@@ -4019,6 +4019,45 @@
         }
       ]
     },
+    "insertOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "setOleSizeOp": {
       "type": "object",
       "required": [

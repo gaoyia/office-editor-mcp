@@ -107,6 +107,8 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `format` 取值：`xlsx`、`xlsm`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
 `xlsm` 与 `xlsx` 走同一套 SpreadsheetML：inspect 树的 `format` 仍为 `xlsx`。不执行宏，不把 `vbaProject.bin` 当对象编辑。不认 `.xls`。
+给出 `format` 时，机器可读 Schema 里的 `ops` 只接受该格式的动作。`xlsm` 与 `xlsx` 同一份动作名单。
+省略 `format` 时，Schema 仍接受任一已登记动作的形状。库按路径推断格式：别家已登记动作报 `InvalidField`，名单里没有的动作报 `UnsupportedOp`。
 
 `path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
 

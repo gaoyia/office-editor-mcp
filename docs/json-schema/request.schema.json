@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ooxp.local/schema/v1/request.schema.json",
-  "$comment": "入口 schema。xlsx / docx / pptx 的 create 体与专用 apply op 在同目录 xlsx.schema.json、docx.schema.json、pptx.schema.json。与 docs/json-contract.md 及分册冲突时以 Markdown 为准。",
+  "$comment": "入口 schema。xlsx / docx / pptx 的 create 体与专用 apply op 在同目录 xlsx.schema.json、docx.schema.json、pptx.schema.json。给出 format 时，ops 只接受该格式的动作；xlsm 与 xlsx 同一份。省略 format 时，ops 接受任一已登记动作的形状。与 docs/json-contract.md 及分册冲突时以 Markdown 为准。",
   "title": "ooxp 领域请求",
   "type": "object",
   "required": [
@@ -524,1040 +524,2551 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "oneOf": [
-              {
-                "$ref": "xlsx.schema.json#/$defs/setCellOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setCellStyleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setColWidthOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setRowHeightOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/mergeRangeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/unmergeRangeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertDataValidationOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setDataValidationOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteDataValidationOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertConditionalFormatOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setConditionalFormatOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteConditionalFormatOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertSheetTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSheetTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteSheetTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertPivotTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setPivotTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deletePivotTableOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertDefinedNameOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setDefinedNameOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteDefinedNameOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setPrintSetupOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSheetViewOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSortStateOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertCustomViewOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteCustomViewOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/showCustomViewOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertCellStyleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteCellStyleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setCellNamedStyleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/groupRowsOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/ungroupRowsOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/groupColsOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/ungroupColsOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setOutlineOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setRowHiddenOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setColHiddenOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setParaTextOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setHeaderFooterDistanceOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setPageMarginOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setPageSizeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setColumnsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setVerticalAlignOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setLineNumberingOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setDocGridOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setRtlGutterOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setMirrorMarginsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setGutterAtTopOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setHeaderFooterLinkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertHeaderFooterOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertSectionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteSectionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTitlePageOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setEvenAndOddHeadersOp"
-              },
-              {
-                "$ref": "#/$defs/replacePictureOp"
-              },
-              {
-                "$ref": "#/$defs/insertPictureOp"
-              },
-              {
-                "$ref": "#/$defs/deletePictureOp"
-              },
-              {
-                "$ref": "#/$defs/setPictureSizeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setPictureWrapOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setPictureAnchorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setPicturePosOp"
-              },
-              {
-                "$ref": "#/$defs/insertTextBoxOp"
-              },
-              {
-                "$ref": "#/$defs/deleteTextBoxOp"
-              },
-              {
-                "$ref": "#/$defs/setTextBoxSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setTextBoxAnchorOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxWrapOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxFillOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxLineOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxDirectionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxTextAnchorOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertParaOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteParaOp"
-              },
-              {
-                "$ref": "#/$defs/insertTableOp"
-              },
-              {
-                "$ref": "#/$defs/deleteTableOp"
-              },
-              {
-                "$ref": "#/$defs/insertRowOp"
-              },
-              {
-                "$ref": "#/$defs/deleteRowOp"
-              },
-              {
-                "$ref": "#/$defs/insertColOp"
-              },
-              {
-                "$ref": "#/$defs/deleteColOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/mergeCellsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/splitCellsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/acceptRevisionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/rejectRevisionOp"
-              },
-              {
-                "$ref": "#/$defs/insertHyperlinkOp"
-              },
-              {
-                "$ref": "#/$defs/setHyperlinkOp"
-              },
-              {
-                "$ref": "#/$defs/deleteHyperlinkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertSparklineOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSparklineOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteSparklineOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertBookmarkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setBookmarkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteBookmarkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertFieldOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertFieldOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setFieldOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setFieldOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteFieldOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteFieldOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertTocOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteTocOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertCaptionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteCaptionOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertCrossRefOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteCrossRefOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertIndexOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteIndexOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertIndexEntryOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteIndexEntryOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertSourceOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteSourceOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertCitationOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteCitationOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertBibliographyOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setBibliographyStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertDocPartOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteDocPartOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertDocPartContentOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertEmbeddedFontOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteEmbeddedFontOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setFontEmbedOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setPageBackgroundOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setPageBordersOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setFormProtOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertEditRangeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteEditRangeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertMathOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setMathOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteMathOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertRubyOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setRubyOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteRubyOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setEastAsianSettingsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertContentControlOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setContentControlOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteContentControlOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertNumberingOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setNumberingOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setParaNumberingOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setParaStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setRunStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableStyleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableFloatOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableWidthOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableAlignOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableRowHeightOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTableBordersOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setCellBordersOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setCellFormatOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setParaFormatOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setRunFormatOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setTextBoxLinkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertFootnoteOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertEndnoteOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteFootnoteOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteEndnoteOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setNoteNumberingOp"
-              },
-              {
-                "$ref": "#/$defs/insertCommentOp"
-              },
-              {
-                "$ref": "#/$defs/deleteCommentOp"
-              },
-              {
-                "$ref": "#/$defs/replyCommentOp"
-              },
-              {
-                "$ref": "#/$defs/setCommentTextOp"
-              },
-              {
-                "$ref": "#/$defs/setCommentMetaOp"
-              },
-              {
-                "$ref": "#/$defs/setCommentDoneOp"
-              },
-              {
-                "$ref": "#/$defs/insertChartOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertChartSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteChartSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/renameSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/moveSheetOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSheetHiddenOp"
-              },
-              {
-                "$ref": "#/$defs/deleteChartOp"
-              },
-              {
-                "$ref": "#/$defs/setChartTitleOp"
-              },
-              {
-                "$ref": "#/$defs/setChartSeriesOp"
-              },
-              {
-                "$ref": "#/$defs/addChartSeriesOp"
-              },
-              {
-                "$ref": "#/$defs/deleteChartSeriesOp"
-              },
-              {
-                "$ref": "#/$defs/setChartTypeOp"
-              },
-              {
-                "$ref": "#/$defs/setChartAxisTitleOp"
-              },
-              {
-                "$ref": "#/$defs/setChartLegendOp"
-              },
-              {
-                "$ref": "#/$defs/setChartDataLabelsOp"
-              },
-              {
-                "$ref": "#/$defs/insertTrendlineOp"
-              },
-              {
-                "$ref": "#/$defs/setTrendlineOp"
-              },
-              {
-                "$ref": "#/$defs/deleteTrendlineOp"
-              },
-              {
-                "$ref": "#/$defs/insertErrorBarsOp"
-              },
-              {
-                "$ref": "#/$defs/setErrorBarsOp"
-              },
-              {
-                "$ref": "#/$defs/deleteErrorBarsOp"
-              },
-              {
-                "$ref": "#/$defs/setChartSeriesAxisOp"
-              },
-              {
-                "$ref": "#/$defs/setChartSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setChartPosOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setChartWrapOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setChartAnchorOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSmartArtAnchorOp"
-              },
-              {
-                "$ref": "#/$defs/insertSmartArtOp"
-              },
-              {
-                "$ref": "#/$defs/deleteSmartArtOp"
-              },
-              {
-                "$ref": "#/$defs/setSmartArtTextOp"
-              },
-              {
-                "$ref": "#/$defs/addSmartArtPointOp"
-              },
-              {
-                "$ref": "#/$defs/deleteSmartArtPointOp"
-              },
-              {
-                "$ref": "#/$defs/setSmartArtSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSmartArtPosOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setSmartArtWrapOp"
-              },
-              {
-                "$ref": "#/$defs/setSmartArtColorsOp"
-              },
-              {
-                "$ref": "#/$defs/setSmartArtStyleOp"
-              },
-              {
-                "$ref": "#/$defs/setSmartArtLayoutOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertOleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setOleSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertSlicerOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSlicerSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSlicerAnchorOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSlicerViewOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setSlicerFilterOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteConnectionOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertExternalLinkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteExternalLinkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setExternalLinkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertOleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteOleOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setOleSizeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertInkCanvasOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/replaceInkCanvasOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setInkCanvasSizeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setInkCanvasWrapOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertModel3dOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/replaceModel3dOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteModel3dOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertInkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/replaceInkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteInkOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setInkSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setInkAnchorOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertModel3dOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/replaceModel3dOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteModel3dOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertModel3dOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/replaceModel3dOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
-              },
-              {
-                "$ref": "#/$defs/setModel3dSizeOp"
-              },
-              {
-                "$ref": "#/$defs/setModel3dCameraOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setModel3dWrapOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setModel3dAnchorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setModel3dPosOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertInkOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/replaceInkOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteInkOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setInkSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setInkPosOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setOleSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertMathOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setMathOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteMathOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setMathSizeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setMathAnchorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertMathOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setMathOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteMathOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setMathSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setMathPosOp"
-              },
-              {
-                "$ref": "#/$defs/setProtectionOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/insertProtectedRangeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/setProtectedRangeOp"
-              },
-              {
-                "$ref": "xlsx.schema.json#/$defs/deleteProtectedRangeOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/insertWatermarkOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/deleteWatermarkOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setNotesTextOp"
-              },
-              {
-                "$ref": "#/$defs/setShapeTextOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertShapeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/groupShapesOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/ungroupOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapePosOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapeSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapeFormatOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShapeGeomOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setConnectorOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableCellTextOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTablePosOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableColWidthsOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableTrHeightOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableCellFillOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableCellBordersOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableCellInsetOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableCellPrOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTableStyleRefOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertSlideOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteSlideOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/moveSlideOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSlideHiddenOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setTransitionOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertAnimOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteAnimOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setAnimOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/moveAnimOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertLayoutOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteLayoutOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertPlaceholderOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deletePlaceholderOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertMasterOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteMasterOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSlideSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setNotesSizeOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeColorsOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeFontsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
-              },
-              {
-                "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setClrMapOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setClrMapOvrOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertVideoOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertAudioOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setMediaOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertSlideSectionOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSlideSectionNameOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteSlideSectionOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setSlideSectionOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertCustomShowOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setCustomShowOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteCustomShowOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/insertZoomOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/deleteZoomOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setZoomOp"
-              },
-              {
-                "$ref": "pptx.schema.json#/$defs/setShowPrOp"
-              },
-              {
-                "$ref": "#/$defs/setPropsOp"
-              },
-              {
-                "$ref": "#/$defs/setCustomPropOp"
-              },
-              {
-                "$ref": "#/$defs/deleteCustomPropOp"
-              }
-            ]
+            "$ref": "#/$defs/anyApplyOp"
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "xlsx",
+                  "xlsm"
+                ]
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/xlsxApplyOp"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "docx"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/docxApplyOp"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "pptx"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/pptxApplyOp"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "anyApplyOp": {
+      "anyOf": [
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setColWidthOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setRowHeightOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/mergeRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/unmergeRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertPivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deletePivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPrintSetupOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSortStateOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/showCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellNamedStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/groupRowsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/ungroupRowsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/groupColsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/ungroupColsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setOutlineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setRowHiddenOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setColHiddenOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaTextOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setHeaderFooterDistanceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageMarginOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setColumnsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setVerticalAlignOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setLineNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setDocGridOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRtlGutterOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setMirrorMarginsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setGutterAtTopOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setHeaderFooterLinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertHeaderFooterOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertSectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteSectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTitlePageOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setEvenAndOddHeadersOp"
+        },
+        {
+          "$ref": "#/$defs/replacePictureOp"
+        },
+        {
+          "$ref": "#/$defs/insertPictureOp"
+        },
+        {
+          "$ref": "#/$defs/deletePictureOp"
+        },
+        {
+          "$ref": "#/$defs/setPictureSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPictureWrapOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPictureAnchorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setPicturePosOp"
+        },
+        {
+          "$ref": "#/$defs/insertTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/setTextBoxSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setTextBoxAnchorOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxWrapOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxFillOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxLineOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxDirectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxTextAnchorOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertParaOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteParaOp"
+        },
+        {
+          "$ref": "#/$defs/insertTableOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTableOp"
+        },
+        {
+          "$ref": "#/$defs/insertRowOp"
+        },
+        {
+          "$ref": "#/$defs/deleteRowOp"
+        },
+        {
+          "$ref": "#/$defs/insertColOp"
+        },
+        {
+          "$ref": "#/$defs/deleteColOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/mergeCellsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/splitCellsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/acceptRevisionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/rejectRevisionOp"
+        },
+        {
+          "$ref": "#/$defs/insertHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/setHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/deleteHyperlinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSparklineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSparklineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSparklineOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertFieldOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFieldOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteFieldOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertTocOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteTocOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCaptionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCaptionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCrossRefOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCrossRefOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertIndexOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteIndexOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertIndexEntryOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteIndexEntryOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertSourceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteSourceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCitationOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCitationOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertBibliographyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setBibliographyStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertDocPartOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteDocPartOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertDocPartContentOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEmbeddedFontOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEmbeddedFontOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFontEmbedOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageBackgroundOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFormProtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEditRangeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEditRangeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setEastAsianSettingsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRunStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableFloatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableWidthOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableAlignOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableRowHeightOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setCellBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setCellFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRunFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxLinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertFootnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEndnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteFootnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEndnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setNoteNumberingOp"
+        },
+        {
+          "$ref": "#/$defs/insertCommentOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCommentOp"
+        },
+        {
+          "$ref": "#/$defs/replyCommentOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentTextOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentMetaOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentDoneOp"
+        },
+        {
+          "$ref": "#/$defs/insertChartOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertChartSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteChartSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/renameSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/moveSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetHiddenOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/addChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTypeOp"
+        },
+        {
+          "$ref": "#/$defs/setChartAxisTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartLegendOp"
+        },
+        {
+          "$ref": "#/$defs/setChartDataLabelsOp"
+        },
+        {
+          "$ref": "#/$defs/insertTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/setTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/insertErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/deleteErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesAxisOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setChartPosOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setChartWrapOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setChartAnchorOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSmartArtAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/insertSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtTextOp"
+        },
+        {
+          "$ref": "#/$defs/addSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSmartArtPosOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setSmartArtWrapOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtColorsOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtStyleOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtLayoutOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSlicerOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerAnchorOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerFilterOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteConnectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertExternalLinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteExternalLinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setExternalLinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/replaceInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setInkCanvasSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setInkCanvasWrapOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/replaceInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setInkSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setInkAnchorOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dSizeOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dCameraOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setModel3dWrapOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setModel3dAnchorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setModel3dPosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/replaceInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setInkSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setInkPosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathAnchorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathPosOp"
+        },
+        {
+          "$ref": "#/$defs/setProtectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertProtectedRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setProtectedRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteProtectedRangeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertWatermarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteWatermarkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setNotesTextOp"
+        },
+        {
+          "$ref": "#/$defs/setShapeTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/groupShapesOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/ungroupOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapePosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFormatOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeGeomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTablePosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableColWidthsOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableTrHeightOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellFillOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellBordersOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellInsetOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellPrOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableStyleRefOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/moveSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideHiddenOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTransitionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/moveAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertPlaceholderOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deletePlaceholderOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertMasterOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMasterOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setNotesSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeColorsOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFontsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setClrMapOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setClrMapOvrOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertVideoOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertAudioOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMediaOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSectionNameOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShowPrOp"
+        },
+        {
+          "$ref": "#/$defs/setPropsOp"
+        },
+        {
+          "$ref": "#/$defs/setCustomPropOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCustomPropOp"
+        }
+      ]
+    },
+    "xlsxApplyOp": {
+      "oneOf": [
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setColWidthOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setRowHeightOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/mergeRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/unmergeRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteDataValidationOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteConditionalFormatOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSheetTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertPivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deletePivotTableOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteDefinedNameOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPrintSetupOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSortStateOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/showCustomViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteCellStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setCellNamedStyleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/groupRowsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/ungroupRowsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/groupColsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/ungroupColsOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setOutlineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setRowHiddenOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setColHiddenOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
+        },
+        {
+          "$ref": "#/$defs/replacePictureOp"
+        },
+        {
+          "$ref": "#/$defs/insertPictureOp"
+        },
+        {
+          "$ref": "#/$defs/deletePictureOp"
+        },
+        {
+          "$ref": "#/$defs/setPictureSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setPictureAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/insertTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/setTextBoxSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setTextBoxAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/insertHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/setHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/deleteHyperlinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSparklineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSparklineOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSparklineOp"
+        },
+        {
+          "$ref": "#/$defs/insertCommentOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCommentOp"
+        },
+        {
+          "$ref": "#/$defs/replyCommentOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentTextOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentMetaOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentDoneOp"
+        },
+        {
+          "$ref": "#/$defs/insertChartOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertChartSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteChartSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/renameSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/moveSheetOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSheetHiddenOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/addChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTypeOp"
+        },
+        {
+          "$ref": "#/$defs/setChartAxisTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartLegendOp"
+        },
+        {
+          "$ref": "#/$defs/setChartDataLabelsOp"
+        },
+        {
+          "$ref": "#/$defs/insertTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/setTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/insertErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/deleteErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesAxisOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setChartAnchorOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSmartArtAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/insertSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtTextOp"
+        },
+        {
+          "$ref": "#/$defs/addSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtSizeOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtColorsOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtStyleOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtLayoutOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertSlicerOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerAnchorOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerViewOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setSlicerFilterOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteConnectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertExternalLinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteExternalLinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setExternalLinkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/replaceInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteInkOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setInkSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setInkAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dSizeOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dCameraOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setModel3dAnchorOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathSizeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setMathAnchorOp"
+        },
+        {
+          "$ref": "#/$defs/setProtectionOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/insertProtectedRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/setProtectedRangeOp"
+        },
+        {
+          "$ref": "xlsx.schema.json#/$defs/deleteProtectedRangeOp"
+        },
+        {
+          "$ref": "#/$defs/setShapeTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/groupShapesOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/ungroupOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeColorsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFontsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
+        },
+        {
+          "$ref": "#/$defs/setPropsOp"
+        },
+        {
+          "$ref": "#/$defs/setCustomPropOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCustomPropOp"
+        }
+      ]
+    },
+    "docxApplyOp": {
+      "oneOf": [
+        {
+          "$ref": "docx.schema.json#/$defs/setParaTextOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setHeaderFooterDistanceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageMarginOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setColumnsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setVerticalAlignOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setLineNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setDocGridOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRtlGutterOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setMirrorMarginsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setGutterAtTopOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setHeaderFooterLinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertHeaderFooterOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertSectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteSectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTitlePageOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setEvenAndOddHeadersOp"
+        },
+        {
+          "$ref": "#/$defs/replacePictureOp"
+        },
+        {
+          "$ref": "#/$defs/insertPictureOp"
+        },
+        {
+          "$ref": "#/$defs/deletePictureOp"
+        },
+        {
+          "$ref": "#/$defs/setPictureSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPictureWrapOp"
+        },
+        {
+          "$ref": "#/$defs/insertTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTextBoxOp"
+        },
+        {
+          "$ref": "#/$defs/setTextBoxSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxWrapOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxFillOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxLineOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxDirectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxTextAnchorOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertParaOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteParaOp"
+        },
+        {
+          "$ref": "#/$defs/insertTableOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTableOp"
+        },
+        {
+          "$ref": "#/$defs/insertRowOp"
+        },
+        {
+          "$ref": "#/$defs/deleteRowOp"
+        },
+        {
+          "$ref": "#/$defs/insertColOp"
+        },
+        {
+          "$ref": "#/$defs/deleteColOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/mergeCellsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/splitCellsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/acceptRevisionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/rejectRevisionOp"
+        },
+        {
+          "$ref": "#/$defs/insertHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/setHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/deleteHyperlinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteBookmarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteFieldOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertTocOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteTocOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCaptionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCaptionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCrossRefOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCrossRefOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertIndexOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteIndexOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertIndexEntryOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteIndexEntryOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertSourceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteSourceOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertCitationOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteCitationOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertBibliographyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setBibliographyStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertDocPartOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteDocPartOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertDocPartContentOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEmbeddedFontOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEmbeddedFontOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFontEmbedOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageBackgroundOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setPageBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setFormProtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEditRangeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEditRangeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteRubyOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setEastAsianSettingsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteContentControlOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaNumberingOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRunStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableStyleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableFloatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableWidthOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableAlignOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableRowHeightOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTableBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setCellBordersOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setCellFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setParaFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setRunFormatOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setTextBoxLinkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertFootnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertEndnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteFootnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteEndnoteOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setNoteNumberingOp"
+        },
+        {
+          "$ref": "#/$defs/insertCommentOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCommentOp"
+        },
+        {
+          "$ref": "#/$defs/replyCommentOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentTextOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentMetaOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentDoneOp"
+        },
+        {
+          "$ref": "#/$defs/insertChartOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/addChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTypeOp"
+        },
+        {
+          "$ref": "#/$defs/setChartAxisTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartLegendOp"
+        },
+        {
+          "$ref": "#/$defs/setChartDataLabelsOp"
+        },
+        {
+          "$ref": "#/$defs/insertTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/setTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/insertErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/deleteErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesAxisOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setChartWrapOp"
+        },
+        {
+          "$ref": "#/$defs/insertSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtTextOp"
+        },
+        {
+          "$ref": "#/$defs/addSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setSmartArtWrapOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtColorsOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtStyleOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtLayoutOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/replaceInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setInkCanvasSizeOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setInkCanvasWrapOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dSizeOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dCameraOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setModel3dWrapOp"
+        },
+        {
+          "$ref": "#/$defs/setProtectionOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/insertWatermarkOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/deleteWatermarkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/groupShapesOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/ungroupOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapePosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeColorsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFontsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
+        },
+        {
+          "$ref": "#/$defs/setPropsOp"
+        },
+        {
+          "$ref": "#/$defs/setCustomPropOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCustomPropOp"
+        }
+      ]
+    },
+    "pptxApplyOp": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/replacePictureOp"
+        },
+        {
+          "$ref": "#/$defs/insertPictureOp"
+        },
+        {
+          "$ref": "#/$defs/deletePictureOp"
+        },
+        {
+          "$ref": "#/$defs/setPictureSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setPicturePosOp"
+        },
+        {
+          "$ref": "#/$defs/insertTableOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTableOp"
+        },
+        {
+          "$ref": "#/$defs/insertRowOp"
+        },
+        {
+          "$ref": "#/$defs/deleteRowOp"
+        },
+        {
+          "$ref": "#/$defs/insertColOp"
+        },
+        {
+          "$ref": "#/$defs/deleteColOp"
+        },
+        {
+          "$ref": "#/$defs/insertHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/setHyperlinkOp"
+        },
+        {
+          "$ref": "#/$defs/deleteHyperlinkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertFieldOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setFieldOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteFieldOp"
+        },
+        {
+          "$ref": "#/$defs/insertCommentOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCommentOp"
+        },
+        {
+          "$ref": "#/$defs/replyCommentOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentTextOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentMetaOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentDoneOp"
+        },
+        {
+          "$ref": "#/$defs/insertChartOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/addChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/deleteChartSeriesOp"
+        },
+        {
+          "$ref": "#/$defs/setChartTypeOp"
+        },
+        {
+          "$ref": "#/$defs/setChartAxisTitleOp"
+        },
+        {
+          "$ref": "#/$defs/setChartLegendOp"
+        },
+        {
+          "$ref": "#/$defs/setChartDataLabelsOp"
+        },
+        {
+          "$ref": "#/$defs/insertTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/setTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/deleteTrendlineOp"
+        },
+        {
+          "$ref": "#/$defs/insertErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/deleteErrorBarsOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSeriesAxisOp"
+        },
+        {
+          "$ref": "#/$defs/setChartSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setChartPosOp"
+        },
+        {
+          "$ref": "#/$defs/insertSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtTextOp"
+        },
+        {
+          "$ref": "#/$defs/addSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/deleteSmartArtPointOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSmartArtPosOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtColorsOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtStyleOp"
+        },
+        {
+          "$ref": "#/$defs/setSmartArtLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertModel3dOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/replaceModel3dOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dSizeOp"
+        },
+        {
+          "$ref": "#/$defs/setModel3dCameraOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setModel3dPosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/replaceInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteInkOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setInkSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setInkPosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertOleOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteOleOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setOleSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMathOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMathPosOp"
+        },
+        {
+          "$ref": "#/$defs/setProtectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setNotesTextOp"
+        },
+        {
+          "$ref": "#/$defs/setShapeTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/groupShapesOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/ungroupOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapePosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeFormatOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShapeGeomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setConnectorOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTablePosOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableColWidthsOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableTrHeightOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellFillOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellBordersOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellInsetOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableCellPrOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTableStyleRefOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/moveSlideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideHiddenOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setTransitionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/moveAnimOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteLayoutOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertPlaceholderOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deletePlaceholderOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertMasterOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMasterOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setNotesSizeOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
+        },
+        {
+          "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setClrMapOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setClrMapOvrOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertVideoOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertAudioOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setMediaOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSectionNameOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setSlideSectionOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteCustomShowOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/insertZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/deleteZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setZoomOp"
+        },
+        {
+          "$ref": "pptx.schema.json#/$defs/setShowPrOp"
+        },
+        {
+          "$ref": "#/$defs/setPropsOp"
+        },
+        {
+          "$ref": "#/$defs/setCustomPropOp"
+        },
+        {
+          "$ref": "#/$defs/deleteCustomPropOp"
+        }
+      ]
     },
     "replacePictureOp": {
       "type": "object",
