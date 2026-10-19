@@ -1398,6 +1398,7 @@ pub enum PptxOp {
     DeleteCustomShow(DeleteCustomShowOp),
     InsertOle(super::super::ole::InsertOleOp),
     DeleteOle(super::super::ole::DeleteOleOp),
+    SetOleSize(super::super::ole::SetOleSizeOp),
     InsertModel3d(super::super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::super::model3d::DeleteModel3dOp),

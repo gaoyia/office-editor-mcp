@@ -837,6 +837,17 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 ole::delete(&mut pkg, doc, &part, op, i)?;
             }
+            XlsxOp::SetOleSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ole::set_size(&mut pkg, doc, &part, op, i)?;
+            }
             XlsxOp::InsertModel3d(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,

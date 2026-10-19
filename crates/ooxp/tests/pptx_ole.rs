@@ -220,6 +220,53 @@ fn insert_xlsx_lists_package_kind_and_skips_preview() {
 }
 
 #[test]
+fn set_ole_size_updates_frame_and_preview() {
+    let src = create_deck("size-host");
+    let xlsx = create_xlsx("size-embed");
+    let inserted = tmp("size-in").with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{ "op": "insertOle", "id": "slide:1", "file": xlsx.to_string_lossy() }]),
+    )
+    .unwrap();
+    let listed = inspect(&inserted, json!({ "oleObjects": true }));
+    let o = &listed["slides"][0]["oleObjects"][0];
+    let id = o["id"].as_str().unwrap();
+    let x = o["x"].clone();
+    let y = o["y"].clone();
+    assert_eq!(o["cx"], 3_657_600);
+    assert_eq!(o["cy"], 2_743_200);
+    let out = tmp("size-out").with_extension("pptx");
+    apply(
+        &inserted,
+        &out,
+        json!([{ "op": "setOleSize", "id": id, "cx": 1_828_800 }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "oleObjects": true }));
+    let sized = &tree["slides"][0]["oleObjects"][0];
+    assert_eq!(sized["x"], x);
+    assert_eq!(sized["y"], y);
+    assert_eq!(sized["cx"], 1_828_800);
+    assert_eq!(sized["cy"], 2_743_200);
+    let xml =
+        String::from_utf8(zip_entry(&out, "ppt/slides/slide1.xml").unwrap_or_default()).unwrap();
+    assert!(xml.contains("cx=\"1828800\""));
+    assert!(xml.contains("imgW=\"1828800\""));
+    assert!(xml.contains("cy=\"2743200\""));
+    assert!(xml.contains("imgH=\"2743200\""));
+
+    let err = apply(
+        &out,
+        &tmp("size-bad").with_extension("pptx"),
+        json!([{ "op": "setOleSize", "id": "slide:1/pic:1", "cx": 1 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
 fn export_media_matches_embedding_bytes() {
     let src = create_deck("exp-host");
     let xlsx = create_xlsx("embed-exp");

@@ -375,7 +375,8 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，`slides[].inks` 复用 `insertInk`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
-`slides[].tables` 复用 `insertTable`，`slides[].oleObjects` 复用 `insertOle`，
+`slides[].tables` 复用 `insertTable`，`slides[].oleObjects` 复用 `insertOle`。
+已有嵌入对象的预览框用 `setOleSize` 改尺寸，三家同一动作，不启动 OLE 服务器。
 `slides[].connectors` 复用 `insertConnector`，`slides[].zooms` 复用 `insertZoom`，
 `slides[].notes` 复用 `setNotesText`（对象形态的 `anims` 复用 `insertAnim` 写到备注页，
 `maths` / `model3ds` / `inks` 复用 `insertMath` / `insertModel3d` / `insertInk` 写到备注页），

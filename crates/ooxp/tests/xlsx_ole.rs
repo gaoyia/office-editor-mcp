@@ -386,3 +386,49 @@ fn wrong_ids_and_missing_from() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!out.exists());
 }
+
+#[test]
+fn set_ole_size_moves_two_cell_corner() {
+    let src = create_book("size-host");
+    let embed = create_embed("size-embed");
+    let inserted = tmp("size-in").with_extension("xlsx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertOle",
+            "id": "sheet:Sheet1",
+            "file": embed.to_string_lossy(),
+            "from": "B2"
+        }]),
+    )
+    .unwrap();
+    let listed = inspect(&inserted, json!({ "oleObjects": true }));
+    let id = listed["sheets"][0]["oleObjects"][0]["id"].as_str().unwrap();
+    assert_eq!(listed["sheets"][0]["oleObjects"][0]["anchor"], "twoCell");
+    let out = tmp("size-out").with_extension("xlsx");
+    apply(
+        &inserted,
+        &out,
+        json!([{ "op": "setOleSize", "id": id, "to": "E6" }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "oleObjects": true }));
+    let o = &tree["sheets"][0]["oleObjects"][0];
+    assert_eq!(o["from"], "B2");
+    assert_eq!(o["to"], "E6");
+    let sheet = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains("<xdr:col>4</xdr:col>"));
+    assert!(sheet.contains("<xdr:row>5</xdr:row>"));
+    let drawing = part_text(&out, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("<xdr:col>4</xdr:col>"));
+    assert!(drawing.contains("<xdr:row>5</xdr:row>"));
+
+    let err = apply(
+        &out,
+        &tmp("size-bad").with_extension("xlsx"),
+        json!([{ "op": "setOleSize", "id": id, "cx": 914400 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

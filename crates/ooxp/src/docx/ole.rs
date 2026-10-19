@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的嵌入对象：收集、导出、插删。
+//! 正文与页眉页脚里的嵌入对象：收集、导出、插删、改预览框尺寸。
 //! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。
 
 use std::collections::HashMap;
@@ -57,6 +57,14 @@ pub struct InsertOleOp {
 pub struct DeleteOleOp {
     pub id: String,
     pub target: OleTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetOleSizeOp {
+    pub id: String,
+    pub target: OleTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
 }
 
 struct HostCtx<'a> {
@@ -360,6 +368,34 @@ pub fn apply_delete(
     Ok(())
 }
 
+pub fn apply_set_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetOleSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        pkg,
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let doc = load_part(pkg, docs, &host)?;
+    if !patch_object_size(&mut doc.root, &op.target, op.cx, op.cy) {
+        return Err(Error::with_path(
+            ErrorKind::OleNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
+    dirty.insert(host, ());
+    Ok(())
+}
+
 impl HostCtx<'_> {
     fn load<'a>(pkg: &'a Package, host: &'a str) -> Result<HostCtx<'a>, Error> {
         Ok(HostCtx {
@@ -407,12 +443,15 @@ impl HostCtx<'_> {
             let part = resolve_rel_target(self.host, &rel.target).ok()?;
             self.cts.content_type_of(&part).map(str::to_string)
         });
+        let (cx, cy) = object_size(obj);
         json!({
             "id": format!("{para_id}/ole:{token}"),
             "progId": prog,
             "name": name,
             "kind": kind,
             "contentType": content_type,
+            "cx": cx,
+            "cy": cy,
             "stable": stable,
         })
     }
@@ -679,6 +718,236 @@ fn find_object_walk<'a>(el: &'a Element, idx: &mut usize, key: &OleKey) -> Optio
         }
     }
     None
+}
+
+fn patch_object_size(
+    root: &mut Element,
+    target: &OleTarget,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> bool {
+    match target {
+        OleTarget::Body { para, key } => match para::find_paragraph_mut(root, para) {
+            Some(p) => patch_object_walk(p, &mut 0, key, cx, cy),
+            None => false,
+        },
+        OleTarget::HeaderFooter { key, .. } => patch_object_walk(root, &mut 0, key, cx, cy),
+    }
+}
+
+fn patch_object_walk(
+    el: &mut Element,
+    idx: &mut usize,
+    key: &OleKey,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> bool {
+    if el.local_name() == "txbxContent" {
+        return false;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = para::first_alt_child_index(el) {
+            if let Node::Element(e) = &mut el.children[i] {
+                return patch_object_walk(e, idx, key, cx, cy);
+            }
+        }
+        return false;
+    }
+    if el.local_name() == "object" {
+        if is_listed_markup(el) {
+            *idx += 1;
+            if matches_key(el, key, *idx) {
+                apply_object_size(el, cx, cy);
+                return true;
+            }
+        }
+        return false;
+    }
+    let n = el.children.len();
+    for i in 0..n {
+        if let Node::Element(e) = &mut el.children[i] {
+            if patch_object_walk(e, idx, key, cx, cy) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 预览框尺寸。优先 `wp:extent`，其次 VML `style`，再次 `dxaOrig` / `dyaOrig`。
+fn object_size(obj: &Element) -> (Option<i64>, Option<i64>) {
+    let mut extent = None;
+    let mut style = None;
+    walk_all(obj, &mut |e| {
+        if extent.is_none() && e.local_name() == "extent" {
+            let cx = e.attr_local("cx").and_then(|s| s.parse().ok());
+            let cy = e.attr_local("cy").and_then(|s| s.parse().ok());
+            if cx.is_some() || cy.is_some() {
+                extent = Some((cx, cy));
+            }
+        }
+        if style.is_none() && e.local_name() == "shape" {
+            if let Some(s) = e.attr_local("style") {
+                let cx = style_pt_emu(s, "width");
+                let cy = style_pt_emu(s, "height");
+                if cx.is_some() || cy.is_some() {
+                    style = Some((cx, cy));
+                }
+            }
+        }
+    });
+    if let Some(v) = extent {
+        return v;
+    }
+    if let Some(v) = style {
+        return v;
+    }
+    let cx = obj
+        .attr_local("dxaOrig")
+        .and_then(|s| s.parse::<i64>().ok())
+        .map(|t| t.saturating_mul(635));
+    let cy = obj
+        .attr_local("dyaOrig")
+        .and_then(|s| s.parse::<i64>().ok())
+        .map(|t| t.saturating_mul(635));
+    (cx, cy)
+}
+
+fn apply_object_size(obj: &mut Element, cx: Option<i64>, cy: Option<i64>) {
+    let (cur_x, cur_y) = object_size(obj);
+    let nx = cx.or(cur_x);
+    let ny = cy.or(cur_y);
+    let mut wrote = false;
+    walk_mut(obj, &mut |e| {
+        if e.local_name() == "extent" || (e.local_name() == "ext" && e.attr_local("cx").is_some()) {
+            if let Some(v) = nx {
+                set_local_attr(e, "cx", &v.to_string());
+                wrote = true;
+            }
+            if let Some(v) = ny {
+                set_local_attr(e, "cy", &v.to_string());
+                wrote = true;
+            }
+        }
+        if e.local_name() == "shape" {
+            if let Some(style) = e.attr_local("style").map(|s| s.to_string()) {
+                let next = rewrite_style(&style, nx, ny);
+                set_local_attr(e, "style", &next);
+                wrote = true;
+            }
+        }
+        if e.local_name() == "object" {
+            if let Some(v) = nx {
+                if e.attr_local("dxaOrig").is_some() {
+                    set_local_attr(e, "dxaOrig", &emu_to_twip(v).to_string());
+                    wrote = true;
+                }
+            }
+            if let Some(v) = ny {
+                if e.attr_local("dyaOrig").is_some() {
+                    set_local_attr(e, "dyaOrig", &emu_to_twip(v).to_string());
+                    wrote = true;
+                }
+            }
+        }
+    });
+    if !wrote {
+        if let Some(v) = nx {
+            set_local_attr(obj, "dxaOrig", &emu_to_twip(v).to_string());
+        }
+        if let Some(v) = ny {
+            set_local_attr(obj, "dyaOrig", &emu_to_twip(v).to_string());
+        }
+    }
+}
+
+fn walk_mut(el: &mut Element, f: &mut impl FnMut(&mut Element)) {
+    f(el);
+    let n = el.children.len();
+    for i in 0..n {
+        if let Node::Element(e) = &mut el.children[i] {
+            walk_mut(e, f);
+        }
+    }
+}
+
+fn set_local_attr(el: &mut Element, local: &str, value: &str) {
+    let name = el
+        .attrs
+        .iter()
+        .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
+        .map(|(k, _)| k.clone())
+        .unwrap_or_else(|| local.to_string());
+    el.set_attr(&name, value);
+}
+
+fn style_pt_emu(style: &str, key: &str) -> Option<i64> {
+    let prefix = format!("{key}:");
+    for part in style.split(';') {
+        let part = part.trim();
+        if part.len() >= prefix.len() && part[..prefix.len()].eq_ignore_ascii_case(&prefix) {
+            let raw = part[prefix.len()..].trim();
+            let raw = raw.strip_suffix("pt").unwrap_or(raw).trim();
+            let pt: f64 = raw.parse().ok()?;
+            return Some((pt * 12_700.0).round() as i64);
+        }
+    }
+    None
+}
+
+fn rewrite_style(style: &str, cx: Option<i64>, cy: Option<i64>) -> String {
+    let mut parts: Vec<String> = style
+        .split(';')
+        .filter(|p| !p.trim().is_empty())
+        .map(|p| p.trim().to_string())
+        .collect();
+    let mut saw_w = false;
+    let mut saw_h = false;
+    for p in &mut parts {
+        let lower = p.to_ascii_lowercase();
+        if let Some(v) = cx {
+            if lower.starts_with("width:") {
+                *p = format!("width:{}", format_pt(v));
+                saw_w = true;
+            }
+        }
+        if let Some(v) = cy {
+            if lower.starts_with("height:") {
+                *p = format!("height:{}", format_pt(v));
+                saw_h = true;
+            }
+        }
+    }
+    if let Some(v) = cx {
+        if !saw_w {
+            parts.push(format!("width:{}", format_pt(v)));
+        }
+    }
+    if let Some(v) = cy {
+        if !saw_h {
+            parts.push(format!("height:{}", format_pt(v)));
+        }
+    }
+    parts.join(";")
+}
+
+fn format_pt(emu: i64) -> String {
+    if emu % 12_700 == 0 {
+        return format!("{}pt", emu / 12_700);
+    }
+    let pt = emu as f64 / 12_700.0;
+    let mut s = format!("{pt:.4}");
+    while s.contains('.') && s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    format!("{s}pt")
+}
+
+fn emu_to_twip(emu: i64) -> i64 {
+    (emu as f64 / 635.0).round() as i64
 }
 
 fn remove_object(root: &mut Element, target: &OleTarget) -> bool {

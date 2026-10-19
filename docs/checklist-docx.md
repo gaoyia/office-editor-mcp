@@ -1873,6 +1873,11 @@ create 复用 53–55 已有 apply：框内表、框内链 / 书签 / 域 / 公�
   - 检查：拒错 id
   - 通过标准：对段落 id 发 `deleteOle`、对 OLE id 发 `insertOle` 得 `InvalidId`
   - 不强制开 Word
+- **Ol6**
+  - 检查：事后改尺寸
+  - 通过标准：✅ `setOleSize` 改 `cx` 后树上 `cx` / `cy` 对得上，`v:shape` 的 `style` 宽高跟着变
+  - Word 16.0 打开无修复
+  - 不启动 OLE 服务器
 
 ## 文档保护
 

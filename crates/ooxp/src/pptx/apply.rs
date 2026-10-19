@@ -678,6 +678,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 ole::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetOleSize(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::OleNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ole::set_size(&mut doc, &part, &pkg, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::InsertModel3d(op) => {
                 let part = ensure_host_part(
                     &mut pkg,

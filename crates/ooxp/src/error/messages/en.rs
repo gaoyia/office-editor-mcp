@@ -1343,6 +1343,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TwoCellInkSize => {
             "twoCell ink size is defined by the to cell; give to on setInkSize, not cx / cy".into()
         }
+        ErrorKind::TwoCellOleSize => {
+            "twoCell OLE size is defined by the to cell; give to on setOleSize, not cx / cy".into()
+        }
         ErrorKind::TwoCellSlicerSize => {
             "twoCell slicer size is defined by the to cell; give to on setSlicerSize, not cx / cy"
                 .into()

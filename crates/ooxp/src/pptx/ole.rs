@@ -1,5 +1,5 @@
 //! 幻灯片嵌入对象：`p:graphicFrame` 里的 `p:oleObj`。
-//! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。
+//! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。改尺寸只动预览框。
 
 use std::path::PathBuf;
 
@@ -48,6 +48,14 @@ pub struct InsertOleOp {
 pub struct DeleteOleOp {
     pub id: String,
     pub target: OleTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetOleSizeOp {
+    pub id: String,
+    pub target: OleTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
 }
 
 pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
@@ -280,6 +288,31 @@ pub fn delete(
     Ok(())
 }
 
+pub fn set_size(
+    slide_doc: &mut Document,
+    slide_part: &str,
+    pkg: &Package,
+    op: &SetOleSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let rels = Relationships::from_package(pkg, slide_part)?;
+    if !patch_frame_size(
+        &mut slide_doc.root,
+        &rels,
+        &mut 0,
+        &op.target.key,
+        op.cx,
+        op.cy,
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::OleNotFound { id: op.id.clone() },
+            path,
+        ));
+    }
+    Ok(())
+}
+
 fn collect_frames<'a>(
     pkg: &Package,
     slide_part: &str,
@@ -476,6 +509,93 @@ fn find_frame<'a>(
         }
     }
     Ok(None)
+}
+
+fn patch_frame_size(
+    el: &mut Element,
+    rels: &Relationships,
+    idx: &mut usize,
+    key: &OleKey,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> bool {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return patch_frame_size(child, rels, idx, key, cx, cy);
+            }
+        }
+        return false;
+    }
+    let mut i = 0;
+    while i < el.children.len() {
+        let is_frame = matches!(&el.children[i], Node::Element(e) if is_counted_frame(e, rels));
+        if is_frame {
+            *idx += 1;
+            let hit = matches!(&el.children[i], Node::Element(e) if frame_matches(e, *idx, key));
+            if hit {
+                if let Node::Element(e) = &mut el.children[i] {
+                    apply_frame_size(e, cx, cy);
+                }
+                return true;
+            }
+        } else if let Node::Element(e) = &mut el.children[i] {
+            if patch_frame_size(e, rels, idx, key, cx, cy) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn apply_frame_size(frame: &mut Element, cx: Option<i64>, cy: Option<i64>) {
+    let (cur_x, cur_y) = frame
+        .child_by_local("xfrm")
+        .and_then(|x| x.child_by_local("ext"))
+        .map(|ext| (parse_i64_attr(ext, "cx"), parse_i64_attr(ext, "cy")))
+        .unwrap_or((None, None));
+    let nx = cx.or(cur_x);
+    let ny = cy.or(cur_y);
+    walk_mut(frame, &mut |e| {
+        if e.local_name() == "ext" && (e.attr_local("cx").is_some() || e.attr_local("cy").is_some())
+        {
+            if let Some(v) = nx {
+                set_local_attr(e, "cx", &v.to_string());
+            }
+            if let Some(v) = ny {
+                set_local_attr(e, "cy", &v.to_string());
+            }
+        }
+        if e.local_name() == "oleObj" {
+            if let Some(v) = nx {
+                set_local_attr(e, "imgW", &v.to_string());
+            }
+            if let Some(v) = ny {
+                set_local_attr(e, "imgH", &v.to_string());
+            }
+        }
+    });
+}
+
+fn walk_mut(el: &mut Element, f: &mut impl FnMut(&mut Element)) {
+    f(el);
+    let n = el.children.len();
+    for i in 0..n {
+        if let Node::Element(e) = &mut el.children[i] {
+            walk_mut(e, f);
+        }
+    }
+}
+
+fn set_local_attr(el: &mut Element, local: &str, value: &str) {
+    let name = el
+        .attrs
+        .iter()
+        .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
+        .map(|(k, _)| k.clone())
+        .unwrap_or_else(|| local.to_string());
+    el.set_attr(&name, value);
 }
 
 fn remove_frame(

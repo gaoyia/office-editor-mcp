@@ -5371,6 +5371,43 @@
         }
       }
     },
+    "setOleSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setOleSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
     "insertInkCanvasOp": {
       "type": "object",
       "required": [

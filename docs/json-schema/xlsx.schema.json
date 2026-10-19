@@ -5365,6 +5365,60 @@
         }
       }
     },
+    "setOleSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setOleSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
     "insertModel3dOp": {
       "type": "object",
       "required": [

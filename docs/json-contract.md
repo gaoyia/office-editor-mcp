@@ -67,6 +67,7 @@ pptx 的 `scope.sections` 与幻灯片节 op 认 presentation 上 `p14:sectionLs
 pptx 的 `scope.customShows` 与自定义放映 op 认 `p:custShowLst`（ECMA-376 §19.2.1.5–19.2.1.7），页引用是 presentation 关系 `r:id`，不实现放映引擎。
 pptx 的 `scope.oleObjects` 与 OLE op 认幻灯片上带嵌入关系的 `p:oleObj`（`p:graphicFrame`，ECMA-376 §19.3.2.4），
 不认 `p:link` 与 ActiveX `p:control`，不把嵌入字节或预览图塞进树。
+三家都可用 `setOleSize` 改已有嵌入对象的预览框。不启动 OLE 服务器，不重算嵌入文件。
 pptx 的 `scope.zooms` 与 Zoom op 认幻灯片上的 `sldZm` / `sectionZm` / `summaryZm`（MS-PPTX §2.2.15），Fallback 预览不进 `pictures`，不实现放映跳转。
 xlsx 的 `scope.comments` 与批注 op 认工作表上的 MS-XLSX 线程化批注（`threadedComment`），不认作者不以 `tc=` 开头的旧式 VML 批注。
 xlsx 的 `scope.textBoxes` 与文本框 op、`setShapeText` / `setShapeFormat` 认工作表 DrawingML 文本框（`xdr:sp` 且 `txBox`）。
@@ -255,7 +256,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
-以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`；不含 `setMathPos`）、以及切片器 op（`insertSlicer`、
+以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`、`setOleSize`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`；不含 `setMathPos`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）、
 以及主题 op（`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setThemeOverride`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
@@ -282,7 +283,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；
 不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、
-`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dWrap`、`setModel3dCamera`；不含 `setModel3dAnchor`、`setModel3dPos`）、以及 `setProtection`、
+`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`、`setOleSize`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dWrap`、`setModel3dCamera`；不含 `setModel3dAnchor`、`setModel3dPos`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
@@ -302,7 +303,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及墨迹 op（`insertInk`、`replaceInk`、`deleteInk`、`setInkSize`、`setInkPos`；不含 `setInkAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathPos`；不含 `setMathAnchor`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`、`setOleSize`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及墨迹 op（`insertInk`、`replaceInk`、`deleteInk`、`setInkSize`、`setInkPos`；不含 `setInkAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathPos`；不含 `setMathAnchor`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
@@ -784,6 +785,18 @@ xlsx：`oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext
 `twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`（右下角 A1）；可选 `toOffX` / `toOffY`（EMU，非负，省略则留下当前偏移）。不按列宽行高去换算 EMU。
 docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。`id` 可以是图 id、视频 id 或音频 id。找不到该对象报 `IdNotFound`。
 批注内图没有画布 `xfrm`，对本 op 报 `InvalidId`。`setMedia` 仍不改几何。
+
+### setOleSize
+
+改已有嵌入对象的预览框尺寸。不启动 OLE 服务器，不重算嵌入文件，不改 embeddings 字节。
+
+字段与 `setPictureSize` 相同，`id` 必须是 OLE id。`cx` / `cy` 与 `to` 不能同时出现。只改被点名的那一侧，另一侧保持原值。
+docx 写入 `v:shape` 的 `style` 宽高（EMU 按 12700 换成 pt）。若有 `wp:extent` 或带 `cx` 的 `a:ext`，一并改。`w:dxaOrig` / `w:dyaOrig` 若有，按 635 EMU 一缇同步。
+xlsx 的 `objectPr/anchor` 是 `twoCell` 时必须给 `to`，可选 `toOffX` / `toOffY`。同时改 dummy 锚点的 `to`，以及 VML `x:Anchor` 的右下角单元格。不按列宽行高换算 EMU。`oneCell` / `absolute` 改 `xdr:ext`。
+pptx 写入 graphicFrame 的 `p:xfrm/a:ext`、两支 `p:oleObj` 的 `imgW` / `imgH`，以及 Fallback 预览 `p:pic` 的 `a:ext`。不改 `a:off`。
+对图 id 发此 op、对 OLE id 发 `setPictureSize` 报 `InvalidId`。
+docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。
+找不到该对象报 `IdNotFound`。
 
 `setPictureWrap` 见 [docx](json-contract-docx.md#setpicturewrap)。
 `setPictureAnchor` 见 [xlsx](json-contract-xlsx.md#setpictureanchor)。

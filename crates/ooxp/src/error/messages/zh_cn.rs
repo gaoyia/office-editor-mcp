@@ -1209,6 +1209,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TwoCellInkSize => {
             "twoCell 墨迹请在 setInkSize 里给 to，不要给 cx / cy".into()
         }
+        ErrorKind::TwoCellOleSize => {
+            "twoCell 嵌入对象请在 setOleSize 里给 to，不要给 cx / cy".into()
+        }
         ErrorKind::TwoCellSlicerSize => {
             "twoCell 切片器请在 setSlicerSize 里给 to，不要给 cx / cy".into()
         }

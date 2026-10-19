@@ -323,7 +323,7 @@ SmartArt id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cN
 ISO `http://purl.oclc.org/ooxml/presentationml/ole`（可带尾斜杠），
 Choice 里有 `p:oleObj`，带 `p:embed`、没有 `p:link`，且 `r:id` 能对上非 External、Type 后缀为 `oleObject` 或 `package` 的关系。
 `p:link`、ActiveX `p:control` 不进树。组合里符合条件的框要展开，组合本身不进树。备注页、幻灯片母版、版式上的 OLE 进树，id 带对应前缀。批注、备注母版、讲义上的 OLE 不进树。`insertOle` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
-`deleteOle` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertole)。
+`deleteOle` / `setOleSize` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertole)。
 docx 上仍是段落 id / Word OLE id，见 [json-contract-docx.md](json-contract-docx.md#insertole)。不提供改尺寸、位置、图标或 ProgID 的 op。不写 `<p:timing>`。
 
 3D 模型 id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文。
@@ -3445,6 +3445,19 @@ docx 上仍用段落 id，见 [json-contract-docx.md](json-contract-docx.md#inse
 清掉无人引用的关系与 embeddings / 预览媒体。按 `deleteShape` 同一套规则清该 graphicFrame `cNvPr/@id` 的 timing `tgtEl`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。
 
+### setOleSize
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setOleSize"` |
+| `id` | 必须是 OLE id |
+| `cx` / `cy` | 至少给一个。EMU，正整数。省略的一侧保持原值 |
+
+写入 graphicFrame 的 `p:xfrm/a:ext`、Choice 与 Fallback 两支 `p:oleObj` 的 `imgW` / `imgH`，以及 Fallback 预览 `p:pic` 的 `a:ext`。
+不改 `a:off`，不改 embeddings，不启动 OLE 服务器。出现 `to` 报 `InvalidField`。
+对页 id 或图 id 发此 op 报 `InvalidId`。找不到报 `IdNotFound`。
+docx 见 [docx 分册](json-contract-docx.md#setolesize)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setolesize)。
+
 示例见 `docs/examples/pptx-apply-ole.json`。inspect 示例见 `docs/examples/pptx-inspect-ole.json`。
 
 ### insertInk
@@ -3898,7 +3911,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection`
  / `setSlideSection` 只脏 `presentation.xml` 的 `p:extLst` 里这份节扩展；`setSlideSection` 还可重排 `sldIdLst`。
 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 只脏 `presentation.xml` 的 `p:custShowLst`，不脏各页 XML，不脏 `.rels`。
-`insertOle` / `deleteOle` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，
+`insertOle` / `deleteOle` / `setOleSize` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
 `setModel3dSize` / `setModel3dPos` / `setModel3dCamera` 只脏该宿主 XML。
@@ -3937,7 +3950,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、`setNotesSize`、
 `setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
-`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
+`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`、`setOleSize`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。
 只改 core 字段时不要新建 custom。未点名的 `Slides` 留下。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。

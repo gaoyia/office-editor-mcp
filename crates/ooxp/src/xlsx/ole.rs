@@ -1,4 +1,5 @@
 //! 工作表嵌入对象：`<oleObjects>`。不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。
+//! 改尺寸只动预览框锚点，不重算嵌入工作簿。
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -61,6 +62,17 @@ pub struct InsertOleOp {
 pub struct DeleteOleOp {
     pub id: String,
     pub target: OleTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetOleSizeOp {
+    pub id: String,
+    pub target: OleTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
 }
 
 pub fn parse_ole_id(id: &str, json_path: &str) -> Result<OleTarget, Error> {
@@ -346,6 +358,92 @@ pub fn delete(
         cleanup_vml_media(pkg, &vml)?;
     }
     drop_vml_if_empty(pkg, sheet_part, &mut sheet_doc.root)?;
+    Ok(())
+}
+
+pub fn set_size(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &SetOleSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let (sid, has_pr) = {
+        let objs = collect_objs(pkg, sheet_part, &sheet_doc.root)?;
+        let Some((_, obj)) = objs
+            .iter()
+            .enumerate()
+            .find(|(i, e)| key_matches(&op.target.key, e, *i + 1))
+        else {
+            return Err(Error::with_path(
+                ErrorKind::OleNotFound { id: op.id.clone() },
+                path,
+            ));
+        };
+        (
+            obj.attr("shapeId").unwrap_or("").to_string(),
+            obj.child_by_local("objectPr")
+                .and_then(|p| p.child_by_local("anchor"))
+                .is_some(),
+        )
+    };
+    let dummy_kind = if sid.is_empty() {
+        None
+    } else {
+        find_dummy_anchor(pkg, sheet_part, &sheet_doc.root, &sid)?.map(|(k, _)| k)
+    };
+    let kind = if has_pr {
+        AnchorKind::TwoCell
+    } else {
+        dummy_kind.unwrap_or(AnchorKind::TwoCell)
+    };
+    let action = picture::plan_size(
+        kind,
+        &picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellOleSize,
+        "setOleSize",
+        op_index,
+    )?;
+    match action {
+        picture::SizeAction::TwoCell {
+            to,
+            to_off_x,
+            to_off_y,
+        } => {
+            let pr =
+                patch_object_pr_to(&mut sheet_doc.root, &op.target.key, to, to_off_x, to_off_y);
+            let dummy = if sid.is_empty() {
+                false
+            } else {
+                patch_dummy_to(pkg, sheet_doc, sheet_part, &sid, to, to_off_x, to_off_y)?
+            };
+            if !sid.is_empty() {
+                patch_vml_anchor(pkg, sheet_part, &sid, to)?;
+            }
+            if !pr && !dummy {
+                return Err(Error::with_path(
+                    ErrorKind::OleNotFound { id: op.id.clone() },
+                    path,
+                ));
+            }
+        }
+        picture::SizeAction::Extent { cx, cy } => {
+            if sid.is_empty() || !patch_dummy_ext(pkg, sheet_doc, sheet_part, &sid, cx, cy)? {
+                return Err(Error::with_path(
+                    ErrorKind::OleNotFound { id: op.id.clone() },
+                    path,
+                ));
+            }
+            patch_vml_style(pkg, sheet_part, &sid, cx, cy)?;
+        }
+    }
     Ok(())
 }
 
@@ -816,6 +914,336 @@ fn ensure_ole_objects(sheet: &mut Element) -> &mut Element {
     sheet
         .child_by_local_mut("oleObjects")
         .expect("刚插入 oleObjects")
+}
+
+fn patch_object_pr_to(
+    sheet: &mut Element,
+    key: &OleKey,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) -> bool {
+    let Some(parent) = sheet.child_by_local_mut("oleObjects") else {
+        return false;
+    };
+    let mut idx = 0usize;
+    for i in 0..parent.children.len() {
+        let Node::Element(el) = &mut parent.children[i] else {
+            continue;
+        };
+        let Some(obj) = ole_object_mut(el) else {
+            continue;
+        };
+        idx += 1;
+        if !key_matches(key, obj, idx) {
+            continue;
+        }
+        let Some(anchor) = obj
+            .child_by_local_mut("objectPr")
+            .and_then(|pr| pr.child_by_local_mut("anchor"))
+        else {
+            return false;
+        };
+        write_to_marker(anchor, to, to_off_x, to_off_y);
+        return true;
+    }
+    false
+}
+
+fn ole_object_mut(el: &mut Element) -> Option<&mut Element> {
+    if el.local_name() == "oleObject" {
+        return Some(el);
+    }
+    if el.local_name() != "AlternateContent" {
+        return None;
+    }
+    let mut slot = None;
+    for (i, n) in el.children.iter().enumerate() {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        if e.local_name() == "Choice" && e.child_by_local("oleObject").is_some() {
+            slot = Some(i);
+            break;
+        }
+        if e.local_name() == "Fallback" && slot.is_none() && e.child_by_local("oleObject").is_some()
+        {
+            slot = Some(i);
+        }
+    }
+    let i = slot?;
+    match &mut el.children[i] {
+        Node::Element(host) => host.child_by_local_mut("oleObject"),
+        Node::Text(_) => None,
+    }
+}
+
+fn write_to_marker(
+    anchor: &mut Element,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) {
+    let (_, cur_x, cur_y) = picture::read_marker(anchor.child_by_local("to"));
+    let ox = to_off_x.unwrap_or(cur_x);
+    let oy = to_off_y.unwrap_or(cur_y);
+    if let Some(marker) = anchor.child_by_local_mut("to") {
+        set_marker_nums(marker, to, ox, oy);
+        return;
+    }
+    anchor.push_element(picture::marker_el("to", to, ox, oy));
+}
+
+fn set_marker_nums(marker: &mut Element, cell: a1::CellRef, off_x: i64, off_y: i64) {
+    if let Some(c) = marker.child_by_local_mut("col") {
+        c.set_text(cell.col.saturating_sub(1).to_string());
+    }
+    if let Some(c) = marker.child_by_local_mut("colOff") {
+        c.set_text(off_x.to_string());
+    }
+    if let Some(c) = marker.child_by_local_mut("row") {
+        c.set_text(cell.row.saturating_sub(1).to_string());
+    }
+    if let Some(c) = marker.child_by_local_mut("rowOff") {
+        c.set_text(off_y.to_string());
+    }
+}
+
+fn patch_dummy_to(
+    pkg: &mut Package,
+    sheet_doc: &Document,
+    sheet_part: &str,
+    sid: &str,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) -> Result<bool, Error> {
+    for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
+        let mut draw = xml::parse(pkg.get(&part)?)?;
+        let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
+            if kind != AnchorKind::TwoCell || !dummy_in_anchor(anchor, sid) {
+                return false;
+            }
+            picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+            true
+        });
+        if hit {
+            pkg.set(&part, draw.to_bytes()?)?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn patch_dummy_ext(
+    pkg: &mut Package,
+    sheet_doc: &Document,
+    sheet_part: &str,
+    sid: &str,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> Result<bool, Error> {
+    for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
+        let mut draw = xml::parse(pkg.get(&part)?)?;
+        let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
+            if !matches!(kind, AnchorKind::OneCell | AnchorKind::Absolute)
+                || !dummy_in_anchor(anchor, sid)
+            {
+                return false;
+            }
+            let (cur_x, cur_y) = read_ext(anchor);
+            let nx = cx.or(cur_x);
+            let ny = cy.or(cur_y);
+            if let Some(ext) = anchor.child_by_local_mut("ext") {
+                if let Some(v) = nx {
+                    picture::set_attr_local(ext, "cx", &v.to_string());
+                }
+                if let Some(v) = ny {
+                    picture::set_attr_local(ext, "cy", &v.to_string());
+                }
+            }
+            set_nested_xfrm_ext(anchor, nx, ny);
+            true
+        });
+        if hit {
+            pkg.set(&part, draw.to_bytes()?)?;
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn set_nested_xfrm_ext(el: &mut Element, cx: Option<i64>, cy: Option<i64>) {
+    if el.local_name() == "xfrm" {
+        if let Some(ext) = el.child_by_local_mut("ext") {
+            if let Some(v) = cx {
+                picture::set_attr_local(ext, "cx", &v.to_string());
+            }
+            if let Some(v) = cy {
+                picture::set_attr_local(ext, "cy", &v.to_string());
+            }
+        }
+    }
+    let n = el.children.len();
+    for i in 0..n {
+        if let Node::Element(c) = &mut el.children[i] {
+            set_nested_xfrm_ext(c, cx, cy);
+        }
+    }
+}
+
+fn patch_vml_anchor(
+    pkg: &mut Package,
+    sheet_part: &str,
+    sid: &str,
+    to: a1::CellRef,
+) -> Result<(), Error> {
+    let Some(next) = map_vml_shape(pkg, sheet_part, sid, |chunk| {
+        rewrite_anchor_chunk(chunk, to)
+    })?
+    else {
+        return Ok(());
+    };
+    let Some(part) = vml_part(pkg, sheet_part)? else {
+        return Ok(());
+    };
+    pkg.set(&part, next.into_bytes())?;
+    Ok(())
+}
+
+fn patch_vml_style(
+    pkg: &mut Package,
+    sheet_part: &str,
+    sid: &str,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> Result<(), Error> {
+    let Some(next) = map_vml_shape(pkg, sheet_part, sid, |chunk| {
+        rewrite_style_chunk(chunk, cx, cy)
+    })?
+    else {
+        return Ok(());
+    };
+    let Some(part) = vml_part(pkg, sheet_part)? else {
+        return Ok(());
+    };
+    pkg.set(&part, next.into_bytes())?;
+    Ok(())
+}
+
+fn map_vml_shape(
+    pkg: &Package,
+    sheet_part: &str,
+    sid: &str,
+    f: impl FnOnce(&str) -> String,
+) -> Result<Option<String>, Error> {
+    let Some(part) = vml_part(pkg, sheet_part)? else {
+        return Ok(None);
+    };
+    if !pkg.contains(&part) {
+        return Ok(None);
+    }
+    let vml = String::from_utf8_lossy(pkg.get(&part)?).into_owned();
+    let needle = format!(r#"id="_x0000_s{sid}""#);
+    let mut from = 0usize;
+    while let Some(rel) = vml[from..].find("<v:shape") {
+        let start = from + rel;
+        let Some(rel_end) = vml[start..].find("</v:shape>") else {
+            break;
+        };
+        let end = start + rel_end + "</v:shape>".len();
+        let chunk = &vml[start..end];
+        if chunk.contains(&needle) {
+            let mut out = String::with_capacity(vml.len() + 32);
+            out.push_str(&vml[..start]);
+            out.push_str(&f(chunk));
+            out.push_str(&vml[end..]);
+            return Ok(Some(out));
+        }
+        from = end;
+    }
+    Ok(None)
+}
+
+fn rewrite_anchor_chunk(chunk: &str, to: a1::CellRef) -> String {
+    let open = "<x:Anchor>";
+    let close = "</x:Anchor>";
+    let Some(a) = chunk.find(open) else {
+        return chunk.to_string();
+    };
+    let Some(b) = chunk[a + open.len()..].find(close) else {
+        return chunk.to_string();
+    };
+    let inner_start = a + open.len();
+    let inner_end = inner_start + b;
+    let mut parts: Vec<String> = chunk[inner_start..inner_end]
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .collect();
+    if parts.len() >= 8 {
+        parts[4] = to.col.saturating_sub(1).to_string();
+        parts[6] = to.row.saturating_sub(1).to_string();
+    }
+    let mut out = String::new();
+    out.push_str(&chunk[..inner_start]);
+    out.push_str(&parts.join(", "));
+    out.push_str(&chunk[inner_end..]);
+    out
+}
+
+fn rewrite_style_chunk(chunk: &str, cx: Option<i64>, cy: Option<i64>) -> String {
+    let key = "style=\"";
+    let Some(a) = chunk.find(key) else {
+        return chunk.to_string();
+    };
+    let start = a + key.len();
+    let Some(b) = chunk[start..].find('"') else {
+        return chunk.to_string();
+    };
+    let end = start + b;
+    let next = rewrite_vml_style(&chunk[start..end], cx, cy);
+    let mut out = String::new();
+    out.push_str(&chunk[..start]);
+    out.push_str(&next);
+    out.push_str(&chunk[end..]);
+    out
+}
+
+fn rewrite_vml_style(style: &str, cx: Option<i64>, cy: Option<i64>) -> String {
+    let mut parts: Vec<String> = style
+        .split(';')
+        .filter(|p| !p.trim().is_empty())
+        .map(|p| p.trim().to_string())
+        .collect();
+    for p in &mut parts {
+        let lower = p.to_ascii_lowercase();
+        if let Some(v) = cx {
+            if lower.starts_with("width:") {
+                *p = format!("width:{}", format_pt(v));
+            }
+        }
+        if let Some(v) = cy {
+            if lower.starts_with("height:") {
+                *p = format!("height:{}", format_pt(v));
+            }
+        }
+    }
+    parts.join(";")
+}
+
+fn format_pt(emu: i64) -> String {
+    if emu % 12_700 == 0 {
+        return format!("{}pt", emu / 12_700);
+    }
+    let pt = emu as f64 / 12_700.0;
+    let mut s = format!("{pt:.4}");
+    while s.contains('.') && s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    format!("{s}pt")
 }
 
 fn remove_ole_entry(sheet: &mut Element, key: &OleKey) -> bool {

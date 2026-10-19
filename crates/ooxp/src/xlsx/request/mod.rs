@@ -321,6 +321,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "ungroup" => XlsxOp::Ungroup(parse_ungroup(obj, i)?),
             "insertOle" => XlsxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => XlsxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "setOleSize" => XlsxOp::SetOleSize(parse_set_ole_size(obj, i)?),
             "insertModel3d" => XlsxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => XlsxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => XlsxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),

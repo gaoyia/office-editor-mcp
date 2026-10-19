@@ -287,7 +287,7 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 且 `r:id` 能对上非 External、Type 后缀为 `oleObject` 或 `package` 的**工作表**关系。
 有 `@link` 的链接对象、ActiveX `controls` 不进树。`mc:AlternateContent` 只进第一个 `Choice`。
 页眉、`chartsheet`、组合里的 OLE 本期不进树。Excel 16.0 COM 在图表工作表与链接 OLE 上建对象失败，不另开 apply。
-预览图不进 `pictures`。`insertOle` 的 `id` 必须是 `sheet:{name}`。`deleteOle` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。
+预览图不进 `pictures`。`insertOle` 的 `id` 必须是 `sheet:{name}`。`deleteOle` / `setOleSize` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。
 不提供改尺寸、位置、图标或 ProgID 的 op。create 可写 OLE。docx / pptx 见各自分册。
 
 工作表 3D 模型挂在该 `worksheet` 上。`{cNvPrId}` 取 Choice 里 `xdr:graphicFrame` 的 `xdr:cNvPr/@id` 原文。
@@ -2450,7 +2450,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `customSheetViews` / 当前 `sheetViews` / 可选 `pageMargins`，不新建部件。
 页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` / `setShapeFormat` 还可以脏 worksheet drawing 及其 `.rels`。
-`insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
+`insertOle` / `deleteOle` / `setOleSize` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertInk` / `replaceInk` / `deleteInk` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/ink/…`、`/xl/media/…` 与 `[Content_Types].xml`。
@@ -3173,6 +3173,14 @@ pptx 见 [pptx 分册](json-contract-pptx.md#insertole)。
 找不到报 `IdNotFound`。id 不是 OLE id 报 `InvalidId`。
 摘该条 `mc:AlternateContent`（或裸的 `oleObject`）、对应 dummy `xdr:sp` 所在锚点、以及 VML 里 `_x0000_s{shapeId}` 的 `v:shape`。
 `oleObjects` 删光则去掉该元素。清掉无人引用的关系与 embeddings / 预览媒体。docx / pptx 见各自分册。
+
+### setOleSize
+
+字段与 `setPictureSize` 的 xlsx 一侧相同，`id` 必须是 OLE id。
+`objectPr/anchor` 为 `twoCell` 时必须给 `to`，可选 `toOffX` / `toOffY`。`cx` / `cy` 在这种锚点上出现报 `InvalidField`。
+同时改 dummy `xdr:twoCellAnchor` 的 `to`，以及 VML `x:Anchor` 的右下角单元格。不按列宽行高换算 EMU。
+没有 `objectPr`、锚点是 `oneCell` 或 `absolute` 时，改 `xdr:ext`。不启动 OLE 服务器，不改 embeddings。
+docx 见 [docx 分册](json-contract-docx.md#setolesize)。pptx 见 [pptx 分册](json-contract-pptx.md#setolesize)。
 
 ### insertModel3d
 

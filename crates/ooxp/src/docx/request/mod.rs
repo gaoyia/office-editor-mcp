@@ -733,6 +733,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )?)),
             "insertOle" => out.push(DocxOp::InsertOle(parse_insert_ole(obj, i)?)),
             "deleteOle" => out.push(DocxOp::DeleteOle(parse_delete_ole(obj, i)?)),
+            "setOleSize" => out.push(DocxOp::SetOleSize(parse_set_ole_size(obj, i)?)),
             "insertInkCanvas" => {
                 out.push(DocxOp::InsertInkCanvas(parse_insert_ink_canvas(obj, i)?))
             }

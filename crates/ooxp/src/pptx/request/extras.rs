@@ -164,6 +164,27 @@ pub(super) fn parse_delete_ole(
     Ok(ole::DeleteOleOp { id, target })
 }
 
+pub(super) fn parse_set_ole_size(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<ole::SetOleSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setOleSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(ole::SetOleSizeOp { id, target, cx, cy })
+}
+
 pub(super) fn parse_insert_model3d(
     obj: &Map<String, Value>,
     i: usize,

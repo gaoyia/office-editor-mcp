@@ -917,6 +917,25 @@ pub(super) fn parse_delete_ole(
     Ok(ole::DeleteOleOp { id, target })
 }
 
+pub(super) fn parse_set_ole_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ole::SetOleSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
+    let id = require_id(obj, i)?;
+    let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
+    let s = parse_drawing_size(obj, i, "setOleSize")?;
+    Ok(ole::SetOleSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
+}
+
 pub(super) fn parse_insert_model3d(
     obj: &serde_json::Map<String, Value>,
     i: usize,

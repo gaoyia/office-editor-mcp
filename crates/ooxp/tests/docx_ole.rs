@@ -257,9 +257,20 @@ fn inspect_lists_word_style_object_and_skips_preview_picture() {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );
     assert_eq!(o["stable"], true);
+    assert_eq!(o["cx"], 1);
+    assert_eq!(o["cy"], 1);
     assert_eq!(
         object_keys(o),
-        ["id", "progId", "name", "kind", "contentType", "stable"]
+        [
+            "id",
+            "progId",
+            "name",
+            "kind",
+            "contentType",
+            "cx",
+            "cy",
+            "stable"
+        ]
     );
     assert_eq!(listed["pictureCount"], 0);
 }
@@ -517,4 +528,57 @@ fn insert_package_writes_cfb_bin() {
         .expect("应写出 oleObjectN.bin");
     let bin = part_bytes(&out, &bin_name);
     assert_eq!(&bin[..8], &[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]);
+}
+
+#[test]
+fn set_ole_size_rewrites_preview_box() {
+    let path = create_docx("size-host");
+    let xlsx = write_xlsx("size-src");
+    let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 5 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap().to_string();
+    let inserted = tmp_dir().join(format!(
+        "size-in-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &path,
+        &inserted,
+        json!([{ "op": "insertOle", "id": para, "file": xlsx.to_string_lossy() }]),
+    );
+    let listed = inspect(&inserted, json!({ "oleObjects": true }));
+    let o = &listed["oleObjects"][0];
+    assert_eq!(o["cx"], 914_400);
+    assert_eq!(o["cy"], 914_400);
+    let id = o["id"].as_str().unwrap();
+    let out = tmp_dir().join(format!(
+        "size-out-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &inserted,
+        &out,
+        json!([{ "op": "setOleSize", "id": id, "cx": 1_828_800 }]),
+    );
+    let tree = inspect(&out, json!({ "oleObjects": true }));
+    assert_eq!(tree["oleObjects"][0]["cx"], 1_828_800);
+    assert_eq!(tree["oleObjects"][0]["cy"], 914_400);
+    let xml = String::from_utf8(part_bytes(&out, "word/document.xml")).unwrap();
+    assert!(xml.contains("width:144pt"));
+    assert!(xml.contains("height:72pt"));
+    assert!(xml.contains("w:dxaOrig=\"2880\""));
+    assert!(xml.contains("w:dyaOrig=\"1440\""));
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": out.to_string_lossy(),
+            "output": tmp_dir().join("size-bad.docx").to_string_lossy(),
+            "ops": [{ "op": "setOleSize", "id": para, "cx": 1 }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }

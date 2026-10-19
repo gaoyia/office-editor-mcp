@@ -546,6 +546,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::DeleteOle(op) => {
                 ole::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::SetOleSize(op) => {
+                ole::apply_set_size(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
             DocxOp::InsertInkCanvas(op) => {
                 ink::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }

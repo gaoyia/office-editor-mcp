@@ -1930,6 +1930,7 @@ pub enum XlsxOp {
     Ungroup(UngroupOp),
     InsertOle(ole::InsertOleOp),
     DeleteOle(ole::DeleteOleOp),
+    SetOleSize(ole::SetOleSizeOp),
     InsertModel3d(super::super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::super::model3d::DeleteModel3dOp),

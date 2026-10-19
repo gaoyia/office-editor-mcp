@@ -1488,6 +1488,11 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - 通过标准：缺 `from`、`id` 为 `slide:1`、对形状 id 发 `insertOle` 得 `InvalidField` 或 `InvalidId`
   - 均未写文件
   - 不强制开 Excel
+- **Xol6**
+  - 检查：事后改尺寸
+  - 通过标准：✅ `twoCell` 上 `setOleSize` 给 `to` 后树上右下角对得上。给 `cx` 得 `InvalidField`
+  - Excel 16.0 打开无修复
+  - 不启动 OLE 服务器，不重算嵌入工作簿
 
 ## 切片器
 

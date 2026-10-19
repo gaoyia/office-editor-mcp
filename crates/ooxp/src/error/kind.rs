@@ -765,6 +765,7 @@ define_error_kinds! {
     TwoCellSmartArtSize => vec![Self::TwoCellSmartArtSize],
     TwoCellModel3dSize => vec![Self::TwoCellModel3dSize],
     TwoCellInkSize => vec![Self::TwoCellInkSize],
+    TwoCellOleSize => vec![Self::TwoCellOleSize],
     TwoCellSlicerSize => vec![Self::TwoCellSlicerSize],
     TwoCellMathSize => vec![Self::TwoCellMathSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
@@ -2154,6 +2155,7 @@ impl ErrorKind {
             | Self::TwoCellSmartArtSize
             | Self::TwoCellModel3dSize
             | Self::TwoCellInkSize
+            | Self::TwoCellOleSize
             | Self::TwoCellSlicerSize
             | Self::TwoCellMathSize
             | Self::NotesSlideImage

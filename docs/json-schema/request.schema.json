@@ -1156,6 +1156,9 @@
                 "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setOleSizeOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertSlicerOp"
               },
               {
@@ -1193,6 +1196,9 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteOleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setOleSizeOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertInkCanvasOp"
@@ -1280,6 +1286,9 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/setInkPosOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setOleSizeOp"
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/insertMathOp"

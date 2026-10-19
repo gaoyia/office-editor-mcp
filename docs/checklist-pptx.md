@@ -2116,6 +2116,11 @@ inspect 计 `oleObjectCount`，`scope.oleObjects` 列名单。`exportMedia` 按 
   - 通过标准：对页 id 发 `deleteOle` 得 `InvalidId`
   - 对 `slide:1/ole:…` 发 `insertOle` 得 `InvalidId`
   - xlsx 发 `insertOle` 得 `InvalidField`，未写文件
+- **Po6**
+  - 检查：事后改尺寸
+  - 通过标准：✅ `setOleSize` 改 `cx` 后树上 `cx` 对得上，`a:off` 不动。对图 id 发此 op 得 `InvalidId`
+  - PowerPoint 16.0 打开无修复
+  - 不启动 OLE 服务器
 
 ## 幻灯片缩放
 

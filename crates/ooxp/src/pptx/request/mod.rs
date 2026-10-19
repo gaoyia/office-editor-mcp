@@ -270,6 +270,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteCustomShow" => PptxOp::DeleteCustomShow(parse_delete_custom_show(obj, i)?),
             "insertOle" => PptxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => PptxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "setOleSize" => PptxOp::SetOleSize(parse_set_ole_size(obj, i)?),
             "insertModel3d" => PptxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => PptxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => PptxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),

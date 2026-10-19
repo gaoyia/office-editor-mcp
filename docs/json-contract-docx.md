@@ -237,6 +237,7 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 `insertOle` 的 `id` 必须是段落 id：正文或页眉页脚。对 OLE id、图 id、容器 id、框 id、注容器 id、批注容器 id、
 框内 / 注内 / 批注内段落 id 或 `section:{n}` 发 `insertOle` 报 `InvalidId`。
 `deleteOle` 的 `id` 必须是 OLE id。对段落 id 发 `deleteOle` 报 `InvalidId`。
+`setOleSize` 的 `id` 也必须是 OLE id。只改预览框，不改嵌入字节。
 
 3D 模型的 `{docPrId}` 取该 `w:drawing` 的 `wp:docPr/@id`。没有则用 `model3d:index:{k}`，树上 `"stable": false`。
 `k` 只在该宿主段内从 1 计。页眉页脚 3D 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `model3ds` 上。
@@ -4701,6 +4702,19 @@ pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#insertole)。
 
 找不到报 `IdNotFound`。删掉整棵 `w:object`（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。
 xlsx 上发此 op 报 `InvalidField`。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。
+
+### setOleSize
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setOleSize"` |
+| `id` | 必须是 OLE id |
+| `cx` / `cy` | 至少给一个。宽度或高度，EMU，正整数。省略的一侧保持原值 |
+
+写入 `v:shape/@style` 的 `width` / `height`（12700 EMU 为 1 pt）。若对象上已有 `wp:extent` 或带 `cx` 的 `a:ext`，一并改。
+已有的 `w:dxaOrig` / `w:dyaOrig` 按 635 EMU 一缇同步。不改 embeddings，不启动 OLE 服务器。
+出现 `to` 报 `InvalidField`。对段落 id 发此 op 报 `InvalidId`。找不到报 `IdNotFound`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setolesize)。pptx 见 [pptx 分册](json-contract-pptx.md#setolesize)。
 
 ### insertInkCanvas
 

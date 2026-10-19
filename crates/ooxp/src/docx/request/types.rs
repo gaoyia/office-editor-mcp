@@ -1400,6 +1400,7 @@ pub enum DocxOp {
     SetSmartArtLayout(super::super::smartart::SetSmartArtLayoutOp),
     InsertOle(super::super::ole::InsertOleOp),
     DeleteOle(super::super::ole::DeleteOleOp),
+    SetOleSize(super::super::ole::SetOleSizeOp),
     InsertInkCanvas(super::super::ink::InsertInkCanvasOp),
     ReplaceInkCanvas(super::super::ink::ReplaceInkCanvasOp),
     DeleteInkCanvas(super::super::ink::DeleteInkCanvasOp),
