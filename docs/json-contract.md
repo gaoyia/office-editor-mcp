@@ -121,9 +121,9 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
 
-带 `q` 时，同时搜动作名、定义名、操作名、字段名，以及中英说明和 `limits`。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。
+带 `q` 时，同时搜动作名、定义名、操作名、字段名，以及中英说明和 `limits`。字段名会看进 `properties`、`items`、`oneOf` 里面，所以写在 `runs` 里的 `color` 也算。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。
 
-排序是名字精确匹配，然后名字里包含这个词，然后字段名，然后说明，最后才是 `limits`。`limits` 里碰巧出现的词不会排到名字命中前面。
+同一个操作不列两次。`setParaRunsOp` 这种定义名不再单独占一条，只留操作那条。排序是名字精确匹配，然后名字里包含这个词，然后字段名，然后说明，最后才是 `limits`。`limits` 里碰巧出现的词不会排到名字命中前面。字段名这一档里，操作排在定义前面。
 
 每条结果有 `kind` 和 `next`，告诉下一步怎么打开：
 

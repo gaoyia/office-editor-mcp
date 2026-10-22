@@ -174,6 +174,17 @@ fn load_catalog() -> Catalog {
     Catalog { ops, defs }
 }
 
+fn lookup_def_pointer(reference: &str) -> Option<Value> {
+    let rest = reference.strip_prefix("#/$defs/")?;
+    let (name, tail) = rest.split_once('/')?;
+    let mut current = catalog().defs.get(name)?.clone();
+    for part in tail.split('/') {
+        let key = part.replace("~1", "/").replace("~0", "~");
+        current = current.get(&key)?.clone();
+    }
+    Some(current)
+}
+
 fn ref_def_name(reference: &str) -> String {
     let rest = reference
         .rsplit_once("#/$defs/")
@@ -272,7 +283,7 @@ fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
         if SKIP_DEFS.contains(&name.as_str()) || ACTIONS.iter().any(|(_, def)| *def == name) {
             continue;
         }
-        if !def_visible(name, format) {
+        if !def_visible(name, format) || is_op_def(cat, name) {
             continue;
         }
         let rank = best_rank(&[name.as_str()], Some(body), needle.as_str());
@@ -297,6 +308,13 @@ fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
 
     hits.sort_by(|a, b| {
         a.0.cmp(&b.0)
+            .then_with(|| {
+                if a.0 >= 2 {
+                    hit_kind_order(&a.2).cmp(&hit_kind_order(&b.2))
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
             .then(a.1.to_lowercase().cmp(&b.1.to_lowercase()))
     });
     let total = hits.len();
@@ -352,14 +370,60 @@ fn name_rank(name: &str, needle: &str) -> Option<u8> {
     }
 }
 
+fn hit_kind_order(value: &Value) -> u8 {
+    match value.get("kind").and_then(Value::as_str) {
+        Some("op") => 0,
+        Some("action") => 1,
+        _ => 2,
+    }
+}
+
+fn is_op_def(cat: &Catalog, name: &str) -> bool {
+    cat.ops.iter().any(|entry| entry.def_name == name)
+}
+
 fn field_hit(body: &Value, needle: &str) -> bool {
-    let Some(props) = body.get("properties").and_then(Value::as_object) else {
-        return false;
-    };
-    props.keys().any(|key| {
-        let folded = key.to_lowercase();
-        folded == needle || folded.contains(needle)
-    })
+    property_key_hit(body, needle)
+}
+
+fn property_key_hit(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::Array(items) => items.iter().any(|item| property_key_hit(item, needle)),
+        Value::Object(obj) => {
+            if let Some(props) = obj.get("properties").and_then(Value::as_object) {
+                for (key, child) in props {
+                    let folded = key.to_lowercase();
+                    if folded == needle
+                        || folded.contains(needle)
+                        || property_key_hit(child, needle)
+                    {
+                        return true;
+                    }
+                }
+            }
+            for key in [
+                "items",
+                "additionalProperties",
+                "unevaluatedProperties",
+                "contains",
+            ] {
+                if let Some(child) = obj.get(key) {
+                    if property_key_hit(child, needle) {
+                        return true;
+                    }
+                }
+            }
+            for key in ["oneOf", "anyOf", "allOf", "prefixItems"] {
+                if let Some(Value::Array(items)) = obj.get(key) {
+                    if items.iter().any(|item| property_key_hit(item, needle)) {
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 fn text_hit(body: &Value, needle: &str, limits: bool) -> bool {
@@ -610,6 +674,9 @@ fn shorten_refs(value: &Value) -> Value {
         Value::Object(map) => {
             if map.len() == 1 {
                 if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
+                    if let Some(resolved) = lookup_def_pointer(reference) {
+                        return shorten_refs(&resolved);
+                    }
                     return json!({ "$ref": ref_def_name(reference) });
                 }
             }

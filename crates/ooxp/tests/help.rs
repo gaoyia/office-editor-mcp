@@ -142,7 +142,12 @@ fn scope_is_a_definition_not_an_op() {
 fn search_reaches_defs_not_just_ops() {
     let document = help(serde_json::json!({"q": "document", "format": "docx"})).unwrap();
     let matches = document["matches"].as_array().unwrap();
-    assert_ne!(matches[0]["op"], "deleteComment");
+    assert_eq!(matches[0]["name"], "docxDocument");
+    assert_eq!(matches[0]["next"], "name=docxDocument");
+    assert_ne!(
+        matches[0].get("op"),
+        Some(&serde_json::json!("deleteComment"))
+    );
     assert!(matches.iter().any(|item| item["name"] == "docxDocument"));
     assert_eq!(
         matches
@@ -153,6 +158,10 @@ fn search_reaches_defs_not_just_ops() {
     );
 
     let runs = help(serde_json::json!({"q": "runs", "format": "docx"})).unwrap();
+    let runs_m = runs["matches"].as_array().unwrap();
+    assert_eq!(runs_m[0]["op"], "setParaRuns");
+    assert_eq!(runs_m[0]["next"], "format=docx, op=setParaRuns");
+    assert!(runs_m.iter().all(|item| item["name"] != "setParaRunsOp"));
     assert!(runs["matches"]
         .as_array()
         .unwrap()
@@ -160,11 +169,26 @@ fn search_reaches_defs_not_just_ops() {
         .any(|item| item["name"] == "docxParaCreate" && item["next"] == "name=docxParaCreate"));
 
     let color = help(serde_json::json!({"q": "color", "format": "docx"})).unwrap();
-    assert!(color["matches"]
+    let color_m = color["matches"].as_array().unwrap();
+    assert!(color_m.iter().any(|item| {
+        item["op"] == "setParaRuns" && item["next"] == "format=docx, op=setParaRuns"
+    }));
+    let underline = help(serde_json::json!({"q": "underline", "format": "docx"})).unwrap();
+    assert!(underline["matches"].as_array().unwrap().iter().any(|item| {
+        item["op"] == "setParaRuns" && item["next"] == "format=docx, op=setParaRuns"
+    }));
+
+    let detail = help(serde_json::json!({"format": "docx", "op": "setParaRuns"})).unwrap();
+    let branches = detail["fields"]["properties"]["runs"]["items"]["oneOf"]
         .as_array()
-        .unwrap()
-        .iter()
-        .any(|item| item["name"] == "docxRunCreate"));
+        .unwrap();
+    for branch in branches.iter().skip(1) {
+        let props = branch["properties"].as_object().unwrap();
+        assert_eq!(props["sz"]["type"], "integer");
+        assert!(props.get("font").is_some());
+        assert!(props.get("highlight").is_some());
+        assert!(props.get("scale").is_some());
+    }
 
     let create = help(serde_json::json!({"q": "new file"})).unwrap();
     assert!(create["matches"]

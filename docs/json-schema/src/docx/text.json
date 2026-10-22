@@ -99,10 +99,22 @@
                   "after": { "type": "string", "minLength": 1 },
                   "before": { "type": "string", "minLength": 1 },
                   "nth": { "type": "integer", "minimum": 1 },
-                  "bold": { "type": "boolean" },
-                  "italic": { "type": "boolean" },
-                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
-                  "underline": { "type": "string" }
+                  "bold": { "$ref": "#/$defs/docxRunCreate/properties/bold" },
+                  "italic": { "$ref": "#/$defs/docxRunCreate/properties/italic" },
+                  "underline": { "$ref": "#/$defs/docxRunCreate/properties/underline" },
+                  "sz": { "$ref": "#/$defs/docxRunCreate/properties/sz" },
+                  "color": { "$ref": "#/$defs/docxRunCreate/properties/color" },
+                  "font": { "$ref": "#/$defs/docxRunCreate/properties/font" },
+                  "eastAsiaFont": { "$ref": "#/$defs/docxRunCreate/properties/eastAsiaFont" },
+                  "em": { "$ref": "#/$defs/docxRunCreate/properties/em" },
+                  "eastAsianLayout": { "$ref": "#/$defs/docxRunCreate/properties/eastAsianLayout" },
+                  "highlight": { "$ref": "#/$defs/docxRunCreate/properties/highlight" },
+                  "strike": { "$ref": "#/$defs/docxRunCreate/properties/strike" },
+                  "dstrike": { "$ref": "#/$defs/docxRunCreate/properties/dstrike" },
+                  "vertAlign": { "$ref": "#/$defs/docxRunCreate/properties/vertAlign" },
+                  "spacing": { "$ref": "#/$defs/docxRunCreate/properties/spacing" },
+                  "kern": { "$ref": "#/$defs/docxRunCreate/properties/kern" },
+                  "scale": { "$ref": "#/$defs/docxRunCreate/properties/scale" }
                 }
               },
               {
@@ -113,10 +125,22 @@
                   "after": { "type": "string", "minLength": 1 },
                   "before": { "type": "string", "minLength": 1 },
                   "nth": { "type": "integer", "minimum": 1 },
-                  "bold": { "type": "boolean" },
-                  "italic": { "type": "boolean" },
-                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
-                  "underline": { "type": "string" }
+                  "bold": { "$ref": "#/$defs/docxRunCreate/properties/bold" },
+                  "italic": { "$ref": "#/$defs/docxRunCreate/properties/italic" },
+                  "underline": { "$ref": "#/$defs/docxRunCreate/properties/underline" },
+                  "sz": { "$ref": "#/$defs/docxRunCreate/properties/sz" },
+                  "color": { "$ref": "#/$defs/docxRunCreate/properties/color" },
+                  "font": { "$ref": "#/$defs/docxRunCreate/properties/font" },
+                  "eastAsiaFont": { "$ref": "#/$defs/docxRunCreate/properties/eastAsiaFont" },
+                  "em": { "$ref": "#/$defs/docxRunCreate/properties/em" },
+                  "eastAsianLayout": { "$ref": "#/$defs/docxRunCreate/properties/eastAsianLayout" },
+                  "highlight": { "$ref": "#/$defs/docxRunCreate/properties/highlight" },
+                  "strike": { "$ref": "#/$defs/docxRunCreate/properties/strike" },
+                  "dstrike": { "$ref": "#/$defs/docxRunCreate/properties/dstrike" },
+                  "vertAlign": { "$ref": "#/$defs/docxRunCreate/properties/vertAlign" },
+                  "spacing": { "$ref": "#/$defs/docxRunCreate/properties/spacing" },
+                  "kern": { "$ref": "#/$defs/docxRunCreate/properties/kern" },
+                  "scale": { "$ref": "#/$defs/docxRunCreate/properties/scale" }
                 }
               },
               {
@@ -126,10 +150,22 @@
                 "properties": {
                   "start": { "type": "integer", "minimum": 0 },
                   "end": { "type": "integer", "minimum": 0 },
-                  "bold": { "type": "boolean" },
-                  "italic": { "type": "boolean" },
-                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
-                  "underline": { "type": "string" }
+                  "bold": { "$ref": "#/$defs/docxRunCreate/properties/bold" },
+                  "italic": { "$ref": "#/$defs/docxRunCreate/properties/italic" },
+                  "underline": { "$ref": "#/$defs/docxRunCreate/properties/underline" },
+                  "sz": { "$ref": "#/$defs/docxRunCreate/properties/sz" },
+                  "color": { "$ref": "#/$defs/docxRunCreate/properties/color" },
+                  "font": { "$ref": "#/$defs/docxRunCreate/properties/font" },
+                  "eastAsiaFont": { "$ref": "#/$defs/docxRunCreate/properties/eastAsiaFont" },
+                  "em": { "$ref": "#/$defs/docxRunCreate/properties/em" },
+                  "eastAsianLayout": { "$ref": "#/$defs/docxRunCreate/properties/eastAsianLayout" },
+                  "highlight": { "$ref": "#/$defs/docxRunCreate/properties/highlight" },
+                  "strike": { "$ref": "#/$defs/docxRunCreate/properties/strike" },
+                  "dstrike": { "$ref": "#/$defs/docxRunCreate/properties/dstrike" },
+                  "vertAlign": { "$ref": "#/$defs/docxRunCreate/properties/vertAlign" },
+                  "spacing": { "$ref": "#/$defs/docxRunCreate/properties/spacing" },
+                  "kern": { "$ref": "#/$defs/docxRunCreate/properties/kern" },
+                  "scale": { "$ref": "#/$defs/docxRunCreate/properties/scale" }
                 }
               }
             ]

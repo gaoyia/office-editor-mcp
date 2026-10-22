@@ -2489,7 +2489,8 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
   - 必须从 0 起首尾相接，盖住整段可见文字
   - 模型容易数错，优先用 `match`
 - **格式字段**
-  - 与 `setRunFormat` 相同，都可以不写
+  - 与 `setRunFormat` 相同：`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`、`spacing`、`kern`、`scale`
+  - 都可以不写
   - 写了就落在这一条 run 上
 
 `w:pPr`、书签、绘图留下。每条新 run 抄它起始处那条旧 run 的 `w:rPr`，再盖上本条的格式字段。
