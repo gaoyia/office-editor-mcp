@@ -230,6 +230,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
         }
         let parsed = match op_name {
             "setShapeText" => PptxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "setShapeRuns" => PptxOp::SetShapeRuns(parse_set_shape_runs(obj, i)?),
             "insertShape" => PptxOp::InsertShape(parse_insert_shape(obj, i)?),
             "insertConnector" => PptxOp::InsertConnector(parse_insert_connector(obj, i)?),
             "deleteConnector" => PptxOp::DeleteConnector(parse_delete_connector(obj, i)?),

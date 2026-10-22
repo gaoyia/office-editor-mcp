@@ -632,6 +632,219 @@ fn needs_xml_space(text: &str) -> bool {
     text.starts_with(' ') || text.starts_with('\t') || text.ends_with(' ') || text.ends_with('\t')
 }
 
+/// 按可见文字把 `a:r` / `a:br` 切开。不改字，不删 `a:fld`，不合并段落。
+pub fn set_txbody_runs(
+    tx: &mut Element,
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+    op_index: usize,
+) -> Result<(), crate::error::Error> {
+    let visible = txbody_visible_text(tx);
+    let spans = crate::shape_runs::plan(&visible, pieces, op_index)?;
+    let chars: Vec<char> = visible.chars().collect();
+    let mut cursor = 0usize;
+    rewrite_run_tree(tx, &mut cursor, &chars, &spans, pieces);
+    Ok(())
+}
+
+fn rewrite_run_tree(
+    el: &mut Element,
+    cursor: &mut usize,
+    chars: &[char],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+) {
+    if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                rewrite_run_tree(child, cursor, chars, spans, pieces);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "fld" {
+        return;
+    }
+    if el.local_name() == "p" {
+        rewrite_para_runs(el, cursor, chars, spans, pieces);
+        return;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            rewrite_run_tree(e, cursor, chars, spans, pieces);
+        }
+    }
+}
+
+fn rewrite_para_runs(
+    p: &mut Element,
+    cursor: &mut usize,
+    chars: &[char],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+) {
+    let mut i = 0usize;
+    while i < p.children.len() {
+        if !is_visible_text_node(&p.children[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < p.children.len() && is_visible_text_node(&p.children[i]) {
+            i += 1;
+        }
+        let end = i;
+        let group_chars = p.children[start..end].iter().map(node_chars).sum::<usize>();
+        let group_abs = *cursor;
+        let segs = char_segs(&p.children[start..end]);
+        let proto = match &p.children[start] {
+            Node::Element(e) => Element::new(e.name.clone()),
+            Node::Text(_) => Element::new("a:r"),
+        };
+        let nodes = emit_group(chars, group_abs, group_chars, &segs, spans, pieces, &proto);
+        let new_len = nodes.len();
+        for _ in start..end {
+            p.children.remove(start);
+        }
+        for (k, node) in nodes.into_iter().enumerate() {
+            p.children.insert(start + k, node);
+        }
+        *cursor += group_chars;
+        i = start + new_len;
+    }
+}
+
+fn is_visible_text_node(n: &Node) -> bool {
+    let Node::Element(e) = n else {
+        return false;
+    };
+    e.local_name() == "br" || is_text_run(e)
+}
+
+fn node_chars(n: &Node) -> usize {
+    let Node::Element(e) = n else {
+        return 0;
+    };
+    if e.local_name() == "br" {
+        return 1;
+    }
+    e.element_children()
+        .filter(|c| c.local_name() == "t")
+        .map(|t| t.text_content().chars().count())
+        .sum()
+}
+
+fn char_segs(nodes: &[Node]) -> Vec<(usize, Option<Element>)> {
+    let mut acc = 0usize;
+    let mut segs = Vec::new();
+    for n in nodes {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        acc += node_chars(n);
+        segs.push((acc, e.child_by_local("rPr").cloned()));
+    }
+    segs
+}
+
+fn emit_group(
+    chars: &[char],
+    group_abs: usize,
+    group_chars: usize,
+    segs: &[(usize, Option<Element>)],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+    proto: &Element,
+) -> Vec<Node> {
+    let group_end = group_abs + group_chars;
+    let mut out = Vec::new();
+    for span in spans {
+        let start = span.start.max(group_abs);
+        let end = span.end.min(group_end);
+        if start >= end {
+            continue;
+        }
+        let format = span
+            .piece
+            .and_then(|idx| pieces.get(idx))
+            .and_then(|piece| piece.format.as_ref());
+        emit_chars(&mut out, chars, group_abs, start, end, segs, format, proto);
+    }
+    out
+}
+
+fn emit_chars(
+    out: &mut Vec<Node>,
+    chars: &[char],
+    group_abs: usize,
+    start: usize,
+    end: usize,
+    segs: &[(usize, Option<Element>)],
+    format: Option<&crate::drawing_text::TextFormat>,
+    proto: &Element,
+) {
+    let mut i = start;
+    while i < end {
+        let seg_i = seg_index(segs, i - group_abs);
+        if chars[i] == '\n' {
+            out.push(Node::Element(styled_br(
+                proto,
+                segs.get(seg_i).and_then(|seg| seg.1.clone()),
+                format,
+            )));
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < end && chars[j] != '\n' && seg_index(segs, j - group_abs) == seg_i {
+            j += 1;
+        }
+        let text: String = chars[i..j].iter().collect();
+        let mut run = Element::new(proto.prefixed("r"));
+        if let Some(rpr) = styled_rpr(proto, segs.get(seg_i).and_then(|s| s.1.clone()), format) {
+            run.push_element(rpr);
+        }
+        let mut t = Element::new(proto.prefixed("t"));
+        apply_t_text(&mut t, &text);
+        run.push_element(t);
+        out.push(Node::Element(run));
+        i = j;
+    }
+}
+
+fn seg_index(segs: &[(usize, Option<Element>)], local: usize) -> usize {
+    segs.iter()
+        .position(|(end, _)| local < *end)
+        .unwrap_or(segs.len().saturating_sub(1))
+}
+
+fn styled_br(
+    proto: &Element,
+    base: Option<Element>,
+    format: Option<&crate::drawing_text::TextFormat>,
+) -> Element {
+    let mut br = Element::new(proto.prefixed("br"));
+    if let Some(rpr) = styled_rpr(proto, base, format) {
+        br.children.insert(0, Node::Element(rpr));
+    }
+    br
+}
+
+fn styled_rpr(
+    proto: &Element,
+    base: Option<Element>,
+    format: Option<&crate::drawing_text::TextFormat>,
+) -> Option<Element> {
+    let Some(fmt) = format.filter(|fmt| fmt.has_run_patch()) else {
+        return base;
+    };
+    let mut rpr = base.unwrap_or_else(|| Element::new(proto.prefixed("rPr")));
+    crate::drawing_text::patch_rpr(&mut rpr, fmt);
+    Some(rpr)
+}
+
 /// 遇到 `mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
 /// 公式框整段不进 `shapes`。
 pub fn walk_choice<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {

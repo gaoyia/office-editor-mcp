@@ -342,6 +342,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
         })?;
         if op_name == "setCell"
             || op_name == "setShapeText"
+            || op_name == "setShapeRuns"
             || op_name == "setNotesText"
             || op_name == "setPictureAnchor"
             || op_name == "setChartAnchor"

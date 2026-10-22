@@ -1353,6 +1353,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ParaRunMismatch { text } => {
             format!("这段可见文字里对不上：{text}")
         }
+        ErrorKind::ShapeRunMismatch { text } => {
+            format!("这段形状文字里对不上：{text}")
+        }
         ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),
         ErrorKind::BookmarkNotFound { id } => format!("找不到书签：{id}"),
         ErrorKind::EditRangeNotFound { id } => format!("找不到例外编辑区：{id}"),

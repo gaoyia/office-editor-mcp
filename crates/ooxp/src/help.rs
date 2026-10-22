@@ -258,11 +258,7 @@ fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
 
     for (action, def_name) in ACTIONS {
         let body = cat.defs.get(*def_name);
-        let rank = best_rank(
-            &[*action, *def_name],
-            body,
-            needle.as_str(),
-        );
+        let rank = best_rank(&[*action, *def_name], body, needle.as_str());
         if let Some(rank) = rank {
             hits.push((
                 rank,
@@ -295,17 +291,20 @@ fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
             needle.as_str(),
         );
         if let Some(rank) = rank {
-            hits.push((
-                rank,
-                entry.op.clone(),
-                entry_blurb_formats(entry, lang),
-            ));
+            hits.push((rank, entry.op.clone(), entry_blurb_formats(entry, lang)));
         }
     }
 
-    hits.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.to_lowercase().cmp(&b.1.to_lowercase())));
+    hits.sort_by(|a, b| {
+        a.0.cmp(&b.0)
+            .then(a.1.to_lowercase().cmp(&b.1.to_lowercase()))
+    });
     let total = hits.len();
-    let matches: Vec<Value> = hits.into_iter().take(SEARCH_LIMIT).map(|(_, _, v)| v).collect();
+    let matches: Vec<Value> = hits
+        .into_iter()
+        .take(SEARCH_LIMIT)
+        .map(|(_, _, v)| v)
+        .collect();
     let mut out = json!({
         "kind": "search",
         "q": q,
@@ -426,7 +425,11 @@ fn def_hit(name: &str, body: &Value, lang: HelpLang) -> Value {
 }
 
 fn op_detail(op: &str, format: Option<&str>, lang: HelpLang) -> Result<Value, Error> {
-    let found: Vec<&OpEntry> = catalog().ops.iter().filter(|entry| entry.op == op).collect();
+    let found: Vec<&OpEntry> = catalog()
+        .ops
+        .iter()
+        .filter(|entry| entry.op == op)
+        .collect();
     if found.is_empty() {
         return Err(Error::new(ErrorKind::UnsupportedOp { op: op.into() }));
     }
@@ -593,7 +596,11 @@ fn pick<'a>(
             } else {
                 description_en
             },
-            if limits_en.is_empty() { limits } else { limits_en },
+            if limits_en.is_empty() {
+                limits
+            } else {
+                limits_en
+            },
         ),
     }
 }

@@ -310,11 +310,7 @@ fn opt_nonempty(
     }
 }
 
-fn req_usize(
-    obj: &serde_json::Map<String, Value>,
-    path: &str,
-    key: &str,
-) -> Result<usize, Error> {
+fn req_usize(obj: &serde_json::Map<String, Value>, path: &str, key: &str) -> Result<usize, Error> {
     match obj.get(key) {
         Some(Value::Number(n)) => n.as_u64().map(|n| n as usize).ok_or_else(|| {
             Error::with_path(

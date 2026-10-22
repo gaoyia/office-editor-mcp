@@ -1732,6 +1732,14 @@ pub struct SetShapeTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetShapeRunsOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub kind: DrawObjKind,
+    pub runs: Vec<crate::shape_runs::ShapeRunPiece>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetShapeFormatOp {
     pub id: String,
     pub target: SheetDrawId,
@@ -1967,6 +1975,7 @@ pub enum XlsxOp {
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
+    SetShapeRuns(SetShapeRunsOp),
     SetShapeFormat(SetShapeFormatOp),
     InsertSmartArt(InsertSmartArtOp),
     DeleteSmartArt(DeleteSmartArtOp),

@@ -364,6 +364,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "setShapeRuns" => XlsxOp::SetShapeRuns(parse_set_shape_runs(obj, i)?),
             "setShapeFormat" => XlsxOp::SetShapeFormat(parse_set_shape_format(obj, i)?),
             "insertSmartArt" => XlsxOp::InsertSmartArt(parse_insert_smartart(obj, i)?),
             "deleteSmartArt" => XlsxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?),

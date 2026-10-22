@@ -96,7 +96,10 @@ pub struct SetParaTextOp {
 #[derive(Debug, Clone)]
 pub enum ParaRunSource {
     Text(String),
-    Range { start: usize, end: usize },
+    Range {
+        start: usize,
+        end: usize,
+    },
     Match {
         text: Option<String>,
         after: Option<String>,

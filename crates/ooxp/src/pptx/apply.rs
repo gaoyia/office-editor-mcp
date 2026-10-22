@@ -94,6 +94,58 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 shape::set_txbody_text(tx, &op.text);
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetShapeRuns(op) => {
+                if op.id.starts_with("master:")
+                    || op.id.starts_with("notesMaster/")
+                    || op.id.starts_with("handout/")
+                {
+                    let ph = master::parse_placeholder_id(&op.id, i)?;
+                    master::set_runs(&mut pkg, &pres_part, &pres.root, &ph, &op.id, &op.runs, i)?;
+                    continue;
+                }
+                let target = shape::parse_shape_id(&op.id, i)?;
+                let meta = slides.get(target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::ShapeNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                if target.on_notes {
+                    if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
+                        notes::reject_slide_image(sp, i)?;
+                    }
+                }
+                let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ShapeNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                if target.on_notes {
+                    notes::reject_slide_image(sp, i)?;
+                }
+                let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ShapeHasNoText { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                shape::set_txbody_runs(tx, &op.runs, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::SetShapeFormat(op) => {
                 apply_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
             }

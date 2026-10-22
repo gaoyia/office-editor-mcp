@@ -1324,7 +1324,7 @@ fn spacing_insert_index(ppr: &Element, local: &str) -> usize {
     after.unwrap_or(0)
 }
 
-fn patch_rpr(rpr: &mut Element, fmt: &TextFormat) {
+pub(crate) fn patch_rpr(rpr: &mut Element, fmt: &TextFormat) {
     if let Some(sz) = &fmt.sz {
         match sz {
             Some(n) => set_attr_local(rpr, "sz", &n.to_string()),

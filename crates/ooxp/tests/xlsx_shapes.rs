@@ -630,3 +630,52 @@ fn group_shape_with_connector_and_rejects() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!dest.exists());
 }
+
+#[test]
+fn set_shape_runs_cuts_textbox_between_two_anchors() {
+    let src = create_book("span");
+    let inserted = tmp("span-ins");
+    let sentence = "前半这里是很长的中间，包括全部直接损失以及因此产生的合理费用结尾之后";
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertTextBox",
+            "id": "sheet:Sheet1",
+            "from": "B2",
+            "text": sentence
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&inserted, json!({ "textBoxes": true }));
+    let id = tree["sheets"][0]["textBoxes"][0]["id"].as_str().unwrap();
+    let out = tmp("span-out");
+    apply(
+        &inserted,
+        &out,
+        json!([{
+            "op": "setShapeRuns",
+            "id": id,
+            "runs": [{
+                "after": "前半",
+                "before": "结尾",
+                "color": "FF0000",
+                "underline": "sng"
+            }]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "textBoxes": true }));
+    let box_ = &tree["sheets"][0]["textBoxes"][0];
+    assert_eq!(box_["text"], sentence);
+    let runs = box_["runs"].as_array().unwrap();
+    let colored: Vec<_> = runs
+        .iter()
+        .filter(|run| run["color"] == "FF0000")
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        colored,
+        ["这里是很长的中间，包括全部直接损失以及因此产生的合理费用"]
+    );
+}

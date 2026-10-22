@@ -45,19 +45,18 @@ use super::request::{
     InsertRubyOp, InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace,
     InsertShapeOp, InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
     InsertTocPlace, MergeCellsOp, NoteNumberTarget, ParaRunSource, ReplacePictureOp,
-    ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetCellBordersOp, SetCellFormatOp, SetColumnsOp, SetCommentDoneOp,
-    SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp,
-    SetFieldOp, SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
-    SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp,
-    SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
-    SetParaRunsOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
-    SetRtlGutterOp, SetRubyOp,
-    SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
-    SetStyleOp, SetTableAlignOp, SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp,
-    SetTableRowHeightOp, SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
-    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxTextAnchorOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
+    ReplyCommentOp, RevisionOp, SetBookmarkOp, SetCellBordersOp, SetCellFormatOp, SetColumnsOp,
+    SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp,
+    SetEvenAndOddHeadersOp, SetFieldOp, SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp,
+    SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp,
+    SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp, SetPageSizeOp,
+    SetParaFormatOp, SetParaNumberingOp, SetParaRunsOp, SetParaStyleOp, SetParaTextOp,
+    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetRunStyleOp,
+    SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp, SetStyleOp, SetTableAlignOp,
+    SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp, SetTableStyleOp,
+    SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp,
+    SetTextBoxSizeOp, SetTextBoxTextAnchorOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
@@ -3530,56 +3529,6 @@ fn slice_at<'a>(
     (text, rpr, format)
 }
 
-fn locate_span(
-    visible: &str,
-    cursor_bytes: usize,
-    needle: Option<&str>,
-    after: Option<&str>,
-    before: Option<&str>,
-    nth: usize,
-) -> Option<(usize, usize)> {
-    if let Some(needle) = needle {
-        let mut from = cursor_bytes;
-        let mut seen = 0usize;
-        while from < visible.len() {
-            let rel = visible[from..].find(needle)?;
-            let abs = from + rel;
-            let end = abs + needle.len();
-            let preceded = after.is_none_or(|prefix| visible[..abs].ends_with(prefix));
-            let followed = before.is_none_or(|suffix| visible[end..].starts_with(suffix));
-            if preceded && followed {
-                seen += 1;
-                if seen == nth {
-                    return Some((abs, end));
-                }
-            }
-            let step = visible[abs..].chars().next().map(|ch| ch.len_utf8()).unwrap_or(1);
-            from = abs + step;
-        }
-        return None;
-    }
-    let after = after?;
-    let before = before?;
-    let mut from = cursor_bytes;
-    let mut seen = 0usize;
-    while from < visible.len() {
-        let rel = visible[from..].find(after)?;
-        let abs = from + rel;
-        let span_start = abs + after.len();
-        if let Some(rel_before) = visible[span_start..].find(before) {
-            if rel_before > 0 {
-                seen += 1;
-                if seen == nth {
-                    return Some((span_start, span_start + rel_before));
-                }
-            }
-        }
-        let step = visible[abs..].chars().next().map(|ch| ch.len_utf8()).unwrap_or(1);
-        from = abs + step;
-    }
-    None
-}
-
 fn match_slices<'a>(
     el: &Element,
     visible: &str,
@@ -3600,7 +3549,7 @@ fn match_slices<'a>(
         else {
             continue;
         };
-        let Some((abs_bytes, end_bytes)) = locate_span(
+        let Some((abs_bytes, end_bytes)) = crate::text_span::locate_span(
             visible,
             cursor_bytes,
             needle.as_deref(),

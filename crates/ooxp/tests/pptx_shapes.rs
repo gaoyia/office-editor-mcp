@@ -493,3 +493,47 @@ fn foreign_format_rejects() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
+
+#[test]
+fn set_shape_runs_cuts_between_two_anchors() {
+    let src = create_deck("span");
+    let tree = inspect_scope(&src, json!({ "slide": 1 }));
+    let id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let sentence = "前半这里是很长的中间，包括全部直接损失以及因此产生的合理费用结尾之后";
+    let filled = tmp("span-filled");
+    apply(
+        &src,
+        &filled,
+        json!([{ "op": "setShapeText", "id": id, "text": sentence }]),
+    )
+    .unwrap();
+    let out = tmp("span-out");
+    apply(
+        &filled,
+        &out,
+        json!([{
+            "op": "setShapeRuns",
+            "id": id,
+            "runs": [{
+                "after": "前半",
+                "before": "结尾",
+                "color": "FF0000",
+                "underline": "sng"
+            }]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "slide": 1 }));
+    let shape = &tree["slides"][0]["shapes"][0];
+    assert_eq!(shape["text"], sentence);
+    let runs = shape["runs"].as_array().unwrap();
+    let colored: Vec<_> = runs
+        .iter()
+        .filter(|run| run["color"] == "FF0000")
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        colored,
+        ["这里是很长的中间，包括全部直接损失以及因此产生的合理费用"]
+    );
+}

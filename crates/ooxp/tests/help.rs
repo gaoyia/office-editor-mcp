@@ -26,7 +26,10 @@ fn index_tells_actions_apart() {
         .as_str()
         .unwrap()
         .contains("看文件的一部分"));
-    assert!(inspect["limits"].as_str().unwrap().contains("不要一次要整份文件"));
+    assert!(inspect["limits"]
+        .as_str()
+        .unwrap()
+        .contains("不要一次要整份文件"));
     let apply = actions
         .iter()
         .find(|item| item["action"] == "apply")
@@ -48,7 +51,10 @@ fn list_xlsx_has_set_cell_not_paragraph() {
         .as_str()
         .unwrap()
         .contains("值或公式"));
-    assert!(!set_cell["description"].as_str().unwrap().contains("不能同时"));
+    assert!(!set_cell["description"]
+        .as_str()
+        .unwrap()
+        .contains("不能同时"));
 }
 
 #[test]
@@ -70,7 +76,8 @@ fn set_cell_fields_stay_one_layer() {
     assert!(value["limits"].as_str().unwrap().contains("共享公式"));
     assert!(value.get("descriptionEn").is_none());
     assert!(value.get("limitsEn").is_none());
-    let english = help(serde_json::json!({"format": "xlsx", "op": "setCell", "locale": "en"})).unwrap();
+    let english =
+        help(serde_json::json!({"format": "xlsx", "op": "setCell", "locale": "en"})).unwrap();
     assert!(english["description"]
         .as_str()
         .unwrap()
@@ -87,7 +94,12 @@ fn set_cell_fields_stay_one_layer() {
         .as_str()
         .unwrap()
         .starts_with("^="));
-    assert!(value.get("otherFormats").unwrap().as_array().unwrap().is_empty());
+    assert!(value
+        .get("otherFormats")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

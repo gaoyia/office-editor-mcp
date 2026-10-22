@@ -50,6 +50,12 @@ pub struct SetShapeTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetShapeRunsOp {
+    pub id: String,
+    pub runs: Vec<crate::shape_runs::ShapeRunPiece>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetShapeFormatOp {
     pub id: String,
     pub format: crate::drawing_text::TextFormat,
@@ -1360,6 +1366,7 @@ pub struct UngroupOp {
 #[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
+    SetShapeRuns(SetShapeRunsOp),
     InsertShape(InsertShapeOp),
     InsertConnector(InsertConnectorOp),
     DeleteConnector(DeleteConnectorOp),

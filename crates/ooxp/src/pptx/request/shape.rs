@@ -41,6 +41,16 @@ pub(super) fn parse_set_shape_text(
     Ok(SetShapeTextOp { id, text })
 }
 
+pub(super) fn parse_set_shape_runs(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeRunsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "runs"])?;
+    let id = require_id(obj, i)?;
+    let runs = crate::shape_runs::parse_shape_runs(obj, i)?;
+    Ok(SetShapeRunsOp { id, runs })
+}
+
 pub(super) fn parse_insert_shape(
     obj: &Map<String, Value>,
     i: usize,

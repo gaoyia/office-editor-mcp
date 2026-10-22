@@ -4,6 +4,10 @@
     "setShapeTextOp": [
       "xlsx",
       "pptx"
+    ],
+    "setShapeRunsOp": [
+      "xlsx",
+      "pptx"
     ]
   },
   "$defs": {
@@ -29,6 +33,93 @@
         },
         "text": {
           "type": "string"
+        }
+      }
+    },
+    "setShapeRunsOp": {
+      "description": "按原文把形状或文本框里的文字拆成多个 run。短的用 match。中间很长时只写 after 和 before 两个切点。",
+      "descriptionEn": "Split the text in a shape or text box into runs. Use match for a short span. For a long span, give only the after and before cut points.",
+      "limits": "不改没点名的字，不重建形状。id 与 setShapeText 相同。不写 match 时，after 是左切点，before 是右切点，中间原文单独成一截，中间不用抄。text 连起来必须和现在的可见文字相同。单元格、备注整段、讲义槽位、图表标题和 SmartArt 不走这条。",
+      "limitsEn": "Does not change unnamed words and does not rebuild the shape. id matches setShapeText. Without match, after is the left cut and before is the right cut; the text between them becomes the run and is not copied into the request. text pieces must join to the current visible text. Cells, whole notes, handout slots, chart titles, and SmartArt do not use this op.",
+      "type": "object",
+      "required": ["op", "id", "runs"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapeRuns" },
+        "id": { "type": "string", "minLength": 1 },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["text"],
+                "additionalProperties": false,
+                "properties": {
+                  "text": { "type": "string" },
+                  "bold": { "type": "boolean" },
+                  "italic": { "type": "boolean" },
+                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+                  "underline": { "type": "string" },
+                  "sz": { "type": "integer", "minimum": 100, "maximum": 400000 },
+                  "font": { "type": "string", "minLength": 1 },
+                  "eastAsiaFont": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["match"],
+                "additionalProperties": false,
+                "properties": {
+                  "match": { "type": "string", "minLength": 1 },
+                  "after": { "type": "string", "minLength": 1 },
+                  "before": { "type": "string", "minLength": 1 },
+                  "nth": { "type": "integer", "minimum": 1 },
+                  "bold": { "type": "boolean" },
+                  "italic": { "type": "boolean" },
+                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+                  "underline": { "type": "string" },
+                  "sz": { "type": "integer", "minimum": 100, "maximum": 400000 },
+                  "font": { "type": "string", "minLength": 1 },
+                  "eastAsiaFont": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["after", "before"],
+                "additionalProperties": false,
+                "properties": {
+                  "after": { "type": "string", "minLength": 1 },
+                  "before": { "type": "string", "minLength": 1 },
+                  "nth": { "type": "integer", "minimum": 1 },
+                  "bold": { "type": "boolean" },
+                  "italic": { "type": "boolean" },
+                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+                  "underline": { "type": "string" },
+                  "sz": { "type": "integer", "minimum": 100, "maximum": 400000 },
+                  "font": { "type": "string", "minLength": 1 },
+                  "eastAsiaFont": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["start", "end"],
+                "additionalProperties": false,
+                "properties": {
+                  "start": { "type": "integer", "minimum": 0 },
+                  "end": { "type": "integer", "minimum": 0 },
+                  "bold": { "type": "boolean" },
+                  "italic": { "type": "boolean" },
+                  "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+                  "underline": { "type": "string" },
+                  "sz": { "type": "integer", "minimum": 100, "maximum": 400000 },
+                  "font": { "type": "string", "minLength": 1 },
+                  "eastAsiaFont": { "type": "string", "minLength": 1 }
+                }
+              }
+            ]
+          }
         }
       }
     }

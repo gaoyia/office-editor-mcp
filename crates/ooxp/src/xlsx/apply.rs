@@ -1162,6 +1162,17 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::set_shape_text(&mut pkg, &doc.root, &part, op, i)?;
             }
+            XlsxOp::SetShapeRuns(op) => {
+                let (part, _) = require_ws_or_chartsheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::set_shape_runs(&mut pkg, &doc.root, &part, op, i)?;
+            }
             XlsxOp::SetShapeFormat(op) => {
                 let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,

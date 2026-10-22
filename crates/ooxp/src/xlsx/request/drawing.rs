@@ -443,6 +443,22 @@ pub(super) fn parse_set_shape_text(
     })
 }
 
+pub(super) fn parse_set_shape_runs(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeRunsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "runs"])?;
+    let id = require_id(obj, i)?;
+    let (target, kind) = shape::parse_shape_text_id(&id, i)?;
+    let runs = crate::shape_runs::parse_shape_runs(obj, i)?;
+    Ok(SetShapeRunsOp {
+        id,
+        target,
+        kind,
+        runs,
+    })
+}
+
 pub(super) fn parse_set_shape_format(
     obj: &serde_json::Map<String, Value>,
     i: usize,

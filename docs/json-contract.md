@@ -2084,6 +2084,47 @@ xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`�
 `docs/examples/pptx-apply-text-fill.json` 与 `docs/examples/xlsx-apply-text-fill.json`、
 `docs/examples/pptx-apply-shape-spacing.json` 与 `docs/examples/xlsx-apply-shape-spacing.json`。
 
+### setShapeRuns
+
+按原文把形状或文本框里的可见文字拆成多个 run。`id` 与 `setShapeText` 相同。不改没点名的字，不重建形状。短的用 `match`。中间很长时不写 `match`，只写两个切点：`after` 是左切点，这一截从它后面开始；`before` 是右切点，这一截到它前面结束。两切点中间的原文单独成一截，中间不用抄出来。
+
+```json
+{
+  "op": "setShapeRuns",
+  "id": "slide:1/shape:2",
+  "runs": [
+    { "after": "前半", "before": "结尾", "color": "FF0000", "underline": "sng" }
+  ]
+}
+```
+
+xlsx 文本框和带文字的形状用同一条，id 例如 `sheet:Sheet1/sp:1`。docx 上发此 op 报 `InvalidField`。单元格、备注整段、讲义槽位、图表标题、SmartArt 点文字不走这条。
+
+- **`runs`**
+  - 至少一条
+  - 要么每条都是 `match` 或一对切点，要么每条都是 `text`，要么每条都是 `start` 与 `end`
+  - 三种不要混用
+- **`match`**
+  - 可见文字里的原文，不能是空串
+  - 找不到报 `InvalidField`
+- **`after` / `before`**
+  - 不写 `match` 时必须成对
+  - 这一截是二者中间的全部原文
+- **`nth`**
+  - 可选，从 1 起，不写就是接下来的第一次
+- **`text`**
+  - 全部连起来必须等于当前可见文字，否则报 `InvalidField`
+- **`start` / `end`**
+  - 字符下标，按 Unicode 标量值，含 `start` 不含 `end`
+  - 必须从 0 起首尾相接
+- **格式字段**
+  - `bold`、`italic`、`color`、`underline`、`sz`、`font`、`eastAsiaFont`
+  - 规则与 `setShapeFormat` 的 run 字段相同
+  - `underline` 是 `sng` / `none` / `dbl`
+  - 对齐、框内垂直、段间距仍用 `setShapeFormat`
+
+`a:pPr`、`a:endParaRPr`、`a:fld` 留下。换行仍是 `\n`，对应 `a:br`。对不上报 `InvalidField`，一个字都不改。
+
 ## exportMedia
 
 按图 id 把 OPC 里的媒体部件原样写到本地文件。docx 与 pptx 也认 OLE id，写出嵌入部件原字节。docx 也认 `font:{n}`，写出 fontTable 指向的 odttf 原字节（仍是混淆后的，不还原）。

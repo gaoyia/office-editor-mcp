@@ -1526,6 +1526,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ParaRunMismatch { text } => {
             format!("Not found in this paragraph's visible text: {text}")
         }
+        ErrorKind::ShapeRunMismatch { text } => {
+            format!("Not found in this shape's visible text: {text}")
+        }
         ErrorKind::HyperlinkNotFound { id } => format!("Hyperlink not found: {id}"),
         ErrorKind::BookmarkNotFound { id } => format!("Bookmark not found: {id}"),
         ErrorKind::EditRangeNotFound { id } => format!("Exception editing range not found: {id}"),

@@ -471,6 +471,28 @@ pub fn set_text(
     })
 }
 
+pub fn set_runs(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    runs: &[crate::shape_runs::ShapeRunPiece],
+    op_index: usize,
+) -> Result<(), Error> {
+    apply_on_placeholder(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        notes::reject_slide_image(sp, op_index)?;
+        let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        shape::set_txbody_runs(tx, runs, op_index)?;
+        Ok(())
+    })
+}
+
 pub fn set_format(
     pkg: &mut Package,
     pres_part: &str,
