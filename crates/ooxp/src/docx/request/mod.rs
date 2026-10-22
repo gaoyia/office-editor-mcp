@@ -475,6 +475,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
         }
         match op_name {
             "setParaText" => out.push(DocxOp::SetParaText(parse_set_para_text(obj, i)?)),
+            "setParaRuns" => out.push(DocxOp::SetParaRuns(parse_set_para_runs(obj, i)?)),
             "setHeaderFooterDistance" => out.push(DocxOp::SetHeaderFooterDistance(
                 parse_set_hf_distance(obj, i)?,
             )),

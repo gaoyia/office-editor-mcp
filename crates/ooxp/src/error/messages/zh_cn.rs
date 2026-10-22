@@ -1350,6 +1350,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedTableRowHeightsMatch => "rowHeights 的长度必须等于行数".into(),
         ErrorKind::RevisionNotFound { id } => format!("找不到修订：{id}"),
         ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
+        ErrorKind::ParaRunMismatch { text } => {
+            format!("这段可见文字里对不上：{text}")
+        }
         ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),
         ErrorKind::BookmarkNotFound { id } => format!("找不到书签：{id}"),
         ErrorKind::EditRangeNotFound { id } => format!("找不到例外编辑区：{id}"),

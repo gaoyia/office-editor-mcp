@@ -30,6 +30,7 @@ impl ParaRemain {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct RunFormatOwned {
     pub bold: Option<bool>,
     pub italic: Option<bool>,
@@ -317,7 +318,7 @@ const RUN_KEYS: &[&str] = &[
     "scale",
 ];
 
-fn parse_run_format(
+pub(crate) fn parse_run_format(
     obj: &serde_json::Map<String, Value>,
     path: &str,
 ) -> Result<Option<RunFormatOwned>, Error> {

@@ -2417,6 +2417,87 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 
 xlsx / pptx 上发此 op 报 `InvalidField`。
 
+### setParaRuns
+
+把已有段落按原文拆成多个 run。只改这一个 `w:p`，不重建文件，也不改没点名的字。拆开之后，每个 run 用现有的 `setRunFormat` 改颜色、下划线等。
+
+短的用 `match`，只写要单独成段的那几个字。中间很长、不想把整段抄出来时，写两个切点，不写 `match`：`after` 是左切点，这一截从它后面开始；`before` 是右切点，这一截到它前面结束。两切点中间的原文整段单独成一截。没被标到的前后文字各自留成 run。同一对切点出现多次时，用 `nth` 指定第几次（从 1 起，从左往右）。不写 `nth` 就是接下来的第一次。
+
+段落原文是「前半这里是很长的中间结尾之后」。下面只写两个切点，中间那一长串单独成一截，不用抄进请求：
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setParaRuns",
+      "id": "para:3F2A1B00",
+      "runs": [
+        { "after": "前半", "before": "结尾", "color": "FF0000", "underline": "wave" }
+      ]
+    }
+  ]
+}
+```
+
+拆完仍是原句，三截：`前半`、`这里是很长的中间`（红字、波浪线）、`结尾之后`。
+
+也可以把 inspect 读到的整段文字自己切开，每条写 `text`。拼起来必须和现在的可见文字逐字相同，否则报 `InvalidField`，一段都不改。要改字先用 `setParaText`。
+
+```json
+{
+  "op": "setParaRuns",
+  "id": "para:3F2A1B00",
+  "runs": [
+    { "text": "前半" },
+    { "text": "后半", "color": "FF0000", "underline": "wave" }
+  ]
+}
+```
+
+- **`op`**
+  - 必须是 `"setParaRuns"`
+- **`id`**
+  - 与 `setParaText` 相同，必须是段落 id
+- **`runs`**
+  - 至少一条
+  - 要么每条都是 `match` 或一对切点，要么每条都是 `text`，要么每条都是 `start` 与 `end`
+  - 三种不要混用
+- **`match`**
+  - 这段可见文字里的原文，不能是空串
+  - 只写要单独拿出来的那几个字，不要把整句塞进来
+  - 找不到报 `InvalidField`
+- **`after`**
+  - 左切点，紧挨在这一截前面的原文
+  - 和 `match` 一起写时，用来在重复里消歧
+  - 不写 `match` 时必须和 `before` 成对
+- **`before`**
+  - 右切点，紧挨在这一截后面的原文
+  - 不写 `match` 时，这一截是 `after` 与 `before` 中间的全部原文，中间不用抄出来
+  - 和 `match` 一起写时，表示命中文字紧挨在它前面
+- **`nth`**
+  - 可选，正整数
+  - 第几次出现，从 1 起
+  - 不写就是接下来的第一次
+- **`text`**
+  - 切开后这一段的原文
+  - 全部 `text` 连起来必须等于当前可见文字
+- **`start` / `end`**
+  - 字符下标，按 Unicode 标量值，含 `start` 不含 `end`
+  - 必须从 0 起首尾相接，盖住整段可见文字
+  - 模型容易数错，优先用 `match`
+- **格式字段**
+  - 与 `setRunFormat` 相同，都可以不写
+  - 写了就落在这一条 run 上
+
+`w:pPr`、书签、绘图留下。每条新 run 抄它起始处那条旧 run 的 `w:rPr`，再盖上本条的格式字段。
+
+有修订、超链接或域时与 `setParaText` 一样报 `NotImplemented`，不改 XML。对不上报 `InvalidField`。找不到段落报 `IdNotFound`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+run 的序号会变。要再改格式，先 inspect 拿新的 run id，或直接在 `runs` 里写格式字段。
+
 ### setHeaderFooterDistance
 
 ```json

@@ -1035,6 +1035,7 @@ define_error_kinds! {
     NeedTableRowHeightsMatch => vec![Self::NeedTableRowHeightsMatch],
     RevisionNotFound { id: String } => vec![Self::RevisionNotFound { id: "rev:1".into() }],
     SetParaTextHasRevision => vec![Self::SetParaTextHasRevision],
+    ParaRunMismatch { text: String } => vec![Self::ParaRunMismatch { text: "后半".into() }],
     HyperlinkNotFound { id: String } => vec![Self::HyperlinkNotFound { id: "link:1".into() }],
     BookmarkNotFound { id: String } => vec![Self::BookmarkNotFound { id: "bookmark:1".into() }],
     EditRangeNotFound { id: String } => vec![Self::EditRangeNotFound { id: "perm:1".into() }],
@@ -1796,6 +1797,7 @@ impl ErrorKind {
             | Self::InvalidDataTableFormula
             | Self::InvalidCellValue
             | Self::OpRequiresField { .. }
+            | Self::ParaRunMismatch { .. }
             | Self::SetCellWorksheetOnly
             | Self::InspectWorksheetOnly
             | Self::NeedAtLeastOneSheet

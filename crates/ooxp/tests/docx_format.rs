@@ -817,3 +817,213 @@ fn set_run_format_scale() {
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn set_para_runs_splits_existing_paragraph() {
+    let path = write_sample("para-runs");
+    let out = tmp_dir().join("para-runs-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [
+                { "text": "第" },
+                { "text": "二段", "color": "0000FF", "underline": "wave" }
+            ]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0]["text"], "第");
+    assert_eq!(runs[1]["text"], "二段");
+    assert_eq!(runs[1]["color"], "0000FF");
+    assert_eq!(runs[1]["underline"], "wave");
+
+    let colored = tmp_dir().join("para-runs-fmt.docx");
+    apply(
+        &out,
+        &colored,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0002/run:1",
+            "color": "00AA00"
+        }]),
+    );
+    let tree = inspect(&colored, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    assert_eq!(runs[0]["color"], "00AA00");
+    assert_eq!(runs[1]["color"], "0000FF");
+
+    let ranged = tmp_dir().join("para-runs-range.docx");
+    apply(
+        &path,
+        &ranged,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [
+                { "start": 0, "end": 1 },
+                { "start": 1, "end": 3, "underline": "wave" }
+            ]
+        }]),
+    );
+    let tree = inspect(&ranged, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    assert_eq!(runs[0]["text"], "第");
+    assert_eq!(runs[1]["text"], "二段");
+    assert_eq!(runs[1]["underline"], "wave");
+
+    let matched = tmp_dir().join("para-runs-match.docx");
+    apply(
+        &path,
+        &matched,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{ "match": "二段", "color": "FF0000", "underline": "wave" }]
+        }]),
+    );
+    let tree = inspect(&matched, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0]["text"], "第");
+    assert!(runs[0]["color"].is_null());
+    assert_eq!(runs[1]["text"], "二段");
+    assert_eq!(runs[1]["color"], "FF0000");
+
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{ "text": "你好" }]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{ "match": "不存在" }]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_para_runs_match_picks_one_hit_in_a_long_sentence() {
+    let path = write_sample("para-long");
+    let filled = tmp_dir().join("para-long-filled.docx");
+    apply(
+        &path,
+        &filled,
+        json!([{
+            "op": "setParaText",
+            "id": "para:AAAA0002",
+            "text": "甲方应当赔偿，乙方也应当赔偿。"
+        }]),
+    );
+    let out = tmp_dir().join("para-long-out.docx");
+    apply(
+        &filled,
+        &out,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{
+                "match": "赔偿",
+                "after": "乙方也应当",
+                "color": "FF0000",
+                "underline": "wave"
+            }]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    let colored: Vec<_> = runs
+        .iter()
+        .filter(|run| run["color"] == "FF0000")
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(colored, ["赔偿"]);
+    let joined: String = runs
+        .iter()
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(joined, "甲方应当赔偿，乙方也应当赔偿。");
+
+    let by_nth = tmp_dir().join("para-long-nth.docx");
+    apply(
+        &filled,
+        &by_nth,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{ "match": "赔偿", "nth": 2, "underline": "wave" }]
+        }]),
+    );
+    let tree = inspect(&by_nth, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    let waved: Vec<_> = runs
+        .iter()
+        .filter(|run| run["underline"] == "wave")
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(waved, ["赔偿"]);
+    let joined: String = runs
+        .iter()
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(joined, "甲方应当赔偿，乙方也应当赔偿。");
+}
+
+#[test]
+fn set_para_runs_cuts_between_two_anchors() {
+    let path = write_sample("para-cuts");
+    let filled = tmp_dir().join("para-cuts-filled.docx");
+    let sentence = "前半这里是很长的中间，包括全部直接损失以及因此产生的合理费用结尾之后";
+    apply(
+        &path,
+        &filled,
+        json!([{
+            "op": "setParaText",
+            "id": "para:AAAA0002",
+            "text": sentence
+        }]),
+    );
+    let out = tmp_dir().join("para-cuts-out.docx");
+    apply(
+        &filled,
+        &out,
+        json!([{
+            "op": "setParaRuns",
+            "id": "para:AAAA0002",
+            "runs": [{
+                "after": "前半",
+                "before": "结尾",
+                "color": "FF0000",
+                "underline": "wave"
+            }]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let runs = para(&tree, "para:AAAA0002")["runs"].as_array().unwrap();
+    let colored: Vec<_> = runs
+        .iter()
+        .filter(|run| run["color"] == "FF0000")
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        colored,
+        ["这里是很长的中间，包括全部直接损失以及因此产生的合理费用"]
+    );
+    let joined: String = runs
+        .iter()
+        .map(|run| run["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(joined, sentence);
+}

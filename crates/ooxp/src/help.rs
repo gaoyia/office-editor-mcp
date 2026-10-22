@@ -240,36 +240,72 @@ fn list(format: &str, lang: HelpLang) -> Value {
     })
 }
 
+const ACTIONS: &[(&str, &str)] = &[
+    ("inspect", "inspectRequest"),
+    ("create", "createRequest"),
+    ("apply", "applyRequest"),
+    ("exportMedia", "exportMediaRequest"),
+    ("exportChartData", "exportChartDataRequest"),
+    ("help", "helpRequest"),
+];
+
+const SKIP_DEFS: &[&str] = &["anyApplyOp", "xlsxApplyOp", "docxApplyOp", "pptxApplyOp"];
+
 fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
     let needle = q.to_lowercase();
-    let mut hits: Vec<&OpEntry> = catalog()
-        .ops
-        .iter()
-        .filter(|entry| {
-            format.is_none_or(|item| entry.formats.iter().any(|have| have == item))
-                && (entry.op.to_lowercase().contains(&needle)
-                    || entry.description.to_lowercase().contains(&needle)
-                    || entry.description_en.to_lowercase().contains(&needle)
-                    || entry.limits.to_lowercase().contains(&needle)
-                    || entry.limits_en.to_lowercase().contains(&needle))
-        })
-        .collect();
-    hits.sort_by(|a, b| {
-        let a_name = a.op.to_lowercase().contains(&needle);
-        let b_name = b.op.to_lowercase().contains(&needle);
-        b_name
-            .cmp(&a_name)
-            .then(a.op.cmp(&b.op))
-            .then(a.def_name.cmp(&b.def_name))
-    });
+    let cat = catalog();
+    let mut hits: Vec<(u8, String, Value)> = Vec::new();
+
+    for (action, def_name) in ACTIONS {
+        let body = cat.defs.get(*def_name);
+        let rank = best_rank(
+            &[*action, *def_name],
+            body,
+            needle.as_str(),
+        );
+        if let Some(rank) = rank {
+            hits.push((
+                rank,
+                (*def_name).to_string(),
+                action_hit(action, def_name, lang),
+            ));
+        }
+    }
+
+    for (name, body) in &cat.defs {
+        if SKIP_DEFS.contains(&name.as_str()) || ACTIONS.iter().any(|(_, def)| *def == name) {
+            continue;
+        }
+        if !def_visible(name, format) {
+            continue;
+        }
+        let rank = best_rank(&[name.as_str()], Some(body), needle.as_str());
+        if let Some(rank) = rank {
+            hits.push((rank, name.clone(), def_hit(name, body, lang)));
+        }
+    }
+
+    for entry in &cat.ops {
+        if format.is_some_and(|item| !entry.formats.iter().any(|have| have == item)) {
+            continue;
+        }
+        let rank = best_rank(
+            &[entry.op.as_str(), entry.def_name.as_str()],
+            Some(&entry.body),
+            needle.as_str(),
+        );
+        if let Some(rank) = rank {
+            hits.push((
+                rank,
+                entry.op.clone(),
+                entry_blurb_formats(entry, lang),
+            ));
+        }
+    }
+
+    hits.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.to_lowercase().cmp(&b.1.to_lowercase())));
     let total = hits.len();
-    let matches: Vec<Value> = hits
-        .into_iter()
-        .take(SEARCH_LIMIT)
-        .map(|entry| {
-            entry_blurb_formats(entry, lang)
-        })
-        .collect();
+    let matches: Vec<Value> = hits.into_iter().take(SEARCH_LIMIT).map(|(_, _, v)| v).collect();
     let mut out = json!({
         "kind": "search",
         "q": q,
@@ -281,6 +317,110 @@ fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
     }
     if total > SEARCH_LIMIT {
         out["truncated"] = json!(true);
+    }
+    out
+}
+
+fn best_rank(names: &[&str], body: Option<&Value>, needle: &str) -> Option<u8> {
+    let mut rank = None::<u8>;
+    for name in names {
+        if let Some(got) = name_rank(name, needle) {
+            rank = Some(rank.map(|have| have.min(got)).unwrap_or(got));
+        }
+    }
+    if let Some(body) = body {
+        if field_hit(body, needle) {
+            rank = Some(rank.map(|have| have.min(2)).unwrap_or(2));
+        }
+        if text_hit(body, needle, false) {
+            rank = Some(rank.map(|have| have.min(3)).unwrap_or(3));
+        }
+        if text_hit(body, needle, true) {
+            rank = Some(rank.map(|have| have.min(4)).unwrap_or(4));
+        }
+    }
+    rank
+}
+
+fn name_rank(name: &str, needle: &str) -> Option<u8> {
+    let folded = name.to_lowercase();
+    if folded == needle {
+        Some(0)
+    } else if folded.contains(needle) {
+        Some(1)
+    } else {
+        None
+    }
+}
+
+fn field_hit(body: &Value, needle: &str) -> bool {
+    let Some(props) = body.get("properties").and_then(Value::as_object) else {
+        return false;
+    };
+    props.keys().any(|key| {
+        let folded = key.to_lowercase();
+        folded == needle || folded.contains(needle)
+    })
+}
+
+fn text_hit(body: &Value, needle: &str, limits: bool) -> bool {
+    let keys: &[&str] = if limits {
+        &["limits", "limitsEn"]
+    } else {
+        &["description", "descriptionEn"]
+    };
+    keys.iter().any(|key| {
+        body.get(*key)
+            .and_then(Value::as_str)
+            .is_some_and(|text| text.to_lowercase().contains(needle))
+    })
+}
+
+fn def_visible(name: &str, format: Option<&str>) -> bool {
+    let Some(format) = format else {
+        return true;
+    };
+    let folded = name.to_ascii_lowercase();
+    for prefix in ["xlsx", "docx", "pptx"] {
+        if folded.starts_with(prefix) && prefix != format {
+            return false;
+        }
+    }
+    true
+}
+
+fn action_hit(action: &str, def_name: &str, lang: HelpLang) -> Value {
+    let mut row = action_row(action, def_name, lang);
+    if let Some(obj) = row.as_object_mut() {
+        obj.insert("kind".into(), json!("action"));
+        obj.insert("name".into(), json!(def_name));
+        obj.insert("open".into(), json!("name"));
+        obj.insert("next".into(), json!(format!("name={def_name}")));
+    }
+    row
+}
+
+fn def_hit(name: &str, body: &Value, lang: HelpLang) -> Value {
+    let description_zh = text_of(body, "description");
+    let description_en = text_of(body, "descriptionEn");
+    let limits_zh = text_of(body, "limits");
+    let limits_en = text_of(body, "limitsEn");
+    let (description, limits) = pick(
+        lang,
+        &description_zh,
+        &description_en,
+        &limits_zh,
+        &limits_en,
+    );
+    let mut out = json!({
+        "kind": "def",
+        "name": name,
+        "open": "name",
+        "next": format!("name={name}"),
+        "description": description,
+    });
+    if !limits.is_empty() {
+        out["limits"] = json!(limits);
     }
     out
 }
@@ -399,9 +539,17 @@ fn entry_blurb(key: &str, name: &str, entry: &OpEntry, lang: HelpLang) -> Value 
 
 fn entry_blurb_formats(entry: &OpEntry, lang: HelpLang) -> Value {
     let (description, limits) = entry_text(entry, lang);
+    let next = if entry.formats.len() == 1 {
+        format!("format={}, op={}", entry.formats[0], entry.op)
+    } else {
+        format!("op={}", entry.op)
+    };
     let mut out = json!({
+        "kind": "op",
         "op": entry.op,
         "formats": entry.formats,
+        "open": "op",
+        "next": next,
         "description": description,
     });
     if !limits.is_empty() {

@@ -1523,6 +1523,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SetParaTextHasRevision => {
             "Cannot change visible text in a paragraph that contains tracked revisions".into()
         }
+        ErrorKind::ParaRunMismatch { text } => {
+            format!("Not found in this paragraph's visible text: {text}")
+        }
         ErrorKind::HyperlinkNotFound { id } => format!("Hyperlink not found: {id}"),
         ErrorKind::BookmarkNotFound { id } => format!("Bookmark not found: {id}"),
         ErrorKind::EditRangeNotFound { id } => format!("Exception editing range not found: {id}"),

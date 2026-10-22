@@ -44,13 +44,15 @@ use super::request::{
     InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
     InsertRubyOp, InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace,
     InsertShapeOp, InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
-    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ParaRunSource, ReplacePictureOp,
+    ReplyCommentOp, RevisionOp,
     SetBookmarkOp, SetCellBordersOp, SetCellFormatOp, SetColumnsOp, SetCommentDoneOp,
     SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp,
     SetFieldOp, SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
     SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp,
     SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
-    SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp,
+    SetParaRunsOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
+    SetRtlGutterOp, SetRubyOp,
     SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
     SetStyleOp, SetTableAlignOp, SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp,
     SetTableRowHeightOp, SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
@@ -85,6 +87,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
         match op {
             DocxOp::SetParaText(op) => {
                 apply_para_text(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetParaRuns(op) => {
+                apply_para_runs(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetHeaderFooterDistance(op) => {
                 let doc = docs.get_mut(&doc_part).unwrap();
@@ -3273,6 +3278,384 @@ fn apply_para_text(
         }
     }
     Ok(())
+}
+
+fn apply_para_runs(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaRunsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let target = para::parse_para_id(&op.id, i)?;
+    match &target {
+        ParaTarget::Body(p) => {
+            let doc = load_part(pkg, docs, doc_part)?;
+            refuse_set_text_if_field(&doc.root, p, i)?;
+            refuse_set_text_if_math(&doc.root, p, i)?;
+            refuse_set_text_if_ruby(&doc.root, p, i)?;
+            refuse_set_text_if_sdt(&doc.root, p, i)?;
+            let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => {
+            let part_name = part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            refuse_set_text_if_field(&doc.root, para, i)?;
+            refuse_set_text_if_math(&doc.root, para, i)?;
+            refuse_set_text_if_ruby(&doc.root, para, i)?;
+            refuse_set_text_if_sdt(&doc.root, para, i)?;
+            let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InTextBox { host, key, para } => {
+            let part_name = part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_field(content, para, i)?;
+            refuse_set_text_if_math(content, para, i)?;
+            refuse_set_text_if_ruby(content, para, i)?;
+            refuse_set_text_if_sdt(content, para, i)?;
+            let el = para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let el = para::find_paragraph_mut(note, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_revision(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let part_name = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let comment =
+                comments::find_comment_mut(&mut doc.root, comment_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            comments::reject_ink(comment, &op.id, i)?;
+            let el = para::find_paragraph_mut(comment, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            refuse_set_text_if_revision(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+
+fn write_para_runs(el: &mut Element, op: &SetParaRunsOp, i: usize) -> Result<(), Error> {
+    let visible = para::visible_text(el);
+    let chars: Vec<char> = visible.chars().collect();
+    let slices = match op.runs.first().map(|run| &run.source) {
+        Some(ParaRunSource::Match { .. }) => match_slices(el, &visible, &chars, op, i)?,
+        Some(ParaRunSource::Text(_)) => {
+            let joined: String = op
+                .runs
+                .iter()
+                .map(|run| match &run.source {
+                    ParaRunSource::Text(text) => text.as_str(),
+                    _ => "",
+                })
+                .collect();
+            if joined != visible {
+                return Err(Error::with_path(
+                    ErrorKind::ParaRunMismatch { text: joined },
+                    format!("ops[{i}].runs"),
+                ));
+            }
+            let mut cursor = 0usize;
+            let mut slices = Vec::new();
+            for run in &op.runs {
+                let ParaRunSource::Text(text) = &run.source else {
+                    continue;
+                };
+                let end = cursor + text.chars().count();
+                slices.push(slice_at(el, &chars, cursor, end, run.format.as_ref()));
+                cursor = end;
+            }
+            slices
+        }
+        _ => {
+            let mut cursor = 0usize;
+            let mut slices = Vec::new();
+            for (j, run) in op.runs.iter().enumerate() {
+                let ParaRunSource::Range { start, end } = run.source else {
+                    continue;
+                };
+                if start != cursor || end > chars.len() {
+                    return Err(Error::with_path(
+                        ErrorKind::OutOfRange {
+                            field: "start".into(),
+                            min: cursor as i64,
+                            max: chars.len() as i64,
+                        },
+                        format!("ops[{i}].runs[{j}].start"),
+                    ));
+                }
+                slices.push(slice_at(el, &chars, start, end, run.format.as_ref()));
+                cursor = end;
+            }
+            if cursor != chars.len() {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "end".into(),
+                        min: 0,
+                        max: chars.len() as i64,
+                    },
+                    format!("ops[{i}].runs"),
+                ));
+            }
+            slices
+        }
+    };
+    let pieces: Vec<para::WrittenRun> = slices
+        .iter()
+        .map(|(text, rpr, _)| para::WrittenRun {
+            text: text.clone(),
+            rpr: rpr.clone(),
+        })
+        .collect();
+    para::replace_visible_runs(el, &pieces);
+    let mut n = 0usize;
+    for child in el.children.iter_mut() {
+        let crate::xml::Node::Element(run) = child else {
+            continue;
+        };
+        if run.local_name() == "r" && run.element_children().any(|c| c.local_name() == "t") {
+            if let Some((_, _, Some(fmt))) = slices.get(n) {
+                format::apply_run(run, run_patch(fmt));
+            }
+            n += 1;
+        }
+    }
+    Ok(())
+}
+
+type RunSlice<'a> = (
+    String,
+    Option<Element>,
+    Option<&'a super::create_round5::RunFormatOwned>,
+);
+
+fn slice_at<'a>(
+    el: &Element,
+    chars: &[char],
+    start: usize,
+    end: usize,
+    format: Option<&'a super::create_round5::RunFormatOwned>,
+) -> RunSlice<'a> {
+    let text: String = chars[start..end].iter().collect();
+    let rpr = if start < chars.len() {
+        para::rpr_at_char(el, start)
+    } else {
+        para::first_text_rpr(el)
+    };
+    (text, rpr, format)
+}
+
+fn locate_span(
+    visible: &str,
+    cursor_bytes: usize,
+    needle: Option<&str>,
+    after: Option<&str>,
+    before: Option<&str>,
+    nth: usize,
+) -> Option<(usize, usize)> {
+    if let Some(needle) = needle {
+        let mut from = cursor_bytes;
+        let mut seen = 0usize;
+        while from < visible.len() {
+            let rel = visible[from..].find(needle)?;
+            let abs = from + rel;
+            let end = abs + needle.len();
+            let preceded = after.is_none_or(|prefix| visible[..abs].ends_with(prefix));
+            let followed = before.is_none_or(|suffix| visible[end..].starts_with(suffix));
+            if preceded && followed {
+                seen += 1;
+                if seen == nth {
+                    return Some((abs, end));
+                }
+            }
+            let step = visible[abs..].chars().next().map(|ch| ch.len_utf8()).unwrap_or(1);
+            from = abs + step;
+        }
+        return None;
+    }
+    let after = after?;
+    let before = before?;
+    let mut from = cursor_bytes;
+    let mut seen = 0usize;
+    while from < visible.len() {
+        let rel = visible[from..].find(after)?;
+        let abs = from + rel;
+        let span_start = abs + after.len();
+        if let Some(rel_before) = visible[span_start..].find(before) {
+            if rel_before > 0 {
+                seen += 1;
+                if seen == nth {
+                    return Some((span_start, span_start + rel_before));
+                }
+            }
+        }
+        let step = visible[abs..].chars().next().map(|ch| ch.len_utf8()).unwrap_or(1);
+        from = abs + step;
+    }
+    None
+}
+
+fn match_slices<'a>(
+    el: &Element,
+    visible: &str,
+    chars: &[char],
+    op: &'a SetParaRunsOp,
+    i: usize,
+) -> Result<Vec<RunSlice<'a>>, Error> {
+    let mut cursor_chars = 0usize;
+    let mut cursor_bytes = 0usize;
+    let mut slices = Vec::new();
+    for (j, run) in op.runs.iter().enumerate() {
+        let ParaRunSource::Match {
+            text: needle,
+            after,
+            before,
+            nth,
+        } = &run.source
+        else {
+            continue;
+        };
+        let Some((abs_bytes, end_bytes)) = locate_span(
+            visible,
+            cursor_bytes,
+            needle.as_deref(),
+            after.as_deref(),
+            before.as_deref(),
+            *nth,
+        ) else {
+            let (field, text) = match needle {
+                Some(text) => ("match", text.clone()),
+                None => ("before", before.clone().unwrap_or_default()),
+            };
+            return Err(Error::with_path(
+                ErrorKind::ParaRunMismatch { text },
+                format!("ops[{i}].runs[{j}].{field}"),
+            ));
+        };
+        let gap = visible[cursor_bytes..abs_bytes].chars().count();
+        let start = cursor_chars + gap;
+        let end = start + visible[abs_bytes..end_bytes].chars().count();
+        if gap > 0 {
+            slices.push(slice_at(el, chars, cursor_chars, start, None));
+        }
+        slices.push(slice_at(el, chars, start, end, run.format.as_ref()));
+        cursor_chars = end;
+        cursor_bytes = visible
+            .chars()
+            .take(cursor_chars)
+            .map(|ch| ch.len_utf8())
+            .sum();
+    }
+    if cursor_chars < chars.len() {
+        slices.push(slice_at(el, chars, cursor_chars, chars.len(), None));
+    }
+    Ok(slices)
+}
+
+fn run_patch(fmt: &super::create_round5::RunFormatOwned) -> format::RunFormatPatch<'_> {
+    format::RunFormatPatch {
+        bold: fmt.bold,
+        italic: fmt.italic,
+        underline: fmt.underline.as_ref().map(|v| v.as_deref()),
+        sz: fmt.sz,
+        color: fmt.color.as_deref(),
+        font: fmt.font.as_deref(),
+        east_asia_font: fmt.east_asia_font.as_deref(),
+        em: fmt.em.as_ref().map(|v| v.as_deref()),
+        east_asian_layout: fmt.east_asian_layout.clone(),
+        highlight: fmt.highlight.as_ref().map(|v| v.as_deref()),
+        strike: fmt.strike,
+        dstrike: fmt.dstrike,
+        vert_align: fmt.vert_align.as_ref().map(|v| v.as_deref()),
+        spacing: fmt.spacing,
+        kern: fmt.kern,
+        scale: fmt.scale,
+    }
 }
 
 fn apply_hf_distance(root: &mut Element, op: &SetHfDistanceOp, i: usize) -> Result<(), Error> {

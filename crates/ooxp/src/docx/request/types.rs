@@ -94,6 +94,30 @@ pub struct SetParaTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum ParaRunSource {
+    Text(String),
+    Range { start: usize, end: usize },
+    Match {
+        text: Option<String>,
+        after: Option<String>,
+        before: Option<String>,
+        nth: usize,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct ParaRunPiece {
+    pub source: ParaRunSource,
+    pub format: Option<super::super::create_round5::RunFormatOwned>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetParaRunsOp {
+    pub id: String,
+    pub runs: Vec<ParaRunPiece>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHfDistanceOp {
     pub id: String,
     pub n: usize,
@@ -1240,6 +1264,7 @@ pub struct DeleteContentControlOp {
 #[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
+    SetParaRuns(SetParaRunsOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
     SetHeaderFooterLink(SetHfLinkOp),
     InsertHeaderFooter(InsertHeaderFooterOp),

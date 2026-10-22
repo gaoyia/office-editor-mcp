@@ -1041,6 +1041,143 @@ fn find_p_mut<'a>(
     None
 }
 
+pub struct WrittenRun {
+    pub text: String,
+    pub rpr: Option<Element>,
+}
+
+pub fn first_text_rpr(p: &Element) -> Option<Element> {
+    find_first_text_run(p).and_then(|r| r.child_by_local("rPr").cloned())
+}
+
+pub fn rpr_at_char(p: &Element, at: usize) -> Option<Element> {
+    let mut seen = 0usize;
+    rpr_covering(p, at, &mut seen)
+}
+
+pub fn replace_visible_runs(p: &mut Element, runs: &[WrittenRun]) {
+    let insert_at = first_direct_text_run_index(p).unwrap_or_else(|| after_ppr(p));
+    strip_visible_text_runs(p);
+    let insert_at = insert_at.min(p.children.len());
+    for (i, run) in runs.iter().enumerate() {
+        let mut el = new_text_run(p, &run.text);
+        if let Some(rpr) = &run.rpr {
+            el.children.insert(0, Node::Element(rpr.clone()));
+        }
+        p.children.insert(insert_at + i, Node::Element(el));
+    }
+}
+
+fn after_ppr(p: &Element) -> usize {
+    let mut insert_at = 0;
+    for (i, n) in p.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "pPr" {
+                insert_at = i + 1;
+            }
+        }
+    }
+    insert_at
+}
+
+fn first_direct_text_run_index(p: &Element) -> Option<usize> {
+    p.children.iter().position(|n| {
+        let Node::Element(e) = n else {
+            return false;
+        };
+        e.local_name() == "r" && e.element_children().any(|c| c.local_name() == "t")
+    })
+}
+
+fn find_first_text_run(el: &Element) -> Option<&Element> {
+    if el.local_name() == "del" || el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &el.children[i] {
+                return find_first_text_run(e);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "r" && el.element_children().any(|c| c.local_name() == "t") {
+        return Some(el);
+    }
+    for child in el.element_children() {
+        if let Some(found) = find_first_text_run(child) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn rpr_covering(el: &Element, at: usize, seen: &mut usize) -> Option<Element> {
+    if el.local_name() == "del" || el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &el.children[i] {
+                return rpr_covering(e, at, seen);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "r" {
+        let rpr = el.child_by_local("rPr").cloned();
+        for child in el.element_children() {
+            if child.local_name() == "t" {
+                let n = child.text_content().chars().count();
+                if at < *seen + n {
+                    return rpr;
+                }
+                *seen += n;
+            }
+        }
+        return None;
+    }
+    for child in el.element_children() {
+        if let Some(found) = rpr_covering(child, at, seen) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn strip_visible_text_runs(el: &mut Element) {
+    if el.local_name() == "del" || el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &mut el.children[i] {
+                strip_visible_text_runs(e);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "r" {
+        if el.element_children().any(|c| c.local_name() == "t") {
+            remove_all_t(el);
+        }
+        return;
+    }
+    let mut remove = Vec::new();
+    for (i, child) in el.children.iter_mut().enumerate() {
+        if let Node::Element(e) = child {
+            let was_r = e.local_name() == "r";
+            strip_visible_text_runs(e);
+            if was_r && is_empty_run(e) {
+                remove.push(i);
+            }
+        }
+    }
+    for i in remove.into_iter().rev() {
+        el.children.remove(i);
+    }
+}
+
 pub fn set_visible_text(p: &mut Element, text: &str) {
     let mut first = false;
     rewrite_runs(p, &mut first, text);

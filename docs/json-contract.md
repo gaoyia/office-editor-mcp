@@ -121,7 +121,17 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
 
-带 `q` 时，在操作名和中英说明里找词。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。返回的句子只留一种语言。
+带 `q` 时，同时搜动作名、定义名、操作名、字段名，以及中英说明和 `limits`。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。
+
+排序是名字精确匹配，然后名字里包含这个词，然后字段名，然后说明，最后才是 `limits`。`limits` 里碰巧出现的词不会排到名字命中前面。
+
+每条结果有 `kind` 和 `next`，告诉下一步怎么打开：
+
+- `kind` 为 `action`：这是动作。`next` 形如 `name=createRequest`。用 `name` 打开，不要当成 `op`。
+- `kind` 为 `def`：这是定义，例如 `docxDocument`、`docxParaCreate`。`next` 形如 `name=docxParaCreate`。
+- `kind` 为 `op`：这是 apply 操作。`next` 形如 `op=setParaText`。多种格式要再带 `format`。
+
+`format` 只过滤操作，以及 `xlsx` / `docx` / `pptx` 开头的定义。新建正文这种共用定义仍然会出来。返回的句子只留一种语言。
 
 带 `op` 时，返回这一个操作的说明和字段。里面的引用只留定义名，不继续展开。同一种名字在多种格式里形状不同时，必须带 `format`；不带就只列出每种格式的说明，不把字段并成一份。
 

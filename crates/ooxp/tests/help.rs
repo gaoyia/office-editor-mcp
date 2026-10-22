@@ -127,6 +127,42 @@ fn scope_is_a_definition_not_an_op() {
 }
 
 #[test]
+fn search_reaches_defs_not_just_ops() {
+    let document = help(serde_json::json!({"q": "document", "format": "docx"})).unwrap();
+    let matches = document["matches"].as_array().unwrap();
+    assert_ne!(matches[0]["op"], "deleteComment");
+    assert!(matches.iter().any(|item| item["name"] == "docxDocument"));
+    assert_eq!(
+        matches
+            .iter()
+            .find(|item| item["name"] == "docxDocument")
+            .unwrap()["open"],
+        "name"
+    );
+
+    let runs = help(serde_json::json!({"q": "runs", "format": "docx"})).unwrap();
+    assert!(runs["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["name"] == "docxParaCreate" && item["next"] == "name=docxParaCreate"));
+
+    let color = help(serde_json::json!({"q": "color", "format": "docx"})).unwrap();
+    assert!(color["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["name"] == "docxRunCreate"));
+
+    let create = help(serde_json::json!({"q": "new file"})).unwrap();
+    assert!(create["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["name"] == "createRequest" && item["kind"] == "action"));
+}
+
+#[test]
 fn unknown_op_and_mixed_keys_fail() {
     let err = help(serde_json::json!({"op": "notAnOp"})).unwrap_err();
     assert_eq!(err.code(), ErrorCode::UnsupportedOp);
