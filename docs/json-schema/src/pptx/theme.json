@@ -1,0 +1,311 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "pptxSetThemeColorsOp": [
+      "pptx"
+    ],
+    "pptxSetThemeFontsOp": [
+      "pptx"
+    ],
+    "setClrMapOp": [
+      "pptx"
+    ],
+    "setClrMapOvrOp": [
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "pptxSetThemeColorsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeColors"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "themeName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dk1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lt1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dk2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lt2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent3": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent4": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent5": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent6": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hlink": {
+          "type": "string",
+          "minLength": 1
+        },
+        "folHlink": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pptxSetThemeFontsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeFonts"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "majorLatin": {
+          "type": "string"
+        },
+        "minorLatin": {
+          "type": "string"
+        },
+        "majorEa": {
+          "type": "string"
+        },
+        "minorEa": {
+          "type": "string"
+        },
+        "majorCs": {
+          "type": "string"
+        },
+        "minorCs": {
+          "type": "string"
+        },
+        "majorScripts": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeScriptFont"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minorScripts": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeScriptFont"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "clrMapSlots": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bg1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tx1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bg2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tx2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent3": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent4": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent5": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent6": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hlink": {
+          "type": "string",
+          "minLength": 1
+        },
+        "folHlink": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setClrMapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setClrMap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bg1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tx1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bg2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tx2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent1": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent2": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent3": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent4": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent5": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accent6": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hlink": {
+          "type": "string",
+          "minLength": 1
+        },
+        "folHlink": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setClrMapOvrOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "clrMapOvr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setClrMapOvr"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "clrMapOvr": {
+          "oneOf": [
+            {
+              "const": "master"
+            },
+            {
+              "$ref": "#/$defs/clrMapSlots"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,490 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "$defs": {
+    "format": {
+      "enum": [
+        "xlsx",
+        "xlsm",
+        "docx",
+        "pptx"
+      ]
+    },
+    "inspectRequest": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "action",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "inspect"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "scope": {
+          "$ref": "#/$defs/inspectScope"
+        },
+        "locale": {
+          "type": "string"
+        }
+      }
+    },
+    "inspectScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "range": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxCells": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxParas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "headerFooter": {
+          "type": "boolean"
+        },
+        "pictures": {
+          "type": "boolean"
+        },
+        "textBoxes": {
+          "type": "boolean"
+        },
+        "shapes": {
+          "type": "boolean"
+        },
+        "textBoxContent": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "charts": {
+          "type": "boolean"
+        },
+        "smartArt": {
+          "type": "boolean"
+        },
+        "slicers": {
+          "type": "boolean"
+        },
+        "protectedRanges": {
+          "type": "boolean"
+        },
+        "connections": {
+          "type": "boolean"
+        },
+        "externalLinks": {
+          "type": "boolean"
+        },
+        "customViews": {
+          "type": "boolean"
+        },
+        "cellStyles": {
+          "type": "boolean"
+        },
+        "oleObjects": {
+          "type": "boolean"
+        },
+        "watermarks": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "boolean"
+        },
+        "connectors": {
+          "type": "boolean"
+        },
+        "inkCanvases": {
+          "type": "boolean"
+        },
+        "model3ds": {
+          "type": "boolean"
+        },
+        "inks": {
+          "type": "boolean"
+        },
+        "timing": {
+          "type": "boolean"
+        },
+        "masters": {
+          "type": "boolean"
+        },
+        "notesMaster": {
+          "type": "boolean"
+        },
+        "handout": {
+          "type": "boolean"
+        },
+        "media": {
+          "type": "boolean"
+        },
+        "sections": {
+          "type": "boolean"
+        },
+        "customShows": {
+          "type": "boolean"
+        },
+        "zooms": {
+          "type": "boolean"
+        },
+        "revisions": {
+          "type": "boolean"
+        },
+        "hyperlinks": {
+          "type": "boolean"
+        },
+        "sparklines": {
+          "type": "boolean"
+        },
+        "bookmarks": {
+          "type": "boolean"
+        },
+        "editRanges": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "boolean"
+        },
+        "tocs": {
+          "type": "boolean"
+        },
+        "captions": {
+          "type": "boolean"
+        },
+        "crossRefs": {
+          "type": "boolean"
+        },
+        "indexes": {
+          "type": "boolean"
+        },
+        "indexEntries": {
+          "type": "boolean"
+        },
+        "sources": {
+          "type": "boolean"
+        },
+        "citations": {
+          "type": "boolean"
+        },
+        "bibliographies": {
+          "type": "boolean"
+        },
+        "docParts": {
+          "type": "boolean"
+        },
+        "embeddedFonts": {
+          "type": "boolean"
+        },
+        "maths": {
+          "type": "boolean"
+        },
+        "contentControls": {
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        },
+        "runs": {
+          "type": "boolean"
+        },
+        "rubies": {
+          "type": "boolean"
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxShapes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        }
+      },
+      "dependentRequired": {
+        "range": [
+          "sheet"
+        ],
+        "sheet": [
+          "range"
+        ],
+        "from": [
+          "maxParas"
+        ],
+        "maxParas": [
+          "from"
+        ],
+        "maxShapes": [
+          "slide"
+        ],
+        "textBoxContent": [
+          "textBoxes"
+        ]
+      }
+    },
+    "createRequest": {
+      "type": "object",
+      "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
+      "required": [
+        "schemaVersion",
+        "action"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "create"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "workbook": {
+          "$ref": "#/$defs/xlsxWorkbook"
+        },
+        "document": {
+          "$ref": "#/$defs/docxDocument"
+        },
+        "presentation": {
+          "$ref": "#/$defs/pptxPresentation"
+        },
+        "locale": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "workbook"
+          ]
+        },
+        {
+          "required": [
+            "document"
+          ]
+        },
+        {
+          "required": [
+            "presentation"
+          ]
+        }
+      ]
+    },
+    "exportMediaRequest": {
+      "type": "object",
+      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "exportMedia"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
+      }
+    },
+    "applyRequest": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "ops"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "apply"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        },
+        "ops": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/anyApplyOp"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "enum": [
+                  "xlsx",
+                  "xlsm"
+                ]
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/xlsxApplyOp"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "docx"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/docxApplyOp"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "pptx"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ops": {
+                "items": {
+                  "$ref": "#/$defs/pptxApplyOp"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "exportChartDataRequest": {
+      "type": "object",
+      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "exportChartData"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

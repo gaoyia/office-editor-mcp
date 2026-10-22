@@ -1,0 +1,209 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertChartSheetOp": [
+      "xlsx"
+    ],
+    "deleteChartSheetOp": [
+      "xlsx"
+    ],
+    "insertSheetOp": [
+      "xlsx"
+    ],
+    "deleteSheetOp": [
+      "xlsx"
+    ],
+    "renameSheetOp": [
+      "xlsx"
+    ],
+    "moveSheetOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "insertChartSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "type",
+        "series",
+        "dataFrom"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertChartSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "#/$defs/chartexLayoutId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteChartSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteChartSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "renameSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "renameSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "moveSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "moveSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

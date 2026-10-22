@@ -1,0 +1,503 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "$defs": {
+    "docxThemeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dk1": {
+              "type": "string"
+            },
+            "lt1": {
+              "type": "string"
+            },
+            "dk2": {
+              "type": "string"
+            },
+            "lt2": {
+              "type": "string"
+            },
+            "accent1": {
+              "type": "string"
+            },
+            "accent2": {
+              "type": "string"
+            },
+            "accent3": {
+              "type": "string"
+            },
+            "accent4": {
+              "type": "string"
+            },
+            "accent5": {
+              "type": "string"
+            },
+            "accent6": {
+              "type": "string"
+            },
+            "hlink": {
+              "type": "string"
+            },
+            "folHlink": {
+              "type": "string"
+            }
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "majorLatin": {
+              "type": "string"
+            },
+            "minorLatin": {
+              "type": "string"
+            },
+            "majorEa": {
+              "type": "string"
+            },
+            "minorEa": {
+              "type": "string"
+            },
+            "majorCs": {
+              "type": "string"
+            },
+            "minorCs": {
+              "type": "string"
+            },
+            "majorScripts": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/themeScriptFont"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "minorScripts": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/themeScriptFont"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "fmt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "extraSchemes": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeExtraScheme"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "docxPageBackgroundCreate": {
+      "type": "object",
+      "required": [
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fill": {
+          "$ref": "#/$defs/pageBackgroundFill"
+        }
+      }
+    },
+    "docxPageBordersCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offsetFrom": {
+          "enum": [
+            "page",
+            "text"
+          ]
+        },
+        "display": {
+          "enum": [
+            "allPages",
+            "firstPage",
+            "notFirstPage"
+          ]
+        },
+        "zOrder": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        },
+        "top": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "createWatermark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ],
+          "not": {
+            "required": [
+              "file"
+            ]
+          }
+        },
+        {
+          "required": [
+            "file"
+          ],
+          "not": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "docxCitationCreate": {
+      "type": "object",
+      "required": [
+        "tag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxIndexEntryCreate": {
+      "type": "object",
+      "required": [
+        "entry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "entry": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxCaptionCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "label": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "bookmark": {
+          "type": "string"
+        }
+      }
+    },
+    "docxIndexCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "instr": {
+          "type": "string"
+        }
+      }
+    },
+    "docxBibliographyCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "instr": {
+          "type": "string"
+        }
+      }
+    },
+    "docxSourceCreate": {
+      "type": "object",
+      "required": [
+        "tag",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "type": "string"
+        },
+        "sourceType": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "year": {
+          "type": "string"
+        },
+        "last": {
+          "type": "string"
+        },
+        "first": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        }
+      }
+    },
+    "docxDocPartCreate": {
+      "type": "object",
+      "required": [
+        "name",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "gallery": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string"
+        },
+        "behavior": {
+          "enum": [
+            "content",
+            "p",
+            "pg"
+          ]
+        }
+      }
+    },
+    "docxStyleCreate": {
+      "type": "object",
+      "required": [
+        "styleId",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "styleId": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "paragraph",
+            "character",
+            "table"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "basedOn": {
+          "type": "string"
+        }
+      }
+    },
+    "docxEmbeddedFontCreate": {
+      "type": "object",
+      "required": [
+        "name",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "style": {
+          "enum": [
+            "regular",
+            "bold",
+            "italic",
+            "boldItalic"
+          ]
+        }
+      }
+    },
+    "docxFontEmbedCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trueType": {
+          "type": "boolean"
+        },
+        "systemFonts": {
+          "type": "boolean"
+        },
+        "subset": {
+          "type": "boolean"
+        }
+      }
+    },
+    "docxEastAsianSettingsCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "characterSpacingControl": {
+          "type": "string"
+        },
+        "strictFirstAndLastChars": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "noLineBreaksBefore": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "noLineBreaksAfter": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "themeFontLang": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeFontLang"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

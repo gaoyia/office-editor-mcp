@@ -1,0 +1,403 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "docxInsertMathOp": [
+      "docx"
+    ],
+    "docxSetMathOp": [
+      "docx"
+    ],
+    "insertRubyOp": [
+      "docx"
+    ],
+    "setRubyOp": [
+      "docx"
+    ],
+    "deleteRubyOp": [
+      "docx"
+    ],
+    "setEastAsianSettingsOp": [
+      "docx"
+    ],
+    "docxDeleteMathOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "mathNode": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "text",
+            "frac",
+            "rad",
+            "sSub",
+            "sSup",
+            "sSubSup",
+            "sPre",
+            "nary",
+            "delim",
+            "func",
+            "mat",
+            "acc",
+            "bar",
+            "limLow",
+            "limUpp",
+            "eqArr",
+            "phant",
+            "borderBox"
+          ]
+        }
+      }
+    },
+    "docxInsertMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expr": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/mathNode"
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "display"
+          ]
+        },
+        "jc": {
+          "enum": [
+            "center",
+            "centerGroup",
+            "left",
+            "right"
+          ]
+        }
+      }
+    },
+    "docxSetMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expr": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/mathNode"
+          }
+        },
+        "jc": {
+          "anyOf": [
+            {
+              "enum": [
+                "center",
+                "centerGroup",
+                "left",
+                "right"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "eastAsianLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "combine": {
+          "type": "boolean"
+        },
+        "combineBrackets": {
+          "enum": [
+            "none",
+            "round",
+            "square",
+            "angle",
+            "curly"
+          ]
+        },
+        "vert": {
+          "type": "boolean"
+        },
+        "vertCompress": {
+          "type": "boolean"
+        }
+      }
+    },
+    "kinsokuChars": {
+      "type": "object",
+      "required": [
+        "lang",
+        "chars"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chars": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "base",
+        "rt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "enum": [
+            "center",
+            "distributeLetter",
+            "distributeSpace",
+            "left",
+            "right",
+            "rightVertical"
+          ]
+        },
+        "hps": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsRaise": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsBaseText": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "lid": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "enum": [
+            "center",
+            "distributeLetter",
+            "distributeSpace",
+            "left",
+            "right",
+            "rightVertical"
+          ]
+        },
+        "hps": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsRaise": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsBaseText": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "lid": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setEastAsianSettingsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setEastAsianSettings"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterSpacingControl": {
+          "oneOf": [
+            {
+              "enum": [
+                "doNotCompress",
+                "compressPunctuation",
+                "compressPunctuationAndJapaneseKana"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strictFirstAndLastChars": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noLineBreaksBefore": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/kinsokuChars"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noLineBreaksAfter": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/kinsokuChars"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "themeFontLang": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeFontLang"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "docxDeleteMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

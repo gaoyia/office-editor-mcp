@@ -1,0 +1,873 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setPictureWrapOp": [
+      "docx"
+    ],
+    "setTextBoxWrapOp": [
+      "docx"
+    ],
+    "setTextBoxFillOp": [
+      "docx"
+    ],
+    "setTextBoxLineOp": [
+      "docx"
+    ],
+    "setTextBoxDirectionOp": [
+      "docx"
+    ],
+    "setTextBoxTextAnchorOp": [
+      "docx"
+    ],
+    "setTextBoxLinkOp": [
+      "docx"
+    ],
+    "setChartWrapOp": [
+      "docx"
+    ],
+    "docxInsertOleOp": [
+      "docx"
+    ],
+    "docxDeleteOleOp": [
+      "docx"
+    ],
+    "docxSetOleSizeOp": [
+      "docx"
+    ],
+    "insertInkCanvasOp": [
+      "docx"
+    ],
+    "replaceInkCanvasOp": [
+      "docx"
+    ],
+    "deleteInkCanvasOp": [
+      "docx"
+    ],
+    "setInkCanvasSizeOp": [
+      "docx"
+    ],
+    "setInkCanvasWrapOp": [
+      "docx"
+    ],
+    "docxInsertModel3dOp": [
+      "docx"
+    ],
+    "docxReplaceModel3dOp": [
+      "docx"
+    ],
+    "docxDeleteModel3dOp": [
+      "docx"
+    ],
+    "setModel3dWrapOp": [
+      "docx"
+    ],
+    "setSmartArtWrapOp": [
+      "docx"
+    ],
+    "insertWatermarkOp": [
+      "docx"
+    ],
+    "deleteWatermarkOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "setPictureWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPictureWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "setTextBoxWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "setTextBoxFillOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxFill"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setTextBoxLineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxLine"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setTextBoxDirectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxDirection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        }
+      }
+    },
+    "setTextBoxTextAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "textAnchor"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxTextAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "textAnchor": {
+          "oneOf": [
+            {
+              "enum": [
+                "t",
+                "ctr",
+                "b",
+                "just",
+                "dist"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setTextBoxLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "next"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setChartWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "docxInsertOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxDeleteOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxSetOleSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setOleSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "insertInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "replaceInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "replaceInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setInkCanvasSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setInkCanvasSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setInkCanvasWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setInkCanvasWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "docxInsertModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertModel3d"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "docxReplaceModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "replaceModel3d"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxDeleteModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteModel3d"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setModel3dWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "setSmartArtWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "insertWatermarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertWatermark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ],
+          "not": {
+            "required": [
+              "file"
+            ]
+          }
+        },
+        {
+          "required": [
+            "file"
+          ],
+          "not": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "deleteWatermarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteWatermark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

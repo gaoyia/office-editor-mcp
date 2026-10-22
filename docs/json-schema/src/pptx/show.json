@@ -1,0 +1,541 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertVideoOp": [
+      "pptx"
+    ],
+    "insertAudioOp": [
+      "pptx"
+    ],
+    "setMediaOp": [
+      "pptx"
+    ],
+    "deleteMediaOp": [
+      "pptx"
+    ],
+    "insertCustomShowOp": [
+      "pptx"
+    ],
+    "setCustomShowOp": [
+      "pptx"
+    ],
+    "deleteCustomShowOp": [
+      "pptx"
+    ],
+    "insertZoomOp": [
+      "pptx"
+    ],
+    "deleteZoomOp": [
+      "pptx"
+    ],
+    "setZoomOp": [
+      "pptx"
+    ],
+    "setShowPrOp": [
+      "pptx"
+    ],
+    "pptxInsertFieldOp": [
+      "pptx"
+    ],
+    "pptxSetFieldOp": [
+      "pptx"
+    ],
+    "pptxDeleteFieldOp": [
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "insertVideoOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertVideo"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "st": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaBookmark"
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaTrackWrite"
+          }
+        },
+        "trackDisplayLoc": {
+          "type": "string",
+          "enum": [
+            "media",
+            "slide"
+          ]
+        }
+      }
+    },
+    "insertAudioOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertAudio"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "st": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaBookmark"
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaTrackWrite"
+          }
+        },
+        "trackDisplayLoc": {
+          "type": "string",
+          "enum": [
+            "media",
+            "slide"
+          ]
+        }
+      }
+    },
+    "setMediaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMedia"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "st": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bookmarks": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/pptxMediaBookmark"
+          }
+        },
+        "tracks": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/pptxMediaTrackWrite"
+          }
+        },
+        "trackDisplayLoc": {
+          "type": "string",
+          "enum": [
+            "media",
+            "slide"
+          ]
+        }
+      }
+    },
+    "deleteMediaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteMedia"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCustomShowOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCustomShow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "slides": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "after": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setCustomShowOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCustomShow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "slides": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "deleteCustomShowOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCustomShow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "deleteZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setShowPrOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShowPr"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "showNarration": {
+          "type": "boolean"
+        },
+        "showAnimation": {
+          "type": "boolean"
+        },
+        "useTimings": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pptxInsertFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "pptxSetFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "pptxDeleteFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keep": {
+          "enum": [
+            "result",
+            "instr"
+          ]
+        }
+      }
+    }
+  }
+}

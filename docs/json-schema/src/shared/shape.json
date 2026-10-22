@@ -1,0 +1,32 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setShapeTextOp": [
+      "xlsx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "setShapeTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

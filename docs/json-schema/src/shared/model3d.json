@@ -1,0 +1,193 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setModel3dSizeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setModel3dCameraOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "setModel3dSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
+    "setModel3dCameraOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dCamera"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "camera": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pos": {
+              "$ref": "#/$defs/model3dXyz"
+            },
+            "up": {
+              "$ref": "#/$defs/model3dUp"
+            },
+            "lookAt": {
+              "$ref": "#/$defs/model3dXyz"
+            },
+            "fov": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "rot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ax": {
+              "type": "integer"
+            },
+            "ay": {
+              "type": "integer"
+            },
+            "az": {
+              "type": "integer"
+            }
+          }
+        },
+        "lightRig": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rig": {
+              "type": "string"
+            },
+            "dir": {
+              "type": "string"
+            },
+            "lat": {
+              "type": "integer"
+            },
+            "lon": {
+              "type": "integer"
+            },
+            "rev": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "camera"
+          ]
+        },
+        {
+          "required": [
+            "rot"
+          ]
+        },
+        {
+          "required": [
+            "lightRig"
+          ]
+        }
+      ]
+    },
+    "model3dXyz": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "z": {
+          "type": "integer"
+        }
+      }
+    },
+    "model3dUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dx": {
+          "type": "integer"
+        },
+        "dy": {
+          "type": "integer"
+        },
+        "dz": {
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

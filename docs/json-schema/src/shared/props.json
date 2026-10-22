@@ -1,0 +1,503 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setProtectionOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setPropsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setCustomPropOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteCustomPropOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "createProps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "creator": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "description": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "keywords": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "category": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "company": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "manager": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/createCustomProp"
+          }
+        }
+      }
+    },
+    "createCustomProp": {
+      "type": "object",
+      "required": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "type": {
+          "enum": [
+            "lpwstr",
+            "i4",
+            "r8",
+            "bool"
+          ]
+        }
+      }
+    },
+    "setProtectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setProtection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enforced": {
+          "type": "boolean"
+        },
+        "edit": {
+          "enum": [
+            "readOnly",
+            "comments",
+            "trackedChanges",
+            "forms"
+          ]
+        },
+        "formatting": {
+          "type": "boolean"
+        },
+        "readOnlyRecommended": {
+          "type": "boolean"
+        },
+        "objects": {
+          "type": "boolean"
+        },
+        "scenarios": {
+          "type": "boolean"
+        },
+        "formatCells": {
+          "type": "boolean"
+        },
+        "formatColumns": {
+          "type": "boolean"
+        },
+        "formatRows": {
+          "type": "boolean"
+        },
+        "insertColumns": {
+          "type": "boolean"
+        },
+        "insertRows": {
+          "type": "boolean"
+        },
+        "insertHyperlinks": {
+          "type": "boolean"
+        },
+        "deleteColumns": {
+          "type": "boolean"
+        },
+        "deleteRows": {
+          "type": "boolean"
+        },
+        "selectLockedCells": {
+          "type": "boolean"
+        },
+        "sort": {
+          "type": "boolean"
+        },
+        "autoFilter": {
+          "type": "boolean"
+        },
+        "pivotTables": {
+          "type": "boolean"
+        },
+        "selectUnlockedCells": {
+          "type": "boolean"
+        },
+        "lockStructure": {
+          "type": "boolean"
+        },
+        "lockWindows": {
+          "type": "boolean"
+        },
+        "lockRevision": {
+          "type": "boolean"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        },
+        "writePassword": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "enforced"
+          ]
+        },
+        {
+          "required": [
+            "edit"
+          ]
+        },
+        {
+          "required": [
+            "formatting"
+          ]
+        },
+        {
+          "required": [
+            "readOnlyRecommended"
+          ]
+        },
+        {
+          "required": [
+            "objects"
+          ]
+        },
+        {
+          "required": [
+            "scenarios"
+          ]
+        },
+        {
+          "required": [
+            "formatCells"
+          ]
+        },
+        {
+          "required": [
+            "formatColumns"
+          ]
+        },
+        {
+          "required": [
+            "formatRows"
+          ]
+        },
+        {
+          "required": [
+            "insertColumns"
+          ]
+        },
+        {
+          "required": [
+            "insertRows"
+          ]
+        },
+        {
+          "required": [
+            "insertHyperlinks"
+          ]
+        },
+        {
+          "required": [
+            "deleteColumns"
+          ]
+        },
+        {
+          "required": [
+            "deleteRows"
+          ]
+        },
+        {
+          "required": [
+            "selectLockedCells"
+          ]
+        },
+        {
+          "required": [
+            "sort"
+          ]
+        },
+        {
+          "required": [
+            "autoFilter"
+          ]
+        },
+        {
+          "required": [
+            "pivotTables"
+          ]
+        },
+        {
+          "required": [
+            "selectUnlockedCells"
+          ]
+        },
+        {
+          "required": [
+            "lockStructure"
+          ]
+        },
+        {
+          "required": [
+            "lockWindows"
+          ]
+        },
+        {
+          "required": [
+            "lockRevision"
+          ]
+        },
+        {
+          "required": [
+            "writePassword"
+          ]
+        }
+      ]
+    },
+    "createProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enforced": {
+          "type": "boolean"
+        },
+        "edit": {
+          "enum": [
+            "readOnly",
+            "comments",
+            "trackedChanges",
+            "forms"
+          ]
+        },
+        "formatting": {
+          "type": "boolean"
+        },
+        "readOnlyRecommended": {
+          "type": "boolean"
+        },
+        "writePassword": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "enforced"
+          ]
+        },
+        {
+          "required": [
+            "edit"
+          ]
+        },
+        {
+          "required": [
+            "formatting"
+          ]
+        },
+        {
+          "required": [
+            "readOnlyRecommended"
+          ]
+        },
+        {
+          "required": [
+            "writePassword"
+          ]
+        }
+      ]
+    },
+    "setPropsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setProps"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "creator": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "description": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "keywords": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "category": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "company": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "manager": {
+          "$ref": "#/$defs/nullableString"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "title"
+          ]
+        },
+        {
+          "required": [
+            "subject"
+          ]
+        },
+        {
+          "required": [
+            "creator"
+          ]
+        },
+        {
+          "required": [
+            "description"
+          ]
+        },
+        {
+          "required": [
+            "keywords"
+          ]
+        },
+        {
+          "required": [
+            "category"
+          ]
+        },
+        {
+          "required": [
+            "company"
+          ]
+        },
+        {
+          "required": [
+            "manager"
+          ]
+        }
+      ]
+    },
+    "setCustomPropOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "value"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCustomProp"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "type": {
+          "enum": [
+            "lpwstr",
+            "i4",
+            "r8",
+            "bool"
+          ]
+        }
+      }
+    },
+    "deleteCustomPropOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCustomProp"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

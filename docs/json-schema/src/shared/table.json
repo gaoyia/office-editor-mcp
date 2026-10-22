@@ -1,0 +1,180 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertTableOp": [
+      "docx",
+      "pptx"
+    ],
+    "deleteTableOp": [
+      "docx",
+      "pptx"
+    ],
+    "insertRowOp": [
+      "docx",
+      "pptx"
+    ],
+    "deleteRowOp": [
+      "docx",
+      "pptx"
+    ],
+    "insertColOp": [
+      "docx",
+      "pptx"
+    ],
+    "deleteColOp": [
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "insertTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rows",
+        "cols"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "cols": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 75
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "deleteTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertRowOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertRow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteRowOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteRow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertColOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "after"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCol"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "deleteColOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "col"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCol"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

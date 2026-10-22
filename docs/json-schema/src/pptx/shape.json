@@ -1,0 +1,927 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertShapeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "insertConnectorOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteConnectorOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "groupShapesOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "ungroupOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteShapeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setShapePosOp": [
+      "docx",
+      "pptx"
+    ],
+    "setShapeSizeOp": [
+      "docx",
+      "pptx"
+    ],
+    "setShapeFillOp": [
+      "docx",
+      "pptx"
+    ],
+    "setShapeFormatOp": [
+      "xlsx",
+      "pptx"
+    ],
+    "setShapeLineOp": [
+      "docx",
+      "pptx"
+    ],
+    "setShapeGeomOp": [
+      "pptx"
+    ],
+    "setConnectorOp": [
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "drawingTextFill": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "none"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "stops"
+          ],
+          "properties": {
+            "type": {
+              "const": "gradient"
+            },
+            "ang": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 21600000
+            },
+            "stops": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "pos",
+                  "color"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "pos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "color": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 6
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drawingTextOutline": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "color",
+            "width"
+          ],
+          "properties": {
+            "color": {
+              "type": "string",
+              "minLength": 6,
+              "maxLength": 6
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "drawingTextSpacing": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "val"
+          ],
+          "properties": {
+            "type": {
+              "const": "pts"
+            },
+            "val": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 158400
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "val"
+          ],
+          "properties": {
+            "type": {
+              "const": "pct"
+            },
+            "val": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "insertShapeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertShape"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
+        },
+        "geom": {
+          "$ref": "#/$defs/shapeGeom"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "insertConnectorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertConnector"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start": {
+          "$ref": "#/$defs/connectorEnd"
+        },
+        "end": {
+          "$ref": "#/$defs/connectorEnd"
+        }
+      }
+    },
+    "deleteConnectorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteConnector"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "groupShapesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ids"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "groupShapes"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "ungroupOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "ungroup"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteShapeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteShape"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setShapePosOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapePos"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "x"
+          ]
+        },
+        {
+          "required": [
+            "y"
+          ]
+        }
+      ]
+    },
+    "setShapeSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setShapeFillOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeFill"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setShapeFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "sz"
+          ]
+        },
+        {
+          "required": [
+            "color"
+          ]
+        },
+        {
+          "required": [
+            "bold"
+          ]
+        },
+        {
+          "required": [
+            "italic"
+          ]
+        },
+        {
+          "required": [
+            "underline"
+          ]
+        },
+        {
+          "required": [
+            "font"
+          ]
+        },
+        {
+          "required": [
+            "eastAsiaFont"
+          ]
+        },
+        {
+          "required": [
+            "align"
+          ]
+        },
+        {
+          "required": [
+            "textAnchor"
+          ]
+        },
+        {
+          "required": [
+            "spcBef"
+          ]
+        },
+        {
+          "required": [
+            "spcAft"
+          ]
+        },
+        {
+          "required": [
+            "lnSpc"
+          ]
+        },
+        {
+          "required": [
+            "spc"
+          ]
+        },
+        {
+          "required": [
+            "kern"
+          ]
+        },
+        {
+          "required": [
+            "textFill"
+          ]
+        },
+        {
+          "required": [
+            "textOutline"
+          ]
+        }
+      ]
+    },
+    "setShapeLineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeLine"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "shapeGeom": {
+      "type": "object",
+      "required": [
+        "paths"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/shapeGeomPath"
+          }
+        }
+      }
+    },
+    "shapeGeomPath": {
+      "type": "object",
+      "required": [
+        "w",
+        "h",
+        "ops"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "w": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "h": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ops": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/shapeGeomPathOp"
+          }
+        }
+      }
+    },
+    "shapeGeomPathOp": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "moveTo",
+            "lnTo",
+            "close"
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "connectorEnd": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "site": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setShapeGeomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "paths"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeGeom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/shapeGeomPath"
+          }
+        }
+      }
+    },
+    "setConnectorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setConnector"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "$ref": "#/$defs/connectorEnd"
+        },
+        "end": {
+          "$ref": "#/$defs/connectorEnd"
+        }
+      }
+    }
+  }
+}

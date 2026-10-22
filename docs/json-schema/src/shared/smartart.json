@@ -1,0 +1,389 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertSmartArtOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteSmartArtOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setSmartArtTextOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "addSmartArtPointOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteSmartArtPointOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setSmartArtSizeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setSmartArtColorsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setSmartArtStyleOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setSmartArtLayoutOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "smartArtLayout": {
+      "enum": [
+        "list",
+        "org",
+        "cycle"
+      ]
+    },
+    "smartArtRole": {
+      "enum": [
+        "node",
+        "asst"
+      ]
+    },
+    "smartArtColors": {
+      "enum": [
+        "accent1",
+        "accent2",
+        "accent3",
+        "accent4",
+        "accent5",
+        "accent6"
+      ]
+    },
+    "smartArtStyle": {
+      "enum": [
+        "simple",
+        "subtle",
+        "intense"
+      ]
+    },
+    "smartArtPointInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "parent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "role": {
+          "$ref": "#/$defs/smartArtRole"
+        }
+      }
+    },
+    "insertSmartArtOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSmartArt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smartArtPointInput"
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "deleteSmartArtOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSmartArt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setSmartArtTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "addSmartArtPointOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "addSmartArtPoint"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/smartArtRole"
+        }
+      }
+    },
+    "deleteSmartArtPointOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSmartArtPoint"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setSmartArtSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
+    "setSmartArtColorsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "colors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtColors"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "colors": {
+          "$ref": "#/$defs/smartArtColors"
+        }
+      }
+    },
+    "setSmartArtStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "$ref": "#/$defs/smartArtStyle"
+        }
+      }
+    },
+    "setSmartArtLayoutOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtLayout"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        }
+      }
+    }
+  }
+}

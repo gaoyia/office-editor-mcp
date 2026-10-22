@@ -1,0 +1,798 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setPageBackgroundOp": [
+      "docx"
+    ],
+    "setPageBordersOp": [
+      "docx"
+    ],
+    "setFormProtOp": [
+      "docx"
+    ],
+    "insertEditRangeOp": [
+      "docx"
+    ],
+    "deleteEditRangeOp": [
+      "docx"
+    ],
+    "setThemeFmtOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setThemeOverrideOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "docxSetThemeColorsOp": [
+      "xlsx",
+      "docx"
+    ],
+    "docxSetThemeFontsOp": [
+      "xlsx",
+      "docx"
+    ],
+    "setThemeExtraSchemesOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setThemeObjectDefaultsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "setPageBackgroundOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageBackground"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fill": {
+          "$ref": "#/$defs/pageBackgroundFill"
+        }
+      }
+    },
+    "pageBackgroundFill": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "gradient",
+            "picture"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pageBorderSide": {
+      "type": "object",
+      "required": [
+        "val"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": "string",
+          "minLength": 1,
+          "$comment": "ECMA-376 ST_Border，含艺术型如 apples"
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "space": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "color": {
+          "type": "string"
+        }
+      }
+    },
+    "setPageBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "const": false
+        },
+        "offsetFrom": {
+          "enum": [
+            "page",
+            "text"
+          ]
+        },
+        "display": {
+          "enum": [
+            "allPages",
+            "firstPage",
+            "notFirstPage"
+          ]
+        },
+        "zOrder": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        },
+        "top": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setFormProtOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "formProt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setFormProt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formProt": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "insertEditRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEditRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edGrp": {
+          "enum": [
+            "everyone",
+            "administrators",
+            "contributors",
+            "editors",
+            "owners",
+            "current"
+          ]
+        },
+        "ed": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteEditRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEditRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setThemeFmtOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeFmt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "line": {
+          "type": "object",
+          "required": [
+            "index",
+            "w"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "fill": {
+          "type": "object",
+          "required": [
+            "index",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "kind": {
+              "enum": [
+                "solid",
+                "grad"
+              ]
+            }
+          }
+        },
+        "bgFill": {
+          "type": "object",
+          "required": [
+            "index",
+            "kind"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "kind": {
+              "enum": [
+                "solid",
+                "grad"
+              ]
+            }
+          }
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setThemeOverrideOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeOverride"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "const": false
+        },
+        "dk1": {
+          "type": "string"
+        },
+        "lt1": {
+          "type": "string"
+        },
+        "dk2": {
+          "type": "string"
+        },
+        "lt2": {
+          "type": "string"
+        },
+        "accent1": {
+          "type": "string"
+        },
+        "accent2": {
+          "type": "string"
+        },
+        "accent3": {
+          "type": "string"
+        },
+        "accent4": {
+          "type": "string"
+        },
+        "accent5": {
+          "type": "string"
+        },
+        "accent6": {
+          "type": "string"
+        },
+        "hlink": {
+          "type": "string"
+        },
+        "folHlink": {
+          "type": "string"
+        }
+      }
+    },
+    "themeScriptFont": {
+      "type": "object",
+      "required": [
+        "script",
+        "typeface"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "script": {
+          "type": "string",
+          "minLength": 1
+        },
+        "typeface": {
+          "type": "string"
+        }
+      }
+    },
+    "themeExtraScheme": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dk1": {
+              "type": "string"
+            },
+            "lt1": {
+              "type": "string"
+            },
+            "dk2": {
+              "type": "string"
+            },
+            "lt2": {
+              "type": "string"
+            },
+            "accent1": {
+              "type": "string"
+            },
+            "accent2": {
+              "type": "string"
+            },
+            "accent3": {
+              "type": "string"
+            },
+            "accent4": {
+              "type": "string"
+            },
+            "accent5": {
+              "type": "string"
+            },
+            "accent6": {
+              "type": "string"
+            },
+            "hlink": {
+              "type": "string"
+            },
+            "folHlink": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "themeFontLang": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "eastAsia": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bidi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "docxSetThemeColorsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeColors"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "themeName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dk1": {
+          "type": "string"
+        },
+        "lt1": {
+          "type": "string"
+        },
+        "dk2": {
+          "type": "string"
+        },
+        "lt2": {
+          "type": "string"
+        },
+        "accent1": {
+          "type": "string"
+        },
+        "accent2": {
+          "type": "string"
+        },
+        "accent3": {
+          "type": "string"
+        },
+        "accent4": {
+          "type": "string"
+        },
+        "accent5": {
+          "type": "string"
+        },
+        "accent6": {
+          "type": "string"
+        },
+        "hlink": {
+          "type": "string"
+        },
+        "folHlink": {
+          "type": "string"
+        }
+      }
+    },
+    "docxSetThemeFontsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeFonts"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "majorLatin": {
+          "type": "string"
+        },
+        "minorLatin": {
+          "type": "string"
+        },
+        "majorEa": {
+          "type": "string"
+        },
+        "minorEa": {
+          "type": "string"
+        },
+        "majorCs": {
+          "type": "string"
+        },
+        "minorCs": {
+          "type": "string"
+        },
+        "majorScripts": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeScriptFont"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minorScripts": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeScriptFont"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setThemeExtraSchemesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "extraSchemes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeExtraSchemes"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "extraSchemes": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/themeExtraScheme"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setThemeObjectDefaultsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "objectDefaults"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setThemeObjectDefaults"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objectDefaults": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeObjectDefaults"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "themeObjectDefaults": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "sp": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeObjectDef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ln": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeObjectDef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tx": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeObjectDef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "themeObjectDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/themeObjectStyle"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lnW": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "themeObjectStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lnRef": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fillRef": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "effectRef": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fontRef": {
+          "enum": [
+            "major",
+            "minor",
+            "none"
+          ]
+        }
+      }
+    }
+  }
+}

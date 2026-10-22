@@ -4,8 +4,9 @@
 
 信封、跨格式 op（图、图表、SmartArt、批注、超链接、文本框、表格插删行列、`setProps`、`setProtection` 等）以及 `exportMedia` / `exportChartData` 仍在主文件。
 
-机器可读副本见 [json-schema/docx.schema.json](json-schema/docx.schema.json)，
-入口仍是 [json-schema/request.schema.json](json-schema/request.schema.json)。与 Markdown 冲突时以本文与主契约为准。
+机器可读副本在 [json-schema/request.schema.json](json-schema/request.schema.json)。
+文档专有的分块在 [json-schema/src/docx/](json-schema/src/docx/)。
+与 Markdown 冲突时以本文与主契约为准。
 
 ## 稳定 id
 

@@ -1,0 +1,629 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "mergeCellsOp": [
+      "docx"
+    ],
+    "splitCellsOp": [
+      "docx"
+    ],
+    "setTableStyleOp": [
+      "docx"
+    ],
+    "setTableFloatOp": [
+      "docx"
+    ],
+    "setTableWidthOp": [
+      "docx"
+    ],
+    "setTableAlignOp": [
+      "docx"
+    ],
+    "setTableRowHeightOp": [
+      "docx"
+    ],
+    "setTableCellMarOp": [
+      "docx"
+    ],
+    "setTableBordersOp": [
+      "docx"
+    ],
+    "setCellBordersOp": [
+      "docx"
+    ],
+    "setCellFormatOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "mergeCellsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "startRow",
+        "startCol",
+        "endRow",
+        "endCol"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "mergeCells"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startRow": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "startCol": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endRow": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endCol": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "splitCellsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "splitCells"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "tableLook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "firstRow": {
+          "type": "boolean"
+        },
+        "lastRow": {
+          "type": "boolean"
+        },
+        "firstColumn": {
+          "type": "boolean"
+        },
+        "lastColumn": {
+          "type": "boolean"
+        },
+        "bandedRows": {
+          "type": "boolean"
+        },
+        "bandedColumns": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setTableStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "look": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableLook"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "tableFloatPos": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "horzAnchor": {
+          "enum": [
+            "margin",
+            "page",
+            "text"
+          ]
+        },
+        "vertAnchor": {
+          "enum": [
+            "margin",
+            "page",
+            "text"
+          ]
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "leftFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rightFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "topFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bottomFromText": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "setTableFloatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "pos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableFloat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pos": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableFloatPos"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setTableWidthOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableWidth"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "auto",
+            "dxa",
+            "pct"
+          ]
+        },
+        "w": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "setTableAlignOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableAlign"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "oneOf": [
+            {
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "indent": {
+          "$ref": "#/$defs/twipOrNull"
+        }
+      }
+    },
+    "setTableRowHeightOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableRowHeight"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "h": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rule": {
+          "enum": [
+            "auto",
+            "atLeast",
+            "exact"
+          ]
+        }
+      }
+    },
+    "twipOrNull": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "setTableCellMarOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableCellMar"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "left": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "bottom": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "right": {
+          "$ref": "#/$defs/twipOrNull"
+        }
+      }
+    },
+    "tableBorders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insideH": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "insideV": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setTableBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "borders"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "borders": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tableBorders"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setCellBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "borders"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "borders": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/tableBorders"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setCellFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fill": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "left": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "bottom": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "right": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "tl2br": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/docxDiagonalBorder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tr2bl": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/docxDiagonalBorder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vAlign": {
+          "oneOf": [
+            {
+              "enum": [
+                "top",
+                "center",
+                "both",
+                "bottom"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noWrap": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "textDirection": {
+          "oneOf": [
+            {
+              "enum": [
+                "lrTb",
+                "tbRl",
+                "btLr",
+                "lrTbV",
+                "tbRlV",
+                "tbLrV"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fitText": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hideMark": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

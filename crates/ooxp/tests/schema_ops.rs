@@ -21,21 +21,13 @@ fn read_json(name: &str) -> Value {
     serde_json::from_str(&text).unwrap_or_else(|err| panic!("{name} 不是 JSON: {err}"))
 }
 
-fn resolve<'a>(request: &'a Value, siblings: &'a [(&'a str, Value)], reference: &str) -> &'a Value {
-    if let Some(name) = reference.strip_prefix("#/$defs/") {
-        return &request["$defs"][name];
-    }
-    let (file, frag) = reference.split_once("#/$defs/").unwrap_or_else(|| {
-        panic!("无法解析引用 {reference}");
-    });
-    let body = siblings
-        .iter()
-        .find(|(name, _)| *name == file)
-        .unwrap_or_else(|| panic!("缺少 {file}"))
-        .1
-        .as_object()
-        .unwrap();
-    &body["$defs"][frag]
+fn resolve<'a>(request: &'a Value, reference: &str) -> &'a Value {
+    let name = reference
+        .strip_prefix("#/$defs/")
+        .unwrap_or_else(|| panic!("引用必须指向本文件的定义: {reference}"));
+    request["$defs"].get(name).unwrap_or_else(|| {
+        panic!("找不到定义 {name}");
+    })
 }
 
 fn op_const(defn: &Value) -> String {
@@ -45,13 +37,7 @@ fn op_const(defn: &Value) -> String {
         .to_string()
 }
 
-fn list_ops(
-    request: &Value,
-    siblings: &[(&str, Value)],
-    key: &str,
-    combiner: &str,
-    unique: bool,
-) -> BTreeSet<String> {
+fn list_ops(request: &Value, key: &str, combiner: &str, unique: bool) -> BTreeSet<String> {
     let items = request["$defs"][key][combiner]
         .as_array()
         .unwrap_or_else(|| panic!("{key} 缺少 {combiner}"));
@@ -60,7 +46,7 @@ fn list_ops(
         let reference = item["$ref"]
             .as_str()
             .unwrap_or_else(|| panic!("{key} 有条目没有 $ref"));
-        let name = op_const(resolve(request, siblings, reference));
+        let name = op_const(resolve(request, reference));
         let inserted = names.insert(name.clone());
         if unique {
             assert!(inserted, "{key} 里 {name} 出现了两次");
@@ -103,18 +89,13 @@ fn parser_ops(relative: &str) -> BTreeSet<String> {
 #[test]
 fn apply_schema_matches_parsers() {
     let request = read_json("request.schema.json");
-    let siblings = [
-        ("xlsx.schema.json", read_json("xlsx.schema.json")),
-        ("docx.schema.json", read_json("docx.schema.json")),
-        ("pptx.schema.json", read_json("pptx.schema.json")),
-    ];
     let xlsx_parser = parser_ops("crates/ooxp/src/xlsx/request/mod.rs");
     let docx_parser = parser_ops("crates/ooxp/src/docx/request/mod.rs");
     let pptx_parser = parser_ops("crates/ooxp/src/pptx/request/mod.rs");
-    let xlsx_schema = list_ops(&request, &siblings, "xlsxApplyOp", "oneOf", true);
-    let docx_schema = list_ops(&request, &siblings, "docxApplyOp", "oneOf", true);
-    let pptx_schema = list_ops(&request, &siblings, "pptxApplyOp", "oneOf", true);
-    let any_schema = list_ops(&request, &siblings, "anyApplyOp", "anyOf", false);
+    let xlsx_schema = list_ops(&request, "xlsxApplyOp", "oneOf", true);
+    let docx_schema = list_ops(&request, "docxApplyOp", "oneOf", true);
+    let pptx_schema = list_ops(&request, "pptxApplyOp", "oneOf", true);
+    let any_schema = list_ops(&request, "anyApplyOp", "anyOf", false);
 
     assert_eq!(xlsx_schema, xlsx_parser, "xlsx 动作名单不一致");
     assert_eq!(docx_schema, docx_parser, "docx 动作名单不一致");
@@ -132,4 +113,19 @@ fn apply_schema_matches_parsers() {
     assert!(pptx_schema.contains("insertOle"));
     assert!(pptx_schema.contains("deleteOle"));
     assert!(!pptx_schema.contains("insertTextBox"));
+}
+
+#[test]
+fn schema_parts_match_built_file() {
+    let output = std::process::Command::new("python")
+        .arg(repo_root().join("docs/json-schema/build.py"))
+        .arg("--check")
+        .current_dir(repo_root())
+        .output()
+        .unwrap_or_else(|err| panic!("运行 schema 拼接脚本失败: {err}"));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

@@ -1,0 +1,379 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertSlicerOp": [
+      "xlsx"
+    ],
+    "deleteSlicerOp": [
+      "xlsx"
+    ],
+    "setSlicerSizeOp": [
+      "xlsx"
+    ],
+    "setSlicerViewOp": [
+      "xlsx"
+    ],
+    "setSlicerFilterOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "insertSlicerOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "source",
+        "field",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSlicer"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "slicer",
+            "timeline"
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rowHeight": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "columnCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "showCaption": {
+          "type": "boolean"
+        },
+        "startItem": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lockedPosition": {
+          "type": "boolean"
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "showHeader": {
+          "type": "boolean"
+        },
+        "showSelectionLabel": {
+          "type": "boolean"
+        },
+        "showTimeLevel": {
+          "type": "boolean"
+        },
+        "showHorizontalScrollbar": {
+          "type": "boolean"
+        },
+        "selectionLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "scrollPosition": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "deleteSlicerOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSlicer"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setSlicerSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSlicerSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
+    "setSlicerViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "minProperties": 3,
+      "properties": {
+        "op": {
+          "const": "setSlicerView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rowHeight": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "columnCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "showCaption": {
+          "type": "boolean"
+        },
+        "startItem": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "lockedPosition": {
+          "type": "boolean"
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "showHeader": {
+          "type": "boolean"
+        },
+        "showSelectionLabel": {
+          "type": "boolean"
+        },
+        "showTimeLevel": {
+          "type": "boolean"
+        },
+        "showHorizontalScrollbar": {
+          "type": "boolean"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "selectionLevel": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "scrollPosition": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "setSlicerFilterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "selected"
+          ],
+          "not": {
+            "required": [
+              "filter"
+            ]
+          }
+        },
+        {
+          "required": [
+            "filter"
+          ],
+          "not": {
+            "required": [
+              "selected"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "op": {
+          "const": "setSlicerFilter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filter": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "filterType",
+                "startDate",
+                "endDate"
+              ],
+              "properties": {
+                "filterType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "startDate": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "endDate": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

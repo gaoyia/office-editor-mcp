@@ -5,9 +5,10 @@
 xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [json-contract-xlsx.md](json-contract-xlsx.md)、
 [json-contract-docx.md](json-contract-docx.md)、[json-contract-pptx.md](json-contract-pptx.md)。
 
-机器可读副本入口是 [json-schema/request.schema.json](json-schema/request.schema.json)。
-xlsx / docx / pptx 的片段分别是 [xlsx.schema.json](json-schema/xlsx.schema.json)、
-[docx.schema.json](json-schema/docx.schema.json)、[pptx.schema.json](json-schema/pptx.schema.json)。与 Markdown 冲突时以本文及分册为准。
+机器可读副本是 [json-schema/request.schema.json](json-schema/request.schema.json)。
+这份文件由 [json-schema/src/](json-schema/src/) 里的分块拼成，不要手改。
+改分块后运行 `python docs/json-schema/build.py`。
+与 Markdown 冲突时以本文及分册为准。
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，

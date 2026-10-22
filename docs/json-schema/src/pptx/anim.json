@@ -1,0 +1,347 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setTransitionOp": [
+      "pptx"
+    ],
+    "insertAnimOp": [
+      "pptx"
+    ],
+    "deleteAnimOp": [
+      "pptx"
+    ],
+    "setAnimOp": [
+      "pptx"
+    ],
+    "moveAnimOp": [
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "animType": {
+      "type": "string",
+      "enum": [
+        "appear",
+        "fade",
+        "flyIn",
+        "wipe",
+        "split",
+        "zoom",
+        "spin",
+        "growShrink",
+        "fadeOut",
+        "flyOut",
+        "wipeOut",
+        "pathRight"
+      ]
+    },
+    "animTrigger": {
+      "type": "string",
+      "enum": [
+        "click",
+        "with",
+        "after",
+        "clickOn"
+      ]
+    },
+    "animRepeat": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "animCreateClickOn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shape": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "picture": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "video": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "audio": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "table": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chart": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "smartArt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "shape"
+          ]
+        },
+        {
+          "required": [
+            "picture"
+          ]
+        },
+        {
+          "required": [
+            "video"
+          ]
+        },
+        {
+          "required": [
+            "audio"
+          ]
+        },
+        {
+          "required": [
+            "table"
+          ]
+        },
+        {
+          "required": [
+            "chart"
+          ]
+        },
+        {
+          "required": [
+            "smartArt"
+          ]
+        }
+      ]
+    },
+    "setTransitionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTransition"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "advClick": {
+          "type": "boolean"
+        },
+        "advTm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invX": {
+          "type": "boolean"
+        },
+        "invY": {
+          "type": "boolean"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orient": {
+          "type": "string",
+          "enum": [
+            "horz",
+            "vert"
+          ]
+        },
+        "spokes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "insertAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/animType"
+        },
+        "trigger": {
+          "$ref": "#/$defs/animTrigger"
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "repeat": {
+          "$ref": "#/$defs/animRepeat"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "para": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "clickOn": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "$ref": "#/$defs/animTrigger"
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "type": {
+          "$ref": "#/$defs/animType"
+        },
+        "repeat": {
+          "$ref": "#/$defs/animRepeat"
+        },
+        "sound": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "para": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clickOn": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "moveAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "index"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "moveAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

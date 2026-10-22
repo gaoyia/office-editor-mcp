@@ -1,0 +1,229 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertEmbeddedFontOp": [
+      "docx"
+    ],
+    "deleteEmbeddedFontOp": [
+      "docx"
+    ],
+    "setFontEmbedOp": [
+      "docx"
+    ],
+    "insertFootnoteOp": [
+      "docx"
+    ],
+    "insertEndnoteOp": [
+      "docx"
+    ],
+    "deleteFootnoteOp": [
+      "docx"
+    ],
+    "deleteEndnoteOp": [
+      "docx"
+    ],
+    "setNoteNumberingOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "insertEmbeddedFontOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEmbeddedFont"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "regular",
+            "bold",
+            "italic",
+            "boldItalic"
+          ]
+        }
+      }
+    },
+    "deleteEmbeddedFontOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEmbeddedFont"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setFontEmbedOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setFontEmbed"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trueType": {
+          "type": "boolean"
+        },
+        "systemFonts": {
+          "type": "boolean"
+        },
+        "subset": {
+          "type": "boolean"
+        }
+      }
+    },
+    "insertFootnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertFootnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "insertEndnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEndnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteFootnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteFootnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteEndnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEndnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setNoteNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setNoteNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "footnote",
+            "endnote"
+          ]
+        },
+        "numFmt": {
+          "enum": [
+            "decimal",
+            "upperRoman",
+            "lowerRoman",
+            "upperLetter",
+            "lowerLetter",
+            "chicago"
+          ]
+        },
+        "numStart": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "numRestart": {
+          "enum": [
+            "continuous",
+            "eachSect",
+            "eachPage"
+          ]
+        }
+      }
+    }
+  }
+}

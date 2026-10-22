@@ -1,0 +1,253 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertSparklineOp": [
+      "xlsx"
+    ],
+    "setSparklineOp": [
+      "xlsx"
+    ],
+    "deleteSparklineOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "sparkAxisType": {
+      "enum": [
+        "individual",
+        "group",
+        "custom"
+      ]
+    },
+    "sparkColors": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "series": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "negative": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "axis": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "markers": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "first": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "last": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "high": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "low": {
+          "$ref": "#/$defs/cellColor"
+        }
+      }
+    },
+    "insertSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ref",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "line",
+            "column",
+            "stacked"
+          ]
+        },
+        "displayEmptyCellsAs": {
+          "enum": [
+            "gap",
+            "span",
+            "zero"
+          ]
+        },
+        "markers": {
+          "type": "boolean"
+        },
+        "high": {
+          "type": "boolean"
+        },
+        "low": {
+          "type": "boolean"
+        },
+        "first": {
+          "type": "boolean"
+        },
+        "last": {
+          "type": "boolean"
+        },
+        "negative": {
+          "type": "boolean"
+        },
+        "displayXAxis": {
+          "type": "boolean"
+        },
+        "lineWeight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1584
+        },
+        "minAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "maxAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "manualMin": {
+          "type": "number"
+        },
+        "manualMax": {
+          "type": "number"
+        },
+        "colors": {
+          "$ref": "#/$defs/sparkColors"
+        }
+      }
+    },
+    "setSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "line",
+            "column",
+            "stacked"
+          ]
+        },
+        "displayEmptyCellsAs": {
+          "enum": [
+            "gap",
+            "span",
+            "zero"
+          ]
+        },
+        "markers": {
+          "type": "boolean"
+        },
+        "high": {
+          "type": "boolean"
+        },
+        "low": {
+          "type": "boolean"
+        },
+        "first": {
+          "type": "boolean"
+        },
+        "last": {
+          "type": "boolean"
+        },
+        "negative": {
+          "type": "boolean"
+        },
+        "displayXAxis": {
+          "type": "boolean"
+        },
+        "lineWeight": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1584
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "maxAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "manualMin": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "manualMax": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colors": {
+          "$ref": "#/$defs/sparkColors"
+        }
+      }
+    },
+    "deleteSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

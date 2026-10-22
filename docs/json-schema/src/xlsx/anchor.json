@@ -1,0 +1,1059 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setPictureAnchorOp": [
+      "xlsx"
+    ],
+    "setTextBoxAnchorOp": [
+      "xlsx"
+    ],
+    "setInkAnchorOp": [
+      "xlsx"
+    ],
+    "setModel3dAnchorOp": [
+      "xlsx"
+    ],
+    "setMathAnchorOp": [
+      "xlsx"
+    ],
+    "setSlicerAnchorOp": [
+      "xlsx"
+    ],
+    "setChartAnchorOp": [
+      "xlsx"
+    ],
+    "setSmartArtAnchorOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "setPictureAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPictureAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute",
+            "relSize"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setTextBoxAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute",
+            "relSize"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setInkAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setInkAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setModel3dAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setMathAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMathAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute",
+            "relSize"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setSlicerAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSlicerAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute",
+            "relSize"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "fromX"
+          ]
+        },
+        {
+          "required": [
+            "fromY"
+          ]
+        },
+        {
+          "required": [
+            "toX"
+          ]
+        },
+        {
+          "required": [
+            "toY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setChartAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setSmartArtAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    }
+  }
+}

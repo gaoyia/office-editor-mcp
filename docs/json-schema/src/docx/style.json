@@ -1,0 +1,361 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "acceptRevisionOp": [
+      "docx"
+    ],
+    "rejectRevisionOp": [
+      "docx"
+    ],
+    "insertContentControlOp": [
+      "docx"
+    ],
+    "setContentControlOp": [
+      "docx"
+    ],
+    "deleteContentControlOp": [
+      "docx"
+    ],
+    "insertNumberingOp": [
+      "docx"
+    ],
+    "setNumberingOp": [
+      "docx"
+    ],
+    "setStyleOp": [
+      "docx"
+    ],
+    "insertStyleOp": [
+      "docx"
+    ],
+    "deleteStyleOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "acceptRevisionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "acceptRevision"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rejectRevisionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "rejectRevision"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "plainText",
+            "richText",
+            "dropDown",
+            "comboBox",
+            "date",
+            "checkbox",
+            "picture",
+            "group",
+            "equation"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fullDate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fullDate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deleteContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keep": {
+          "enum": [
+            "content",
+            "none"
+          ]
+        }
+      }
+    },
+    "insertNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertNumbering"
+        },
+        "id": {
+          "const": "docx:document"
+        },
+        "kind": {
+          "enum": [
+            "decimal",
+            "bullet"
+          ]
+        }
+      }
+    },
+    "setNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ilvl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "numFmt": {
+          "enum": [
+            "decimal",
+            "bullet",
+            "lowerLetter",
+            "upperLetter",
+            "lowerRoman",
+            "upperRoman"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lvlText": {
+          "type": "string"
+        }
+      }
+    },
+    "setStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "insertStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "styleId",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertStyle"
+        },
+        "id": {
+          "const": "docx:document"
+        },
+        "styleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+        },
+        "type": {
+          "enum": [
+            "paragraph",
+            "character",
+            "table"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basedOn": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,996 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertChartOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteChartOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartTitleOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartSeriesOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "addChartSeriesOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteChartSeriesOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartTypeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartAxisTitleOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartLegendOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartDataLabelsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "insertTrendlineOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setTrendlineOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteTrendlineOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "insertErrorBarsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setErrorBarsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteErrorBarsOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartSeriesAxisOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setChartSizeOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "chartType": {
+      "enum": [
+        "bar",
+        "col",
+        "line",
+        "pie",
+        "area",
+        "scatter",
+        "doughnut",
+        "radar",
+        "bubble",
+        "stock",
+        "surface",
+        "ofPie"
+      ]
+    },
+    "insertChartType": {
+      "enum": [
+        "bar",
+        "col",
+        "line",
+        "pie",
+        "area",
+        "scatter",
+        "doughnut",
+        "radar",
+        "bubble",
+        "combo",
+        "stock",
+        "surface",
+        "ofPie",
+        "chartex"
+      ]
+    },
+    "stockKind": {
+      "enum": [
+        "hlc",
+        "ohlc",
+        "vhlc",
+        "vohlc"
+      ]
+    },
+    "surfaceKind": {
+      "enum": [
+        "surface3d",
+        "wireframe",
+        "contour",
+        "contourWire"
+      ]
+    },
+    "chartexLayoutId": {
+      "enum": [
+        "waterfall",
+        "treemap",
+        "sunburst",
+        "funnel",
+        "clusteredColumn",
+        "boxWhisker",
+        "pareto"
+      ]
+    },
+    "comboSeriesType": {
+      "enum": [
+        "bar",
+        "col",
+        "line",
+        "area",
+        "scatter"
+      ]
+    },
+    "chartSeriesData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/comboSeriesType"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        }
+      }
+    },
+    "insertChartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type",
+        "series"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertChart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "#/$defs/chartexLayoutId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteChartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteChart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setChartTitleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartTitle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "setChartSeriesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "required": [
+            "categories"
+          ]
+        },
+        {
+          "required": [
+            "values"
+          ]
+        },
+        {
+          "required": [
+            "sizes"
+          ]
+        }
+      ]
+    },
+    "addChartSeriesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "addChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "sizes": {
+          "type": "array",
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
+        },
+        "type": {
+          "$ref": "#/$defs/comboSeriesType"
+        }
+      }
+    },
+    "deleteChartSeriesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setChartTypeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartType"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/chartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        }
+      }
+    },
+    "setChartAxisTitleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "axis",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartAxisTitle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "axis": {
+          "enum": [
+            "cat",
+            "val"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "setChartLegendOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "show"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartLegend"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "boolean"
+        },
+        "pos": {
+          "enum": [
+            "b",
+            "t",
+            "l",
+            "r",
+            "tr"
+          ]
+        }
+      }
+    },
+    "setChartDataLabelsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "show"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartDataLabels"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "boolean"
+        }
+      }
+    },
+    "trendlineType": {
+      "enum": [
+        "linear",
+        "exp",
+        "log",
+        "poly",
+        "power",
+        "movingAvg"
+      ]
+    },
+    "insertTrendlineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/trendlineType"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "displayRSquared": {
+          "type": "boolean"
+        },
+        "displayEquation": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "setTrendlineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/trendlineType"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "displayRSquared": {
+          "type": "boolean"
+        },
+        "displayEquation": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "required": [
+            "order"
+          ]
+        },
+        {
+          "required": [
+            "period"
+          ]
+        },
+        {
+          "required": [
+            "displayRSquared"
+          ]
+        },
+        {
+          "required": [
+            "displayEquation"
+          ]
+        },
+        {
+          "required": [
+            "name"
+          ]
+        }
+      ]
+    },
+    "deleteTrendlineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertErrorBarsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "x",
+            "y"
+          ]
+        },
+        "barType": {
+          "enum": [
+            "both",
+            "plus",
+            "minus"
+          ]
+        },
+        "valType": {
+          "enum": [
+            "stdErr",
+            "stdDev",
+            "fixedVal",
+            "percentage",
+            "cust"
+          ]
+        },
+        "value": {
+          "type": "number"
+        },
+        "plus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        },
+        "minus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "setErrorBarsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "x",
+            "y"
+          ]
+        },
+        "barType": {
+          "enum": [
+            "both",
+            "plus",
+            "minus"
+          ]
+        },
+        "valType": {
+          "enum": [
+            "stdErr",
+            "stdDev",
+            "fixedVal",
+            "percentage",
+            "cust"
+          ]
+        },
+        "value": {
+          "type": "number"
+        },
+        "plus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        },
+        "minus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "dir"
+          ]
+        },
+        {
+          "required": [
+            "barType"
+          ]
+        },
+        {
+          "required": [
+            "valType"
+          ]
+        },
+        {
+          "required": [
+            "plus"
+          ]
+        },
+        {
+          "required": [
+            "minus"
+          ]
+        },
+        {
+          "required": [
+            "value"
+          ]
+        }
+      ]
+    },
+    "deleteErrorBarsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setChartSeriesAxisOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "axis"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartSeriesAxis"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "axis": {
+          "enum": [
+            "primary",
+            "secondary"
+          ]
+        }
+      }
+    },
+    "setChartSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    }
+  }
+}

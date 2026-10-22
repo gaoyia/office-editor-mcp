@@ -18,7 +18,7 @@
 | [checklist-docx.md](checklist-docx.md) | 人工用 Microsoft Word 打开文档的检查清单 |
 | [checklist-pptx.md](checklist-pptx.md) | 人工用 Microsoft PowerPoint 打开文稿的检查清单 |
 | [examples/](examples/) | 可直接拿去跑的请求和响应样例 |
-| [json-schema/request.schema.json](json-schema/request.schema.json) | 请求 JSON Schema 入口；xlsx / docx / pptx 片段在同目录 |
+| [json-schema/README.md](json-schema/README.md) | Schema 分块怎么改、怎么拼 |
 
 规范条款以 `standards/md/` 为索引，本目录只引用条款号，不复制五千页原文。
 

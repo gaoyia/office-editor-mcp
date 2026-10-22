@@ -73,10 +73,10 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 │   ├── checklist-pptx.md
 │   ├── examples/
 │   └── json-schema/
-│       ├── request.schema.json
-│       ├── xlsx.schema.json
-│       ├── docx.schema.json
-│       └── pptx.schema.json
+│       ├── README.md
+│       ├── build.py                  ← 把 src/ 拼成 request.schema.json
+│       ├── request.schema.json       ← 拼出来的副本，不要手改
+│       └── src/                      ← 按格式和主题分块，改这里
 ├── .bugfix-reports/                   ← 严重缺陷记录（计划中的目录，现在还不存在）
 └── standards/                         ← OOXML 规范原件与抽取结果
     ├── ECMA-376-Part1-5th-2016.pdf

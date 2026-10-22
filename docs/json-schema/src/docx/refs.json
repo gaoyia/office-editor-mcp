@@ -1,0 +1,524 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertTocOp": [
+      "docx"
+    ],
+    "deleteTocOp": [
+      "docx"
+    ],
+    "insertCaptionOp": [
+      "docx"
+    ],
+    "deleteCaptionOp": [
+      "docx"
+    ],
+    "insertCrossRefOp": [
+      "docx"
+    ],
+    "deleteCrossRefOp": [
+      "docx"
+    ],
+    "insertIndexOp": [
+      "docx"
+    ],
+    "deleteIndexOp": [
+      "docx"
+    ],
+    "insertIndexEntryOp": [
+      "docx"
+    ],
+    "deleteIndexEntryOp": [
+      "docx"
+    ],
+    "insertSourceOp": [
+      "docx"
+    ],
+    "deleteSourceOp": [
+      "docx"
+    ],
+    "insertCitationOp": [
+      "docx"
+    ],
+    "deleteCitationOp": [
+      "docx"
+    ],
+    "insertBibliographyOp": [
+      "docx"
+    ],
+    "deleteBibliographyOp": [
+      "docx"
+    ],
+    "setBibliographyStyleOp": [
+      "docx"
+    ],
+    "insertDocPartOp": [
+      "docx"
+    ],
+    "deleteDocPartOp": [
+      "docx"
+    ],
+    "insertDocPartContentOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "insertTocOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertToc"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "toc",
+            "tof",
+            "toa"
+          ]
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteTocOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteToc"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCaptionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCaption"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "bookmark": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteCaptionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCaption"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCrossRefOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "bookmark"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCrossRef"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bookmark": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "ref",
+            "page"
+          ]
+        }
+      }
+    },
+    "deleteCrossRefOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCrossRef"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertIndexOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertIndex"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteIndexOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteIndex"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertIndexEntryOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "entry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertIndexEntry"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteIndexEntryOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteIndexEntry"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertSourceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "tag",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSource"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "year": {
+          "type": "string"
+        },
+        "last": {
+          "type": "string"
+        },
+        "first": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteSourceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSource"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCitationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "tag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCitation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteCitationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCitation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertBibliographyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertBibliography"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteBibliographyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteBibliography"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setBibliographyStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "styleName"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setBibliographyStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "styleName": {
+          "enum": [
+            "APA",
+            "MLA",
+            "Chicago",
+            "IEEE",
+            "GB7714"
+          ]
+        }
+      }
+    },
+    "insertDocPartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDocPart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gallery": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "behavior": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteDocPartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDocPart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertDocPartContentOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "docPart"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDocPartContent"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "docPart": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

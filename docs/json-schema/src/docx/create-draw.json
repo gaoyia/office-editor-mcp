@@ -1,0 +1,437 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "$defs": {
+    "docxOleCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxInkCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxModel3dCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxChartCreate": {
+      "type": "object",
+      "required": [
+        "type",
+        "series"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "#/$defs/chartexLayoutId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxPictureCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none"
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxTextBoxCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTableCreate"
+          }
+        },
+        "hyperlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxHyperlinkCreate"
+          }
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxBookmarkCreate"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxFieldCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxMathCreate"
+          }
+        },
+        "contentControls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSdtCreate"
+          }
+        },
+        "rubies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxRubyCreate"
+          }
+        }
+      }
+    },
+    "docxGroupCreate": {
+      "type": "object",
+      "required": [
+        "ids"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "docxSmartArtCreate": {
+      "type": "object",
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smartArtPointInput"
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxDrawingHyperlink": {
+      "description": "inspect 图 / 文本框上的 DrawingML 链。没有链则为 null。create 本期不写。",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "rId",
+            "url",
+            "anchor",
+            "tooltip"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "url",
+                "anchor"
+              ]
+            },
+            "rId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "anchor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "docxDrawingHlinkCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": "string"
+        },
+        "tooltip": {
+          "type": "string"
+        }
+      }
+    },
+    "docxShapeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": {
+          "type": "string"
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    },
+    "docxConnectorCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": {
+          "type": "string"
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
+        }
+      }
+    }
+  }
+}

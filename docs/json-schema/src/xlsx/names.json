@@ -1,0 +1,336 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertDefinedNameOp": [
+      "xlsx"
+    ],
+    "setDefinedNameOp": [
+      "xlsx"
+    ],
+    "deleteDefinedNameOp": [
+      "xlsx"
+    ],
+    "insertCustomViewOp": [
+      "xlsx"
+    ],
+    "deleteCustomViewOp": [
+      "xlsx"
+    ],
+    "showCustomViewOp": [
+      "xlsx"
+    ],
+    "insertConnectionOp": [
+      "xlsx"
+    ],
+    "deleteConnectionOp": [
+      "xlsx"
+    ],
+    "insertExternalLinkOp": [
+      "xlsx"
+    ],
+    "deleteExternalLinkOp": [
+      "xlsx"
+    ],
+    "setExternalLinkOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "insertDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "localSheet": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "localSheet": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "required": [
+            "formula"
+          ]
+        },
+        {
+          "required": [
+            "hidden"
+          ]
+        },
+        {
+          "required": [
+            "localSheet"
+          ]
+        }
+      ]
+    },
+    "deleteDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCustomView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "includePrintSettings": {
+          "type": "boolean"
+        },
+        "includeHiddenRowCol": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deleteCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCustomView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "showCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "showCustomView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertConnectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertConnection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "web",
+            "text"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceFile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteConnectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteConnection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertExternalLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertExternalLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sheets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "deleteExternalLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteExternalLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setExternalLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setExternalLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

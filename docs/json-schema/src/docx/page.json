@@ -1,0 +1,575 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setHeaderFooterDistanceOp": [
+      "docx"
+    ],
+    "setHeaderFooterLinkOp": [
+      "docx"
+    ],
+    "insertHeaderFooterOp": [
+      "docx"
+    ],
+    "insertSectionOp": [
+      "docx"
+    ],
+    "deleteSectionOp": [
+      "docx"
+    ],
+    "setTitlePageOp": [
+      "docx"
+    ],
+    "setEvenAndOddHeadersOp": [
+      "docx"
+    ],
+    "setPageMarginOp": [
+      "docx"
+    ],
+    "setPageSizeOp": [
+      "docx"
+    ],
+    "setColumnsOp": [
+      "docx"
+    ],
+    "setVerticalAlignOp": [
+      "docx"
+    ],
+    "setLineNumberingOp": [
+      "docx"
+    ],
+    "setDocGridOp": [
+      "docx"
+    ],
+    "setRtlGutterOp": [
+      "docx"
+    ],
+    "setMirrorMarginsOp": [
+      "docx"
+    ],
+    "setGutterAtTopOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "setHeaderFooterDistanceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHeaderFooterDistance"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headerDistance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "footerDistance": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "headerDistance"
+          ]
+        },
+        {
+          "required": [
+            "footerDistance"
+          ]
+        }
+      ]
+    },
+    "setHeaderFooterLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind",
+        "type",
+        "linked"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHeaderFooterLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "type": {
+          "enum": [
+            "default",
+            "even",
+            "first"
+          ]
+        },
+        "linked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "insertHeaderFooterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertHeaderFooter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "type": {
+          "enum": [
+            "default",
+            "even",
+            "first"
+          ]
+        }
+      }
+    },
+    "insertSectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "nextPage",
+            "continuous",
+            "evenPage",
+            "oddPage",
+            "nextColumn"
+          ]
+        }
+      }
+    },
+    "deleteSectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setTitlePageOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "titlePage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTitlePage"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "titlePage": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setEvenAndOddHeadersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "evenAndOdd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setEvenAndOddHeaders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evenAndOdd": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setPageMarginOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageMargin"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top": {
+          "type": "integer"
+        },
+        "bottom": {
+          "type": "integer"
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "right": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gutter": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "top"
+          ]
+        },
+        {
+          "required": [
+            "bottom"
+          ]
+        },
+        {
+          "required": [
+            "left"
+          ]
+        },
+        {
+          "required": [
+            "right"
+          ]
+        },
+        {
+          "required": [
+            "gutter"
+          ]
+        }
+      ]
+    },
+    "setPageSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pageWidth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pageHeight": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "orient": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "pageWidth"
+          ]
+        },
+        {
+          "required": [
+            "pageHeight"
+          ]
+        },
+        {
+          "required": [
+            "orient"
+          ]
+        }
+      ]
+    },
+    "setColumnsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setColumns"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "space": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "equalWidth": {
+          "type": "boolean"
+        },
+        "sep": {
+          "type": "boolean"
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "space": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setVerticalAlignOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "vAlign"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setVerticalAlign"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vAlign": {
+          "anyOf": [
+            {
+              "enum": [
+                "top",
+                "center",
+                "both",
+                "bottom"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setLineNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setLineNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "countBy": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restart": {
+          "enum": [
+            "newPage",
+            "newSection",
+            "continuous"
+          ]
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setDocGridOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDocGrid"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "default",
+            "lines",
+            "linesAndChars",
+            "snapToChars"
+          ]
+        },
+        "linePitch": {
+          "type": "integer"
+        },
+        "charSpace": {
+          "type": "integer"
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setRtlGutterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rtlGutter"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRtlGutter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rtlGutter": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setMirrorMarginsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "mirrorMargins"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMirrorMargins"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mirrorMargins": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setGutterAtTopOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "gutterAtTop"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setGutterAtTop"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gutterAtTop": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

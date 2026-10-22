@@ -1,0 +1,379 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "$defs": {
+    "pptxPresentation": {
+      "type": "object",
+      "required": [
+        "slides"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "slides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxSlideCreate"
+          }
+        },
+        "props": {
+          "$ref": "#/$defs/createProps"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxSectionCreate"
+          }
+        },
+        "customShows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxCustomShowCreate"
+          }
+        },
+        "notesSize": {
+          "type": "object",
+          "required": [
+            "cx",
+            "cy"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cx": {
+              "type": "integer",
+              "minimum": 914400,
+              "maximum": 51206400
+            },
+            "cy": {
+              "type": "integer",
+              "minimum": 914400,
+              "maximum": 51206400
+            }
+          }
+        },
+        "handout": {
+          "$ref": "#/$defs/pptxHandoutCreate"
+        },
+        "showPr": {
+          "$ref": "#/$defs/pptxShowPrCreate"
+        },
+        "modifyProtection": {
+          "$ref": "#/$defs/pptxModifyProtectionCreate"
+        }
+      }
+    },
+    "pptxSlideCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxShapeCreate"
+          }
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxPictureCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMathCreate"
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxChartCreate"
+          }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxSmartArtCreate"
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxTableCreate"
+          }
+        },
+        "model3ds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxModel3dCreate"
+          }
+        },
+        "inks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxInkCreate"
+          }
+        },
+        "oleObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxOleCreate"
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxConnectorCreate"
+          }
+        },
+        "zooms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxZoomCreate"
+          }
+        },
+        "notes": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/pptxNotesCreate"
+            }
+          ]
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxCommentCreate"
+          }
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaCreate"
+          }
+        },
+        "audios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaCreate"
+          }
+        },
+        "transition": {
+          "$ref": "#/$defs/pptxTransitionCreate"
+        },
+        "anims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxAnimCreate"
+          }
+        }
+      }
+    },
+    "pptxCommentCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "pptxSectionCreate": {
+      "type": "object",
+      "required": [
+        "name",
+        "start"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxNotesCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "anims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxAnimCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMathCreate"
+          }
+        },
+        "model3ds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxModel3dCreate"
+          }
+        },
+        "inks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxInkCreate"
+          }
+        }
+      }
+    },
+    "pptxCustomShowCreate": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slides": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "pptxHandoutCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "type": "string"
+        },
+        "footer": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "sldNum": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "header"
+          ]
+        },
+        {
+          "required": [
+            "footer"
+          ]
+        },
+        {
+          "required": [
+            "date"
+          ]
+        },
+        {
+          "required": [
+            "sldNum"
+          ]
+        }
+      ]
+    },
+    "pptxShowPrCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "present",
+            "browse",
+            "kiosk"
+          ]
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "showNarration": {
+          "type": "boolean"
+        },
+        "showAnimation": {
+          "type": "boolean"
+        },
+        "useTimings": {
+          "type": "boolean"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "required": [
+            "loop"
+          ]
+        },
+        {
+          "required": [
+            "showNarration"
+          ]
+        },
+        {
+          "required": [
+            "showAnimation"
+          ]
+        },
+        {
+          "required": [
+            "useTimings"
+          ]
+        }
+      ]
+    },
+    "pptxModifyProtectionCreate": {
+      "type": "object",
+      "required": [
+        "enforced"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enforced": {
+          "type": "boolean"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

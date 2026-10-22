@@ -1,0 +1,168 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertHyperlinkOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "setHyperlinkOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ],
+    "deleteHyperlinkOp": [
+      "xlsx",
+      "docx",
+      "pptx"
+    ]
+  },
+  "$defs": {
+    "insertHyperlinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertHyperlink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "display": {
+          "type": "string"
+        },
+        "on": {
+          "type": "string",
+          "enum": [
+            "shape",
+            "run",
+            "pic",
+            "table",
+            "chart",
+            "smartArt",
+            "cell"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "click",
+            "hover"
+          ]
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setHyperlinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHyperlink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "tooltip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteHyperlinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteHyperlink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

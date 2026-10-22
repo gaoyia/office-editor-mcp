@@ -1,0 +1,760 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "$defs": {
+    "pptxSmartArtCreate": {
+      "type": "object",
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/smartArtPointInput"
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
+        }
+      }
+    },
+    "pptxInkCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxModel3dCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxMathCreate": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxChartCreate": {
+      "type": "object",
+      "required": [
+        "type",
+        "series"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "#/$defs/chartexLayoutId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
+        }
+      }
+    },
+    "pptxPictureCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
+        }
+      }
+    },
+    "pptxShapeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "on": {
+          "type": "string",
+          "enum": [
+            "shape",
+            "run"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "click",
+            "hover"
+          ]
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
+        },
+        "geom": {
+          "$ref": "#/$defs/shapeGeom"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxFieldCreate"
+          }
+        }
+      }
+    },
+    "pptxMediaBookmark": {
+      "type": "object",
+      "required": [
+        "name",
+        "time"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "time": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "pptxMediaTrackWrite": {
+      "type": "object",
+      "required": [
+        "label",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lang": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pptxMediaCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "st": {
+          "type": "number",
+          "minimum": 0
+        },
+        "end": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaBookmark"
+          }
+        },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaTrackWrite"
+          }
+        },
+        "trackDisplayLoc": {
+          "type": "string",
+          "enum": [
+            "media",
+            "slide"
+          ]
+        }
+      }
+    },
+    "pptxTransitionCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "advClick": {
+          "type": "boolean"
+        },
+        "advTm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invX": {
+          "type": "boolean"
+        },
+        "invY": {
+          "type": "boolean"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orient": {
+          "type": "string",
+          "enum": [
+            "horz",
+            "vert"
+          ]
+        },
+        "spokes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        }
+      }
+    },
+    "pptxAnimCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/animType"
+        },
+        "trigger": {
+          "$ref": "#/$defs/animTrigger"
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "repeat": {
+          "$ref": "#/$defs/animRepeat"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "para": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "clickOn": {
+          "$ref": "#/$defs/animCreateClickOn"
+        },
+        "shape": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "picture": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "video": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "audio": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "table": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chart": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "smartArt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "shape"
+          ]
+        },
+        {
+          "required": [
+            "picture"
+          ]
+        },
+        {
+          "required": [
+            "video"
+          ]
+        },
+        {
+          "required": [
+            "audio"
+          ]
+        },
+        {
+          "required": [
+            "table"
+          ]
+        },
+        {
+          "required": [
+            "chart"
+          ]
+        },
+        {
+          "required": [
+            "smartArt"
+          ]
+        }
+      ]
+    },
+    "pptxOleCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pptxCxnBindCreate": {
+      "type": "object",
+      "required": [
+        "shape"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "shape": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "site": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxConnectorCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start": {
+          "$ref": "#/$defs/pptxCxnBindCreate"
+        },
+        "end": {
+          "$ref": "#/$defs/pptxCxnBindCreate"
+        }
+      }
+    },
+    "pptxZoomCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "slide",
+            "section",
+            "summary"
+          ]
+        },
+        "target": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxObjectHyperlinkCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "event": {
+          "enum": [
+            "click",
+            "hover"
+          ]
+        }
+      }
+    },
+    "pptxFieldCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

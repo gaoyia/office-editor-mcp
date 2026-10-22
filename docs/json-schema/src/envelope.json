@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ooxp.local/schema/v1/request.schema.json",
+  "$comment": "由 src/ 分块拼成，不要手改本文件。改分块后运行 python docs/json-schema/build.py。给出 format 时，ops 只接受该格式的动作；xlsm 与 xlsx 同一份。省略 format 时，ops 接受任一已登记动作的形状。与 docs/json-contract.md 及分册冲突时以 Markdown 为准。",
+  "title": "ooxp 领域请求",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "action"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "action": {
+      "enum": [
+        "inspect",
+        "create",
+        "apply",
+        "exportMedia",
+        "exportChartData"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "inspect"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/inspectRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "create"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/createRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "apply"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/applyRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "exportMedia"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exportMediaRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "exportChartData"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exportChartDataRequest"
+      }
+    }
+  ]
+}

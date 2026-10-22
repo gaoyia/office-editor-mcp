@@ -1,0 +1,864 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "setParaTextOp": [
+      "docx"
+    ],
+    "insertParaOp": [
+      "docx"
+    ],
+    "deleteParaOp": [
+      "docx"
+    ],
+    "insertBookmarkOp": [
+      "docx"
+    ],
+    "setBookmarkOp": [
+      "docx"
+    ],
+    "deleteBookmarkOp": [
+      "docx"
+    ],
+    "docxInsertFieldOp": [
+      "docx"
+    ],
+    "docxSetFieldOp": [
+      "docx"
+    ],
+    "docxDeleteFieldOp": [
+      "docx"
+    ],
+    "setParaNumberingOp": [
+      "docx"
+    ],
+    "setParaStyleOp": [
+      "docx"
+    ],
+    "setRunStyleOp": [
+      "docx"
+    ],
+    "setParaFormatOp": [
+      "docx"
+    ],
+    "setRunFormatOp": [
+      "docx"
+    ]
+  },
+  "$defs": {
+    "setParaTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "insertParaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertPara"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteParaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deletePara"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxInsertFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arg": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "instr"
+          ],
+          "not": {
+            "required": [
+              "code"
+            ]
+          }
+        },
+        {
+          "required": [
+            "code"
+          ],
+          "not": {
+            "required": [
+              "instr"
+            ]
+          }
+        }
+      ]
+    },
+    "docxSetFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "instr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxDeleteFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keep": {
+          "enum": [
+            "result",
+            "instr"
+          ]
+        }
+      }
+    },
+    "setParaNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "num"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "num": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        }
+      }
+    },
+    "setParaStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setRunStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRunStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setParaFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "left",
+                "center",
+                "right",
+                "both",
+                "distribute",
+                "start",
+                "end"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "firstLine": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hanging": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "before": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lineRule": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "auto",
+                "exact",
+                "atLeast"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kinsoku": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overflowPunct": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "topLinePunct": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoSpaceDE": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoSpaceDN": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "borders": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/paraBorders"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shd": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/paraShd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tabs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/paraTabStop"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "paraBorders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "paraShd": {
+      "type": "object",
+      "required": [
+        "fill"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        }
+      }
+    },
+    "paraTabStop": {
+      "type": "object",
+      "required": [
+        "val",
+        "pos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "decimal",
+            "bar"
+          ]
+        },
+        "pos": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "setRunFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRunFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "none",
+                "double",
+                "thick",
+                "dotted",
+                "dash",
+                "wave",
+                "words",
+                "dottedHeavy",
+                "dashedHeavy",
+                "dashLong",
+                "dashLongHeavy",
+                "dotDash",
+                "dashDotHeavy",
+                "dotDotDash",
+                "dashDotDotHeavy",
+                "wavyHeavy",
+                "wavyDouble"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "em": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "none",
+                "dot",
+                "comma",
+                "circle",
+                "underDot"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eastAsianLayout": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/eastAsianLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "highlight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "yellow",
+                "green",
+                "cyan",
+                "magenta",
+                "red",
+                "blue",
+                "black",
+                "white",
+                "darkBlue",
+                "darkCyan",
+                "darkGreen",
+                "darkMagenta",
+                "darkRed",
+                "darkYellow",
+                "darkGray",
+                "lightGray",
+                "none"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strike": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dstrike": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vertAlign": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "superscript",
+                "subscript",
+                "baseline"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kern": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scale": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 600
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

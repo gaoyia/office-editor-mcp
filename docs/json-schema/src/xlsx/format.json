@@ -1,0 +1,753 @@
+{
+  "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
+  "formats": {
+    "insertDataValidationOp": [
+      "xlsx"
+    ],
+    "setDataValidationOp": [
+      "xlsx"
+    ],
+    "deleteDataValidationOp": [
+      "xlsx"
+    ],
+    "insertConditionalFormatOp": [
+      "xlsx"
+    ],
+    "setConditionalFormatOp": [
+      "xlsx"
+    ],
+    "deleteConditionalFormatOp": [
+      "xlsx"
+    ]
+  },
+  "$defs": {
+    "insertDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "none",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ]
+        },
+        "operator": {
+          "enum": [
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "lessThan",
+            "lessThanOrEqual",
+            "greaterThan",
+            "greaterThanOrEqual"
+          ]
+        },
+        "formula1": {
+          "type": "string"
+        },
+        "formula2": {
+          "type": "string"
+        },
+        "allowBlank": {
+          "type": "boolean"
+        },
+        "dropdown": {
+          "type": "boolean"
+        },
+        "showInputMessage": {
+          "type": "boolean"
+        },
+        "showErrorMessage": {
+          "type": "boolean"
+        },
+        "errorStyle": {
+          "enum": [
+            "stop",
+            "warning",
+            "information"
+          ]
+        },
+        "errorTitle": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "promptTitle": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      }
+    },
+    "setDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "none",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ]
+        },
+        "operator": {
+          "oneOf": [
+            {
+              "enum": [
+                "between",
+                "notBetween",
+                "equal",
+                "notEqual",
+                "lessThan",
+                "lessThanOrEqual",
+                "greaterThan",
+                "greaterThanOrEqual"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formula1": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "formula2": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allowBlank": {
+          "type": "boolean"
+        },
+        "dropdown": {
+          "type": "boolean"
+        },
+        "showInputMessage": {
+          "type": "boolean"
+        },
+        "showErrorMessage": {
+          "type": "boolean"
+        },
+        "errorStyle": {
+          "oneOf": [
+            {
+              "enum": [
+                "stop",
+                "warning",
+                "information"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errorTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "promptTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "deleteDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "cfSqref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "cfWritableType": {
+      "enum": [
+        "cellIs",
+        "expression",
+        "colorScale",
+        "dataBar",
+        "iconSet",
+        "top10",
+        "aboveAverage",
+        "containsText",
+        "notContainsText",
+        "beginsWith",
+        "endsWith"
+      ]
+    },
+    "cfOperator": {
+      "enum": [
+        "lessThan",
+        "lessThanOrEqual",
+        "equal",
+        "notEqual",
+        "greaterThanOrEqual",
+        "greaterThan",
+        "between",
+        "notBetween"
+      ]
+    },
+    "cfvo": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "num",
+            "percent",
+            "max",
+            "min",
+            "formula",
+            "percentile"
+          ]
+        },
+        "val": {
+          "type": "string"
+        },
+        "gte": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cfDxf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sz": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 409
+            },
+            "bold": {
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "underline": {
+              "type": [
+                "boolean",
+                "string",
+                "null"
+              ]
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "fill": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fg": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "bg": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "border": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "type": "string",
+              "minLength": 1
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "left": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "right": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "top": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "bottom": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "diagonal": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "diagonalUp": {
+              "type": "boolean"
+            },
+            "diagonalDown": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "cfColorScale": {
+      "type": "object",
+      "required": [
+        "colors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/cellColor"
+          }
+        }
+      }
+    },
+    "cfDataBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "color": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "showValue": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cfIconSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "enum": [
+            "3Arrows",
+            "3ArrowsGray",
+            "3Flags",
+            "3Signs",
+            "3Symbols",
+            "3Symbols2",
+            "3TrafficLights1",
+            "3TrafficLights2",
+            "4Arrows",
+            "4ArrowsGray",
+            "4Rating",
+            "4RedToBlack",
+            "4TrafficLights",
+            "5Arrows",
+            "5ArrowsGray",
+            "5Quarters",
+            "5Rating"
+          ]
+        },
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "showValue": {
+          "type": "boolean"
+        },
+        "reverse": {
+          "type": "boolean"
+        },
+        "percent": {
+          "type": "boolean"
+        }
+      }
+    },
+    "insertConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "$ref": "#/$defs/cfSqref"
+        },
+        "type": {
+          "$ref": "#/$defs/cfWritableType"
+        },
+        "operator": {
+          "$ref": "#/$defs/cfOperator"
+        },
+        "formulas": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "dxf": {
+          "$ref": "#/$defs/cfDxf"
+        },
+        "colorScale": {
+          "$ref": "#/$defs/cfColorScale"
+        },
+        "dataBar": {
+          "$ref": "#/$defs/cfDataBar"
+        },
+        "iconSet": {
+          "$ref": "#/$defs/cfIconSet"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stopIfTrue": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "percent": {
+          "type": "boolean"
+        },
+        "bottom": {
+          "type": "boolean"
+        },
+        "aboveAverage": {
+          "type": "boolean"
+        },
+        "equalAverage": {
+          "type": "boolean"
+        },
+        "stdDev": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "$ref": "#/$defs/cfSqref"
+        },
+        "type": {
+          "$ref": "#/$defs/cfWritableType"
+        },
+        "operator": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfOperator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formulas": {
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dxf": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfDxf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colorScale": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfColorScale"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dataBar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfDataBar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iconSet": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfIconSet"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "stopIfTrue": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rank": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "percent": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "bottom": {
+          "type": "boolean"
+        },
+        "aboveAverage": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "equalAverage": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "stdDev": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "deleteConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}
