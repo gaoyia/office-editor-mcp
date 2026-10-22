@@ -1702,8 +1702,15 @@ id 不是趋势线 id 报 `InvalidId`。找不到报 `IdNotFound`。
   - docx / pptx 上出现报 `InvalidField`
 - **`dataFrom`**
   - xlsx 必填
-  - 写到该表上的数据表左上角，A1
-  - 第 1 行是系列名，第 1 列是分类，数值向右
+  - 单个单元格地址，例如 `A1`
+  - 不要写范围（`A1:E19`），不要写表名（`Sheet!A1`）
+  - 不是图表去引用哪一块已有单元格
+  - `series` 里的分类和数值按这个格子当左上角写进工作表，挡住的格子会被盖掉
+  - 分类写在这一列的下一行起
+  - 每个系列的名字写在这一行、向右逐列
+  - 数值写在名字下面
+  - 气泡图每个系列占两列
+  - 已经手写了表格时，指到空区域，不要指到那张表的表头
   - docx / pptx 上出现报 `InvalidField`
 
 docx：在该段末插入 `w:drawing`，默认浮动。新建 `/word/charts/chartN.xml`（`N` 从 1 起尚未占用）、chart 的 `.rels`、一份最小 embedding xlsx（工作表名 `Sheet1`，

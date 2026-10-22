@@ -1432,7 +1432,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 | `charts[].type` | 必须。与 `insertChart` 相同 |
 | `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
 | `charts[].from` | 必须。图的左上角单元格，A1 |
-| `charts[].dataFrom` | 必须。数据表左上角，A1。按 `setCell` 语义覆盖已有格子，包括同一张表 `cells[]` 里已声明的值 |
+| `charts[].dataFrom` | 必须。单个 A1，不是范围。含义与 `insertChart` 的 `dataFrom` 相同 |
 | `charts[].title` | 可选 |
 | `charts[].to` / `anchor` / `cx` / `cy` / 偏移 | 与 `insertChart` 相同。`kind` / `wrap` 报 `InvalidField` |
 | `headerFooters[].kind` | 必须。`odd` / `even` / `first`。其它取值报 `InvalidField` |
@@ -3865,7 +3865,7 @@ id 不是迷你图组 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx �
 | `op` | 必须是 `"insertChartSheet"` |
 | `id` | 必须是 `xlsx:workbook` |
 | `name` | 新表名。规则与 create 的 `sheets[].name` 相同 |
-| `dataFrom` | 写到普通工作表上的数据表左上角，A1。第 1 行系列名，第 1 列分类，数值向右 |
+| `dataFrom` | 单个 A1，不是范围。含义与 `insertChart` 的 `dataFrom` 相同 |
 | `dataSheet` | 可选。承接 `dataFrom` 的 `worksheet` 名。省略则取工作簿里第一张 `worksheet` |
 | `type` / `ofPieType` / `title` / `series` | 与 `insertChart` 相同 |
 | `cx` / `cy` | 可选。`absoluteAnchor` 的 EMU 尺寸。都省略则用与 `insertChart` 相同的缺省。只给一个报 `InvalidField` |

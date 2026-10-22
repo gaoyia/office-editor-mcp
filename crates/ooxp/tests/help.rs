@@ -129,6 +129,27 @@ fn insert_math_does_not_merge_formats() {
     assert!(docx["limits"].as_str().unwrap().contains("不要套用 xlsx"));
 }
 
+const DATA_FROM_HELP: &str = "dataFrom 是单个单元格地址，例如 A1。不要写范围（A1:E19），不要写表名（Sheet!A1）。它不是「图表去引用哪一块已有单元格」。series 里的分类和数值会按这个格子当左上角，写进工作表，挡住的格子会被盖掉。分类写在这一列的下一行起；每个系列的名字写在这一行、向右逐列；数值写在名字下面。气泡图每个系列占两列。已经手写了表格时，把 dataFrom 指到空区域，不要指到那张表的表头。";
+
+#[test]
+fn data_from_help_sits_on_the_field() {
+    let created = help(serde_json::json!({"name": "xlsxChartCreate"})).unwrap();
+    assert_eq!(
+        created["fields"]["properties"]["dataFrom"]["description"],
+        DATA_FROM_HELP
+    );
+    let chart = help(serde_json::json!({"op": "insertChart"})).unwrap();
+    assert_eq!(
+        chart["fields"]["properties"]["dataFrom"]["description"],
+        DATA_FROM_HELP
+    );
+    let sheet = help(serde_json::json!({"format": "xlsx", "op": "insertChartSheet"})).unwrap();
+    assert_eq!(
+        sheet["fields"]["properties"]["dataFrom"]["description"],
+        DATA_FROM_HELP
+    );
+}
+
 #[test]
 fn scope_is_a_definition_not_an_op() {
     let value = help(serde_json::json!({"name": "inspectScope"})).unwrap();
