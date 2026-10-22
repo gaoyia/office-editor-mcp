@@ -23,7 +23,9 @@
   "$defs": {
     "insertDataValidationOp": {
       "description": "往工作表追加一条数据验证（ECMA-376 §18.3.1.32）。",
+      "descriptionEn": "Append one data validation to the worksheet (ECMA-376 §18.3.1.32).",
       "limits": "公式当字符串，不求值，不展开下拉列表。",
+      "limitsEn": "The formula is stored as a string. It is not evaluated, and the drop-down list is not expanded.",
       "type": "object",
       "required": [
         "op",
@@ -121,7 +123,9 @@
     },
     "setDataValidationOp": {
       "description": "改已有规则。",
+      "descriptionEn": "Change an existing rule.",
       "limits": "只改给了的字段。",
+      "limitsEn": "Only the fields that were given are changed.",
       "type": "object",
       "required": [
         "op",
@@ -249,6 +253,7 @@
     },
     "deleteDataValidationOp": {
       "description": "删掉一条规则。",
+      "descriptionEn": "Delete one rule.",
       "type": "object",
       "required": [
         "op",
@@ -520,7 +525,9 @@
     },
     "insertConditionalFormatOp": {
       "description": "往工作表追加一条条件格式规则（ECMA-376 §18.3.1.18 / §18.3.1.10）。",
+      "descriptionEn": "Append one conditional formatting rule to the worksheet (ECMA-376 §18.3.1.18 / §18.3.1.10).",
       "limits": "公式当字符串，不求值。不渲染色阶、数据条或图标。始终新建一块 <conditionalFormatting>（一块一条规则），追加到已有条件格式之后、dataValidations 之前。",
+      "limitsEn": "The formula is stored as a string and is not evaluated. Color scales, data bars, and icon sets are not rendered. Always create a new <conditionalFormatting> block (one rule per block), appended after existing conditional formatting and before dataValidations.",
       "type": "object",
       "required": [
         "op",
@@ -601,7 +608,9 @@
     },
     "setConditionalFormatOp": {
       "description": "改已有规则。",
+      "descriptionEn": "Change an existing rule.",
       "limits": "只改给了的字段。",
+      "limitsEn": "Only the fields that were given are changed.",
       "type": "object",
       "required": [
         "op",
@@ -743,6 +752,7 @@
     },
     "deleteConditionalFormatOp": {
       "description": "删掉一条规则。",
+      "descriptionEn": "Delete one rule.",
       "type": "object",
       "required": [
         "op",

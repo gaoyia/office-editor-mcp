@@ -23,7 +23,9 @@
   "$defs": {
     "insertSheetTableOp": {
       "description": "往工作表追加一张 SpreadsheetML 表（ECMA-376 §18.5.1.2）。",
+      "descriptionEn": "Append one SpreadsheetML table to the worksheet (ECMA-376 §18.5.1.2).",
       "limits": "单元格数据仍在 sheetData 里。不实现结构化引用求值，不渲染表样式。",
+      "limitsEn": "Cell data stays in sheetData. Structured-reference evaluation is not implemented, and table styles are not rendered.",
       "type": "object",
       "required": [
         "op",
@@ -59,7 +61,9 @@
     },
     "setSheetTableOp": {
       "description": "改已有表格。",
+      "descriptionEn": "Change an existing table.",
       "limits": "只改给了的字段。",
+      "limitsEn": "Only the fields that were given are changed.",
       "type": "object",
       "required": [
         "op",
@@ -94,7 +98,9 @@
     },
     "deleteSheetTableOp": {
       "description": "删掉一张表格。",
+      "descriptionEn": "Delete a table.",
       "limits": "单元格数据留下。",
+      "limitsEn": "Cell data stays.",
       "type": "object",
       "required": [
         "op",
@@ -130,7 +136,9 @@
     },
     "insertPivotTableOp": {
       "description": "往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。",
+      "descriptionEn": "Append one SpreadsheetML pivot table to the worksheet (ECMA-376 §18.10).",
       "limits": "库按源格子抄缓存记录，并标 refreshOnLoad=\"1\"。不在库里聚合，也不把合计写进 sheetData。打开后由 Excel 刷新。",
+      "limitsEn": "The library copies cache records from the source cells and sets refreshOnLoad=\"1\". It does not aggregate in the library and does not write totals into sheetData. Excel refreshes them on open.",
       "type": "object",
       "required": [
         "op",
@@ -192,7 +200,9 @@
     },
     "setPivotTableOp": {
       "description": "改已有透视表。",
+      "descriptionEn": "Change an existing pivot table.",
       "limits": "只改给了的字段。",
+      "limitsEn": "Only the fields that were given are changed.",
       "type": "object",
       "required": [
         "op",
@@ -251,7 +261,9 @@
     },
     "deletePivotTableOp": {
       "description": "删掉一张透视表。",
+      "descriptionEn": "Delete a pivot table.",
       "limits": "源格子留下。",
+      "limitsEn": "Source cells stay.",
       "type": "object",
       "required": [
         "op",

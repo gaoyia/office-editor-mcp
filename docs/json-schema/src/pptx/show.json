@@ -47,7 +47,9 @@
   "$defs": {
     "insertVideoOp": {
       "description": "往幻灯片、备注页或幻灯片母版 / 版式插入一段内嵌视频。",
+      "descriptionEn": "Insert an embedded video on a slide, a notes page, or a slide master or layout.",
       "limits": "不解码、不抽帧。不写 <p:timing>。",
+      "limitsEn": "Does not decode the media or extract frames. Does not write <p:timing>.",
       "type": "object",
       "required": [
         "op",
@@ -114,7 +116,9 @@
     },
     "insertAudioOp": {
       "description": "往幻灯片、备注页或幻灯片母版 / 版式插入一段内嵌音频。",
+      "descriptionEn": "Insert an embedded audio clip on a slide, a notes page, or a slide master or layout.",
       "limits": "字段与 insertVideo 相同，op 为 \"insertAudio\"，file 按文件头认 WAV（RIFF…WAVE），写出 /ppt/media/mediaN.wav，内容类型 audio/x-wav。p:nvPr 写 a:audioFile/@r:link 与 p14:media/@r:embed。ISO 关系 Type 以 /audio 结尾。缺尺寸则用 609600 × 609600。其余规则与 insertVideo 相同。文件不是 WAV 报 InvalidField。",
+      "limitsEn": "Same fields as insertVideo. op is \"insertAudio\". file is recognized as WAV from the header (RIFF…WAVE) and written to /ppt/media/mediaN.wav with content type audio/x-wav. p:nvPr gets a:audioFile/@r:link and p14:media/@r:embed. The ISO relationship Type ends with /audio. If size is omitted, use 609600 × 609600. The other rules match insertVideo. A file that is not WAV returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -181,7 +185,9 @@
     },
     "setMediaOp": {
       "description": "改已有内嵌视频 / 音频的裁剪、书签与字幕轨。",
+      "descriptionEn": "Change the crop, bookmarks, and caption tracks of an existing embedded video or audio clip.",
       "limits": "不换媒体文件。不写 <p:timing>。不写 <p14:fade>。",
+      "limitsEn": "The media file is not replaced. Does not write <p:timing>. Does not write <p14:fade>.",
       "type": "object",
       "required": [
         "op",
@@ -233,7 +239,9 @@
     },
     "deleteMediaOp": {
       "description": "删掉一个视频或音频。",
+      "descriptionEn": "Delete a video or an audio clip.",
       "limits": "找不到该对象报 IdNotFound。id 不是视频 id 也不是音频 id 报 InvalidId。摘掉对应 p:pic。 该 p:pic 上的 media / video / audio / 海报 image 关系若本页 XML 里无人引用则删除；对应 /ppt/media/… 若重新解析后无人引用则删掉。 清掉 <p:timing> 里对应该 cNvPr/@id 的 p:tgtEl，规则与 deleteShape 相同；未点名对象的 timing 留下，不要整节无故删掉 <p:timing>。不改未点名的 p:pic。",
+      "limitsEn": "A missing object returns IdNotFound. An id that is neither a video id nor an audio id returns InvalidId. Remove the matching p:pic. media / video / audio / poster image relationships on that p:pic are deleted when nothing else in this slide's XML references them. The matching /ppt/media/… part is deleted if nothing references it after relationships are resolved again. Clear the p:tgtEl in <p:timing> for that cNvPr/@id, by the same rules as deleteShape. Timing for objects you did not name stays. Do not delete the whole <p:timing> without cause. p:pic elements you did not name are unchanged.",
       "type": "object",
       "required": [
         "op",
@@ -252,7 +260,9 @@
     },
     "insertCustomShowOp": {
       "description": "在 p:custShowLst 里追加或插入一条自定义放映。",
+      "descriptionEn": "Append or insert one custom show in p:custShowLst.",
       "limits": "不改各页 XML。不实现放映引擎。不改 presProps 的 showPr（放映设置用 setShowPr）。",
+      "limitsEn": "Slide XML is unchanged. This library does not implement a slideshow engine. showPr on presProps is unchanged (slideshow settings use setShowPr).",
       "type": "object",
       "required": [
         "op",
@@ -286,7 +296,9 @@
     },
     "setCustomShowOp": {
       "description": "改一个自定义放映。",
+      "descriptionEn": "Change one custom show.",
       "limits": "name 与 slides 至少给一个，否则报 InvalidField。找不到该条报 IdNotFound。id 不是自定义放映 id 报 InvalidId。未点名的 @id 与 extLst 留下。 xlsx / docx 上发此 op 报 InvalidField。",
+      "limitsEn": "Give at least one of name and slides, or the op returns InvalidField. A missing entry returns IdNotFound. An id that is not a custom-show id returns InvalidId. Unnamed @id and extLst stay. This op on xlsx / docx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -315,7 +327,9 @@
     },
     "deleteCustomShowOp": {
       "description": "删掉一个自定义放映。",
+      "descriptionEn": "Delete one custom show.",
       "limits": "找不到该条报 IdNotFound。id 不是自定义放映 id 报 InvalidId。摘掉该 p:custShow。删光后去掉空的 custShowLst。不改各页 XML，不改 sldIdLst。 xlsx / docx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing entry returns IdNotFound. An id that is not a custom-show id returns InvalidId. Remove that p:custShow. When the last one is gone, remove the empty custShowLst. Slide XML is unchanged, and sldIdLst is unchanged. This op on xlsx / docx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -334,7 +348,9 @@
     },
     "insertZoomOp": {
       "description": "把幻灯片缩放、节缩放或摘要缩放写入目标宿主。",
+      "descriptionEn": "Write a slide zoom, a section zoom, or a summary zoom on the target host.",
       "limits": "不实现放映跳转，不写 <p:timing>，不生成真实预览图（写入一张最小 PNG 占位）。不进批注、备注母版、讲义。",
+      "limitsEn": "Does not implement slideshow jumps, does not write <p:timing>, and does not draw a real preview (it writes a minimal PNG placeholder). Not allowed in comments, the notes master, or handouts.",
       "type": "object",
       "required": [
         "op",
@@ -385,7 +401,9 @@
     },
     "deleteZoomOp": {
       "description": "删掉一个缩放链接。",
+      "descriptionEn": "Delete one zoom link.",
       "limits": "找不到报 IdNotFound。id 不是 Zoom id 报 InvalidId。摘整段 AlternateContent（或无 AC 时的 graphicFrame）。两支都扫关系 id。 清掉无人引用的预览媒体与指向目标页的 slide 关系。按 deleteShape 同一套规则清该 graphicFrame cNvPr/@id 的 timing tgtEl。xlsx / docx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a Zoom id returns InvalidId. Remove the whole AlternateContent (or the graphicFrame when there is no AC). Both branches are scanned for relationship ids. Drop unreferenced preview media and slide relationships that point at the target slide. Clear the timing tgtEl for that graphicFrame cNvPr/@id by the same rules as deleteShape. This op on xlsx / docx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -404,7 +422,9 @@
     },
     "setZoomOp": {
       "description": "改一个缩放链接。",
+      "descriptionEn": "Change one zoom link.",
       "limits": "target、targets、file、几何至少给一类，否则报 InvalidField。只给几何也合法。target 与 targets 同时出现报 InvalidField。 cx 与 cy 只出现一侧报 InvalidField。 targets 为空或含重复节报 InvalidField。空 file 报 InvalidField。读不到 file 报 Io。不是该格式认的图片报 InvalidField。 SVG 只写入 PNG 海报，不写 svgBlip。",
+      "limitsEn": "Give at least one of target, targets, file, and geometry, or the op returns InvalidField. Geometry alone is valid. target together with targets returns InvalidField. Giving only one of cx and cy returns InvalidField. An empty targets list, or one that contains a duplicate section, returns InvalidField. An empty file returns InvalidField. A file that cannot be read returns Io. A picture this format does not accept returns InvalidField. SVG is written only as a PNG poster. svgBlip is not written.",
       "type": "object",
       "required": [
         "op",
@@ -454,7 +474,9 @@
     },
     "setShowPrOp": {
       "description": "改 /ppt/presProps.xml 的 p:showPr（ECMA-376 §19.2.1.30）。",
+      "descriptionEn": "Change p:showPr in /ppt/presProps.xml (ECMA-376 §19.2.1.30).",
       "limits": "不实现放映引擎，不改自定义放映名单，不改 prnPr。",
+      "limitsEn": "Does not implement a slideshow engine, does not change the custom-show list, and does not change prnPr.",
       "type": "object",
       "required": [
         "op",
@@ -489,7 +511,9 @@
     },
     "pptxInsertFieldOp": {
       "description": "往幻灯片文本形状最后一段、a:endParaRPr 之前插入一个 a:fld（ECMA-376 §21.1.2.2.4）。",
+      "descriptionEn": "Insert an a:fld (ECMA-376 §21.1.2.2.4) before a:endParaRPr in the last paragraph of a slide text shape.",
       "limits": "不写 a:pPr。不在库里求值，不刷新缓存。",
+      "limitsEn": "a:pPr is not written. This library does not evaluate the field and does not refresh the cache.",
       "type": "object",
       "required": [
         "op",
@@ -516,7 +540,9 @@
     },
     "pptxSetFieldOp": {
       "description": "改一个域。",
+      "descriptionEn": "Change one field.",
       "limits": "type 与 text 至少给一个，否则报 InvalidField。改 type 不改 GUID。找不到报 IdNotFound。id 不是 pptx 域 id 报 InvalidId。 xlsx 上发此 op 报 InvalidField。docx 仍改 instr。",
+      "limitsEn": "Give at least one of type and text, or the op returns InvalidField. Changing type does not change the GUID. A missing id returns IdNotFound. An id that is not a pptx field id returns InvalidId. This op on xlsx returns InvalidField. docx still changes instr.",
       "type": "object",
       "required": [
         "op",
@@ -542,7 +568,9 @@
     },
     "pptxDeleteFieldOp": {
       "description": "keep 为 result：把 a:fld 换成 a:r，抄 rPr 与缓存 a:t。",
+      "descriptionEn": "When keep is result, replace a:fld with a:r, copying rPr and the cached a:t.",
       "limits": "keep 为 instr：把 a:t 写成 type 字符串。找不到报 IdNotFound。id 不是 pptx 域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "When keep is instr, write a:t as the type string. A missing id returns IdNotFound. An id that is not a pptx field id returns InvalidId. This op on xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

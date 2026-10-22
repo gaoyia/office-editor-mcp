@@ -32,7 +32,9 @@
   "$defs": {
     "setCellOp": {
       "description": "改一个单元格的值或公式。",
+      "descriptionEn": "Change a cell's value or formula.",
       "limits": "value 和 formula 二选一，不能同时出现。arrayRef 与 sharedRef 不能同时出现，shared 与 array 也不能同时为真。不改超链接，不改迷你图。共享公式、数组公式、数据表的填法不同，不要把从属格当成主格来写。",
+      "limitsEn": "Give exactly one of value and formula; they cannot both appear. arrayRef and sharedRef cannot both appear, and shared and array cannot both be true. Do not change hyperlinks or sparklines. Shared formulas, array formulas, and data tables are filled in differently; do not write a dependent cell as if it were the master cell.",
       "type": "object",
       "required": [
         "op",
@@ -123,7 +125,9 @@
     },
     "setCellStyleOp": {
       "description": "写单元格的数字格式、字体、填充、边框与对齐。",
+      "descriptionEn": "Write a cell's number format, font, fill, border, and alignment.",
       "limits": "不改值、不改公式。",
+      "limitsEn": "Does not change the value or the formula。",
       "type": "object",
       "required": [
         "op",
@@ -299,7 +303,9 @@
     },
     "setColWidthOp": {
       "description": "写工作表列宽。",
+      "descriptionEn": "Write a worksheet column width.",
       "limits": "JSON 的 width 是 Excel 列宽字符数（与 COM ColumnWidth 同一套），不是像素。写入 col/@width 时按 ECMA-376 §18.3.1.13 的公式转换；MDW 固定用该节示例的 Calibri 11 点 7 像素，不读实际字体、不算最适列宽。",
+      "limitsEn": "JSON width is the Excel column-width character count (the same scale as COM ColumnWidth), not pixels. When writing col/@width, convert with the formula in ECMA-376 §18.3.1.13. MDW is fixed at that section's example, Calibri 11 pt and 7 pixels. The actual font is not read, and best-fit width is not calculated.",
       "type": "object",
       "required": [
         "op",
@@ -346,7 +352,9 @@
     },
     "setRowHeightOp": {
       "description": "写行高。",
+      "descriptionEn": "Write a row height.",
       "limits": "单位磅，对应 row/@ht。不算自动换行后的高度。",
+      "limitsEn": "The unit is points, stored in row/@ht. Wrapped-text height is not calculated。",
       "type": "object",
       "required": [
         "op",
@@ -385,7 +393,9 @@
     },
     "mergeRangeOp": {
       "description": "合并工作表单元格。",
+      "descriptionEn": "Merge worksheet cells.",
       "limits": "不要跟 Word 表的 mergeCells 混用。",
+      "limitsEn": "Do not confuse this with Word table mergeCells。",
       "type": "object",
       "required": [
         "op",
@@ -409,7 +419,9 @@
     },
     "unmergeRangeOp": {
       "description": "取消合并。",
+      "descriptionEn": "Unmerge cells.",
       "limits": "不恢复合并时清掉的值。",
+      "limitsEn": "Does not restore values cleared by the merge。",
       "type": "object",
       "required": [
         "op",
@@ -433,7 +445,9 @@
     },
     "insertCellStyleOp": {
       "description": "往 styles.xml 追加一条命名单元格样式。",
+      "descriptionEn": "Append one named cell style to styles.xml.",
       "limits": "不套到任何格子上。",
+      "limitsEn": "Does not apply the style to any cell。",
       "type": "object",
       "required": [
         "op",
@@ -614,7 +628,9 @@
     },
     "deleteCellStyleOp": {
       "description": "删掉一条命名单元格样式。",
+      "descriptionEn": "Delete one named cell style.",
       "limits": "不删 cellStyleXfs，不改格子上已有 s。",
+      "limitsEn": "Does not delete cellStyleXfs and does not change s already on cells。",
       "type": "object",
       "required": [
         "op",
@@ -633,6 +649,7 @@
     },
     "setCellNamedStyleOp": {
       "description": "把单元格的 s 指到一条引用该命名样式 xfId 的 cellXfs。",
+      "descriptionEn": "Point the cell's s at a cellXfs entry that references that named style's xfId.",
       "type": "object",
       "required": [
         "op",

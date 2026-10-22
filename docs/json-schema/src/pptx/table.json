@@ -180,7 +180,9 @@
     },
     "setTableCellTextOp": {
       "description": "改幻灯片 DrawingML 表某一格的可见文字。",
+      "descriptionEn": "Change the visible text of one cell in a slide DrawingML table.",
       "limits": "手术刀规则与 setShapeText 相同，目标是该 a:tc 的 a:txBody，不整格重建。",
+      "limitsEn": "The surgical-edit rule matches setShapeText. The target is that a:tc's a:txBody. The cell is not rebuilt as a whole.",
       "type": "object",
       "required": [
         "op",
@@ -203,7 +205,9 @@
     },
     "setTablePosOp": {
       "description": "写入该 p:graphicFrame 的 p:xfrm/a:off。",
+      "descriptionEn": "Writes p:xfrm/a:off on that p:graphicFrame.",
       "limits": "没有 xfrm 则补。只改画布坐标，不重分配 gridCol/@w 与 tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "If xfrm is missing, add one. Only canvas coordinates change. gridCol/@w and tr/@h are not redistributed. A missing table returns IdNotFound. An id that is not a table id returns InvalidId. Giving neither x nor y returns InvalidField. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -230,7 +234,9 @@
     },
     "setTableSizeOp": {
       "description": "写入该 p:graphicFrame 的 p:xfrm/a:ext。",
+      "descriptionEn": "Writes p:xfrm/a:ext on that p:graphicFrame.",
       "limits": "没有 xfrm 则补。只改框尺寸，不算自动列宽，不重分配 a:gridCol/@w 与 a:tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "If xfrm is missing, add one. Only the frame size changes. Column width is not calculated automatically, and a:gridCol/@w and a:tr/@h are not redistributed. A missing table returns IdNotFound. An id that is not a table id returns InvalidId. Giving neither cx nor cy returns InvalidField. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -257,7 +263,9 @@
     },
     "setTableColWidthsOp": {
       "description": "只写 a:tblGrid 的 a:gridCol/@w。",
+      "descriptionEn": "Write only a:gridCol/@w on a:tblGrid.",
       "limits": "没有网格则补 a:tblGrid。不改 p:xfrm。不改各格 tcW。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。缺 cols、不是数组、长度对不上 colCount、或某项不是正整数报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableWidth（单位是 twip）。不要复用 xlsx 的 setColWidth。",
+      "limitsEn": "If there is no grid, add a:tblGrid. p:xfrm is unchanged. Each cell's tcW is unchanged. A missing table returns IdNotFound. An id that is not a table id returns InvalidId. A missing cols, a value that is not an array, a length that does not match colCount, or an item that is not a positive integer returns InvalidField. This op on docx / xlsx returns InvalidField. Do not reuse Word setTableWidth (the unit is twip). Do not reuse xlsx setColWidth.",
       "type": "object",
       "required": [
         "op",
@@ -284,7 +292,9 @@
     },
     "setTableTrHeightOp": {
       "description": "只改该行 @h。",
+      "descriptionEn": "Change only that row's @h.",
       "limits": "不改框 p:xfrm。找不到该行报 IdNotFound。id 不是行 id 报 InvalidId。缺 h、或不是正整数报 InvalidField。a:tr/@h 必填，h: null 报 InvalidField。inspect 缺 @h 仍报 null。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableRowHeight（单位是 twip）。不要复用 xlsx 的 setRowHeight。",
+      "limitsEn": "The frame's p:xfrm is unchanged. A missing row returns IdNotFound. An id that is not a row id returns InvalidId. A missing h, or a value that is not a positive integer, returns InvalidField. a:tr/@h is required. h: null returns InvalidField. When inspect finds no @h, it still reports null. This op on docx / xlsx returns InvalidField. Do not reuse Word setTableRowHeight (the unit is twip). Do not reuse xlsx setRowHeight.",
       "type": "object",
       "required": [
         "op",
@@ -399,7 +409,9 @@
     },
     "setTableCellFillOp": {
       "description": "改某一格 a:tcPr 的填充（EG_FillProperties）。",
+      "descriptionEn": "Change the fill on one cell's a:tcPr (EG_FillProperties).",
       "limits": "不要用 setShapeFill。不要用 docx 的 setCellFormat。theme 色仍不展开成 RGB。备注表、母版表同样认。",
+      "limitsEn": "Do not use setShapeFill. Do not use docx setCellFormat. Theme colors are still not expanded to RGB. Notes tables and master tables are accepted the same way.",
       "type": "object",
       "required": [
         "op",
@@ -569,7 +581,9 @@
     },
     "setTableCellBordersOp": {
       "description": "改某一格 a:tcPr 的六边。",
+      "descriptionEn": "Change the six edges of one cell's a:tcPr.",
       "limits": "未点名的边留下。不要用 setShapeLine。",
+      "limitsEn": "Edges you did not name stay. Do not use setShapeLine.",
       "type": "object",
       "required": [
         "op",
@@ -682,7 +696,9 @@
     },
     "setTableCellInsetOp": {
       "description": "改某一格 a:tcPr 的 marT / marL / marB / marR。",
+      "descriptionEn": "Change marT / marL / marB / marR on one cell's a:tcPr.",
       "limits": "不要用 docx 的 setTableCellMar 或 setCellFormat。",
+      "limitsEn": "Do not use docx setTableCellMar or setCellFormat.",
       "type": "object",
       "required": [
         "op",
@@ -729,7 +745,9 @@
     },
     "setTableCellPrOp": {
       "description": "改某一格 a:tcPr 上 44 / 45 / 50 未覆盖的属性与子元：vert、anchorCtr、horzOverflow、cell3D、headers。",
+      "descriptionEn": "Change attributes and child elements of one cell's a:tcPr that 44 / 45 / 50 do not cover: vert, anchorCtr, horzOverflow, cell3D, and headers.",
       "limits": "不要改 C9 的 textAnchor。不要写 tcPr/@anchor。不要用 setShapeFormat。备注表、母版表同样认。",
+      "limitsEn": "Do not change C9 textAnchor. Do not write tcPr/@anchor. Do not use setShapeFormat. Notes tables and master tables are accepted the same way.",
       "type": "object",
       "required": [
         "op",
@@ -800,7 +818,9 @@
     },
     "setTableStyleRefOp": {
       "description": "改某一张 DrawingML 表上的样式 GUID 与 a:tblPr 行列开关。",
+      "descriptionEn": "Change the style GUID and the a:tblPr row and column switches on one DrawingML table.",
       "limits": "不要用 docx 的 setTableStyle。不要读写 /ppt/tableStyles.xml。备注表、母版表同样认。",
+      "limitsEn": "Do not use docx setTableStyle. Do not read or write /ppt/tableStyles.xml. Notes tables and master tables are accepted the same way.",
       "type": "object",
       "required": [
         "op",

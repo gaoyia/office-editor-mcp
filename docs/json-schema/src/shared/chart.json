@@ -205,7 +205,9 @@
     },
     "insertChartOp": {
       "description": "插入一个图表。",
+      "descriptionEn": "Insert a chart.",
       "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/charts/chartN.xml（N 从 1 起尚未占用）、chart 的 .rels、一份最小 embedding xlsx（工作表名 Sheet1， 分类从 A2 起，系列名在第 1 行，数值从 B2 起向右），以及宿主部件关系（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）、[Content_Types].xml Override。 chart 部件仍写在 /word/charts/。",
+      "limitsEn": "docx: insert a w:drawing at the end of that paragraph, floating by default. Create /word/charts/chartN.xml (N starts at 1 and is not yet used), the chart .rels, and a minimal embedding xlsx (sheet name Sheet1, categories starting at A2, series names on row 1, values from B2 to the right), plus a relationship on the host part (main document, header or footer, comments.xml, footnotes.xml, or endnotes.xml) and a [Content_Types].xml Override. The chart part is still written under /word/charts/.",
       "type": "object",
       "required": [
         "op",
@@ -333,7 +335,9 @@
     },
     "deleteChartOp": {
       "description": "删掉一个图表。",
+      "descriptionEn": "Delete a chart.",
       "limits": "docx：删掉对应 w:drawing。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。重新解析关系之后，若该 chart 部件、专属 colors / style、embedding 再无人引用，删掉这些部件、关系条目和对应内容类型。",
+      "limitsEn": "docx: delete the matching w:drawing. If it sits in the Choice of an mc:AlternateContent, delete the whole AlternateContent. If the host w:r has only w:rPr left, or is empty, after the delete, that run is deleted too. After relationships are resolved again, if that chart part, its dedicated colors / style, and the embedding are unreferenced, delete those parts, the relationship entries, and the matching content types.",
       "type": "object",
       "required": [
         "op",
@@ -352,7 +356,9 @@
     },
     "setChartTitleOp": {
       "description": "改图表标题。",
+      "descriptionEn": "Change the chart title.",
       "limits": "找不到该图报表 IdNotFound。id 不是图表 id 报 InvalidId。",
+      "limitsEn": "A missing chart returns IdNotFound. An id that is not a chart id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -375,7 +381,9 @@
     },
     "setChartSeriesOp": {
       "description": "改图表里一个系列的数据。",
+      "descriptionEn": "Change one series' data in a chart.",
       "limits": "name、categories、values、sizes 至少给一个，否则报 InvalidField。只给的字段改，其余保留。categories 与 values 都给时长度可以不同。 对非气泡系列给 sizes 报 InvalidField。找不到该系列报 IdNotFound。id 不是系列 id 报 InvalidId。",
+      "limitsEn": "Give at least one of name, categories, values, and sizes, or the op returns InvalidField. Only the fields you give are changed; the rest stay. When both categories and values are given, their lengths may differ. sizes on a non-bubble series returns InvalidField. A missing series returns IdNotFound. An id that is not a series id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -446,7 +454,9 @@
     },
     "addChartSeriesOp": {
       "description": "在 chart 部件末尾追加一条 c:ser，c:idx / c:order 取尚未占用的最小值。",
+      "descriptionEn": "Append one c:ser at the end of the chart part. c:idx / c:order take the smallest unused value.",
       "limits": "样式能从最后一条系列抄则抄，抄不了就用最小默认。docx 有 embedding 则在工作表右侧追加一列。xlsx 能从已有系列的 c:f 推出右侧相邻空列则写入；推不出报 NotImplemented。不能用本 op 把单类型图加成组合图。id 不是图表 id 报 InvalidId。",
+      "limitsEn": "Copy the style from the last series when it can be copied; otherwise use a minimal default. If docx has an embedding, append a column on the right of the worksheet. On xlsx, if an empty column immediately to the right can be inferred from an existing series c:f, write it; if it cannot, return NotImplemented. This op cannot turn a single-type chart into a combo chart. An id that is not a chart id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -500,7 +510,9 @@
     },
     "deleteChartSeriesOp": {
       "description": "删掉该 c:ser。",
+      "descriptionEn": "Delete that c:ser.",
       "limits": "docx 若能从公式定位则同步 embedding 里对应列。xlsx 不删单元格。删完后一条都不剩时报 InvalidField（要整张去掉请用 deleteChart）。找不到报 IdNotFound。id 不是系列 id 报 InvalidId。",
+      "limitsEn": "On docx, if the column can be located from the formula, update the matching column in the embedding too. xlsx does not delete cells. If none remain after the delete, the op returns InvalidField (to remove the whole chart, use deleteChart). A missing id returns IdNotFound. An id that is not a series id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -519,7 +531,9 @@
     },
     "setChartTypeOp": {
       "description": "改图表类型。",
+      "descriptionEn": "Change the chart type.",
       "limits": "不认识的枚举、或值为 combo、chartex，报 InvalidField。当前 type 为 other 或 chartex 时报 NotImplemented，不写文件。 转成 stock 必须恰好三条（hlc）或四条（ohlc）系列，否则 NotImplemented。从组合图转成股价报 NotImplemented。 转成 surface 必须恰好三条系列，否则 NotImplemented。 转成 ofPie / pie / doughnut 必须恰好一条系列，否则 NotImplemented。",
+      "limitsEn": "An unknown enum, or the value combo or chartex, returns InvalidField. If the current type is other or chartex, the op returns NotImplemented and the file is not written. Converting to stock requires exactly three series (hlc) or four series (ohlc); otherwise NotImplemented. Converting a combo chart to stock returns NotImplemented. Converting to surface requires exactly three series; otherwise NotImplemented. Converting to ofPie / pie / doughnut requires exactly one series; otherwise NotImplemented.",
       "type": "object",
       "required": [
         "op",
@@ -554,7 +568,9 @@
     },
     "setChartAxisTitleOp": {
       "description": "改图表坐标轴的标题。",
+      "descriptionEn": "Change a chart axis title.",
       "limits": "axis 不认识报 InvalidField。找不到对应主轴报 InvalidField。id 不是图表 id 报 InvalidId。找不到图报表 IdNotFound。",
+      "limitsEn": "An unknown axis returns InvalidField. If the matching primary axis cannot be found, the op returns InvalidField. An id that is not a chart id returns InvalidId. A missing chart returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -584,7 +600,9 @@
     },
     "setChartLegendOp": {
       "description": "show 为 false 时忽略 pos。",
+      "descriptionEn": "When show is false, pos is ignored.",
       "limits": "不认识的 pos 报 InvalidField。id 不是图表 id 报 InvalidId。",
+      "limitsEn": "An unknown pos returns InvalidField. An id that is not a chart id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -616,7 +634,9 @@
     },
     "setChartDataLabelsOp": {
       "description": "true：在 plotArea 写 c:dLbls，c:showVal 为 1，不调标签坐标。",
+      "descriptionEn": "true: write c:dLbls on plotArea, with c:showVal set to 1. Label coordinates are not adjusted.",
       "limits": "false：去掉 plotArea 与各系列上的 c:dLbls。id 不是图表 id 报 InvalidId。",
+      "limitsEn": "false: remove c:dLbls from plotArea and from each series. An id that is not a chart id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -649,7 +669,9 @@
     },
     "insertTrendlineOp": {
       "description": "在该 c:ser 末尾追加一条 c:trendline（插在 c:cat / c:val / c:errBars / c:extLst 之前）。",
+      "descriptionEn": "Append one c:trendline at the end of that c:ser (inserted before c:cat / c:val / c:errBars / c:extLst).",
       "limits": "poly 以外给 order、或 movingAvg 以外给 period，报 InvalidField。饼、圆环、复合饼、曲面、other、chartex 上报 InvalidField。id 不是系列 id 报 InvalidId。找不到系列报 IdNotFound。",
+      "limitsEn": "order for a type other than poly, or period for a type other than movingAvg, returns InvalidField. Pie, doughnut, of-pie, surface, other, and chartex return InvalidField. An id that is not a series id returns InvalidId. A missing series returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -690,7 +712,9 @@
     },
     "setTrendlineOp": {
       "description": "改一条趋势线。",
+      "descriptionEn": "Change one trendline.",
       "limits": "至少给一个可写字段，否则报 InvalidField。只改被点名的字段。把 type 改成非 poly 时去掉 c:order；改成非 movingAvg 时去掉 c:period。 id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
+      "limitsEn": "Give at least one writable field, or the op returns InvalidField. Only the fields you name are changed. Changing type to a non-poly value removes c:order. Changing it to a non-movingAvg value removes c:period. An id that is not a trendline id returns InvalidId. A missing id returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -762,7 +786,9 @@
     },
     "deleteTrendlineOp": {
       "description": "删掉该 c:trendline。",
+      "descriptionEn": "Delete that c:trendline.",
       "limits": "id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
+      "limitsEn": "An id that is not a trendline id returns InvalidId. A missing id returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -781,7 +807,9 @@
     },
     "insertErrorBarsOp": {
       "description": "写出一条 c:errBars。",
+      "descriptionEn": "Write one c:errBars.",
       "limits": "valType 为 cust 时必须给 plus 与 minus，写成 c:plus / c:minus 的 c:numLit，不必与系列点数相同。非 cust 时出现 plus / minus 报 InvalidField。lCaps 不是合法 valType，报 InvalidField。dir 为 y 或缺省时不写 c:errDir；dir 为 x 时写 c:errDir val=\"x\"。该系列已有同 dir 的误差线时报 InvalidField。",
+      "limitsEn": "When valType is cust, plus and minus are required and are written as c:numLit under c:plus / c:minus. They need not have the same point count as the series. plus or minus on a non-cust value returns InvalidField. lCaps is not a legal valType and returns InvalidField. When dir is y or omitted, c:errDir is not written. When dir is x, write c:errDir val=\"x\". If that series already has an error bar with the same dir, the op returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -839,7 +867,9 @@
     },
     "setErrorBarsOp": {
       "description": "改误差线。",
+      "descriptionEn": "Change the error bars.",
       "limits": "至少给一个可写字段。改成 stdErr 时去掉 c:val。改成 cust 时必须有 plus 与 minus（本 op 给的，或原节点已有）。 改成非 cust 时去掉 c:plus / c:minus。lCaps 报 InvalidField。id 不是误差线 id 报 InvalidId。",
+      "limitsEn": "Give at least one writable field. Changing to stdErr removes c:val. Changing to cust requires plus and minus (supplied on this op, or already present on the node). Changing to a non-cust value removes c:plus / c:minus. lCaps returns InvalidField. An id that is not an error-bar id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -929,7 +959,9 @@
     },
     "deleteErrorBarsOp": {
       "description": "删掉该 c:errBars。",
+      "descriptionEn": "Delete that c:errBars.",
       "limits": "找不到报 IdNotFound。",
+      "limitsEn": "A missing id returns IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -948,7 +980,9 @@
     },
     "setChartSeriesAxisOp": {
       "description": "把该系列所在包裹的数值轴 c:axId 指到主轴或次轴。",
+      "descriptionEn": "Point the value-axis c:axId of the wrapper that holds this series at the primary or secondary axis.",
       "limits": "没有次轴时按主数值轴复制一条，写 c:overlay val=\"1\"、c:crosses val=\"max\"、新的 c:axId。同一包裹里还有别的系列且目标轴不同时，把被点名系列拆到同类型的新包裹。已经是目标状态则空操作。饼、圆环、复合饼、曲面、股价、other、chartex 上报 InvalidField。axis 不认识报 InvalidField。id 不是系列 id 报 InvalidId。",
+      "limitsEn": "If there is no secondary axis, copy one from the primary value axis and write c:overlay val=\"1\", c:crosses val=\"max\", and a new c:axId. If the same wrapper still has other series and the target axis differs, split the named series into a new wrapper of the same type. If it is already in the target state, the op is a no-op. Pie, doughnut, of-pie, surface, stock, other, and chartex return InvalidField. An unknown axis returns InvalidField. An id that is not a series id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -974,7 +1008,9 @@
     },
     "setChartSizeOp": {
       "description": "字段与 setPictureSize 相同，id 为图表 id。",
+      "descriptionEn": "Same fields as setPictureSize. id is a chart id.",
       "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 写入 graphicFrame 的 p:xfrm/a:ext。",
+      "limitsEn": "docx changes the host wp:extent (and a:ext when present), by the same rules as pictures. xlsx follows pictures: oneCell / absolute change xdr:ext, and twoCell changes the bottom-right to. pptx writes p:xfrm/a:ext on the graphicFrame.",
       "type": "object",
       "required": [
         "op",

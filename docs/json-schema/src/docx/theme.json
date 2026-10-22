@@ -48,7 +48,9 @@
   "$defs": {
     "setPageBackgroundOp": {
       "description": "改页面背景。",
+      "descriptionEn": "Change the page background.",
       "limits": "缺 color、不是字符串也不是 null、或非空却不是六位十六进制，报 InvalidField。不写 themeColor。 可选 fill：省略则只改 @w:color，并删掉已有 v:background 与 w:drawing。 fill 必须是对象，字段只认 kind、color、file。kind 必填，只能是 gradient 或 picture。",
+      "limitsEn": "A missing color, a value that is neither a string nor null, or a non-empty value that is not six hex digits, returns InvalidField. themeColor is not written. fill is optional: if it is omitted, only @w:color is changed, and any existing v:background and w:drawing are deleted. fill must be an object, and the only fields accepted are kind, color, and file. kind is required and can only be gradient or picture.",
       "type": "object",
       "required": [
         "op",
@@ -130,7 +132,9 @@
     },
     "setPageBordersOp": {
       "description": "改页面边框。",
+      "descriptionEn": "Change the page borders.",
       "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个，否则报 InvalidField。边对象必须有 val。 val 认 ECMA-376 ST_Border 全套（含 apples 等艺术型）。不认识的令牌报 InvalidField。JSON 不要 art 字段，出现则报 UnknownField。 sz 为非负整数（八分之一磅）。space 为非负整数（磅）。color 为 auto 或六位十六进制。 不认识的 offsetFrom / display / zOrder，或非法 color，报 InvalidField。",
+      "limitsEn": "enabled: false cannot appear together with other fields. Provide at least one of the remaining fields, otherwise InvalidField. A border object must have val. val accepts the full ECMA-376 ST_Border set, including art borders such as apples. An unrecognized token returns InvalidField. Do not put an art field in the JSON; if it is present, UnknownField is returned. sz is a non-negative integer in eighths of a point. space is a non-negative integer in points. color is auto or six hex digits. An unrecognized offsetFrom, display, or zOrder, or an illegal color, returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -211,7 +215,9 @@
     },
     "setFormProtOp": {
       "description": "改某一节的窗体保护。",
+      "descriptionEn": "Change form protection on one section.",
       "limits": "节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。 setProtection 打开窗体仍给各节写 formProt；随后可用本 op 把某节改成 val=0。",
+      "limitsEn": "A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField. When setProtection turns forms protection on, it still writes formProt on every section; this op can then set one section to val=0.",
       "type": "object",
       "required": [
         "op",
@@ -237,7 +243,9 @@
     },
     "insertEditRangeOp": {
       "description": "划出一块允许编辑的区域。",
+      "descriptionEn": "Mark a range that may be edited.",
       "limits": "edGrp 与 ed 不能同时给。两个都不给时写 w:edGrp=\"everyone\"。不认识的 edGrp 或空 ed 报 InvalidField。 在该段 w:pPr 之后插入 w:permStart，在段末插入配对 w:permEnd。w:id 取该部件已有 perm 标记里最大整数加 1，至少为 0。 框内、注内、批注内的段落，以及非段落 id，报 InvalidId。找不到段落报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "edGrp and ed cannot both be given. When neither is given, write w:edGrp=\"everyone\". An unrecognized edGrp or an empty ed returns InvalidField. Insert w:permStart after that paragraph's w:pPr, and insert the matching w:permEnd at the end of the paragraph. w:id is one greater than the largest integer among existing perm marks in that part, and at least 0. A paragraph inside a text box, note, or comment, and an id that is not a paragraph id, return InvalidId. A missing paragraph returns IdNotFound. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -270,7 +278,9 @@
     },
     "deleteEditRangeOp": {
       "description": "删掉该对 permStart / permEnd，不删文字。",
+      "descriptionEn": "Delete that permStart / permEnd pair without deleting the text.",
       "limits": "找不到报 IdNotFound。id 不是 perm:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not perm:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -289,7 +299,9 @@
     },
     "setThemeFmtOp": {
       "description": "改主文档 theme 部件 a:fmtScheme 的常用槽。",
+      "descriptionEn": "Change the common slots of a:fmtScheme on the main document's theme part.",
       "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
+      "limitsEn": "This is not a theme layout engine, and phClr is not expanded to RGB.",
       "type": "object",
       "required": [
         "op",
@@ -375,7 +387,9 @@
     },
     "setThemeOverrideOp": {
       "description": "读写主文档 themeOverride 部件的配色槽。",
+      "descriptionEn": "Read and write the color slots of the main document's themeOverride part.",
       "limits": "根元素是 a:themeOverride，配色写在根下 clrScheme。",
+      "limitsEn": "The root element is a:themeOverride, and the colors are written in clrScheme under the root.",
       "type": "object",
       "required": [
         "op",
@@ -534,7 +548,9 @@
     },
     "docxSetThemeColorsOp": {
       "description": "改主文档 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "descriptionEn": "Change the a:clrScheme slots on the main document's theme part, and the color-scheme name and the theme root name.",
       "limits": "不改未点名的 fmtScheme 槽。不把段落 / run 上的 themeColor 展开成直接色。",
+      "limitsEn": "Unnamed fmtScheme slots are not changed. themeColor on a paragraph or run is not expanded to a direct color.",
       "type": "object",
       "required": [
         "op",
@@ -601,7 +617,9 @@
     },
     "docxSetThemeFontsOp": {
       "description": "改主文档 theme 部件的 a:fontScheme。",
+      "descriptionEn": "Change a:fontScheme on the main document's theme part.",
       "limits": "未点名的 fmtScheme 槽留下。",
+      "limitsEn": "Unnamed fmtScheme slots stay.",
       "type": "object",
       "required": [
         "op",
@@ -670,7 +688,9 @@
     },
     "setThemeExtraSchemesOp": {
       "description": "整份替换主文档 theme 部件的 a:extraClrSchemeLst。",
+      "descriptionEn": "Replace a:extraClrSchemeLst on the main document's theme part as a whole.",
       "limits": "不算主题排版引擎。",
+      "limitsEn": "This is not a theme layout engine.",
       "type": "object",
       "required": [
         "op",
@@ -703,7 +723,9 @@
     },
     "setThemeObjectDefaultsOp": {
       "description": "改主文档 theme 部件的 a:objectDefaults。",
+      "descriptionEn": "Change a:objectDefaults on the main document's theme part.",
       "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
+      "limitsEn": "This is not a theme layout engine, and phClr is not expanded to RGB.",
       "type": "object",
       "required": [
         "op",

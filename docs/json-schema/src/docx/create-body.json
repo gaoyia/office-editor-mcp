@@ -3,7 +3,9 @@
   "$defs": {
     "docxDocument": {
       "description": "新建文档时的正文，只在 create 里使用。",
+      "descriptionEn": "Body of a new document. Use it only with create.",
       "limits": "不要把它当成 apply 的补丁。",
+      "limitsEn": "Do not send it as an apply patch.",
       "type": "object",
       "required": [
         "paragraphs"

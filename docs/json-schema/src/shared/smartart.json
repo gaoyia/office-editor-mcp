@@ -99,7 +99,9 @@
     },
     "insertSmartArtOp": {
       "description": "插入一个 SmartArt。",
+      "descriptionEn": "Insert a SmartArt diagram.",
       "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/diagrams/ 下尚未占用的 data / layout / colors / quickStyle 四件套（序号从 1 起）， 并把四条关系写在宿主 .rels 上（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）。 diagram 部件仍写在 /word/diagrams/。wp:docPr/@id 取该部件已有 docPr 的最大整数加 1，至少为 1。",
+      "limitsEn": "docx: insert a w:drawing at the end of that paragraph, floating by default. Create an unused data / layout / colors / quickStyle set of four under /word/diagrams/ (numbers starting at 1), and write the four relationships on the host .rels (main document, header or footer, comments.xml, footnotes.xml, or endnotes.xml). Diagram parts are still written under /word/diagrams/. wp:docPr/@id is the largest existing docPr integer in that part plus 1, and at least 1.",
       "type": "object",
       "required": [
         "op",
@@ -194,7 +196,9 @@
     },
     "deleteSmartArtOp": {
       "description": "删掉对应宿主 drawing。",
+      "descriptionEn": "Delete the corresponding host drawing.",
       "limits": "docx 删 w:drawing；若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（Fallback 位图一起走）。所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx 删对应 xdr:graphicFrame；若在组合里只摘该子节点，空组合再摘组合；锚点只剩 from/to/clientData 再摘整锚点。pptx 删 p:graphicFrame；若在 Choice 里同样整段 AlternateContent 删掉。",
+      "limitsEn": "docx deletes the w:drawing; if it is inside the Choice of mc:AlternateContent, the whole AlternateContent is deleted (the Fallback bitmap goes with it). If the host w:r then contains only w:rPr or is empty, that run is deleted too. xlsx deletes the matching xdr:graphicFrame; inside a group, only that child is removed, and an empty group is removed next; if the anchor has only from/to/clientData left, the whole anchor is removed. pptx deletes the p:graphicFrame; if it is inside a Choice, the whole AlternateContent is deleted the same way.",
       "type": "object",
       "required": [
         "op",
@@ -213,7 +217,9 @@
     },
     "setSmartArtTextOp": {
       "description": "只改该点 dgm:t 的可见文字。",
+      "descriptionEn": "Change only the visible text of that point's dgm:t.",
       "limits": "留下第一个含 a:t 的 run 收下全部新文本，规则对齐 setShapeText 的可见替换（不整段重建 dgm:t 的 a:bodyPr）。没有 dgm:t 则补一份最小文本体。找不到该点报 IdNotFound。id 不是点 id 报 InvalidId。对 doc / pres / parTrans / sibTrans 点发此 op 报 InvalidId（它们不在树上）。",
+      "limitsEn": "Keep the first run that contains a:t and put all of the new text there, matching setShapeText's visible replacement (do not rebuild a:bodyPr of dgm:t). If there is no dgm:t, add a minimal text body. A missing point returns IdNotFound. An id that is not a point id returns InvalidId. This op on a doc / pres / parTrans / sibTrans point returns InvalidId (those points are not on the tree).",
       "type": "object",
       "required": [
         "op",
@@ -236,7 +242,9 @@
     },
     "addSmartArtPointOp": {
       "description": "在 data 部件追加一个可见 dgm:pt，并追加一条 type 为 parOf（或省略 type）的 cxn：srcId 为父点 modelId（图示 id 时父为 type=\"doc\" 的点），destId 为新点。",
+      "descriptionEn": "Append one visible dgm:pt in the data part, and append one cxn whose type is parOf (or whose type is omitted): srcId is the parent point's modelId (when the id is the diagram, the parent is the point with type=\"doc\"), and destId is the new point.",
       "limits": "不手写 pres / parTrans / sibTrans。现有 modelId 都能解析成非负整数时，新点与新连接用尚未占用的最小正整数； 否则新点写新的大写 GUID（带花括号），连接 modelId 同样不与已有 pt / cxn 冲突。",
+      "limitsEn": "Do not hand-author pres / parTrans / sibTrans. When every existing modelId parses as a non-negative integer, the new point and the new connection use the smallest unused positive integer; otherwise the new point is a new uppercase GUID (with braces), and the connection modelId likewise does not collide with an existing pt or cxn.",
       "type": "object",
       "required": [
         "op",
@@ -261,7 +269,9 @@
     },
     "deleteSmartArtPointOp": {
       "description": "删掉该点，并沿 parOf 边删掉所有子孙可见点。",
+      "descriptionEn": "Delete that point and, along parOf edges, every visible descendant.",
       "limits": "同时删掉 srcId / destId 指向这些 modelId 的连接，以及 cxnId 指向已删连接的 parTrans / sibTrans 点。不删 type=\"doc\" 的点。删完后可见点一条都不剩时报 InvalidField（要整张去掉请用 deleteSmartArt）。找不到报 IdNotFound。id 不是点 id 报 InvalidId。",
+      "limitsEn": "Also delete connections whose srcId or destId points at those modelIds, and parTrans / sibTrans points whose cxnId points at a deleted connection. Do not delete the point whose type is \"doc\". If no visible point remains, InvalidField is returned (to remove the whole diagram, use deleteSmartArt). A missing id returns IdNotFound. An id that is not a point id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -280,7 +290,9 @@
     },
     "setSmartArtSizeOp": {
       "description": "字段与 setPictureSize 相同，id 为图示 id。",
+      "descriptionEn": "Same fields as setPictureSize. id is a diagram id.",
       "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 改 graphicFrame 的 p:xfrm/a:ext。",
+      "limitsEn": "docx updates the host wp:extent (and a:ext if present), with the same rules as pictures. xlsx follows pictures: oneCell / absolute updates xdr:ext, and twoCell updates the bottom-right to. pptx updates p:xfrm/a:ext on the graphicFrame.",
       "type": "object",
       "required": [
         "op",
@@ -336,7 +348,9 @@
     },
     "setSmartArtColorsOp": {
       "description": "换成库内对应色板模板。",
+      "descriptionEn": "Switch to the matching color-palette template in the library.",
       "limits": "包里已有相同 uniqueId 的 colors 部件则只改 r:cs 指向它；否则写入新部件并改 r:cs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
+      "limitsEn": "If the package already has a colors part with the same uniqueId, only retarget r:cs to it; otherwise write a new part and update r:cs. An unrecognized value returns InvalidField. A missing diagram returns IdNotFound. An id that is not a diagram id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -359,7 +373,9 @@
     },
     "setSmartArtStyleOp": {
       "description": "换成库内对应 quickStyle 模板。",
+      "descriptionEn": "Switch to the matching quickStyle template in the library.",
       "limits": "包里已有相同 uniqueId 的 style 部件则只改 r:qs；否则写入新部件并改 r:qs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
+      "limitsEn": "If the package already has a style part with the same uniqueId, only update r:qs; otherwise write a new part and update r:qs. An unrecognized value returns InvalidField. A missing diagram returns IdNotFound. An id that is not a diagram id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -382,7 +398,9 @@
     },
     "setSmartArtLayoutOp": {
       "description": "改 SmartArt 的布局。",
+      "descriptionEn": "Change the SmartArt layout.",
       "limits": "不认识的短名报 InvalidField。当前 uniqueId 已经是目标那一条：空操作，仍计入 opsApplied。 当前 uniqueId 属于库内 list / org / cycle 三族之一：把 layout 部件换成库内对应模板，并改 r:lo；可见点与 parOf 连接不动。 目标是 list 或 cycle 时，助手点改成普通节点，以免文字在新版式里消失。删掉 diagram drawing 缓存，让 Office 打开时重排。 当前 uniqueId 不在这三族里报 NotImplemented，不写文件。",
+      "limitsEn": "An unrecognized short name returns InvalidField. If the current uniqueId is already the target entry, this is a no-op and still counts toward opsApplied. If the current uniqueId is one of the library's list / org / cycle families: replace the layout part with the matching library template and update r:lo; visible points and parOf connections stay. When the target is list or cycle, assistant points become ordinary nodes so text does not disappear in the new layout. Delete the diagram drawing cache so Office lays the diagram out again on open. If the current uniqueId is outside those three families, NotImplemented is returned and nothing is written.",
       "type": "object",
       "required": [
         "op",

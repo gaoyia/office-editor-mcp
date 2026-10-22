@@ -44,7 +44,9 @@
   "$defs": {
     "setPrintSetupOp": {
       "description": "改工作表或图表工作表的页边距、纸张、方向、缩放、打印网格线、打印区域与手工分页符。",
+      "descriptionEn": "Change margins, paper, orientation, scaling, print gridlines, the print area, and manual page breaks on a worksheet or chart sheet.",
       "limits": "不改页眉页脚原文（仍走 setHeaderFooterText）。",
+      "limitsEn": "Do not change header or footer text (that still goes through setHeaderFooterText).",
       "type": "object",
       "required": [
         "op",
@@ -243,7 +245,9 @@
     },
     "setSheetViewOp": {
       "description": "改工作表或图表工作表默认视图的缩放、冻结窗格、拆分窗格与活动单元格。",
+      "descriptionEn": "Change zoom, frozen panes, split panes, and the active cell on the default view of a worksheet or chart sheet.",
       "limits": "不改分页预览 / 页面布局。",
+      "limitsEn": "Do not change page-break preview or page layout view.",
       "type": "object",
       "required": [
         "op",
@@ -323,7 +327,9 @@
     },
     "setAutoFilterOp": {
       "description": "改工作表级自动筛选范围。",
+      "descriptionEn": "Change the worksheet-level auto-filter range.",
       "limits": "不改表格部件里的筛选，不写筛选条件，不隐藏行。",
+      "limitsEn": "Do not change the filter inside a table part, do not write filter criteria, and do not hide rows.",
       "type": "object",
       "required": [
         "op",
@@ -350,7 +356,9 @@
     },
     "setSortStateOp": {
       "description": "改工作表级排序条件。",
+      "descriptionEn": "Change worksheet-level sort conditions.",
       "limits": "不重排 sheetData，不隐藏行，不求值。不改表格部件里的排序。",
+      "limitsEn": "Do not reorder sheetData, do not hide rows, and do not evaluate. Do not change the sort inside a table part.",
       "type": "object",
       "required": [
         "op",
@@ -437,7 +445,9 @@
     },
     "groupRowsOp": {
       "description": "给指定行的大纲级加 1。",
+      "descriptionEn": "Increase the outline level of the specified rows by 1.",
       "limits": "不写隐藏、不写折叠、不改汇总方向。",
+      "limitsEn": "Do not write hidden, do not write collapsed, and do not change the summary direction.",
       "type": "object",
       "required": [
         "op",
@@ -461,7 +471,9 @@
     },
     "ungroupRowsOp": {
       "description": "给指定行的大纲级减 1。",
+      "descriptionEn": "Decrease the outline level of the specified rows by 1.",
       "limits": "减到 0 则去掉 @outlineLevel。范围内本来就是 0 的行不动。同步 outlineLevelRow。字段与错误与 groupRows 相同，op 必须是 \"ungroupRows\"。不写隐藏、不写折叠。",
+      "limitsEn": "At 0, remove @outlineLevel. Rows in the range that are already 0 stay unchanged. Keep outlineLevelRow in sync. Fields and errors match groupRows, and op must be \"ungroupRows\". Do not write hidden or collapsed.",
       "type": "object",
       "required": [
         "op",
@@ -485,7 +497,9 @@
     },
     "groupColsOp": {
       "description": "给指定列的大纲级加 1。",
+      "descriptionEn": "Increase the outline level of the specified columns by 1.",
       "limits": "不写隐藏、不写折叠。",
+      "limitsEn": "Do not write hidden or collapsed.",
       "type": "object",
       "required": [
         "op",
@@ -509,7 +523,9 @@
     },
     "ungroupColsOp": {
       "description": "给指定列的大纲级减 1。",
+      "descriptionEn": "Decrease the outline level of the specified columns by 1.",
       "limits": "减到 0 则去掉 @outlineLevel。字段与错误与 groupCols 相同，op 必须是 \"ungroupCols\"。",
+      "limitsEn": "At 0, remove @outlineLevel. Fields and errors match groupCols, and op must be \"ungroupCols\".",
       "type": "object",
       "required": [
         "op",
@@ -533,6 +549,7 @@
     },
     "setOutlineOp": {
       "description": "改汇总方向，或按点名的细节范围折叠 / 展开。",
+      "descriptionEn": "Change the summary direction, or collapse or expand the named detail range.",
       "type": "object",
       "required": [
         "op",
@@ -592,7 +609,9 @@
     },
     "setRowHiddenOp": {
       "description": "写或去掉行的 @hidden。",
+      "descriptionEn": "Write or remove @hidden on rows.",
       "limits": "不改大纲级，不折叠汇总行。",
+      "limitsEn": "Do not change the outline level, and do not collapse summary rows.",
       "type": "object",
       "required": [
         "op",
@@ -620,7 +639,9 @@
     },
     "setColHiddenOp": {
       "description": "写或去掉列的 @hidden。",
+      "descriptionEn": "Write or remove @hidden on columns.",
       "limits": "不改大纲级。",
+      "limitsEn": "Do not change the outline level.",
       "type": "object",
       "required": [
         "op",
@@ -648,7 +669,9 @@
     },
     "setHeaderFooterTextOp": {
       "description": "改页眉页脚里的文字。",
+      "descriptionEn": "Change the text in a header or footer.",
       "limits": "找不到该表报 IdNotFound。id 不是页眉槽位 id 报 InvalidId。对图 id、工作表 id 或单元格 id 发此 op 报 InvalidId。 worksheet / chartsheet / dialogsheet 都可以改文本。对 macrosheet 本期只读页眉原文，不新开写入。没有 headerFooter 则按 CT_Worksheet 顺序新建。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a header/footer slot id returns InvalidId. This op on a picture id, sheet id, or cell id returns InvalidId. worksheet / chartsheet / dialogsheet can all change the text. For a macrosheet this phase only reads the existing header/footer text and does not open a new write. If headerFooter is missing, create it in CT_Worksheet order.",
       "type": "object",
       "required": [
         "op",
@@ -671,7 +694,9 @@
     },
     "setSheetHiddenOp": {
       "description": "隐藏或显示工作表。",
+      "descriptionEn": "Hide or show a sheet.",
       "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 把最后一张可见表改成隐藏报 InvalidField。true 写 state=\"hidden\"（若原先是 veryHidden 也改成 hidden）。false 去掉 state。已经是目标可见性则空操作。 docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. dialogsheet / macrosheet returns NotImplemented. Hiding the last visible sheet returns InvalidField. true writes state=\"hidden\" (veryHidden is also changed to hidden). false removes state. If visibility is already the target, this is a no-op. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

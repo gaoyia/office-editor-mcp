@@ -192,7 +192,9 @@
     },
     "insertShapeOp": {
       "description": "往幻灯片、备注页、母版或版式插入一个带 p:txBody 的形状。",
+      "descriptionEn": "Insert a shape that has p:txBody on a slide, notes page, master, or layout.",
       "limits": "缺省 prst 为矩形文本框。不抄版式占位符，不写 <p:timing>。往母版 / 版式插时写出没有 p:ph 的装饰形，不把该 p:sp 抄进各页。插占位符请用 insertPlaceholder。",
+      "limitsEn": "The default prst is a rectangle text box. Layout placeholders are not copied, and <p:timing> is not written. Inserting on a master or layout writes a decorative shape with no p:ph, and that p:sp is not copied onto slides. To insert a placeholder, use insertPlaceholder.",
       "type": "object",
       "required": [
         "op",
@@ -344,7 +346,9 @@
     },
     "insertConnectorOp": {
       "description": "往幻灯片、备注页、母版或版式插入一条连接线（p:cxnSp）。",
+      "descriptionEn": "Insert a connector (p:cxnSp) on a slide, notes page, master, or layout.",
       "limits": "不算自动绕障碍。省略 start / end 时不写 a:stCxn / a:endCxn。",
+      "limitsEn": "Does not route around obstacles automatically. When start / end are omitted, a:stCxn / a:endCxn are not written.",
       "type": "object",
       "required": [
         "op",
@@ -419,7 +423,9 @@
     },
     "deleteConnectorOp": {
       "description": "删掉一条连接线。",
+      "descriptionEn": "Delete a connector.",
       "limits": "找不到该连接线报 IdNotFound。id 不是连接线 id 报 InvalidId。删掉对应 p:cxnSp。 若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。删组合内连接线后若组合空了，把空 p:grpSp 一并摘掉。不改其它对象的 cNvPr/@id。 按被删连接线的 cNvPr/@id 清掉本页 <p:timing> 里对应的 p:tgtEl。docx 见 [docx 分册](json-contract-docx.md#deleteconnector)。",
+      "limitsEn": "A missing connector returns IdNotFound. An id that is not a connector id returns InvalidId. Delete the matching p:cxnSp. If it sits in the Choice of an mc:AlternateContent, delete the whole AlternateContent. After deleting a connector inside a group, if the group is empty, remove the empty p:grpSp too. cNvPr/@id of other objects is unchanged. Clear the matching p:tgtEl in this slide's <p:timing> for the deleted connector's cNvPr/@id. For docx, see json-contract-docx.md#deleteconnector.",
       "type": "object",
       "required": [
         "op",
@@ -438,7 +444,9 @@
     },
     "groupShapesOp": {
       "description": "把同一页 spTree 上至少两个直接子对象包进一个新 p:grpSp。",
+      "descriptionEn": "Wrap at least two direct children of the same slide's spTree into a new p:grpSp.",
       "limits": "组合本身不进 inspect 树。",
+      "limitsEn": "The group itself is not placed in the inspect tree.",
       "type": "object",
       "required": [
         "op",
@@ -466,7 +474,9 @@
     },
     "ungroupOp": {
       "description": "解开某个成员所在的 p:grpSp，子节点抬回父节点。",
+      "descriptionEn": "Ungroup the p:grpSp that contains a member, and lift the children back onto the parent.",
       "limits": "组合本身没有 inspect id。",
+      "limitsEn": "The group itself has no inspect id.",
       "type": "object",
       "required": [
         "op",
@@ -485,7 +495,9 @@
     },
     "deleteShapeOp": {
       "description": "删掉一个形状。",
+      "descriptionEn": "Delete a shape.",
       "limits": "找不到该形状报 IdNotFound。id 不是形状 id 报 InvalidId。对母版、版式、备注母版或讲义占位符 id 发本 op 报 InvalidId。 插删占位符请用 insertPlaceholder / deletePlaceholder。对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 删掉对应 p:sp。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。",
+      "limitsEn": "A missing shape returns IdNotFound. An id that is not a shape id returns InvalidId. A master, layout, notes-master, or handout placeholder id returns InvalidId for this op. To insert or delete a placeholder, use insertPlaceholder / deletePlaceholder. This op on a shape whose placeholder p:ph/@type is sldImg, on a notes page, notes master, or handout, returns InvalidField, and the file is not written. Delete the matching p:sp. If it sits in the Choice of an mc:AlternateContent, delete the whole AlternateContent.",
       "type": "object",
       "required": [
         "op",
@@ -504,7 +516,9 @@
     },
     "setShapePosOp": {
       "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:off。",
+      "descriptionEn": "Writes p:spPr/a:xfrm/a:off on that p:sp or p:cxnSp.",
       "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。",
+      "limitsEn": "If xfrm is missing, add one. A missing id returns IdNotFound. An id that is neither a shape id nor a connector id returns InvalidId. Giving neither x nor y returns InvalidField. An sldImg placeholder returns InvalidField. Master and layout placeholders and decorative shapes are changed only in the matching slideMaster or slideLayout part, not in each slide's XML. The notes master changes only the notesMaster part. Handouts change only the handoutMaster part.",
       "type": "object",
       "required": [
         "op",
@@ -543,7 +557,9 @@
     },
     "setShapeSizeOp": {
       "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:ext。",
+      "descriptionEn": "Writes p:spPr/a:xfrm/a:ext on that p:sp or p:cxnSp.",
       "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。对已组合的子对象只改该子 xfrm，不重算父组合框。",
+      "limitsEn": "If xfrm is missing, add one. A missing id returns IdNotFound. An id that is neither a shape id nor a connector id returns InvalidId. Giving neither cx nor cy returns InvalidField. An sldImg placeholder returns InvalidField. Master and layout placeholders and decorative shapes are changed only in the matching slideMaster or slideLayout part. The notes master changes only the notesMaster part. Handouts change only the handoutMaster part. For a child that is already grouped, change only that child's xfrm. Do not recompute the parent group box.",
       "type": "object",
       "required": [
         "op",
@@ -582,7 +598,9 @@
     },
     "setShapeFillOp": {
       "description": "写入 p:spPr 的 a:solidFill/a:srgbClr；null 则写成 a:noFill，并去掉原有填充。",
+      "descriptionEn": "Writes a:solidFill/a:srgbClr on p:spPr. null is written as a:noFill, and the previous fill is removed.",
       "limits": "缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing color, or an illegal hexadecimal value, returns InvalidField. A missing id returns IdNotFound. An id that is not a shape id returns InvalidId. A master or layout placeholder id returns InvalidId for this op. An sldImg placeholder returns InvalidField. Decorative shapes on a master or layout are changed only in the matching slideMaster or slideLayout part, not in each slide's XML. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -608,7 +626,9 @@
     },
     "setShapeFormatOp": {
       "description": "改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐、框内垂直锚点、段落间距与字符间距。",
+      "descriptionEn": "Change a DrawingML text box's font size, font color, text fill, text outline, bold, italic, underline, Latin and East Asian fonts, horizontal alignment, vertical anchor inside the box, paragraph spacing, and character spacing.",
       "limits": "不改可见字。不要用 Word 的半磅字号。",
+      "limitsEn": "Visible text is not changed. Do not use Word's half-point font size.",
       "type": "object",
       "required": [
         "op",
@@ -786,7 +806,9 @@
     },
     "setShapeLineOp": {
       "description": "写入 p:spPr/a:ln。",
+      "descriptionEn": "Writes p:spPr/a:ln.",
       "limits": "color 为 null 时写成 a:ln/a:noFill；此时出现 width 报 InvalidField。缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。",
+      "limitsEn": "A null color is written as a:ln/a:noFill. width then returns InvalidField. A missing color, or an illegal hexadecimal value, returns InvalidField. A missing id returns IdNotFound. An id that is neither a shape id nor a connector id returns InvalidId. A master or layout placeholder id returns InvalidId for this op. An sldImg placeholder returns InvalidField. Decorative shapes on a master or layout are changed only in the matching slideMaster or slideLayout part, not in each slide's XML.",
       "type": "object",
       "required": [
         "op",
@@ -899,7 +921,9 @@
     },
     "setShapeGeomOp": {
       "description": "把带 p:txBody 的 p:sp 的 a:prstGeom 或已有 a:custGeom 整份换成自定义路径。",
+      "descriptionEn": "Replace the whole a:prstGeom, or an existing a:custGeom, of a p:sp that has p:txBody with a custom path.",
       "limits": "不重算组合框。",
+      "limitsEn": "The group box is not recomputed.",
       "type": "object",
       "required": [
         "op",
@@ -926,7 +950,9 @@
     },
     "setConnectorOp": {
       "description": "改一条已有连接线的起点 / 终点绑定。",
+      "descriptionEn": "Change the start and end bindings of an existing connector.",
       "limits": "不算自动绕障碍。不改画布坐标。",
+      "limitsEn": "Does not route around obstacles automatically. Canvas coordinates are unchanged.",
       "type": "object",
       "required": [
         "op",

@@ -16,7 +16,9 @@ struct OpEntry {
     def_name: String,
     formats: Vec<String>,
     description: String,
+    description_en: String,
     limits: String,
+    limits_en: String,
     body: Value,
 }
 
@@ -129,14 +131,18 @@ fn load_catalog() -> Catalog {
             .as_str()
             .unwrap_or_else(|| panic!("{def_name} 缺少 op"))
             .to_string();
-        let description = body["description"].as_str().unwrap_or("").to_string();
-        let limits = body["limits"].as_str().unwrap_or("").to_string();
+        let description = text_of(&body, "description");
+        let description_en = text_of(&body, "descriptionEn");
+        let limits = text_of(&body, "limits");
+        let limits_en = text_of(&body, "limitsEn");
         ops.push(OpEntry {
             op,
             def_name,
             formats,
             description,
+            description_en,
             limits,
+            limits_en,
             body,
         });
     }
@@ -172,29 +178,31 @@ fn index() -> Value {
     })
 }
 
+fn text_of(body: &Value, key: &str) -> String {
+    body.get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
 fn action_row(action: &str, def_name: &str) -> Value {
-    let body = catalog().defs.get(def_name);
-    let description = body
-        .and_then(|item| item.get("description"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    let limits = body
-        .and_then(|item| item.get("limits"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    blurb("action", action, description, limits)
+    let empty = Value::Null;
+    let body = catalog().defs.get(def_name).unwrap_or(&empty);
+    blurb(
+        "action",
+        action,
+        &text_of(body, "description"),
+        &text_of(body, "descriptionEn"),
+        &text_of(body, "limits"),
+        &text_of(body, "limitsEn"),
+    )
 }
 
 fn list(format: &str) -> Value {
     let mut ops = Vec::new();
     for entry in &catalog().ops {
         if entry.formats.iter().any(|item| item == format) {
-            ops.push(blurb(
-                "op",
-                &entry.op,
-                &entry.description,
-                &entry.limits,
-            ));
+            ops.push(entry_blurb("op", &entry.op, entry));
         }
     }
     json!({
@@ -213,7 +221,9 @@ fn search(q: &str, format: Option<&str>) -> Value {
             format.is_none_or(|item| entry.formats.iter().any(|have| have == item))
                 && (entry.op.to_lowercase().contains(&needle)
                     || entry.description.to_lowercase().contains(&needle)
-                    || entry.limits.to_lowercase().contains(&needle))
+                    || entry.description_en.to_lowercase().contains(&needle)
+                    || entry.limits.to_lowercase().contains(&needle)
+                    || entry.limits_en.to_lowercase().contains(&needle))
         })
         .collect();
     hits.sort_by(|a, b| {
@@ -229,7 +239,7 @@ fn search(q: &str, format: Option<&str>) -> Value {
         .into_iter()
         .take(SEARCH_LIMIT)
         .map(|entry| {
-            blurb_formats(entry)
+            entry_blurb_formats(entry)
         })
         .collect();
     let mut out = json!({
@@ -266,11 +276,11 @@ fn op_detail(op: &str, format: Option<&str>) -> Result<Value, Error> {
     let mut formats = Vec::new();
     for entry in &found {
         for item in &entry.formats {
-            let mut row = json!({
-                "format": item,
-                "description": entry.description,
-            });
-            attach_limits(&mut row, &entry.limits);
+            let mut row = Map::new();
+            row.insert("format".into(), json!(item));
+            row.insert("description".into(), json!(entry.description));
+            let mut row = Value::Object(row);
+            attach_pair(&mut row, entry);
             formats.push(row);
         }
     }
@@ -309,7 +319,7 @@ fn detail_value(entry: &OpEntry, others: &[String]) -> Value {
         "otherFormats": others,
         "fields": fields_of(&entry.body),
     });
-    attach_limits(&mut out, &entry.limits);
+    attach_pair(&mut out, entry);
     out
 }
 
@@ -322,18 +332,19 @@ fn def_detail(name: &str) -> Result<Value, Error> {
             "name",
         ));
     };
-    let description = body
-        .get("description")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    let limits = body.get("limits").and_then(Value::as_str).unwrap_or("");
+    let description = text_of(body, "description");
     let mut out = json!({
         "kind": "def",
         "name": name,
         "description": description,
         "fields": fields_of(body),
     });
-    attach_limits(&mut out, limits);
+    attach_named(
+        &mut out,
+        &text_of(body, "descriptionEn"),
+        &text_of(body, "limits"),
+        &text_of(body, "limitsEn"),
+    );
     Ok(out)
 }
 
@@ -341,33 +352,73 @@ fn fields_of(body: &Value) -> Value {
     let mut value = shorten_refs(body);
     if let Some(obj) = value.as_object_mut() {
         obj.remove("description");
+        obj.remove("descriptionEn");
         obj.remove("limits");
+        obj.remove("limitsEn");
     }
     value
 }
 
-fn blurb(key: &str, name: &str, description: &str, limits: &str) -> Value {
-    let mut out = Map::new();
-    out.insert(key.to_string(), json!(name));
-    out.insert("description".into(), json!(description));
-    let mut value = Value::Object(out);
-    attach_limits(&mut value, limits);
-    value
+fn entry_blurb(key: &str, name: &str, entry: &OpEntry) -> Value {
+    blurb(
+        key,
+        name,
+        &entry.description,
+        &entry.description_en,
+        &entry.limits,
+        &entry.limits_en,
+    )
 }
 
-fn blurb_formats(entry: &OpEntry) -> Value {
+fn entry_blurb_formats(entry: &OpEntry) -> Value {
     let mut out = json!({
         "op": entry.op,
         "formats": entry.formats,
         "description": entry.description,
     });
-    attach_limits(&mut out, &entry.limits);
+    attach_named(
+        &mut out,
+        &entry.description_en,
+        &entry.limits,
+        &entry.limits_en,
+    );
     out
 }
 
-fn attach_limits(out: &mut Value, limits: &str) {
+fn blurb(
+    key: &str,
+    name: &str,
+    description: &str,
+    description_en: &str,
+    limits: &str,
+    limits_en: &str,
+) -> Value {
+    let mut out = Map::new();
+    out.insert(key.to_string(), json!(name));
+    out.insert("description".into(), json!(description));
+    let mut value = Value::Object(out);
+    attach_named(&mut value, description_en, limits, limits_en);
+    value
+}
+
+fn attach_pair(out: &mut Value, entry: &OpEntry) {
+    attach_named(
+        out,
+        &entry.description_en,
+        &entry.limits,
+        &entry.limits_en,
+    );
+}
+
+fn attach_named(out: &mut Value, description_en: &str, limits: &str, limits_en: &str) {
+    if !description_en.is_empty() {
+        out["descriptionEn"] = json!(description_en);
+    }
     if !limits.is_empty() {
         out["limits"] = json!(limits);
+    }
+    if !limits_en.is_empty() {
+        out["limitsEn"] = json!(limits_en);
     }
 }
 

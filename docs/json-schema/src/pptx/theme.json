@@ -17,7 +17,9 @@
   "$defs": {
     "pptxSetThemeColorsOp": {
       "description": "改该母版 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "descriptionEn": "Change a:clrScheme slots on that master's theme part, and the color-scheme name and the theme root name.",
       "limits": "不改未点名的 fmtScheme 槽。不把未点名形状上的 schemeClr 展开成直接色。",
+      "limitsEn": "fmtScheme slots you did not name stay unchanged. schemeClr on shapes you did not name is not expanded to a direct color.",
       "type": "object",
       "required": [
         "op",
@@ -96,7 +98,9 @@
     },
     "pptxSetThemeFontsOp": {
       "description": "改该母版 theme 部件的 a:fontScheme。",
+      "descriptionEn": "Change a:fontScheme on that master's theme part.",
       "limits": "未点名的 fmtScheme 槽留下。",
+      "limitsEn": "Unnamed fmtScheme slots stay.",
       "type": "object",
       "required": [
         "op",
@@ -220,7 +224,9 @@
     },
     "setClrMapOp": {
       "description": "改 slideMaster、notesMaster 或 handoutMaster 上的 p:clrMap。",
+      "descriptionEn": "Change p:clrMap on a slideMaster, notesMaster, or handoutMaster.",
       "limits": "不把映射算成 RGB。不改 theme 部件。",
+      "limitsEn": "The map is not resolved to RGB. The theme part is unchanged.",
       "type": "object",
       "required": [
         "op",
@@ -287,6 +293,7 @@
     },
     "setClrMapOvrOp": {
       "description": "改幻灯片、版式或备注页上的 p:clrMapOvr。",
+      "descriptionEn": "Change p:clrMapOvr on a slide, a layout, or a notes page.",
       "type": "object",
       "required": [
         "op",

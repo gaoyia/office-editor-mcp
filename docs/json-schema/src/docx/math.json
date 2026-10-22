@@ -56,7 +56,9 @@
     },
     "docxInsertMathOp": {
       "description": "在 Word 段落里插入公式。",
+      "descriptionEn": "Insert an equation into a Word paragraph.",
       "limits": "text 和 expr 恰好给一个，不能同时给。kind 缺省是 inline，display 才单独成段。不要套用 xlsx 或 pptx 的坐标字段。",
+      "limitsEn": "Provide exactly one of text and expr; do not provide both. kind defaults to inline; only display stands as its own paragraph. Do not reuse coordinate fields from xlsx or pptx.",
       "type": "object",
       "required": [
         "op",
@@ -100,7 +102,9 @@
     },
     "docxSetMathOp": {
       "description": "改 Word 段落里已有的公式。",
+      "descriptionEn": "Change an existing equation in a Word paragraph.",
       "limits": "text 和 expr 恰好给一个；只改对齐时可以只给 jc。不改 kind。不要套用 xlsx 或 pptx 的公式框字段。",
+      "limitsEn": "Provide exactly one of text and expr. To change only alignment, jc alone is enough. kind is not changed. Do not reuse formula-box fields from xlsx or pptx.",
       "type": "object",
       "required": [
         "op",
@@ -190,7 +194,9 @@
     },
     "insertRubyOp": {
       "description": "在点名段末尾追加一个 w:r，里面是 w:ruby（rubyPr + rt + rubyBase）。",
+      "descriptionEn": "Append a w:r at the end of the named paragraph, containing w:ruby (rubyPr + rt + rubyBase).",
       "limits": "id 为 docx:document 时在正文末尾、sectPr 之前新插一个只含该拼音的 w:p。框内、注内、批注内的段落，以及拼音 id、容器 id、表 id、run id、section:{n}，一律报 InvalidId。找不到段落报 IdNotFound。空 base / rt、空 lid、不认识的 align、或 hps / hpsRaise / hpsBaseText 越界，报 InvalidField。",
+      "limitsEn": "When id is docx:document, insert a new w:p that contains only this ruby at the end of the body, before sectPr. Paragraphs inside a text box, note, or comment, and a ruby id, container id, table id, run id, or section:{n}, all return InvalidId. A missing paragraph returns IdNotFound. An empty base / rt, an empty lid, an unrecognized align, or hps / hpsRaise / hpsBaseText out of range returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -248,7 +254,9 @@
     },
     "setRubyOp": {
       "description": "改一处拼音。",
+      "descriptionEn": "Change one ruby annotation.",
       "limits": "base、rt、align、hps、hpsRaise、hpsBaseText、lid 至少给一个。只改被点名的那一个 w:ruby。 空 base / rt / lid、不认识的 align、或字号越界报 InvalidField。找不到报 IdNotFound。 id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of base, rt, align, hps, hpsRaise, hpsBaseText, and lid. Only the named w:ruby is changed. An empty base / rt / lid, an unrecognized align, or a font size out of range returns InvalidField. A missing id returns IdNotFound. An id that is not a ruby id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -304,7 +312,9 @@
     },
     "deleteRubyOp": {
       "description": "删掉该 w:ruby。",
+      "descriptionEn": "Delete that w:ruby.",
       "limits": "若宿主 w:r 里除 w:rPr 外只剩这一份拼音，连该 run 一起删。不因此删掉空段。找不到报 IdNotFound。id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "If the host w:r contains only this ruby besides w:rPr, delete that run as well. An empty paragraph is not deleted because of this. A missing id returns IdNotFound. An id that is not a ruby id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -323,7 +333,9 @@
     },
     "setEastAsianSettingsOp": {
       "description": "改文档的东亚排版设置。",
+      "descriptionEn": "Change the document's East Asian typography settings.",
       "limits": "五个字段至少给一个。禁则对象必须同时有非空 lang 与非空 chars。 themeFontLang 对象只认 val / eastAsia / bidi，值为字符串或 null。空串报 InvalidField。写入时整份替换该元素，只写出非 null 的属性。 不认识的 characterSpacingControl 报 InvalidField。 id 不是 docx:document 报 InvalidId。没有 settings 且要写入时新建 /word/settings.xml 与主文档 settings 关系。",
+      "limitsEn": "Provide at least one of the five fields. A kinsoku object must have both a non-empty lang and non-empty chars. A themeFontLang object accepts only val / eastAsia / bidi, each a string or null. An empty string returns InvalidField. On write, the element is replaced as a whole, and only non-null attributes are written. An unrecognized characterSpacingControl returns InvalidField. An id that is not docx:document returns InvalidId. If settings is missing and a write is required, create /word/settings.xml and the main document's settings relationship.",
       "type": "object",
       "required": [
         "op",
@@ -396,7 +408,9 @@
     },
     "docxDeleteMathOp": {
       "description": "删掉该 oMath；若父 oMathPara 里已经没有 oMath，连 oMathPara 一起删。",
+      "descriptionEn": "Delete that oMath. If the parent oMathPara then has no oMath left, delete the oMathPara as well.",
       "limits": "因此变空且无 sectPr 的正文段可删掉。表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是公式 id 报 InvalidId。xlsx / pptx 的 drawing 公式框见各自分册。",
+      "limitsEn": "A body paragraph that becomes empty and has no sectPr may be deleted. An empty paragraph inside a table cell stays. After the delete, if w:body has no w:p, insert an empty paragraph before sectPr. If a paragraph has a section break and the whole paragraph cannot be deleted, NotImplemented is returned. A missing id returns IdNotFound. An id that is not an equation id returns InvalidId. For drawing formula boxes in xlsx / pptx, see the xlsx and pptx books.",
       "type": "object",
       "required": [
         "op",

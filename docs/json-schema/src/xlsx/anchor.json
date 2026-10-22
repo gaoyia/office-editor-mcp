@@ -29,7 +29,9 @@
   "$defs": {
     "setPictureAnchorOp": {
       "description": "改图片在工作表上的锚点。",
+      "descriptionEn": "Change a picture's anchor on the worksheet.",
       "limits": "anchor、位置字段、editAs、cx / cy 至少给一类，否则报 InvalidField。找不到该图报 IdNotFound。id 不是 xlsx 图 id 报 InvalidId。 docx / pptx 上发此 op 报 InvalidField。pptx 改画布坐标请用 setPicturePos。",
+      "limitsEn": "Give at least one of anchor, position fields, editAs, and cx / cy, or InvalidField is returned. A missing picture returns IdNotFound. An id that is not an xlsx picture id returns InvalidId. This op on docx / pptx returns InvalidField. To change pptx canvas coordinates, use setPicturePos.",
       "type": "object",
       "required": [
         "op",
@@ -183,7 +185,9 @@
     },
     "setTextBoxAnchorOp": {
       "description": "字段与 setPictureAnchor 相同。",
+      "descriptionEn": "Same fields as setPictureAnchor.",
       "limits": "id 可以是 xlsx 文本框 id、形状 id 或连接线 id。改包含该 xdr:sp 或 xdr:cxnSp 的外层锚点，规则与 setPictureAnchor 相同（留下该对象或其所在 xdr:grpSp，以及 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "id may be an xlsx text box id, shape id, or connector id. Update the outer anchor that contains that xdr:sp or xdr:cxnSp, with the same rules as setPictureAnchor (that object, or the xdr:grpSp it sits in, and xdr:clientData, stay). This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -337,7 +341,9 @@
     },
     "setInkAnchorOp": {
       "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 墨迹 id。",
+      "descriptionEn": "Same fields as setPictureAnchor. id must be an xlsx ink id.",
       "limits": "改包含该 xdr14 AlternateContent 的外层锚点。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Update the outer anchor that contains that xdr14 AlternateContent. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -408,7 +414,9 @@
     },
     "setModel3dAnchorOp": {
       "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 3D 模型 id。",
+      "descriptionEn": "Same fields as setPictureAnchor. id must be an xlsx 3D model id.",
       "limits": "改包含该 am3d AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Update the outer anchor that contains that am3d AlternateContent, with the same rules as setPictureAnchor (AlternateContent and xdr:clientData stay). This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -541,7 +549,9 @@
     },
     "setMathAnchorOp": {
       "description": "字段与 setPictureAnchor 相同，id 必须是公式框 id。",
+      "descriptionEn": "Same fields as setPictureAnchor. id must be an equation box id.",
       "limits": "改包含该 a14:m AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。对公式框 id 发 setTextBoxAnchor 仍报 InvalidId。",
+      "limitsEn": "Update the outer anchor that contains that a14:m AlternateContent, with the same rules as setPictureAnchor (AlternateContent and xdr:clientData stay). This op on docx / pptx returns InvalidField. setTextBoxAnchor on an equation box id still returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -633,7 +643,9 @@
     },
     "setSlicerAnchorOp": {
       "description": "字段与 setPictureAnchor 相同，id 必须是切片器 id（含时间线）。",
+      "descriptionEn": "Same fields as setPictureAnchor. id must be a slicer id (including a timeline).",
       "limits": "改包含该 graphicFrame 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Update the outer anchor that contains that graphicFrame, with the same rules as setPictureAnchor (AlternateContent and xdr:clientData stay). This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -807,7 +819,9 @@
     },
     "setChartAnchorOp": {
       "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 图表 id。",
+      "descriptionEn": "Same fields as setPictureAnchor. id must be an xlsx chart id.",
       "limits": "改包含该 xdr:graphicFrame 的锚点，规则与 setPictureAnchor 相同（留下 xdr:graphicFrame 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Update the anchor that contains that xdr:graphicFrame, with the same rules as setPictureAnchor (xdr:graphicFrame and xdr:clientData stay). This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -940,7 +954,9 @@
     },
     "setSmartArtAnchorOp": {
       "description": "字段与 setChartAnchor 相同，id 必须是 xlsx 图示 id。",
+      "descriptionEn": "Same fields as setChartAnchor. id must be an xlsx diagram id.",
       "limits": "改包含该 xdr:graphicFrame 的外层锚点，规则与 setChartAnchor 相同。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Update the outer anchor that contains that xdr:graphicFrame, with the same rules as setChartAnchor. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

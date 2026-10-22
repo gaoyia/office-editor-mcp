@@ -20,7 +20,9 @@
   "$defs": {
     "insertSlicerOp": {
       "description": "把切片器或时间线视图写到目标工作表。",
+      "descriptionEn": "Write a slicer or timeline view onto the target worksheet.",
       "limits": "不在库里执行筛选，不刷新透视合计。",
+      "limitsEn": "This library does not run the filter and does not refresh pivot totals.",
       "type": "object",
       "required": [
         "op",
@@ -155,7 +157,9 @@
     },
     "deleteSlicerOp": {
       "description": "删掉一个切片器。",
+      "descriptionEn": "Delete a slicer.",
       "limits": "找不到报 IdNotFound。id 不是切片器 id 报 InvalidId。摘 drawing 锚点、slicers 或 timelines 部件里对应视图。 该 cache 已无视图则摘 slicerCache 或 timelineCache、workbook 关系，以及 @name 与 cache 名相同的那条定义名。 slicers 部件删光则去掉该部件与工作表 slicerList 条目。timelines 部件删光则去掉该部件与工作表 timelineRefs 条目。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a slicer id returns InvalidId. Remove the drawing anchor and the matching view in the slicers or timelines part. If that cache has no views left, remove the slicerCache or timelineCache, the workbook relationship, and the defined name whose @name matches the cache name. When the slicers part is empty, remove that part and the worksheet slicerList entry. When the timelines part is empty, remove that part and the worksheet timelineRefs entry.",
       "type": "object",
       "required": [
         "op",
@@ -174,7 +178,9 @@
     },
     "setSlicerSizeOp": {
       "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "descriptionEn": "Same fields as the xlsx side of setPictureSize.",
       "limits": "id 必须是切片器 id（含时间线）。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对图 id 发此 op、对切片器 id 发 setPictureSize 仍报 InvalidId。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "id must be a slicer id (including a timeline). oneCell / absolute updates the outer xdr:ext. twoCell does not accept cx / cy (those return InvalidField) and requires to. EMU is not converted from column width or row height. AlternateContent and xdr:clientData stay. This op on a picture id, or setPictureSize on a slicer id, still returns InvalidId. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -230,7 +236,9 @@
     },
     "setSlicerViewOp": {
       "description": "改 slicer 或 timeline 视图部件上的标题、行高、列数、显示开关与样式名。",
+      "descriptionEn": "Change the caption, row height, column count, display switches, and style name on a slicer or timeline view part.",
       "limits": "不改 drawing 锚点，不改 cache，不执行筛选。",
+      "limitsEn": "Do not change the drawing anchor, do not change the cache, and do not run the filter.",
       "type": "object",
       "required": [
         "op",
@@ -309,7 +317,9 @@
     },
     "setSlicerFilterOp": {
       "description": "改切片器 cache 已勾选项，或时间线 cache 的筛选区间。",
+      "descriptionEn": "Change the checked items on a slicer cache, or the filter range on a timeline cache.",
       "limits": "不改 drawing，不改视图 @caption。不隐藏行。不重写透视缓存合计。不在库里执行筛选。",
+      "limitsEn": "Do not change the drawing, and do not change the view @caption. Do not hide rows. Do not rewrite pivot-cache totals. This library does not run the filter.",
       "type": "object",
       "required": [
         "op",

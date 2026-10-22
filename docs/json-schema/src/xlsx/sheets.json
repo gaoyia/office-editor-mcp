@@ -23,7 +23,9 @@
   "$defs": {
     "insertChartSheetOp": {
       "description": "插入一个图表工作表。",
+      "descriptionEn": "Insert a chart sheet.",
       "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidField。与已有表重名（不分大小写）报 InvalidField。 找不到 dataSheet 报 IdNotFound。dataSheet 不是 worksheet，或省略时工作簿里没有 worksheet，报 InvalidField。 出现 from / to / anchor / 偏移 / kind / wrap 报 InvalidField。类型与系列限制与 insertChart 相同。",
+      "limitsEn": "xlsx: an id that is not xlsx:workbook returns InvalidId. An illegal name returns InvalidField. A name that duplicates an existing sheet (case-insensitive) returns InvalidField. A missing dataSheet returns IdNotFound. If dataSheet is not a worksheet, or it is omitted and the workbook has no worksheet, InvalidField is returned. from / to / anchor / offsets / kind / wrap return InvalidField. Type and series limits are the same as insertChart.",
       "type": "object",
       "required": [
         "op",
@@ -103,7 +105,9 @@
     },
     "deleteChartSheetOp": {
       "description": "删掉一个图表工作表。",
+      "descriptionEn": "Delete a chart sheet.",
       "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 worksheet / dialogsheet / macrosheet 发此 op 报 InvalidId。 删掉工作簿里最后一张表报 InvalidField。删掉最后一张可见表报 InvalidField。 去掉 workbook 表项、chartsheet 部件及其 drawing / chart（无人引用则删），以及对应关系与内容类型。不删 dataFrom 那些单元格。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. This op on a worksheet / dialogsheet / macrosheet returns InvalidId. Deleting the last sheet in the workbook returns InvalidField. Deleting the last visible sheet returns InvalidField. Remove the workbook sheet entry, the chartsheet part and its drawing / chart (deleted if unreferenced), and the matching relationships and content types. Do not delete the cells from dataFrom. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -122,7 +126,9 @@
     },
     "insertSheetOp": {
       "description": "插入一个工作表。",
+      "descriptionEn": "Insert a worksheet.",
       "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidSheetName。与已有表重名（不分大小写）报 DuplicateSheetName。 after 找不到报 IdNotFound；不是工作表 id 报 InvalidId。不要用本 op 新建图表工作表。 新建最小 worksheet 部件（空 sheetData，CT 与 create 相同），workbook 关系 Type 以 /worksheet 结尾，sheetId 取已有最大整数加 1。",
+      "limitsEn": "xlsx: an id that is not xlsx:workbook returns InvalidId. An illegal name returns InvalidSheetName. A name that duplicates an existing sheet (case-insensitive) returns DuplicateSheetName. A missing after returns IdNotFound; an id that is not a sheet id returns InvalidId. Do not use this op to create a chart sheet. Create a minimal worksheet part (empty sheetData, the same content type as create). The workbook relationship Type ends with /worksheet. sheetId is the largest existing integer plus 1.",
       "type": "object",
       "required": [
         "op",
@@ -150,7 +156,9 @@
     },
     "deleteSheetOp": {
       "description": "删掉一个工作表。",
+      "descriptionEn": "Delete a worksheet.",
       "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 chartsheet 发此 op 报 InvalidId（请用 deleteChartSheet）。 对 dialogsheet / macrosheet 报 NotImplemented。删掉工作簿里最后一张表，或删掉最后一张可见表，报 InvalidField。 definedNames 或其它表的 <f>、图表 c:f 仍含该表名时报 NotImplemented，不写文件。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. This op on a chartsheet returns InvalidId (use deleteChartSheet). dialogsheet / macrosheet returns NotImplemented. Deleting the last sheet in the workbook, or the last visible sheet, returns InvalidField. If definedNames, another sheet's <f>, or a chart c:f still contains that sheet name, NotImplemented is returned and nothing is written.",
       "type": "object",
       "required": [
         "op",
@@ -169,7 +177,9 @@
     },
     "renameSheetOp": {
       "description": "给工作表改名。",
+      "descriptionEn": "Rename a sheet.",
       "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 name 非法报 InvalidSheetName。与另一张表重名（不分大小写）报 DuplicateSheetName。已经是目标名（大小写相同）则空操作，仍计入 opsApplied。 只改大小写时仍改 sheet/@name。definedNames 或其它表 <f> / 图表 c:f 仍含旧表名时报 NotImplemented，不写文件。不改写公式。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. dialogsheet / macrosheet returns NotImplemented. An illegal name returns InvalidSheetName. A name that duplicates another sheet (case-insensitive) returns DuplicateSheetName. If the name is already the target (same case), this is a no-op and still counts toward opsApplied. A case-only change still updates sheet/@name. If definedNames, another sheet's <f>, or a chart c:f still contains the old sheet name, NotImplemented is returned and nothing is written. Do not rewrite formulas.",
       "type": "object",
       "required": [
         "op",
@@ -193,7 +203,9 @@
     },
     "moveSheetOp": {
       "description": "调整工作表的顺序。",
+      "descriptionEn": "Reorder sheets.",
       "limits": "找不到该表或 after 报 IdNotFound。id / after 不是工作表 id 报 InvalidId。after 与 id 是同一张表报 InvalidField。 对 dialogsheet / macrosheet 报 NotImplemented。已经在目标位置则空操作。 只改 workbook.xml 里 sheets 子元素顺序，不改部件路径、sheetId 或关系 id。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing sheet or after returns IdNotFound. If id or after is not a sheet id, InvalidId is returned. If after and id are the same sheet, InvalidField is returned. dialogsheet / macrosheet returns NotImplemented. If it is already at the target position, this is a no-op. Only the order of sheets children in workbook.xml changes. Part paths, sheetId, and relationship ids stay unchanged. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

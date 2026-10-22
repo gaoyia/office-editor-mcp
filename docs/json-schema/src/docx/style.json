@@ -35,7 +35,9 @@
   "$defs": {
     "acceptRevisionOp": {
       "description": "不调 Word COM。",
+      "descriptionEn": "Does not call Word COM.",
       "limits": "run 级 ins：拆掉 w:ins 外壳，留下内部 w:r，并去掉这些 run 的属性容器上的 ins / del（Word 会另写在 rPr 里，不进树）。run 级 del：删掉整个 w:del（含 delText）。run 级 moveFrom：删掉该节点（含内容），并删掉包住它的同 w:id 的 moveFromRangeStart / moveFromRangeEnd。",
+      "limitsEn": "Run-level ins: unwrap the w:ins shell, keep the inner w:r, and remove ins / del on those runs' property containers (Word also writes them on rPr, which is not in the tree). Run-level del: delete the whole w:del, including delText. Run-level moveFrom: delete that node, including its content, and delete the moveFromRangeStart / moveFromRangeEnd with the same w:id that wraps it.",
       "type": "object",
       "required": [
         "op",
@@ -54,7 +56,9 @@
     },
     "rejectRevisionOp": {
       "description": "run 级 ins：删掉整个 w:ins。",
+      "descriptionEn": "Run-level ins: delete the whole w:ins.",
       "limits": "run 级 del：拆掉 w:del 外壳，把其中 w:delText 改回 w:t，并去掉内部属性容器上的 ins / del。run 级 moveFrom：拆掉 w:moveFrom 外壳，留下内部 w:r，并删掉包住它的 RangeStart/End。run 级 moveTo：删掉该节点（含内容），并删掉包住它的 RangeStart/End。rPrChange：用 Change 里的旧 w:rPr 替换当前 run 属性。pPrChange：用 Change 里的旧 w:pPr 替换当前段落属性。",
+      "limitsEn": "Run-level del: unwrap the w:del shell, change its w:delText back to w:t, and remove ins / del on the inner property containers. Run-level moveFrom: unwrap the w:moveFrom shell, keep the inner w:r, and delete the RangeStart/End that wraps it. Run-level moveTo: delete that node, including its content, and delete the RangeStart/End that wraps it. rPrChange: replace the current run properties with the old w:rPr inside the Change. pPrChange: replace the current paragraph properties with the old w:pPr inside the Change.",
       "type": "object",
       "required": [
         "op",
@@ -73,7 +77,9 @@
     },
     "insertContentControlOp": {
       "description": "在点名段末尾追加一个行内 w:sdt（sdtPr 含 w:id，值为本故事里尚未占用的十进制数字；有 tag / alias 则写入；类型元素按 kind）。",
+      "descriptionEn": "Append an inline w:sdt at the end of the named paragraph (sdtPr contains w:id, a decimal not yet used in this story; tag / alias are written when present; the type element follows kind).",
       "limits": "checkbox 写 w14:checkbox（checked / checkedState / uncheckedState，缺省符号 U+2612 / U+2610、字体 MS Gothic）， sdtContent 里一条带 MS Gothic 的 w:r/w:t（勾选 ☒、未勾 ☐）。根元素补 xmlns:w14，并把 w14 列入 mc:Ignorable。",
+      "limitsEn": "checkbox writes w14:checkbox (checked / checkedState / uncheckedState; default symbols U+2612 / U+2610, font MS Gothic), and sdtContent gets one w:r/w:t in MS Gothic (checked ☒, unchecked ☐). The root element gains xmlns:w14, and w14 is added to mc:Ignorable.",
       "type": "object",
       "required": [
         "op",
@@ -134,7 +140,9 @@
     },
     "setContentControlOp": {
       "description": "checkbox：改 w14:checked 与内容符号字符，不把 sdtContent 换成任意文本。",
+      "descriptionEn": "checkbox: change w14:checked and the content symbol character. Do not replace sdtContent with arbitrary text.",
       "limits": "picture：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。其余 kind 用新文本替换当前值：行内把 sdtContent 换成一条 w:r/w:t；块级只改 sdtContent 里第一个 w:p 的可见文本，并去掉其余 w:p。有 w:showingPlcHdr 则删掉。不改 kind，不改 w:id。带 w:dataBinding 报 NotImplemented。",
+      "limitsEn": "picture: replace the picture inside the control with new inline DrawingML, and delete the old media relationship if nothing else references it. Other kinds replace the current value with new text: inline replaces sdtContent with one w:r/w:t; block level changes only the visible text of the first w:p in sdtContent and removes the other w:p elements. If w:showingPlcHdr is present, it is removed. kind is not changed, and w:id is not changed. w:dataBinding returns NotImplemented.",
       "type": "object",
       "required": [
         "op",
@@ -182,7 +190,9 @@
     },
     "deleteContentControlOp": {
       "description": "keep 为 none 时：因此变空且无 sectPr 的正文段可删掉。",
+      "descriptionEn": "When keep is none: a body paragraph that becomes empty and has no sectPr may be deleted.",
       "limits": "表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是内容控件 id 报 InvalidId。不认识的 keep 报 InvalidField。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "An empty paragraph inside a table cell stays. After the delete, if w:body has no w:p, insert an empty paragraph before sectPr. If a paragraph has a section break and the whole paragraph cannot be deleted, NotImplemented is returned. A missing id returns IdNotFound. An id that is not a content-control id returns InvalidId. An unrecognized keep returns InvalidField. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -207,7 +217,9 @@
     },
     "insertNumberingOp": {
       "description": "写入一份抽象定义（9 级 hybridMultilevel）加一个 w:num 实例。",
+      "descriptionEn": "Write one abstract definition (9-level hybridMultilevel) plus one w:num instance.",
       "limits": "没有 /word/numbering.xml 则新建该部件、主文档关系与内容类型 Override。decimal 的 lvlText 为 %1.、%1.%2. 这类累计小数；bullet 用 Symbol 字体，各级 lvlText 轮换实心点、o 与节号。apply 不返回新 id；随后 inspect 按 w:num 文档顺序，新实例在名单末尾。kind 缺或不认识报 InvalidField。id 不是 docx:document 报 InvalidId。",
+      "limitsEn": "If /word/numbering.xml is missing, create that part, the main-document relationship, and the content-type Override. For decimal, lvlText is a cumulative decimal such as %1. or %1.%2. For bullet, the font is Symbol, and each level's lvlText rotates a filled bullet, o, and a section sign. apply does not return the new id. A later inspect lists w:num in document order, with the new instance at the end of the list. A missing or unrecognized kind returns InvalidField. An id that is not docx:document returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -232,7 +244,9 @@
     },
     "setNumberingOp": {
       "description": "改某一级编号的格式。",
+      "descriptionEn": "Change the format of one numbering level.",
       "limits": "numFmt、start、lvlText 至少给一个。只改被点名抽象定义上已有的 w:lvl，不自动建级，也不改该实例上的 w:lvlOverride。 不认识的 numFmt、ilvl 超出 0–8、或该抽象定义没有这一级，报 InvalidField。找不到抽象定义报 IdNotFound。id 不是抽象编号 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of numFmt, start, and lvlText. Only an existing w:lvl on the named abstract definition is changed. Levels are not created automatically, and w:lvlOverride on that instance is not changed. An unrecognized numFmt, an ilvl outside 0–8, or an abstract definition that does not have that level returns InvalidField. A missing abstract definition returns IdNotFound. An id that is not an abstract-numbering id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -274,7 +288,9 @@
     },
     "setStyleOp": {
       "description": "改一个命名样式。",
+      "descriptionEn": "Change a named style.",
       "limits": "font、eastAsiaFont、sz、bold、color、before、after 至少给一个。 段落、字符、表格样式都可改（w:type 为 paragraph / character / table，或缺省当段落）。编号样式报 InvalidField。 before / after 只允许段落与表格样式；字符样式带这两项报 InvalidField。rPr 字段三种都可写。 空 font / eastAsiaFont、不是六位十六进制的 color、sz 越界报 InvalidField。",
+      "limitsEn": "Provide at least one of font, eastAsiaFont, sz, bold, color, before, and after. Paragraph, character, and table styles can all be changed (w:type is paragraph / character / table, or defaults to paragraph). A numbering style returns InvalidField. before / after are allowed only on paragraph and table styles; a character style that carries either returns InvalidField. rPr fields can be written on all three. An empty font / eastAsiaFont, a color that is not six hex digits, or sz out of range returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -321,7 +337,9 @@
     },
     "insertStyleOp": {
       "description": "在 /word/styles.xml 末尾追加一条自定义样式。",
+      "descriptionEn": "Append one custom style at the end of /word/styles.xml.",
       "limits": "没有 styles 部件时新建最小部件，并补主文档关系与 [Content_Types].xml。",
+      "limitsEn": "If the styles part is missing, create a minimal part, and add the main-document relationship and [Content_Types].xml.",
       "type": "object",
       "required": [
         "op",
@@ -360,7 +378,9 @@
     },
     "deleteStyleOp": {
       "description": "只删 w:customStyle 为开（1 / true / on）且不是 w:default 的样式。",
+      "descriptionEn": "Delete only a style whose w:customStyle is on (1 / true / on) and that is not w:default.",
       "limits": "内置或没有 customStyle 的报 InvalidField。不扫描文档里的 pStyle / rStyle / tblStyle 引用。找不到样式报 IdNotFound。id 不是 style:{styleId} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A built-in style, or a style without customStyle, returns InvalidField. pStyle / rStyle / tblStyle references in the document are not scanned. A missing style returns IdNotFound. An id that is not style:{styleId} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

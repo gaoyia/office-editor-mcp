@@ -38,7 +38,9 @@
   "$defs": {
     "insertDefinedNameOp": {
       "description": "往工作簿追加一条定义名（ECMA-376 §18.2.5）。",
+      "descriptionEn": "Append one defined name to the workbook (ECMA-376 §18.2.5).",
       "limits": "公式当字符串写入元素文本，不解析、不求值。",
+      "limitsEn": "Write the formula into the element text as a string. Do not parse it and do not evaluate it.",
       "type": "object",
       "required": [
         "op",
@@ -74,7 +76,9 @@
     },
     "setDefinedNameOp": {
       "description": "改已有定义名。",
+      "descriptionEn": "Change an existing defined name.",
       "limits": "只改给了的字段。",
+      "limitsEn": "Only the fields that were given are changed.",
       "type": "object",
       "required": [
         "op",
@@ -133,6 +137,7 @@
     },
     "deleteDefinedNameOp": {
       "description": "删掉一条定义名。",
+      "descriptionEn": "Delete one defined name.",
       "type": "object",
       "required": [
         "op",
@@ -151,7 +156,9 @@
     },
     "insertCustomViewOp": {
       "description": "把当前窗口设置存成一条自定义视图。",
+      "descriptionEn": "Save the current window settings as one custom view.",
       "limits": "不恢复隐藏行 / 列。",
+      "limitsEn": "Do not restore hidden rows or columns.",
       "type": "object",
       "required": [
         "op",
@@ -181,7 +188,9 @@
     },
     "deleteCustomViewOp": {
       "description": "去掉该 <customWorkbookView>，以及各表上同一 guid 的 <customSheetView>。",
+      "descriptionEn": "Remove that <customWorkbookView>, and the <customSheetView> with the same guid on each sheet.",
       "limits": "删光则去掉 <customWorkbookViews> / 空的 <customSheetViews>。找不到该序号报 IdNotFound。id 不是自定义视图 id 报 InvalidId。docx / pptx 上发此 op 报 InvalidField。不标重算。",
+      "limitsEn": "When none remain, remove <customWorkbookViews> and empty <customSheetViews>. A missing index returns IdNotFound. An id that is not a custom view id returns InvalidId. This op on docx / pptx returns InvalidField. Do not mark the file for recalculation.",
       "type": "object",
       "required": [
         "op",
@@ -200,6 +209,7 @@
     },
     "showCustomViewOp": {
       "description": "按快照把窗格写回当前默认视图。",
+      "descriptionEn": "Write the panes from the snapshot back onto the current default view.",
       "type": "object",
       "required": [
         "op",
@@ -218,7 +228,9 @@
     },
     "insertConnectionOp": {
       "description": "把网页查询或文本连接写入工作簿 Connections 部件。",
+      "descriptionEn": "Write a web query or a text connection into the workbook Connections part.",
       "limits": "不向数据源发请求，不把查询结果写进单元格，不写 queryTable。",
+      "limitsEn": "Do not send a request to the data source, do not write query results into cells, and do not write a queryTable.",
       "type": "object",
       "required": [
         "op",
@@ -260,7 +272,9 @@
     },
     "deleteConnectionOp": {
       "description": "删掉一个数据连接。",
+      "descriptionEn": "Delete a data connection.",
       "limits": "找不到报 IdNotFound。id 不是连接 id 报 InvalidId。摘该条 connection。删光则去掉 Connections 部件、workbook 关系与 Override。 不改 queryTable / sheetData。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a connection id returns InvalidId. Remove that connection. When none remain, remove the Connections part, the workbook relationship, and the Override. Do not change queryTable / sheetData. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -279,7 +293,9 @@
     },
     "insertExternalLinkOp": {
       "description": "把对其他工作簿的外部引用写入 /xl/externalLinks/…。",
+      "descriptionEn": "Write an external reference to another workbook under /xl/externalLinks/….",
       "limits": "不打开目标文件，不把缓存值写进 sheetDataSet，也不改单元格公式。",
+      "limitsEn": "Do not open the target file, do not write cached values into sheetDataSet, and do not change cell formulas.",
       "type": "object",
       "required": [
         "op",
@@ -311,7 +327,9 @@
     },
     "deleteExternalLinkOp": {
       "description": "删掉一个外部引用。",
+      "descriptionEn": "Delete an external reference.",
       "limits": "找不到报 IdNotFound。id 不是外部引用 id 报 InvalidId。若任一工作表 <f> 或定义名文本含 [k]（k 为该条下标或更大）报 NotImplemented，不写文件。 否则摘该条 <externalReference>、对应 externalLink 部件及其 .rels、workbook 关系与 Override。删光则去掉 <externalReferences>。 不重写其余公式的 [n]。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an external-reference id returns InvalidId. If any worksheet <f> or defined-name text contains [k] (k is this entry's index or greater), NotImplemented is returned and nothing is written. Otherwise remove that <externalReference>, the matching externalLink part and its .rels, the workbook relationship, and the Override. When none remain, remove <externalReferences>. Do not rewrite [n] in the remaining formulas. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -330,7 +348,9 @@
     },
     "setExternalLinkOp": {
       "description": "改已有外部引用的路径。",
+      "descriptionEn": "Change the path of an existing external reference.",
       "limits": "不打开目标文件，不刷新 sheetDataSet，也不改单元格公式里的 [n]。",
+      "limitsEn": "Do not open the target file, do not refresh sheetDataSet, and do not change [n] in cell formulas.",
       "type": "object",
       "required": [
         "op",

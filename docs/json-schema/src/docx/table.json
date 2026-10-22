@@ -38,7 +38,9 @@
   "$defs": {
     "mergeCellsOp": {
       "description": "把 Word 表格里的几格并成一格。",
+      "descriptionEn": "Merge several cells in a Word table into one cell.",
       "limits": "范围内已有合并、或格子对不上网格时报 NotImplemented。幸存格是左上角：水平方向写 gridSpan，垂直方向左上为 vMerge=restart、其余行为 continue。 被吃掉的格子里的段落（遇嵌套表停住）按先行后列挪进幸存格，然后删掉那些 w:tc。continue 格留下一个空的 w:p。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "An existing merge in the range, or cells that do not line up with the grid, returns NotImplemented. The surviving cell is the top-left: horizontally it writes gridSpan; vertically the top-left is vMerge=restart and the other rows are continue. Paragraphs in the consumed cells (stopping at a nested table) are moved into the surviving cell in row-major order, and those w:tc elements are then deleted. A continue cell keeps one empty w:p. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -77,7 +79,9 @@
     },
     "splitCellsOp": {
       "description": "把 Word 表格里并过的格子拆开。",
+      "descriptionEn": "Split merged cells in a Word table.",
       "limits": "gridSpan 为 1 且没有 vMerge 时报 InvalidField。对 continue 格发此 op 报 InvalidField，必须点名 restart 那一格。 水平拆分后补出的新格各有一段空文本；垂直拆分去掉该列向下连续的 vMerge。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "gridSpan of 1 with no vMerge returns InvalidField. This op on a continue cell returns InvalidField; the restart cell must be named. After a horizontal split, each new cell has one empty paragraph. A vertical split removes the consecutive vMerge down that column. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -120,7 +124,9 @@
     },
     "setTableStyleOp": {
       "description": "改 Word 表格的样式。",
+      "descriptionEn": "Change a Word table's style.",
       "limits": "style 与 look 至少给一个。style 为样式 id 时目标必须是表格样式。段落 / 字符 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。 look 对象字段：firstRow、lastRow、firstColumn、lastColumn、bandedRows、bandedColumns，均为可选布尔。未点名的开关与已有 tblLook 合并。 没有已有 tblLook 时缺省约 Word 的 04A0：首行开、末行关、首列开、末列关、行带开、列带关。 写出六个属性与 val（四位大写十六进制）。",
+      "limitsEn": "Provide at least one of style and look. When style is a style id, the target must be a table style. A paragraph, character, or numbering style returns InvalidField. A missing style returns IdNotFound. look object fields: firstRow, lastRow, firstColumn, lastColumn, bandedRows, and bandedColumns, each an optional boolean. Unnamed switches are merged with the existing tblLook. When there is no existing tblLook, the default is about Word's 04A0: first row on, last row off, first column on, last column off, banded rows on, banded columns off. Writes the six attributes and val (four uppercase hex digits).",
       "type": "object",
       "required": [
         "op",
@@ -202,7 +208,9 @@
     },
     "setTableFloatOp": {
       "description": "让 Word 表格浮在文字旁边。",
+      "descriptionEn": "Float a Word table beside the text.",
       "limits": "不要复用 pptx 的 setTablePos（单位是 EMU）。",
+      "limitsEn": "Do not reuse pptx setTablePos (its unit is EMU).",
       "type": "object",
       "required": [
         "op",
@@ -232,7 +240,9 @@
     },
     "setTableWidthOp": {
       "description": "改 Word 表格的宽度。",
+      "descriptionEn": "Change a Word table's width.",
       "limits": "不要复用 pptx 的 setTableSize（单位是 EMU）。不要复用 xlsx 的 setColWidth。",
+      "limitsEn": "Do not reuse pptx setTableSize (its unit is EMU). Do not reuse xlsx setColWidth.",
       "type": "object",
       "required": [
         "op",
@@ -269,7 +279,9 @@
     },
     "setTableAlignOp": {
       "description": "行内表的水平对齐与左缩进。",
+      "descriptionEn": "Horizontal alignment and left indent of an inline table.",
       "limits": "浮动位置请用 setTableFloat。",
+      "limitsEn": "For a floating position, use setTableFloat.",
       "type": "object",
       "required": [
         "op",
@@ -305,7 +317,9 @@
     },
     "setTableRowHeightOp": {
       "description": "改 Word 表格的行高。",
+      "descriptionEn": "Change a Word table's row height.",
       "limits": "不要复用 xlsx 的 setRowHeight（单位是磅）。",
+      "limitsEn": "Do not reuse xlsx setRowHeight (its unit is points).",
       "type": "object",
       "required": [
         "op",
@@ -354,7 +368,9 @@
     },
     "setTableCellMarOp": {
       "description": "改 Word 表格单元格的内边距。",
+      "descriptionEn": "Change a Word table cell's inner margins.",
       "limits": "至少给一边。写入表级 tblCellMar，type=\"dxa\"。四边都删光后去掉空的 tblCellMar。 找不到表报 IdNotFound。id 不是表 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one side. Writes table-level tblCellMar with type=\"dxa\". After all four sides are deleted, the empty tblCellMar is removed. A missing table returns IdNotFound. An id that is not a table id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -451,7 +467,9 @@
     },
     "setTableBordersOp": {
       "description": "表级 w:tblBorders 的四边与内外框。",
+      "descriptionEn": "The four sides and the inside borders of table-level w:tblBorders.",
       "limits": "不要和格斜线、页面边框、段边框混。不算自动套表样式。",
+      "limitsEn": "Do not mix this with cell diagonals, page borders, or paragraph borders. This does not auto-apply a table style.",
       "type": "object",
       "required": [
         "op",
@@ -481,7 +499,9 @@
     },
     "setCellBordersOp": {
       "description": "格级 w:tcBorders 的正交四边与格内 insideH / insideV。",
+      "descriptionEn": "The four orthogonal sides of cell-level w:tcBorders, plus insideH / insideV inside the cell.",
       "limits": "不要和 setCellFormat 的 tcMar、斜线、表级 setTableBorders 混。不算自动套表样式。",
+      "limitsEn": "Do not mix this with tcMar from setCellFormat, diagonals, or table-level setTableBorders. This does not auto-apply a table style.",
       "type": "object",
       "required": [
         "op",
@@ -511,7 +531,9 @@
     },
     "setCellFormatOp": {
       "description": "改 Word 表格单元格的填充、边框和对齐。",
+      "descriptionEn": "Change a Word table cell's fill, borders, and alignment.",
       "limits": "fill、四边、两条斜线、vAlign、noWrap、textDirection、fitText、hideMark、headers 至少给一个。 fill 写入 shd val=\"clear\" color=\"auto\"，并去掉 theme 填充属性。不是六位十六进制报 InvalidField。 vAlign 写入 tcPr/w:vAlign/@w:val。不认识报 InvalidField。不要和节上 setVerticalAlign 混。",
+      "limitsEn": "Provide at least one of fill, the four sides, the two diagonals, vAlign, noWrap, textDirection, fitText, hideMark, and headers. fill writes shd with val=\"clear\" and color=\"auto\", and removes theme fill attributes. A value that is not six hex digits returns InvalidField. vAlign writes tcPr/w:vAlign/@w:val. An unrecognized value returns InvalidField. Do not confuse this with setVerticalAlign on a section.",
       "type": "object",
       "required": [
         "op",

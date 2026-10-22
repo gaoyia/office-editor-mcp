@@ -17,7 +17,9 @@
   "$defs": {
     "insertTextBoxOp": {
       "description": "插入一个文本框。",
+      "descriptionEn": "Insert a text box.",
       "limits": "id 必须是段落 id，对图 id、框 id、容器 id、框内段落 id 或 section:{n} 报 InvalidId。找不到该段报 IdNotFound。 cx / cy 都省略时用 2 英寸宽、1 英寸高（1828800 / 914400）。只给一个时报 InvalidField。 插入浮动 anchor + wrapSquare，挂在该段末尾一个新的 w:r 里，写成 mc:AlternateContent（Choice 为 wps:wsp / wps:txbx，Fallback 为空白 w:pict，不编 VML 几何）。",
+      "limitsEn": "id must be a paragraph id. A picture id, text box id, container id, in-box paragraph id, or section:{n} returns InvalidId. A missing paragraph returns IdNotFound. When both cx and cy are omitted, the box is 2 inches wide and 1 inch high (1828800 / 914400). Giving only one of them returns InvalidField. Insert a floating anchor with wrapSquare, in a new w:r at the end of that paragraph, written as mc:AlternateContent (Choice is wps:wsp / wps:txbx, Fallback is an empty w:pict, and no VML geometry is authored).",
       "type": "object",
       "required": [
         "op",
@@ -174,7 +176,9 @@
     },
     "deleteTextBoxOp": {
       "description": "删掉一个文本框。",
+      "descriptionEn": "Delete a text box.",
       "limits": "找不到该框报 IdNotFound。对段落 id、图 id、容器 id 或 section:{n} 报 InvalidId。 按框 id 删掉对应的 w:drawing；若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。链接链从中间删时，把前一框的 next 接到后一框、后一框的 prev 接到前一框， 并改写 wps:txbx / linkedTxbx 的 id 与 seq。",
+      "limitsEn": "A missing text box returns IdNotFound. A paragraph id, picture id, container id, or section:{n} returns InvalidId. Delete the w:drawing for that text box id; if it is inside the Choice of mc:AlternateContent, delete the whole AlternateContent. If the host w:r then contains only w:rPr or is empty, delete that run too. When deleting from the middle of a link chain, point the previous box's next at the following box and the following box's prev at the previous box, and rewrite id and seq on wps:txbx / linkedTxbx.",
       "type": "object",
       "required": [
         "op",
@@ -193,7 +197,9 @@
     },
     "setTextBoxSizeOp": {
       "description": "字段与 setPictureSize 相同。",
+      "descriptionEn": "Same fields as setPictureSize.",
       "limits": "docx 的 id 必须是框 id。xlsx 的 id 可以是文本框 id、形状 id 或连接线 id。docx 写入该框 wp:extent；若 wps:spPr/a:xfrm/a:ext 存在，一并改。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "For docx, id must be a text box id. For xlsx, id may be a text box id, a shape id, or a connector id. docx writes that box's wp:extent; if wps:spPr/a:xfrm/a:ext exists, update it too. xlsx follows pictures: oneCell / absolute updates xdr:ext, and twoCell updates the bottom-right to. This op on pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

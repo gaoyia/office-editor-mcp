@@ -35,7 +35,9 @@
   "$defs": {
     "insertCommentOp": {
       "description": "插入一条批注。",
+      "descriptionEn": "Insert one comment.",
       "limits": "start 与 end 必须在同一部件，且 start 在文档顺序上不得晚于 end，否则报 InvalidField。不提供字符偏移。 在 start 段 w:pPr 之后插入 w:commentRangeStart； 在 end 段已有内容之后插入 w:commentRangeEnd，再跟一个含 w:commentReference 的 run（rStyle 为 CommentReference）。跨段时中间段落整段落在范围内，不另写标记。",
+      "limitsEn": "start and end must be in the same part, and start must not come after end in document order, or the op returns InvalidField. Character offsets are not accepted. Insert w:commentRangeStart after w:pPr in the start paragraph. After the existing content of the end paragraph, insert w:commentRangeEnd, followed by a run that contains w:commentReference (rStyle is CommentReference). When the range crosses paragraphs, each paragraph in between lies wholly inside the range, and no extra marks are written.",
       "type": "object",
       "required": [
         "op"
@@ -95,7 +97,9 @@
     },
     "deleteCommentOp": {
       "description": "去掉该批注在主文档、页眉、页脚、文本框和注里所有匹配的范围标记与 commentReference，再去掉 comments.xml 里该条。",
+      "descriptionEn": "Remove every matching range mark and commentReference for that comment in the main document, headers, footers, text boxes, and notes, then remove that entry from comments.xml.",
       "limits": "子回复级联删除（paraIdParent 链指向它的都删），清单里验回复不残留。已经不存在报 IdNotFound。id 不是批注容器 id 报 InvalidId。批注内图按图片规则收。删光批注后仍保留 comments.xml 空壳和已有的 extended / people 部件，不拆掉整个 part。xlsx 的 id 可以是顶层批注或回复。",
+      "limitsEn": "Child replies are cascade-deleted (every paraIdParent chain that points at it is deleted). The listing must show no leftover replies. An id that no longer exists returns IdNotFound. An id that is not a comment-container id returns InvalidId. Pictures inside the comment are cleaned up by the picture rules. After the last comment is deleted, the empty comments.xml shell and the existing extended / people parts remain. The whole part is not removed. An xlsx id may be a top-level comment or a reply.",
       "type": "object",
       "required": [
         "op",
@@ -114,7 +118,9 @@
     },
     "replyCommentOp": {
       "description": "新增一条 w:comment 和新的 commentEx，paraIdParent 为父批注当前最后一段的 paraId。",
+      "descriptionEn": "Add one w:comment and a new commentEx. paraIdParent is the paraId of the parent comment's current last paragraph.",
       "limits": "在父批注已有的范围上再套一套相同范围的标记（commentRangeStart 插在父 start 之后， commentRangeEnd 与 commentReference 插在父 commentReference 所在 run 之后），与 Word 16 Replies.Add 一致；rStyle 抄父引用 run。找不到父批注的范围标记时仍写 comment 与 commentEx，不报错。",
+      "limitsEn": "Place another mark of the same range around the parent comment's existing range (commentRangeStart goes after the parent's start, and commentRangeEnd and commentReference go after the run that holds the parent's commentReference), matching Word 16 Replies.Add. rStyle is copied from the parent reference run. If the parent comment's range marks cannot be found, comment and commentEx are still written, and no error is returned.",
       "type": "object",
       "required": [
         "op",
@@ -146,7 +152,9 @@
     },
     "setCommentTextOp": {
       "description": "只改该 w:comment 的可见文本，不改范围标记。",
+      "descriptionEn": "Change only the visible text of that w:comment. Range marks stay unchanged.",
       "limits": "留下第一段（含 annotationRef），按 setParaText 的规则改这段的可见 w:t，删掉后面多出来的 w:p。随后把 commentEx/@paraId 和指向旧最后一段的 paraIdParent 改成留下的那一段。id 不是批注容器 id 报 InvalidId。对批注内段落 id 请用 setParaText。对 kind 为 ink 的批注报 NotImplemented，没有可见 w:t 时同样拒绝，不写文件。xlsx 的 id 可以是批注容器 id 或回复 id。",
+      "limitsEn": "Keep the first paragraph (including annotationRef). Change that paragraph's visible w:t by the setParaText rules, and delete the extra w:p elements after it. Then set commentEx/@paraId, and any paraIdParent that pointed at the old last paragraph, to the paragraph that remains. An id that is not a comment-container id returns InvalidId. For a paragraph id inside a comment, use setParaText. A comment whose kind is ink returns NotImplemented. The same refusal applies when there is no visible w:t, and the file is not written. An xlsx id may be a comment-container id or a reply id.",
       "type": "object",
       "required": [
         "op",
@@ -169,7 +177,9 @@
     },
     "setCommentMetaOp": {
       "description": "改批注的作者、缩写或时间。",
+      "descriptionEn": "Change a comment's author, initials, or date.",
       "limits": "author、initials、date 至少给一个，否则报 InvalidField。只改被点名的属性，其余不动。改 author 时若 people.xml 里还没有这个作者则补一条，不删旧作者。 id 不是批注容器 id 报 InvalidId。xlsx 的 id 可以是批注容器 id 或回复 id。 改 author 时按新的 displayName 指向（必要时新建）一条 person，只改该条 personId，不改共享的那条 person，以免误伤同作者其它批注。initials 接受但不写入。 改 date 时写 @dT。",
+      "limitsEn": "Give at least one of author, initials, and date, or the op returns InvalidField. Only the attributes you name change. The rest stay. When author changes, if people.xml does not yet contain that author, add one entry. The old author is not deleted. An id that is not a comment-container id returns InvalidId. An xlsx id may be a comment-container id or a reply id. When author changes, point at one person by the new displayName (create it if needed), change only that personId, and do not change the shared person, so other comments by the same author are not affected. initials is accepted but not written. When date changes, write @dT.",
       "type": "object",
       "required": [
         "op",
@@ -215,7 +225,9 @@
     },
     "setCommentDoneOp": {
       "description": "只改被点名这一条的 done，不自动改回复。",
+      "descriptionEn": "Change done only on the one entry you name. Replies are not updated automatically.",
       "limits": "没有 commentsExtended 则按 Word 16 最小集新建，并为文件里每条批注补 commentEx（默认 done=\"0\"），再改被点名的那条。父批注最后一段没有 w14:paraId 时报 InvalidField。xlsx 的 id 可以是批注容器 id 或回复 id。done: true 写 @done=\"1\"；false 去掉 @done。pptx 的 id 可以是批注容器 id 或回复 id。",
+      "limitsEn": "If commentsExtended is missing, create the Word 16 minimal set, add a commentEx for every comment in the file (default done=\"0\"), then change the one you named. If the parent comment's last paragraph has no w14:paraId, the op returns InvalidField. An xlsx id may be a comment-container id or a reply id. done: true writes @done=\"1\"; false removes @done. A pptx id may be a comment-container id or a reply id.",
       "type": "object",
       "required": [
         "op",

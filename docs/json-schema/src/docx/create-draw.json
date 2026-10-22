@@ -329,7 +329,9 @@
     },
     "docxDrawingHyperlink": {
       "description": "inspect 图 / 文本框上的 DrawingML 链。",
+      "descriptionEn": "Inspect DrawingML links on pictures and text boxes.",
       "limits": "没有链则为 null。create 本期不写。",
+      "limitsEn": "Null when there is no link. create does not write one in this phase.",
       "oneOf": [
         {
           "type": "null"

@@ -51,7 +51,9 @@
     },
     "insertSparklineOp": {
       "description": "在该表 extLst 里追加一组 x14:sparklineGroup，组内一条 x14:sparkline。",
+      "descriptionEn": "Append one x14:sparklineGroup, containing one x14:sparkline, to that sheet's extLst.",
       "limits": "没有对应 ext 则按 CT_Worksheet 在末尾写 extLst / ext（uri 写成 Excel 16.0 另存的 {05C60535-1F16-4fd2-B633-F4F36F0B64E0}）， xmlns:x14 写在该 ext 上，xmlns:xm 写在 sparklineGroups 上。ref 必须是单格；闭区间报 InvalidField。非法 A1 报 InvalidRange。",
+      "limitsEn": "If the matching ext is missing, write extLst / ext at the end following CT_Worksheet (the uri is the one Excel 16.0 writes on save, {05C60535-1F16-4fd2-B633-F4F36F0B64E0}). xmlns:x14 is written on that ext, and xmlns:xm is written on sparklineGroups. ref must be a single cell; a closed range returns InvalidField. An illegal A1 returns InvalidRange.",
       "type": "object",
       "required": [
         "op",
@@ -135,7 +137,9 @@
     },
     "setSparklineOp": {
       "description": "改一个迷你图。",
+      "descriptionEn": "Change a sparkline.",
       "limits": "type、ref、formula 与新增可选字段至少给一个，否则报 InvalidField。该组若有多于一条 sparkline，给 ref 或 formula 报 InvalidField（仍可改 type、颜色与轴）。 ref 约束与 insert 相同，含重叠检查（排除自身）。formula 空串报 InvalidField，写入规则与 insert 相同。 colors 只覆盖给了的键，未点名的颜色子元素原样留。lineWeight 为 null 去掉该属性。 标记布尔为 false 去掉对应属性。轴约束与 insert 相同。",
+      "limitsEn": "Give at least one of type, ref, formula, and the additional optional fields, or InvalidField is returned. If the group has more than one sparkline, giving ref or formula returns InvalidField (type, colors, and axes can still be changed). ref constraints match insert, including the overlap check (excluding itself). An empty formula returns InvalidField, and the write rules match insert. colors overwrites only the keys that were given; unnamed color children stay as they are. A null lineWeight removes that attribute. A marker boolean of false removes the matching attribute. Axis constraints match insert.",
       "type": "object",
       "required": [
         "op",
@@ -238,7 +242,9 @@
     },
     "deleteSparklineOp": {
       "description": "去掉该 x14:sparklineGroup。",
+      "descriptionEn": "Remove that x14:sparklineGroup.",
       "limits": "组删光则去掉 sparklineGroups 与该 ext；extLst 空则去掉 extLst。不改单元格值，也不动其它 ext。找不到报 IdNotFound。id 不是迷你图组 id 报 InvalidId。只能改 worksheet。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "When no groups remain, remove sparklineGroups and that ext; if extLst is empty, remove extLst. Do not change cell values, and do not touch other ext elements. A missing id returns IdNotFound. An id that is not a sparkline-group id returns InvalidId. Only a worksheet can be changed. This op on docx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

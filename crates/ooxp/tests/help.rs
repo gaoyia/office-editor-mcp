@@ -56,6 +56,9 @@ fn search_finds_shared_formula_word() {
     let value = help(serde_json::json!({"q": "共享公式", "format": "xlsx"})).unwrap();
     let matches = value["matches"].as_array().unwrap();
     assert!(matches.iter().any(|item| item["op"] == "setCell"));
+    let english = help(serde_json::json!({"q": "shared formula", "format": "xlsx"})).unwrap();
+    let matches = english["matches"].as_array().unwrap();
+    assert!(matches.iter().any(|item| item["op"] == "setCell"));
 }
 
 #[test]
@@ -65,6 +68,16 @@ fn set_cell_fields_stay_one_layer() {
     assert!(value["description"].as_str().unwrap().contains("值或公式"));
     assert!(value["limits"].as_str().unwrap().contains("不能同时出现"));
     assert!(value["limits"].as_str().unwrap().contains("共享公式"));
+    assert!(value["descriptionEn"]
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("cell"));
+    assert!(value["limitsEn"]
+        .as_str()
+        .unwrap()
+        .to_lowercase()
+        .contains("shared"));
     assert!(value["fields"]["properties"]["formula"]["pattern"]
         .as_str()
         .unwrap()

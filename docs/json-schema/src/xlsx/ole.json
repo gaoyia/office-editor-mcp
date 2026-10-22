@@ -14,7 +14,9 @@
   "$defs": {
     "xlsxInsertOleOp": {
       "description": "把本地文件作为嵌入对象写入目标工作表。",
+      "descriptionEn": "Embed a local file as an OLE object on the target worksheet.",
       "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不进页眉、chartsheet、组合。",
+      "limitsEn": "This library does not start an OLE server and does not draw a real preview (it writes a minimal PNG placeholder). It does not go into headers, a chartsheet, or a group.",
       "type": "object",
       "required": [
         "op",
@@ -78,7 +80,9 @@
     },
     "xlsxDeleteOleOp": {
       "description": "删掉一个嵌入对象。",
+      "descriptionEn": "Delete an embedded OLE object.",
       "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。 摘该条 mc:AlternateContent（或裸的 oleObject）、对应 dummy xdr:sp 所在锚点、以及 VML 里 _x0000_s{shapeId} 的 v:shape。 oleObjects 删光则去掉该元素。清掉无人引用的关系与 embeddings / 预览媒体。docx / pptx 见各自分册。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an OLE id returns InvalidId. Remove that mc:AlternateContent (or a bare oleObject), the anchor of the matching dummy xdr:sp, and the v:shape _x0000_s{shapeId} in the VML. When no oleObjects remain, remove that element. Clear unreferenced relationships and embeddings / preview media. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -97,7 +101,9 @@
     },
     "xlsxSetOleSizeOp": {
       "description": "字段与 setPictureSize 的 xlsx 一侧相同，id 必须是 OLE id。",
+      "descriptionEn": "Same fields as the xlsx side of setPictureSize. id must be an OLE id.",
       "limits": "objectPr/anchor 为 twoCell 时必须给 to，可选 toOffX / toOffY。cx / cy 在这种锚点上出现报 InvalidField。同时改 dummy xdr:twoCellAnchor 的 to，以及 VML x:Anchor 的右下角单元格。不按列宽行高换算 EMU。没有 objectPr、锚点是 oneCell 或 absolute 时，改 xdr:ext。不启动 OLE 服务器，不改 embeddings。",
+      "limitsEn": "When objectPr/anchor is twoCell, to is required and toOffX / toOffY are optional. cx / cy on that anchor returns InvalidField. Also update to on the dummy xdr:twoCellAnchor and the bottom-right cell of the VML x:Anchor. Do not convert EMU from column width or row height. When there is no objectPr and the anchor is oneCell or absolute, update xdr:ext. Do not start an OLE server, and do not change embeddings.",
       "type": "object",
       "required": [
         "op",

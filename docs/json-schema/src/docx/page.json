@@ -53,7 +53,9 @@
   "$defs": {
     "setHeaderFooterDistanceOp": {
       "description": "改页眉页脚到页边的距离。",
+      "descriptionEn": "Change the distance from the header and footer to the page edge.",
       "limits": "两个距离至少给一个，否则报 InvalidField。节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of the two distances, otherwise InvalidField. A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -92,7 +94,9 @@
     },
     "setHeaderFooterLinkOp": {
       "description": "改这一节的页眉页脚是否沿用上一节。",
+      "descriptionEn": "Change whether this section's header and footer continue from the previous section.",
       "limits": "第一节上 linked: true 报 InvalidField。该类型对本节不生效时报 InvalidField（不替用户打开首页不同或奇偶页）。节不存在报 IdNotFound。 id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。",
+      "limitsEn": "linked: true on the first section returns InvalidField. If that type does not apply to this section, InvalidField is returned (this does not turn on a different first page or odd and even pages for the user). A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField. If it is already the target state, this is a no-op, still counted in opsApplied, and no part is dirtied.",
       "type": "object",
       "required": [
         "op",
@@ -130,7 +134,9 @@
     },
     "insertHeaderFooterOp": {
       "description": "给这一节加上页眉或页脚。",
+      "descriptionEn": "Add a header or footer to this section.",
       "limits": "该类型对本节不生效时报 InvalidField（不替用户打开首页不同或奇偶页）。 本节该类型已经链接前节（inspect 的 headerLink / footerLink 为 true）时报 InvalidField； 要独立部件走 setHeaderFooterLink 且 linked: false。 节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "If that type does not apply to this section, InvalidField is returned (this does not turn on a different first page or odd and even pages for the user). If this section's type is already linked to the previous section (inspect headerLink / footerLink is true), InvalidField is returned. For an independent part, use setHeaderFooterLink with linked: false. A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -164,7 +170,9 @@
     },
     "insertSectionOp": {
       "description": "插在点名段之后：该段成为当前节的最后一段。",
+      "descriptionEn": "Insert after the named paragraph: that paragraph becomes the last paragraph of the current section.",
       "limits": "该段还没有 pPr/sectPr 时，把分节符写在该段上。该段已经带 sectPr 时，在它后面插入一个空的 w:p（新 w14:paraId），把新分节符放在这个空段上。不要拆 run，不要拆段落中间。",
+      "limitsEn": "If the paragraph has no pPr/sectPr, write the section break on that paragraph. If it already has sectPr, insert an empty w:p after it (a new w14:paraId) and put the new section break on that empty paragraph. Do not split a run, and do not split the middle of a paragraph.",
       "type": "object",
       "required": [
         "op",
@@ -192,7 +200,9 @@
     },
     "deleteSectionOp": {
       "description": "删掉结束第 n 节的那个 w:sectPr（一定在某段 pPr 上，不会是 w:body 末尾那一份）。",
+      "descriptionEn": "Delete the w:sectPr that ends section n. It is always on some paragraph's pPr, never the one at the end of w:body.",
       "limits": "第 n 节的正文并进第 n+1 节，沿用第 n+1 节的节属性。这与 Word 删除分节符的方向相同。",
+      "limitsEn": "Section n's body is merged into section n+1, which keeps section n+1's section properties. This is the same direction as deleting a section break in Word.",
       "type": "object",
       "required": [
         "op",
@@ -211,7 +221,9 @@
     },
     "setTitlePageOp": {
       "description": "不新建 first 页眉页脚。",
+      "descriptionEn": "Does not create a first-page header or footer.",
       "limits": "关掉时不删除已有 first 部件。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Turning it off does not delete an existing first part. If it is already the target state, this is a no-op, still counted in opsApplied, and no part is dirtied. A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -234,7 +246,9 @@
     },
     "setEvenAndOddHeadersOp": {
       "description": "整篇一份，不按节。",
+      "descriptionEn": "One setting for the whole document, not per section.",
       "limits": "不新建 even 页眉页脚。关掉时不删除已有 even 部件。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。没有 settings.xml 时报 OpcPartMissing。id 不是 docx:document 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Does not create an even-page header or footer. Turning it off does not delete an existing even part. If it is already the target state, this is a no-op, still counted in opsApplied, and no part is dirtied. A missing settings.xml returns OpcPartMissing. An id that is not docx:document returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -257,7 +271,9 @@
     },
     "setPageMarginOp": {
       "description": "改页边距。",
+      "descriptionEn": "Change the page margins.",
       "limits": "五个边距至少给一个，否则报 InvalidField。不要出现 headerDistance / footerDistance。节不存在报 IdNotFound。 id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of the five margins, otherwise InvalidField. Do not include headerDistance / footerDistance. A missing section returns IdNotFound. An id that is not section:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -321,7 +337,9 @@
     },
     "setPageSizeOp": {
       "description": "改纸张大小。",
+      "descriptionEn": "Change the paper size.",
       "limits": "三个字段至少给一个，否则报 InvalidField。不认识的 orient 报 InvalidField。只改被点名的属性。没有 w:pgSz 时插入一个，只写本次给出的字段，不补宽高，也不猜纵向。 改 orient 时不自动对调 pageWidth / pageHeight。不读写 w:code。",
+      "limitsEn": "Provide at least one of the three fields, otherwise InvalidField. An unrecognized orient returns InvalidField. Only the named attributes are changed. If w:pgSz is missing, one is inserted, writing only the fields given this time: width and height are not filled in, and portrait is not guessed. Changing orient does not automatically swap pageWidth / pageHeight. w:code is neither read nor written.",
       "type": "object",
       "required": [
         "op",
@@ -371,7 +389,9 @@
     },
     "setColumnsOp": {
       "description": "改这一节的分栏。",
+      "descriptionEn": "Change this section's columns.",
       "limits": "enabled: false 与其它字段不能同时出现，否则报 InvalidField。其余字段至少给一个，否则报 InvalidField。num 小于 1 报 InvalidField。只改被点名的属性。 没有 w:cols 且不是删除时插入一个。给了 cols 却同时 equalWidth 为 true 报 InvalidField。",
+      "limitsEn": "enabled: false cannot appear together with other fields, otherwise InvalidField. Provide at least one of the remaining fields, otherwise InvalidField. num less than 1 returns InvalidField. Only the named attributes are changed. If w:cols is missing and this is not a delete, one is inserted. Providing cols while equalWidth is true returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -424,7 +444,9 @@
     },
     "setVerticalAlignOp": {
       "description": "必填。",
+      "descriptionEn": "Required.",
       "limits": "不认识的字符串报 InvalidField。",
+      "limitsEn": "An unrecognized string returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -459,7 +481,9 @@
     },
     "setLineNumberingOp": {
       "description": "改这一节的行号。",
+      "descriptionEn": "Change this section's line numbering.",
       "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个。没有 w:lnNumType 且不是删除时插入一个，只写本次给出的属性。",
+      "limitsEn": "enabled: false cannot appear together with other fields. Provide at least one of the remaining fields. If w:lnNumType is missing and this is not a delete, one is inserted, writing only the attributes given this time.",
       "type": "object",
       "required": [
         "op",
@@ -500,7 +524,9 @@
     },
     "setDocGridOp": {
       "description": "改文档网格。",
+      "descriptionEn": "Change the document grid.",
       "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个。没有 w:docGrid 且不是删除时插入一个。",
+      "limitsEn": "enabled: false cannot appear together with other fields. Provide at least one of the remaining fields. If w:docGrid is missing and this is not a delete, one is inserted.",
       "type": "object",
       "required": [
         "op",
@@ -536,7 +562,9 @@
     },
     "setRtlGutterOp": {
       "description": "必填。",
+      "descriptionEn": "Required.",
       "limits": "规则与 setTitlePage 相同。",
+      "limitsEn": "Same rules as setTitlePage.",
       "type": "object",
       "required": [
         "op",
@@ -559,7 +587,9 @@
     },
     "setMirrorMarginsOp": {
       "description": "开关对称页边距。",
+      "descriptionEn": "Turn mirror margins on or off.",
       "limits": "id 不是 docx:document 报 InvalidId。没有 settings.xml 报 OpcPartMissing。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "An id that is not docx:document returns InvalidId. A missing settings.xml returns OpcPartMissing. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -582,7 +612,9 @@
     },
     "setGutterAtTopOp": {
       "description": "id 与缺 settings 的报错与 setMirrorMargins 相同。",
+      "descriptionEn": "The id error and the missing-settings error match setMirrorMargins.",
       "limits": "关掉本标志不改各节 w:pgMar/@w:gutter。",
+      "limitsEn": "Turning this flag off does not change w:pgMar/@w:gutter on any section.",
       "type": "object",
       "required": [
         "op",

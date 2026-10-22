@@ -65,7 +65,9 @@
   "$defs": {
     "setPicturePosOp": {
       "description": "改图片在页面上的位置。",
+      "descriptionEn": "Change a picture's position on the page.",
       "limits": "x 与 y 至少给一个，否则报 InvalidField。只改被点名的那一侧。写入 p:spPr/a:xfrm/a:off。找不到该对象报 IdNotFound。 id 不是合法图 id、视频 id 或音频 id 报 InvalidId。批注内图没有画布坐标。setMedia 仍不改几何。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of x and y, otherwise InvalidField. Only the named side is changed. Writes p:spPr/a:xfrm/a:off. A missing object returns IdNotFound. An id that is not a valid picture id, video id, or audio id returns InvalidId. A picture inside a comment has no canvas coordinates. setMedia still does not change geometry. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -104,7 +106,9 @@
     },
     "setChartPosOp": {
       "description": "字段与 setPicturePos 相同，id 为 pptx 图表 id。",
+      "descriptionEn": "Same fields as setPicturePos. id is a pptx chart id.",
       "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "Writes p:xfrm/a:off on the graphicFrame. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -143,7 +147,9 @@
     },
     "setSmartArtPosOp": {
       "description": "字段与 setPicturePos 相同，id 为 pptx 图示 id。",
+      "descriptionEn": "Same fields as setPicturePos. id is a pptx SmartArt id.",
       "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "Writes p:xfrm/a:off on the graphicFrame. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -182,7 +188,9 @@
     },
     "pptxInsertModel3dOp": {
       "description": "把本地 GLB 作为 3D 模型写入目标幻灯片或备注页。",
+      "descriptionEn": "Write a local GLB as a 3D model on the target slide or notes page.",
       "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。不写 <p:timing>。",
+      "limitsEn": "It is not a picture. The model is not rasterized. The poster is a 1×1 PNG placeholder. Does not write <p:timing>.",
       "type": "object",
       "required": [
         "op",
@@ -222,7 +230,9 @@
     },
     "pptxReplaceModel3dOp": {
       "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "descriptionEn": "Replace the GLB bytes. Keep the graphicFrame and the relationship id.",
       "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。xlsx / docx 见各自分册。",
+      "limitsEn": "The poster stays a 1×1 PNG. Position and size are unchanged. A missing id returns IdNotFound. An id that is not a 3D model id returns InvalidId. See the xlsx and docx books.",
       "type": "object",
       "required": [
         "op",
@@ -246,7 +256,9 @@
     },
     "pptxDeleteModel3dOp": {
       "description": "删掉一个 3D 模型。",
+      "descriptionEn": "Delete a 3D model.",
       "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a 3D model id returns InvalidId. Remove the whole AlternateContent. Drop unreferenced relationships and the GLB / poster. See the xlsx and docx books.",
       "type": "object",
       "required": [
         "op",
@@ -265,7 +277,9 @@
     },
     "setModel3dPosOp": {
       "description": "字段与 setPicturePos 相同，id 必须是 pptx 3D 模型 id。",
+      "descriptionEn": "Same fields as setPicturePos. id must be a pptx 3D model id.",
       "limits": "写入 graphicFrame 的 p:xfrm/a:off。Fallback 海报 p:pic 同步改位置。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "Writes p:xfrm/a:off on the graphicFrame. The Fallback poster p:pic moves with it. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -304,7 +318,9 @@
     },
     "pptxInsertInkOp": {
       "description": "把本地 InkML 作为一笔墨迹写入目标幻灯片、备注页、母版或版式。",
+      "descriptionEn": "Write a local InkML file as one ink stroke on the target slide, notes page, master, or layout.",
       "limits": "不进 pictures。不把笔画放进树。海报用 1×1 PNG 占位。不写 <p:timing>。位置是画布 EMU。",
+      "limitsEn": "It is not a picture. Strokes are not placed in the tree. The poster is a 1×1 PNG placeholder. Does not write <p:timing>. Position is in canvas EMU.",
       "type": "object",
       "required": [
         "op",
@@ -344,7 +360,9 @@
     },
     "pptxReplaceInkOp": {
       "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "descriptionEn": "Replace the InkML bytes. Keep the contentPart and the relationship id.",
       "limits": "不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。",
+      "limitsEn": "Position and size are unchanged. A missing id returns IdNotFound. An id that is not an ink id returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -368,7 +386,9 @@
     },
     "pptxDeleteInkOp": {
       "description": "删掉一处墨迹。",
+      "descriptionEn": "Delete one ink stroke.",
       "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系、InkML 与海报。按 deleteShape 同一套规则清该 cNvPr/@id 的 timing tgtEl。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an ink id returns InvalidId. Remove the whole AlternateContent. Drop unreferenced relationships, InkML, and the poster. Clear the timing tgtEl for that cNvPr/@id by the same rules as deleteShape.",
       "type": "object",
       "required": [
         "op",
@@ -387,7 +407,9 @@
     },
     "pptxSetInkSizeOp": {
       "description": "字段与 setPictureSize 的 pptx 一侧相同。",
+      "descriptionEn": "Same fields as the pptx side of setPictureSize.",
       "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:ext。Fallback 海报 p:pic 同步改尺寸。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。xlsx 用 setInkSize 改单元格锚点，见 xlsx 分册。",
+      "limitsEn": "id must be an ink id. Writes p14:xfrm/a:ext. The Fallback poster p:pic is resized with it. This op on a picture id, or setPictureSize on an ink id, still returns InvalidId. On xlsx, use setInkSize to change the cell anchor; see the xlsx book.",
       "type": "object",
       "required": [
         "op",
@@ -426,7 +448,9 @@
     },
     "pptxInsertOleOp": {
       "description": "把本地文件作为嵌入对象写入目标宿主。",
+      "descriptionEn": "Embed a local file as an OLE object on the target host.",
       "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不写 <p:timing>。不进批注、备注母版、讲义。",
+      "limitsEn": "This library does not start an OLE server and does not draw a real preview (it writes a minimal PNG placeholder). Does not write <p:timing>. Not allowed in comments, the notes master, or handouts.",
       "type": "object",
       "required": [
         "op",
@@ -450,7 +474,9 @@
     },
     "pptxDeleteOleOp": {
       "description": "删掉一个嵌入对象。",
+      "descriptionEn": "Delete an embedded OLE object.",
       "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。摘整棵 graphicFrame（含 AlternateContent）。两支都扫 r:id（预览只在 Fallback）。 清掉无人引用的关系与 embeddings / 预览媒体。按 deleteShape 同一套规则清该 graphicFrame cNvPr/@id 的 timing tgtEl。 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an OLE id returns InvalidId. Remove the whole graphicFrame (including AlternateContent). Both branches are scanned for r:id (the preview is only in Fallback). Drop unreferenced relationships and embeddings / preview media. Clear the timing tgtEl for that graphicFrame cNvPr/@id by the same rules as deleteShape. For xlsx, see json-contract-xlsx.md#deleteole.",
       "type": "object",
       "required": [
         "op",
@@ -469,7 +495,9 @@
     },
     "pptxSetOleSizeOp": {
       "description": "写入 graphicFrame 的 p:xfrm/a:ext、Choice 与 Fallback 两支 p:oleObj 的 imgW / imgH，以及 Fallback 预览 p:pic 的 a:ext。",
+      "descriptionEn": "Writes p:xfrm/a:ext on the graphicFrame, imgW / imgH on both the Choice and Fallback p:oleObj, and a:ext on the Fallback preview p:pic.",
       "limits": "不改 a:off，不改 embeddings，不启动 OLE 服务器。出现 to 报 InvalidField。对页 id 或图 id 发此 op 报 InvalidId。找不到报 IdNotFound。docx 见 [docx 分册](json-contract-docx.md#setolesize)。",
+      "limitsEn": "Does not change a:off, does not change embeddings, and does not start an OLE server. to returns InvalidField. A slide id or a picture id returns InvalidId. A missing id returns IdNotFound. For docx, see json-contract-docx.md#setolesize.",
       "type": "object",
       "required": [
         "op",
@@ -508,7 +536,9 @@
     },
     "setInkPosOp": {
       "description": "字段与 setPicturePos 相同。",
+      "descriptionEn": "Same fields as setPicturePos.",
       "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:off。Fallback 海报 p:pic 同步改位置。x 与 y 一个都不给报 InvalidField。显式 0 可以。xlsx 不认此 op。",
+      "limitsEn": "id must be an ink id. Writes p14:xfrm/a:off. The Fallback poster p:pic moves with it. Giving neither x nor y returns InvalidField. An explicit 0 is allowed. xlsx does not accept this op.",
       "type": "object",
       "required": [
         "op",
@@ -547,7 +577,9 @@
     },
     "pptxInsertMathOp": {
       "description": "把一条线性公式写入目标幻灯片或备注页。",
+      "descriptionEn": "Write one linear formula on the target slide or notes page.",
       "limits": "不进 shapes。不实现排版引擎。不写 <p:timing>。",
+      "limitsEn": "It is not a shape. This library does not implement a layout engine. Does not write <p:timing>.",
       "type": "object",
       "required": [
         "op",
@@ -587,7 +619,9 @@
     },
     "pptxSetMathOp": {
       "description": "不改位置尺寸。",
+      "descriptionEn": "Position and size are unchanged.",
       "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。xlsx / docx 见各自分册。",
+      "limitsEn": "expr or kind returns InvalidField. Empty text returns InvalidField. x / y / cx / cy returns UnknownField. A missing id returns IdNotFound. An id that is not a formula-box id returns InvalidId. See the xlsx and docx books.",
       "type": "object",
       "required": [
         "op",
@@ -611,7 +645,9 @@
     },
     "pptxDeleteMathOp": {
       "description": "删掉一个公式。",
+      "descriptionEn": "Delete one formula.",
       "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。摘整棵 AlternateContent。 海报无人引用则删。xlsx / docx 见各自分册。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a formula-box id returns InvalidId. Remove the whole AlternateContent. Delete the poster if nothing references it. See the xlsx and docx books.",
       "type": "object",
       "required": [
         "op",
@@ -630,7 +666,9 @@
     },
     "pptxSetMathSizeOp": {
       "description": "字段与 setShapeSize 相同。",
+      "descriptionEn": "Same fields as setShapeSize.",
       "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:ext。没有 xfrm 则补。不改 Fallback。cx 与 cy 一个都不给报 InvalidField。对形状 id 发此 op、对公式框 id 发 setShapeSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setmathsize)。",
+      "limitsEn": "id must be a formula-box id. Write p:spPr/a:xfrm/a:ext on that p:sp inside Choice. If xfrm is missing, add one. Do not change Fallback. Giving neither cx nor cy returns InvalidField. This op on a shape id, or setShapeSize on a formula-box id, still returns InvalidId. This op on docx returns InvalidField. For xlsx, see json-contract-xlsx.md#setmathsize.",
       "type": "object",
       "required": [
         "op",
@@ -669,7 +707,9 @@
     },
     "setMathPosOp": {
       "description": "字段与 setShapePos 相同。",
+      "descriptionEn": "Same fields as setShapePos.",
       "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:off。没有 xfrm 则补。不改 Fallback。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。对公式框 id 发 setShapePos 仍报 InvalidId。",
+      "limitsEn": "id must be a formula-box id. Write p:spPr/a:xfrm/a:off on that p:sp inside Choice. If xfrm is missing, add one. Do not change Fallback. Giving neither x nor y returns InvalidField. This op on docx / xlsx returns InvalidField. setShapePos on a formula-box id still returns InvalidId.",
       "type": "object",
       "required": [
         "op",

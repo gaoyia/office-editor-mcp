@@ -38,7 +38,9 @@
   "$defs": {
     "xlsxInsertModel3dOp": {
       "description": "把本地 GLB 作为 3D 模型写入目标工作表。",
+      "descriptionEn": "Write a local GLB as a 3D model on the target worksheet.",
       "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。",
+      "limitsEn": "It is not a picture. The model is not rasterized. The poster is a 1×1 PNG placeholder.",
       "type": "object",
       "required": [
         "op",
@@ -101,7 +103,9 @@
     },
     "xlsxReplaceModel3dOp": {
       "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "descriptionEn": "Replace the GLB bytes. Keep the graphicFrame and the relationship id.",
       "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。不是 GLB 报 InvalidField。docx / pptx 见各自分册。",
+      "limitsEn": "The poster stays a 1×1 PNG. Position and size are unchanged. A missing id returns IdNotFound. An id that is not a 3D model id returns InvalidId. A non-GLB file returns InvalidField. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -125,7 +129,9 @@
     },
     "xlsxDeleteModel3dOp": {
       "description": "删掉一个 3D 模型。",
+      "descriptionEn": "Delete a 3D model.",
       "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 GLB 与海报无人引用则删。docx / pptx 见各自分册。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not a 3D model id returns InvalidId. Remove that mc:AlternateContent; if the anchor has only from / to / ext / pos / clientData left, delete the whole anchor. If the GLB and the poster are unreferenced, delete them. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -144,7 +150,9 @@
     },
     "xlsxInsertInkOp": {
       "description": "把本地 InkML 作为一笔墨迹写入目标工作表。",
+      "descriptionEn": "Write a local InkML file as one ink stroke on the target worksheet.",
       "limits": "不进 pictures。不把手写识别成字。海报用 1×1 PNG 占位。",
+      "limitsEn": "It is not a picture. Handwriting is not recognized as text. The poster is a 1×1 PNG placeholder.",
       "type": "object",
       "required": [
         "op",
@@ -207,7 +215,9 @@
     },
     "xlsxReplaceInkOp": {
       "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "descriptionEn": "Replace the InkML bytes. Keep the contentPart and the relationship id.",
       "limits": "不改海报，不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。不是 InkML 报 InvalidField。",
+      "limitsEn": "Do not change the poster, and do not change position or size. A missing id returns IdNotFound. An id that is not an ink id returns InvalidId. A non-InkML file returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -231,7 +241,9 @@
     },
     "xlsxDeleteInkOp": {
       "description": "删掉一处墨迹。",
+      "descriptionEn": "Delete one ink stroke.",
       "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 InkML 与海报无人引用则删。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an ink id returns InvalidId. Remove that mc:AlternateContent; if the anchor has only from / to / ext / pos / clientData left, delete the whole anchor. If the InkML and the poster are unreferenced, delete them.",
       "type": "object",
       "required": [
         "op",
@@ -250,7 +262,9 @@
     },
     "xlsxSetInkSizeOp": {
       "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "descriptionEn": "Same fields as the xlsx side of setPictureSize.",
       "limits": "id 必须是墨迹 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。",
+      "limitsEn": "id must be an ink id. oneCell / absolute updates the outer xdr:ext. twoCell does not accept cx / cy (those return InvalidField) and requires to. This op on a picture id, or setPictureSize on an ink id, still returns InvalidId.",
       "type": "object",
       "required": [
         "op",
@@ -289,7 +303,9 @@
     },
     "xlsxInsertMathOp": {
       "description": "把一条线性公式写入目标工作表 drawing。",
+      "descriptionEn": "Write one linear formula into the target worksheet drawing.",
       "limits": "不进单元格 f。不进 textBoxes。不实现排版引擎。",
+      "limitsEn": "It does not go into a cell f. It does not go into textBoxes. No layout engine is implemented.",
       "type": "object",
       "required": [
         "op",
@@ -352,7 +368,9 @@
     },
     "xlsxSetMathOp": {
       "description": "不改锚点与尺寸。",
+      "descriptionEn": "Do not change the anchor or the size.",
       "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy / from / to 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。docx / pptx 见各自分册。",
+      "limitsEn": "expr / kind returns InvalidField. An empty text returns InvalidField. x / y / cx / cy / from / to returns UnknownField. A missing id returns IdNotFound. An id that is not an equation box id returns InvalidId. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -376,7 +394,9 @@
     },
     "xlsxDeleteMathOp": {
       "description": "删掉一个公式。",
+      "descriptionEn": "Delete one formula.",
       "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 海报无人引用则删。docx / pptx 见各自分册。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an equation box id returns InvalidId. Remove that mc:AlternateContent; if the anchor has only from / to / ext / pos / clientData left, delete the whole anchor. If the poster is unreferenced, delete it. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -395,7 +415,9 @@
     },
     "xlsxSetMathSizeOp": {
       "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "descriptionEn": "Same fields as the xlsx side of setPictureSize.",
       "limits": "id 必须是公式框 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对文本框 id 发此 op、对公式框 id 发 setTextBoxSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。",
+      "limitsEn": "id must be an equation box id. oneCell / absolute updates the outer xdr:ext. twoCell does not accept cx / cy (those return InvalidField) and requires to. EMU is not converted from column width or row height. AlternateContent and xdr:clientData stay. This op on a text box id, or setTextBoxSize on an equation box id, still returns InvalidId. This op on docx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

@@ -29,7 +29,9 @@
   "$defs": {
     "insertEmbeddedFontOp": {
       "description": "把一份字体嵌进文档。",
+      "descriptionEn": "Embed a font in the document.",
       "limits": "出现 subsetted 报 UnknownField。本期不写 w:subsetted，不在库里做 TTF 子集化。同一 name + style 已有嵌入面报 InvalidField。",
+      "limitsEn": "subsetted returns UnknownField. This phase does not write w:subsetted and does not subset a TTF in the library. An embed face that already exists for the same name + style returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -67,7 +69,9 @@
     },
     "deleteEmbeddedFontOp": {
       "description": "删掉该 embed*、对应 font 部件及 fontTable 关系。",
+      "descriptionEn": "Delete that embed*, the matching font part, and the fontTable relationship.",
       "limits": "所属 w:font 条目留下（即使再也没有 embed*）。fontTable 本身不因删光嵌入面而拆掉。找不到报 IdNotFound。id 不是 font:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "The owning w:font entry stays, even if it no longer has any embed*. fontTable itself is not removed when every embed face is gone. A missing id returns IdNotFound. An id that is not font:{n} returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -86,7 +90,9 @@
     },
     "setFontEmbedOp": {
       "description": "改嵌入字体怎么用。",
+      "descriptionEn": "Change how an embedded font is used.",
       "limits": "三者至少给一个，否则报 InvalidField。未点名的标志留下。本 op 不自动嵌字体、不子集化、不改 fontTable。 没有 settings 且要写成 true 时新建 /word/settings.xml 与主文档 settings 关系。id 不是 docx:document 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of the three, otherwise InvalidField. Unnamed flags stay. This op does not embed a font automatically, does not subset, and does not change fontTable. If settings is missing and a value must be written as true, create /word/settings.xml and the main document's settings relationship. An id that is not docx:document returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -114,7 +120,9 @@
     },
     "insertFootnoteOp": {
       "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "descriptionEn": "Insert a new run at the end of that paragraph, containing w:footnoteReference or w:endnoteReference.",
       "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
+      "limitsEn": "No character offset is provided. Allocates an unused w:id in that notes part (decimal, skipping existing user notes and separators, commonly starting at 2).",
       "type": "object",
       "required": [
         "op",
@@ -136,7 +144,9 @@
     },
     "insertEndnoteOp": {
       "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "descriptionEn": "Insert a new run at the end of that paragraph, containing w:footnoteReference or w:endnoteReference.",
       "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
+      "limitsEn": "No character offset is provided. Allocates an unused w:id in that notes part (decimal, skipping existing user notes and separators, commonly starting at 2).",
       "type": "object",
       "required": [
         "op",
@@ -158,7 +168,9 @@
     },
     "deleteFootnoteOp": {
       "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "descriptionEn": "Remove every matching reference run in the main document, headers, footers, and text boxes, then remove that w:footnote / w:endnote from the notes part.",
       "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Separators must not be deleted. An id that no longer exists returns IdNotFound. An id that is not a user-note id returns InvalidId. A picture inside a note follows picture rules: the media part is deleted if no relationship still references it. After every user note is deleted, the notes part and the two separators remain; the whole part is not removed. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -177,7 +189,9 @@
     },
     "deleteEndnoteOp": {
       "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "descriptionEn": "Remove every matching reference run in the main document, headers, footers, and text boxes, then remove that w:footnote / w:endnote from the notes part.",
       "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Separators must not be deleted. An id that no longer exists returns IdNotFound. An id that is not a user-note id returns InvalidId. A picture inside a note follows picture rules: the media part is deleted if no relationship still references it. After every user note is deleted, the notes part and the two separators remain; the whole part is not removed. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -196,7 +210,9 @@
     },
     "setNoteNumberingOp": {
       "description": "改脚注或尾注的编号。",
+      "descriptionEn": "Change footnote or endnote numbering.",
       "limits": "numFmt、numStart、numRestart 至少给一个，否则报 InvalidField。只改被点名的属性，其余编号属性保留。不重算页面上已经画出来的序号（那是渲染，Word 打开时自己画）。 不认识的枚举报 InvalidField。id 不是 docx:document 或 section:{n} 报 InvalidId。节不存在报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Provide at least one of numFmt, numStart, and numRestart, otherwise InvalidField. Only the named attributes are changed; the other numbering attributes stay. Numbers already drawn on the page are not recomputed (that is rendering; Word draws them when it opens the file). An unrecognized enum returns InvalidField. An id that is not docx:document or section:{n} returns InvalidId. A missing section returns IdNotFound. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",

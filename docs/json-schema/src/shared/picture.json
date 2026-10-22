@@ -25,7 +25,9 @@
   "$defs": {
     "replacePictureOp": {
       "description": "把一张图换成另一张。",
+      "descriptionEn": "Replace one picture with another.",
       "limits": "找不到该图报 IdNotFound。读不到 file 报 Io。文件不是该格式认的图片报 InvalidField。",
+      "limitsEn": "A missing picture returns IdNotFound. An unreadable file returns Io. A file that is not a picture recognized for this format returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -49,7 +51,9 @@
     },
     "insertPictureOp": {
       "description": "插入一张图片。",
+      "descriptionEn": "Insert a picture.",
       "limits": "docx：找不到该段落报 IdNotFound。id 不是段落 id 报 InvalidId。 cx / cy 都省略时，位图按像素尺寸、96 dpi 换算成 EMU（px × 914400 / 96）；读不出尺寸则用 1 英寸见方（914400）。 SVG 按根元素 width / height（无单位或 px 当 CSS 像素，同样 96 dpi）；没有则用 viewBox；再没有则 1 英寸见方。 EMF 优先用 rclFrame（单位 0.01 mm）换 EMU；读不到再用 rclBounds 当像素、96 dpi。",
+      "limitsEn": "docx: a missing paragraph returns IdNotFound. An id that is not a paragraph id returns InvalidId. When both cx and cy are omitted, a bitmap is converted from pixels at 96 dpi to EMU (px × 914400 / 96); if the size cannot be read, a 1-inch square (914400) is used. SVG uses the root width / height (unitless or px treated as CSS pixels, also at 96 dpi); if those are missing, viewBox is used; if that is missing too, a 1-inch square is used. EMF prefers rclFrame (unit 0.01 mm) converted to EMU; if that cannot be read, rclBounds is treated as pixels at 96 dpi.",
       "type": "object",
       "required": [
         "op",
@@ -139,7 +143,9 @@
     },
     "deletePictureOp": {
       "description": "删掉一张图片。",
+      "descriptionEn": "Delete a picture.",
       "limits": "找不到该图报 IdNotFound。docx：按图 id 删掉对应的 w:drawing。 若该图在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（避免 Fallback 的 VML 把图留住）。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 xdr:pic 的整个锚点。工作表 drawing 删空后去掉该部件、工作表上的 <drawing> 和对应关系。",
+      "limitsEn": "A missing picture returns IdNotFound. docx: delete the w:drawing for that picture id. If the picture is in the Choice of mc:AlternateContent, delete the whole AlternateContent (so Fallback VML does not keep the picture). If the host w:r then contains only w:rPr or is empty, delete that run too. xlsx: delete the whole anchor that contains that xdr:pic. When a worksheet drawing is empty, remove that part, the worksheet <drawing>, and the matching relationship.",
       "type": "object",
       "required": [
         "op",
@@ -158,7 +164,9 @@
     },
     "setPictureSizeOp": {
       "description": "改图片的大小。",
+      "descriptionEn": "Change a picture's size.",
       "limits": "cx 与 cy 至少给一个，否则报 InvalidField（xlsx twoCell 见下）。cx / cy 与 to 不能同时出现。只改被点名的那一侧，另一侧保持原值。 docx：写入 wp:extent；若 pic:spPr/a:xfrm/a:ext 存在，一并改。 xlsx：oneCell 或 absolute 时写入 xdr:ext；若 xdr:spPr/a:xfrm/a:ext 存在，一并改。",
+      "limitsEn": "Give at least one of cx and cy, or InvalidField is returned (for xlsx twoCell, see below). cx / cy and to cannot both appear. Only the named side changes; the other side keeps its value. docx: write wp:extent; if pic:spPr/a:xfrm/a:ext exists, update it too. xlsx: for oneCell or absolute, write xdr:ext; if xdr:spPr/a:xfrm/a:ext exists, update it too.",
       "type": "object",
       "required": [
         "op",

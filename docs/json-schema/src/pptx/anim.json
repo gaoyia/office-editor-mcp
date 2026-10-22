@@ -129,7 +129,9 @@
     },
     "setTransitionOp": {
       "description": "写或清除该宿主 <p:transition>。",
+      "descriptionEn": "Write or clear that host's <p:transition>.",
       "limits": "不写 <p:timing>。",
+      "limitsEn": "Does not write <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -197,7 +199,9 @@
     },
     "insertAnimOp": {
       "description": "给该页对象追加一条预设效果。",
+      "descriptionEn": "Append one preset effect to that slide object.",
       "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。",
+      "limitsEn": "Writes only a minimal <p:timing> tree matching a PowerPoint 16.0 Save As, and does not accept a timeline JSON submitted by the caller.",
       "type": "object",
       "required": [
         "op",
@@ -248,6 +252,7 @@
     },
     "deleteAnimOp": {
       "description": "摘掉该宿主名单上的一条效果。",
+      "descriptionEn": "Remove one effect from that host's list.",
       "type": "object",
       "required": [
         "op",
@@ -266,7 +271,9 @@
     },
     "setAnimOp": {
       "description": "改该宿主名单上已有一条的 type / trigger / delay / dur / repeat / sound / para / clickOn。",
+      "descriptionEn": "Change type / trigger / delay / dur / repeat / sound / para / clickOn on one existing entry in that host's list.",
       "limits": "不换绑定对象。不接受整棵时间轴 JSON。",
+      "limitsEn": "Does not rebind the target object. Does not accept a whole timeline JSON.",
       "type": "object",
       "required": [
         "op",
@@ -330,7 +337,9 @@
     },
     "moveAnimOp": {
       "description": "把该宿主名单上的一条效果挪到新的文档顺序。",
+      "descriptionEn": "Move one effect on that host's list to a new document order.",
       "limits": "不改 type，不换绑定对象，不改 delay / dur。不接受整棵时间轴 JSON。",
+      "limitsEn": "Does not change type, does not rebind the target object, and does not change delay / dur. Does not accept a whole timeline JSON.",
       "type": "object",
       "required": [
         "op",

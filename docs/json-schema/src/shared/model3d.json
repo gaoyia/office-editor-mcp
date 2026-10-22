@@ -15,7 +15,9 @@
   "$defs": {
     "setModel3dSizeOp": {
       "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "descriptionEn": "Same fields as the xlsx side of setPictureSize.",
       "limits": "id 必须是 3D 模型 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对图 id 发此 op、对 3D id 发 setPictureSize 仍报 InvalidId。docx / pptx 见各自分册。",
+      "limitsEn": "id must be a 3D model id. oneCell / absolute updates the outer xdr:ext. twoCell does not accept cx / cy (those return InvalidField) and requires to. EMU is not converted from column width or row height. AlternateContent and xdr:clientData stay. This op on a picture id, or setPictureSize on a 3D id, still returns InvalidId. See the docx and pptx books.",
       "type": "object",
       "required": [
         "op",
@@ -71,7 +73,9 @@
     },
     "setModel3dCameraOp": {
       "description": "字段与 [docx setModel3dCamera](json-contract-docx.md#setmodel3dcamera) 相同。",
+      "descriptionEn": "Same fields as [docx setModel3dCamera](json-contract-docx.md#setmodel3dcamera).",
       "limits": "id 必须是 xlsx 3D 模型 id。改 Choice 里 am3d:camera、am3d:rot 与 am3d:spPr 里的 a:scene3d/a:lightRig。不换 GLB。不改锚点。docx / pptx 上同一套字段。示例见 docs/examples/xlsx-apply-model3d-camera.json。",
+      "limitsEn": "id must be an xlsx 3D model id. Updates am3d:camera, am3d:rot, and a:scene3d/a:lightRig inside am3d:spPr in the Choice. Does not replace the GLB. Does not change the anchor. docx / pptx use the same fields. See docs/examples/xlsx-apply-model3d-camera.json.",
       "type": "object",
       "required": [
         "op",
