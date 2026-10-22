@@ -121,13 +121,13 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
 
-带 `q` 时，在操作名、中文说明和英文说明里找词。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。
+带 `q` 时，在操作名和中英说明里找词。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。返回的句子只留一种语言。
 
 带 `op` 时，返回这一个操作的说明和字段。里面的引用只留定义名，不继续展开。同一种名字在多种格式里形状不同时，必须带 `format`；不带就只列出每种格式的说明，不把字段并成一份。
 
 带 `name` 时，打开一个定义，例如 `inspectScope`、`xlsxWorkbook`。新建和查看范围不在操作名单里，走这里。
 
-`op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。`description` 和 `limits` 是中文，`descriptionEn` 和 `limitsEn` 是英文。两边都返回，不随 `locale` 切换。
+`op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。不写 `locale` 时，`description` 和 `limits` 是中文。`locale` 为 `en` 时这两条换成英文。一次结果里只出一种语言。
 
 ## 稳定 id
 

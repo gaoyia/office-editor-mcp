@@ -68,16 +68,21 @@ fn set_cell_fields_stay_one_layer() {
     assert!(value["description"].as_str().unwrap().contains("值或公式"));
     assert!(value["limits"].as_str().unwrap().contains("不能同时出现"));
     assert!(value["limits"].as_str().unwrap().contains("共享公式"));
-    assert!(value["descriptionEn"]
+    assert!(value.get("descriptionEn").is_none());
+    assert!(value.get("limitsEn").is_none());
+    let english = help(serde_json::json!({"format": "xlsx", "op": "setCell", "locale": "en"})).unwrap();
+    assert!(english["description"]
         .as_str()
         .unwrap()
         .to_lowercase()
         .contains("cell"));
-    assert!(value["limitsEn"]
+    assert!(english["limits"]
         .as_str()
         .unwrap()
         .to_lowercase()
         .contains("shared"));
+    assert!(english.get("descriptionEn").is_none());
+    assert!(!english["description"].as_str().unwrap().contains("单元格"));
     assert!(value["fields"]["properties"]["formula"]["pattern"]
         .as_str()
         .unwrap()

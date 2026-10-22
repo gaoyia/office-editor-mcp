@@ -5,11 +5,17 @@ use std::sync::OnceLock;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{Error, ErrorKind, TypeName};
+use crate::error::{Error, ErrorKind, Lang, TypeName};
 use crate::json::{self, Format};
 
 const SCHEMA_TEXT: &str = include_str!("../../../docs/json-schema/request.schema.json");
 const SEARCH_LIMIT: usize = 20;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum HelpLang {
+    Zh,
+    En,
+}
 
 struct OpEntry {
     op: String,
@@ -54,19 +60,37 @@ pub fn help(obj: &Map<String, Value>) -> Result<Value, Error> {
         Some(value) => Some(format_key(value)?),
         None => None,
     };
+    let lang = help_lang(obj)?;
     if let Some(op) = op {
-        return op_detail(op, format);
+        return op_detail(op, format, lang);
     }
     if let Some(name) = name {
-        return def_detail(name);
+        return def_detail(name, lang);
     }
     if let Some(q) = q {
-        return Ok(search(q, format));
+        return Ok(search(q, format, lang));
     }
     if let Some(format) = format {
-        return Ok(list(format));
+        return Ok(list(format, lang));
     }
-    Ok(index())
+    Ok(index(lang))
+}
+
+fn help_lang(obj: &Map<String, Value>) -> Result<HelpLang, Error> {
+    match obj.get("locale") {
+        None => Ok(HelpLang::Zh),
+        Some(Value::String(tag)) => Ok(match Lang::parse(tag) {
+            Lang::ZhCn => HelpLang::Zh,
+            Lang::En => HelpLang::En,
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "locale".into(),
+                expected: TypeName::String,
+            },
+            "locale",
+        )),
+    }
 }
 
 fn optional_str<'a>(obj: &'a Map<String, Value>, key: &str) -> Result<Option<&'a str>, Error> {
@@ -158,16 +182,16 @@ fn ref_def_name(reference: &str) -> String {
     rest.split('/').next().unwrap_or(rest).to_string()
 }
 
-fn index() -> Value {
+fn index(lang: HelpLang) -> Value {
     json!({
         "kind": "actions",
         "actions": [
-            action_row("inspect", "inspectRequest"),
-            action_row("create", "createRequest"),
-            action_row("apply", "applyRequest"),
-            action_row("exportMedia", "exportMediaRequest"),
-            action_row("exportChartData", "exportChartDataRequest"),
-            action_row("help", "helpRequest"),
+            action_row("inspect", "inspectRequest", lang),
+            action_row("create", "createRequest", lang),
+            action_row("apply", "applyRequest", lang),
+            action_row("exportMedia", "exportMediaRequest", lang),
+            action_row("exportChartData", "exportChartDataRequest", lang),
+            action_row("help", "helpRequest", lang),
         ],
         "ask": {
             "list": {"format": "xlsx"},
@@ -185,24 +209,28 @@ fn text_of(body: &Value, key: &str) -> String {
         .to_string()
 }
 
-fn action_row(action: &str, def_name: &str) -> Value {
+fn action_row(action: &str, def_name: &str, lang: HelpLang) -> Value {
     let empty = Value::Null;
     let body = catalog().defs.get(def_name).unwrap_or(&empty);
-    blurb(
-        "action",
-        action,
-        &text_of(body, "description"),
-        &text_of(body, "descriptionEn"),
-        &text_of(body, "limits"),
-        &text_of(body, "limitsEn"),
-    )
+    let description_zh = text_of(body, "description");
+    let description_en = text_of(body, "descriptionEn");
+    let limits_zh = text_of(body, "limits");
+    let limits_en = text_of(body, "limitsEn");
+    let (description, limits) = pick(
+        lang,
+        &description_zh,
+        &description_en,
+        &limits_zh,
+        &limits_en,
+    );
+    blurb("action", action, description, limits)
 }
 
-fn list(format: &str) -> Value {
+fn list(format: &str, lang: HelpLang) -> Value {
     let mut ops = Vec::new();
     for entry in &catalog().ops {
         if entry.formats.iter().any(|item| item == format) {
-            ops.push(entry_blurb("op", &entry.op, entry));
+            ops.push(entry_blurb("op", &entry.op, entry, lang));
         }
     }
     json!({
@@ -212,7 +240,7 @@ fn list(format: &str) -> Value {
     })
 }
 
-fn search(q: &str, format: Option<&str>) -> Value {
+fn search(q: &str, format: Option<&str>, lang: HelpLang) -> Value {
     let needle = q.to_lowercase();
     let mut hits: Vec<&OpEntry> = catalog()
         .ops
@@ -239,7 +267,7 @@ fn search(q: &str, format: Option<&str>) -> Value {
         .into_iter()
         .take(SEARCH_LIMIT)
         .map(|entry| {
-            entry_blurb_formats(entry)
+            entry_blurb_formats(entry, lang)
         })
         .collect();
     let mut out = json!({
@@ -257,7 +285,7 @@ fn search(q: &str, format: Option<&str>) -> Value {
     out
 }
 
-fn op_detail(op: &str, format: Option<&str>) -> Result<Value, Error> {
+fn op_detail(op: &str, format: Option<&str>, lang: HelpLang) -> Result<Value, Error> {
     let found: Vec<&OpEntry> = catalog().ops.iter().filter(|entry| entry.op == op).collect();
     if found.is_empty() {
         return Err(Error::new(ErrorKind::UnsupportedOp { op: op.into() }));
@@ -268,20 +296,15 @@ fn op_detail(op: &str, format: Option<&str>) -> Result<Value, Error> {
             .find(|entry| entry.formats.iter().any(|item| item == format))
         {
             let others = other_formats(&found, entry);
-            return Ok(detail_value(entry, &others));
+            return Ok(detail_value(entry, &others, lang));
         }
     } else if found.len() == 1 {
-        return Ok(detail_value(found[0], &[]));
+        return Ok(detail_value(found[0], &[], lang));
     }
     let mut formats = Vec::new();
     for entry in &found {
         for item in &entry.formats {
-            let mut row = Map::new();
-            row.insert("format".into(), json!(item));
-            row.insert("description".into(), json!(entry.description));
-            let mut row = Value::Object(row);
-            attach_pair(&mut row, entry);
-            formats.push(row);
+            formats.push(entry_blurb("format", item, entry, lang));
         }
     }
     let mut out = json!({
@@ -310,20 +333,23 @@ fn other_formats(found: &[&OpEntry], picked: &OpEntry) -> Vec<String> {
     others
 }
 
-fn detail_value(entry: &OpEntry, others: &[String]) -> Value {
+fn detail_value(entry: &OpEntry, others: &[String], lang: HelpLang) -> Value {
+    let (description, limits) = entry_text(entry, lang);
     let mut out = json!({
         "kind": "op",
         "op": entry.op,
         "formats": entry.formats,
-        "description": entry.description,
+        "description": description,
         "otherFormats": others,
         "fields": fields_of(&entry.body),
     });
-    attach_pair(&mut out, entry);
+    if !limits.is_empty() {
+        out["limits"] = json!(limits);
+    }
     out
 }
 
-fn def_detail(name: &str) -> Result<Value, Error> {
+fn def_detail(name: &str, lang: HelpLang) -> Result<Value, Error> {
     let Some(body) = catalog().defs.get(name) else {
         return Err(Error::with_path(
             ErrorKind::UnknownField {
@@ -332,19 +358,26 @@ fn def_detail(name: &str) -> Result<Value, Error> {
             "name",
         ));
     };
-    let description = text_of(body, "description");
+    let description_zh = text_of(body, "description");
+    let description_en = text_of(body, "descriptionEn");
+    let limits_zh = text_of(body, "limits");
+    let limits_en = text_of(body, "limitsEn");
+    let (description, limits) = pick(
+        lang,
+        &description_zh,
+        &description_en,
+        &limits_zh,
+        &limits_en,
+    );
     let mut out = json!({
         "kind": "def",
         "name": name,
         "description": description,
         "fields": fields_of(body),
     });
-    attach_named(
-        &mut out,
-        &text_of(body, "descriptionEn"),
-        &text_of(body, "limits"),
-        &text_of(body, "limitsEn"),
-    );
+    if !limits.is_empty() {
+        out["limits"] = json!(limits);
+    }
     Ok(out)
 }
 
@@ -359,10 +392,37 @@ fn fields_of(body: &Value) -> Value {
     value
 }
 
-fn entry_blurb(key: &str, name: &str, entry: &OpEntry) -> Value {
-    blurb(
-        key,
-        name,
+fn entry_blurb(key: &str, name: &str, entry: &OpEntry, lang: HelpLang) -> Value {
+    let (description, limits) = entry_text(entry, lang);
+    blurb(key, name, description, limits)
+}
+
+fn entry_blurb_formats(entry: &OpEntry, lang: HelpLang) -> Value {
+    let (description, limits) = entry_text(entry, lang);
+    let mut out = json!({
+        "op": entry.op,
+        "formats": entry.formats,
+        "description": description,
+    });
+    if !limits.is_empty() {
+        out["limits"] = json!(limits);
+    }
+    out
+}
+
+fn blurb(key: &str, name: &str, description: &str, limits: &str) -> Value {
+    let mut out = Map::new();
+    out.insert(key.to_string(), json!(name));
+    out.insert("description".into(), json!(description));
+    if !limits.is_empty() {
+        out.insert("limits".into(), json!(limits));
+    }
+    Value::Object(out)
+}
+
+fn entry_text(entry: &OpEntry, lang: HelpLang) -> (&str, &str) {
+    pick(
+        lang,
         &entry.description,
         &entry.description_en,
         &entry.limits,
@@ -370,55 +430,23 @@ fn entry_blurb(key: &str, name: &str, entry: &OpEntry) -> Value {
     )
 }
 
-fn entry_blurb_formats(entry: &OpEntry) -> Value {
-    let mut out = json!({
-        "op": entry.op,
-        "formats": entry.formats,
-        "description": entry.description,
-    });
-    attach_named(
-        &mut out,
-        &entry.description_en,
-        &entry.limits,
-        &entry.limits_en,
-    );
-    out
-}
-
-fn blurb(
-    key: &str,
-    name: &str,
-    description: &str,
-    description_en: &str,
-    limits: &str,
-    limits_en: &str,
-) -> Value {
-    let mut out = Map::new();
-    out.insert(key.to_string(), json!(name));
-    out.insert("description".into(), json!(description));
-    let mut value = Value::Object(out);
-    attach_named(&mut value, description_en, limits, limits_en);
-    value
-}
-
-fn attach_pair(out: &mut Value, entry: &OpEntry) {
-    attach_named(
-        out,
-        &entry.description_en,
-        &entry.limits,
-        &entry.limits_en,
-    );
-}
-
-fn attach_named(out: &mut Value, description_en: &str, limits: &str, limits_en: &str) {
-    if !description_en.is_empty() {
-        out["descriptionEn"] = json!(description_en);
-    }
-    if !limits.is_empty() {
-        out["limits"] = json!(limits);
-    }
-    if !limits_en.is_empty() {
-        out["limitsEn"] = json!(limits_en);
+fn pick<'a>(
+    lang: HelpLang,
+    description: &'a str,
+    description_en: &'a str,
+    limits: &'a str,
+    limits_en: &'a str,
+) -> (&'a str, &'a str) {
+    match lang {
+        HelpLang::Zh => (description, limits),
+        HelpLang::En => (
+            if description_en.is_empty() {
+                description
+            } else {
+                description_en
+            },
+            if limits_en.is_empty() { limits } else { limits_en },
+        ),
     }
 }
 
