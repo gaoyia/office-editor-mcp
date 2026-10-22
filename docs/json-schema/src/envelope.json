@@ -18,7 +18,8 @@
         "create",
         "apply",
         "exportMedia",
-        "exportChartData"
+        "exportChartData",
+        "help"
       ]
     }
   },
@@ -96,6 +97,21 @@
       },
       "then": {
         "$ref": "#/$defs/exportChartDataRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "help"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/helpRequest"
       }
     }
   ]

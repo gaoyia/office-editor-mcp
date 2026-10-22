@@ -24,6 +24,8 @@
   },
   "$defs": {
     "replacePictureOp": {
+      "description": "把一张图换成另一张。",
+      "limits": "找不到该图报 IdNotFound。读不到 file 报 Io。文件不是该格式认的图片报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -46,6 +48,8 @@
       }
     },
     "insertPictureOp": {
+      "description": "插入一张图片。",
+      "limits": "docx：找不到该段落报 IdNotFound。id 不是段落 id 报 InvalidId。 cx / cy 都省略时，位图按像素尺寸、96 dpi 换算成 EMU（px × 914400 / 96）；读不出尺寸则用 1 英寸见方（914400）。 SVG 按根元素 width / height（无单位或 px 当 CSS 像素，同样 96 dpi）；没有则用 viewBox；再没有则 1 英寸见方。 EMF 优先用 rclFrame（单位 0.01 mm）换 EMU；读不到再用 rclBounds 当像素、96 dpi。",
       "type": "object",
       "required": [
         "op",
@@ -134,6 +138,8 @@
       }
     },
     "deletePictureOp": {
+      "description": "删掉一张图片。",
+      "limits": "找不到该图报 IdNotFound。docx：按图 id 删掉对应的 w:drawing。 若该图在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（避免 Fallback 的 VML 把图留住）。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 xdr:pic 的整个锚点。工作表 drawing 删空后去掉该部件、工作表上的 <drawing> 和对应关系。",
       "type": "object",
       "required": [
         "op",
@@ -151,6 +157,8 @@
       }
     },
     "setPictureSizeOp": {
+      "description": "改图片的大小。",
+      "limits": "cx 与 cy 至少给一个，否则报 InvalidField（xlsx twoCell 见下）。cx / cy 与 to 不能同时出现。只改被点名的那一侧，另一侧保持原值。 docx：写入 wp:extent；若 pic:spPr/a:xfrm/a:ext 存在，一并改。 xlsx：oneCell 或 absolute 时写入 xdr:ext；若 xdr:spPr/a:xfrm/a:ext 存在，一并改。",
       "type": "object",
       "required": [
         "op",

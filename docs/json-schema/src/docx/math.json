@@ -55,6 +55,8 @@
       }
     },
     "docxInsertMathOp": {
+      "description": "在 Word 段落里插入公式。",
+      "limits": "text 和 expr 恰好给一个，不能同时给。kind 缺省是 inline，display 才单独成段。不要套用 xlsx 或 pptx 的坐标字段。",
       "type": "object",
       "required": [
         "op",
@@ -97,6 +99,8 @@
       }
     },
     "docxSetMathOp": {
+      "description": "改 Word 段落里已有的公式。",
+      "limits": "text 和 expr 恰好给一个；只改对齐时可以只给 jc。不改 kind。不要套用 xlsx 或 pptx 的公式框字段。",
       "type": "object",
       "required": [
         "op",
@@ -185,6 +189,8 @@
       }
     },
     "insertRubyOp": {
+      "description": "在点名段末尾追加一个 w:r，里面是 w:ruby（rubyPr + rt + rubyBase）。",
+      "limits": "id 为 docx:document 时在正文末尾、sectPr 之前新插一个只含该拼音的 w:p。框内、注内、批注内的段落，以及拼音 id、容器 id、表 id、run id、section:{n}，一律报 InvalidId。找不到段落报 IdNotFound。空 base / rt、空 lid、不认识的 align、或 hps / hpsRaise / hpsBaseText 越界，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -241,6 +247,8 @@
       }
     },
     "setRubyOp": {
+      "description": "改一处拼音。",
+      "limits": "base、rt、align、hps、hpsRaise、hpsBaseText、lid 至少给一个。只改被点名的那一个 w:ruby。 空 base / rt / lid、不认识的 align、或字号越界报 InvalidField。找不到报 IdNotFound。 id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -295,6 +303,8 @@
       }
     },
     "deleteRubyOp": {
+      "description": "删掉该 w:ruby。",
+      "limits": "若宿主 w:r 里除 w:rPr 外只剩这一份拼音，连该 run 一起删。不因此删掉空段。找不到报 IdNotFound。id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -312,6 +322,8 @@
       }
     },
     "setEastAsianSettingsOp": {
+      "description": "改文档的东亚排版设置。",
+      "limits": "五个字段至少给一个。禁则对象必须同时有非空 lang 与非空 chars。 themeFontLang 对象只认 val / eastAsia / bidi，值为字符串或 null。空串报 InvalidField。写入时整份替换该元素，只写出非 null 的属性。 不认识的 characterSpacingControl 报 InvalidField。 id 不是 docx:document 报 InvalidId。没有 settings 且要写入时新建 /word/settings.xml 与主文档 settings 关系。",
       "type": "object",
       "required": [
         "op",
@@ -383,6 +395,8 @@
       }
     },
     "docxDeleteMathOp": {
+      "description": "删掉该 oMath；若父 oMathPara 里已经没有 oMath，连 oMathPara 一起删。",
+      "limits": "因此变空且无 sectPr 的正文段可删掉。表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是公式 id 报 InvalidId。xlsx / pptx 的 drawing 公式框见各自分册。",
       "type": "object",
       "required": [
         "op",

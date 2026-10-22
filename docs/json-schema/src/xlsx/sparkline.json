@@ -50,6 +50,8 @@
       }
     },
     "insertSparklineOp": {
+      "description": "在该表 extLst 里追加一组 x14:sparklineGroup，组内一条 x14:sparkline。",
+      "limits": "没有对应 ext 则按 CT_Worksheet 在末尾写 extLst / ext（uri 写成 Excel 16.0 另存的 {05C60535-1F16-4fd2-B633-F4F36F0B64E0}）， xmlns:x14 写在该 ext 上，xmlns:xm 写在 sparklineGroups 上。ref 必须是单格；闭区间报 InvalidField。非法 A1 报 InvalidRange。",
       "type": "object",
       "required": [
         "op",
@@ -132,6 +134,8 @@
       }
     },
     "setSparklineOp": {
+      "description": "改一个迷你图。",
+      "limits": "type、ref、formula 与新增可选字段至少给一个，否则报 InvalidField。该组若有多于一条 sparkline，给 ref 或 formula 报 InvalidField（仍可改 type、颜色与轴）。 ref 约束与 insert 相同，含重叠检查（排除自身）。formula 空串报 InvalidField，写入规则与 insert 相同。 colors 只覆盖给了的键，未点名的颜色子元素原样留。lineWeight 为 null 去掉该属性。 标记布尔为 false 去掉对应属性。轴约束与 insert 相同。",
       "type": "object",
       "required": [
         "op",
@@ -233,6 +237,8 @@
       }
     },
     "deleteSparklineOp": {
+      "description": "去掉该 x14:sparklineGroup。",
+      "limits": "组删光则去掉 sparklineGroups 与该 ext；extLst 空则去掉 extLst。不改单元格值，也不动其它 ext。找不到报 IdNotFound。id 不是迷你图组 id 报 InvalidId。只能改 worksheet。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

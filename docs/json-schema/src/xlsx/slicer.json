@@ -19,6 +19,8 @@
   },
   "$defs": {
     "insertSlicerOp": {
+      "description": "把切片器或时间线视图写到目标工作表。",
+      "limits": "不在库里执行筛选，不刷新透视合计。",
       "type": "object",
       "required": [
         "op",
@@ -152,6 +154,8 @@
       }
     },
     "deleteSlicerOp": {
+      "description": "删掉一个切片器。",
+      "limits": "找不到报 IdNotFound。id 不是切片器 id 报 InvalidId。摘 drawing 锚点、slicers 或 timelines 部件里对应视图。 该 cache 已无视图则摘 slicerCache 或 timelineCache、workbook 关系，以及 @name 与 cache 名相同的那条定义名。 slicers 部件删光则去掉该部件与工作表 slicerList 条目。timelines 部件删光则去掉该部件与工作表 timelineRefs 条目。",
       "type": "object",
       "required": [
         "op",
@@ -169,6 +173,8 @@
       }
     },
     "setSlicerSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是切片器 id（含时间线）。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对图 id 发此 op、对切片器 id 发 setPictureSize 仍报 InvalidId。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -223,6 +229,8 @@
       ]
     },
     "setSlicerViewOp": {
+      "description": "改 slicer 或 timeline 视图部件上的标题、行高、列数、显示开关与样式名。",
+      "limits": "不改 drawing 锚点，不改 cache，不执行筛选。",
       "type": "object",
       "required": [
         "op",
@@ -300,6 +308,8 @@
       }
     },
     "setSlicerFilterOp": {
+      "description": "改切片器 cache 已勾选项，或时间线 cache 的筛选区间。",
+      "limits": "不改 drawing，不改视图 @caption。不隐藏行。不重写透视缓存合计。不在库里执行筛选。",
       "type": "object",
       "required": [
         "op",

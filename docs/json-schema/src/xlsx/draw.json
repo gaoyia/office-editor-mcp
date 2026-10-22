@@ -37,6 +37,8 @@
   },
   "$defs": {
     "xlsxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标工作表。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。",
       "type": "object",
       "required": [
         "op",
@@ -98,6 +100,8 @@
       }
     },
     "xlsxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。不是 GLB 报 InvalidField。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -120,6 +124,8 @@
       }
     },
     "xlsxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 GLB 与海报无人引用则删。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -137,6 +143,8 @@
       }
     },
     "xlsxInsertInkOp": {
+      "description": "把本地 InkML 作为一笔墨迹写入目标工作表。",
+      "limits": "不进 pictures。不把手写识别成字。海报用 1×1 PNG 占位。",
       "type": "object",
       "required": [
         "op",
@@ -198,6 +206,8 @@
       }
     },
     "xlsxReplaceInkOp": {
+      "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "limits": "不改海报，不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。不是 InkML 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -220,6 +230,8 @@
       }
     },
     "xlsxDeleteInkOp": {
+      "description": "删掉一处墨迹。",
+      "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 InkML 与海报无人引用则删。",
       "type": "object",
       "required": [
         "op",
@@ -237,6 +249,8 @@
       }
     },
     "xlsxSetInkSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是墨迹 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -274,6 +288,8 @@
       }
     },
     "xlsxInsertMathOp": {
+      "description": "把一条线性公式写入目标工作表 drawing。",
+      "limits": "不进单元格 f。不进 textBoxes。不实现排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -335,6 +351,8 @@
       }
     },
     "xlsxSetMathOp": {
+      "description": "不改锚点与尺寸。",
+      "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy / from / to 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -357,6 +375,8 @@
       }
     },
     "xlsxDeleteMathOp": {
+      "description": "删掉一个公式。",
+      "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 海报无人引用则删。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -374,6 +394,8 @@
       }
     },
     "xlsxSetMathSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是公式框 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对文本框 id 发此 op、对公式框 id 发 setTextBoxSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

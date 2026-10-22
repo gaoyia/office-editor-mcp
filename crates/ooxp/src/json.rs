@@ -10,6 +10,7 @@ use crate::error::{io_path, Error, ErrorKind, TypeName};
 #[derive(Debug)]
 pub enum RunOutput {
     Inspect(Value),
+    Help(Value),
     Written {
         path: PathBuf,
         ops_applied: Option<usize>,
@@ -31,6 +32,7 @@ pub enum Action {
     Apply,
     ExportMedia,
     ExportChartData,
+    Help,
 }
 
 pub struct Request {
@@ -72,6 +74,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "apply" => Action::Apply,
         "exportMedia" => Action::ExportMedia,
         "exportChartData" => Action::ExportChartData,
+        "help" => Action::Help,
         other => {
             return Err(Error::new(ErrorKind::UnsupportedAction {
                 action: other.to_string(),

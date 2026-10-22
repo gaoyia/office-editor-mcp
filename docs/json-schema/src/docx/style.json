@@ -34,6 +34,8 @@
   },
   "$defs": {
     "acceptRevisionOp": {
+      "description": "不调 Word COM。",
+      "limits": "run 级 ins：拆掉 w:ins 外壳，留下内部 w:r，并去掉这些 run 的属性容器上的 ins / del（Word 会另写在 rPr 里，不进树）。run 级 del：删掉整个 w:del（含 delText）。run 级 moveFrom：删掉该节点（含内容），并删掉包住它的同 w:id 的 moveFromRangeStart / moveFromRangeEnd。",
       "type": "object",
       "required": [
         "op",
@@ -51,6 +53,8 @@
       }
     },
     "rejectRevisionOp": {
+      "description": "run 级 ins：删掉整个 w:ins。",
+      "limits": "run 级 del：拆掉 w:del 外壳，把其中 w:delText 改回 w:t，并去掉内部属性容器上的 ins / del。run 级 moveFrom：拆掉 w:moveFrom 外壳，留下内部 w:r，并删掉包住它的 RangeStart/End。run 级 moveTo：删掉该节点（含内容），并删掉包住它的 RangeStart/End。rPrChange：用 Change 里的旧 w:rPr 替换当前 run 属性。pPrChange：用 Change 里的旧 w:pPr 替换当前段落属性。",
       "type": "object",
       "required": [
         "op",
@@ -68,6 +72,8 @@
       }
     },
     "insertContentControlOp": {
+      "description": "在点名段末尾追加一个行内 w:sdt（sdtPr 含 w:id，值为本故事里尚未占用的十进制数字；有 tag / alias 则写入；类型元素按 kind）。",
+      "limits": "checkbox 写 w14:checkbox（checked / checkedState / uncheckedState，缺省符号 U+2612 / U+2610、字体 MS Gothic）， sdtContent 里一条带 MS Gothic 的 w:r/w:t（勾选 ☒、未勾 ☐）。根元素补 xmlns:w14，并把 w14 列入 mc:Ignorable。",
       "type": "object",
       "required": [
         "op",
@@ -127,6 +133,8 @@
       }
     },
     "setContentControlOp": {
+      "description": "checkbox：改 w14:checked 与内容符号字符，不把 sdtContent 换成任意文本。",
+      "limits": "picture：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。其余 kind 用新文本替换当前值：行内把 sdtContent 换成一条 w:r/w:t；块级只改 sdtContent 里第一个 w:p 的可见文本，并去掉其余 w:p。有 w:showingPlcHdr 则删掉。不改 kind，不改 w:id。带 w:dataBinding 报 NotImplemented。",
       "type": "object",
       "required": [
         "op",
@@ -173,6 +181,8 @@
       }
     },
     "deleteContentControlOp": {
+      "description": "keep 为 none 时：因此变空且无 sectPr 的正文段可删掉。",
+      "limits": "表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是内容控件 id 报 InvalidId。不认识的 keep 报 InvalidField。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -196,6 +206,8 @@
       }
     },
     "insertNumberingOp": {
+      "description": "写入一份抽象定义（9 级 hybridMultilevel）加一个 w:num 实例。",
+      "limits": "没有 /word/numbering.xml 则新建该部件、主文档关系与内容类型 Override。decimal 的 lvlText 为 %1.、%1.%2. 这类累计小数；bullet 用 Symbol 字体，各级 lvlText 轮换实心点、o 与节号。apply 不返回新 id；随后 inspect 按 w:num 文档顺序，新实例在名单末尾。kind 缺或不认识报 InvalidField。id 不是 docx:document 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -219,6 +231,8 @@
       }
     },
     "setNumberingOp": {
+      "description": "改某一级编号的格式。",
+      "limits": "numFmt、start、lvlText 至少给一个。只改被点名抽象定义上已有的 w:lvl，不自动建级，也不改该实例上的 w:lvlOverride。 不认识的 numFmt、ilvl 超出 0–8、或该抽象定义没有这一级，报 InvalidField。找不到抽象定义报 IdNotFound。id 不是抽象编号 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -259,6 +273,8 @@
       }
     },
     "setStyleOp": {
+      "description": "改一个命名样式。",
+      "limits": "font、eastAsiaFont、sz、bold、color、before、after 至少给一个。 段落、字符、表格样式都可改（w:type 为 paragraph / character / table，或缺省当段落）。编号样式报 InvalidField。 before / after 只允许段落与表格样式；字符样式带这两项报 InvalidField。rPr 字段三种都可写。 空 font / eastAsiaFont、不是六位十六进制的 color、sz 越界报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -304,6 +320,8 @@
       }
     },
     "insertStyleOp": {
+      "description": "在 /word/styles.xml 末尾追加一条自定义样式。",
+      "limits": "没有 styles 部件时新建最小部件，并补主文档关系与 [Content_Types].xml。",
       "type": "object",
       "required": [
         "op",
@@ -341,6 +359,8 @@
       }
     },
     "deleteStyleOp": {
+      "description": "只删 w:customStyle 为开（1 / true / on）且不是 w:default 的样式。",
+      "limits": "内置或没有 customStyle 的报 InvalidField。不扫描文档里的 pStyle / rStyle / tblStyle 引用。找不到样式报 IdNotFound。id 不是 style:{styleId} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

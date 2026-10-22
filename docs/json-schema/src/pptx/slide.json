@@ -61,6 +61,8 @@
   },
   "$defs": {
     "setNotesTextOp": {
+      "description": "只改备注页上占位符 p:ph/@type 为 body 的那个文本框。",
+      "limits": "文档顺序中第一个 body 占位符命中。找不到该页报 IdNotFound。id 不是上述两种报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -82,6 +84,8 @@
       }
     },
     "insertSlideOp": {
+      "description": "插入一张幻灯片。",
+      "limits": "pptx：id 不是 pptx:presentation 报 InvalidId。after 找不到报 IdNotFound；不是页 id 报 InvalidId。 新建空白幻灯片部件（p:spTree 只有组合框，不抄版式占位符，不写 <p:timing>），关系指向一份已有 slideLayout：优先抄 after 那一页的版式关系，省略 after 则抄最后一页；该页没有版式关系则用第一份幻灯片母版的第一份版式。 找不到任何版式报 InvalidField。p:sldId/@id 取已有最大 ST_SlideId 加 1，至少为 256。",
       "type": "object",
       "required": [
         "op",
@@ -103,6 +107,8 @@
       }
     },
     "deleteSlideOp": {
+      "description": "删掉一张幻灯片。",
+      "limits": "找不到该页报 IdNotFound。id 不是页 id 报 InvalidId。删掉演示文稿里最后一页报 InvalidField，不写文件。 去掉 sldIdLst 表项、presentation 关系、内容类型，以及该页部件及其 .rels。该页备注 notesSlide、现代批注部件、图表 / embedding / diagram / 媒体若再无人引用则删。 不删幻灯片版式、母版、主题、notesMaster。",
       "type": "object",
       "required": [
         "op",
@@ -120,6 +126,8 @@
       }
     },
     "moveSlideOp": {
+      "description": "调整一张幻灯片的顺序。",
+      "limits": "找不到该页或 after 报 IdNotFound。id / after 不是页 id 报 InvalidId。after 与 id 是同一页报 InvalidField。已经在目标位置则空操作。 只改 presentation.xml 里 sldIdLst 子元素顺序，以及若有 p14:sectionLst 则按同一套顺序把该 ST_SlideId 挪到 after 那一页所在节（移到最前则进第一节）。 不改部件路径、p:sldId/@id 或关系 id。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -144,6 +152,8 @@
       }
     },
     "setSlideHiddenOp": {
+      "description": "隐藏或显示一张幻灯片。",
+      "limits": "找不到该页报 IdNotFound。id 不是页 id 报 InvalidId。缺 hidden 报 InvalidField。true 在该页 p:sld 上写 show=\"0\"。 false 去掉 show。已经是目标可见性则空操作。允许把全部页藏起来。不改 sldIdLst。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -165,6 +175,8 @@
       }
     },
     "setSlideLayoutOp": {
+      "description": "只改该页 .rels 里指向 slideLayout 的关系。",
+      "limits": "不改幻灯片 XML，不删用户形状，不把版式占位符抄进页，不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -187,6 +199,8 @@
       }
     },
     "insertLayoutOp": {
+      "description": "在已有母版上追加一份空白版式。",
+      "limits": "不抄占位符，不算母版排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -208,6 +222,8 @@
       }
     },
     "deleteLayoutOp": {
+      "description": "删掉一个版式。",
+      "limits": "找不到该版式报 IdNotFound。id 不是版式 id 报 InvalidId。任何页的 layoutId 指向它则报 InvalidField，未写文件。该母版只剩这一份版式报 InvalidField。 摘掉母版 p:sldLayoutIdLst 对应项、母版 .rels 对应关系、该 slideLayout 部件及其 .rels、内容类型 Override。不改各页 XML，不改未点名版式。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -225,6 +241,8 @@
       }
     },
     "insertPlaceholderOp": {
+      "description": "往母版或版式插入一个带 p:ph 与 p:txBody 的占位符。",
+      "limits": "装饰形请用 insertShape。不写 theme p:style，不写 a16:creationId。",
       "type": "object",
       "required": [
         "op",
@@ -266,6 +284,8 @@
       }
     },
     "deletePlaceholderOp": {
+      "description": "删掉一个占位符。",
+      "limits": "找不到该占位符报 IdNotFound。id 不是占位符 id 报 InvalidId。对幻灯片形状 id 发本 op 报 InvalidId。只删该 p:sp。 若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。组合里的占位符同样摘掉；组合空了则把空 p:grpSp 一并摘掉。 不改各页 XML，不改未点名占位符的 cNvPr/@id。不把备注母版 / 讲义的删除抄进 notesSlide 或各页。 docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -283,6 +303,8 @@
       }
     },
     "insertMasterOp": {
+      "description": "抄现有一份母版及其全部版式与 theme 部件，新开 master / layout / theme。",
+      "limits": "不生成新的占位符几何，不算母版排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -304,6 +326,8 @@
       }
     },
     "deleteMasterOp": {
+      "description": "删掉一个母版。",
+      "limits": "找不到该母版报 IdNotFound。id 不是母版 id 报 InvalidId（对 master:{n}/layout:{k} 或占位符 id 也是这条）。最后一份母版报 InvalidField。 任何页仍使用该母版下的版式报 InvalidField，未写文件。摘掉 presentation 的 p:sldMasterId 与对应关系， 以及该母版、其全部版式、仅被它引用的 theme 部件及其 .rels 与内容类型 Override。 不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -321,6 +345,8 @@
       }
     },
     "setSlideSizeOp": {
+      "description": "只改 presentation.xml 的 p:sldSz。",
+      "limits": "不按新画布重排已有形状，不算排版引擎。不改 p:notesSz。",
       "type": "object",
       "required": [
         "op",
@@ -354,6 +380,8 @@
       }
     },
     "setNotesSizeOp": {
+      "description": "只改 presentation.xml 的 p:notesSz。",
+      "limits": "不按新画布重排已有备注形状，不算排版引擎。不改 p:sldSz。",
       "type": "object",
       "required": [
         "op",
@@ -383,6 +411,8 @@
       }
     },
     "setHandoutTextOp": {
+      "description": "改讲义上的页眉页脚文字。",
+      "limits": "四个槽位至少给一个，否则报 InvalidField。未点名的槽位留下。id 不是 handout 报 InvalidId。 不要和 setNotesText 混用：本 op 只改 /ppt/handoutMasters/…，不改 notesSlide。 对 handout 容器发 setShapeText / setShapeFormat / insertShape / deleteShape / setShapeFill / setShapeLine / setShapeGeom 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -434,6 +464,8 @@
       ]
     },
     "insertSlideSectionOp": {
+      "description": "在 p:sldIdLst 之上写入 p14:sectionLst 分组。",
+      "limits": "不改页部件。不写节的 UI 颜色。",
       "type": "object",
       "required": [
         "op",
@@ -463,6 +495,8 @@
       }
     },
     "setSlideSectionNameOp": {
+      "description": "改幻灯片节的名字。",
+      "limits": "找不到该节报 IdNotFound。id 不是节 id 报 InvalidId。只改 p14:section/@name。不改 GUID、不改所含页。xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -484,6 +518,8 @@
       }
     },
     "deleteSlideSectionOp": {
+      "description": "删掉一个幻灯片节。",
+      "limits": "找不到该节报 IdNotFound。id 不是节 id 报 InvalidId。页留在 sldIdLst，不删幻灯片部件。该节里的 ST_SlideId 并进前一节（删的是第一节则并进后一节）。 只剩这一节时去掉整份 p14:sectionLst；若该 p:ext 里没有别的子元素则连 p:ext 一起去掉。空的 p:extLst 也去掉。xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -501,6 +537,8 @@
       }
     },
     "setSlideSectionOp": {
+      "description": "把一页划进某节。",
+      "limits": "节必须覆盖 sldIdLst 的一个连续分段。",
       "type": "object",
       "required": [
         "op",

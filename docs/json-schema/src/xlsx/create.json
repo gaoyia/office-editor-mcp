@@ -2,6 +2,8 @@
   "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
   "$defs": {
     "xlsxWorkbook": {
+      "description": "新建工作簿时的正文，只在 create 里使用。",
+      "limits": "不要把它当成 apply 的补丁。",
       "type": "object",
       "required": [
         "sheets"

@@ -46,6 +46,8 @@
   },
   "$defs": {
     "setParaTextOp": {
+      "description": "改一个段落里的文字。",
+      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
       "type": "object",
       "required": [
         "op",
@@ -67,6 +69,7 @@
       }
     },
     "insertParaOp": {
+      "description": "insertPara 的 id：",
       "type": "object",
       "required": [
         "op",
@@ -87,6 +90,7 @@
       }
     },
     "deleteParaOp": {
+      "description": "insertPara 的 id：",
       "type": "object",
       "required": [
         "op",
@@ -104,6 +108,8 @@
       }
     },
     "insertBookmarkOp": {
+      "description": "在起始段 w:pPr 之后插入 w:bookmarkStart，在结束段末尾插入配对 w:bookmarkEnd。",
+      "limits": "w:id 取该部件已有书签 id 的最大整数加 1，至少为 0。name 不能为空、不能含空白、不能以 _ 开头，否则报 InvalidField。与已有书签名（含隐藏书签）冲突报 InvalidField。end 必须与 id 在同一故事，且文档顺序不得早于起始段，否则报 InvalidField。找不到段落报 IdNotFound。id / end 不是段落 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -129,6 +135,8 @@
       }
     },
     "setBookmarkOp": {
+      "description": "改 w:bookmarkStart/@w:name。",
+      "limits": "同时把本部件里 w:hyperlink/@w:anchor 等于旧名的改成新名。新名规则与 insertBookmark 相同。与其他书签重名报 InvalidField。已经是该名则空操作，仍计入 opsApplied。找不到报 IdNotFound。id 不是书签 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -151,6 +159,8 @@
       }
     },
     "deleteBookmarkOp": {
+      "description": "去掉配对的 w:bookmarkStart 与 w:bookmarkEnd。",
+      "limits": "不改指向该书签的 w:hyperlink/@w:anchor。找不到报 IdNotFound。id 不是书签 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -168,6 +178,8 @@
       }
     },
     "docxInsertFieldOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText（xml:space=\"preserve\"）、fldChar separate、 若给了非空 result 则再写一个带 w:t 的 run、fldChar end。",
+      "limits": "给了窗体 code 时在 begin 里写 w:ffData，不写书签。不在库里求值。空 instr / 空 code / 同时给两者 / 两个都不给 / 不认识的 code / 缺 arg，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -236,6 +248,8 @@
       ]
     },
     "docxSetFieldOp": {
+      "description": "只改被点名那一域的指令，不改缓存结果，也不改 ffData。",
+      "limits": "简单域写 w:instr。复杂域删掉本层指令区里的旧 instrText 以及落在指令区里的嵌套域，在 begin 之后插入一条新的 instrText。结果区（separate 与 end 之间）不动。不在库里求值。instr 缺或只含空白报 InvalidField。找不到报 IdNotFound。id 不是域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -258,6 +272,8 @@
       }
     },
     "docxDeleteFieldOp": {
+      "description": "keep 为 result：拆掉该域外壳与指令，留下缓存结果。",
+      "limits": "指令区里的嵌套域一并删掉；结果区里的嵌套域留下。简单域拆掉 w:fldSimple，留下子节点。keep 为 instr：把本层指令变成普通可见文本（instrText 改成 w:t，简单域则写成一个带指令原文的 run），删掉 begin / separate / end 与结果区。指令区里的嵌套域留下。找不到报 IdNotFound。id 不是域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -281,6 +297,8 @@
       }
     },
     "setParaNumberingOp": {
+      "description": "num 为实例 id 时写入（或改写）w:numPr，插在 pStyle 之后。",
+      "limits": "找不到该编号实例报 IdNotFound。num 为 null 时去掉 numPr，不要求 numbering 部件存在。缺 num 报 InvalidField。ilvl 超出 0–8 报 InvalidField。找不到段落报 IdNotFound。id 不是正文或页眉页脚段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -315,6 +333,8 @@
       }
     },
     "setParaStyleOp": {
+      "description": "style 为样式 id 时写入（或改写）w:pStyle，放在 pPr 子元素最前。",
+      "limits": "目标必须已在 styles.xml 里，且是段落样式。字符 / 表格 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。style 为 null 时去掉 pStyle，不要求 styles 部件存在。缺 style 报 InvalidField。找不到段落报 IdNotFound。id 不是正文或页眉页脚段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -344,6 +364,8 @@
       }
     },
     "setRunStyleOp": {
+      "description": "style 为样式 id 时写入（或改写）w:rStyle，放在 rPr 子元素最前（EG_RPrBase）。",
+      "limits": "目标必须已在 styles.xml 里，且是字符样式。段落 / 表格 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。style 为 null 时去掉 rStyle，不要求 styles 部件存在。缺 style 报 InvalidField。找不到 run 报 IdNotFound。id 不是 run id 报 InvalidId。框内 / 注内 / 批注内 run 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -373,6 +395,8 @@
       }
     },
     "setParaFormatOp": {
+      "description": "改段落的对齐、缩进和间距。",
+      "limits": "align、left、right、firstLine、hanging、before、after、line、lineRule、 kinsoku、overflowPunct、topLinePunct、autoSpaceDE、autoSpaceDN、borders、shd、tabs 至少给一个。 firstLine 与 hanging 不能同时写成非 null 的数字。不认识的 align / lineRule 报 InvalidField。只改该段自己的 w:pPr，不改 styles.xml。 属性删光后去掉空的 w:ind / w:spacing。",
       "type": "object",
       "required": [
         "op",
@@ -667,6 +691,8 @@
       }
     },
     "setRunFormatOp": {
+      "description": "改一段文字的字体、颜色和字号。",
+      "limits": "bold、italic、underline、sz、color、font、eastAsiaFont、em、eastAsianLayout、highlight、strike、dstrike、vertAlign、spacing、kern、scale 至少给一个。只改被点名的那一个 w:r 的 w:rPr，不拆 run，不改 styles.xml。",
       "type": "object",
       "required": [
         "op",

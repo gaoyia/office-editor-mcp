@@ -13,6 +13,8 @@
   },
   "$defs": {
     "insertProtectedRangeOp": {
+      "description": "往工作表追加一条允许编辑区域（ECMA-376 §18.3.1.71）。",
+      "limits": "区域在工作表保护打开且单元格锁定时生效。不标重算。",
       "type": "object",
       "required": [
         "op",
@@ -57,6 +59,8 @@
       }
     },
     "setProtectedRangeOp": {
+      "description": "改已有允许编辑区域。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -116,6 +120,7 @@
       ]
     },
     "deleteProtectedRangeOp": {
+      "description": "删掉一条允许编辑区域。",
       "type": "object",
       "required": [
         "op",

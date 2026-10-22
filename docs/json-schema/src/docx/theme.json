@@ -47,6 +47,8 @@
   },
   "$defs": {
     "setPageBackgroundOp": {
+      "description": "改页面背景。",
+      "limits": "缺 color、不是字符串也不是 null、或非空却不是六位十六进制，报 InvalidField。不写 themeColor。 可选 fill：省略则只改 @w:color，并删掉已有 v:background 与 w:drawing。 fill 必须是对象，字段只认 kind、color、file。kind 必填，只能是 gradient 或 picture。",
       "type": "object",
       "required": [
         "op",
@@ -127,6 +129,8 @@
       }
     },
     "setPageBordersOp": {
+      "description": "改页面边框。",
+      "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个，否则报 InvalidField。边对象必须有 val。 val 认 ECMA-376 ST_Border 全套（含 apples 等艺术型）。不认识的令牌报 InvalidField。JSON 不要 art 字段，出现则报 UnknownField。 sz 为非负整数（八分之一磅）。space 为非负整数（磅）。color 为 auto 或六位十六进制。 不认识的 offsetFrom / display / zOrder，或非法 color，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -206,6 +210,8 @@
       }
     },
     "setFormProtOp": {
+      "description": "改某一节的窗体保护。",
+      "limits": "节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。 setProtection 打开窗体仍给各节写 formProt；随后可用本 op 把某节改成 val=0。",
       "type": "object",
       "required": [
         "op",
@@ -230,6 +236,8 @@
       }
     },
     "insertEditRangeOp": {
+      "description": "划出一块允许编辑的区域。",
+      "limits": "edGrp 与 ed 不能同时给。两个都不给时写 w:edGrp=\"everyone\"。不认识的 edGrp 或空 ed 报 InvalidField。 在该段 w:pPr 之后插入 w:permStart，在段末插入配对 w:permEnd。w:id 取该部件已有 perm 标记里最大整数加 1，至少为 0。 框内、注内、批注内的段落，以及非段落 id，报 InvalidId。找不到段落报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -261,6 +269,8 @@
       }
     },
     "deleteEditRangeOp": {
+      "description": "删掉该对 permStart / permEnd，不删文字。",
+      "limits": "找不到报 IdNotFound。id 不是 perm:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -278,6 +288,8 @@
       }
     },
     "setThemeFmtOp": {
+      "description": "改主文档 theme 部件 a:fmtScheme 的常用槽。",
+      "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
       "type": "object",
       "required": [
         "op",
@@ -362,6 +374,8 @@
       }
     },
     "setThemeOverrideOp": {
+      "description": "读写主文档 themeOverride 部件的配色槽。",
+      "limits": "根元素是 a:themeOverride，配色写在根下 clrScheme。",
       "type": "object",
       "required": [
         "op",
@@ -519,6 +533,8 @@
       }
     },
     "docxSetThemeColorsOp": {
+      "description": "改主文档 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "limits": "不改未点名的 fmtScheme 槽。不把段落 / run 上的 themeColor 展开成直接色。",
       "type": "object",
       "required": [
         "op",
@@ -584,6 +600,8 @@
       }
     },
     "docxSetThemeFontsOp": {
+      "description": "改主文档 theme 部件的 a:fontScheme。",
+      "limits": "未点名的 fmtScheme 槽留下。",
       "type": "object",
       "required": [
         "op",
@@ -651,6 +669,8 @@
       }
     },
     "setThemeExtraSchemesOp": {
+      "description": "整份替换主文档 theme 部件的 a:extraClrSchemeLst。",
+      "limits": "不算主题排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -682,6 +702,8 @@
       }
     },
     "setThemeObjectDefaultsOp": {
+      "description": "改主文档 theme 部件的 a:objectDefaults。",
+      "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
       "type": "object",
       "required": [
         "op",

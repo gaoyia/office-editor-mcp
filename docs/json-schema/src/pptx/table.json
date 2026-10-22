@@ -179,6 +179,8 @@
       ]
     },
     "setTableCellTextOp": {
+      "description": "改幻灯片 DrawingML 表某一格的可见文字。",
+      "limits": "手术刀规则与 setShapeText 相同，目标是该 a:tc 的 a:txBody，不整格重建。",
       "type": "object",
       "required": [
         "op",
@@ -200,6 +202,8 @@
       }
     },
     "setTablePosOp": {
+      "description": "写入该 p:graphicFrame 的 p:xfrm/a:off。",
+      "limits": "没有 xfrm 则补。只改画布坐标，不重分配 gridCol/@w 与 tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -225,6 +229,8 @@
       }
     },
     "setTableSizeOp": {
+      "description": "写入该 p:graphicFrame 的 p:xfrm/a:ext。",
+      "limits": "没有 xfrm 则补。只改框尺寸，不算自动列宽，不重分配 a:gridCol/@w 与 a:tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -250,6 +256,8 @@
       }
     },
     "setTableColWidthsOp": {
+      "description": "只写 a:tblGrid 的 a:gridCol/@w。",
+      "limits": "没有网格则补 a:tblGrid。不改 p:xfrm。不改各格 tcW。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。缺 cols、不是数组、长度对不上 colCount、或某项不是正整数报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableWidth（单位是 twip）。不要复用 xlsx 的 setColWidth。",
       "type": "object",
       "required": [
         "op",
@@ -275,6 +283,8 @@
       }
     },
     "setTableTrHeightOp": {
+      "description": "只改该行 @h。",
+      "limits": "不改框 p:xfrm。找不到该行报 IdNotFound。id 不是行 id 报 InvalidId。缺 h、或不是正整数报 InvalidField。a:tr/@h 必填，h: null 报 InvalidField。inspect 缺 @h 仍报 null。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableRowHeight（单位是 twip）。不要复用 xlsx 的 setRowHeight。",
       "type": "object",
       "required": [
         "op",
@@ -388,6 +398,8 @@
       }
     },
     "setTableCellFillOp": {
+      "description": "改某一格 a:tcPr 的填充（EG_FillProperties）。",
+      "limits": "不要用 setShapeFill。不要用 docx 的 setCellFormat。theme 色仍不展开成 RGB。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",
@@ -556,6 +568,8 @@
       ]
     },
     "setTableCellBordersOp": {
+      "description": "改某一格 a:tcPr 的六边。",
+      "limits": "未点名的边留下。不要用 setShapeLine。",
       "type": "object",
       "required": [
         "op",
@@ -667,6 +681,8 @@
       }
     },
     "setTableCellInsetOp": {
+      "description": "改某一格 a:tcPr 的 marT / marL / marB / marR。",
+      "limits": "不要用 docx 的 setTableCellMar 或 setCellFormat。",
       "type": "object",
       "required": [
         "op",
@@ -712,6 +728,8 @@
       }
     },
     "setTableCellPrOp": {
+      "description": "改某一格 a:tcPr 上 44 / 45 / 50 未覆盖的属性与子元：vert、anchorCtr、horzOverflow、cell3D、headers。",
+      "limits": "不要改 C9 的 textAnchor。不要写 tcPr/@anchor。不要用 setShapeFormat。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",
@@ -781,6 +799,8 @@
       }
     },
     "setTableStyleRefOp": {
+      "description": "改某一张 DrawingML 表上的样式 GUID 与 a:tblPr 行列开关。",
+      "limits": "不要用 docx 的 setTableStyle。不要读写 /ppt/tableStyles.xml。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",

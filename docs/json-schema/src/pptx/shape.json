@@ -191,6 +191,8 @@
       ]
     },
     "insertShapeOp": {
+      "description": "往幻灯片、备注页、母版或版式插入一个带 p:txBody 的形状。",
+      "limits": "缺省 prst 为矩形文本框。不抄版式占位符，不写 <p:timing>。往母版 / 版式插时写出没有 p:ph 的装饰形，不把该 p:sp 抄进各页。插占位符请用 insertPlaceholder。",
       "type": "object",
       "required": [
         "op",
@@ -341,6 +343,8 @@
       }
     },
     "insertConnectorOp": {
+      "description": "往幻灯片、备注页、母版或版式插入一条连接线（p:cxnSp）。",
+      "limits": "不算自动绕障碍。省略 start / end 时不写 a:stCxn / a:endCxn。",
       "type": "object",
       "required": [
         "op",
@@ -414,6 +418,8 @@
       }
     },
     "deleteConnectorOp": {
+      "description": "删掉一条连接线。",
+      "limits": "找不到该连接线报 IdNotFound。id 不是连接线 id 报 InvalidId。删掉对应 p:cxnSp。 若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。删组合内连接线后若组合空了，把空 p:grpSp 一并摘掉。不改其它对象的 cNvPr/@id。 按被删连接线的 cNvPr/@id 清掉本页 <p:timing> 里对应的 p:tgtEl。docx 见 [docx 分册](json-contract-docx.md#deleteconnector)。",
       "type": "object",
       "required": [
         "op",
@@ -431,6 +437,8 @@
       }
     },
     "groupShapesOp": {
+      "description": "把同一页 spTree 上至少两个直接子对象包进一个新 p:grpSp。",
+      "limits": "组合本身不进 inspect 树。",
       "type": "object",
       "required": [
         "op",
@@ -457,6 +465,8 @@
       }
     },
     "ungroupOp": {
+      "description": "解开某个成员所在的 p:grpSp，子节点抬回父节点。",
+      "limits": "组合本身没有 inspect id。",
       "type": "object",
       "required": [
         "op",
@@ -474,6 +484,8 @@
       }
     },
     "deleteShapeOp": {
+      "description": "删掉一个形状。",
+      "limits": "找不到该形状报 IdNotFound。id 不是形状 id 报 InvalidId。对母版、版式、备注母版或讲义占位符 id 发本 op 报 InvalidId。 插删占位符请用 insertPlaceholder / deletePlaceholder。对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 删掉对应 p:sp。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。",
       "type": "object",
       "required": [
         "op",
@@ -491,6 +503,8 @@
       }
     },
     "setShapePosOp": {
+      "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:off。",
+      "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。",
       "type": "object",
       "required": [
         "op",
@@ -528,6 +542,8 @@
       ]
     },
     "setShapeSizeOp": {
+      "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:ext。",
+      "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。对已组合的子对象只改该子 xfrm，不重算父组合框。",
       "type": "object",
       "required": [
         "op",
@@ -565,6 +581,8 @@
       ]
     },
     "setShapeFillOp": {
+      "description": "写入 p:spPr 的 a:solidFill/a:srgbClr；null 则写成 a:noFill，并去掉原有填充。",
+      "limits": "缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -589,6 +607,8 @@
       }
     },
     "setShapeFormatOp": {
+      "description": "改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐、框内垂直锚点、段落间距与字符间距。",
+      "limits": "不改可见字。不要用 Word 的半磅字号。",
       "type": "object",
       "required": [
         "op",
@@ -765,6 +785,8 @@
       ]
     },
     "setShapeLineOp": {
+      "description": "写入 p:spPr/a:ln。",
+      "limits": "color 为 null 时写成 a:ln/a:noFill；此时出现 width 报 InvalidField。缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。",
       "type": "object",
       "required": [
         "op",
@@ -876,6 +898,8 @@
       }
     },
     "setShapeGeomOp": {
+      "description": "把带 p:txBody 的 p:sp 的 a:prstGeom 或已有 a:custGeom 整份换成自定义路径。",
+      "limits": "不重算组合框。",
       "type": "object",
       "required": [
         "op",
@@ -901,6 +925,8 @@
       }
     },
     "setConnectorOp": {
+      "description": "改一条已有连接线的起点 / 终点绑定。",
+      "limits": "不算自动绕障碍。不改画布坐标。",
       "type": "object",
       "required": [
         "op",

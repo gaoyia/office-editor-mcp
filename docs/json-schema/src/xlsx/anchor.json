@@ -28,6 +28,8 @@
   },
   "$defs": {
     "setPictureAnchorOp": {
+      "description": "改图片在工作表上的锚点。",
+      "limits": "anchor、位置字段、editAs、cx / cy 至少给一类，否则报 InvalidField。找不到该图报 IdNotFound。id 不是 xlsx 图 id 报 InvalidId。 docx / pptx 上发此 op 报 InvalidField。pptx 改画布坐标请用 setPicturePos。",
       "type": "object",
       "required": [
         "op",
@@ -180,6 +182,8 @@
       ]
     },
     "setTextBoxAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同。",
+      "limits": "id 可以是 xlsx 文本框 id、形状 id 或连接线 id。改包含该 xdr:sp 或 xdr:cxnSp 的外层锚点，规则与 setPictureAnchor 相同（留下该对象或其所在 xdr:grpSp，以及 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -332,6 +336,8 @@
       ]
     },
     "setInkAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 墨迹 id。",
+      "limits": "改包含该 xdr14 AlternateContent 的外层锚点。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -401,6 +407,8 @@
       }
     },
     "setModel3dAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 3D 模型 id。",
+      "limits": "改包含该 am3d AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -532,6 +540,8 @@
       ]
     },
     "setMathAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是公式框 id。",
+      "limits": "改包含该 a14:m AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。对公式框 id 发 setTextBoxAnchor 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -622,6 +632,8 @@
       }
     },
     "setSlicerAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是切片器 id（含时间线）。",
+      "limits": "改包含该 graphicFrame 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -794,6 +806,8 @@
       ]
     },
     "setChartAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 图表 id。",
+      "limits": "改包含该 xdr:graphicFrame 的锚点，规则与 setPictureAnchor 相同（留下 xdr:graphicFrame 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -925,6 +939,8 @@
       ]
     },
     "setSmartArtAnchorOp": {
+      "description": "字段与 setChartAnchor 相同，id 必须是 xlsx 图示 id。",
+      "limits": "改包含该 xdr:graphicFrame 的外层锚点，规则与 setChartAnchor 相同。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

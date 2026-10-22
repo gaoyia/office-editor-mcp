@@ -31,6 +31,8 @@
   },
   "$defs": {
     "setCellOp": {
+      "description": "改一个单元格的值或公式。",
+      "limits": "value 和 formula 二选一，不能同时出现。arrayRef 与 sharedRef 不能同时出现，shared 与 array 也不能同时为真。不改超链接，不改迷你图。共享公式、数组公式、数据表的填法不同，不要把从属格当成主格来写。",
       "type": "object",
       "required": [
         "op",
@@ -120,6 +122,8 @@
       }
     },
     "setCellStyleOp": {
+      "description": "写单元格的数字格式、字体、填充、边框与对齐。",
+      "limits": "不改值、不改公式。",
       "type": "object",
       "required": [
         "op",
@@ -294,6 +298,8 @@
       ]
     },
     "setColWidthOp": {
+      "description": "写工作表列宽。",
+      "limits": "JSON 的 width 是 Excel 列宽字符数（与 COM ColumnWidth 同一套），不是像素。写入 col/@width 时按 ECMA-376 §18.3.1.13 的公式转换；MDW 固定用该节示例的 Calibri 11 点 7 像素，不读实际字体、不算最适列宽。",
       "type": "object",
       "required": [
         "op",
@@ -339,6 +345,8 @@
       ]
     },
     "setRowHeightOp": {
+      "description": "写行高。",
+      "limits": "单位磅，对应 row/@ht。不算自动换行后的高度。",
       "type": "object",
       "required": [
         "op",
@@ -376,6 +384,8 @@
       }
     },
     "mergeRangeOp": {
+      "description": "合并工作表单元格。",
+      "limits": "不要跟 Word 表的 mergeCells 混用。",
       "type": "object",
       "required": [
         "op",
@@ -398,6 +408,8 @@
       }
     },
     "unmergeRangeOp": {
+      "description": "取消合并。",
+      "limits": "不恢复合并时清掉的值。",
       "type": "object",
       "required": [
         "op",
@@ -420,6 +432,8 @@
       }
     },
     "insertCellStyleOp": {
+      "description": "往 styles.xml 追加一条命名单元格样式。",
+      "limits": "不套到任何格子上。",
       "type": "object",
       "required": [
         "op",
@@ -599,6 +613,8 @@
       ]
     },
     "deleteCellStyleOp": {
+      "description": "删掉一条命名单元格样式。",
+      "limits": "不删 cellStyleXfs，不改格子上已有 s。",
       "type": "object",
       "required": [
         "op",
@@ -616,6 +632,7 @@
       }
     },
     "setCellNamedStyleOp": {
+      "description": "把单元格的 s 指到一条引用该命名样式 xfId 的 cellXfs。",
       "type": "object",
       "required": [
         "op",

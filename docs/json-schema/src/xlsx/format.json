@@ -22,6 +22,8 @@
   },
   "$defs": {
     "insertDataValidationOp": {
+      "description": "往工作表追加一条数据验证（ECMA-376 §18.3.1.32）。",
+      "limits": "公式当字符串，不求值，不展开下拉列表。",
       "type": "object",
       "required": [
         "op",
@@ -118,6 +120,8 @@
       }
     },
     "setDataValidationOp": {
+      "description": "改已有规则。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -244,6 +248,7 @@
       }
     },
     "deleteDataValidationOp": {
+      "description": "删掉一条规则。",
       "type": "object",
       "required": [
         "op",
@@ -514,6 +519,8 @@
       }
     },
     "insertConditionalFormatOp": {
+      "description": "往工作表追加一条条件格式规则（ECMA-376 §18.3.1.18 / §18.3.1.10）。",
+      "limits": "公式当字符串，不求值。不渲染色阶、数据条或图标。始终新建一块 <conditionalFormatting>（一块一条规则），追加到已有条件格式之后、dataValidations 之前。",
       "type": "object",
       "required": [
         "op",
@@ -593,6 +600,8 @@
       }
     },
     "setConditionalFormatOp": {
+      "description": "改已有规则。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -733,6 +742,7 @@
       }
     },
     "deleteConditionalFormatOp": {
+      "description": "删掉一条规则。",
       "type": "object",
       "required": [
         "op",

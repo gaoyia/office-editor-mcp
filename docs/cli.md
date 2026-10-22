@@ -33,6 +33,7 @@ stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向
 | 动作 | stdout | stderr | 退出码 |
 | --- | --- | --- | --- |
 | inspect 成功 | 领域树 JSON，UTF-8，末尾换行 | 空 | 0 |
+| help 成功 | 帮助 JSON，UTF-8，末尾换行 | 空 | 0 |
 | create / apply / exportMedia / exportChartData 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
 | 失败 | 空 | `{ "ok": false, "error": { ... } }` | 见 [errors.md](errors.md) |
 

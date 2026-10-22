@@ -73,6 +73,8 @@
   },
   "$defs": {
     "setPictureWrapOp": {
+      "description": "行内改浮动或反过来。",
+      "limits": "位置只支持相对页边（wp:positionH/@relativeFrom 与 wp:positionV/@relativeFrom 都写 margin），不做任意 Dist，也不写其它 relativeFrom。改成浮动且没给对齐或偏移时，水平默认 alignH: \"left\"，垂直默认 alignV: \"top\"。已经是浮动、只改 wrap 时，未点名的位置属性原样留下。behindDoc：wrap 为 none 时写成 1（衬于文字下方），其余为 0。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -131,6 +133,8 @@
       }
     },
     "setTextBoxWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是框 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。",
       "type": "object",
       "required": [
         "op",
@@ -189,6 +193,8 @@
       }
     },
     "setTextBoxFillOp": {
+      "description": "写入 wps:spPr 的 a:solidFill/a:srgbClr；color 为 null 时写成 a:noFill。",
+      "limits": "不要 theme 色。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -213,6 +219,8 @@
       }
     },
     "setTextBoxLineOp": {
+      "description": "color 为 null 时写成 a:ln/a:noFill。",
+      "limits": "有颜色时写成 a:ln 加 a:solidFill。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -241,6 +249,8 @@
       }
     },
     "setTextBoxDirectionOp": {
+      "description": "horizontal 对应横排（去掉或写成从左到右）；vertical 对应竖排，写入 wps:bodyPr/@vert 为 eaVert。",
+      "limits": "xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -265,6 +275,8 @@
       }
     },
     "setTextBoxTextAnchorOp": {
+      "description": "写入该框 wps:bodyPr/@anchor。",
+      "limits": "这是框内文字相对框的上下锚点，不是框相对页边的 setPictureWrap.alignV，也不是格级 w:vAlign。不要和 xlsx 的 setTextBoxAnchor（改绘图锚点）混。xlsx / pptx 上发此 op 报 InvalidField。xlsx / pptx 框内垂直仍用已有 setShapeFormat.textAnchor。",
       "type": "object",
       "required": [
         "op",
@@ -299,6 +311,8 @@
       }
     },
     "setTextBoxLinkOp": {
+      "description": "把 id 接到 next 前面，或断开。",
+      "limits": "两框必须在同一部件（同一主文档，或同一页眉页脚部件）。跨部件链接报 InvalidField。断开时后一框变成独立故事（自己的 wps:txbx）。next 可以是没有 w:txbxContent 的溢出后继框（Word 常只留 wps:linkedTxbx）。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -323,6 +337,8 @@
       }
     },
     "setChartWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 为图表 id。",
+      "limits": "改宿主 wp:inline / wp:anchor 与绕排，规则与图相同。xlsx / pptx 上发此 op 报 InvalidField。xlsx 改锚点请用 setChartAnchor。",
       "type": "object",
       "required": [
         "op",
@@ -381,6 +397,8 @@
       }
     },
     "docxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标段落。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。",
       "type": "object",
       "required": [
         "op",
@@ -403,6 +421,8 @@
       }
     },
     "docxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。删掉整棵 w:object（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。 xlsx 上发此 op 报 InvalidField。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。",
       "type": "object",
       "required": [
         "op",
@@ -420,6 +440,8 @@
       }
     },
     "docxSetOleSizeOp": {
+      "description": "写入 v:shape/@style 的 width / height（12700 EMU 为 1 pt）。",
+      "limits": "若对象上已有 wp:extent 或带 cx 的 a:ext，一并改。已有的 w:dxaOrig / w:dyaOrig 按 635 EMU 一缇同步。不改 embeddings，不启动 OLE 服务器。出现 to 报 InvalidField。对段落 id 发此 op 报 InvalidId。找不到报 IdNotFound。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setolesize)。",
       "type": "object",
       "required": [
         "op",
@@ -457,6 +479,8 @@
       ]
     },
     "insertInkCanvasOp": {
+      "description": "把本地 InkML 作为墨迹画布写入目标段落。",
+      "limits": "不把手写识别成字。不写独立 wpi 画布。",
       "type": "object",
       "required": [
         "op",
@@ -487,6 +511,8 @@
       }
     },
     "replaceInkCanvasOp": {
+      "description": "换 InkML 字节，保留 drawing 与关系 id。",
+      "limits": "找不到报 IdNotFound。不是墨迹 id 报 InvalidId。坏 InkML 报 InvalidField。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -509,6 +535,8 @@
       }
     },
     "deleteInkCanvasOp": {
+      "description": "删掉一个墨迹画布。",
+      "limits": "找不到报 IdNotFound。删掉该 contentPart；若宿主 wpc 只剩 bg / whole 则删整段 drawing / AlternateContent。 关系无人引用则删部件与 Override。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -526,6 +554,8 @@
       }
     },
     "setInkCanvasSizeOp": {
+      "description": "字段与 setPictureSize 的 docx 一侧相同。",
+      "limits": "id 必须是墨迹画布 id。",
       "type": "object",
       "required": [
         "op",
@@ -563,6 +593,8 @@
       ]
     },
     "setInkCanvasWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是墨迹画布 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。位置只支持相对页边。replaceInkCanvas 仍不改几何。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -621,6 +653,8 @@
       }
     },
     "docxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标段落。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。本期只写 wp:inline。",
       "type": "object",
       "required": [
         "op",
@@ -651,6 +685,8 @@
       }
     },
     "docxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 wp:inline 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。不是 3D id 报 InvalidId。不是 GLB 报 InvalidField。xlsx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -673,6 +709,8 @@
       }
     },
     "docxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。删掉该 AlternateContent。GLB 与海报无人引用则删。xlsx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -690,6 +728,8 @@
       }
     },
     "setModel3dWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是 3D 模型 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。位置只支持相对页边。Fallback 海报 drawing 同步改绕排。replaceModel3d 仍不改几何。xlsx / pptx 上发此 op 报 InvalidField。xlsx 改锚点请用 setModel3dAnchor。pptx 改画布坐标请用 setModel3dPos。",
       "type": "object",
       "required": [
         "op",
@@ -748,6 +788,8 @@
       }
     },
     "setSmartArtWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 为图示 id。",
+      "limits": "改宿主 wp:inline / wp:anchor 与绕排，规则与图相同。xlsx / pptx 上发此 op 报 InvalidField。pptx 改画布坐标请用 setSmartArtPos。",
       "type": "object",
       "required": [
         "op",
@@ -806,6 +848,8 @@
       }
     },
     "insertWatermarkOp": {
+      "description": "把文字或图片水印写入页眉 DrawingML。",
+      "limits": "不写 VML。",
       "type": "object",
       "required": [
         "op",
@@ -853,6 +897,8 @@
       ]
     },
     "deleteWatermarkOp": {
+      "description": "docx:document 删掉所有页眉里的 DrawingML 水印；没有水印则空操作，仍计入 opsApplied。",
+      "limits": "水印 id 找不到报 IdNotFound。id 不是水印 id 也不是 docx:document 报 InvalidId。不删 VML。xlsx / pptx 上发此 op 报 InvalidField。图片水印删掉后，若媒体没有其它关系再指向则去掉该部件。",
       "type": "object",
       "required": [
         "op",

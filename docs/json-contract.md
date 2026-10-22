@@ -97,10 +97,10 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 必须是 `1` |
-| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData` 之一 |
+| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，五种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
+`locale` 不属于动作参数，六种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
 这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
@@ -112,6 +112,22 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 省略 `format` 时，Schema 仍接受任一已登记动作的形状。库按路径推断格式：别家已登记动作报 `InvalidField`，名单里没有的动作报 `UnsupportedOp`。
 
 `path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
+
+## help
+
+`help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
+
+不带 `format`、`q`、`op`、`name` 时，只说明六个动作各自干什么，以及下一步该带哪些字段。
+
+带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
+
+带 `q` 时，在操作名、`description` 和 `limits` 里找词。可以再带 `format`。命中太多时只返回前 20 条，并带上总数。
+
+带 `op` 时，返回这一个操作的说明和字段。里面的引用只留定义名，不继续展开。同一种名字在多种格式里形状不同时，必须带 `format`；不带就只列出每种格式的说明，不把字段并成一份。
+
+带 `name` 时，打开一个定义，例如 `inspectScope`、`xlsxWorkbook`。新建和查看范围不在操作名单里，走这里。
+
+`op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。说明文字是中文，不随 `locale` 改变。
 
 ## 稳定 id
 

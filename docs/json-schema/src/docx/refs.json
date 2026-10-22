@@ -64,6 +64,8 @@
   },
   "$defs": {
     "insertTocOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里根据标题算页码。不包 w:sdt。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -92,6 +94,8 @@
       }
     },
     "deleteTocOp": {
+      "description": "删掉该目录块。",
+      "limits": "若该 TOC 域落在 w:sdt 里，且 sdtPr 的 docPartGallery 为 Table of Contents / Table of Figures / List of Figures / Table of Authorities， 并且该 sdt 是 w:body 的直接子节点，则删掉整个 sdt（含「目录」标题段）。否则删掉该域从 begin 到 end 的全部 run（含结果区里的嵌套域），再删掉因此变空、且没有 sectPr 的正文段落。不要留下空的目录段。",
       "type": "object",
       "required": [
         "op",
@@ -109,6 +113,8 @@
       }
     },
     "insertCaptionOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId）：bookmarkStart、标签 run（{label} 后带一个空格）、 一组复杂 SEQ 域（fldChar begin 带 w:dirty=\"true\"、指令 SEQ {label} \\* ARABIC 、separate、end， 不写结果 run）、bookmarkEnd、若给了 title 再写说明 run（若 title 不是以空白开头则前面补一个空格）。",
+      "limits": "不写 Caption 段落样式。不在库里求序号。",
       "type": "object",
       "required": [
         "op",
@@ -137,6 +143,8 @@
       }
     },
     "deleteCaptionOp": {
+      "description": "若该 SEQ 落在 w:body 的直接子段落上，则删掉整段（题注就是这一段）。",
+      "limits": "某段带分节符且不能整段删掉时，报 NotImplemented。否则只拆掉该 SEQ 域（含缓存）以及包住它的 _Ref* 书签，不删格子或页眉段落。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。找不到报 IdNotFound。id 不是 caption:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -154,6 +162,8 @@
       }
     },
     "insertCrossRefOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里解析书签内容。本期不写 NOTEREF。bookmark 缺、空串或含空白报 InvalidField。主文档里没有该名报 IdNotFound。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -182,6 +192,8 @@
       }
     },
     "deleteCrossRefOp": {
+      "description": "拆掉该 REF / PAGEREF / NOTEREF 域（含指令与缓存），不删所在段落。",
+      "limits": "找不到报 IdNotFound。id 不是 xref:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -199,6 +211,8 @@
       }
     },
     "insertIndexOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里根据 XE 算页码。不包 w:sdt，不写 Index 样式，不改 sectPr 分栏。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、index:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -220,6 +234,8 @@
       }
     },
     "deleteIndexOp": {
+      "description": "删掉该 INDEX 域从 begin 到 end 的全部 run（含结果区里的嵌套域），再删掉因此变空、且没有 sectPr 的正文段落。",
+      "limits": "不要留下空的索引段。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是 index:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -237,6 +253,8 @@
       }
     },
     "insertIndexEntryOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin、一条 instrText、fldChar end。",
+      "limits": "不写 separate（与 Word 16.0 Indexes.MarkEntry 一致），不写 w:vanish，不写结果 run。不在库里求页码。框内、注内、批注内的段落，以及索引 id、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -259,6 +277,8 @@
       }
     },
     "deleteIndexEntryOp": {
+      "description": "拆掉该 XE 域（含指令），不删所在段落。",
+      "limits": "找不到报 IdNotFound。id 不是 xe:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -276,6 +296,8 @@
       }
     },
     "insertSourceOp": {
+      "description": "没有 bibliography customXml 时新建 /customXml/itemN.xml（空 b:Sources，SelectedStyle 为 \\APASixthEditionOfficeOnline.xsl， StyleName 为 APA，Version 为 6）、itemPropsN.xml（schemaRef 为 bibliography 命名空间）、itemN.xml.rels，以及主文档 /customXml 关系。",
+      "limits": "只给 itemProps 写 Content Type Override。",
       "type": "object",
       "required": [
         "op",
@@ -322,6 +344,8 @@
       }
     },
     "deleteSourceOp": {
+      "description": "删掉该 b:Source，按剩余源重写 b:RefOrder（从 1 起）。",
+      "limits": "不删 CITATION / BIBLIOGRAPHY 域。空了也留下 b:Sources 部件。找不到报 IdNotFound。id 不是 source:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -339,6 +363,8 @@
       }
     },
     "insertCitationOp": {
+      "description": "在该段已有内容之后插入一行内 w:sdt：sdtPr 含 w:id 与空的 w:citation， sdtContent 里写一组复杂域（fldChar begin 带 w:dirty=\"true\"、指令 CITATION {tag} 、separate、end）。",
+      "limits": "不写结果 run，不写 dataBinding。不在库里排版引文。主文档里没有该 tag 报 IdNotFound。空串、只含空白或含英文双引号的 tag 报 InvalidField。框内、注内、批注内本期不编。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -361,6 +387,8 @@
       }
     },
     "deleteCitationOp": {
+      "description": "若该 CITATION 包在带 w:citation 的 w:sdt 里，删掉整个 sdt；否则只拆掉该域。",
+      "limits": "不删所在段落，也不删书目源。找不到报 IdNotFound。id 不是 cite:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -378,6 +406,8 @@
       }
     },
     "insertBibliographyOp": {
+      "description": "在点名段之后插入一个新的 w:p，里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不包 w:sdt，不写 Bibliography 样式。不在库里按源排版。表格单元格内、页眉页脚、框内、注内、批注内的段落报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -399,6 +429,8 @@
       }
     },
     "deleteBibliographyOp": {
+      "description": "删掉该 BIBLIOGRAPHY 域从 begin 到 end 的全部 run，再删掉因此变空、且没有 sectPr 的正文段落。",
+      "limits": "删完后若 w:body 里没有 w:p，补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是 biblio:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -416,6 +448,7 @@
       }
     },
     "setBibliographyStyleOp": {
+      "description": "按 Word 16.0 另存写 b:Sources 的三个属性：",
       "type": "object",
       "required": [
         "op",
@@ -443,6 +476,8 @@
       }
     },
     "insertDocPartOp": {
+      "description": "没有 glossary 时新建 /word/glossary/document.xml（空 w:docParts）， 并写卫星 styles.xml / settings.xml / webSettings.xml / fontTable.xml、glossary .rels、 主文档 glossaryDocument 关系与 Content Type Override。",
+      "limits": "styles.xml / settings.xml 复制自主文档对应部件；没有则写最小 styles / settings。",
       "type": "object",
       "required": [
         "op",
@@ -482,6 +517,8 @@
       }
     },
     "deleteDocPartOp": {
+      "description": "删掉该 w:docPart。",
+      "limits": "删光最后一条则去掉 glossary 部件、卫星、主文档关系与 Override，不要留空 w:docParts。找不到报 IdNotFound。id 不是 docPart:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -499,6 +536,8 @@
       }
     },
     "insertDocPartContentOp": {
+      "description": "把该条目 docPartBody 的块级子节点复制进主文档。",
+      "limits": "跳过 sectPr 与末尾空段。给新的 w:p 分配新 w14:paraId。behavior 为 pg 时先插一条只含 w:br/@w:type=\"page\" 的段。content 与 p 都按块级兄弟插入（不把末段 run 并进点名段）。表格单元格内、页眉页脚、框内、注内、批注内的段落报 InvalidId。找不到基块报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

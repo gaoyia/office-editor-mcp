@@ -19,6 +19,8 @@
   },
   "$defs": {
     "insertHyperlinkOp": {
+      "description": "插入一个超链接。",
+      "limits": "docx：段落链在该段已有内容之后插入一个 w:hyperlink，内含一个带 text 的 run。 外部链在该部件 .rels 上新建 Type 以 /hyperlink 结尾的关系，TargetMode 为 External，Target 为 url 原文。内部链写 w:anchor，不写关系。 url 与 anchor 同时出现或一个都不给报 InvalidField。url 为空串报 InvalidField。anchor 为空串或以 _ 开头报 InvalidField。 找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -88,6 +90,8 @@
       }
     },
     "setHyperlinkOp": {
+      "description": "改一个已有的超链接。",
+      "limits": "docx：段落链：url、anchor、text、tooltip 至少给一个。url 与 anchor 不能同时出现。 给了 url：有已有 r:id 则改该关系 Target；没有则新建关系并写 r:id，去掉 w:anchor。给了 anchor：写 w:anchor，去掉 r:id，该关系无人引用则删除。 text 只改该 w:hyperlink 内可见 w:t（规则与 setParaText 第 2–4 条相同，范围限于该元素）。tooltip 为字符串则写属性；为 null 则去掉属性。 找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -148,6 +152,8 @@
       }
     },
     "deleteHyperlinkOp": {
+      "description": "删掉一个超链接。",
+      "limits": "docx：段落链拆掉 w:hyperlink 外壳，留下内部 w:r。该 r:id 在本部件 XML 里无人引用则删除关系。 DrawingML 链去掉 a:hlinkClick 和无人引用的 hyperlink 关系，不删对象。 找不到报 IdNotFound。id 不是超链接 id 且不是带链的本期 DrawingML 对象 id 报 InvalidId。 对 OLE id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",

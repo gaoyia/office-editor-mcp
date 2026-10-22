@@ -10,6 +10,8 @@
       ]
     },
     "inspectRequest": {
+      "description": "按 scope 看文件的一部分。",
+      "limits": "不要一次要整份文件。改内容用 apply，不要把这次看到的树整份送回去当修改。",
       "type": "object",
       "required": [
         "schemaVersion",
@@ -40,6 +42,8 @@
       }
     },
     "inspectScope": {
+      "description": "查看范围。",
+      "limits": "三种格式的键不能混用。xlsx 看格子要同时给 sheet 和 range。没列出的键不要写。",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -253,6 +257,8 @@
       }
     },
     "createRequest": {
+      "description": "只用于新建文件。",
+      "limits": "已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
       "type": "object",
       "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
@@ -306,6 +312,8 @@
       ]
     },
     "exportMediaRequest": {
+      "description": "按 id 把图或嵌入对象的原始字节写到本地。",
+      "limits": "不改源文件，字节也不进 inspect 树。",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -343,6 +351,8 @@
       }
     },
     "applyRequest": {
+      "description": "用 id 和 op 改文件里点名的内容。",
+      "limits": "不要把整棵 inspect 树塞进请求。",
       "type": "object",
       "required": [
         "schemaVersion",
@@ -450,6 +460,8 @@
       ]
     },
     "exportChartDataRequest": {
+      "description": "把图表背后的工作簿数据导出。",
+      "limits": "不改源文件，不算公式。",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -485,6 +497,68 @@
           "type": "string"
         }
       }
+    },
+    "helpRequest": {
+      "description": "查某个操作怎么填。",
+      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "help"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "q": {
+          "type": "string",
+          "minLength": 1
+        },
+        "op": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "op",
+              "name"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "q",
+              "op"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "q",
+              "name"
+            ]
+          }
+        }
+      ]
     }
   }
 }

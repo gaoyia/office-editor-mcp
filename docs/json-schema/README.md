@@ -32,6 +32,8 @@ python docs/json-schema/build.py --check
 
 一个文件里是一块事情，不是一个操作一个文件。操作要在该文件的 `formats` 里写上给哪种格式用。`xlsx`、`docx`、`pptx` 三种里可以写一个或多个。总名单由脚本按 `formats` 扫出来，不用手写。
 
+每个操作的 `description` 只写它做什么。不能怎么填写在 `limits`，另成一条。`help` 两处都会拿来检索。
+
 同一种格式里名字相同、填法不同的定义，定义名前面带格式，例如 `xlsxInsertMathOp`。请求里的 `op` 仍写 `insertMath`。
 
 ## 哪些文件入库

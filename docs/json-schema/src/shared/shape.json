@@ -8,6 +8,8 @@
   },
   "$defs": {
     "setShapeTextOp": {
+      "description": "改形状里的文字。",
+      "limits": "找不到该形状报 IdNotFound。对 slide:{n} 或 slide:{n}/notes（没有 /shape:）发本 op 报 InvalidId。 对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 xlsx 改工作表文本框或无 txBox 形状的 xdr:txBody，规则与 pptx 相同（把下文的 p:sp / p:txBody 换成 xdr:sp / xdr:txBody）。",
       "type": "object",
       "required": [
         "op",

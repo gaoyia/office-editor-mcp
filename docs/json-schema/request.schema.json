@@ -18,7 +18,8 @@
         "create",
         "apply",
         "exportMedia",
-        "exportChartData"
+        "exportChartData",
+        "help"
       ]
     }
   },
@@ -97,10 +98,27 @@
       "then": {
         "$ref": "#/$defs/exportChartDataRequest"
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "help"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/helpRequest"
+      }
     }
   ],
   "$defs": {
     "docxDocument": {
+      "description": "新建文档时的正文，只在 create 里使用。",
+      "limits": "不要把它当成 apply 的补丁。",
       "type": "object",
       "required": [
         "paragraphs"
@@ -1846,7 +1864,8 @@
       }
     },
     "docxDrawingHyperlink": {
-      "description": "inspect 图 / 文本框上的 DrawingML 链。没有链则为 null。create 本期不写。",
+      "description": "inspect 图 / 文本框上的 DrawingML 链。",
+      "limits": "没有链则为 null。create 本期不写。",
       "oneOf": [
         {
           "type": "null"
@@ -2450,6 +2469,8 @@
       }
     },
     "setPictureWrapOp": {
+      "description": "行内改浮动或反过来。",
+      "limits": "位置只支持相对页边（wp:positionH/@relativeFrom 与 wp:positionV/@relativeFrom 都写 margin），不做任意 Dist，也不写其它 relativeFrom。改成浮动且没给对齐或偏移时，水平默认 alignH: \"left\"，垂直默认 alignV: \"top\"。已经是浮动、只改 wrap 时，未点名的位置属性原样留下。behindDoc：wrap 为 none 时写成 1（衬于文字下方），其余为 0。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2508,6 +2529,8 @@
       }
     },
     "setTextBoxWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是框 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。",
       "type": "object",
       "required": [
         "op",
@@ -2566,6 +2589,8 @@
       }
     },
     "setTextBoxFillOp": {
+      "description": "写入 wps:spPr 的 a:solidFill/a:srgbClr；color 为 null 时写成 a:noFill。",
+      "limits": "不要 theme 色。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2590,6 +2615,8 @@
       }
     },
     "setTextBoxLineOp": {
+      "description": "color 为 null 时写成 a:ln/a:noFill。",
+      "limits": "有颜色时写成 a:ln 加 a:solidFill。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2618,6 +2645,8 @@
       }
     },
     "setTextBoxDirectionOp": {
+      "description": "horizontal 对应横排（去掉或写成从左到右）；vertical 对应竖排，写入 wps:bodyPr/@vert 为 eaVert。",
+      "limits": "xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2642,6 +2671,8 @@
       }
     },
     "setTextBoxTextAnchorOp": {
+      "description": "写入该框 wps:bodyPr/@anchor。",
+      "limits": "这是框内文字相对框的上下锚点，不是框相对页边的 setPictureWrap.alignV，也不是格级 w:vAlign。不要和 xlsx 的 setTextBoxAnchor（改绘图锚点）混。xlsx / pptx 上发此 op 报 InvalidField。xlsx / pptx 框内垂直仍用已有 setShapeFormat.textAnchor。",
       "type": "object",
       "required": [
         "op",
@@ -2676,6 +2707,8 @@
       }
     },
     "setTextBoxLinkOp": {
+      "description": "把 id 接到 next 前面，或断开。",
+      "limits": "两框必须在同一部件（同一主文档，或同一页眉页脚部件）。跨部件链接报 InvalidField。断开时后一框变成独立故事（自己的 wps:txbx）。next 可以是没有 w:txbxContent 的溢出后继框（Word 常只留 wps:linkedTxbx）。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2700,6 +2733,8 @@
       }
     },
     "setChartWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 为图表 id。",
+      "limits": "改宿主 wp:inline / wp:anchor 与绕排，规则与图相同。xlsx / pptx 上发此 op 报 InvalidField。xlsx 改锚点请用 setChartAnchor。",
       "type": "object",
       "required": [
         "op",
@@ -2758,6 +2793,8 @@
       }
     },
     "docxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标段落。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。",
       "type": "object",
       "required": [
         "op",
@@ -2780,6 +2817,8 @@
       }
     },
     "docxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。删掉整棵 w:object（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。 xlsx 上发此 op 报 InvalidField。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。",
       "type": "object",
       "required": [
         "op",
@@ -2797,6 +2836,8 @@
       }
     },
     "docxSetOleSizeOp": {
+      "description": "写入 v:shape/@style 的 width / height（12700 EMU 为 1 pt）。",
+      "limits": "若对象上已有 wp:extent 或带 cx 的 a:ext，一并改。已有的 w:dxaOrig / w:dyaOrig 按 635 EMU 一缇同步。不改 embeddings，不启动 OLE 服务器。出现 to 报 InvalidField。对段落 id 发此 op 报 InvalidId。找不到报 IdNotFound。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setolesize)。",
       "type": "object",
       "required": [
         "op",
@@ -2834,6 +2875,8 @@
       ]
     },
     "insertInkCanvasOp": {
+      "description": "把本地 InkML 作为墨迹画布写入目标段落。",
+      "limits": "不把手写识别成字。不写独立 wpi 画布。",
       "type": "object",
       "required": [
         "op",
@@ -2864,6 +2907,8 @@
       }
     },
     "replaceInkCanvasOp": {
+      "description": "换 InkML 字节，保留 drawing 与关系 id。",
+      "limits": "找不到报 IdNotFound。不是墨迹 id 报 InvalidId。坏 InkML 报 InvalidField。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2886,6 +2931,8 @@
       }
     },
     "deleteInkCanvasOp": {
+      "description": "删掉一个墨迹画布。",
+      "limits": "找不到报 IdNotFound。删掉该 contentPart；若宿主 wpc 只剩 bg / whole 则删整段 drawing / AlternateContent。 关系无人引用则删部件与 Override。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2903,6 +2950,8 @@
       }
     },
     "setInkCanvasSizeOp": {
+      "description": "字段与 setPictureSize 的 docx 一侧相同。",
+      "limits": "id 必须是墨迹画布 id。",
       "type": "object",
       "required": [
         "op",
@@ -2940,6 +2989,8 @@
       ]
     },
     "setInkCanvasWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是墨迹画布 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。位置只支持相对页边。replaceInkCanvas 仍不改几何。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -2998,6 +3049,8 @@
       }
     },
     "docxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标段落。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。本期只写 wp:inline。",
       "type": "object",
       "required": [
         "op",
@@ -3028,6 +3081,8 @@
       }
     },
     "docxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 wp:inline 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。不是 3D id 报 InvalidId。不是 GLB 报 InvalidField。xlsx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -3050,6 +3105,8 @@
       }
     },
     "docxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。删掉该 AlternateContent。GLB 与海报无人引用则删。xlsx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -3067,6 +3124,8 @@
       }
     },
     "setModel3dWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 必须是 3D 模型 id。",
+      "limits": "行内 / 浮动与绕排规则同图片。位置只支持相对页边。Fallback 海报 drawing 同步改绕排。replaceModel3d 仍不改几何。xlsx / pptx 上发此 op 报 InvalidField。xlsx 改锚点请用 setModel3dAnchor。pptx 改画布坐标请用 setModel3dPos。",
       "type": "object",
       "required": [
         "op",
@@ -3125,6 +3184,8 @@
       }
     },
     "setSmartArtWrapOp": {
+      "description": "字段与 setPictureWrap 相同，id 为图示 id。",
+      "limits": "改宿主 wp:inline / wp:anchor 与绕排，规则与图相同。xlsx / pptx 上发此 op 报 InvalidField。pptx 改画布坐标请用 setSmartArtPos。",
       "type": "object",
       "required": [
         "op",
@@ -3183,6 +3244,8 @@
       }
     },
     "insertWatermarkOp": {
+      "description": "把文字或图片水印写入页眉 DrawingML。",
+      "limits": "不写 VML。",
       "type": "object",
       "required": [
         "op",
@@ -3230,6 +3293,8 @@
       ]
     },
     "deleteWatermarkOp": {
+      "description": "docx:document 删掉所有页眉里的 DrawingML 水印；没有水印则空操作，仍计入 opsApplied。",
+      "limits": "水印 id 找不到报 IdNotFound。id 不是水印 id 也不是 docx:document 报 InvalidId。不删 VML。xlsx / pptx 上发此 op 报 InvalidField。图片水印删掉后，若媒体没有其它关系再指向则去掉该部件。",
       "type": "object",
       "required": [
         "op",
@@ -3277,6 +3342,8 @@
       }
     },
     "docxInsertMathOp": {
+      "description": "在 Word 段落里插入公式。",
+      "limits": "text 和 expr 恰好给一个，不能同时给。kind 缺省是 inline，display 才单独成段。不要套用 xlsx 或 pptx 的坐标字段。",
       "type": "object",
       "required": [
         "op",
@@ -3319,6 +3386,8 @@
       }
     },
     "docxSetMathOp": {
+      "description": "改 Word 段落里已有的公式。",
+      "limits": "text 和 expr 恰好给一个；只改对齐时可以只给 jc。不改 kind。不要套用 xlsx 或 pptx 的公式框字段。",
       "type": "object",
       "required": [
         "op",
@@ -3407,6 +3476,8 @@
       }
     },
     "insertRubyOp": {
+      "description": "在点名段末尾追加一个 w:r，里面是 w:ruby（rubyPr + rt + rubyBase）。",
+      "limits": "id 为 docx:document 时在正文末尾、sectPr 之前新插一个只含该拼音的 w:p。框内、注内、批注内的段落，以及拼音 id、容器 id、表 id、run id、section:{n}，一律报 InvalidId。找不到段落报 IdNotFound。空 base / rt、空 lid、不认识的 align、或 hps / hpsRaise / hpsBaseText 越界，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3463,6 +3534,8 @@
       }
     },
     "setRubyOp": {
+      "description": "改一处拼音。",
+      "limits": "base、rt、align、hps、hpsRaise、hpsBaseText、lid 至少给一个。只改被点名的那一个 w:ruby。 空 base / rt / lid、不认识的 align、或字号越界报 InvalidField。找不到报 IdNotFound。 id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3517,6 +3590,8 @@
       }
     },
     "deleteRubyOp": {
+      "description": "删掉该 w:ruby。",
+      "limits": "若宿主 w:r 里除 w:rPr 外只剩这一份拼音，连该 run 一起删。不因此删掉空段。找不到报 IdNotFound。id 不是拼音 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3534,6 +3609,8 @@
       }
     },
     "setEastAsianSettingsOp": {
+      "description": "改文档的东亚排版设置。",
+      "limits": "五个字段至少给一个。禁则对象必须同时有非空 lang 与非空 chars。 themeFontLang 对象只认 val / eastAsia / bidi，值为字符串或 null。空串报 InvalidField。写入时整份替换该元素，只写出非 null 的属性。 不认识的 characterSpacingControl 报 InvalidField。 id 不是 docx:document 报 InvalidId。没有 settings 且要写入时新建 /word/settings.xml 与主文档 settings 关系。",
       "type": "object",
       "required": [
         "op",
@@ -3605,6 +3682,8 @@
       }
     },
     "docxDeleteMathOp": {
+      "description": "删掉该 oMath；若父 oMathPara 里已经没有 oMath，连 oMathPara 一起删。",
+      "limits": "因此变空且无 sectPr 的正文段可删掉。表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是公式 id 报 InvalidId。xlsx / pptx 的 drawing 公式框见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -3622,6 +3701,8 @@
       }
     },
     "insertEmbeddedFontOp": {
+      "description": "把一份字体嵌进文档。",
+      "limits": "出现 subsetted 报 UnknownField。本期不写 w:subsetted，不在库里做 TTF 子集化。同一 name + style 已有嵌入面报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3658,6 +3739,8 @@
       }
     },
     "deleteEmbeddedFontOp": {
+      "description": "删掉该 embed*、对应 font 部件及 fontTable 关系。",
+      "limits": "所属 w:font 条目留下（即使再也没有 embed*）。fontTable 本身不因删光嵌入面而拆掉。找不到报 IdNotFound。id 不是 font:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3675,6 +3758,8 @@
       }
     },
     "setFontEmbedOp": {
+      "description": "改嵌入字体怎么用。",
+      "limits": "三者至少给一个，否则报 InvalidField。未点名的标志留下。本 op 不自动嵌字体、不子集化、不改 fontTable。 没有 settings 且要写成 true 时新建 /word/settings.xml 与主文档 settings 关系。id 不是 docx:document 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3701,6 +3786,8 @@
       }
     },
     "insertFootnoteOp": {
+      "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
       "type": "object",
       "required": [
         "op",
@@ -3721,6 +3808,8 @@
       }
     },
     "insertEndnoteOp": {
+      "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
       "type": "object",
       "required": [
         "op",
@@ -3741,6 +3830,8 @@
       }
     },
     "deleteFootnoteOp": {
+      "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3758,6 +3849,8 @@
       }
     },
     "deleteEndnoteOp": {
+      "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3775,6 +3868,8 @@
       }
     },
     "setNoteNumberingOp": {
+      "description": "改脚注或尾注的编号。",
+      "limits": "numFmt、numStart、numRestart 至少给一个，否则报 InvalidField。只改被点名的属性，其余编号属性保留。不重算页面上已经画出来的序号（那是渲染，Word 打开时自己画）。 不认识的枚举报 InvalidField。id 不是 docx:document 或 section:{n} 报 InvalidId。节不存在报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3820,6 +3915,8 @@
       }
     },
     "setHeaderFooterDistanceOp": {
+      "description": "改页眉页脚到页边的距离。",
+      "limits": "两个距离至少给一个，否则报 InvalidField。节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3857,6 +3954,8 @@
       ]
     },
     "setHeaderFooterLinkOp": {
+      "description": "改这一节的页眉页脚是否沿用上一节。",
+      "limits": "第一节上 linked: true 报 InvalidField。该类型对本节不生效时报 InvalidField（不替用户打开首页不同或奇偶页）。节不存在报 IdNotFound。 id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。",
       "type": "object",
       "required": [
         "op",
@@ -3893,6 +3992,8 @@
       }
     },
     "insertHeaderFooterOp": {
+      "description": "给这一节加上页眉或页脚。",
+      "limits": "该类型对本节不生效时报 InvalidField（不替用户打开首页不同或奇偶页）。 本节该类型已经链接前节（inspect 的 headerLink / footerLink 为 true）时报 InvalidField； 要独立部件走 setHeaderFooterLink 且 linked: false。 节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3925,6 +4026,8 @@
       }
     },
     "insertSectionOp": {
+      "description": "插在点名段之后：该段成为当前节的最后一段。",
+      "limits": "该段还没有 pPr/sectPr 时，把分节符写在该段上。该段已经带 sectPr 时，在它后面插入一个空的 w:p（新 w14:paraId），把新分节符放在这个空段上。不要拆 run，不要拆段落中间。",
       "type": "object",
       "required": [
         "op",
@@ -3951,6 +4054,8 @@
       }
     },
     "deleteSectionOp": {
+      "description": "删掉结束第 n 节的那个 w:sectPr（一定在某段 pPr 上，不会是 w:body 末尾那一份）。",
+      "limits": "第 n 节的正文并进第 n+1 节，沿用第 n+1 节的节属性。这与 Word 删除分节符的方向相同。",
       "type": "object",
       "required": [
         "op",
@@ -3968,6 +4073,8 @@
       }
     },
     "setTitlePageOp": {
+      "description": "不新建 first 页眉页脚。",
+      "limits": "关掉时不删除已有 first 部件。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -3989,6 +4096,8 @@
       }
     },
     "setEvenAndOddHeadersOp": {
+      "description": "整篇一份，不按节。",
+      "limits": "不新建 even 页眉页脚。关掉时不删除已有 even 部件。已经是目标状态则空操作，仍计入 opsApplied，不脏任何部件。没有 settings.xml 时报 OpcPartMissing。id 不是 docx:document 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4010,6 +4119,8 @@
       }
     },
     "setPageMarginOp": {
+      "description": "改页边距。",
+      "limits": "五个边距至少给一个，否则报 InvalidField。不要出现 headerDistance / footerDistance。节不存在报 IdNotFound。 id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4072,6 +4183,8 @@
       ]
     },
     "setPageSizeOp": {
+      "description": "改纸张大小。",
+      "limits": "三个字段至少给一个，否则报 InvalidField。不认识的 orient 报 InvalidField。只改被点名的属性。没有 w:pgSz 时插入一个，只写本次给出的字段，不补宽高，也不猜纵向。 改 orient 时不自动对调 pageWidth / pageHeight。不读写 w:code。",
       "type": "object",
       "required": [
         "op",
@@ -4120,6 +4233,8 @@
       ]
     },
     "setColumnsOp": {
+      "description": "改这一节的分栏。",
+      "limits": "enabled: false 与其它字段不能同时出现，否则报 InvalidField。其余字段至少给一个，否则报 InvalidField。num 小于 1 报 InvalidField。只改被点名的属性。 没有 w:cols 且不是删除时插入一个。给了 cols 却同时 equalWidth 为 true 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4171,6 +4286,8 @@
       }
     },
     "setVerticalAlignOp": {
+      "description": "必填。",
+      "limits": "不认识的字符串报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4204,6 +4321,8 @@
       }
     },
     "setLineNumberingOp": {
+      "description": "改这一节的行号。",
+      "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个。没有 w:lnNumType 且不是删除时插入一个，只写本次给出的属性。",
       "type": "object",
       "required": [
         "op",
@@ -4243,6 +4362,8 @@
       }
     },
     "setDocGridOp": {
+      "description": "改文档网格。",
+      "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个。没有 w:docGrid 且不是删除时插入一个。",
       "type": "object",
       "required": [
         "op",
@@ -4277,6 +4398,8 @@
       }
     },
     "setRtlGutterOp": {
+      "description": "必填。",
+      "limits": "规则与 setTitlePage 相同。",
       "type": "object",
       "required": [
         "op",
@@ -4298,6 +4421,8 @@
       }
     },
     "setMirrorMarginsOp": {
+      "description": "开关对称页边距。",
+      "limits": "id 不是 docx:document 报 InvalidId。没有 settings.xml 报 OpcPartMissing。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4319,6 +4444,8 @@
       }
     },
     "setGutterAtTopOp": {
+      "description": "id 与缺 settings 的报错与 setMirrorMargins 相同。",
+      "limits": "关掉本标志不改各节 w:pgMar/@w:gutter。",
       "type": "object",
       "required": [
         "op",
@@ -4340,6 +4467,8 @@
       }
     },
     "insertTocOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里根据标题算页码。不包 w:sdt。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -4368,6 +4497,8 @@
       }
     },
     "deleteTocOp": {
+      "description": "删掉该目录块。",
+      "limits": "若该 TOC 域落在 w:sdt 里，且 sdtPr 的 docPartGallery 为 Table of Contents / Table of Figures / List of Figures / Table of Authorities， 并且该 sdt 是 w:body 的直接子节点，则删掉整个 sdt（含「目录」标题段）。否则删掉该域从 begin 到 end 的全部 run（含结果区里的嵌套域），再删掉因此变空、且没有 sectPr 的正文段落。不要留下空的目录段。",
       "type": "object",
       "required": [
         "op",
@@ -4385,6 +4516,8 @@
       }
     },
     "insertCaptionOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId）：bookmarkStart、标签 run（{label} 后带一个空格）、 一组复杂 SEQ 域（fldChar begin 带 w:dirty=\"true\"、指令 SEQ {label} \\* ARABIC 、separate、end， 不写结果 run）、bookmarkEnd、若给了 title 再写说明 run（若 title 不是以空白开头则前面补一个空格）。",
+      "limits": "不写 Caption 段落样式。不在库里求序号。",
       "type": "object",
       "required": [
         "op",
@@ -4413,6 +4546,8 @@
       }
     },
     "deleteCaptionOp": {
+      "description": "若该 SEQ 落在 w:body 的直接子段落上，则删掉整段（题注就是这一段）。",
+      "limits": "某段带分节符且不能整段删掉时，报 NotImplemented。否则只拆掉该 SEQ 域（含缓存）以及包住它的 _Ref* 书签，不删格子或页眉段落。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。找不到报 IdNotFound。id 不是 caption:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4430,6 +4565,8 @@
       }
     },
     "insertCrossRefOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里解析书签内容。本期不写 NOTEREF。bookmark 缺、空串或含空白报 InvalidField。主文档里没有该名报 IdNotFound。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4458,6 +4595,8 @@
       }
     },
     "deleteCrossRefOp": {
+      "description": "拆掉该 REF / PAGEREF / NOTEREF 域（含指令与缓存），不删所在段落。",
+      "limits": "找不到报 IdNotFound。id 不是 xref:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4475,6 +4614,8 @@
       }
     },
     "insertIndexOp": {
+      "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不在库里根据 XE 算页码。不包 w:sdt，不写 Index 样式，不改 sectPr 分栏。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、index:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -4496,6 +4637,8 @@
       }
     },
     "deleteIndexOp": {
+      "description": "删掉该 INDEX 域从 begin 到 end 的全部 run（含结果区里的嵌套域），再删掉因此变空、且没有 sectPr 的正文段落。",
+      "limits": "不要留下空的索引段。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是 index:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4513,6 +4656,8 @@
       }
     },
     "insertIndexEntryOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin、一条 instrText、fldChar end。",
+      "limits": "不写 separate（与 Word 16.0 Indexes.MarkEntry 一致），不写 w:vanish，不写结果 run。不在库里求页码。框内、注内、批注内的段落，以及索引 id、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4535,6 +4680,8 @@
       }
     },
     "deleteIndexEntryOp": {
+      "description": "拆掉该 XE 域（含指令），不删所在段落。",
+      "limits": "找不到报 IdNotFound。id 不是 xe:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4552,6 +4699,8 @@
       }
     },
     "insertSourceOp": {
+      "description": "没有 bibliography customXml 时新建 /customXml/itemN.xml（空 b:Sources，SelectedStyle 为 \\APASixthEditionOfficeOnline.xsl， StyleName 为 APA，Version 为 6）、itemPropsN.xml（schemaRef 为 bibliography 命名空间）、itemN.xml.rels，以及主文档 /customXml 关系。",
+      "limits": "只给 itemProps 写 Content Type Override。",
       "type": "object",
       "required": [
         "op",
@@ -4598,6 +4747,8 @@
       }
     },
     "deleteSourceOp": {
+      "description": "删掉该 b:Source，按剩余源重写 b:RefOrder（从 1 起）。",
+      "limits": "不删 CITATION / BIBLIOGRAPHY 域。空了也留下 b:Sources 部件。找不到报 IdNotFound。id 不是 source:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4615,6 +4766,8 @@
       }
     },
     "insertCitationOp": {
+      "description": "在该段已有内容之后插入一行内 w:sdt：sdtPr 含 w:id 与空的 w:citation， sdtContent 里写一组复杂域（fldChar begin 带 w:dirty=\"true\"、指令 CITATION {tag} 、separate、end）。",
+      "limits": "不写结果 run，不写 dataBinding。不在库里排版引文。主文档里没有该 tag 报 IdNotFound。空串、只含空白或含英文双引号的 tag 报 InvalidField。框内、注内、批注内本期不编。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4637,6 +4790,8 @@
       }
     },
     "deleteCitationOp": {
+      "description": "若该 CITATION 包在带 w:citation 的 w:sdt 里，删掉整个 sdt；否则只拆掉该域。",
+      "limits": "不删所在段落，也不删书目源。找不到报 IdNotFound。id 不是 cite:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4654,6 +4809,8 @@
       }
     },
     "insertBibliographyOp": {
+      "description": "在点名段之后插入一个新的 w:p，里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
+      "limits": "不写结果 run，不包 w:sdt，不写 Bibliography 样式。不在库里按源排版。表格单元格内、页眉页脚、框内、注内、批注内的段落报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4675,6 +4832,8 @@
       }
     },
     "deleteBibliographyOp": {
+      "description": "删掉该 BIBLIOGRAPHY 域从 begin 到 end 的全部 run，再删掉因此变空、且没有 sectPr 的正文段落。",
+      "limits": "删完后若 w:body 里没有 w:p，补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是 biblio:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4692,6 +4851,7 @@
       }
     },
     "setBibliographyStyleOp": {
+      "description": "按 Word 16.0 另存写 b:Sources 的三个属性：",
       "type": "object",
       "required": [
         "op",
@@ -4719,6 +4879,8 @@
       }
     },
     "insertDocPartOp": {
+      "description": "没有 glossary 时新建 /word/glossary/document.xml（空 w:docParts）， 并写卫星 styles.xml / settings.xml / webSettings.xml / fontTable.xml、glossary .rels、 主文档 glossaryDocument 关系与 Content Type Override。",
+      "limits": "styles.xml / settings.xml 复制自主文档对应部件；没有则写最小 styles / settings。",
       "type": "object",
       "required": [
         "op",
@@ -4758,6 +4920,8 @@
       }
     },
     "deleteDocPartOp": {
+      "description": "删掉该 w:docPart。",
+      "limits": "删光最后一条则去掉 glossary 部件、卫星、主文档关系与 Override，不要留空 w:docParts。找不到报 IdNotFound。id 不是 docPart:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4775,6 +4939,8 @@
       }
     },
     "insertDocPartContentOp": {
+      "description": "把该条目 docPartBody 的块级子节点复制进主文档。",
+      "limits": "跳过 sectPr 与末尾空段。给新的 w:p 分配新 w14:paraId。behavior 为 pg 时先插一条只含 w:br/@w:type=\"page\" 的段。content 与 p 都按块级兄弟插入（不把末段 run 并进点名段）。表格单元格内、页眉页脚、框内、注内、批注内的段落报 InvalidId。找不到基块报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4797,6 +4963,8 @@
       }
     },
     "acceptRevisionOp": {
+      "description": "不调 Word COM。",
+      "limits": "run 级 ins：拆掉 w:ins 外壳，留下内部 w:r，并去掉这些 run 的属性容器上的 ins / del（Word 会另写在 rPr 里，不进树）。run 级 del：删掉整个 w:del（含 delText）。run 级 moveFrom：删掉该节点（含内容），并删掉包住它的同 w:id 的 moveFromRangeStart / moveFromRangeEnd。",
       "type": "object",
       "required": [
         "op",
@@ -4814,6 +4982,8 @@
       }
     },
     "rejectRevisionOp": {
+      "description": "run 级 ins：删掉整个 w:ins。",
+      "limits": "run 级 del：拆掉 w:del 外壳，把其中 w:delText 改回 w:t，并去掉内部属性容器上的 ins / del。run 级 moveFrom：拆掉 w:moveFrom 外壳，留下内部 w:r，并删掉包住它的 RangeStart/End。run 级 moveTo：删掉该节点（含内容），并删掉包住它的 RangeStart/End。rPrChange：用 Change 里的旧 w:rPr 替换当前 run 属性。pPrChange：用 Change 里的旧 w:pPr 替换当前段落属性。",
       "type": "object",
       "required": [
         "op",
@@ -4831,6 +5001,8 @@
       }
     },
     "insertContentControlOp": {
+      "description": "在点名段末尾追加一个行内 w:sdt（sdtPr 含 w:id，值为本故事里尚未占用的十进制数字；有 tag / alias 则写入；类型元素按 kind）。",
+      "limits": "checkbox 写 w14:checkbox（checked / checkedState / uncheckedState，缺省符号 U+2612 / U+2610、字体 MS Gothic）， sdtContent 里一条带 MS Gothic 的 w:r/w:t（勾选 ☒、未勾 ☐）。根元素补 xmlns:w14，并把 w14 列入 mc:Ignorable。",
       "type": "object",
       "required": [
         "op",
@@ -4890,6 +5062,8 @@
       }
     },
     "setContentControlOp": {
+      "description": "checkbox：改 w14:checked 与内容符号字符，不把 sdtContent 换成任意文本。",
+      "limits": "picture：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。其余 kind 用新文本替换当前值：行内把 sdtContent 换成一条 w:r/w:t；块级只改 sdtContent 里第一个 w:p 的可见文本，并去掉其余 w:p。有 w:showingPlcHdr 则删掉。不改 kind，不改 w:id。带 w:dataBinding 报 NotImplemented。",
       "type": "object",
       "required": [
         "op",
@@ -4936,6 +5110,8 @@
       }
     },
     "deleteContentControlOp": {
+      "description": "keep 为 none 时：因此变空且无 sectPr 的正文段可删掉。",
+      "limits": "表格单元格内的空段留下。删完后若 w:body 里没有 w:p，在 sectPr 之前补一个空段。某段带分节符且不能整段删掉时，报 NotImplemented。找不到报 IdNotFound。id 不是内容控件 id 报 InvalidId。不认识的 keep 报 InvalidField。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -4959,6 +5135,8 @@
       }
     },
     "insertNumberingOp": {
+      "description": "写入一份抽象定义（9 级 hybridMultilevel）加一个 w:num 实例。",
+      "limits": "没有 /word/numbering.xml 则新建该部件、主文档关系与内容类型 Override。decimal 的 lvlText 为 %1.、%1.%2. 这类累计小数；bullet 用 Symbol 字体，各级 lvlText 轮换实心点、o 与节号。apply 不返回新 id；随后 inspect 按 w:num 文档顺序，新实例在名单末尾。kind 缺或不认识报 InvalidField。id 不是 docx:document 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -4982,6 +5160,8 @@
       }
     },
     "setNumberingOp": {
+      "description": "改某一级编号的格式。",
+      "limits": "numFmt、start、lvlText 至少给一个。只改被点名抽象定义上已有的 w:lvl，不自动建级，也不改该实例上的 w:lvlOverride。 不认识的 numFmt、ilvl 超出 0–8、或该抽象定义没有这一级，报 InvalidField。找不到抽象定义报 IdNotFound。id 不是抽象编号 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5022,6 +5202,8 @@
       }
     },
     "setStyleOp": {
+      "description": "改一个命名样式。",
+      "limits": "font、eastAsiaFont、sz、bold、color、before、after 至少给一个。 段落、字符、表格样式都可改（w:type 为 paragraph / character / table，或缺省当段落）。编号样式报 InvalidField。 before / after 只允许段落与表格样式；字符样式带这两项报 InvalidField。rPr 字段三种都可写。 空 font / eastAsiaFont、不是六位十六进制的 color、sz 越界报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5067,6 +5249,8 @@
       }
     },
     "insertStyleOp": {
+      "description": "在 /word/styles.xml 末尾追加一条自定义样式。",
+      "limits": "没有 styles 部件时新建最小部件，并补主文档关系与 [Content_Types].xml。",
       "type": "object",
       "required": [
         "op",
@@ -5104,6 +5288,8 @@
       }
     },
     "deleteStyleOp": {
+      "description": "只删 w:customStyle 为开（1 / true / on）且不是 w:default 的样式。",
+      "limits": "内置或没有 customStyle 的报 InvalidField。不扫描文档里的 pStyle / rStyle / tblStyle 引用。找不到样式报 IdNotFound。id 不是 style:{styleId} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5121,6 +5307,8 @@
       }
     },
     "mergeCellsOp": {
+      "description": "把 Word 表格里的几格并成一格。",
+      "limits": "范围内已有合并、或格子对不上网格时报 NotImplemented。幸存格是左上角：水平方向写 gridSpan，垂直方向左上为 vMerge=restart、其余行为 continue。 被吃掉的格子里的段落（遇嵌套表停住）按先行后列挪进幸存格，然后删掉那些 w:tc。continue 格留下一个空的 w:p。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5158,6 +5346,8 @@
       }
     },
     "splitCellsOp": {
+      "description": "把 Word 表格里并过的格子拆开。",
+      "limits": "gridSpan 为 1 且没有 vMerge 时报 InvalidField。对 continue 格发此 op 报 InvalidField，必须点名 restart 那一格。 水平拆分后补出的新格各有一段空文本；垂直拆分去掉该列向下连续的 vMerge。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5199,6 +5389,8 @@
       }
     },
     "setTableStyleOp": {
+      "description": "改 Word 表格的样式。",
+      "limits": "style 与 look 至少给一个。style 为样式 id 时目标必须是表格样式。段落 / 字符 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。 look 对象字段：firstRow、lastRow、firstColumn、lastColumn、bandedRows、bandedColumns，均为可选布尔。未点名的开关与已有 tblLook 合并。 没有已有 tblLook 时缺省约 Word 的 04A0：首行开、末行关、首列开、末列关、行带开、列带关。 写出六个属性与 val（四位大写十六进制）。",
       "type": "object",
       "required": [
         "op",
@@ -5279,6 +5471,8 @@
       }
     },
     "setTableFloatOp": {
+      "description": "让 Word 表格浮在文字旁边。",
+      "limits": "不要复用 pptx 的 setTablePos（单位是 EMU）。",
       "type": "object",
       "required": [
         "op",
@@ -5307,6 +5501,8 @@
       }
     },
     "setTableWidthOp": {
+      "description": "改 Word 表格的宽度。",
+      "limits": "不要复用 pptx 的 setTableSize（单位是 EMU）。不要复用 xlsx 的 setColWidth。",
       "type": "object",
       "required": [
         "op",
@@ -5342,6 +5538,8 @@
       }
     },
     "setTableAlignOp": {
+      "description": "行内表的水平对齐与左缩进。",
+      "limits": "浮动位置请用 setTableFloat。",
       "type": "object",
       "required": [
         "op",
@@ -5376,6 +5574,8 @@
       }
     },
     "setTableRowHeightOp": {
+      "description": "改 Word 表格的行高。",
+      "limits": "不要复用 xlsx 的 setRowHeight（单位是磅）。",
       "type": "object",
       "required": [
         "op",
@@ -5423,6 +5623,8 @@
       ]
     },
     "setTableCellMarOp": {
+      "description": "改 Word 表格单元格的内边距。",
+      "limits": "至少给一边。写入表级 tblCellMar，type=\"dxa\"。四边都删光后去掉空的 tblCellMar。 找不到表报 IdNotFound。id 不是表 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5518,6 +5720,8 @@
       }
     },
     "setTableBordersOp": {
+      "description": "表级 w:tblBorders 的四边与内外框。",
+      "limits": "不要和格斜线、页面边框、段边框混。不算自动套表样式。",
       "type": "object",
       "required": [
         "op",
@@ -5546,6 +5750,8 @@
       }
     },
     "setCellBordersOp": {
+      "description": "格级 w:tcBorders 的正交四边与格内 insideH / insideV。",
+      "limits": "不要和 setCellFormat 的 tcMar、斜线、表级 setTableBorders 混。不算自动套表样式。",
       "type": "object",
       "required": [
         "op",
@@ -5574,6 +5780,8 @@
       }
     },
     "setCellFormatOp": {
+      "description": "改 Word 表格单元格的填充、边框和对齐。",
+      "limits": "fill、四边、两条斜线、vAlign、noWrap、textDirection、fitText、hideMark、headers 至少给一个。 fill 写入 shd val=\"clear\" color=\"auto\"，并去掉 theme 填充属性。不是六位十六进制报 InvalidField。 vAlign 写入 tcPr/w:vAlign/@w:val。不认识报 InvalidField。不要和节上 setVerticalAlign 混。",
       "type": "object",
       "required": [
         "op",
@@ -5710,6 +5918,8 @@
       }
     },
     "setParaTextOp": {
+      "description": "改一个段落里的文字。",
+      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
       "type": "object",
       "required": [
         "op",
@@ -5731,6 +5941,7 @@
       }
     },
     "insertParaOp": {
+      "description": "insertPara 的 id：",
       "type": "object",
       "required": [
         "op",
@@ -5751,6 +5962,7 @@
       }
     },
     "deleteParaOp": {
+      "description": "insertPara 的 id：",
       "type": "object",
       "required": [
         "op",
@@ -5768,6 +5980,8 @@
       }
     },
     "insertBookmarkOp": {
+      "description": "在起始段 w:pPr 之后插入 w:bookmarkStart，在结束段末尾插入配对 w:bookmarkEnd。",
+      "limits": "w:id 取该部件已有书签 id 的最大整数加 1，至少为 0。name 不能为空、不能含空白、不能以 _ 开头，否则报 InvalidField。与已有书签名（含隐藏书签）冲突报 InvalidField。end 必须与 id 在同一故事，且文档顺序不得早于起始段，否则报 InvalidField。找不到段落报 IdNotFound。id / end 不是段落 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -5793,6 +6007,8 @@
       }
     },
     "setBookmarkOp": {
+      "description": "改 w:bookmarkStart/@w:name。",
+      "limits": "同时把本部件里 w:hyperlink/@w:anchor 等于旧名的改成新名。新名规则与 insertBookmark 相同。与其他书签重名报 InvalidField。已经是该名则空操作，仍计入 opsApplied。找不到报 IdNotFound。id 不是书签 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5815,6 +6031,8 @@
       }
     },
     "deleteBookmarkOp": {
+      "description": "去掉配对的 w:bookmarkStart 与 w:bookmarkEnd。",
+      "limits": "不改指向该书签的 w:hyperlink/@w:anchor。找不到报 IdNotFound。id 不是书签 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5832,6 +6050,8 @@
       }
     },
     "docxInsertFieldOp": {
+      "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText（xml:space=\"preserve\"）、fldChar separate、 若给了非空 result 则再写一个带 w:t 的 run、fldChar end。",
+      "limits": "给了窗体 code 时在 begin 里写 w:ffData，不写书签。不在库里求值。空 instr / 空 code / 同时给两者 / 两个都不给 / 不认识的 code / 缺 arg，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5900,6 +6120,8 @@
       ]
     },
     "docxSetFieldOp": {
+      "description": "只改被点名那一域的指令，不改缓存结果，也不改 ffData。",
+      "limits": "简单域写 w:instr。复杂域删掉本层指令区里的旧 instrText 以及落在指令区里的嵌套域，在 begin 之后插入一条新的 instrText。结果区（separate 与 end 之间）不动。不在库里求值。instr 缺或只含空白报 InvalidField。找不到报 IdNotFound。id 不是域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5922,6 +6144,8 @@
       }
     },
     "docxDeleteFieldOp": {
+      "description": "keep 为 result：拆掉该域外壳与指令，留下缓存结果。",
+      "limits": "指令区里的嵌套域一并删掉；结果区里的嵌套域留下。简单域拆掉 w:fldSimple，留下子节点。keep 为 instr：把本层指令变成普通可见文本（instrText 改成 w:t，简单域则写成一个带指令原文的 run），删掉 begin / separate / end 与结果区。指令区里的嵌套域留下。找不到报 IdNotFound。id 不是域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5945,6 +6169,8 @@
       }
     },
     "setParaNumberingOp": {
+      "description": "num 为实例 id 时写入（或改写）w:numPr，插在 pStyle 之后。",
+      "limits": "找不到该编号实例报 IdNotFound。num 为 null 时去掉 numPr，不要求 numbering 部件存在。缺 num 报 InvalidField。ilvl 超出 0–8 报 InvalidField。找不到段落报 IdNotFound。id 不是正文或页眉页脚段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -5979,6 +6205,8 @@
       }
     },
     "setParaStyleOp": {
+      "description": "style 为样式 id 时写入（或改写）w:pStyle，放在 pPr 子元素最前。",
+      "limits": "目标必须已在 styles.xml 里，且是段落样式。字符 / 表格 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。style 为 null 时去掉 pStyle，不要求 styles 部件存在。缺 style 报 InvalidField。找不到段落报 IdNotFound。id 不是正文或页眉页脚段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -6008,6 +6236,8 @@
       }
     },
     "setRunStyleOp": {
+      "description": "style 为样式 id 时写入（或改写）w:rStyle，放在 rPr 子元素最前（EG_RPrBase）。",
+      "limits": "目标必须已在 styles.xml 里，且是字符样式。段落 / 表格 / 编号样式报 InvalidField。找不到该样式报 IdNotFound。style 为 null 时去掉 rStyle，不要求 styles 部件存在。缺 style 报 InvalidField。找不到 run 报 IdNotFound。id 不是 run id 报 InvalidId。框内 / 注内 / 批注内 run 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -6037,6 +6267,8 @@
       }
     },
     "setParaFormatOp": {
+      "description": "改段落的对齐、缩进和间距。",
+      "limits": "align、left、right、firstLine、hanging、before、after、line、lineRule、 kinsoku、overflowPunct、topLinePunct、autoSpaceDE、autoSpaceDN、borders、shd、tabs 至少给一个。 firstLine 与 hanging 不能同时写成非 null 的数字。不认识的 align / lineRule 报 InvalidField。只改该段自己的 w:pPr，不改 styles.xml。 属性删光后去掉空的 w:ind / w:spacing。",
       "type": "object",
       "required": [
         "op",
@@ -6331,6 +6563,8 @@
       }
     },
     "setRunFormatOp": {
+      "description": "改一段文字的字体、颜色和字号。",
+      "limits": "bold、italic、underline、sz、color、font、eastAsiaFont、em、eastAsianLayout、highlight、strike、dstrike、vertAlign、spacing、kern、scale 至少给一个。只改被点名的那一个 w:r 的 w:rPr，不拆 run，不改 styles.xml。",
       "type": "object",
       "required": [
         "op",
@@ -6525,6 +6759,8 @@
       }
     },
     "setPageBackgroundOp": {
+      "description": "改页面背景。",
+      "limits": "缺 color、不是字符串也不是 null、或非空却不是六位十六进制，报 InvalidField。不写 themeColor。 可选 fill：省略则只改 @w:color，并删掉已有 v:background 与 w:drawing。 fill 必须是对象，字段只认 kind、color、file。kind 必填，只能是 gradient 或 picture。",
       "type": "object",
       "required": [
         "op",
@@ -6605,6 +6841,8 @@
       }
     },
     "setPageBordersOp": {
+      "description": "改页面边框。",
+      "limits": "enabled: false 与其它字段不能同时出现。其余字段至少给一个，否则报 InvalidField。边对象必须有 val。 val 认 ECMA-376 ST_Border 全套（含 apples 等艺术型）。不认识的令牌报 InvalidField。JSON 不要 art 字段，出现则报 UnknownField。 sz 为非负整数（八分之一磅）。space 为非负整数（磅）。color 为 auto 或六位十六进制。 不认识的 offsetFrom / display / zOrder，或非法 color，报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -6684,6 +6922,8 @@
       }
     },
     "setFormProtOp": {
+      "description": "改某一节的窗体保护。",
+      "limits": "节不存在报 IdNotFound。id 不是 section:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。 setProtection 打开窗体仍给各节写 formProt；随后可用本 op 把某节改成 val=0。",
       "type": "object",
       "required": [
         "op",
@@ -6708,6 +6948,8 @@
       }
     },
     "insertEditRangeOp": {
+      "description": "划出一块允许编辑的区域。",
+      "limits": "edGrp 与 ed 不能同时给。两个都不给时写 w:edGrp=\"everyone\"。不认识的 edGrp 或空 ed 报 InvalidField。 在该段 w:pPr 之后插入 w:permStart，在段末插入配对 w:permEnd。w:id 取该部件已有 perm 标记里最大整数加 1，至少为 0。 框内、注内、批注内的段落，以及非段落 id，报 InvalidId。找不到段落报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -6739,6 +6981,8 @@
       }
     },
     "deleteEditRangeOp": {
+      "description": "删掉该对 permStart / permEnd，不删文字。",
+      "limits": "找不到报 IdNotFound。id 不是 perm:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -6756,6 +7000,8 @@
       }
     },
     "setThemeFmtOp": {
+      "description": "改主文档 theme 部件 a:fmtScheme 的常用槽。",
+      "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
       "type": "object",
       "required": [
         "op",
@@ -6840,6 +7086,8 @@
       }
     },
     "setThemeOverrideOp": {
+      "description": "读写主文档 themeOverride 部件的配色槽。",
+      "limits": "根元素是 a:themeOverride，配色写在根下 clrScheme。",
       "type": "object",
       "required": [
         "op",
@@ -6997,6 +7245,8 @@
       }
     },
     "docxSetThemeColorsOp": {
+      "description": "改主文档 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "limits": "不改未点名的 fmtScheme 槽。不把段落 / run 上的 themeColor 展开成直接色。",
       "type": "object",
       "required": [
         "op",
@@ -7062,6 +7312,8 @@
       }
     },
     "docxSetThemeFontsOp": {
+      "description": "改主文档 theme 部件的 a:fontScheme。",
+      "limits": "未点名的 fmtScheme 槽留下。",
       "type": "object",
       "required": [
         "op",
@@ -7129,6 +7381,8 @@
       }
     },
     "setThemeExtraSchemesOp": {
+      "description": "整份替换主文档 theme 部件的 a:extraClrSchemeLst。",
+      "limits": "不算主题排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -7160,6 +7414,8 @@
       }
     },
     "setThemeObjectDefaultsOp": {
+      "description": "改主文档 theme 部件的 a:objectDefaults。",
+      "limits": "不算主题排版引擎，不把 phClr 展开成 RGB。",
       "type": "object",
       "required": [
         "op",
@@ -7382,6 +7638,8 @@
       ]
     },
     "setTransitionOp": {
+      "description": "写或清除该宿主 <p:transition>。",
+      "limits": "不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -7448,6 +7706,8 @@
       }
     },
     "insertAnimOp": {
+      "description": "给该页对象追加一条预设效果。",
+      "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。",
       "type": "object",
       "required": [
         "op",
@@ -7497,6 +7757,7 @@
       }
     },
     "deleteAnimOp": {
+      "description": "摘掉该宿主名单上的一条效果。",
       "type": "object",
       "required": [
         "op",
@@ -7514,6 +7775,8 @@
       }
     },
     "setAnimOp": {
+      "description": "改该宿主名单上已有一条的 type / trigger / delay / dur / repeat / sound / para / clickOn。",
+      "limits": "不换绑定对象。不接受整棵时间轴 JSON。",
       "type": "object",
       "required": [
         "op",
@@ -7576,6 +7839,8 @@
       }
     },
     "moveAnimOp": {
+      "description": "把该宿主名单上的一条效果挪到新的文档顺序。",
+      "limits": "不改 type，不换绑定对象，不改 delay / dur。不接受整棵时间轴 JSON。",
       "type": "object",
       "required": [
         "op",
@@ -8353,6 +8618,8 @@
       }
     },
     "pptxPresentation": {
+      "description": "新建演示文稿时的正文，只在 create 里使用。",
+      "limits": "不要把它当成 apply 的补丁。",
       "type": "object",
       "required": [
         "slides"
@@ -8727,6 +8994,8 @@
       }
     },
     "setPicturePosOp": {
+      "description": "改图片在页面上的位置。",
+      "limits": "x 与 y 至少给一个，否则报 InvalidField。只改被点名的那一侧。写入 p:spPr/a:xfrm/a:off。找不到该对象报 IdNotFound。 id 不是合法图 id、视频 id 或音频 id 报 InvalidId。批注内图没有画布坐标。setMedia 仍不改几何。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -8764,6 +9033,8 @@
       ]
     },
     "setChartPosOp": {
+      "description": "字段与 setPicturePos 相同，id 为 pptx 图表 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -8801,6 +9072,8 @@
       ]
     },
     "setSmartArtPosOp": {
+      "description": "字段与 setPicturePos 相同，id 为 pptx 图示 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -8838,6 +9111,8 @@
       ]
     },
     "pptxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标幻灯片或备注页。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -8876,6 +9151,8 @@
       }
     },
     "pptxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -8898,6 +9175,8 @@
       }
     },
     "pptxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -8915,6 +9194,8 @@
       }
     },
     "setModel3dPosOp": {
+      "description": "字段与 setPicturePos 相同，id 必须是 pptx 3D 模型 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。Fallback 海报 p:pic 同步改位置。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -8952,6 +9233,8 @@
       ]
     },
     "pptxInsertInkOp": {
+      "description": "把本地 InkML 作为一笔墨迹写入目标幻灯片、备注页、母版或版式。",
+      "limits": "不进 pictures。不把笔画放进树。海报用 1×1 PNG 占位。不写 <p:timing>。位置是画布 EMU。",
       "type": "object",
       "required": [
         "op",
@@ -8990,6 +9273,8 @@
       }
     },
     "pptxReplaceInkOp": {
+      "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "limits": "不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -9012,6 +9297,8 @@
       }
     },
     "pptxDeleteInkOp": {
+      "description": "删掉一处墨迹。",
+      "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系、InkML 与海报。按 deleteShape 同一套规则清该 cNvPr/@id 的 timing tgtEl。",
       "type": "object",
       "required": [
         "op",
@@ -9029,6 +9316,8 @@
       }
     },
     "pptxSetInkSizeOp": {
+      "description": "字段与 setPictureSize 的 pptx 一侧相同。",
+      "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:ext。Fallback 海报 p:pic 同步改尺寸。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。xlsx 用 setInkSize 改单元格锚点，见 xlsx 分册。",
       "type": "object",
       "required": [
         "op",
@@ -9066,6 +9355,8 @@
       ]
     },
     "pptxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标宿主。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不写 <p:timing>。不进批注、备注母版、讲义。",
       "type": "object",
       "required": [
         "op",
@@ -9088,6 +9379,8 @@
       }
     },
     "pptxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。摘整棵 graphicFrame（含 AlternateContent）。两支都扫 r:id（预览只在 Fallback）。 清掉无人引用的关系与 embeddings / 预览媒体。按 deleteShape 同一套规则清该 graphicFrame cNvPr/@id 的 timing tgtEl。 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。",
       "type": "object",
       "required": [
         "op",
@@ -9105,6 +9398,8 @@
       }
     },
     "pptxSetOleSizeOp": {
+      "description": "写入 graphicFrame 的 p:xfrm/a:ext、Choice 与 Fallback 两支 p:oleObj 的 imgW / imgH，以及 Fallback 预览 p:pic 的 a:ext。",
+      "limits": "不改 a:off，不改 embeddings，不启动 OLE 服务器。出现 to 报 InvalidField。对页 id 或图 id 发此 op 报 InvalidId。找不到报 IdNotFound。docx 见 [docx 分册](json-contract-docx.md#setolesize)。",
       "type": "object",
       "required": [
         "op",
@@ -9142,6 +9437,8 @@
       ]
     },
     "setInkPosOp": {
+      "description": "字段与 setPicturePos 相同。",
+      "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:off。Fallback 海报 p:pic 同步改位置。x 与 y 一个都不给报 InvalidField。显式 0 可以。xlsx 不认此 op。",
       "type": "object",
       "required": [
         "op",
@@ -9179,6 +9476,8 @@
       ]
     },
     "pptxInsertMathOp": {
+      "description": "把一条线性公式写入目标幻灯片或备注页。",
+      "limits": "不进 shapes。不实现排版引擎。不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -9217,6 +9516,8 @@
       }
     },
     "pptxSetMathOp": {
+      "description": "不改位置尺寸。",
+      "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -9239,6 +9540,8 @@
       }
     },
     "pptxDeleteMathOp": {
+      "description": "删掉一个公式。",
+      "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。摘整棵 AlternateContent。 海报无人引用则删。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -9256,6 +9559,8 @@
       }
     },
     "pptxSetMathSizeOp": {
+      "description": "字段与 setShapeSize 相同。",
+      "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:ext。没有 xfrm 则补。不改 Fallback。cx 与 cy 一个都不给报 InvalidField。对形状 id 发此 op、对公式框 id 发 setShapeSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setmathsize)。",
       "type": "object",
       "required": [
         "op",
@@ -9293,6 +9598,8 @@
       ]
     },
     "setMathPosOp": {
+      "description": "字段与 setShapePos 相同。",
+      "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:off。没有 xfrm 则补。不改 Fallback。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。对公式框 id 发 setShapePos 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -9461,6 +9768,8 @@
       ]
     },
     "insertShapeOp": {
+      "description": "往幻灯片、备注页、母版或版式插入一个带 p:txBody 的形状。",
+      "limits": "缺省 prst 为矩形文本框。不抄版式占位符，不写 <p:timing>。往母版 / 版式插时写出没有 p:ph 的装饰形，不把该 p:sp 抄进各页。插占位符请用 insertPlaceholder。",
       "type": "object",
       "required": [
         "op",
@@ -9611,6 +9920,8 @@
       }
     },
     "insertConnectorOp": {
+      "description": "往幻灯片、备注页、母版或版式插入一条连接线（p:cxnSp）。",
+      "limits": "不算自动绕障碍。省略 start / end 时不写 a:stCxn / a:endCxn。",
       "type": "object",
       "required": [
         "op",
@@ -9684,6 +9995,8 @@
       }
     },
     "deleteConnectorOp": {
+      "description": "删掉一条连接线。",
+      "limits": "找不到该连接线报 IdNotFound。id 不是连接线 id 报 InvalidId。删掉对应 p:cxnSp。 若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。删组合内连接线后若组合空了，把空 p:grpSp 一并摘掉。不改其它对象的 cNvPr/@id。 按被删连接线的 cNvPr/@id 清掉本页 <p:timing> 里对应的 p:tgtEl。docx 见 [docx 分册](json-contract-docx.md#deleteconnector)。",
       "type": "object",
       "required": [
         "op",
@@ -9701,6 +10014,8 @@
       }
     },
     "groupShapesOp": {
+      "description": "把同一页 spTree 上至少两个直接子对象包进一个新 p:grpSp。",
+      "limits": "组合本身不进 inspect 树。",
       "type": "object",
       "required": [
         "op",
@@ -9727,6 +10042,8 @@
       }
     },
     "ungroupOp": {
+      "description": "解开某个成员所在的 p:grpSp，子节点抬回父节点。",
+      "limits": "组合本身没有 inspect id。",
       "type": "object",
       "required": [
         "op",
@@ -9744,6 +10061,8 @@
       }
     },
     "deleteShapeOp": {
+      "description": "删掉一个形状。",
+      "limits": "找不到该形状报 IdNotFound。id 不是形状 id 报 InvalidId。对母版、版式、备注母版或讲义占位符 id 发本 op 报 InvalidId。 插删占位符请用 insertPlaceholder / deletePlaceholder。对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 删掉对应 p:sp。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。",
       "type": "object",
       "required": [
         "op",
@@ -9761,6 +10080,8 @@
       }
     },
     "setShapePosOp": {
+      "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:off。",
+      "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。",
       "type": "object",
       "required": [
         "op",
@@ -9798,6 +10119,8 @@
       ]
     },
     "setShapeSizeOp": {
+      "description": "写入该 p:sp 或 p:cxnSp 的 p:spPr/a:xfrm/a:ext。",
+      "limits": "没有 xfrm 则补。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。对 sldImg 占位符报 InvalidField。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件。备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。对已组合的子对象只改该子 xfrm，不重算父组合框。",
       "type": "object",
       "required": [
         "op",
@@ -9835,6 +10158,8 @@
       ]
     },
     "setShapeFillOp": {
+      "description": "写入 p:spPr 的 a:solidFill/a:srgbClr；null 则写成 a:noFill，并去掉原有填充。",
+      "limits": "缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -9859,6 +10184,8 @@
       }
     },
     "setShapeFormatOp": {
+      "description": "改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐、框内垂直锚点、段落间距与字符间距。",
+      "limits": "不改可见字。不要用 Word 的半磅字号。",
       "type": "object",
       "required": [
         "op",
@@ -10035,6 +10362,8 @@
       ]
     },
     "setShapeLineOp": {
+      "description": "写入 p:spPr/a:ln。",
+      "limits": "color 为 null 时写成 a:ln/a:noFill；此时出现 width 报 InvalidField。缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 也不是连接线 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。",
       "type": "object",
       "required": [
         "op",
@@ -10146,6 +10475,8 @@
       }
     },
     "setShapeGeomOp": {
+      "description": "把带 p:txBody 的 p:sp 的 a:prstGeom 或已有 a:custGeom 整份换成自定义路径。",
+      "limits": "不重算组合框。",
       "type": "object",
       "required": [
         "op",
@@ -10171,6 +10502,8 @@
       }
     },
     "setConnectorOp": {
+      "description": "改一条已有连接线的起点 / 终点绑定。",
+      "limits": "不算自动绕障碍。不改画布坐标。",
       "type": "object",
       "required": [
         "op",
@@ -10194,6 +10527,8 @@
       }
     },
     "insertVideoOp": {
+      "description": "往幻灯片、备注页或幻灯片母版 / 版式插入一段内嵌视频。",
+      "limits": "不解码、不抽帧。不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -10259,6 +10594,8 @@
       }
     },
     "insertAudioOp": {
+      "description": "往幻灯片、备注页或幻灯片母版 / 版式插入一段内嵌音频。",
+      "limits": "字段与 insertVideo 相同，op 为 \"insertAudio\"，file 按文件头认 WAV（RIFF…WAVE），写出 /ppt/media/mediaN.wav，内容类型 audio/x-wav。p:nvPr 写 a:audioFile/@r:link 与 p14:media/@r:embed。ISO 关系 Type 以 /audio 结尾。缺尺寸则用 609600 × 609600。其余规则与 insertVideo 相同。文件不是 WAV 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10324,6 +10661,8 @@
       }
     },
     "setMediaOp": {
+      "description": "改已有内嵌视频 / 音频的裁剪、书签与字幕轨。",
+      "limits": "不换媒体文件。不写 <p:timing>。不写 <p14:fade>。",
       "type": "object",
       "required": [
         "op",
@@ -10374,6 +10713,8 @@
       }
     },
     "deleteMediaOp": {
+      "description": "删掉一个视频或音频。",
+      "limits": "找不到该对象报 IdNotFound。id 不是视频 id 也不是音频 id 报 InvalidId。摘掉对应 p:pic。 该 p:pic 上的 media / video / audio / 海报 image 关系若本页 XML 里无人引用则删除；对应 /ppt/media/… 若重新解析后无人引用则删掉。 清掉 <p:timing> 里对应该 cNvPr/@id 的 p:tgtEl，规则与 deleteShape 相同；未点名对象的 timing 留下，不要整节无故删掉 <p:timing>。不改未点名的 p:pic。",
       "type": "object",
       "required": [
         "op",
@@ -10391,6 +10732,8 @@
       }
     },
     "insertCustomShowOp": {
+      "description": "在 p:custShowLst 里追加或插入一条自定义放映。",
+      "limits": "不改各页 XML。不实现放映引擎。不改 presProps 的 showPr（放映设置用 setShowPr）。",
       "type": "object",
       "required": [
         "op",
@@ -10423,6 +10766,8 @@
       }
     },
     "setCustomShowOp": {
+      "description": "改一个自定义放映。",
+      "limits": "name 与 slides 至少给一个，否则报 InvalidField。找不到该条报 IdNotFound。id 不是自定义放映 id 报 InvalidId。未点名的 @id 与 extLst 留下。 xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10450,6 +10795,8 @@
       }
     },
     "deleteCustomShowOp": {
+      "description": "删掉一个自定义放映。",
+      "limits": "找不到该条报 IdNotFound。id 不是自定义放映 id 报 InvalidId。摘掉该 p:custShow。删光后去掉空的 custShowLst。不改各页 XML，不改 sldIdLst。 xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10467,6 +10814,8 @@
       }
     },
     "insertZoomOp": {
+      "description": "把幻灯片缩放、节缩放或摘要缩放写入目标宿主。",
+      "limits": "不实现放映跳转，不写 <p:timing>，不生成真实预览图（写入一张最小 PNG 占位）。不进批注、备注母版、讲义。",
       "type": "object",
       "required": [
         "op",
@@ -10516,6 +10865,8 @@
       }
     },
     "deleteZoomOp": {
+      "description": "删掉一个缩放链接。",
+      "limits": "找不到报 IdNotFound。id 不是 Zoom id 报 InvalidId。摘整段 AlternateContent（或无 AC 时的 graphicFrame）。两支都扫关系 id。 清掉无人引用的预览媒体与指向目标页的 slide 关系。按 deleteShape 同一套规则清该 graphicFrame cNvPr/@id 的 timing tgtEl。xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10533,6 +10884,8 @@
       }
     },
     "setZoomOp": {
+      "description": "改一个缩放链接。",
+      "limits": "target、targets、file、几何至少给一类，否则报 InvalidField。只给几何也合法。target 与 targets 同时出现报 InvalidField。 cx 与 cy 只出现一侧报 InvalidField。 targets 为空或含重复节报 InvalidField。空 file 报 InvalidField。读不到 file 报 Io。不是该格式认的图片报 InvalidField。 SVG 只写入 PNG 海报，不写 svgBlip。",
       "type": "object",
       "required": [
         "op",
@@ -10581,6 +10934,8 @@
       }
     },
     "setShowPrOp": {
+      "description": "改 /ppt/presProps.xml 的 p:showPr（ECMA-376 §19.2.1.30）。",
+      "limits": "不实现放映引擎，不改自定义放映名单，不改 prnPr。",
       "type": "object",
       "required": [
         "op",
@@ -10614,6 +10969,8 @@
       }
     },
     "pptxInsertFieldOp": {
+      "description": "往幻灯片文本形状最后一段、a:endParaRPr 之前插入一个 a:fld（ECMA-376 §21.1.2.2.4）。",
+      "limits": "不写 a:pPr。不在库里求值，不刷新缓存。",
       "type": "object",
       "required": [
         "op",
@@ -10639,6 +10996,8 @@
       }
     },
     "pptxSetFieldOp": {
+      "description": "改一个域。",
+      "limits": "type 与 text 至少给一个，否则报 InvalidField。改 type 不改 GUID。找不到报 IdNotFound。id 不是 pptx 域 id 报 InvalidId。 xlsx 上发此 op 报 InvalidField。docx 仍改 instr。",
       "type": "object",
       "required": [
         "op",
@@ -10663,6 +11022,8 @@
       }
     },
     "pptxDeleteFieldOp": {
+      "description": "keep 为 result：把 a:fld 换成 a:r，抄 rPr 与缓存 a:t。",
+      "limits": "keep 为 instr：把 a:t 写成 type 字符串。找不到报 IdNotFound。id 不是 pptx 域 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10686,6 +11047,8 @@
       }
     },
     "setNotesTextOp": {
+      "description": "只改备注页上占位符 p:ph/@type 为 body 的那个文本框。",
+      "limits": "文档顺序中第一个 body 占位符命中。找不到该页报 IdNotFound。id 不是上述两种报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -10707,6 +11070,8 @@
       }
     },
     "insertSlideOp": {
+      "description": "插入一张幻灯片。",
+      "limits": "pptx：id 不是 pptx:presentation 报 InvalidId。after 找不到报 IdNotFound；不是页 id 报 InvalidId。 新建空白幻灯片部件（p:spTree 只有组合框，不抄版式占位符，不写 <p:timing>），关系指向一份已有 slideLayout：优先抄 after 那一页的版式关系，省略 after 则抄最后一页；该页没有版式关系则用第一份幻灯片母版的第一份版式。 找不到任何版式报 InvalidField。p:sldId/@id 取已有最大 ST_SlideId 加 1，至少为 256。",
       "type": "object",
       "required": [
         "op",
@@ -10728,6 +11093,8 @@
       }
     },
     "deleteSlideOp": {
+      "description": "删掉一张幻灯片。",
+      "limits": "找不到该页报 IdNotFound。id 不是页 id 报 InvalidId。删掉演示文稿里最后一页报 InvalidField，不写文件。 去掉 sldIdLst 表项、presentation 关系、内容类型，以及该页部件及其 .rels。该页备注 notesSlide、现代批注部件、图表 / embedding / diagram / 媒体若再无人引用则删。 不删幻灯片版式、母版、主题、notesMaster。",
       "type": "object",
       "required": [
         "op",
@@ -10745,6 +11112,8 @@
       }
     },
     "moveSlideOp": {
+      "description": "调整一张幻灯片的顺序。",
+      "limits": "找不到该页或 after 报 IdNotFound。id / after 不是页 id 报 InvalidId。after 与 id 是同一页报 InvalidField。已经在目标位置则空操作。 只改 presentation.xml 里 sldIdLst 子元素顺序，以及若有 p14:sectionLst 则按同一套顺序把该 ST_SlideId 挪到 after 那一页所在节（移到最前则进第一节）。 不改部件路径、p:sldId/@id 或关系 id。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10769,6 +11138,8 @@
       }
     },
     "setSlideHiddenOp": {
+      "description": "隐藏或显示一张幻灯片。",
+      "limits": "找不到该页报 IdNotFound。id 不是页 id 报 InvalidId。缺 hidden 报 InvalidField。true 在该页 p:sld 上写 show=\"0\"。 false 去掉 show。已经是目标可见性则空操作。允许把全部页藏起来。不改 sldIdLst。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10790,6 +11161,8 @@
       }
     },
     "setSlideLayoutOp": {
+      "description": "只改该页 .rels 里指向 slideLayout 的关系。",
+      "limits": "不改幻灯片 XML，不删用户形状，不把版式占位符抄进页，不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -10812,6 +11185,8 @@
       }
     },
     "insertLayoutOp": {
+      "description": "在已有母版上追加一份空白版式。",
+      "limits": "不抄占位符，不算母版排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -10833,6 +11208,8 @@
       }
     },
     "deleteLayoutOp": {
+      "description": "删掉一个版式。",
+      "limits": "找不到该版式报 IdNotFound。id 不是版式 id 报 InvalidId。任何页的 layoutId 指向它则报 InvalidField，未写文件。该母版只剩这一份版式报 InvalidField。 摘掉母版 p:sldLayoutIdLst 对应项、母版 .rels 对应关系、该 slideLayout 部件及其 .rels、内容类型 Override。不改各页 XML，不改未点名版式。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10850,6 +11227,8 @@
       }
     },
     "insertPlaceholderOp": {
+      "description": "往母版或版式插入一个带 p:ph 与 p:txBody 的占位符。",
+      "limits": "装饰形请用 insertShape。不写 theme p:style，不写 a16:creationId。",
       "type": "object",
       "required": [
         "op",
@@ -10891,6 +11270,8 @@
       }
     },
     "deletePlaceholderOp": {
+      "description": "删掉一个占位符。",
+      "limits": "找不到该占位符报 IdNotFound。id 不是占位符 id 报 InvalidId。对幻灯片形状 id 发本 op 报 InvalidId。只删该 p:sp。 若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。组合里的占位符同样摘掉；组合空了则把空 p:grpSp 一并摘掉。 不改各页 XML，不改未点名占位符的 cNvPr/@id。不把备注母版 / 讲义的删除抄进 notesSlide 或各页。 docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10908,6 +11289,8 @@
       }
     },
     "insertMasterOp": {
+      "description": "抄现有一份母版及其全部版式与 theme 部件，新开 master / layout / theme。",
+      "limits": "不生成新的占位符几何，不算母版排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -10929,6 +11312,8 @@
       }
     },
     "deleteMasterOp": {
+      "description": "删掉一个母版。",
+      "limits": "找不到该母版报 IdNotFound。id 不是母版 id 报 InvalidId（对 master:{n}/layout:{k} 或占位符 id 也是这条）。最后一份母版报 InvalidField。 任何页仍使用该母版下的版式报 InvalidField，未写文件。摘掉 presentation 的 p:sldMasterId 与对应关系， 以及该母版、其全部版式、仅被它引用的 theme 部件及其 .rels 与内容类型 Override。 不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -10946,6 +11331,8 @@
       }
     },
     "setSlideSizeOp": {
+      "description": "只改 presentation.xml 的 p:sldSz。",
+      "limits": "不按新画布重排已有形状，不算排版引擎。不改 p:notesSz。",
       "type": "object",
       "required": [
         "op",
@@ -10979,6 +11366,8 @@
       }
     },
     "setNotesSizeOp": {
+      "description": "只改 presentation.xml 的 p:notesSz。",
+      "limits": "不按新画布重排已有备注形状，不算排版引擎。不改 p:sldSz。",
       "type": "object",
       "required": [
         "op",
@@ -11008,6 +11397,8 @@
       }
     },
     "setHandoutTextOp": {
+      "description": "改讲义上的页眉页脚文字。",
+      "limits": "四个槽位至少给一个，否则报 InvalidField。未点名的槽位留下。id 不是 handout 报 InvalidId。 不要和 setNotesText 混用：本 op 只改 /ppt/handoutMasters/…，不改 notesSlide。 对 handout 容器发 setShapeText / setShapeFormat / insertShape / deleteShape / setShapeFill / setShapeLine / setShapeGeom 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -11059,6 +11450,8 @@
       ]
     },
     "insertSlideSectionOp": {
+      "description": "在 p:sldIdLst 之上写入 p14:sectionLst 分组。",
+      "limits": "不改页部件。不写节的 UI 颜色。",
       "type": "object",
       "required": [
         "op",
@@ -11088,6 +11481,8 @@
       }
     },
     "setSlideSectionNameOp": {
+      "description": "改幻灯片节的名字。",
+      "limits": "找不到该节报 IdNotFound。id 不是节 id 报 InvalidId。只改 p14:section/@name。不改 GUID、不改所含页。xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -11109,6 +11504,8 @@
       }
     },
     "deleteSlideSectionOp": {
+      "description": "删掉一个幻灯片节。",
+      "limits": "找不到该节报 IdNotFound。id 不是节 id 报 InvalidId。页留在 sldIdLst，不删幻灯片部件。该节里的 ST_SlideId 并进前一节（删的是第一节则并进后一节）。 只剩这一节时去掉整份 p14:sectionLst；若该 p:ext 里没有别的子元素则连 p:ext 一起去掉。空的 p:extLst 也去掉。xlsx / docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -11126,6 +11523,8 @@
       }
     },
     "setSlideSectionOp": {
+      "description": "把一页划进某节。",
+      "limits": "节必须覆盖 sldIdLst 的一个连续分段。",
       "type": "object",
       "required": [
         "op",
@@ -11293,6 +11692,8 @@
       ]
     },
     "setTableCellTextOp": {
+      "description": "改幻灯片 DrawingML 表某一格的可见文字。",
+      "limits": "手术刀规则与 setShapeText 相同，目标是该 a:tc 的 a:txBody，不整格重建。",
       "type": "object",
       "required": [
         "op",
@@ -11314,6 +11715,8 @@
       }
     },
     "setTablePosOp": {
+      "description": "写入该 p:graphicFrame 的 p:xfrm/a:off。",
+      "limits": "没有 xfrm 则补。只改画布坐标，不重分配 gridCol/@w 与 tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -11339,6 +11742,8 @@
       }
     },
     "setTableSizeOp": {
+      "description": "写入该 p:graphicFrame 的 p:xfrm/a:ext。",
+      "limits": "没有 xfrm 则补。只改框尺寸，不算自动列宽，不重分配 a:gridCol/@w 与 a:tr/@h。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。cx 与 cy 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -11364,6 +11769,8 @@
       }
     },
     "setTableColWidthsOp": {
+      "description": "只写 a:tblGrid 的 a:gridCol/@w。",
+      "limits": "没有网格则补 a:tblGrid。不改 p:xfrm。不改各格 tcW。找不到报表 IdNotFound。id 不是表 id 报 InvalidId。缺 cols、不是数组、长度对不上 colCount、或某项不是正整数报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableWidth（单位是 twip）。不要复用 xlsx 的 setColWidth。",
       "type": "object",
       "required": [
         "op",
@@ -11389,6 +11796,8 @@
       }
     },
     "setTableTrHeightOp": {
+      "description": "只改该行 @h。",
+      "limits": "不改框 p:xfrm。找不到该行报 IdNotFound。id 不是行 id 报 InvalidId。缺 h、或不是正整数报 InvalidField。a:tr/@h 必填，h: null 报 InvalidField。inspect 缺 @h 仍报 null。docx / xlsx 上发此 op 报 InvalidField。不要复用 Word 的 setTableRowHeight（单位是 twip）。不要复用 xlsx 的 setRowHeight。",
       "type": "object",
       "required": [
         "op",
@@ -11502,6 +11911,8 @@
       }
     },
     "setTableCellFillOp": {
+      "description": "改某一格 a:tcPr 的填充（EG_FillProperties）。",
+      "limits": "不要用 setShapeFill。不要用 docx 的 setCellFormat。theme 色仍不展开成 RGB。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",
@@ -11670,6 +12081,8 @@
       ]
     },
     "setTableCellBordersOp": {
+      "description": "改某一格 a:tcPr 的六边。",
+      "limits": "未点名的边留下。不要用 setShapeLine。",
       "type": "object",
       "required": [
         "op",
@@ -11781,6 +12194,8 @@
       }
     },
     "setTableCellInsetOp": {
+      "description": "改某一格 a:tcPr 的 marT / marL / marB / marR。",
+      "limits": "不要用 docx 的 setTableCellMar 或 setCellFormat。",
       "type": "object",
       "required": [
         "op",
@@ -11826,6 +12241,8 @@
       }
     },
     "setTableCellPrOp": {
+      "description": "改某一格 a:tcPr 上 44 / 45 / 50 未覆盖的属性与子元：vert、anchorCtr、horzOverflow、cell3D、headers。",
+      "limits": "不要改 C9 的 textAnchor。不要写 tcPr/@anchor。不要用 setShapeFormat。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",
@@ -11895,6 +12312,8 @@
       }
     },
     "setTableStyleRefOp": {
+      "description": "改某一张 DrawingML 表上的样式 GUID 与 a:tblPr 行列开关。",
+      "limits": "不要用 docx 的 setTableStyle。不要读写 /ppt/tableStyles.xml。备注表、母版表同样认。",
       "type": "object",
       "required": [
         "op",
@@ -12027,6 +12446,8 @@
       ]
     },
     "pptxSetThemeColorsOp": {
+      "description": "改该母版 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "limits": "不改未点名的 fmtScheme 槽。不把未点名形状上的 schemeClr 展开成直接色。",
       "type": "object",
       "required": [
         "op",
@@ -12104,6 +12525,8 @@
       }
     },
     "pptxSetThemeFontsOp": {
+      "description": "改该母版 theme 部件的 a:fontScheme。",
+      "limits": "未点名的 fmtScheme 槽留下。",
       "type": "object",
       "required": [
         "op",
@@ -12226,6 +12649,8 @@
       }
     },
     "setClrMapOp": {
+      "description": "改 slideMaster、notesMaster 或 handoutMaster 上的 p:clrMap。",
+      "limits": "不把映射算成 RGB。不改 theme 部件。",
       "type": "object",
       "required": [
         "op",
@@ -12291,6 +12716,7 @@
       }
     },
     "setClrMapOvrOp": {
+      "description": "改幻灯片、版式或备注页上的 p:clrMapOvr。",
       "type": "object",
       "required": [
         "op",
@@ -12429,6 +12855,8 @@
       }
     },
     "insertChartOp": {
+      "description": "插入一个图表。",
+      "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/charts/chartN.xml（N 从 1 起尚未占用）、chart 的 .rels、一份最小 embedding xlsx（工作表名 Sheet1， 分类从 A2 起，系列名在第 1 行，数值从 B2 起向右），以及宿主部件关系（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）、[Content_Types].xml Override。 chart 部件仍写在 /word/charts/。",
       "type": "object",
       "required": [
         "op",
@@ -12555,6 +12983,8 @@
       }
     },
     "deleteChartOp": {
+      "description": "删掉一个图表。",
+      "limits": "docx：删掉对应 w:drawing。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。重新解析关系之后，若该 chart 部件、专属 colors / style、embedding 再无人引用，删掉这些部件、关系条目和对应内容类型。",
       "type": "object",
       "required": [
         "op",
@@ -12572,6 +13002,8 @@
       }
     },
     "setChartTitleOp": {
+      "description": "改图表标题。",
+      "limits": "找不到该图报表 IdNotFound。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12593,6 +13025,8 @@
       }
     },
     "setChartSeriesOp": {
+      "description": "改图表里一个系列的数据。",
+      "limits": "name、categories、values、sizes 至少给一个，否则报 InvalidField。只给的字段改，其余保留。categories 与 values 都给时长度可以不同。 对非气泡系列给 sizes 报 InvalidField。找不到该系列报 IdNotFound。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12662,6 +13096,8 @@
       ]
     },
     "addChartSeriesOp": {
+      "description": "在 chart 部件末尾追加一条 c:ser，c:idx / c:order 取尚未占用的最小值。",
+      "limits": "样式能从最后一条系列抄则抄，抄不了就用最小默认。docx 有 embedding 则在工作表右侧追加一列。xlsx 能从已有系列的 c:f 推出右侧相邻空列则写入；推不出报 NotImplemented。不能用本 op 把单类型图加成组合图。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12714,6 +13150,8 @@
       }
     },
     "deleteChartSeriesOp": {
+      "description": "删掉该 c:ser。",
+      "limits": "docx 若能从公式定位则同步 embedding 里对应列。xlsx 不删单元格。删完后一条都不剩时报 InvalidField（要整张去掉请用 deleteChart）。找不到报 IdNotFound。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12731,6 +13169,8 @@
       }
     },
     "setChartTypeOp": {
+      "description": "改图表类型。",
+      "limits": "不认识的枚举、或值为 combo、chartex，报 InvalidField。当前 type 为 other 或 chartex 时报 NotImplemented，不写文件。 转成 stock 必须恰好三条（hlc）或四条（ohlc）系列，否则 NotImplemented。从组合图转成股价报 NotImplemented。 转成 surface 必须恰好三条系列，否则 NotImplemented。 转成 ofPie / pie / doughnut 必须恰好一条系列，否则 NotImplemented。",
       "type": "object",
       "required": [
         "op",
@@ -12764,6 +13204,8 @@
       }
     },
     "setChartAxisTitleOp": {
+      "description": "改图表坐标轴的标题。",
+      "limits": "axis 不认识报 InvalidField。找不到对应主轴报 InvalidField。id 不是图表 id 报 InvalidId。找不到图报表 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -12792,6 +13234,8 @@
       }
     },
     "setChartLegendOp": {
+      "description": "show 为 false 时忽略 pos。",
+      "limits": "不认识的 pos 报 InvalidField。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12822,6 +13266,8 @@
       }
     },
     "setChartDataLabelsOp": {
+      "description": "true：在 plotArea 写 c:dLbls，c:showVal 为 1，不调标签坐标。",
+      "limits": "false：去掉 plotArea 与各系列上的 c:dLbls。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -12853,6 +13299,8 @@
       ]
     },
     "insertTrendlineOp": {
+      "description": "在该 c:ser 末尾追加一条 c:trendline（插在 c:cat / c:val / c:errBars / c:extLst 之前）。",
+      "limits": "poly 以外给 order、或 movingAvg 以外给 period，报 InvalidField。饼、圆环、复合饼、曲面、other、chartex 上报 InvalidField。id 不是系列 id 报 InvalidId。找不到系列报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -12892,6 +13340,8 @@
       }
     },
     "setTrendlineOp": {
+      "description": "改一条趋势线。",
+      "limits": "至少给一个可写字段，否则报 InvalidField。只改被点名的字段。把 type 改成非 poly 时去掉 c:order；改成非 movingAvg 时去掉 c:period。 id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -12962,6 +13412,8 @@
       ]
     },
     "deleteTrendlineOp": {
+      "description": "删掉该 c:trendline。",
+      "limits": "id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -12979,6 +13431,8 @@
       }
     },
     "insertErrorBarsOp": {
+      "description": "写出一条 c:errBars。",
+      "limits": "valType 为 cust 时必须给 plus 与 minus，写成 c:plus / c:minus 的 c:numLit，不必与系列点数相同。非 cust 时出现 plus / minus 报 InvalidField。lCaps 不是合法 valType，报 InvalidField。dir 为 y 或缺省时不写 c:errDir；dir 为 x 时写 c:errDir val=\"x\"。该系列已有同 dir 的误差线时报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -13035,6 +13489,8 @@
       }
     },
     "setErrorBarsOp": {
+      "description": "改误差线。",
+      "limits": "至少给一个可写字段。改成 stdErr 时去掉 c:val。改成 cust 时必须有 plus 与 minus（本 op 给的，或原节点已有）。 改成非 cust 时去掉 c:plus / c:minus。lCaps 报 InvalidField。id 不是误差线 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -13123,6 +13579,8 @@
       ]
     },
     "deleteErrorBarsOp": {
+      "description": "删掉该 c:errBars。",
+      "limits": "找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -13140,6 +13598,8 @@
       }
     },
     "setChartSeriesAxisOp": {
+      "description": "把该系列所在包裹的数值轴 c:axId 指到主轴或次轴。",
+      "limits": "没有次轴时按主数值轴复制一条，写 c:overlay val=\"1\"、c:crosses val=\"max\"、新的 c:axId。同一包裹里还有别的系列且目标轴不同时，把被点名系列拆到同类型的新包裹。已经是目标状态则空操作。饼、圆环、复合饼、曲面、股价、other、chartex 上报 InvalidField。axis 不认识报 InvalidField。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -13164,6 +13624,8 @@
       }
     },
     "setChartSizeOp": {
+      "description": "字段与 setPictureSize 相同，id 为图表 id。",
+      "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 写入 graphicFrame 的 p:xfrm/a:ext。",
       "type": "object",
       "required": [
         "op",
@@ -13218,6 +13680,8 @@
       ]
     },
     "insertCommentOp": {
+      "description": "插入一条批注。",
+      "limits": "start 与 end 必须在同一部件，且 start 在文档顺序上不得晚于 end，否则报 InvalidField。不提供字符偏移。 在 start 段 w:pPr 之后插入 w:commentRangeStart； 在 end 段已有内容之后插入 w:commentRangeEnd，再跟一个含 w:commentReference 的 run（rStyle 为 CommentReference）。跨段时中间段落整段落在范围内，不另写标记。",
       "type": "object",
       "required": [
         "op"
@@ -13276,6 +13740,8 @@
       ]
     },
     "deleteCommentOp": {
+      "description": "去掉该批注在主文档、页眉、页脚、文本框和注里所有匹配的范围标记与 commentReference，再去掉 comments.xml 里该条。",
+      "limits": "子回复级联删除（paraIdParent 链指向它的都删），清单里验回复不残留。已经不存在报 IdNotFound。id 不是批注容器 id 报 InvalidId。批注内图按图片规则收。删光批注后仍保留 comments.xml 空壳和已有的 extended / people 部件，不拆掉整个 part。xlsx 的 id 可以是顶层批注或回复。",
       "type": "object",
       "required": [
         "op",
@@ -13293,6 +13759,8 @@
       }
     },
     "replyCommentOp": {
+      "description": "新增一条 w:comment 和新的 commentEx，paraIdParent 为父批注当前最后一段的 paraId。",
+      "limits": "在父批注已有的范围上再套一套相同范围的标记（commentRangeStart 插在父 start 之后， commentRangeEnd 与 commentReference 插在父 commentReference 所在 run 之后），与 Word 16 Replies.Add 一致；rStyle 抄父引用 run。找不到父批注的范围标记时仍写 comment 与 commentEx，不报错。",
       "type": "object",
       "required": [
         "op",
@@ -13323,6 +13791,8 @@
       }
     },
     "setCommentTextOp": {
+      "description": "只改该 w:comment 的可见文本，不改范围标记。",
+      "limits": "留下第一段（含 annotationRef），按 setParaText 的规则改这段的可见 w:t，删掉后面多出来的 w:p。随后把 commentEx/@paraId 和指向旧最后一段的 paraIdParent 改成留下的那一段。id 不是批注容器 id 报 InvalidId。对批注内段落 id 请用 setParaText。对 kind 为 ink 的批注报 NotImplemented，没有可见 w:t 时同样拒绝，不写文件。xlsx 的 id 可以是批注容器 id 或回复 id。",
       "type": "object",
       "required": [
         "op",
@@ -13344,6 +13814,8 @@
       }
     },
     "setCommentMetaOp": {
+      "description": "改批注的作者、缩写或时间。",
+      "limits": "author、initials、date 至少给一个，否则报 InvalidField。只改被点名的属性，其余不动。改 author 时若 people.xml 里还没有这个作者则补一条，不删旧作者。 id 不是批注容器 id 报 InvalidId。xlsx 的 id 可以是批注容器 id 或回复 id。 改 author 时按新的 displayName 指向（必要时新建）一条 person，只改该条 personId，不改共享的那条 person，以免误伤同作者其它批注。initials 接受但不写入。 改 date 时写 @dT。",
       "type": "object",
       "required": [
         "op",
@@ -13388,6 +13860,8 @@
       ]
     },
     "setCommentDoneOp": {
+      "description": "只改被点名这一条的 done，不自动改回复。",
+      "limits": "没有 commentsExtended 则按 Word 16 最小集新建，并为文件里每条批注补 commentEx（默认 done=\"0\"），再改被点名的那条。父批注最后一段没有 w14:paraId 时报 InvalidField。xlsx 的 id 可以是批注容器 id 或回复 id。done: true 写 @done=\"1\"；false 去掉 @done。pptx 的 id 可以是批注容器 id 或回复 id。",
       "type": "object",
       "required": [
         "op",
@@ -13417,6 +13891,8 @@
       ]
     },
     "inspectRequest": {
+      "description": "按 scope 看文件的一部分。",
+      "limits": "不要一次要整份文件。改内容用 apply，不要把这次看到的树整份送回去当修改。",
       "type": "object",
       "required": [
         "schemaVersion",
@@ -13447,6 +13923,8 @@
       }
     },
     "inspectScope": {
+      "description": "查看范围。",
+      "limits": "三种格式的键不能混用。xlsx 看格子要同时给 sheet 和 range。没列出的键不要写。",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -13660,6 +14138,8 @@
       }
     },
     "createRequest": {
+      "description": "只用于新建文件。",
+      "limits": "已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
       "type": "object",
       "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
@@ -13713,6 +14193,8 @@
       ]
     },
     "exportMediaRequest": {
+      "description": "按 id 把图或嵌入对象的原始字节写到本地。",
+      "limits": "不改源文件，字节也不进 inspect 树。",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -13750,6 +14232,8 @@
       }
     },
     "applyRequest": {
+      "description": "用 id 和 op 改文件里点名的内容。",
+      "limits": "不要把整棵 inspect 树塞进请求。",
       "type": "object",
       "required": [
         "schemaVersion",
@@ -13857,6 +14341,8 @@
       ]
     },
     "exportChartDataRequest": {
+      "description": "把图表背后的工作簿数据导出。",
+      "limits": "不改源文件，不算公式。",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -13893,7 +14379,71 @@
         }
       }
     },
+    "helpRequest": {
+      "description": "查某个操作怎么填。",
+      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "action"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "help"
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "q": {
+          "type": "string",
+          "minLength": 1
+        },
+        "op": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "op",
+              "name"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "q",
+              "op"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "q",
+              "name"
+            ]
+          }
+        }
+      ]
+    },
     "insertHyperlinkOp": {
+      "description": "插入一个超链接。",
+      "limits": "docx：段落链在该段已有内容之后插入一个 w:hyperlink，内含一个带 text 的 run。 外部链在该部件 .rels 上新建 Type 以 /hyperlink 结尾的关系，TargetMode 为 External，Target 为 url 原文。内部链写 w:anchor，不写关系。 url 与 anchor 同时出现或一个都不给报 InvalidField。url 为空串报 InvalidField。anchor 为空串或以 _ 开头报 InvalidField。 找不到段落报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -13963,6 +14513,8 @@
       }
     },
     "setHyperlinkOp": {
+      "description": "改一个已有的超链接。",
+      "limits": "docx：段落链：url、anchor、text、tooltip 至少给一个。url 与 anchor 不能同时出现。 给了 url：有已有 r:id 则改该关系 Target；没有则新建关系并写 r:id，去掉 w:anchor。给了 anchor：写 w:anchor，去掉 r:id，该关系无人引用则删除。 text 只改该 w:hyperlink 内可见 w:t（规则与 setParaText 第 2–4 条相同，范围限于该元素）。tooltip 为字符串则写属性；为 null 则去掉属性。 找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -14023,6 +14575,8 @@
       }
     },
     "deleteHyperlinkOp": {
+      "description": "删掉一个超链接。",
+      "limits": "docx：段落链拆掉 w:hyperlink 外壳，留下内部 w:r。该 r:id 在本部件 XML 里无人引用则删除关系。 DrawingML 链去掉 a:hlinkClick 和无人引用的 hyperlink 关系，不删对象。 找不到报 IdNotFound。id 不是超链接 id 且不是带链的本期 DrawingML 对象 id 报 InvalidId。 对 OLE id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -14040,6 +14594,8 @@
       }
     },
     "setModel3dSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是 3D 模型 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对图 id 发此 op、对 3D id 发 setPictureSize 仍报 InvalidId。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -14094,6 +14650,8 @@
       ]
     },
     "setModel3dCameraOp": {
+      "description": "字段与 [docx setModel3dCamera](json-contract-docx.md#setmodel3dcamera) 相同。",
+      "limits": "id 必须是 xlsx 3D 模型 id。改 Choice 里 am3d:camera、am3d:rot 与 am3d:spPr 里的 a:scene3d/a:lightRig。不换 GLB。不改锚点。docx / pptx 上同一套字段。示例见 docs/examples/xlsx-apply-model3d-camera.json。",
       "type": "object",
       "required": [
         "op",
@@ -14216,6 +14774,8 @@
       }
     },
     "replacePictureOp": {
+      "description": "把一张图换成另一张。",
+      "limits": "找不到该图报 IdNotFound。读不到 file 报 Io。文件不是该格式认的图片报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -14238,6 +14798,8 @@
       }
     },
     "insertPictureOp": {
+      "description": "插入一张图片。",
+      "limits": "docx：找不到该段落报 IdNotFound。id 不是段落 id 报 InvalidId。 cx / cy 都省略时，位图按像素尺寸、96 dpi 换算成 EMU（px × 914400 / 96）；读不出尺寸则用 1 英寸见方（914400）。 SVG 按根元素 width / height（无单位或 px 当 CSS 像素，同样 96 dpi）；没有则用 viewBox；再没有则 1 英寸见方。 EMF 优先用 rclFrame（单位 0.01 mm）换 EMU；读不到再用 rclBounds 当像素、96 dpi。",
       "type": "object",
       "required": [
         "op",
@@ -14326,6 +14888,8 @@
       }
     },
     "deletePictureOp": {
+      "description": "删掉一张图片。",
+      "limits": "找不到该图报 IdNotFound。docx：按图 id 删掉对应的 w:drawing。 若该图在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（避免 Fallback 的 VML 把图留住）。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 xdr:pic 的整个锚点。工作表 drawing 删空后去掉该部件、工作表上的 <drawing> 和对应关系。",
       "type": "object",
       "required": [
         "op",
@@ -14343,6 +14907,8 @@
       }
     },
     "setPictureSizeOp": {
+      "description": "改图片的大小。",
+      "limits": "cx 与 cy 至少给一个，否则报 InvalidField（xlsx twoCell 见下）。cx / cy 与 to 不能同时出现。只改被点名的那一侧，另一侧保持原值。 docx：写入 wp:extent；若 pic:spPr/a:xfrm/a:ext 存在，一并改。 xlsx：oneCell 或 absolute 时写入 xdr:ext；若 xdr:spPr/a:xfrm/a:ext 存在，一并改。",
       "type": "object",
       "required": [
         "op",
@@ -14468,6 +15034,8 @@
       }
     },
     "setProtectionOp": {
+      "description": "docx 改 /word/settings.xml 的限制编辑；xlsx 改工作表 sheetProtection 或工作簿 workbookProtection； pptx 改 presentation.xml 的 p:modifyVerifier。",
+      "limits": "pptx 的放映设置用 setShowPr，不要塞进本 op。",
       "type": "object",
       "required": [
         "op",
@@ -14735,6 +15303,8 @@
       ]
     },
     "setPropsOp": {
+      "description": "改标题、作者这类文档属性。",
+      "limits": "这八个字段至少给一个，否则报 InvalidField。未点名的字段留下，含 Application、页数/字数、HeadingPairs、TitlesOfParts、Slides，以及未点名的公司名。 不要写 DigSig。不要改 lastModifiedBy、created、modified。出现这些只读键报 UnknownField。id 不是格式根报 InvalidId。 缺 core.xml 或 app.xml 时，只要这条 op 点到了对应部件里的字段，就按需新建部件、根关系和 Content Type Override。",
       "type": "object",
       "required": [
         "op",
@@ -14818,6 +15388,8 @@
       ]
     },
     "setCustomPropOp": {
+      "description": "按名 upsert：已有同名 property 时命中文档顺序第一处，保留原来的 pid / fmtid，只换值子元素。",
+      "limits": "没有则追加，fmtid 固定 {D5CDD505-2E9C-101B-9397-08002B2CF9AE}，pid 取已有最大整数加 1，至少为 2。name 为空、type 不认识，或 type 与 value 对不上（例如 i4 却给了字符串或带小数的数字），报 InvalidField。id 不是格式根报 InvalidId。缺 custom.xml 则新建部件、根关系和 Override。",
       "type": "object",
       "required": [
         "op",
@@ -14856,6 +15428,8 @@
       }
     },
     "deleteCustomPropOp": {
+      "description": "删掉一个自定义文档属性。",
+      "limits": "找不到该名报 IdNotFound。id 不是 prop:{name} 报 InvalidId。删光后去掉 custom 部件、根关系和 Override。",
       "type": "object",
       "required": [
         "op",
@@ -14873,6 +15447,8 @@
       }
     },
     "setShapeTextOp": {
+      "description": "改形状里的文字。",
+      "limits": "找不到该形状报 IdNotFound。对 slide:{n} 或 slide:{n}/notes（没有 /shape:）发本 op 报 InvalidId。 对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 xlsx 改工作表文本框或无 txBox 形状的 xdr:txBody，规则与 pptx 相同（把下文的 p:sp / p:txBody 换成 xdr:sp / xdr:txBody）。",
       "type": "object",
       "required": [
         "op",
@@ -14943,6 +15519,8 @@
       }
     },
     "insertSmartArtOp": {
+      "description": "插入一个 SmartArt。",
+      "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/diagrams/ 下尚未占用的 data / layout / colors / quickStyle 四件套（序号从 1 起）， 并把四条关系写在宿主 .rels 上（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）。 diagram 部件仍写在 /word/diagrams/。wp:docPr/@id 取该部件已有 docPr 的最大整数加 1，至少为 1。",
       "type": "object",
       "required": [
         "op",
@@ -15036,6 +15614,8 @@
       }
     },
     "deleteSmartArtOp": {
+      "description": "删掉对应宿主 drawing。",
+      "limits": "docx 删 w:drawing；若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（Fallback 位图一起走）。所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx 删对应 xdr:graphicFrame；若在组合里只摘该子节点，空组合再摘组合；锚点只剩 from/to/clientData 再摘整锚点。pptx 删 p:graphicFrame；若在 Choice 里同样整段 AlternateContent 删掉。",
       "type": "object",
       "required": [
         "op",
@@ -15053,6 +15633,8 @@
       }
     },
     "setSmartArtTextOp": {
+      "description": "只改该点 dgm:t 的可见文字。",
+      "limits": "留下第一个含 a:t 的 run 收下全部新文本，规则对齐 setShapeText 的可见替换（不整段重建 dgm:t 的 a:bodyPr）。没有 dgm:t 则补一份最小文本体。找不到该点报 IdNotFound。id 不是点 id 报 InvalidId。对 doc / pres / parTrans / sibTrans 点发此 op 报 InvalidId（它们不在树上）。",
       "type": "object",
       "required": [
         "op",
@@ -15074,6 +15656,8 @@
       }
     },
     "addSmartArtPointOp": {
+      "description": "在 data 部件追加一个可见 dgm:pt，并追加一条 type 为 parOf（或省略 type）的 cxn：srcId 为父点 modelId（图示 id 时父为 type=\"doc\" 的点），destId 为新点。",
+      "limits": "不手写 pres / parTrans / sibTrans。现有 modelId 都能解析成非负整数时，新点与新连接用尚未占用的最小正整数； 否则新点写新的大写 GUID（带花括号），连接 modelId 同样不与已有 pt / cxn 冲突。",
       "type": "object",
       "required": [
         "op",
@@ -15097,6 +15681,8 @@
       }
     },
     "deleteSmartArtPointOp": {
+      "description": "删掉该点，并沿 parOf 边删掉所有子孙可见点。",
+      "limits": "同时删掉 srcId / destId 指向这些 modelId 的连接，以及 cxnId 指向已删连接的 parTrans / sibTrans 点。不删 type=\"doc\" 的点。删完后可见点一条都不剩时报 InvalidField（要整张去掉请用 deleteSmartArt）。找不到报 IdNotFound。id 不是点 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -15114,6 +15700,8 @@
       }
     },
     "setSmartArtSizeOp": {
+      "description": "字段与 setPictureSize 相同，id 为图示 id。",
+      "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 改 graphicFrame 的 p:xfrm/a:ext。",
       "type": "object",
       "required": [
         "op",
@@ -15168,6 +15756,8 @@
       ]
     },
     "setSmartArtColorsOp": {
+      "description": "换成库内对应色板模板。",
+      "limits": "包里已有相同 uniqueId 的 colors 部件则只改 r:cs 指向它；否则写入新部件并改 r:cs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -15189,6 +15779,8 @@
       }
     },
     "setSmartArtStyleOp": {
+      "description": "换成库内对应 quickStyle 模板。",
+      "limits": "包里已有相同 uniqueId 的 style 部件则只改 r:qs；否则写入新部件并改 r:qs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -15210,6 +15802,8 @@
       }
     },
     "setSmartArtLayoutOp": {
+      "description": "改 SmartArt 的布局。",
+      "limits": "不认识的短名报 InvalidField。当前 uniqueId 已经是目标那一条：空操作，仍计入 opsApplied。 当前 uniqueId 属于库内 list / org / cycle 三族之一：把 layout 部件换成库内对应模板，并改 r:lo；可见点与 parOf 连接不动。 目标是 list 或 cycle 时，助手点改成普通节点，以免文字在新版式里消失。删掉 diagram drawing 缓存，让 Office 打开时重排。 当前 uniqueId 不在这三族里报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -15231,6 +15825,8 @@
       }
     },
     "insertTableOp": {
+      "description": "写出带单线边框的 w:tbl，每列宽 1440 twip，每格至少一段并带新的 w14:paraId。",
+      "limits": "docx 插在单元格时，嵌套表放在该格 tcPr 之后、已有段落之前。格末仍保留一个 w:p。Word 16.0 在文本框单元格里插表另存也是这个顺序；把等宽嵌套表接到格尾会报无法读取。rows / cols 越界或不是正整数报 InvalidField。id 形态不对报 InvalidId。找不到锚点报 IdNotFound。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -15285,6 +15881,8 @@
       }
     },
     "deleteTableOp": {
+      "description": "删掉该 w:tbl。",
+      "limits": "若删的是正文里仅剩的块级内容，在 sectPr 前补一个空的 w:p。若删的是单元格里的嵌套表，该格至少留下一个 w:p。表不存在报 IdNotFound。id 不是表 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。pptx：删掉对应 p:graphicFrame。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。组合里删子框后若组合空了，把空 p:grpSp 一并摘掉。不改其它对象的 cNvPr/@id。",
       "type": "object",
       "required": [
         "op",
@@ -15302,6 +15900,8 @@
       }
     },
     "insertRowOp": {
+      "description": "新行按参照行（表 id 时用最后一行，行 id 时用该行）的 gridSpan 布局复制格子，不复制 vMerge，每格一段空文本。",
+      "limits": "xlsx 上发此 op 报 InvalidField。pptx：往 a:tbl 插入一行 a:tr。参照行的 gridSpan / hMerge 布局复制，不复制 vMerge / rowSpan，每格空 a:txBody。行高抄参照行的 a:tr/@h，缺则均分当前框高。id 不是表 id 也不是行 id 报 InvalidId。某行占的列数对不上 colCount 报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -15319,6 +15919,8 @@
       }
     },
     "deleteRowOp": {
+      "description": "删掉表格的一行。",
+      "limits": "只剩一行时报 InvalidField。xlsx 上发此 op 报 InvalidField。pptx：删掉该 a:tr。只剩一行时报 InvalidField。id 不是行 id 报 InvalidId。 找不到报 IdNotFound。该行含 rowSpan 起点或 vMerge 继续格时报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -15336,6 +15938,8 @@
       }
     },
     "insertColOp": {
+      "description": "新列宽抄相邻列；没有 tblGrid 时先按当前布局补上，缺宽则 1440 twip。",
+      "limits": "插入点落在某格 gridSpan 内部时，该格 gridSpan 加 1，不新开 w:tc。否则每行在该处插入一个新格。xlsx 上发此 op 报 InvalidField。pptx：在 a:tblGrid 插入 a:gridCol，宽度抄相邻列。插入点落在某格 gridSpan 内部时，该格 gridSpan 加 1，并补一个 hMerge 继续格。否则每行插入一个空 a:tc。after 越界报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -15358,6 +15962,8 @@
       }
     },
     "deleteColOp": {
+      "description": "删掉表格的一列。",
+      "limits": "只剩一列时报 InvalidField。该列落在某格 gridSpan 内部时，gridSpan 减 1；减到 0 则删掉该 w:tc。xlsx 上发此 op 报 InvalidField。 pptx：删掉对应 a:gridCol。该列落在某格 gridSpan 内部时，gridSpan 减 1；纯 hMerge 继续格则删掉该 a:tc。只剩一列时报 InvalidField。 col 越界报 InvalidField。某行占的列数对不上 colCount 报 NotImplemented。",
       "type": "object",
       "required": [
         "op",
@@ -15380,6 +15986,8 @@
       }
     },
     "insertTextBoxOp": {
+      "description": "插入一个文本框。",
+      "limits": "id 必须是段落 id，对图 id、框 id、容器 id、框内段落 id 或 section:{n} 报 InvalidId。找不到该段报 IdNotFound。 cx / cy 都省略时用 2 英寸宽、1 英寸高（1828800 / 914400）。只给一个时报 InvalidField。 插入浮动 anchor + wrapSquare，挂在该段末尾一个新的 w:r 里，写成 mc:AlternateContent（Choice 为 wps:wsp / wps:txbx，Fallback 为空白 w:pict，不编 VML 几何）。",
       "type": "object",
       "required": [
         "op",
@@ -15535,6 +16143,8 @@
       }
     },
     "deleteTextBoxOp": {
+      "description": "删掉一个文本框。",
+      "limits": "找不到该框报 IdNotFound。对段落 id、图 id、容器 id 或 section:{n} 报 InvalidId。 按框 id 删掉对应的 w:drawing；若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。链接链从中间删时，把前一框的 next 接到后一框、后一框的 prev 接到前一框， 并改写 wps:txbx / linkedTxbx 的 id 与 seq。",
       "type": "object",
       "required": [
         "op",
@@ -15552,6 +16162,8 @@
       }
     },
     "setTextBoxSizeOp": {
+      "description": "字段与 setPictureSize 相同。",
+      "limits": "docx 的 id 必须是框 id。xlsx 的 id 可以是文本框 id、形状 id 或连接线 id。docx 写入该框 wp:extent；若 wps:spPr/a:xfrm/a:ext 存在，一并改。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -15606,6 +16218,8 @@
       ]
     },
     "setPictureAnchorOp": {
+      "description": "改图片在工作表上的锚点。",
+      "limits": "anchor、位置字段、editAs、cx / cy 至少给一类，否则报 InvalidField。找不到该图报 IdNotFound。id 不是 xlsx 图 id 报 InvalidId。 docx / pptx 上发此 op 报 InvalidField。pptx 改画布坐标请用 setPicturePos。",
       "type": "object",
       "required": [
         "op",
@@ -15758,6 +16372,8 @@
       ]
     },
     "setTextBoxAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同。",
+      "limits": "id 可以是 xlsx 文本框 id、形状 id 或连接线 id。改包含该 xdr:sp 或 xdr:cxnSp 的外层锚点，规则与 setPictureAnchor 相同（留下该对象或其所在 xdr:grpSp，以及 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -15910,6 +16526,8 @@
       ]
     },
     "setInkAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 墨迹 id。",
+      "limits": "改包含该 xdr14 AlternateContent 的外层锚点。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -15979,6 +16597,8 @@
       }
     },
     "setModel3dAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 3D 模型 id。",
+      "limits": "改包含该 am3d AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -16110,6 +16730,8 @@
       ]
     },
     "setMathAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是公式框 id。",
+      "limits": "改包含该 a14:m AlternateContent 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。对公式框 id 发 setTextBoxAnchor 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -16200,6 +16822,8 @@
       }
     },
     "setSlicerAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是切片器 id（含时间线）。",
+      "limits": "改包含该 graphicFrame 的外层锚点，规则与 setPictureAnchor 相同（留下 AlternateContent 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -16372,6 +16996,8 @@
       ]
     },
     "setChartAnchorOp": {
+      "description": "字段与 setPictureAnchor 相同，id 必须是 xlsx 图表 id。",
+      "limits": "改包含该 xdr:graphicFrame 的锚点，规则与 setPictureAnchor 相同（留下 xdr:graphicFrame 与 xdr:clientData）。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -16503,6 +17129,8 @@
       ]
     },
     "setSmartArtAnchorOp": {
+      "description": "字段与 setChartAnchor 相同，id 必须是 xlsx 图示 id。",
+      "limits": "改包含该 xdr:graphicFrame 的外层锚点，规则与 setChartAnchor 相同。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -16634,6 +17262,8 @@
       ]
     },
     "setCellOp": {
+      "description": "改一个单元格的值或公式。",
+      "limits": "value 和 formula 二选一，不能同时出现。arrayRef 与 sharedRef 不能同时出现，shared 与 array 也不能同时为真。不改超链接，不改迷你图。共享公式、数组公式、数据表的填法不同，不要把从属格当成主格来写。",
       "type": "object",
       "required": [
         "op",
@@ -16723,6 +17353,8 @@
       }
     },
     "setCellStyleOp": {
+      "description": "写单元格的数字格式、字体、填充、边框与对齐。",
+      "limits": "不改值、不改公式。",
       "type": "object",
       "required": [
         "op",
@@ -16897,6 +17529,8 @@
       ]
     },
     "setColWidthOp": {
+      "description": "写工作表列宽。",
+      "limits": "JSON 的 width 是 Excel 列宽字符数（与 COM ColumnWidth 同一套），不是像素。写入 col/@width 时按 ECMA-376 §18.3.1.13 的公式转换；MDW 固定用该节示例的 Calibri 11 点 7 像素，不读实际字体、不算最适列宽。",
       "type": "object",
       "required": [
         "op",
@@ -16942,6 +17576,8 @@
       ]
     },
     "setRowHeightOp": {
+      "description": "写行高。",
+      "limits": "单位磅，对应 row/@ht。不算自动换行后的高度。",
       "type": "object",
       "required": [
         "op",
@@ -16979,6 +17615,8 @@
       }
     },
     "mergeRangeOp": {
+      "description": "合并工作表单元格。",
+      "limits": "不要跟 Word 表的 mergeCells 混用。",
       "type": "object",
       "required": [
         "op",
@@ -17001,6 +17639,8 @@
       }
     },
     "unmergeRangeOp": {
+      "description": "取消合并。",
+      "limits": "不恢复合并时清掉的值。",
       "type": "object",
       "required": [
         "op",
@@ -17023,6 +17663,8 @@
       }
     },
     "insertCellStyleOp": {
+      "description": "往 styles.xml 追加一条命名单元格样式。",
+      "limits": "不套到任何格子上。",
       "type": "object",
       "required": [
         "op",
@@ -17202,6 +17844,8 @@
       ]
     },
     "deleteCellStyleOp": {
+      "description": "删掉一条命名单元格样式。",
+      "limits": "不删 cellStyleXfs，不改格子上已有 s。",
       "type": "object",
       "required": [
         "op",
@@ -17219,6 +17863,7 @@
       }
     },
     "setCellNamedStyleOp": {
+      "description": "把单元格的 s 指到一条引用该命名样式 xfId 的 cellXfs。",
       "type": "object",
       "required": [
         "op",
@@ -17241,6 +17886,8 @@
       }
     },
     "xlsxWorkbook": {
+      "description": "新建工作簿时的正文，只在 create 里使用。",
+      "limits": "不要把它当成 apply 的补丁。",
       "type": "object",
       "required": [
         "sheets"
@@ -19514,6 +20161,8 @@
       }
     },
     "xlsxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标工作表。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。",
       "type": "object",
       "required": [
         "op",
@@ -19575,6 +20224,8 @@
       }
     },
     "xlsxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。不是 GLB 报 InvalidField。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -19597,6 +20248,8 @@
       }
     },
     "xlsxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 GLB 与海报无人引用则删。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -19614,6 +20267,8 @@
       }
     },
     "xlsxInsertInkOp": {
+      "description": "把本地 InkML 作为一笔墨迹写入目标工作表。",
+      "limits": "不进 pictures。不把手写识别成字。海报用 1×1 PNG 占位。",
       "type": "object",
       "required": [
         "op",
@@ -19675,6 +20330,8 @@
       }
     },
     "xlsxReplaceInkOp": {
+      "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "limits": "不改海报，不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。不是 InkML 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -19697,6 +20354,8 @@
       }
     },
     "xlsxDeleteInkOp": {
+      "description": "删掉一处墨迹。",
+      "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 InkML 与海报无人引用则删。",
       "type": "object",
       "required": [
         "op",
@@ -19714,6 +20373,8 @@
       }
     },
     "xlsxSetInkSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是墨迹 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -19751,6 +20412,8 @@
       }
     },
     "xlsxInsertMathOp": {
+      "description": "把一条线性公式写入目标工作表 drawing。",
+      "limits": "不进单元格 f。不进 textBoxes。不实现排版引擎。",
       "type": "object",
       "required": [
         "op",
@@ -19812,6 +20475,8 @@
       }
     },
     "xlsxSetMathOp": {
+      "description": "不改锚点与尺寸。",
+      "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy / from / to 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -19834,6 +20499,8 @@
       }
     },
     "xlsxDeleteMathOp": {
+      "description": "删掉一个公式。",
+      "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。 摘该条 mc:AlternateContent；若锚点只剩 from / to / ext / pos / clientData 则删整个锚点。 海报无人引用则删。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -19851,6 +20518,8 @@
       }
     },
     "xlsxSetMathSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是公式框 id。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对文本框 id 发此 op、对公式框 id 发 setTextBoxSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -19905,6 +20574,8 @@
       ]
     },
     "insertDataValidationOp": {
+      "description": "往工作表追加一条数据验证（ECMA-376 §18.3.1.32）。",
+      "limits": "公式当字符串，不求值，不展开下拉列表。",
       "type": "object",
       "required": [
         "op",
@@ -20001,6 +20672,8 @@
       }
     },
     "setDataValidationOp": {
+      "description": "改已有规则。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -20127,6 +20800,7 @@
       }
     },
     "deleteDataValidationOp": {
+      "description": "删掉一条规则。",
       "type": "object",
       "required": [
         "op",
@@ -20397,6 +21071,8 @@
       }
     },
     "insertConditionalFormatOp": {
+      "description": "往工作表追加一条条件格式规则（ECMA-376 §18.3.1.18 / §18.3.1.10）。",
+      "limits": "公式当字符串，不求值。不渲染色阶、数据条或图标。始终新建一块 <conditionalFormatting>（一块一条规则），追加到已有条件格式之后、dataValidations 之前。",
       "type": "object",
       "required": [
         "op",
@@ -20476,6 +21152,8 @@
       }
     },
     "setConditionalFormatOp": {
+      "description": "改已有规则。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -20616,6 +21294,7 @@
       }
     },
     "deleteConditionalFormatOp": {
+      "description": "删掉一条规则。",
       "type": "object",
       "required": [
         "op",
@@ -20633,6 +21312,8 @@
       }
     },
     "insertDefinedNameOp": {
+      "description": "往工作簿追加一条定义名（ECMA-376 §18.2.5）。",
+      "limits": "公式当字符串写入元素文本，不解析、不求值。",
       "type": "object",
       "required": [
         "op",
@@ -20667,6 +21348,8 @@
       }
     },
     "setDefinedNameOp": {
+      "description": "改已有定义名。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -20724,6 +21407,7 @@
       ]
     },
     "deleteDefinedNameOp": {
+      "description": "删掉一条定义名。",
       "type": "object",
       "required": [
         "op",
@@ -20741,6 +21425,8 @@
       }
     },
     "insertCustomViewOp": {
+      "description": "把当前窗口设置存成一条自定义视图。",
+      "limits": "不恢复隐藏行 / 列。",
       "type": "object",
       "required": [
         "op",
@@ -20769,6 +21455,8 @@
       }
     },
     "deleteCustomViewOp": {
+      "description": "去掉该 <customWorkbookView>，以及各表上同一 guid 的 <customSheetView>。",
+      "limits": "删光则去掉 <customWorkbookViews> / 空的 <customSheetViews>。找不到该序号报 IdNotFound。id 不是自定义视图 id 报 InvalidId。docx / pptx 上发此 op 报 InvalidField。不标重算。",
       "type": "object",
       "required": [
         "op",
@@ -20786,6 +21474,7 @@
       }
     },
     "showCustomViewOp": {
+      "description": "按快照把窗格写回当前默认视图。",
       "type": "object",
       "required": [
         "op",
@@ -20803,6 +21492,8 @@
       }
     },
     "insertConnectionOp": {
+      "description": "把网页查询或文本连接写入工作簿 Connections 部件。",
+      "limits": "不向数据源发请求，不把查询结果写进单元格，不写 queryTable。",
       "type": "object",
       "required": [
         "op",
@@ -20843,6 +21534,8 @@
       }
     },
     "deleteConnectionOp": {
+      "description": "删掉一个数据连接。",
+      "limits": "找不到报 IdNotFound。id 不是连接 id 报 InvalidId。摘该条 connection。删光则去掉 Connections 部件、workbook 关系与 Override。 不改 queryTable / sheetData。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -20860,6 +21553,8 @@
       }
     },
     "insertExternalLinkOp": {
+      "description": "把对其他工作簿的外部引用写入 /xl/externalLinks/…。",
+      "limits": "不打开目标文件，不把缓存值写进 sheetDataSet，也不改单元格公式。",
       "type": "object",
       "required": [
         "op",
@@ -20890,6 +21585,8 @@
       }
     },
     "deleteExternalLinkOp": {
+      "description": "删掉一个外部引用。",
+      "limits": "找不到报 IdNotFound。id 不是外部引用 id 报 InvalidId。若任一工作表 <f> 或定义名文本含 [k]（k 为该条下标或更大）报 NotImplemented，不写文件。 否则摘该条 <externalReference>、对应 externalLink 部件及其 .rels、workbook 关系与 Override。删光则去掉 <externalReferences>。 不重写其余公式的 [n]。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -20907,6 +21604,8 @@
       }
     },
     "setExternalLinkOp": {
+      "description": "改已有外部引用的路径。",
+      "limits": "不打开目标文件，不刷新 sheetDataSet，也不改单元格公式里的 [n]。",
       "type": "object",
       "required": [
         "op",
@@ -20929,6 +21628,8 @@
       }
     },
     "xlsxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标工作表。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不进页眉、chartsheet、组合。",
       "type": "object",
       "required": [
         "op",
@@ -20991,6 +21692,8 @@
       }
     },
     "xlsxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。 摘该条 mc:AlternateContent（或裸的 oleObject）、对应 dummy xdr:sp 所在锚点、以及 VML 里 _x0000_s{shapeId} 的 v:shape。 oleObjects 删光则去掉该元素。清掉无人引用的关系与 embeddings / 预览媒体。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -21008,6 +21711,8 @@
       }
     },
     "xlsxSetOleSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同，id 必须是 OLE id。",
+      "limits": "objectPr/anchor 为 twoCell 时必须给 to，可选 toOffX / toOffY。cx / cy 在这种锚点上出现报 InvalidField。同时改 dummy xdr:twoCellAnchor 的 to，以及 VML x:Anchor 的右下角单元格。不按列宽行高换算 EMU。没有 objectPr、锚点是 oneCell 或 absolute 时，改 xdr:ext。不启动 OLE 服务器，不改 embeddings。",
       "type": "object",
       "required": [
         "op",
@@ -21062,6 +21767,8 @@
       ]
     },
     "insertProtectedRangeOp": {
+      "description": "往工作表追加一条允许编辑区域（ECMA-376 §18.3.1.71）。",
+      "limits": "区域在工作表保护打开且单元格锁定时生效。不标重算。",
       "type": "object",
       "required": [
         "op",
@@ -21106,6 +21813,8 @@
       }
     },
     "setProtectedRangeOp": {
+      "description": "改已有允许编辑区域。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -21165,6 +21874,7 @@
       ]
     },
     "deleteProtectedRangeOp": {
+      "description": "删掉一条允许编辑区域。",
       "type": "object",
       "required": [
         "op",
@@ -21186,6 +21896,8 @@
       }
     },
     "insertChartSheetOp": {
+      "description": "插入一个图表工作表。",
+      "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidField。与已有表重名（不分大小写）报 InvalidField。 找不到 dataSheet 报 IdNotFound。dataSheet 不是 worksheet，或省略时工作簿里没有 worksheet，报 InvalidField。 出现 from / to / anchor / 偏移 / kind / wrap 报 InvalidField。类型与系列限制与 insertChart 相同。",
       "type": "object",
       "required": [
         "op",
@@ -21264,6 +21976,8 @@
       }
     },
     "deleteChartSheetOp": {
+      "description": "删掉一个图表工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 worksheet / dialogsheet / macrosheet 发此 op 报 InvalidId。 删掉工作簿里最后一张表报 InvalidField。删掉最后一张可见表报 InvalidField。 去掉 workbook 表项、chartsheet 部件及其 drawing / chart（无人引用则删），以及对应关系与内容类型。不删 dataFrom 那些单元格。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -21281,6 +21995,8 @@
       }
     },
     "insertSheetOp": {
+      "description": "插入一个工作表。",
+      "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidSheetName。与已有表重名（不分大小写）报 DuplicateSheetName。 after 找不到报 IdNotFound；不是工作表 id 报 InvalidId。不要用本 op 新建图表工作表。 新建最小 worksheet 部件（空 sheetData，CT 与 create 相同），workbook 关系 Type 以 /worksheet 结尾，sheetId 取已有最大整数加 1。",
       "type": "object",
       "required": [
         "op",
@@ -21307,6 +22023,8 @@
       }
     },
     "deleteSheetOp": {
+      "description": "删掉一个工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 chartsheet 发此 op 报 InvalidId（请用 deleteChartSheet）。 对 dialogsheet / macrosheet 报 NotImplemented。删掉工作簿里最后一张表，或删掉最后一张可见表，报 InvalidField。 definedNames 或其它表的 <f>、图表 c:f 仍含该表名时报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -21324,6 +22042,8 @@
       }
     },
     "renameSheetOp": {
+      "description": "给工作表改名。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 name 非法报 InvalidSheetName。与另一张表重名（不分大小写）报 DuplicateSheetName。已经是目标名（大小写相同）则空操作，仍计入 opsApplied。 只改大小写时仍改 sheet/@name。definedNames 或其它表 <f> / 图表 c:f 仍含旧表名时报 NotImplemented，不写文件。不改写公式。",
       "type": "object",
       "required": [
         "op",
@@ -21346,6 +22066,8 @@
       }
     },
     "moveSheetOp": {
+      "description": "调整工作表的顺序。",
+      "limits": "找不到该表或 after 报 IdNotFound。id / after 不是工作表 id 报 InvalidId。after 与 id 是同一张表报 InvalidField。 对 dialogsheet / macrosheet 报 NotImplemented。已经在目标位置则空操作。 只改 workbook.xml 里 sheets 子元素顺序，不改部件路径、sheetId 或关系 id。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -21370,6 +22092,8 @@
       }
     },
     "insertSlicerOp": {
+      "description": "把切片器或时间线视图写到目标工作表。",
+      "limits": "不在库里执行筛选，不刷新透视合计。",
       "type": "object",
       "required": [
         "op",
@@ -21503,6 +22227,8 @@
       }
     },
     "deleteSlicerOp": {
+      "description": "删掉一个切片器。",
+      "limits": "找不到报 IdNotFound。id 不是切片器 id 报 InvalidId。摘 drawing 锚点、slicers 或 timelines 部件里对应视图。 该 cache 已无视图则摘 slicerCache 或 timelineCache、workbook 关系，以及 @name 与 cache 名相同的那条定义名。 slicers 部件删光则去掉该部件与工作表 slicerList 条目。timelines 部件删光则去掉该部件与工作表 timelineRefs 条目。",
       "type": "object",
       "required": [
         "op",
@@ -21520,6 +22246,8 @@
       }
     },
     "setSlicerSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同。",
+      "limits": "id 必须是切片器 id（含时间线）。oneCell / absolute 改外层 xdr:ext。twoCell 不认 cx / cy（出现报 InvalidField），必须给 to。不按列宽行高去换算 EMU。留下 AlternateContent 与 xdr:clientData。对图 id 发此 op、对切片器 id 发 setPictureSize 仍报 InvalidId。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -21574,6 +22302,8 @@
       ]
     },
     "setSlicerViewOp": {
+      "description": "改 slicer 或 timeline 视图部件上的标题、行高、列数、显示开关与样式名。",
+      "limits": "不改 drawing 锚点，不改 cache，不执行筛选。",
       "type": "object",
       "required": [
         "op",
@@ -21651,6 +22381,8 @@
       }
     },
     "setSlicerFilterOp": {
+      "description": "改切片器 cache 已勾选项，或时间线 cache 的筛选区间。",
+      "limits": "不改 drawing，不改视图 @caption。不隐藏行。不重写透视缓存合计。不在库里执行筛选。",
       "type": "object",
       "required": [
         "op",
@@ -21764,6 +22496,8 @@
       }
     },
     "insertSparklineOp": {
+      "description": "在该表 extLst 里追加一组 x14:sparklineGroup，组内一条 x14:sparkline。",
+      "limits": "没有对应 ext 则按 CT_Worksheet 在末尾写 extLst / ext（uri 写成 Excel 16.0 另存的 {05C60535-1F16-4fd2-B633-F4F36F0B64E0}）， xmlns:x14 写在该 ext 上，xmlns:xm 写在 sparklineGroups 上。ref 必须是单格；闭区间报 InvalidField。非法 A1 报 InvalidRange。",
       "type": "object",
       "required": [
         "op",
@@ -21846,6 +22580,8 @@
       }
     },
     "setSparklineOp": {
+      "description": "改一个迷你图。",
+      "limits": "type、ref、formula 与新增可选字段至少给一个，否则报 InvalidField。该组若有多于一条 sparkline，给 ref 或 formula 报 InvalidField（仍可改 type、颜色与轴）。 ref 约束与 insert 相同，含重叠检查（排除自身）。formula 空串报 InvalidField，写入规则与 insert 相同。 colors 只覆盖给了的键，未点名的颜色子元素原样留。lineWeight 为 null 去掉该属性。 标记布尔为 false 去掉对应属性。轴约束与 insert 相同。",
       "type": "object",
       "required": [
         "op",
@@ -21947,6 +22683,8 @@
       }
     },
     "deleteSparklineOp": {
+      "description": "去掉该 x14:sparklineGroup。",
+      "limits": "组删光则去掉 sparklineGroups 与该 ext；extLst 空则去掉 extLst。不改单元格值，也不动其它 ext。找不到报 IdNotFound。id 不是迷你图组 id 报 InvalidId。只能改 worksheet。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -21964,6 +22702,8 @@
       }
     },
     "insertSheetTableOp": {
+      "description": "往工作表追加一张 SpreadsheetML 表（ECMA-376 §18.5.1.2）。",
+      "limits": "单元格数据仍在 sheetData 里。不实现结构化引用求值，不渲染表样式。",
       "type": "object",
       "required": [
         "op",
@@ -21998,6 +22738,8 @@
       }
     },
     "setSheetTableOp": {
+      "description": "改已有表格。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -22031,6 +22773,8 @@
       }
     },
     "deleteSheetTableOp": {
+      "description": "删掉一张表格。",
+      "limits": "单元格数据留下。",
       "type": "object",
       "required": [
         "op",
@@ -22065,6 +22809,8 @@
       }
     },
     "insertPivotTableOp": {
+      "description": "往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。",
+      "limits": "库按源格子抄缓存记录，并标 refreshOnLoad=\"1\"。不在库里聚合，也不把合计写进 sheetData。打开后由 Excel 刷新。",
       "type": "object",
       "required": [
         "op",
@@ -22125,6 +22871,8 @@
       }
     },
     "setPivotTableOp": {
+      "description": "改已有透视表。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -22182,6 +22930,8 @@
       }
     },
     "deletePivotTableOp": {
+      "description": "删掉一张透视表。",
+      "limits": "源格子留下。",
       "type": "object",
       "required": [
         "op",
@@ -22199,6 +22949,8 @@
       }
     },
     "setPrintSetupOp": {
+      "description": "改工作表或图表工作表的页边距、纸张、方向、缩放、打印网格线、打印区域与手工分页符。",
+      "limits": "不改页眉页脚原文（仍走 setHeaderFooterText）。",
       "type": "object",
       "required": [
         "op",
@@ -22396,6 +23148,8 @@
       ]
     },
     "setSheetViewOp": {
+      "description": "改工作表或图表工作表默认视图的缩放、冻结窗格、拆分窗格与活动单元格。",
+      "limits": "不改分页预览 / 页面布局。",
       "type": "object",
       "required": [
         "op",
@@ -22474,6 +23228,8 @@
       ]
     },
     "setAutoFilterOp": {
+      "description": "改工作表级自动筛选范围。",
+      "limits": "不改表格部件里的筛选，不写筛选条件，不隐藏行。",
       "type": "object",
       "required": [
         "op",
@@ -22499,6 +23255,8 @@
       }
     },
     "setSortStateOp": {
+      "description": "改工作表级排序条件。",
+      "limits": "不重排 sheetData，不隐藏行，不求值。不改表格部件里的排序。",
       "type": "object",
       "required": [
         "op",
@@ -22584,6 +23342,8 @@
       }
     },
     "groupRowsOp": {
+      "description": "给指定行的大纲级加 1。",
+      "limits": "不写隐藏、不写折叠、不改汇总方向。",
       "type": "object",
       "required": [
         "op",
@@ -22606,6 +23366,8 @@
       }
     },
     "ungroupRowsOp": {
+      "description": "给指定行的大纲级减 1。",
+      "limits": "减到 0 则去掉 @outlineLevel。范围内本来就是 0 的行不动。同步 outlineLevelRow。字段与错误与 groupRows 相同，op 必须是 \"ungroupRows\"。不写隐藏、不写折叠。",
       "type": "object",
       "required": [
         "op",
@@ -22628,6 +23390,8 @@
       }
     },
     "groupColsOp": {
+      "description": "给指定列的大纲级加 1。",
+      "limits": "不写隐藏、不写折叠。",
       "type": "object",
       "required": [
         "op",
@@ -22650,6 +23414,8 @@
       }
     },
     "ungroupColsOp": {
+      "description": "给指定列的大纲级减 1。",
+      "limits": "减到 0 则去掉 @outlineLevel。字段与错误与 groupCols 相同，op 必须是 \"ungroupCols\"。",
       "type": "object",
       "required": [
         "op",
@@ -22672,6 +23438,7 @@
       }
     },
     "setOutlineOp": {
+      "description": "改汇总方向，或按点名的细节范围折叠 / 展开。",
       "type": "object",
       "required": [
         "op",
@@ -22730,6 +23497,8 @@
       ]
     },
     "setRowHiddenOp": {
+      "description": "写或去掉行的 @hidden。",
+      "limits": "不改大纲级，不折叠汇总行。",
       "type": "object",
       "required": [
         "op",
@@ -22756,6 +23525,8 @@
       }
     },
     "setColHiddenOp": {
+      "description": "写或去掉列的 @hidden。",
+      "limits": "不改大纲级。",
       "type": "object",
       "required": [
         "op",
@@ -22782,6 +23553,8 @@
       }
     },
     "setHeaderFooterTextOp": {
+      "description": "改页眉页脚里的文字。",
+      "limits": "找不到该表报 IdNotFound。id 不是页眉槽位 id 报 InvalidId。对图 id、工作表 id 或单元格 id 发此 op 报 InvalidId。 worksheet / chartsheet / dialogsheet 都可以改文本。对 macrosheet 本期只读页眉原文，不新开写入。没有 headerFooter 则按 CT_Worksheet 顺序新建。",
       "type": "object",
       "required": [
         "op",
@@ -22803,6 +23576,8 @@
       }
     },
     "setSheetHiddenOp": {
+      "description": "隐藏或显示工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 把最后一张可见表改成隐藏报 InvalidField。true 写 state=\"hidden\"（若原先是 veryHidden 也改成 hidden）。false 去掉 state。已经是目标可见性则空操作。 docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

@@ -22,6 +22,8 @@
   },
   "$defs": {
     "insertChartSheetOp": {
+      "description": "插入一个图表工作表。",
+      "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidField。与已有表重名（不分大小写）报 InvalidField。 找不到 dataSheet 报 IdNotFound。dataSheet 不是 worksheet，或省略时工作簿里没有 worksheet，报 InvalidField。 出现 from / to / anchor / 偏移 / kind / wrap 报 InvalidField。类型与系列限制与 insertChart 相同。",
       "type": "object",
       "required": [
         "op",
@@ -100,6 +102,8 @@
       }
     },
     "deleteChartSheetOp": {
+      "description": "删掉一个图表工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 worksheet / dialogsheet / macrosheet 发此 op 报 InvalidId。 删掉工作簿里最后一张表报 InvalidField。删掉最后一张可见表报 InvalidField。 去掉 workbook 表项、chartsheet 部件及其 drawing / chart（无人引用则删），以及对应关系与内容类型。不删 dataFrom 那些单元格。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -117,6 +121,8 @@
       }
     },
     "insertSheetOp": {
+      "description": "插入一个工作表。",
+      "limits": "xlsx：id 不是 xlsx:workbook 报 InvalidId。name 非法报 InvalidSheetName。与已有表重名（不分大小写）报 DuplicateSheetName。 after 找不到报 IdNotFound；不是工作表 id 报 InvalidId。不要用本 op 新建图表工作表。 新建最小 worksheet 部件（空 sheetData，CT 与 create 相同），workbook 关系 Type 以 /worksheet 结尾，sheetId 取已有最大整数加 1。",
       "type": "object",
       "required": [
         "op",
@@ -143,6 +149,8 @@
       }
     },
     "deleteSheetOp": {
+      "description": "删掉一个工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 chartsheet 发此 op 报 InvalidId（请用 deleteChartSheet）。 对 dialogsheet / macrosheet 报 NotImplemented。删掉工作簿里最后一张表，或删掉最后一张可见表，报 InvalidField。 definedNames 或其它表的 <f>、图表 c:f 仍含该表名时报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -160,6 +168,8 @@
       }
     },
     "renameSheetOp": {
+      "description": "给工作表改名。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 name 非法报 InvalidSheetName。与另一张表重名（不分大小写）报 DuplicateSheetName。已经是目标名（大小写相同）则空操作，仍计入 opsApplied。 只改大小写时仍改 sheet/@name。definedNames 或其它表 <f> / 图表 c:f 仍含旧表名时报 NotImplemented，不写文件。不改写公式。",
       "type": "object",
       "required": [
         "op",
@@ -182,6 +192,8 @@
       }
     },
     "moveSheetOp": {
+      "description": "调整工作表的顺序。",
+      "limits": "找不到该表或 after 报 IdNotFound。id / after 不是工作表 id 报 InvalidId。after 与 id 是同一张表报 InvalidField。 对 dialogsheet / macrosheet 报 NotImplemented。已经在目标位置则空操作。 只改 workbook.xml 里 sheets 子元素顺序，不改部件路径、sheetId 或关系 id。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

@@ -28,6 +28,8 @@
   },
   "$defs": {
     "insertTableOp": {
+      "description": "写出带单线边框的 w:tbl，每列宽 1440 twip，每格至少一段并带新的 w14:paraId。",
+      "limits": "docx 插在单元格时，嵌套表放在该格 tcPr 之后、已有段落之前。格末仍保留一个 w:p。Word 16.0 在文本框单元格里插表另存也是这个顺序；把等宽嵌套表接到格尾会报无法读取。rows / cols 越界或不是正整数报 InvalidField。id 形态不对报 InvalidId。找不到锚点报 IdNotFound。xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -82,6 +84,8 @@
       }
     },
     "deleteTableOp": {
+      "description": "删掉该 w:tbl。",
+      "limits": "若删的是正文里仅剩的块级内容，在 sectPr 前补一个空的 w:p。若删的是单元格里的嵌套表，该格至少留下一个 w:p。表不存在报 IdNotFound。id 不是表 id 报 InvalidId。xlsx 上发此 op 报 InvalidField。pptx：删掉对应 p:graphicFrame。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。组合里删子框后若组合空了，把空 p:grpSp 一并摘掉。不改其它对象的 cNvPr/@id。",
       "type": "object",
       "required": [
         "op",
@@ -99,6 +103,8 @@
       }
     },
     "insertRowOp": {
+      "description": "新行按参照行（表 id 时用最后一行，行 id 时用该行）的 gridSpan 布局复制格子，不复制 vMerge，每格一段空文本。",
+      "limits": "xlsx 上发此 op 报 InvalidField。pptx：往 a:tbl 插入一行 a:tr。参照行的 gridSpan / hMerge 布局复制，不复制 vMerge / rowSpan，每格空 a:txBody。行高抄参照行的 a:tr/@h，缺则均分当前框高。id 不是表 id 也不是行 id 报 InvalidId。某行占的列数对不上 colCount 报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -116,6 +122,8 @@
       }
     },
     "deleteRowOp": {
+      "description": "删掉表格的一行。",
+      "limits": "只剩一行时报 InvalidField。xlsx 上发此 op 报 InvalidField。pptx：删掉该 a:tr。只剩一行时报 InvalidField。id 不是行 id 报 InvalidId。 找不到报 IdNotFound。该行含 rowSpan 起点或 vMerge 继续格时报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",
@@ -133,6 +141,8 @@
       }
     },
     "insertColOp": {
+      "description": "新列宽抄相邻列；没有 tblGrid 时先按当前布局补上，缺宽则 1440 twip。",
+      "limits": "插入点落在某格 gridSpan 内部时，该格 gridSpan 加 1，不新开 w:tc。否则每行在该处插入一个新格。xlsx 上发此 op 报 InvalidField。pptx：在 a:tblGrid 插入 a:gridCol，宽度抄相邻列。插入点落在某格 gridSpan 内部时，该格 gridSpan 加 1，并补一个 hMerge 继续格。否则每行插入一个空 a:tc。after 越界报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -155,6 +165,8 @@
       }
     },
     "deleteColOp": {
+      "description": "删掉表格的一列。",
+      "limits": "只剩一列时报 InvalidField。该列落在某格 gridSpan 内部时，gridSpan 减 1；减到 0 则删掉该 w:tc。xlsx 上发此 op 报 InvalidField。 pptx：删掉对应 a:gridCol。该列落在某格 gridSpan 内部时，gridSpan 减 1；纯 hMerge 继续格则删掉该 a:tc。只剩一列时报 InvalidField。 col 越界报 InvalidField。某行占的列数对不上 colCount 报 NotImplemented。",
       "type": "object",
       "required": [
         "op",

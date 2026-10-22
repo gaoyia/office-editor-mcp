@@ -13,6 +13,8 @@
   },
   "$defs": {
     "xlsxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标工作表。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不进页眉、chartsheet、组合。",
       "type": "object",
       "required": [
         "op",
@@ -75,6 +77,8 @@
       }
     },
     "xlsxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。 摘该条 mc:AlternateContent（或裸的 oleObject）、对应 dummy xdr:sp 所在锚点、以及 VML 里 _x0000_s{shapeId} 的 v:shape。 oleObjects 删光则去掉该元素。清掉无人引用的关系与 embeddings / 预览媒体。docx / pptx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -92,6 +96,8 @@
       }
     },
     "xlsxSetOleSizeOp": {
+      "description": "字段与 setPictureSize 的 xlsx 一侧相同，id 必须是 OLE id。",
+      "limits": "objectPr/anchor 为 twoCell 时必须给 to，可选 toOffX / toOffY。cx / cy 在这种锚点上出现报 InvalidField。同时改 dummy xdr:twoCellAnchor 的 to，以及 VML x:Anchor 的右下角单元格。不按列宽行高换算 EMU。没有 objectPr、锚点是 oneCell 或 absolute 时，改 xdr:ext。不启动 OLE 服务器，不改 embeddings。",
       "type": "object",
       "required": [
         "op",

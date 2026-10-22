@@ -98,6 +98,8 @@
       }
     },
     "insertSmartArtOp": {
+      "description": "插入一个 SmartArt。",
+      "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/diagrams/ 下尚未占用的 data / layout / colors / quickStyle 四件套（序号从 1 起）， 并把四条关系写在宿主 .rels 上（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）。 diagram 部件仍写在 /word/diagrams/。wp:docPr/@id 取该部件已有 docPr 的最大整数加 1，至少为 1。",
       "type": "object",
       "required": [
         "op",
@@ -191,6 +193,8 @@
       }
     },
     "deleteSmartArtOp": {
+      "description": "删掉对应宿主 drawing。",
+      "limits": "docx 删 w:drawing；若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉（Fallback 位图一起走）。所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。xlsx 删对应 xdr:graphicFrame；若在组合里只摘该子节点，空组合再摘组合；锚点只剩 from/to/clientData 再摘整锚点。pptx 删 p:graphicFrame；若在 Choice 里同样整段 AlternateContent 删掉。",
       "type": "object",
       "required": [
         "op",
@@ -208,6 +212,8 @@
       }
     },
     "setSmartArtTextOp": {
+      "description": "只改该点 dgm:t 的可见文字。",
+      "limits": "留下第一个含 a:t 的 run 收下全部新文本，规则对齐 setShapeText 的可见替换（不整段重建 dgm:t 的 a:bodyPr）。没有 dgm:t 则补一份最小文本体。找不到该点报 IdNotFound。id 不是点 id 报 InvalidId。对 doc / pres / parTrans / sibTrans 点发此 op 报 InvalidId（它们不在树上）。",
       "type": "object",
       "required": [
         "op",
@@ -229,6 +235,8 @@
       }
     },
     "addSmartArtPointOp": {
+      "description": "在 data 部件追加一个可见 dgm:pt，并追加一条 type 为 parOf（或省略 type）的 cxn：srcId 为父点 modelId（图示 id 时父为 type=\"doc\" 的点），destId 为新点。",
+      "limits": "不手写 pres / parTrans / sibTrans。现有 modelId 都能解析成非负整数时，新点与新连接用尚未占用的最小正整数； 否则新点写新的大写 GUID（带花括号），连接 modelId 同样不与已有 pt / cxn 冲突。",
       "type": "object",
       "required": [
         "op",
@@ -252,6 +260,8 @@
       }
     },
     "deleteSmartArtPointOp": {
+      "description": "删掉该点，并沿 parOf 边删掉所有子孙可见点。",
+      "limits": "同时删掉 srcId / destId 指向这些 modelId 的连接，以及 cxnId 指向已删连接的 parTrans / sibTrans 点。不删 type=\"doc\" 的点。删完后可见点一条都不剩时报 InvalidField（要整张去掉请用 deleteSmartArt）。找不到报 IdNotFound。id 不是点 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -269,6 +279,8 @@
       }
     },
     "setSmartArtSizeOp": {
+      "description": "字段与 setPictureSize 相同，id 为图示 id。",
+      "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 改 graphicFrame 的 p:xfrm/a:ext。",
       "type": "object",
       "required": [
         "op",
@@ -323,6 +335,8 @@
       ]
     },
     "setSmartArtColorsOp": {
+      "description": "换成库内对应色板模板。",
+      "limits": "包里已有相同 uniqueId 的 colors 部件则只改 r:cs 指向它；否则写入新部件并改 r:cs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -344,6 +358,8 @@
       }
     },
     "setSmartArtStyleOp": {
+      "description": "换成库内对应 quickStyle 模板。",
+      "limits": "包里已有相同 uniqueId 的 style 部件则只改 r:qs；否则写入新部件并改 r:qs。不认识的取值报 InvalidField。找不到图示报 IdNotFound。id 不是图示 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -365,6 +381,8 @@
       }
     },
     "setSmartArtLayoutOp": {
+      "description": "改 SmartArt 的布局。",
+      "limits": "不认识的短名报 InvalidField。当前 uniqueId 已经是目标那一条：空操作，仍计入 opsApplied。 当前 uniqueId 属于库内 list / org / cycle 三族之一：把 layout 部件换成库内对应模板，并改 r:lo；可见点与 parOf 连接不动。 目标是 list 或 cycle 时，助手点改成普通节点，以免文字在新版式里消失。删掉 diagram drawing 缓存，让 Office 打开时重排。 当前 uniqueId 不在这三族里报 NotImplemented，不写文件。",
       "type": "object",
       "required": [
         "op",

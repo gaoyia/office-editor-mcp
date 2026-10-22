@@ -18,7 +18,24 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
         Action::Apply => run_apply(&req, cli_output),
         Action::ExportMedia => run_export_media(&req, cli_output),
         Action::ExportChartData => run_export_chart_data(&req, cli_output),
+        Action::Help => run_help(&req),
     }
+}
+
+fn run_help(req: &Request) -> Result<RunOutput, Error> {
+    json::deny_unknown(
+        &req.obj,
+        &[
+            "schemaVersion",
+            "action",
+            "format",
+            "q",
+            "op",
+            "name",
+            "locale",
+        ],
+    )?;
+    Ok(RunOutput::Help(crate::help::help(&req.obj)?))
 }
 
 fn run_inspect(req: &Request) -> Result<RunOutput, Error> {

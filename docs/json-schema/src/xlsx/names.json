@@ -37,6 +37,8 @@
   },
   "$defs": {
     "insertDefinedNameOp": {
+      "description": "往工作簿追加一条定义名（ECMA-376 §18.2.5）。",
+      "limits": "公式当字符串写入元素文本，不解析、不求值。",
       "type": "object",
       "required": [
         "op",
@@ -71,6 +73,8 @@
       }
     },
     "setDefinedNameOp": {
+      "description": "改已有定义名。",
+      "limits": "只改给了的字段。",
       "type": "object",
       "required": [
         "op",
@@ -128,6 +132,7 @@
       ]
     },
     "deleteDefinedNameOp": {
+      "description": "删掉一条定义名。",
       "type": "object",
       "required": [
         "op",
@@ -145,6 +150,8 @@
       }
     },
     "insertCustomViewOp": {
+      "description": "把当前窗口设置存成一条自定义视图。",
+      "limits": "不恢复隐藏行 / 列。",
       "type": "object",
       "required": [
         "op",
@@ -173,6 +180,8 @@
       }
     },
     "deleteCustomViewOp": {
+      "description": "去掉该 <customWorkbookView>，以及各表上同一 guid 的 <customSheetView>。",
+      "limits": "删光则去掉 <customWorkbookViews> / 空的 <customSheetViews>。找不到该序号报 IdNotFound。id 不是自定义视图 id 报 InvalidId。docx / pptx 上发此 op 报 InvalidField。不标重算。",
       "type": "object",
       "required": [
         "op",
@@ -190,6 +199,7 @@
       }
     },
     "showCustomViewOp": {
+      "description": "按快照把窗格写回当前默认视图。",
       "type": "object",
       "required": [
         "op",
@@ -207,6 +217,8 @@
       }
     },
     "insertConnectionOp": {
+      "description": "把网页查询或文本连接写入工作簿 Connections 部件。",
+      "limits": "不向数据源发请求，不把查询结果写进单元格，不写 queryTable。",
       "type": "object",
       "required": [
         "op",
@@ -247,6 +259,8 @@
       }
     },
     "deleteConnectionOp": {
+      "description": "删掉一个数据连接。",
+      "limits": "找不到报 IdNotFound。id 不是连接 id 报 InvalidId。摘该条 connection。删光则去掉 Connections 部件、workbook 关系与 Override。 不改 queryTable / sheetData。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -264,6 +278,8 @@
       }
     },
     "insertExternalLinkOp": {
+      "description": "把对其他工作簿的外部引用写入 /xl/externalLinks/…。",
+      "limits": "不打开目标文件，不把缓存值写进 sheetDataSet，也不改单元格公式。",
       "type": "object",
       "required": [
         "op",
@@ -294,6 +310,8 @@
       }
     },
     "deleteExternalLinkOp": {
+      "description": "删掉一个外部引用。",
+      "limits": "找不到报 IdNotFound。id 不是外部引用 id 报 InvalidId。若任一工作表 <f> 或定义名文本含 [k]（k 为该条下标或更大）报 NotImplemented，不写文件。 否则摘该条 <externalReference>、对应 externalLink 部件及其 .rels、workbook 关系与 Override。删光则去掉 <externalReferences>。 不重写其余公式的 [n]。docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -311,6 +329,8 @@
       }
     },
     "setExternalLinkOp": {
+      "description": "改已有外部引用的路径。",
+      "limits": "不打开目标文件，不刷新 sheetDataSet，也不改单元格公式里的 [n]。",
       "type": "object",
       "required": [
         "op",

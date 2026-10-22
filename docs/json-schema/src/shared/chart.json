@@ -204,6 +204,8 @@
       }
     },
     "insertChartOp": {
+      "description": "插入一个图表。",
+      "limits": "docx：在该段末插入 w:drawing，默认浮动。新建 /word/charts/chartN.xml（N 从 1 起尚未占用）、chart 的 .rels、一份最小 embedding xlsx（工作表名 Sheet1， 分类从 A2 起，系列名在第 1 行，数值从 B2 起向右），以及宿主部件关系（主文档、页眉页脚、comments.xml、footnotes.xml 或 endnotes.xml）、[Content_Types].xml Override。 chart 部件仍写在 /word/charts/。",
       "type": "object",
       "required": [
         "op",
@@ -330,6 +332,8 @@
       }
     },
     "deleteChartOp": {
+      "description": "删掉一个图表。",
+      "limits": "docx：删掉对应 w:drawing。若在 mc:AlternateContent 的 Choice 里，整段 AlternateContent 删掉。 所在 w:r 若删完后只剩 w:rPr 或空，把该 run 也删掉。重新解析关系之后，若该 chart 部件、专属 colors / style、embedding 再无人引用，删掉这些部件、关系条目和对应内容类型。",
       "type": "object",
       "required": [
         "op",
@@ -347,6 +351,8 @@
       }
     },
     "setChartTitleOp": {
+      "description": "改图表标题。",
+      "limits": "找不到该图报表 IdNotFound。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -368,6 +374,8 @@
       }
     },
     "setChartSeriesOp": {
+      "description": "改图表里一个系列的数据。",
+      "limits": "name、categories、values、sizes 至少给一个，否则报 InvalidField。只给的字段改，其余保留。categories 与 values 都给时长度可以不同。 对非气泡系列给 sizes 报 InvalidField。找不到该系列报 IdNotFound。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -437,6 +445,8 @@
       ]
     },
     "addChartSeriesOp": {
+      "description": "在 chart 部件末尾追加一条 c:ser，c:idx / c:order 取尚未占用的最小值。",
+      "limits": "样式能从最后一条系列抄则抄，抄不了就用最小默认。docx 有 embedding 则在工作表右侧追加一列。xlsx 能从已有系列的 c:f 推出右侧相邻空列则写入；推不出报 NotImplemented。不能用本 op 把单类型图加成组合图。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -489,6 +499,8 @@
       }
     },
     "deleteChartSeriesOp": {
+      "description": "删掉该 c:ser。",
+      "limits": "docx 若能从公式定位则同步 embedding 里对应列。xlsx 不删单元格。删完后一条都不剩时报 InvalidField（要整张去掉请用 deleteChart）。找不到报 IdNotFound。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -506,6 +518,8 @@
       }
     },
     "setChartTypeOp": {
+      "description": "改图表类型。",
+      "limits": "不认识的枚举、或值为 combo、chartex，报 InvalidField。当前 type 为 other 或 chartex 时报 NotImplemented，不写文件。 转成 stock 必须恰好三条（hlc）或四条（ohlc）系列，否则 NotImplemented。从组合图转成股价报 NotImplemented。 转成 surface 必须恰好三条系列，否则 NotImplemented。 转成 ofPie / pie / doughnut 必须恰好一条系列，否则 NotImplemented。",
       "type": "object",
       "required": [
         "op",
@@ -539,6 +553,8 @@
       }
     },
     "setChartAxisTitleOp": {
+      "description": "改图表坐标轴的标题。",
+      "limits": "axis 不认识报 InvalidField。找不到对应主轴报 InvalidField。id 不是图表 id 报 InvalidId。找不到图报表 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -567,6 +583,8 @@
       }
     },
     "setChartLegendOp": {
+      "description": "show 为 false 时忽略 pos。",
+      "limits": "不认识的 pos 报 InvalidField。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -597,6 +615,8 @@
       }
     },
     "setChartDataLabelsOp": {
+      "description": "true：在 plotArea 写 c:dLbls，c:showVal 为 1，不调标签坐标。",
+      "limits": "false：去掉 plotArea 与各系列上的 c:dLbls。id 不是图表 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -628,6 +648,8 @@
       ]
     },
     "insertTrendlineOp": {
+      "description": "在该 c:ser 末尾追加一条 c:trendline（插在 c:cat / c:val / c:errBars / c:extLst 之前）。",
+      "limits": "poly 以外给 order、或 movingAvg 以外给 period，报 InvalidField。饼、圆环、复合饼、曲面、other、chartex 上报 InvalidField。id 不是系列 id 报 InvalidId。找不到系列报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -667,6 +689,8 @@
       }
     },
     "setTrendlineOp": {
+      "description": "改一条趋势线。",
+      "limits": "至少给一个可写字段，否则报 InvalidField。只改被点名的字段。把 type 改成非 poly 时去掉 c:order；改成非 movingAvg 时去掉 c:period。 id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -737,6 +761,8 @@
       ]
     },
     "deleteTrendlineOp": {
+      "description": "删掉该 c:trendline。",
+      "limits": "id 不是趋势线 id 报 InvalidId。找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -754,6 +780,8 @@
       }
     },
     "insertErrorBarsOp": {
+      "description": "写出一条 c:errBars。",
+      "limits": "valType 为 cust 时必须给 plus 与 minus，写成 c:plus / c:minus 的 c:numLit，不必与系列点数相同。非 cust 时出现 plus / minus 报 InvalidField。lCaps 不是合法 valType，报 InvalidField。dir 为 y 或缺省时不写 c:errDir；dir 为 x 时写 c:errDir val=\"x\"。该系列已有同 dir 的误差线时报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -810,6 +838,8 @@
       }
     },
     "setErrorBarsOp": {
+      "description": "改误差线。",
+      "limits": "至少给一个可写字段。改成 stdErr 时去掉 c:val。改成 cust 时必须有 plus 与 minus（本 op 给的，或原节点已有）。 改成非 cust 时去掉 c:plus / c:minus。lCaps 报 InvalidField。id 不是误差线 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -898,6 +928,8 @@
       ]
     },
     "deleteErrorBarsOp": {
+      "description": "删掉该 c:errBars。",
+      "limits": "找不到报 IdNotFound。",
       "type": "object",
       "required": [
         "op",
@@ -915,6 +947,8 @@
       }
     },
     "setChartSeriesAxisOp": {
+      "description": "把该系列所在包裹的数值轴 c:axId 指到主轴或次轴。",
+      "limits": "没有次轴时按主数值轴复制一条，写 c:overlay val=\"1\"、c:crosses val=\"max\"、新的 c:axId。同一包裹里还有别的系列且目标轴不同时，把被点名系列拆到同类型的新包裹。已经是目标状态则空操作。饼、圆环、复合饼、曲面、股价、other、chartex 上报 InvalidField。axis 不认识报 InvalidField。id 不是系列 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -939,6 +973,8 @@
       }
     },
     "setChartSizeOp": {
+      "description": "字段与 setPictureSize 相同，id 为图表 id。",
+      "limits": "docx 改宿主 wp:extent（以及 a:ext 若有），规则与图相同。xlsx 规则与图相同：oneCell / absolute 改 xdr:ext，twoCell 改右下角 to。pptx 写入 graphicFrame 的 p:xfrm/a:ext。",
       "type": "object",
       "required": [
         "op",

@@ -64,6 +64,8 @@
   },
   "$defs": {
     "setPicturePosOp": {
+      "description": "改图片在页面上的位置。",
+      "limits": "x 与 y 至少给一个，否则报 InvalidField。只改被点名的那一侧。写入 p:spPr/a:xfrm/a:off。找不到该对象报 IdNotFound。 id 不是合法图 id、视频 id 或音频 id 报 InvalidId。批注内图没有画布坐标。setMedia 仍不改几何。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -101,6 +103,8 @@
       ]
     },
     "setChartPosOp": {
+      "description": "字段与 setPicturePos 相同，id 为 pptx 图表 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -138,6 +142,8 @@
       ]
     },
     "setSmartArtPosOp": {
+      "description": "字段与 setPicturePos 相同，id 为 pptx 图示 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -175,6 +181,8 @@
       ]
     },
     "pptxInsertModel3dOp": {
+      "description": "把本地 GLB 作为 3D 模型写入目标幻灯片或备注页。",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -213,6 +221,8 @@
       }
     },
     "pptxReplaceModel3dOp": {
+      "description": "换 GLB 字节，保留 graphicFrame 与关系 id。",
+      "limits": "海报仍写成 1×1 PNG。不改位置尺寸。找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -235,6 +245,8 @@
       }
     },
     "pptxDeleteModel3dOp": {
+      "description": "删掉一个 3D 模型。",
+      "limits": "找不到报 IdNotFound。id 不是 3D 模型 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -252,6 +264,8 @@
       }
     },
     "setModel3dPosOp": {
+      "description": "字段与 setPicturePos 相同，id 必须是 pptx 3D 模型 id。",
+      "limits": "写入 graphicFrame 的 p:xfrm/a:off。Fallback 海报 p:pic 同步改位置。docx / xlsx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -289,6 +303,8 @@
       ]
     },
     "pptxInsertInkOp": {
+      "description": "把本地 InkML 作为一笔墨迹写入目标幻灯片、备注页、母版或版式。",
+      "limits": "不进 pictures。不把笔画放进树。海报用 1×1 PNG 占位。不写 <p:timing>。位置是画布 EMU。",
       "type": "object",
       "required": [
         "op",
@@ -327,6 +343,8 @@
       }
     },
     "pptxReplaceInkOp": {
+      "description": "换 InkML 字节，保留 contentPart 与关系 id。",
+      "limits": "不改位置尺寸。找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。",
       "type": "object",
       "required": [
         "op",
@@ -349,6 +367,8 @@
       }
     },
     "pptxDeleteInkOp": {
+      "description": "删掉一处墨迹。",
+      "limits": "找不到报 IdNotFound。id 不是墨迹 id 报 InvalidId。摘整棵 AlternateContent。 清掉无人引用的关系、InkML 与海报。按 deleteShape 同一套规则清该 cNvPr/@id 的 timing tgtEl。",
       "type": "object",
       "required": [
         "op",
@@ -366,6 +386,8 @@
       }
     },
     "pptxSetInkSizeOp": {
+      "description": "字段与 setPictureSize 的 pptx 一侧相同。",
+      "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:ext。Fallback 海报 p:pic 同步改尺寸。对图 id 发此 op、对墨迹 id 发 setPictureSize 仍报 InvalidId。xlsx 用 setInkSize 改单元格锚点，见 xlsx 分册。",
       "type": "object",
       "required": [
         "op",
@@ -403,6 +425,8 @@
       ]
     },
     "pptxInsertOleOp": {
+      "description": "把本地文件作为嵌入对象写入目标宿主。",
+      "limits": "不在库里启动 OLE 服务器，不生成真实预览图（写入一张最小 PNG 占位）。不写 <p:timing>。不进批注、备注母版、讲义。",
       "type": "object",
       "required": [
         "op",
@@ -425,6 +449,8 @@
       }
     },
     "pptxDeleteOleOp": {
+      "description": "删掉一个嵌入对象。",
+      "limits": "找不到报 IdNotFound。id 不是 OLE id 报 InvalidId。摘整棵 graphicFrame（含 AlternateContent）。两支都扫 r:id（预览只在 Fallback）。 清掉无人引用的关系与 embeddings / 预览媒体。按 deleteShape 同一套规则清该 graphicFrame cNvPr/@id 的 timing tgtEl。 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。",
       "type": "object",
       "required": [
         "op",
@@ -442,6 +468,8 @@
       }
     },
     "pptxSetOleSizeOp": {
+      "description": "写入 graphicFrame 的 p:xfrm/a:ext、Choice 与 Fallback 两支 p:oleObj 的 imgW / imgH，以及 Fallback 预览 p:pic 的 a:ext。",
+      "limits": "不改 a:off，不改 embeddings，不启动 OLE 服务器。出现 to 报 InvalidField。对页 id 或图 id 发此 op 报 InvalidId。找不到报 IdNotFound。docx 见 [docx 分册](json-contract-docx.md#setolesize)。",
       "type": "object",
       "required": [
         "op",
@@ -479,6 +507,8 @@
       ]
     },
     "setInkPosOp": {
+      "description": "字段与 setPicturePos 相同。",
+      "limits": "id 必须是墨迹 id。写入 p14:xfrm/a:off。Fallback 海报 p:pic 同步改位置。x 与 y 一个都不给报 InvalidField。显式 0 可以。xlsx 不认此 op。",
       "type": "object",
       "required": [
         "op",
@@ -516,6 +546,8 @@
       ]
     },
     "pptxInsertMathOp": {
+      "description": "把一条线性公式写入目标幻灯片或备注页。",
+      "limits": "不进 shapes。不实现排版引擎。不写 <p:timing>。",
       "type": "object",
       "required": [
         "op",
@@ -554,6 +586,8 @@
       }
     },
     "pptxSetMathOp": {
+      "description": "不改位置尺寸。",
+      "limits": "出现 expr / kind 报 InvalidField。空 text 报 InvalidField。出现 x / y / cx / cy 报未知字段。找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -576,6 +610,8 @@
       }
     },
     "pptxDeleteMathOp": {
+      "description": "删掉一个公式。",
+      "limits": "找不到报 IdNotFound。id 不是公式框 id 报 InvalidId。摘整棵 AlternateContent。 海报无人引用则删。xlsx / docx 见各自分册。",
       "type": "object",
       "required": [
         "op",
@@ -593,6 +629,8 @@
       }
     },
     "pptxSetMathSizeOp": {
+      "description": "字段与 setShapeSize 相同。",
+      "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:ext。没有 xfrm 则补。不改 Fallback。cx 与 cy 一个都不给报 InvalidField。对形状 id 发此 op、对公式框 id 发 setShapeSize 仍报 InvalidId。docx 上发此 op 报 InvalidField。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setmathsize)。",
       "type": "object",
       "required": [
         "op",
@@ -630,6 +668,8 @@
       ]
     },
     "setMathPosOp": {
+      "description": "字段与 setShapePos 相同。",
+      "limits": "id 必须是公式框 id。写入 Choice 里该 p:sp 的 p:spPr/a:xfrm/a:off。没有 xfrm 则补。不改 Fallback。x 与 y 一个都不给报 InvalidField。docx / xlsx 上发此 op 报 InvalidField。对公式框 id 发 setShapePos 仍报 InvalidId。",
       "type": "object",
       "required": [
         "op",

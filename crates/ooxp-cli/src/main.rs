@@ -51,7 +51,7 @@ fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
     );
     let out = run(&json_text, cli.output.as_deref()).map_err(|e| (e, Some(lang)))?;
     match out {
-        RunOutput::Inspect(tree) => {
+        RunOutput::Inspect(tree) | RunOutput::Help(tree) => {
             let text = if cli.pretty {
                 serde_json::to_string_pretty(&tree).unwrap()
             } else {

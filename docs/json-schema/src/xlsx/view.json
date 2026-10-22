@@ -43,6 +43,8 @@
   },
   "$defs": {
     "setPrintSetupOp": {
+      "description": "改工作表或图表工作表的页边距、纸张、方向、缩放、打印网格线、打印区域与手工分页符。",
+      "limits": "不改页眉页脚原文（仍走 setHeaderFooterText）。",
       "type": "object",
       "required": [
         "op",
@@ -240,6 +242,8 @@
       ]
     },
     "setSheetViewOp": {
+      "description": "改工作表或图表工作表默认视图的缩放、冻结窗格、拆分窗格与活动单元格。",
+      "limits": "不改分页预览 / 页面布局。",
       "type": "object",
       "required": [
         "op",
@@ -318,6 +322,8 @@
       ]
     },
     "setAutoFilterOp": {
+      "description": "改工作表级自动筛选范围。",
+      "limits": "不改表格部件里的筛选，不写筛选条件，不隐藏行。",
       "type": "object",
       "required": [
         "op",
@@ -343,6 +349,8 @@
       }
     },
     "setSortStateOp": {
+      "description": "改工作表级排序条件。",
+      "limits": "不重排 sheetData，不隐藏行，不求值。不改表格部件里的排序。",
       "type": "object",
       "required": [
         "op",
@@ -428,6 +436,8 @@
       }
     },
     "groupRowsOp": {
+      "description": "给指定行的大纲级加 1。",
+      "limits": "不写隐藏、不写折叠、不改汇总方向。",
       "type": "object",
       "required": [
         "op",
@@ -450,6 +460,8 @@
       }
     },
     "ungroupRowsOp": {
+      "description": "给指定行的大纲级减 1。",
+      "limits": "减到 0 则去掉 @outlineLevel。范围内本来就是 0 的行不动。同步 outlineLevelRow。字段与错误与 groupRows 相同，op 必须是 \"ungroupRows\"。不写隐藏、不写折叠。",
       "type": "object",
       "required": [
         "op",
@@ -472,6 +484,8 @@
       }
     },
     "groupColsOp": {
+      "description": "给指定列的大纲级加 1。",
+      "limits": "不写隐藏、不写折叠。",
       "type": "object",
       "required": [
         "op",
@@ -494,6 +508,8 @@
       }
     },
     "ungroupColsOp": {
+      "description": "给指定列的大纲级减 1。",
+      "limits": "减到 0 则去掉 @outlineLevel。字段与错误与 groupCols 相同，op 必须是 \"ungroupCols\"。",
       "type": "object",
       "required": [
         "op",
@@ -516,6 +532,7 @@
       }
     },
     "setOutlineOp": {
+      "description": "改汇总方向，或按点名的细节范围折叠 / 展开。",
       "type": "object",
       "required": [
         "op",
@@ -574,6 +591,8 @@
       ]
     },
     "setRowHiddenOp": {
+      "description": "写或去掉行的 @hidden。",
+      "limits": "不改大纲级，不折叠汇总行。",
       "type": "object",
       "required": [
         "op",
@@ -600,6 +619,8 @@
       }
     },
     "setColHiddenOp": {
+      "description": "写或去掉列的 @hidden。",
+      "limits": "不改大纲级。",
       "type": "object",
       "required": [
         "op",
@@ -626,6 +647,8 @@
       }
     },
     "setHeaderFooterTextOp": {
+      "description": "改页眉页脚里的文字。",
+      "limits": "找不到该表报 IdNotFound。id 不是页眉槽位 id 报 InvalidId。对图 id、工作表 id 或单元格 id 发此 op 报 InvalidId。 worksheet / chartsheet / dialogsheet 都可以改文本。对 macrosheet 本期只读页眉原文，不新开写入。没有 headerFooter 则按 CT_Worksheet 顺序新建。",
       "type": "object",
       "required": [
         "op",
@@ -647,6 +670,8 @@
       }
     },
     "setSheetHiddenOp": {
+      "description": "隐藏或显示工作表。",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 把最后一张可见表改成隐藏报 InvalidField。true 写 state=\"hidden\"（若原先是 veryHidden 也改成 hidden）。false 去掉 state。已经是目标可见性则空操作。 docx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

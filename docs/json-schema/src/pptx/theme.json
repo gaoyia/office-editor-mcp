@@ -16,6 +16,8 @@
   },
   "$defs": {
     "pptxSetThemeColorsOp": {
+      "description": "改该母版 theme 部件的 a:clrScheme 槽位，以及配色方案名、theme 根名。",
+      "limits": "不改未点名的 fmtScheme 槽。不把未点名形状上的 schemeClr 展开成直接色。",
       "type": "object",
       "required": [
         "op",
@@ -93,6 +95,8 @@
       }
     },
     "pptxSetThemeFontsOp": {
+      "description": "改该母版 theme 部件的 a:fontScheme。",
+      "limits": "未点名的 fmtScheme 槽留下。",
       "type": "object",
       "required": [
         "op",
@@ -215,6 +219,8 @@
       }
     },
     "setClrMapOp": {
+      "description": "改 slideMaster、notesMaster 或 handoutMaster 上的 p:clrMap。",
+      "limits": "不把映射算成 RGB。不改 theme 部件。",
       "type": "object",
       "required": [
         "op",
@@ -280,6 +286,7 @@
       }
     },
     "setClrMapOvrOp": {
+      "description": "改幻灯片、版式或备注页上的 p:clrMapOvr。",
       "type": "object",
       "required": [
         "op",

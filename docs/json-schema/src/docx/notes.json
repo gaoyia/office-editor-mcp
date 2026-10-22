@@ -28,6 +28,8 @@
   },
   "$defs": {
     "insertEmbeddedFontOp": {
+      "description": "把一份字体嵌进文档。",
+      "limits": "出现 subsetted 报 UnknownField。本期不写 w:subsetted，不在库里做 TTF 子集化。同一 name + style 已有嵌入面报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -64,6 +66,8 @@
       }
     },
     "deleteEmbeddedFontOp": {
+      "description": "删掉该 embed*、对应 font 部件及 fontTable 关系。",
+      "limits": "所属 w:font 条目留下（即使再也没有 embed*）。fontTable 本身不因删光嵌入面而拆掉。找不到报 IdNotFound。id 不是 font:{n} 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -81,6 +85,8 @@
       }
     },
     "setFontEmbedOp": {
+      "description": "改嵌入字体怎么用。",
+      "limits": "三者至少给一个，否则报 InvalidField。未点名的标志留下。本 op 不自动嵌字体、不子集化、不改 fontTable。 没有 settings 且要写成 true 时新建 /word/settings.xml 与主文档 settings 关系。id 不是 docx:document 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -107,6 +113,8 @@
       }
     },
     "insertFootnoteOp": {
+      "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
       "type": "object",
       "required": [
         "op",
@@ -127,6 +135,8 @@
       }
     },
     "insertEndnoteOp": {
+      "description": "在该段末插入一个新 run，内含 w:footnoteReference 或 w:endnoteReference。",
+      "limits": "不提供字符偏移。分配该注部件里尚未占用的 w:id（十进制，跳过已有用户注和分隔符，常见从 2 起）。",
       "type": "object",
       "required": [
         "op",
@@ -147,6 +157,8 @@
       }
     },
     "deleteFootnoteOp": {
+      "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -164,6 +176,8 @@
       }
     },
     "deleteEndnoteOp": {
+      "description": "去掉主文档、页眉、页脚和文本框里所有匹配的引用 run，再去掉注部件里该条 w:footnote / w:endnote。",
+      "limits": "不得删分隔符。已经不存在报 IdNotFound。id 不是用户注 id 报 InvalidId。注内图按图片规则：该媒体不再被任何关系引用则删除部件。删光用户注后仍保留注部件和两条分隔符，不拆掉整个 part。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",
@@ -181,6 +195,8 @@
       }
     },
     "setNoteNumberingOp": {
+      "description": "改脚注或尾注的编号。",
+      "limits": "numFmt、numStart、numRestart 至少给一个，否则报 InvalidField。只改被点名的属性，其余编号属性保留。不重算页面上已经画出来的序号（那是渲染，Word 打开时自己画）。 不认识的枚举报 InvalidField。id 不是 docx:document 或 section:{n} 报 InvalidId。节不存在报 IdNotFound。xlsx / pptx 上发此 op 报 InvalidField。",
       "type": "object",
       "required": [
         "op",

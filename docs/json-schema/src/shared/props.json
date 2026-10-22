@@ -95,6 +95,8 @@
       }
     },
     "setProtectionOp": {
+      "description": "docx 改 /word/settings.xml 的限制编辑；xlsx 改工作表 sheetProtection 或工作簿 workbookProtection； pptx 改 presentation.xml 的 p:modifyVerifier。",
+      "limits": "pptx 的放映设置用 setShowPr，不要塞进本 op。",
       "type": "object",
       "required": [
         "op",
@@ -362,6 +364,8 @@
       ]
     },
     "setPropsOp": {
+      "description": "改标题、作者这类文档属性。",
+      "limits": "这八个字段至少给一个，否则报 InvalidField。未点名的字段留下，含 Application、页数/字数、HeadingPairs、TitlesOfParts、Slides，以及未点名的公司名。 不要写 DigSig。不要改 lastModifiedBy、created、modified。出现这些只读键报 UnknownField。id 不是格式根报 InvalidId。 缺 core.xml 或 app.xml 时，只要这条 op 点到了对应部件里的字段，就按需新建部件、根关系和 Content Type Override。",
       "type": "object",
       "required": [
         "op",
@@ -445,6 +449,8 @@
       ]
     },
     "setCustomPropOp": {
+      "description": "按名 upsert：已有同名 property 时命中文档顺序第一处，保留原来的 pid / fmtid，只换值子元素。",
+      "limits": "没有则追加，fmtid 固定 {D5CDD505-2E9C-101B-9397-08002B2CF9AE}，pid 取已有最大整数加 1，至少为 2。name 为空、type 不认识，或 type 与 value 对不上（例如 i4 却给了字符串或带小数的数字），报 InvalidField。id 不是格式根报 InvalidId。缺 custom.xml 则新建部件、根关系和 Override。",
       "type": "object",
       "required": [
         "op",
@@ -483,6 +489,8 @@
       }
     },
     "deleteCustomPropOp": {
+      "description": "删掉一个自定义文档属性。",
+      "limits": "找不到该名报 IdNotFound。id 不是 prop:{name} 报 InvalidId。删光后去掉 custom 部件、根关系和 Override。",
       "type": "object",
       "required": [
         "op",
