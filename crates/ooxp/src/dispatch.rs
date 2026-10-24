@@ -25,7 +25,20 @@ pub enum ByteOutput {
 }
 
 /// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData` 必须带上包字节。
-pub fn run_bytes(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutput, Error> {
+pub fn run_bytes(
+    input_json: &str,
+    package: Option<&[u8]>,
+    files: &[(&str, &[u8])],
+) -> Result<ByteOutput, Error> {
+    let map = files
+        .iter()
+        .map(|(path, bytes)| crate::host_files::success(path, bytes.to_vec()))
+        .collect();
+    let _guard = crate::host_files::install(map);
+    run_bytes_inner(input_json, package)
+}
+
+fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutput, Error> {
     let req = json::parse_request(input_json)?;
     screen(&req)?;
     match req.action {
@@ -79,6 +92,7 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
     let req = json::parse_request(input_json)?;
     // 先拒掉多余字段，再读盘。缺文件不能盖过 InvalidField。
     screen(&req)?;
+    let _files = crate::host_files::load_json(&Value::Object(req.obj.clone()));
     let package = match req.action {
         Action::Help | Action::Create => None,
         Action::Inspect | Action::Apply | Action::ExportMedia | Action::ExportChartData => {
@@ -86,7 +100,7 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
             Some(fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?)
         }
     };
-    let produced = run_bytes(input_json, package.as_deref())?;
+    let produced = run_bytes_inner(input_json, package.as_deref())?;
     match produced {
         ByteOutput::Inspect(tree) => Ok(RunOutput::Inspect(tree)),
         ByteOutput::Help(tree) => Ok(RunOutput::Help(tree)),
@@ -500,7 +514,7 @@ mod tests {
             "path": "missing-on-purpose.xlsx"
         })
         .to_string();
-        let ByteOutput::Inspect(tree) = run_bytes(&request, Some(&package)).unwrap() else {
+        let ByteOutput::Inspect(tree) = run_bytes(&request, Some(&package), &[]).unwrap() else {
             panic!("inspect 应返回树");
         };
         assert_eq!(tree["sheets"][0]["name"], "Sheet1");

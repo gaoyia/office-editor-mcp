@@ -2,11 +2,10 @@
 //! 不算渲染引擎，不把 GLB 塞进 inspect 树。
 //! 不把 `am3d:ambientLight` / `ptLight` 放进树。
 
-use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, TypeName};
+use crate::error::{Error, ErrorKind, TypeName};
 use crate::xml::{Element, Node};
 
 /// `[Content_Types].xml` 的 Default `glb`。
@@ -34,8 +33,7 @@ pub fn looks_like_glb(bytes: &[u8]) -> bool {
 
 /// 读本地文件并按文件头认 GLB。不是 GLB 报 `InvalidImageFile`。
 pub fn read_glb(path: &str) -> Result<Vec<u8>, Error> {
-    let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     if !looks_like_glb(&bytes) {
         return Err(Error::new(ErrorKind::InvalidImageFile));
     }

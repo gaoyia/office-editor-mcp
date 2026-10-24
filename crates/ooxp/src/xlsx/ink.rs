@@ -1,11 +1,10 @@
 //! 工作表墨迹：一笔一个 `xdr:contentPart`，InkML 在 `/xl/ink/inkN.xml`。
 //! 不进 `pictures`。Fallback 海报不进 `pictures`。不把笔画放进 inspect 树。
 
-use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason, TypeName};
+use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -928,8 +927,7 @@ fn walk(el: &Element, f: &mut dyn FnMut(&Element)) {
 }
 
 fn read_inkml(path: &str, json_path: &str) -> Result<Vec<u8>, Error> {
-    let src = PathBuf::from(path);
-    let bytes = std::fs::read(&src).map_err(|e| io_path(e, src))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     validate_inkml(&bytes, json_path)?;
     Ok(bytes)
 }

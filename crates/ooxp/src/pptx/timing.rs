@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use serde_json::{json, Map, Value};
 
 use crate::chart::{CHARTEX_NS, CHART_NS};
-use crate::error::{io_path, Error, ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::smartart::DGM_NS;
 use crate::xml::{Element, Node};
@@ -2273,8 +2273,8 @@ fn attach_sound_on(
     op_index: usize,
 ) -> Result<(), Error> {
     let p = std::path::PathBuf::from(file);
-    let bytes = std::fs::read(&p)
-        .map_err(|e| io_path(e, p.clone()).at(format!("ops[{op_index}].sound")))?;
+    let bytes = crate::host_files::read_user_file(file)
+        .map_err(|e| e.at(format!("ops[{op_index}].sound")))?;
     if !is_wav(&bytes) {
         return Err(Error::with_path(
             ErrorKind::InvalidMediaFile,

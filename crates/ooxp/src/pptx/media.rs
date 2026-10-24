@@ -1,10 +1,10 @@
 //! 幻灯片视频 / 音频：带 `a:videoFile` / `a:audioFile` 的 `p:pic`。不写 timing。
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{resolve_rel_target, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{Document, Element, Node};
 
@@ -716,8 +716,7 @@ struct ClipFile {
 }
 
 fn read_clip(path: &str, kind: MediaKind) -> Result<ClipFile, Error> {
-    let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     match kind {
         MediaKind::Video => {
             if is_mp4(&bytes) {
@@ -1135,8 +1134,7 @@ fn add_tracks(
 }
 
 fn read_vtt(path: &str) -> Result<Vec<u8>, Error> {
-    let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     if is_vtt(&bytes) {
         Ok(bytes)
     } else {

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship, Relationships,
 };
@@ -1521,7 +1521,7 @@ pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
 
 pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
     let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     classify_image(bytes, &p)
 }
 

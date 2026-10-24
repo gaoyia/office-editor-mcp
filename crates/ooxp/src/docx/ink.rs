@@ -2,11 +2,10 @@
 //! 不把手写识别成字，不把 InkML 原文塞进 inspect 树。
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_id, resolve_rel_target, ContentTypes, Package, Relationship,
     Relationships,
@@ -794,8 +793,7 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
 }
 
 fn read_inkml(path: &str, i: usize) -> Result<Vec<u8>, Error> {
-    let src = PathBuf::from(path);
-    let bytes = std::fs::read(&src).map_err(|e| io_path(e, src.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     validate_inkml(&bytes, i)?;
     Ok(bytes)
 }

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship,
     Relationships,
@@ -685,7 +685,7 @@ pub fn remove_picture(root: &mut Element, key: &PicKey) -> bool {
 
 pub fn read_image(path: &str) -> Result<ImageFile, Error> {
     let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     classify_image(bytes, &p)
 }
 

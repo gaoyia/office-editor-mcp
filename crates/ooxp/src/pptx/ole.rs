@@ -1,11 +1,10 @@
 //! 幻灯片嵌入对象：`p:graphicFrame` 里的 `p:oleObj`。
 //! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。改尺寸只动预览框。
 
-use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::ole::{self, FileSpec};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{Document, Element, Node};
@@ -181,8 +180,7 @@ pub fn insert(
     _i: usize,
 ) -> Result<(), Error> {
     let spec = ole::classify(&op.file);
-    let src = PathBuf::from(&op.file);
-    let bytes = std::fs::read(&src).map_err(|e| io_path(e, src.clone()))?;
+    let bytes = crate::host_files::read_user_file(&op.file)?;
     let payload = match &spec {
         FileSpec::Office { .. } => bytes,
         FileSpec::Package => ole::wrap_package(&op.file, &bytes),

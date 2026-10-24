@@ -2,11 +2,10 @@
 //! 改尺寸只动预览框锚点，不重算嵌入工作簿。
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::ole::{self, FileSpec};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
@@ -204,8 +203,7 @@ pub fn insert(
     _file_field: &str,
 ) -> Result<(), Error> {
     let spec = ole::classify(&op.file);
-    let src = PathBuf::from(&op.file);
-    let bytes = std::fs::read(&src).map_err(|e| io_path(e, src.clone()))?;
+    let bytes = crate::host_files::read_user_file(&op.file)?;
     let payload = match &spec {
         FileSpec::Office { .. } => bytes,
         FileSpec::Package => ole::wrap_package(&op.file, &bytes),

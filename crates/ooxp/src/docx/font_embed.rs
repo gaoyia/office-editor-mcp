@@ -2,11 +2,10 @@
 //! 不实现字体渲染、PANOSE 替换或 TTF 子集化引擎，不把 odttf 字节塞进树。
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -569,8 +568,7 @@ fn minimal_settings() -> String {
 }
 
 fn read_font_file(path: &str) -> Result<Vec<u8>, Error> {
-    let p = PathBuf::from(path);
-    let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
+    let bytes = crate::host_files::read_user_file(path)?;
     validate_font(&bytes)?;
     Ok(bytes)
 }

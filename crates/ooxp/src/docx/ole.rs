@@ -2,11 +2,10 @@
 //! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde_json::{json, Value};
 
-use crate::error::{io_path, Error, ErrorKind, IdReason};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_id, resolve_rel_target, ContentTypes, Package, Relationship,
     Relationships,
@@ -246,8 +245,7 @@ pub fn apply_insert(
         }
     }
     let spec = ole::classify(&op.file);
-    let src = PathBuf::from(&op.file);
-    let bytes = std::fs::read(&src).map_err(|e| io_path(e, src.clone()))?;
+    let bytes = crate::host_files::read_user_file(&op.file)?;
     let payload = match &spec {
         FileSpec::Office { .. } => bytes,
         FileSpec::Package => ole::wrap_package(&op.file, &bytes),
