@@ -1,11 +1,10 @@
 //! 领域 JSON 信封：schemaVersion、action、路径与格式。不含单元格或段落语义。
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorKind, TypeName};
+use crate::error::{Error, ErrorKind, TypeName};
 
 #[derive(Debug)]
 pub enum RunOutput {
@@ -174,8 +173,12 @@ pub fn require_ops(obj: &Map<String, Value>) -> Result<&[Value], Error> {
     Ok(ops)
 }
 
-/// 先写同目录临时文件再改名，避免截断原文件。
+/// 先写同目录临时文件再改名，避免截断原文件。本机 `run` 才写盘。
+#[cfg(not(target_arch = "wasm32"))]
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
+    use std::fs;
+
+    use crate::error::io_path;
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
     if let Some(dir) = parent {
         fs::create_dir_all(dir).map_err(|e| io_path(e, dir.to_path_buf()))?;

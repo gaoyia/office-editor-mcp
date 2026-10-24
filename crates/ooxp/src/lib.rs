@@ -31,6 +31,7 @@ mod xml;
 pub use dispatch::run;
 pub use dispatch::{run_bytes, ByteOutput};
 pub use error::{io_path, peek_lang, Error, ErrorCode, Lang};
+pub use host_env::{install as install_clock, EnvGuard};
 pub use json::{written_json, RunOutput};
 pub use model3d::sample_glb;
 

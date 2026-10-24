@@ -2,13 +2,12 @@
 //! `run_bytes` 不碰磁盘。本机的 `run` 才按路径读写。
 
 use std::io;
-use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::error::{io_path, Error, ErrorKind};
+use crate::error::{Error, ErrorKind};
 use crate::json::{
-    self, deny_unknown, infer_format, require_ops, str_field, Action, Format, Request, RunOutput,
+    self, deny_unknown, infer_format, require_ops, str_field, Action, Format, Request,
 };
 use crate::{docx, pptx, xlsx};
 
@@ -84,10 +83,15 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
 
 /// 本机入口：按 JSON 里的路径读包、写结果。不编进 wasm。
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+pub fn run(
+    input_json: &str,
+    cli_output: Option<&std::path::Path>,
+) -> Result<crate::json::RunOutput, Error> {
     use std::fs;
+    use std::path::PathBuf;
 
-    use crate::json::write_atomic;
+    use crate::error::io_path;
+    use crate::json::{write_atomic, RunOutput};
 
     let req = json::parse_request(input_json)?;
     // 先拒掉多余字段，再读盘。缺文件不能盖过 InvalidField。
@@ -122,7 +126,11 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn output_path(req: &Request, cli_output: Option<&Path>) -> Result<PathBuf, Error> {
+fn output_path(
+    req: &Request,
+    cli_output: Option<&std::path::Path>,
+) -> Result<std::path::PathBuf, Error> {
+    use std::path::{Path, PathBuf};
     match req.action {
         Action::Create => req
             .obj
