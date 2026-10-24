@@ -1,28 +1,218 @@
 //! 按 format 把信封交给 xlsx / docx / pptx。
+//! `run_bytes` 不碰磁盘。本机的 `run` 才按路径读写。
 
-use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+
+use serde_json::Value;
 
 use crate::error::{io_path, Error, ErrorKind};
 use crate::json::{
-    self, deny_unknown, infer_format, require_ops, str_field, write_atomic, Action, Format,
-    Request, RunOutput,
+    self, deny_unknown, infer_format, require_ops, str_field, Action, Format, Request, RunOutput,
 };
 use crate::{docx, pptx, xlsx};
 
-pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+/// 库门口的结果。字节由调用方自己落盘。
+#[derive(Debug)]
+pub enum ByteOutput {
+    Inspect(Value),
+    Help(Value),
+    Bytes {
+        bytes: Vec<u8>,
+        ops_applied: Option<usize>,
+        content_type: Option<String>,
+    },
+}
+
+/// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData` 必须带上包字节。
+pub fn run_bytes(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutput, Error> {
     let req = json::parse_request(input_json)?;
+    screen(&req)?;
     match req.action {
-        Action::Inspect => run_inspect(&req),
-        Action::Create => run_create(&req, cli_output),
-        Action::Apply => run_apply(&req, cli_output),
-        Action::ExportMedia => run_export_media(&req, cli_output),
-        Action::ExportChartData => run_export_chart_data(&req, cli_output),
-        Action::Help => run_help(&req),
+        Action::Inspect => {
+            let bytes = require_package(package)?;
+            Ok(ByteOutput::Inspect(inspect_bytes(&req, bytes)?))
+        }
+        Action::Create => Ok(ByteOutput::Bytes {
+            bytes: create_bytes(&req)?,
+            ops_applied: None,
+            content_type: None,
+        }),
+        Action::Apply => {
+            let bytes = require_package(package)?;
+            let (out, n) = apply_bytes(&req, bytes)?;
+            Ok(ByteOutput::Bytes {
+                bytes: out,
+                ops_applied: Some(n),
+                content_type: None,
+            })
+        }
+        Action::ExportMedia => {
+            let bytes = require_package(package)?;
+            let exported = export_media_bytes(&req, bytes)?;
+            Ok(ByteOutput::Bytes {
+                bytes: exported.bytes,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
+        Action::ExportChartData => {
+            let bytes = require_package(package)?;
+            let exported = export_chart_bytes(&req, bytes)?;
+            Ok(ByteOutput::Bytes {
+                bytes: exported.bytes,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
+        Action::Help => Ok(ByteOutput::Help(help_value(&req)?)),
     }
 }
 
-fn run_help(req: &Request) -> Result<RunOutput, Error> {
+/// 本机入口：按 JSON 里的路径读包、写结果。不编进 wasm。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+    use std::fs;
+
+    use crate::json::write_atomic;
+
+    let req = json::parse_request(input_json)?;
+    // 先拒掉多余字段，再读盘。缺文件不能盖过 InvalidField。
+    screen(&req)?;
+    let package = match req.action {
+        Action::Help | Action::Create => None,
+        Action::Inspect | Action::Apply | Action::ExportMedia | Action::ExportChartData => {
+            let path = str_field(&req.obj, "path")?;
+            Some(fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?)
+        }
+    };
+    let produced = run_bytes(input_json, package.as_deref())?;
+    match produced {
+        ByteOutput::Inspect(tree) => Ok(RunOutput::Inspect(tree)),
+        ByteOutput::Help(tree) => Ok(RunOutput::Help(tree)),
+        ByteOutput::Bytes {
+            bytes,
+            ops_applied,
+            content_type,
+        } => {
+            let path = output_path(&req, cli_output)?;
+            write_atomic(&path, &bytes)?;
+            Ok(RunOutput::Written {
+                path,
+                ops_applied,
+                content_type,
+            })
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn output_path(req: &Request, cli_output: Option<&Path>) -> Result<PathBuf, Error> {
+    match req.action {
+        Action::Create => req
+            .obj
+            .get("path")
+            .and_then(Value::as_str)
+            .map(PathBuf::from)
+            .or_else(|| cli_output.map(Path::to_path_buf))
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "path".into(),
+                    },
+                    "path",
+                )
+            }),
+        Action::Apply => {
+            let path = str_field(&req.obj, "path")?;
+            Ok(req
+                .obj
+                .get("output")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+                .or_else(|| cli_output.map(Path::to_path_buf))
+                .unwrap_or_else(|| PathBuf::from(path)))
+        }
+        Action::ExportMedia | Action::ExportChartData => req
+            .obj
+            .get("output")
+            .and_then(Value::as_str)
+            .map(PathBuf::from)
+            .or_else(|| cli_output.map(Path::to_path_buf))
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "output".into(),
+                    },
+                    "output",
+                )
+            }),
+        Action::Inspect | Action::Help => Err(Error::new(ErrorKind::UnsupportedAction {
+            action: "bytes".into(),
+        })),
+    }
+}
+
+fn screen(req: &Request) -> Result<(), Error> {
+    match req.action {
+        Action::Help => deny_unknown(
+            &req.obj,
+            &["schemaVersion", "action", "format", "q", "op", "name", "locale"],
+        ),
+        Action::Inspect => deny_unknown(
+            &req.obj,
+            &["schemaVersion", "action", "path", "format", "scope", "locale"],
+        ),
+        Action::Create => deny_unknown(
+            &req.obj,
+            &[
+                "schemaVersion",
+                "action",
+                "path",
+                "format",
+                "workbook",
+                "document",
+                "presentation",
+                "locale",
+            ],
+        ),
+        Action::Apply => deny_unknown(
+            &req.obj,
+            &[
+                "schemaVersion",
+                "action",
+                "path",
+                "format",
+                "output",
+                "ops",
+                "locale",
+            ],
+        ),
+        Action::ExportMedia | Action::ExportChartData => deny_unknown(
+            &req.obj,
+            &[
+                "schemaVersion",
+                "action",
+                "path",
+                "format",
+                "id",
+                "output",
+                "locale",
+            ],
+        ),
+    }
+}
+
+fn require_package(package: Option<&[u8]>) -> Result<&[u8], Error> {
+    package.ok_or_else(|| {
+        Error::from(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "package bytes are required",
+        ))
+    })
+}
+
+fn help_value(req: &Request) -> Result<Value, Error> {
     json::deny_unknown(
         &req.obj,
         &[
@@ -35,10 +225,10 @@ fn run_help(req: &Request) -> Result<RunOutput, Error> {
             "locale",
         ],
     )?;
-    Ok(RunOutput::Help(crate::help::help(&req.obj)?))
+    crate::help::help(&req.obj)
 }
 
-fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
+fn inspect_bytes(req: &Request, bytes: &[u8]) -> Result<Value, Error> {
     deny_unknown(
         &req.obj,
         &[
@@ -51,27 +241,26 @@ fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
         ],
     )?;
     let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
+    let format = req.obj.get("format").and_then(Value::as_str);
     let fmt = infer_format(path, format)?;
-    let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
     let tree = match fmt {
         Format::Xlsx => {
             let scope = xlsx::parse_scope(req.obj.get("scope"))?;
-            xlsx::inspect(&bytes, scope)?
+            xlsx::inspect(bytes, scope)?
         }
         Format::Docx => {
             let scope = docx::parse_scope(req.obj.get("scope"))?;
-            docx::inspect(&bytes, scope)?
+            docx::inspect(bytes, scope)?
         }
         Format::Pptx => {
             let scope = pptx::parse_scope(req.obj.get("scope"))?;
-            pptx::inspect(&bytes, scope)?
+            pptx::inspect(bytes, scope)?
         }
     };
-    Ok(RunOutput::Inspect(tree))
+    Ok(tree)
 }
 
-fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
     deny_unknown(
         &req.obj,
         &[
@@ -85,22 +274,9 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             "locale",
         ],
     )?;
-    let path = req
-        .obj
-        .get("path")
-        .and_then(serde_json::Value::as_str)
-        .map(PathBuf::from)
-        .or_else(|| cli_output.map(Path::to_path_buf))
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField {
-                    field: "path".into(),
-                },
-                "path",
-            )
-        })?;
-    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
-    let fmt = infer_format(&path.to_string_lossy(), format)?;
+    let path = str_field(&req.obj, "path")?;
+    let format = req.obj.get("format").and_then(Value::as_str);
+    let fmt = infer_format(path, format)?;
     let has_wb = req.obj.contains_key("workbook");
     let has_doc = req.obj.contains_key("document");
     let has_pres = req.obj.contains_key("presentation");
@@ -133,7 +309,7 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
                     "workbook",
                 )
             })?;
-            let xlsm = path
+            let xlsm = std::path::Path::new(path)
                 .extension()
                 .and_then(|e| e.to_str())
                 .is_some_and(|e| e.eq_ignore_ascii_case("xlsm"));
@@ -184,15 +360,10 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             pptx::create(presentation)?
         }
     };
-    write_atomic(&path, &bytes)?;
-    Ok(RunOutput::Written {
-        path,
-        ops_applied: None,
-        content_type: None,
-    })
+    Ok(bytes)
 }
 
-fn run_apply(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+fn apply_bytes(req: &Request, bytes: &[u8]) -> Result<(Vec<u8>, usize), Error> {
     deny_unknown(
         &req.obj,
         &[
@@ -206,43 +377,72 @@ fn run_apply(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Erro
         ],
     )?;
     let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
+    let format = req.obj.get("format").and_then(Value::as_str);
     let fmt = infer_format(path, format)?;
-    let out = req
-        .obj
-        .get("output")
-        .and_then(serde_json::Value::as_str)
-        .map(PathBuf::from)
-        .or_else(|| cli_output.map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from(path));
     let ops = require_ops(&req.obj)?;
-    let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
     let (out_bytes, n) = match fmt {
         Format::Xlsx => {
             let parsed = xlsx::parse_ops(ops)?;
             let n = parsed.len();
-            (xlsx::apply(&bytes, &parsed)?, n)
+            (xlsx::apply(bytes, &parsed)?, n)
         }
         Format::Docx => {
             let parsed = docx::parse_ops(ops)?;
             let n = parsed.len();
-            (docx::apply(&bytes, &parsed)?, n)
+            (docx::apply(bytes, &parsed)?, n)
         }
         Format::Pptx => {
             let parsed = pptx::parse_ops(ops)?;
             let n = parsed.len();
-            (pptx::apply(&bytes, &parsed)?, n)
+            (pptx::apply(bytes, &parsed)?, n)
         }
     };
-    write_atomic(&out, &out_bytes)?;
-    Ok(RunOutput::Written {
-        path: out,
-        ops_applied: Some(n),
-        content_type: None,
+    Ok((out_bytes, n))
+}
+
+struct Exported {
+    bytes: Vec<u8>,
+    content_type: Option<String>,
+}
+
+fn export_media_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
+    deny_unknown(
+        &req.obj,
+        &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "id",
+            "output",
+            "locale",
+        ],
+    )?;
+    let path = str_field(&req.obj, "path")?;
+    let format = req.obj.get("format").and_then(Value::as_str);
+    let fmt = infer_format(path, format)?;
+    let id = str_field(&req.obj, "id")?;
+    let (raw, content_type) = match fmt {
+        Format::Docx => {
+            let exported = docx::export_media(bytes, id)?;
+            (exported.bytes, exported.content_type)
+        }
+        Format::Xlsx => {
+            let exported = xlsx::export_media(bytes, id)?;
+            (exported.bytes, exported.content_type)
+        }
+        Format::Pptx => {
+            let exported = pptx::export_media(bytes, id)?;
+            (exported.bytes, exported.content_type)
+        }
+    };
+    Ok(Exported {
+        bytes: raw,
+        content_type,
     })
 }
 
-fn run_export_media(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+fn export_chart_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
     deny_unknown(
         &req.obj,
         &[
@@ -256,96 +456,14 @@ fn run_export_media(req: &Request, cli_output: Option<&Path>) -> Result<RunOutpu
         ],
     )?;
     let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
+    let format = req.obj.get("format").and_then(Value::as_str);
     let fmt = infer_format(path, format)?;
     let id = str_field(&req.obj, "id")?;
-    let out = req
-        .obj
-        .get("output")
-        .and_then(serde_json::Value::as_str)
-        .map(PathBuf::from)
-        .or_else(|| cli_output.map(Path::to_path_buf))
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField {
-                    field: "output".into(),
-                },
-                "output",
-            )
-        })?;
     match fmt {
         Format::Docx => {
-            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
-            let exported = docx::export_media(&bytes, id)?;
-            write_atomic(&out, &exported.bytes)?;
-            Ok(RunOutput::Written {
-                path: out,
-                ops_applied: None,
-                content_type: exported.content_type,
-            })
-        }
-        Format::Xlsx => {
-            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
-            let exported = xlsx::export_media(&bytes, id)?;
-            write_atomic(&out, &exported.bytes)?;
-            Ok(RunOutput::Written {
-                path: out,
-                ops_applied: None,
-                content_type: exported.content_type,
-            })
-        }
-        Format::Pptx => {
-            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
-            let exported = pptx::export_media(&bytes, id)?;
-            write_atomic(&out, &exported.bytes)?;
-            Ok(RunOutput::Written {
-                path: out,
-                ops_applied: None,
-                content_type: exported.content_type,
-            })
-        }
-    }
-}
-
-fn run_export_chart_data(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "id",
-            "output",
-            "locale",
-        ],
-    )?;
-    let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
-    let fmt = infer_format(path, format)?;
-    let id = str_field(&req.obj, "id")?;
-    let out = req
-        .obj
-        .get("output")
-        .and_then(serde_json::Value::as_str)
-        .map(PathBuf::from)
-        .or_else(|| cli_output.map(Path::to_path_buf))
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField {
-                    field: "output".into(),
-                },
-                "output",
-            )
-        })?;
-    match fmt {
-        Format::Docx => {
-            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
-            let exported = docx::export_chart_data(&bytes, id)?;
-            write_atomic(&out, &exported.bytes)?;
-            Ok(RunOutput::Written {
-                path: out,
-                ops_applied: None,
+            let exported = docx::export_chart_data(bytes, id)?;
+            Ok(Exported {
+                bytes: exported.bytes,
                 content_type: exported.content_type,
             })
         }
@@ -357,14 +475,34 @@ fn run_export_chart_data(req: &Request, cli_output: Option<&Path>) -> Result<Run
             "action",
         )),
         Format::Pptx => {
-            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
-            let exported = pptx::export_chart_data(&bytes, id)?;
-            write_atomic(&out, &exported.bytes)?;
-            Ok(RunOutput::Written {
-                path: out,
-                ops_applied: None,
+            let exported = pptx::export_chart_data(bytes, id)?;
+            Ok(Exported {
+                bytes: exported.bytes,
                 content_type: exported.content_type,
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inspect_reads_given_bytes_not_the_path() {
+        let workbook = serde_json::json!({
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
+        });
+        let package = xlsx::create(&workbook).unwrap();
+        let request = serde_json::json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": "missing-on-purpose.xlsx"
+        })
+        .to_string();
+        let ByteOutput::Inspect(tree) = run_bytes(&request, Some(&package)).unwrap() else {
+            panic!("inspect 应返回树");
+        };
+        assert_eq!(tree["sheets"][0]["name"], "Sheet1");
     }
 }
