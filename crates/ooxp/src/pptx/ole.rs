@@ -1,7 +1,6 @@
 //! 幻灯片嵌入对象：`p:graphicFrame` 里的 `p:oleObj`。
 //! 不执行 OLE 服务器，不把嵌入字节塞进 inspect 树。改尺寸只动预览框。
 
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};

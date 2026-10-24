@@ -55,7 +55,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 依赖方向只能是：`cli` → 库的门面；`dispatch` → `json` 与各格式模块；`xlsx` / `docx` / `pptx` → `opc`、`json` 与 `props`。
 
-库门口是 `run_bytes`：调用方交出领域 JSON、已经读好的包字节（`help` 和 `create` 不需要包），以及 JSON 里 `file`、`sound` 指向的那些文件的字节。库返回树，或返回要落盘的字节。它不打开 Office 文件，也不按路径去读图片、音视频、OLE、墨迹、3D 模型或嵌入字体。本机命令行和测试走 `run`。`run` 先把包和这些用户文件读进内存，再调用 `run_bytes`，最后把结果写回磁盘。`run` 不编进 `wasm32`。领域 JSON 的字段不变，路径仍由本机这一层解释。
+库门口是 `run_bytes`：调用方交出领域 JSON、已经读好的包字节（`help` 和 `create` 不需要包），以及 JSON 里 `file`、`sound` 指向的那些文件的字节。库返回树，或返回要落盘的字节。它不打开 Office 文件，也不按路径去读图片、音视频、OLE、墨迹、3D 模型或嵌入字体。随机数、当前时间和进程号也由调用方传入；本机的 `run` 每次仍问系统，所以拼出来的 id 和以前一样。没有传入时，本机编译会自己用系统的这三项，`wasm32` 上则没有系统来源。本机命令行和测试走 `run`。`run` 先把包和这些用户文件读进内存，再调用 `run_bytes`，最后把结果写回磁盘。`run` 不编进 `wasm32`。领域 JSON 的字段不变，路径仍由本机这一层解释。
 `props` 可调用 `opc` 与 `json`；不依赖格式模块。`chart` 可调用 `xlsx` 读写 embedding；pptx 不直接引用 `xlsx` 或 `docx`。
 `ole` 可调用 `opc`；xlsx / docx / pptx 调用 `ole`，彼此不引用。`json` 不依赖格式模块。各模块只依赖 `error`，`error` 不反向依赖 `json`、`opc` 或任何格式模块。
 禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。

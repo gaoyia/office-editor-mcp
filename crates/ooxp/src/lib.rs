@@ -9,6 +9,7 @@ mod drawing_math;
 mod drawing_text;
 mod error;
 mod help;
+mod host_env;
 mod host_files;
 mod image;
 mod json;

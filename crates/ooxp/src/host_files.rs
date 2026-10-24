@@ -42,12 +42,10 @@ pub fn read_user_file(path: &str) -> Result<Vec<u8>, Error> {
         };
         match map.get(path) {
             Some(Cached {
-                bytes: Some(bytes),
-                ..
+                bytes: Some(bytes), ..
             }) => Ok(bytes.clone()),
             Some(Cached {
-                raw_os: Some(code),
-                ..
+                raw_os: Some(code), ..
             }) => Err(io_path(
                 io::Error::from_raw_os_error(*code),
                 PathBuf::from(path),

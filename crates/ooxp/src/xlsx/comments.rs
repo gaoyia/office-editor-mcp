@@ -1,9 +1,7 @@
 //! 工作表线程化批注（MS-XLSX）。不把旧式 VML 批注当树节点。
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use serde_json::{json, Map, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
@@ -1104,12 +1102,9 @@ fn next_part(pkg: &Package, prefix: &str, suffix: &str) -> String {
 }
 
 fn new_guid() -> String {
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let t = crate::host_env::now_nanos();
     let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = std::process::id() as u128;
+    let pid = crate::host_env::pid();
     let mix = t ^ (n << 48) ^ (pid << 16);
     let mut b = [0u8; 16];
     for (i, byte) in b.iter_mut().enumerate() {
@@ -1125,10 +1120,8 @@ fn new_guid() -> String {
 }
 
 fn utc_now() -> String {
-    let dur = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    unix_to_dt(dur.as_secs(), dur.subsec_millis())
+    let (secs, millis) = crate::host_env::unix_secs_millis();
+    unix_to_dt(secs, millis)
 }
 
 fn unix_to_dt(secs: u64, millis: u32) -> String {

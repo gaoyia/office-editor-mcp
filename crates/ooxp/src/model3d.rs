@@ -2,7 +2,6 @@
 //! 不算渲染引擎，不把 GLB 塞进 inspect 树。
 //! 不把 `am3d:ambientLight` / `ptLight` 放进树。
 
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, TypeName};

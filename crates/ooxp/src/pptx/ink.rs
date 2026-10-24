@@ -2,7 +2,6 @@
 //! 不进 `pictures`。Fallback 海报不进 `pictures`。不把笔画放进 inspect 树。
 //! 位置是画布 EMU，不是单元格锚点。
 
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};

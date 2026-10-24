@@ -1,9 +1,7 @@
 //! 幻灯片节：`p14:sectionLst` 分组元数据。页顺序仍以 `p:sldIdLst` 为准。
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use serde_json::{json, Map, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::Package;
@@ -717,12 +715,9 @@ fn remove_sid_from_section_lst(lst: &mut Element, sid: u32) {
 }
 
 pub(crate) fn new_guid() -> String {
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
+    let t = crate::host_env::now_nanos();
     let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = std::process::id() as u128;
+    let pid = crate::host_env::pid();
     let mix = t ^ (n << 48) ^ (pid << 16);
     let mut b = [0u8; 16];
     for (i, byte) in b.iter_mut().enumerate() {

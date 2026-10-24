@@ -589,7 +589,7 @@ fn validate_font(bytes: &[u8]) -> Result<(), Error> {
 
 fn new_font_key() -> ([u8; 16], String) {
     let mut b = [0u8; 16];
-    getrandom::getrandom(&mut b).expect("系统随机数不可用");
+    crate::host_env::fill_random(&mut b);
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     let guid = format!(

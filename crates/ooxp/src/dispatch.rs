@@ -92,6 +92,7 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
     let req = json::parse_request(input_json)?;
     // 先拒掉多余字段，再读盘。缺文件不能盖过 InvalidField。
     screen(&req)?;
+    let _clock = crate::host_env::install_native();
     let _files = crate::host_files::load_json(&Value::Object(req.obj.clone()));
     let package = match req.action {
         Action::Help | Action::Create => None,
@@ -171,11 +172,26 @@ fn screen(req: &Request) -> Result<(), Error> {
     match req.action {
         Action::Help => deny_unknown(
             &req.obj,
-            &["schemaVersion", "action", "format", "q", "op", "name", "locale"],
+            &[
+                "schemaVersion",
+                "action",
+                "format",
+                "q",
+                "op",
+                "name",
+                "locale",
+            ],
         ),
         Action::Inspect => deny_unknown(
             &req.obj,
-            &["schemaVersion", "action", "path", "format", "scope", "locale"],
+            &[
+                "schemaVersion",
+                "action",
+                "path",
+                "format",
+                "scope",
+                "locale",
+            ],
         ),
         Action::Create => deny_unknown(
             &req.obj,

@@ -332,7 +332,7 @@ fn password_matches(password: &str, spec: &Sha512Spec) -> bool {
 
 fn write_sha512(el: &mut Element, password: &str, workbook: bool) {
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).expect("系统随机数不可用");
+    crate::host_env::fill_random(&mut salt);
     let hash = sha512_spin(password, &salt, SPIN_COUNT);
     let (algo_n, hash_n, salt_n, spin_n) = if workbook {
         (

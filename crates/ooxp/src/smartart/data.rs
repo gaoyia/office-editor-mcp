@@ -1,10 +1,8 @@
 //! data 部件：可见点、连线、改字。不含宿主 graphicFrame。
 
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use serde_json::{json, Value};
 
 use crate::error::Error;
 use crate::opc::Package;
@@ -647,11 +645,9 @@ pub fn next_model_ids(root: &Element) -> (String, String) {
 
 fn new_guid() -> String {
     let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed);
-    let t = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let a = (t.as_secs() as u32).wrapping_mul(0x9E37_79B9) ^ (n as u32);
-    let b = t.subsec_nanos();
+    let (secs, nanos) = crate::host_env::unix_secs_nanos();
+    let a = (secs as u32).wrapping_mul(0x9E37_79B9) ^ (n as u32);
+    let b = nanos;
     format!(
         "{{{:08X}-{:04X}-4{:03X}-A{:03X}-{:012X}}}",
         a,

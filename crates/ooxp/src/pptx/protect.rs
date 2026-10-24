@@ -149,7 +149,7 @@ fn sha512_spec(el: &Element) -> Option<Sha512Spec> {
 fn write_sha512(el: &mut Element, password: &str) {
     strip_hash_attrs(el);
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).expect("系统随机数不可用");
+    crate::host_env::fill_random(&mut salt);
     let hash = sha512_spin(password, &salt, SPIN_COUNT);
     el.set_attr("cryptProviderType", "rsaAES");
     el.set_attr("cryptAlgorithmClass", "hash");

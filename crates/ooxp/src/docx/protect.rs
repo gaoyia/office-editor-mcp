@@ -264,7 +264,7 @@ fn write_write_protection_hash(root: &mut Element, password: &str) {
 
 fn write_sha512_attrs(root: &Element, el: &mut Element, password: &str, word_legacy: bool) {
     let mut salt = [0u8; 16];
-    getrandom::getrandom(&mut salt).expect("系统随机数不可用");
+    crate::host_env::fill_random(&mut salt);
     let hash = if word_legacy {
         word_sha512_spin(password, &salt, SPIN_COUNT)
     } else {

@@ -1,7 +1,6 @@
 //! 工作表墨迹：一笔一个 `xdr:contentPart`，InkML 在 `/xl/ink/inkN.xml`。
 //! 不进 `pictures`。Fallback 海报不进 `pictures`。不把笔画放进 inspect 树。
 
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
