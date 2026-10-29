@@ -279,3 +279,935 @@ fn remove_attr_local(el: &mut Element, local: &str) {
     el.attrs
         .retain(|(k, _)| k.rsplit(':').next().unwrap_or(k) != local);
 }
+
+use super::charts;
+use super::hf;
+use super::ink;
+use super::model3d;
+use super::para;
+use super::picture;
+use super::request::SetHyperlinkOp;
+use super::smartart;
+use super::textbox;
+use crate::error::Error;
+use crate::error::ErrorKind;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_insert_pic_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &picture::PicTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, target, id, i)?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        let drawing =
+            super::picture::find_target_drawing_mut(&mut doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+        if picture_hlink_exists(drawing, target) {
+            return Err(Error::with_path(
+                ErrorKind::ShapeAlreadyHasHyperlink,
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let rid = {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = super::drawing_hlink::push_rel(&mut rels, url, anchor);
+        rels.write_to(pkg, &part_name)?;
+        rid
+    };
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::drawing_hlink::ensure_ns(&mut doc.root);
+    let drawing =
+        super::picture::find_target_drawing_mut(&mut doc.root, target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+    let parent = picture_hlink_parent_mut(drawing, target).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::drawing_hlink::insert_click(parent, &rid, tooltip);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_txbx_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        let host = para::find_paragraph_mut(&mut doc.root, target.host.body())
+            .ok_or_else(|| super::textbox::txbx_missing(id, i))?;
+        let drawing = textbox::find_textbox_drawing_mut(host, &target.key)
+            .ok_or_else(|| super::textbox::txbx_missing(id, i))?;
+        if super::drawing_hlink::textbox_has_click(drawing) {
+            return Err(Error::with_path(
+                ErrorKind::ShapeAlreadyHasHyperlink,
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let rid = {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = super::drawing_hlink::push_rel(&mut rels, url, anchor);
+        rels.write_to(pkg, &part_name)?;
+        rid
+    };
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::drawing_hlink::ensure_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, target.host.body())
+        .ok_or_else(|| super::textbox::txbx_missing(id, i))?;
+    let drawing = textbox::find_textbox_drawing_mut(host, &target.key)
+        .ok_or_else(|| super::textbox::txbx_missing(id, i))?;
+    let parent = super::drawing_hlink::textbox_click_parent_mut(drawing)
+        .ok_or_else(|| super::textbox::txbx_missing(id, i))?;
+    super::drawing_hlink::insert_click(parent, &rid, tooltip);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_click_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    id: &str,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+    mut has_click: impl FnMut(&mut Element) -> Option<bool>,
+    mut parent_mut: impl FnMut(&mut Element) -> Option<&mut Element>,
+    missing: ErrorKind,
+) -> Result<(), Error> {
+    {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        match has_click(&mut doc.root) {
+            Some(true) => {
+                return Err(Error::with_path(
+                    ErrorKind::ShapeAlreadyHasHyperlink,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            Some(false) => {}
+            None => {
+                return Err(Error::with_path(missing, format!("ops[{i}].id")));
+            }
+        }
+    }
+    let rid = {
+        let mut rels = Relationships::from_package(pkg, part_name)?;
+        let rid = super::drawing_hlink::push_rel(&mut rels, url, anchor);
+        rels.write_to(pkg, part_name)?;
+        rid
+    };
+    let doc = super::apply::load_part(pkg, docs, part_name)?;
+    super::drawing_hlink::ensure_ns(&mut doc.root);
+    let parent = parent_mut(&mut doc.root).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::HyperlinkNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::drawing_hlink::insert_click(parent, &rid, tooltip);
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_wsp_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+    has_click: fn(&mut Element, &para::TxbxKey) -> Option<bool>,
+    parent_mut: for<'a> fn(&'a mut Element, &para::TxbxKey) -> Option<&'a mut Element>,
+    missing: ErrorKind,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?;
+    let key = target.key.clone();
+    apply_insert_click_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        url,
+        anchor,
+        tooltip,
+        i,
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            has_click(host, &key)
+        },
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            parent_mut(host, &key)
+        },
+        missing,
+    )
+}
+pub(crate) fn apply_insert_ink_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = ink::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    super::apply::load_part(pkg, docs, &part_name)?;
+    {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        match ink::find_drawing_mut(&mut doc.root, &ctx, &key) {
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::InkNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                ));
+            }
+            Some(d) if super::drawing_hlink::picture_has_click(d) => {
+                return Err(Error::with_path(
+                    ErrorKind::ShapeAlreadyHasHyperlink,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    let rid = {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = super::drawing_hlink::push_rel(&mut rels, url, anchor);
+        rels.write_to(pkg, &part_name)?;
+        rid
+    };
+    {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        super::drawing_hlink::ensure_ns(&mut doc.root);
+        let drawing = ink::find_drawing_mut(&mut doc.root, &ctx, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let parent = super::drawing_hlink::picture_click_parent_mut(drawing).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::drawing_hlink::insert_click(parent, &rid, tooltip);
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_model3d_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    apply_insert_click_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        url,
+        anchor,
+        tooltip,
+        i,
+        |root| {
+            let frame = model3d::find_frame_mut(root, &key)?;
+            Some(super::drawing_hlink::picture_has_click(frame))
+        },
+        |root| {
+            let frame = model3d::find_frame_mut(root, &key)?;
+            super::drawing_hlink::picture_click_parent_mut(frame)
+        },
+        ErrorKind::Model3dNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_insert_chart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &charts::ChartTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        charts::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_insert_click_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        url,
+        anchor,
+        tooltip,
+        i,
+        |root| {
+            let drawing = charts::find_drawing_mut(root, target)?;
+            Some(super::drawing_hlink::picture_has_click(drawing))
+        },
+        |root| {
+            let drawing = charts::find_drawing_mut(root, target)?;
+            super::drawing_hlink::picture_click_parent_mut(drawing)
+        },
+        ErrorKind::ChartNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_insert_smartart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &smartart::DiagramTarget,
+    url: Option<&str>,
+    anchor: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        smartart::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_insert_click_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        url,
+        anchor,
+        tooltip,
+        i,
+        |root| {
+            let drawing = smartart::find_drawing_mut(root, target)?;
+            Some(super::drawing_hlink::picture_has_click(drawing))
+        },
+        |root| {
+            let drawing = smartart::find_drawing_mut(root, target)?;
+            super::drawing_hlink::picture_click_parent_mut(drawing)
+        },
+        ErrorKind::SmartArtNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_pic_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &picture::PicTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &super::apply::part_for_pic(pkg, catalog, doc_part, target, id, i)?,
+        id,
+        i,
+        op,
+        |root| {
+            let drawing = super::picture::find_target_drawing_mut(root, target)?;
+            picture_hlink_parent_mut(drawing, target)
+        },
+        |root| {
+            let drawing = super::picture::find_target_drawing_mut(root, target)?;
+            Some(picture_hlink_exists(drawing, target))
+        },
+        ErrorKind::PictureNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_txbx_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?,
+        id,
+        i,
+        op,
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            let drawing = textbox::find_textbox_drawing_mut(host, &target.key)?;
+            super::drawing_hlink::textbox_click_parent_mut(drawing)
+        },
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            let drawing = textbox::find_textbox_drawing_mut(host, &target.key)?;
+            Some(super::drawing_hlink::textbox_has_click(drawing))
+        },
+        ErrorKind::TextBoxNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_wsp_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+    has_click: fn(&mut Element, &para::TxbxKey) -> Option<bool>,
+    parent_mut: for<'a> fn(&'a mut Element, &para::TxbxKey) -> Option<&'a mut Element>,
+    missing: ErrorKind,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?;
+    let key = target.key.clone();
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        i,
+        op,
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            parent_mut(host, &key)
+        },
+        |root| {
+            let host = para::find_paragraph_mut(root, target.host.body())?;
+            has_click(host, &key)
+        },
+        missing,
+    )
+}
+pub(crate) fn apply_set_ink_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = ink::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    super::apply::load_part(pkg, docs, &part_name)?;
+    {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        match ink::find_drawing_mut(&mut doc.root, &ctx, &key) {
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::InkNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                ));
+            }
+            Some(d) if super::drawing_hlink::picture_has_click(d) => {}
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                ));
+            }
+        }
+    }
+    let old_rid = {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        let drawing = ink::find_drawing_mut(&mut doc.root, &ctx, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let parent = super::drawing_hlink::picture_click_parent_mut(drawing).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::drawing_hlink::click_rid(parent)
+    };
+    let new_rid = if op.url.is_some() || op.anchor.is_some() {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = super::drawing_hlink::set_rel(
+            &mut rels,
+            old_rid.as_deref(),
+            op.url.as_deref(),
+            op.anchor.as_deref(),
+        );
+        rels.write_to(pkg, &part_name)?;
+        Some(rid)
+    } else {
+        None
+    };
+    {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        super::drawing_hlink::ensure_ns(&mut doc.root);
+        let drawing = ink::find_drawing_mut(&mut doc.root, &ctx, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let parent = super::drawing_hlink::picture_click_parent_mut(drawing).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let tooltip = op.tooltip.as_ref().map(|t| t.as_deref());
+        if !super::drawing_hlink::set_click(parent, new_rid.as_deref(), tooltip) {
+            return Err(Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    if let (Some(old), Some(new)) = (old_rid.as_deref(), new_rid.as_deref()) {
+        if old != new {
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            super::link::drop_rel_if_unused(pkg, &doc.root, &part_name, old)?;
+        }
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_model3d_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        i,
+        op,
+        |root| {
+            let frame = model3d::find_frame_mut(root, &key)?;
+            super::drawing_hlink::picture_click_parent_mut(frame)
+        },
+        |root| {
+            let frame = model3d::find_frame_mut(root, &key)?;
+            Some(super::drawing_hlink::picture_has_click(frame))
+        },
+        ErrorKind::Model3dNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_chart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &charts::ChartTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        charts::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        i,
+        op,
+        |root| {
+            let drawing = charts::find_drawing_mut(root, target)?;
+            super::drawing_hlink::picture_click_parent_mut(drawing)
+        },
+        |root| {
+            let drawing = charts::find_drawing_mut(root, target)?;
+            Some(super::drawing_hlink::picture_has_click(drawing))
+        },
+        ErrorKind::ChartNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_smartart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &smartart::DiagramTarget,
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        smartart::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_set_drawing_hlink(
+        pkg,
+        docs,
+        dirty,
+        &part_name,
+        id,
+        i,
+        op,
+        |root| {
+            let drawing = smartart::find_drawing_mut(root, target)?;
+            super::drawing_hlink::picture_click_parent_mut(drawing)
+        },
+        |root| {
+            let drawing = smartart::find_drawing_mut(root, target)?;
+            Some(super::drawing_hlink::picture_has_click(drawing))
+        },
+        ErrorKind::SmartArtNotFound { id: id.to_string() },
+    )
+}
+pub(crate) fn apply_set_drawing_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    id: &str,
+    i: usize,
+    op: &SetHyperlinkOp,
+    mut parent_mut: impl FnMut(&mut Element) -> Option<&mut Element>,
+    mut exists: impl FnMut(&mut Element) -> Option<bool>,
+    missing: ErrorKind,
+) -> Result<(), Error> {
+    {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        match exists(&mut doc.root) {
+            Some(true) => {}
+            Some(false) => {
+                return Err(Error::with_path(
+                    ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(missing, format!("ops[{i}].id")));
+            }
+        }
+    }
+    let old_rid = {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        let parent = parent_mut(&mut doc.root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::drawing_hlink::click_rid(parent)
+    };
+    let new_rid = if op.url.is_some() || op.anchor.is_some() {
+        let mut rels = Relationships::from_package(pkg, part_name)?;
+        let rid = super::drawing_hlink::set_rel(
+            &mut rels,
+            old_rid.as_deref(),
+            op.url.as_deref(),
+            op.anchor.as_deref(),
+        );
+        rels.write_to(pkg, part_name)?;
+        Some(rid)
+    } else {
+        None
+    };
+    {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        super::drawing_hlink::ensure_ns(&mut doc.root);
+        let parent = parent_mut(&mut doc.root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let tooltip = op.tooltip.as_ref().map(|t| t.as_deref());
+        if !super::drawing_hlink::set_click(parent, new_rid.as_deref(), tooltip) {
+            return Err(Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    if let (Some(old), Some(new)) = (old_rid.as_deref(), new_rid.as_deref()) {
+        if old != new {
+            let doc = super::apply::load_part(pkg, docs, part_name)?;
+            super::link::drop_rel_if_unused(pkg, &doc.root, part_name, old)?;
+        }
+    }
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_pic_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &picture::PicTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, target, id, i)?;
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let drawing = super::picture::find_target_drawing_mut(root, target)?;
+        picture_hlink_parent_mut(drawing, target)
+    })
+}
+pub(crate) fn apply_delete_txbx_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?;
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let host = para::find_paragraph_mut(root, target.host.body())?;
+        let drawing = textbox::find_textbox_drawing_mut(host, &target.key)?;
+        super::drawing_hlink::textbox_click_parent_mut(drawing)
+    })
+}
+pub(crate) fn apply_delete_wsp_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    i: usize,
+    parent_mut: for<'a> fn(&'a mut Element, &para::TxbxKey) -> Option<&'a mut Element>,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, target, id, i)?;
+    let key = target.key.clone();
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let host = para::find_paragraph_mut(root, target.host.body())?;
+        parent_mut(host, &key)
+    })
+}
+pub(crate) fn apply_delete_ink_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = ink::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    super::apply::load_part(pkg, docs, &part_name)?;
+    let old_rid = {
+        let ctx = ink::HostCtx::load(pkg, &part_name)?;
+        let doc = super::apply::ink_doc_mut(docs, &part_name)?;
+        let drawing = ink::find_drawing_mut(&mut doc.root, &ctx, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let parent = super::drawing_hlink::picture_click_parent_mut(drawing).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::drawing_hlink::delete_click(parent).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    };
+    if let Some(rid) = old_rid {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        super::link::drop_rel_if_unused(pkg, &doc.root, &part_name, &rid)?;
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_model3d_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &para::TxbxTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let key = target.key.clone();
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let frame = model3d::find_frame_mut(root, &key)?;
+        super::drawing_hlink::picture_click_parent_mut(frame)
+    })
+}
+pub(crate) fn apply_delete_chart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &charts::ChartTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        charts::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let drawing = charts::find_drawing_mut(root, target)?;
+        super::drawing_hlink::picture_click_parent_mut(drawing)
+    })
+}
+pub(crate) fn apply_delete_smartart_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    id: &str,
+    target: &smartart::DiagramTarget,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        smartart::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
+        let drawing = smartart::find_drawing_mut(root, target)?;
+        super::drawing_hlink::picture_click_parent_mut(drawing)
+    })
+}
+pub(crate) fn apply_delete_drawing_hlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    id: &str,
+    i: usize,
+    mut parent_mut: impl FnMut(&mut Element) -> Option<&mut Element>,
+) -> Result<(), Error> {
+    let old_rid = {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        let parent = parent_mut(&mut doc.root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::drawing_hlink::delete_click(parent).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::HyperlinkNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    };
+    if let Some(rid) = old_rid {
+        let doc = super::apply::load_part(pkg, docs, part_name)?;
+        super::link::drop_rel_if_unused(pkg, &doc.root, part_name, &rid)?;
+    }
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
+}
+pub(crate) fn picture_hlink_exists(drawing: &Element, target: &picture::PicTarget) -> bool {
+    if picture::is_group_drawing(drawing) {
+        picture::grouped_pic_has_click(drawing, target.key())
+    } else {
+        super::drawing_hlink::picture_has_click(drawing)
+    }
+}
+pub(crate) fn picture_hlink_parent_mut<'a>(
+    drawing: &'a mut Element,
+    target: &picture::PicTarget,
+) -> Option<&'a mut Element> {
+    if picture::is_group_drawing(drawing) {
+        picture::find_grouped_pic_cnv_pr_mut(drawing, target.key())
+    } else {
+        super::drawing_hlink::picture_click_parent_mut(drawing)
+    }
+}

@@ -11,7 +11,7 @@ use crate::opc::{
 };
 use crate::xml::{Element, Node};
 
-use super::hf::{HfKind, HfType};
+use super::hf::{self, HfKind, HfType};
 use super::notes;
 use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::{A_NS, PIC_NS, REL_IMAGE, REL_NS, WP_NS};
@@ -2336,4 +2336,350 @@ pub fn body_para_of(target: &ParaTarget) -> Option<&BodyPara> {
         ParaTarget::InNote { para, .. } => Some(para),
         ParaTarget::InComment { para, .. } => Some(para),
     }
+}
+
+use super::comments;
+use super::request::DeletePictureOp;
+use super::request::InsertPictureOp;
+use super::request::ReplacePictureOp;
+use super::request::SetPictureSizeOp;
+use super::request::SetPictureWrapOp;
+use super::textbox;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn find_target_drawing_mut<'a>(
+    root: &'a mut Element,
+    target: &super::picture::PicTarget,
+) -> Option<&'a mut Element> {
+    match target {
+        super::picture::PicTarget::HeaderFooter { key, .. } => {
+            super::picture::find_drawing_mut(root, key)
+        }
+        super::picture::PicTarget::Body { para, key } => {
+            let p = para::find_paragraph_mut(root, para)?;
+            super::picture::find_drawing_mut(p, key)
+        }
+        super::picture::PicTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            key,
+        } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, box_key)?;
+            let inner = para::find_paragraph_in_txbx_mut(content, para)?;
+            super::picture::find_drawing_mut(inner, key)
+        }
+        super::picture::PicTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            let inner = para::find_paragraph_mut(note, para)?;
+            super::picture::find_drawing_mut(inner, key)
+        }
+        super::picture::PicTarget::InComment {
+            comment_id,
+            para,
+            key,
+        } => {
+            let comment = comments::find_comment_mut(root, comment_id)?;
+            let inner = para::find_paragraph_mut(comment, para)?;
+            super::picture::find_drawing_mut(inner, key)
+        }
+    }
+}
+pub(crate) fn remove_target_picture(
+    root: &mut Element,
+    target: &super::picture::PicTarget,
+) -> bool {
+    match target {
+        super::picture::PicTarget::HeaderFooter { key, .. } => {
+            super::picture::remove_picture(root, key)
+        }
+        super::picture::PicTarget::Body { para, key } => match para::find_paragraph_mut(root, para)
+        {
+            Some(p) => super::picture::remove_picture(p, key),
+            None => false,
+        },
+        super::picture::PicTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            key,
+        } => {
+            let Some(host_p) = para::find_paragraph_mut(root, host.body()) else {
+                return false;
+            };
+            let Some(content) = textbox::find_txbx_content_by_key_mut(host_p, box_key) else {
+                return false;
+            };
+            match para::find_paragraph_in_txbx_mut(content, para) {
+                Some(inner) => super::picture::remove_picture(inner, key),
+                None => false,
+            }
+        }
+        super::picture::PicTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        } => match notes::find_user_note_mut(root, *kind, note_id) {
+            Some(note) => match para::find_paragraph_mut(note, para) {
+                Some(inner) => super::picture::remove_picture(inner, key),
+                None => false,
+            },
+            None => false,
+        },
+        super::picture::PicTarget::InComment {
+            comment_id,
+            para,
+            key,
+        } => match comments::find_comment_mut(root, comment_id) {
+            Some(comment) => match para::find_paragraph_mut(comment, para) {
+                Some(inner) => super::picture::remove_picture(inner, key),
+                None => false,
+            },
+            None => false,
+        },
+    }
+}
+pub(crate) fn apply_replace_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &ReplacePictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let (xml_dirty, drop_rid) = {
+        let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::picture::replace_media(pkg, &part_name, drawing, &op.file)?
+    };
+    if xml_dirty {
+        dirty.insert(part_name.clone(), ());
+    }
+    if let Some(rid) = drop_rid {
+        let media = super::picture::resolve_embed(pkg, &part_name, &rid).ok();
+        super::picture::remove_rel_if_unused(pkg, &part_name, &rid, &doc.root)?;
+        if let Some(m) = media {
+            if !super::picture::media_still_used(pkg, &m)? {
+                pkg.remove(&m);
+            }
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_insert_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertPictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = match &op.para {
+        ParaTarget::Body(_) => doc_part.to_string(),
+        ParaTarget::HeaderFooter {
+            kind, hf_type, n, ..
+        } => super::apply::part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?,
+        ParaTarget::InTextBox { host, .. } => {
+            super::apply::part_for_host(pkg, catalog, doc_part, host, &op.id, i)?
+        }
+        ParaTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?
+        }
+        ParaTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?,
+    };
+    if let ParaTarget::InComment { comment_id, .. } = &op.para {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        let comment = comments::find_comment(&doc.root, comment_id).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        comments::reject_ink(comment, &op.id, i)?;
+    }
+    {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        if super::apply::find_insert_para_mut(&mut doc.root, &op.para).is_none() {
+            return Err(Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let added = super::picture::add_media(pkg, &part_name, &op.file, op.cx, op.cy)?;
+
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::picture::ensure_drawing_ns(&mut doc.root);
+    let doc_pr = super::picture::next_docpr_id(&doc.root);
+    let p = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::picture::insert_prepared_drawing(
+        p,
+        doc_pr,
+        &added.blip_rid,
+        added.svg_rid.as_deref(),
+        added.cx,
+        added.cy,
+        super::picture::PicKind::Inline,
+        None,
+        &super::picture::WrapPos::default(),
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeletePictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let (rids, medias) = {
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let rids = super::picture::embed_rids(drawing);
+        let medias: Vec<String> = rids
+            .iter()
+            .filter_map(|r| super::picture::resolve_embed(pkg, &part_name, r).ok())
+            .collect();
+        if !remove_target_picture(&mut doc.root, &op.target) {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        }
+        (rids, medias)
+    };
+    dirty.insert(part_name.clone(), ());
+    for r in rids {
+        super::picture::remove_rel_if_unused(
+            pkg,
+            &part_name,
+            &r,
+            &docs.get(&part_name).unwrap().root,
+        )?;
+    }
+    for m in medias {
+        if !super::picture::media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_pic_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetPictureSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if !super::picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_pic_wrap(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetPictureWrapOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
+    let part_name = super::apply::part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::picture::ensure_drawing_ns(&mut doc.root);
+    let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+        .map_err(|e| e.at(format!("ops[{i}]")))?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn reject_ink_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    target: &super::picture::PicTarget,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let super::picture::PicTarget::InComment { comment_id, .. } = target else {
+        return Ok(());
+    };
+    let part = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    let comment = comments::find_comment(&doc.root, comment_id).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    comments::reject_ink(comment, id, i)
 }

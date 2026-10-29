@@ -475,3 +475,210 @@ fn set_color(rpr: &mut Element, hex: &str) {
     let key = el.prefixed("val");
     el.set_attr(&key, hex.to_ascii_uppercase());
 }
+
+use super::format;
+use super::hf;
+use super::request::DeleteStyleOp;
+use super::request::InsertStyleOp;
+use super::request::SetParaStyleOp;
+use super::request::SetRunStyleOp;
+use super::request::SetStyleOp;
+use super::request::SetTableStyleOp;
+use super::tbl;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_set_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = super::styles::styles_part(pkg, doc_part)? else {
+        return Err(super::styles::missing_style(&op.id, i));
+    };
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    super::styles::set_style_props(
+        &mut doc.root,
+        &op.style_id,
+        super::styles::StylePatch {
+            font: op.font.as_deref(),
+            east_asia_font: op.east_asia_font.as_deref(),
+            sz: op.sz,
+            bold: op.bold,
+            color: op.color.as_deref(),
+            before: op.before,
+            after: op.after,
+        },
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+pub(crate) fn apply_set_para_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(style_id) = op.style.as_deref() {
+        let style_part = super::styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| super::styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = super::apply::load_part(pkg, docs, &style_part)?;
+            let Some(el) = super::styles::find_style(&style_doc.root, style_id) else {
+                return Err(super::styles::missing_para_style(
+                    &format!("style:{style_id}"),
+                    i,
+                ));
+            };
+            if !super::styles::is_paragraph_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetStyleNeedsParagraph,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    match op.style.as_deref() {
+        Some(s) => super::styles::bind_para(el, s),
+        None => super::styles::unbind_para(el),
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_style(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part = super::styles::ensure_part(pkg, docs, dirty, doc_part)?;
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    super::styles::insert_style(
+        &mut doc.root,
+        &op.style_id,
+        &op.ty,
+        &op.name,
+        op.based_on.as_deref(),
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = super::styles::styles_part(pkg, doc_part)? else {
+        return Err(super::styles::missing_style(&op.id, i));
+    };
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    super::styles::delete_style(&mut doc.root, &op.style_id, &op.id, i)?;
+    dirty.insert(part, ());
+    Ok(())
+}
+pub(crate) fn apply_set_run_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRunStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(style_id) = op.style.as_deref() {
+        let style_part = super::styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| super::styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = super::apply::load_part(pkg, docs, &style_part)?;
+            let Some(el) = super::styles::find_style(&style_doc.root, style_id) else {
+                return Err(super::styles::missing_para_style(
+                    &format!("style:{style_id}"),
+                    i,
+                ));
+            };
+            if !super::styles::is_character_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetRunStyleNeedsCharacter,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let run = format::find_run_mut(el, op.run).ok_or_else(|| format::missing_run(&op.id, i))?;
+    match op.style.as_deref() {
+        Some(s) => format::bind_run_style(run, s),
+        None => format::unbind_run_style(run),
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(Some(style_id)) = op.style.as_ref() {
+        let style_part = super::styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| super::styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = super::apply::load_part(pkg, docs, &style_part)?;
+            let Some(el) = super::styles::find_style(&style_doc.root, style_id) else {
+                return Err(super::styles::missing_para_style(
+                    &format!("style:{style_id}"),
+                    i,
+                ));
+            };
+            if !super::styles::is_table_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetTableStyleNeedsTable,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_style(
+        &mut doc.root,
+        &op.target,
+        op.style.as_ref().map(|s| s.as_deref()),
+        op.look.as_ref().map(|l| l.as_ref()),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}

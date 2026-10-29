@@ -768,3 +768,67 @@ fn insert_blocks(
     }
     Ok(())
 }
+
+use super::request::DeleteDocPartOp;
+use super::request::InsertDocPartContentOp;
+use super::request::InsertDocPartContentPlace;
+use super::request::InsertDocPartOp;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_insert_doc_part(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertDocPartOp,
+    i: usize,
+) -> Result<(), Error> {
+    super::glossary::insert_part(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        &super::glossary::DocPartWrite {
+            name: &op.name,
+            gallery: &op.gallery,
+            category: &op.category,
+            behavior: &op.behavior,
+            text: &op.text,
+        },
+        i,
+    )
+}
+pub(crate) fn apply_delete_doc_part(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &DeleteDocPartOp,
+    i: usize,
+) -> Result<(), Error> {
+    super::glossary::delete_part(pkg, docs, dirty, removed, doc_part, op.n, &op.id, i)
+}
+pub(crate) fn apply_insert_doc_part_content(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertDocPartContentOp,
+    i: usize,
+) -> Result<(), Error> {
+    let after = match &op.place {
+        InsertDocPartContentPlace::After(p) => Some(p),
+        InsertDocPartContentPlace::EndOfDocument => None,
+    };
+    super::glossary::insert_content(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        after,
+        op.n,
+        &op.part_id,
+        &op.id,
+        i,
+    )
+}

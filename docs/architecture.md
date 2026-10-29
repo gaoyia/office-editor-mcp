@@ -76,6 +76,10 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 `parse_scope` 与 `parse_ops` 仍是入口；类型和解析函数按领域拆到子文件。
 对外仍从 `request` 再导出，apply / inspect / create 继续写 `use super::request::…`，路径不变。
 
+`apply.rs` 只打开包、按 op 分发、写回脏部件。
+某个对象已经有模块时，这个 op 的函数体放在那个模块。
+多个对象都要用的部件装载留在 `apply.rs`，不在每个模块各抄一份。docx 已按此拆开。
+
 ### opc
 
 把 `.docx`、`.xlsx`、`.pptx` 都当成 OPC 包。负责打开、列出部件、按路径读字节、标记脏部件、保存。

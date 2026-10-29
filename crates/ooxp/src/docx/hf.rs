@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use crate::error::{Error, XmlIssue};
-use crate::opc::{self, Package, Relationships};
+use crate::opc::{self, Package, Relationship, Relationships};
 use crate::xml::{Document, Element, Node};
 
 use super::WML_NS;
@@ -890,4 +890,279 @@ fn insert_index_by_order(parent: &Element, local: &str, order: &[&str]) -> usize
         }
     }
     after_lower
+}
+
+use super::notes;
+use super::request::InsertHeaderFooterOp;
+use super::request::SetEvenAndOddHeadersOp;
+use super::request::SetHfDistanceOp;
+use super::request::SetHfLinkOp;
+use super::request::SetTitlePageOp;
+use super::CT_FOOTER;
+use super::CT_HEADER;
+use super::REL_FOOTER;
+use super::REL_HEADER;
+use crate::error::ErrorKind;
+use crate::opc::rels_part_name;
+use crate::opc::ContentTypes;
+use std::collections::HashSet;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_hf_distance(
+    root: &mut Element,
+    op: &SetHfDistanceOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = super::hf::find_sect_pr_mut(root, op.n).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let has_pg = sect.child_by_local("pgMar").is_some();
+    if !has_pg {
+        let pg = super::hf::ensure_child_in_order(sect, "pgMar", super::hf::TITLE_PG_ORDER);
+        if let Some(h) = op.header_distance {
+            super::hf::set_twip_attr(pg, "header", h);
+        }
+        if let Some(f) = op.footer_distance {
+            super::hf::set_twip_attr(pg, "footer", f);
+        }
+        return Ok(());
+    }
+    let pg = sect.child_by_local_mut("pgMar").unwrap();
+    if let Some(h) = op.header_distance {
+        super::hf::set_twip_attr(pg, "header", h);
+    }
+    if let Some(f) = op.footer_distance {
+        super::hf::set_twip_attr(pg, "footer", f);
+    }
+    Ok(())
+}
+pub(crate) fn apply_hf_link(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &SetHfLinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect_count = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root).len();
+    if op.n > sect_count {
+        return Err(Error::with_path(
+            ErrorKind::SectionNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
+
+    let even_and_odd = super::hf::even_and_odd_cached(pkg, docs, doc_part)?;
+    let title_pg = {
+        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
+        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+    };
+    if !super::hf::type_is_active(op.hf_type, title_pg, even_and_odd) {
+        return Err(Error::with_path(
+            ErrorKind::HfTypeInactive {
+                kind: op.kind.as_str().into(),
+                hf_type: op.hf_type.as_str().into(),
+            },
+            format!("ops[{i}].type"),
+        ));
+    }
+
+    if op.n == 1 && op.linked {
+        return Err(Error::with_path(
+            ErrorKind::CannotLinkFirstSection,
+            format!("ops[{i}].linked"),
+        ));
+    }
+
+    let has_explicit = {
+        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
+        super::hf::has_explicit_ref(sects[op.n - 1], op.kind, op.hf_type)
+    };
+    if (op.linked && !has_explicit) || (!op.linked && has_explicit) {
+        return Ok(());
+    }
+
+    if op.linked {
+        super::sect::relink_section(pkg, docs, dirty, removed, doc_part, op)?;
+    } else {
+        super::sect::unlink_section(pkg, docs, dirty, doc_part, op)?;
+    }
+    Ok(())
+}
+pub(crate) fn refresh_hf_catalog(
+    pkg: &Package,
+    docs: &HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &mut Vec<super::hf::HfPart>,
+) -> Result<(), Error> {
+    *catalog = super::hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    Ok(())
+}
+pub(crate) fn apply_insert_hf(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertHeaderFooterOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect_count = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root).len();
+    if op.n > sect_count {
+        return Err(Error::with_path(
+            ErrorKind::SectionNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
+
+    let even_and_odd = super::hf::even_and_odd_cached(pkg, docs, doc_part)?;
+    let title_pg = {
+        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
+        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+    };
+    if !super::hf::type_is_active(op.hf_type, title_pg, even_and_odd) {
+        return Err(Error::with_path(
+            ErrorKind::HfTypeInactive {
+                kind: op.kind.as_str().into(),
+                hf_type: op.hf_type.as_str().into(),
+            },
+            format!("ops[{i}].type"),
+        ));
+    }
+
+    let has_explicit = {
+        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
+        super::hf::has_explicit_ref(sects[op.n - 1], op.kind, op.hf_type)
+    };
+    if has_explicit {
+        return Ok(());
+    }
+    if op.n > 1 {
+        return Err(Error::with_path(
+            ErrorKind::HfInsertWhileLinked,
+            format!("ops[{i}].id"),
+        ));
+    }
+
+    let new_part = super::hf::next_unused_hf_part(pkg, op.kind);
+    pkg.set(&new_part, super::hf::minimal_hf_xml(op.kind))?;
+
+    let mut rels = Relationships::from_package(pkg, doc_part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid.clone(),
+        rel_type: match op.kind {
+            HfKind::Header => REL_HEADER,
+            HfKind::Footer => REL_FOOTER,
+        }
+        .into(),
+        target: super::hf::same_dir_rel_target(doc_part, &new_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, doc_part)?;
+
+    let mut cts = ContentTypes::from_package(pkg)?;
+    let ct = match op.kind {
+        HfKind::Header => CT_HEADER,
+        HfKind::Footer => CT_FOOTER,
+    };
+    cts.set_override(&new_part, ct)?;
+    cts.write_to(pkg)?;
+
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = super::hf::find_sect_pr_mut(&mut doc.root, op.n).unwrap();
+    let rid_attr = super::hf::rid_attr_name(sect);
+    super::hf::insert_hf_ref(sect, op.kind, op.hf_type, &rid_attr, &rid);
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_title_page(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetTitlePageOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect_count = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root).len();
+    if op.n > sect_count {
+        return Err(Error::with_path(
+            ErrorKind::SectionNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let current = {
+        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
+        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+    };
+    if current == op.title_page {
+        return Ok(());
+    }
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = super::hf::find_sect_pr_mut(&mut doc.root, op.n).unwrap();
+    super::hf::set_on_off(sect, "titlePg", op.title_page, super::hf::TITLE_PG_ORDER);
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_even_and_odd(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetEvenAndOddHeadersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let settings = notes::settings_part_name(pkg, doc_part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PartMissing {
+                name: "/word/settings.xml".into(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let current = super::hf::even_and_odd_cached(pkg, docs, doc_part)?;
+    if current == op.even_and_odd {
+        return Ok(());
+    }
+    let doc = super::apply::load_part(pkg, docs, &settings)?;
+    super::hf::set_on_off(
+        &mut doc.root,
+        "evenAndOddHeaders",
+        op.even_and_odd,
+        super::hf::EVEN_ODD_ORDER,
+    );
+    dirty.insert(settings.clone(), ());
+    pkg.set(&settings, docs.get(&settings).unwrap().to_bytes()?)?;
+    Ok(())
+}
+pub(crate) fn drop_hf_parts_not_in_catalog(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    old_parts: &[String],
+) -> Result<(), Error> {
+    let still = super::hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    for old in old_parts {
+        if still.iter().any(|h| h.part == *old) {
+            continue;
+        }
+        let mut rels = Relationships::from_package(pkg, doc_part)?;
+        rels.remove_by_target_part(doc_part, old);
+        rels.write_to(pkg, doc_part)?;
+
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.remove_override(old);
+        cts.write_to(pkg)?;
+
+        pkg.remove(old);
+        pkg.remove(&rels_part_name(old));
+        removed.insert(old.to_string());
+        docs.remove(old);
+        dirty.remove(old);
+    }
+    Ok(())
 }

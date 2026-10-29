@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
 use crate::xml::{Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
 
@@ -533,4 +533,121 @@ fn needs_xml_space(text: &str) -> bool {
         || text.ends_with(' ')
         || text.ends_with('\t')
         || text.contains('\n')
+}
+
+use super::request::DeleteRubyOp;
+use super::request::InsertRubyOp;
+use super::request::InsertRubyPlace;
+use super::request::SetRubyOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn refuse_set_text_if_ruby(
+    root: &Element,
+    para: &para::BodyPara,
+    i: usize,
+) -> Result<(), Error> {
+    if super::ruby::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasRuby,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+pub(crate) fn apply_insert_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let spec = super::ruby::InsertSpec {
+        base: &op.base,
+        rt: &op.rt,
+        align: &op.align,
+        hps: op.hps,
+        hps_raise: op.hps_raise,
+        hps_base_text: op.hps_base_text,
+        lid: &op.lid,
+    };
+    match &op.place {
+        InsertRubyPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            super::ruby::insert_ruby(&mut doc.root, None, &spec, &op.id, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertRubyPlace::After(target) => {
+            let part_name = super::apply::part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let path = super::apply::para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertRubyNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::ruby::insert_ruby(&mut doc.root, Some(path.as_slice()), &spec, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_set_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::ruby::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::ruby::missing_ruby_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::ruby::missing_ruby_err(&op.id, i)
+    })?;
+    super::ruby::set_ruby(
+        story,
+        op.target.n,
+        &super::ruby::SetPatch {
+            base: op.base.as_deref(),
+            rt: op.rt.as_deref(),
+            align: op.align.as_deref(),
+            hps: op.hps,
+            hps_raise: op.hps_raise,
+            hps_base_text: op.hps_base_text,
+            lid: op.lid.as_deref(),
+        },
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::ruby::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::ruby::missing_ruby_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::ruby::missing_ruby_err(&op.id, i)
+    })?;
+    super::ruby::delete_ruby(story, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

@@ -4,7 +4,7 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
 use super::connector;
-use super::hf::{HfKind, HfType};
+use super::hf::{self, HfKind, HfType};
 use super::para::{self, HostPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKey, PicKind, PicTarget};
 use super::shape;
@@ -1136,4 +1136,44 @@ fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
         f(node);
         true
     });
+}
+
+use super::request::GroupShapesOp;
+use super::request::UngroupOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_group_shapes(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &GroupShapesOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_group_host(catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    super::group::group_shapes(&mut doc.root, &op.host, &op.members, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_ungroup(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &UngroupOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        super::apply::part_for_group_member(pkg, catalog, doc_part, &op.member, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    super::group::ungroup(&mut doc.root, &op.member, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

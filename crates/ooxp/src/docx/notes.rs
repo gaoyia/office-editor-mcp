@@ -6,7 +6,7 @@ use crate::error::Error;
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::para::{self, NoteKind};
 use super::textbox;
 use super::{MC_NS, REL_NS, W14_NS, WML_NS};
@@ -619,4 +619,208 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {
     crate::xml::alternate_child(el).unwrap_or(None)
+}
+
+use super::para::ParaTarget;
+use super::picture;
+use super::request::DeleteNoteOp;
+use super::request::InsertNoteOp;
+use super::request::NoteNumberTarget;
+use super::request::SetNoteNumberingOp;
+use crate::error::ErrorKind;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_insert_note(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertNoteOp,
+    kind: NoteKind,
+    i: usize,
+) -> Result<(), Error> {
+    let host_part = match &op.host {
+        ParaTarget::Body(_) => doc_part.to_string(),
+        ParaTarget::HeaderFooter {
+            kind: hf_kind,
+            hf_type,
+            n,
+            ..
+        } => super::apply::part_for_hf(catalog, *hf_kind, *hf_type, *n, &op.id, i)?,
+        ParaTarget::InTextBox { host, .. } => {
+            super::apply::part_for_host(pkg, catalog, doc_part, host, &op.id, i)?
+        }
+        ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: crate::error::IdReason::NotePrefix,
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+    };
+    {
+        let doc = super::apply::load_part(pkg, docs, &host_part)?;
+        if super::apply::find_insert_para_mut(&mut doc.root, &op.host).is_none() {
+            return Err(Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let notes_part = super::notes::ensure_part(pkg, docs, dirty, doc_part, kind)?;
+    let (w_id, para_hex) = {
+        let doc = super::apply::load_part(pkg, docs, &notes_part)?;
+        let w_id = super::notes::next_user_id(&doc.root, kind);
+        let para_hex = para::next_para_hex(&doc.root);
+        super::notes::append_user_note(&mut doc.root, kind, &w_id, &para_hex, &op.text);
+        dirty.insert(notes_part.clone(), ());
+        (w_id, para_hex)
+    };
+    let _ = para_hex;
+    let doc = super::apply::load_part(pkg, docs, &host_part)?;
+    let p = super::apply::find_insert_para_mut(&mut doc.root, &op.host).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::notes::append_reference(p, kind, &w_id);
+    dirty.insert(host_part, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_note(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteNoteOp,
+    i: usize,
+) -> Result<(), Error> {
+    let notes_part = super::notes::part_name(pkg, doc_part, op.kind)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::NoteNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let (embeds, media) = {
+        let doc = super::apply::load_part(pkg, docs, &notes_part)?;
+        if super::notes::find_user_note(&doc.root, op.kind, &op.note_id).is_none() {
+            let is_sep = super::notes::seps(&doc.root, op.kind)
+                .iter()
+                .any(|e| super::notes::ids_match(e.attr_local("id").unwrap_or(""), &op.note_id));
+            return Err(Error::with_path(
+                if is_sep {
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::NoteSep,
+                    }
+                } else {
+                    ErrorKind::NoteNotFound { id: op.id.clone() }
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+        let note = super::notes::find_user_note(&doc.root, op.kind, &op.note_id).unwrap();
+        let embeds = super::notes::collect_blip_embeds(note);
+        let mut media = Vec::new();
+        for rid in &embeds {
+            if let Ok(m) = picture::resolve_embed(pkg, &notes_part, rid) {
+                media.push(m);
+            }
+        }
+        (embeds, media)
+    };
+    {
+        let doc = super::apply::load_part(pkg, docs, &notes_part)?;
+        super::notes::remove_user_note(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(notes_part.clone(), ());
+    }
+    {
+        let doc = super::apply::load_part(pkg, docs, doc_part)?;
+        super::notes::remove_references(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(doc_part.to_string(), ());
+    }
+    for item in catalog {
+        let doc = super::apply::load_part(pkg, docs, &item.part)?;
+        super::notes::remove_references(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(item.part.clone(), ());
+    }
+    let notes_root = &docs.get(&notes_part).unwrap().root;
+    for rid in embeds {
+        picture::remove_rel_if_unused(pkg, &notes_part, &rid, notes_root)?;
+    }
+    for m in media {
+        if !picture::media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_note_numbering(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetNoteNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    match op.target {
+        NoteNumberTarget::Document => {
+            let settings = super::notes::settings_part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PartMissing {
+                        name: "/word/settings.xml".into(),
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &settings)?;
+            super::notes::apply_numbering(
+                &mut doc.root,
+                op.kind,
+                op.num_fmt.as_deref(),
+                op.num_start,
+                op.num_restart.as_deref(),
+            );
+            dirty.insert(settings, ());
+            // Word 16.0 读的是节上的 numFmt；只写 settings 时 COM NumberStyle 仍是阿拉伯。
+            let n_sects =
+                hf::collect_sect_prs(&super::apply::load_part(pkg, docs, doc_part)?.root).len();
+            for n in 1..=n_sects {
+                let doc = super::apply::load_part(pkg, docs, doc_part)?;
+                let Some(sect) = hf::find_sect_pr_mut(&mut doc.root, n) else {
+                    continue;
+                };
+                super::notes::apply_numbering(
+                    sect,
+                    op.kind,
+                    op.num_fmt.as_deref(),
+                    op.num_start,
+                    op.num_restart.as_deref(),
+                );
+            }
+            if n_sects > 0 {
+                dirty.insert(doc_part.to_string(), ());
+            }
+        }
+        NoteNumberTarget::Section(n) => {
+            let doc = super::apply::load_part(pkg, docs, doc_part)?;
+            let sect = hf::find_sect_pr_mut(&mut doc.root, n).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::SectionNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::notes::apply_numbering(
+                sect,
+                op.kind,
+                op.num_fmt.as_deref(),
+                op.num_start,
+                op.num_restart.as_deref(),
+            );
+            dirty.insert(doc_part.to_string(), ());
+        }
+    }
+    Ok(())
 }

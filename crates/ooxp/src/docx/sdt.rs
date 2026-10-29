@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
 use crate::xml::{Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
 use super::{MC_NS, W14_NS};
@@ -1281,4 +1281,222 @@ fn ensure_w14(root: &mut Element) {
         return;
     }
     root.set_attr("mc:Ignorable", next);
+}
+
+use super::picture;
+use super::request::DeleteContentControlOp;
+use super::request::InsertContentControlOp;
+use super::request::InsertSdtPlace;
+use super::request::SetContentControlOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn refuse_set_text_if_sdt(
+    root: &Element,
+    para: &para::BodyPara,
+    i: usize,
+) -> Result<(), Error> {
+    if super::sdt::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasSdt,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+pub(crate) fn apply_insert_sdt(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = match &op.place {
+        InsertSdtPlace::EndOfDocument => doc_part.to_string(),
+        InsertSdtPlace::After(target) => {
+            super::apply::part_for_para(pkg, catalog, doc_part, target, &op.id, i)?
+        }
+    };
+    let drawing = if op.kind == super::sdt::SdtKind::Picture {
+        let file = op.file.as_deref().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "file".into(),
+                },
+                format!("ops[{i}].file"),
+            )
+        })?;
+        Some(sdt_inline_drawing(pkg, docs, &part_name, file)?)
+    } else {
+        None
+    };
+    let write = super::sdt::SdtWrite {
+        kind: op.kind,
+        text: &op.text,
+        tag: op.tag.as_deref(),
+        alias: op.alias.as_deref(),
+        items: &op.items,
+        full_date: op.full_date.as_deref(),
+        checked: op.checked,
+        drawing,
+    };
+    match &op.place {
+        InsertSdtPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            super::sdt::insert_sdt(&mut doc.root, None, write, &op.id, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertSdtPlace::After(target) => {
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let path = super::apply::para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertSdtNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::sdt::insert_sdt(&mut doc.root, Some(path.as_slice()), write, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_set_sdt(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    if let Some(file) = &op.file {
+        if op.text.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].text"),
+            ));
+        }
+        if op.checked.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].checked"),
+            ));
+        }
+        if op.items.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].items"),
+            ));
+        }
+        if op.full_date.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].fullDate"),
+            ));
+        }
+        let old_rids = {
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+                super::sdt::missing_sdt_err(&op.id, i)
+            })?;
+            super::sdt::sdt_picture_rids(story, op.target.n, &op.id, i)?
+        };
+        let old_media: Vec<String> = old_rids
+            .iter()
+            .filter_map(|r| picture::resolve_embed(pkg, &part_name, r).ok())
+            .collect();
+        let drawing = sdt_inline_drawing(pkg, docs, &part_name, file)?;
+        let doc = super::apply::load_part(pkg, docs, &part_name)?;
+        let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+            super::sdt::missing_sdt_err(&op.id, i)
+        })?;
+        super::sdt::set_sdt_picture(
+            story,
+            op.target.n,
+            drawing,
+            op.tag.as_deref(),
+            op.alias.as_deref(),
+            &op.id,
+            i,
+        )?;
+        dirty.insert(part_name.clone(), ());
+        for r in &old_rids {
+            picture::remove_rel_if_unused(pkg, &part_name, r, &docs.get(&part_name).unwrap().root)?;
+        }
+        for m in old_media {
+            if !picture::media_still_used(pkg, &m)? {
+                pkg.remove(&m);
+            }
+        }
+        return Ok(());
+    }
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    super::sdt::set_sdt(
+        story,
+        &super::sdt::SdtSet {
+            n: op.target.n,
+            text: op.text.as_deref(),
+            tag: op.tag.as_deref(),
+            alias: op.alias.as_deref(),
+            items: op.items.as_deref(),
+            full_date: op.full_date.as_deref(),
+            checked: op.checked,
+            id: &op.id,
+            i,
+        },
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn sdt_inline_drawing(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    part_name: &str,
+    file: &str,
+) -> Result<Element, Error> {
+    let added = picture::add_media(pkg, part_name, file, None, None)?;
+    let doc = super::apply::load_part(pkg, docs, part_name)?;
+    picture::ensure_drawing_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let name = format!("图片 {doc_pr}");
+    Ok(picture::build_inline_drawing(
+        doc_pr,
+        &name,
+        &added.blip_rid,
+        added.svg_rid.as_deref(),
+        added.cx,
+        added.cy,
+    ))
+}
+pub(crate) fn apply_delete_sdt(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    super::sdt::delete_sdt(story, op.target.n, op.keep, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

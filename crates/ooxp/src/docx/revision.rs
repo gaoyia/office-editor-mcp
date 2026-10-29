@@ -730,3 +730,35 @@ fn missing(id: &str, i: usize) -> Error {
         format!("ops[{i}].id"),
     )
 }
+
+use super::request::RevisionOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn refuse_set_text_if_revision(el: &Element, i: usize) -> Result<(), Error> {
+    if super::revision::para_blocks_set_text(el) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasRevision,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+pub(crate) fn apply_rev(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &RevisionOp,
+    accept: bool,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        super::revision::part_for_story(catalog, doc_part, &op.target.story, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::revision::apply_revision(&mut doc.root, op.target.n, accept, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}

@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason, TypeName, XmlIssue};
 use crate::xml::{Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
 
@@ -2384,5 +2384,269 @@ pub fn delete_bibliography(
         drop_empty_body_paras(root, &a, &b)?;
     }
     ensure_body_has_para(root)?;
+    Ok(())
+}
+
+use super::request::DeleteCaptionOp;
+use super::request::DeleteCrossRefOp;
+use super::request::DeleteFieldOp;
+use super::request::DeleteIndexEntryOp;
+use super::request::DeleteIndexOp;
+use super::request::DeleteTocOp;
+use super::request::InsertCaptionOp;
+use super::request::InsertCaptionPlace;
+use super::request::InsertCrossRefOp;
+use super::request::InsertFieldOp;
+use super::request::InsertIndexEntryOp;
+use super::request::InsertIndexOp;
+use super::request::InsertIndexPlace;
+use super::request::InsertTocOp;
+use super::request::InsertTocPlace;
+use super::request::SetFieldOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn refuse_set_text_if_field(
+    root: &Element,
+    para: &para::BodyPara,
+    i: usize,
+) -> Result<(), Error> {
+    if super::field::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasField,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+pub(crate) fn apply_insert_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::field::insert_field_form(el, &op.instr, op.result.as_deref(), op.form.as_ref());
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::field::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::field::missing_field_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::field::missing_field_err(&op.id, i)
+    })?;
+    super::field::set_field_instr(story, op.target.n, &op.instr, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::field::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::field::missing_field_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::field::missing_field_err(&op.id, i)
+    })?;
+    super::field::delete_field(story, op.target.n, op.keep, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_toc(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertTocOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertTocPlace::After(p) => Some(p),
+        InsertTocPlace::EndOfDocument => None,
+    };
+    super::field::insert_toc(&mut doc.root, after, &op.instr, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_toc(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteTocOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    super::field::delete_toc(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_caption(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertCaptionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertCaptionPlace::After(p) => Some(p),
+        InsertCaptionPlace::EndOfDocument => None,
+    };
+    super::field::insert_caption(
+        &mut doc.root,
+        after,
+        &op.label,
+        op.title.as_deref(),
+        op.bookmark.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_caption(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteCaptionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    super::field::delete_caption(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_cross_ref(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertCrossRefOp,
+    i: usize,
+) -> Result<(), Error> {
+    {
+        let main = docs.get(doc_part).unwrap();
+        if !link::all_bookmark_names(&main.root).contains(&op.bookmark) {
+            return Err(Error::with_path(
+                ErrorKind::BookmarkNotFound {
+                    id: op.bookmark.clone(),
+                },
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+    }
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::field::insert_cross_ref(el, &op.bookmark, op.kind);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_cross_ref(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteCrossRefOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    super::field::delete_cross_ref(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_index(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertIndexOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertIndexPlace::After(p) => Some(p),
+        InsertIndexPlace::EndOfDocument => None,
+    };
+    super::field::insert_index(&mut doc.root, after, &op.instr, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_index(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteIndexOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    super::field::delete_index(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_index_entry(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertIndexEntryOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::field::insert_index_entry(el, &op.entry);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_index_entry(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteIndexEntryOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    super::field::delete_index_entry(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
     Ok(())
 }

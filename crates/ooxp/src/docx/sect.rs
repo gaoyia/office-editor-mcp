@@ -493,7 +493,7 @@ pub fn rtl_gutter_value(sect: &Element) -> Value {
     }
 }
 
-pub fn apply_page_margin(
+pub fn page_margin(
     sect: &mut Element,
     top: Option<i64>,
     bottom: Option<i64>,
@@ -519,7 +519,7 @@ pub fn apply_page_margin(
     }
 }
 
-pub fn apply_page_size(
+pub fn page_size(
     sect: &mut Element,
     width: Option<u32>,
     height: Option<u32>,
@@ -542,7 +542,7 @@ pub struct ColItem {
     pub space: Option<u32>,
 }
 
-pub fn apply_columns(
+pub fn columns(
     sect: &mut Element,
     num: Option<u32>,
     space: Option<u32>,
@@ -586,7 +586,7 @@ pub fn apply_columns(
     }
 }
 
-pub fn apply_valign(sect: &mut Element, v_align: Option<&str>) {
+pub fn valign(sect: &mut Element, v_align: Option<&str>) {
     match v_align {
         None => hf::remove_local(sect, "vAlign"),
         Some(v) => {
@@ -596,7 +596,7 @@ pub fn apply_valign(sect: &mut Element, v_align: Option<&str>) {
     }
 }
 
-pub fn apply_line_numbering(
+pub fn line_numbering(
     sect: &mut Element,
     count_by: Option<u32>,
     start: Option<u32>,
@@ -623,7 +623,7 @@ pub fn apply_line_numbering(
     }
 }
 
-pub fn apply_doc_grid(
+pub fn doc_grid(
     sect: &mut Element,
     grid_type: Option<&str>,
     line_pitch: Option<i64>,
@@ -646,10 +646,390 @@ pub fn apply_doc_grid(
     }
 }
 
-pub fn apply_rtl_gutter(sect: &mut Element, on: bool) {
+pub fn rtl_gutter(sect: &mut Element, on: bool) {
     hf::set_on_off(sect, "rtlGutter", on, hf::TITLE_PG_ORDER);
 }
 
-pub fn apply_settings_flag(root: &mut Element, local: &str, on: bool) {
+pub fn settings_flag(root: &mut Element, local: &str, on: bool) {
     hf::set_on_off(root, local, on, hf::SETTINGS_ORDER);
+}
+
+use super::hf::HfKind;
+use super::page_bg;
+use super::picture;
+use super::request::DeleteSectionOp;
+use super::request::InsertSectionOp;
+use super::request::InsertSectionPlace;
+use super::request::SetColumnsOp;
+use super::request::SetDocGridOp;
+use super::request::SetFormProtOp;
+use super::request::SetGutterAtTopOp;
+use super::request::SetHfLinkOp;
+use super::request::SetLineNumberingOp;
+use super::request::SetMirrorMarginsOp;
+use super::request::SetPageBordersOp;
+use super::request::SetPageMarginOp;
+use super::request::SetPageSizeOp;
+use super::request::SetRtlGutterOp;
+use super::request::SetVerticalAlignOp;
+use super::CT_FOOTER;
+use super::CT_HEADER;
+use super::REL_FOOTER;
+use super::REL_HEADER;
+use crate::opc::rels_part_name;
+use crate::opc::ContentTypes;
+use crate::opc::{Relationship, Relationships};
+use crate::xml::Document;
+use std::collections::HashMap;
+use std::collections::HashSet;
+// 从 apply 搬来的操作体。
+pub(crate) fn find_sect_for_apply<'a>(
+    docs: &'a mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<&'a mut Element, Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = hf::find_sect_pr_mut(&mut doc.root, n).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(sect)
+}
+pub(crate) fn apply_page_borders(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    page_bg::set_borders(
+        sect,
+        op.enabled,
+        op.offset_from.as_deref(),
+        op.display.as_deref(),
+        op.z_order.as_deref(),
+        op.top.as_ref().map(|s| s.as_ref()),
+        op.left.as_ref().map(|s| s.as_ref()),
+        op.bottom.as_ref().map(|s| s.as_ref()),
+        op.right.as_ref().map(|s| s.as_ref()),
+    );
+    Ok(())
+}
+pub(crate) fn apply_set_form_prot(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetFormProtOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    hf::set_form_prot(sect, op.form_prot);
+    Ok(())
+}
+pub(crate) fn apply_page_margin(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageMarginOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::page_margin(sect, op.top, op.bottom, op.left, op.right, op.gutter);
+    Ok(())
+}
+pub(crate) fn apply_page_size(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::page_size(sect, op.page_width, op.page_height, op.orient.as_deref());
+    Ok(())
+}
+pub(crate) fn apply_columns(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetColumnsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let items: Option<Vec<super::sect::ColItem>> = op.cols.as_ref().map(|v| {
+        v.iter()
+            .map(|c| super::sect::ColItem {
+                width: c.width,
+                space: c.space,
+            })
+            .collect()
+    });
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::columns(
+        sect,
+        op.num,
+        op.space,
+        op.equal_width,
+        op.sep,
+        items.as_deref(),
+        op.enabled,
+    );
+    Ok(())
+}
+pub(crate) fn apply_valign(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetVerticalAlignOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::valign(sect, op.v_align.as_deref());
+    Ok(())
+}
+pub(crate) fn apply_line_numbering(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetLineNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::line_numbering(
+        sect,
+        op.count_by,
+        op.start,
+        op.distance,
+        op.restart.as_deref(),
+        op.enabled,
+    );
+    Ok(())
+}
+pub(crate) fn apply_doc_grid(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetDocGridOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::doc_grid(
+        sect,
+        op.grid_type.as_deref(),
+        op.line_pitch,
+        op.char_space,
+        op.enabled,
+    );
+    Ok(())
+}
+pub(crate) fn apply_rtl_gutter(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetRtlGutterOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    super::sect::rtl_gutter(sect, op.rtl_gutter);
+    Ok(())
+}
+pub(crate) fn apply_mirror_margins(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetMirrorMarginsOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_settings_flag(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        "mirrorMargins",
+        op.mirror_margins,
+        i,
+    )
+}
+pub(crate) fn apply_gutter_at_top(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetGutterAtTopOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_settings_flag(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        "gutterAtTop",
+        op.gutter_at_top,
+        i,
+    )
+}
+pub(crate) fn apply_settings_flag(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    local: &str,
+    on: bool,
+    i: usize,
+) -> Result<(), Error> {
+    let settings = notes::settings_part_name(pkg, doc_part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PartMissing {
+                name: "/word/settings.xml".into(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &settings)?;
+    super::sect::settings_flag(&mut doc.root, local, on);
+    dirty.insert(settings, ());
+    Ok(())
+}
+pub(crate) fn unlink_section(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetHfLinkOp,
+) -> Result<(), Error> {
+    let inherited = hf::inherited_part_path(
+        pkg,
+        doc_part,
+        &docs.get(doc_part).unwrap().root,
+        op.n,
+        op.kind,
+        op.hf_type,
+    )?;
+    let bytes = match inherited {
+        Some(ref src) => super::apply::current_part_bytes(pkg, docs, src)?,
+        None => hf::minimal_hf_xml(op.kind),
+    };
+    let new_part = hf::next_unused_hf_part(pkg, op.kind);
+    pkg.set(&new_part, bytes)?;
+    if let Some(src) = &inherited {
+        picture::copy_part_rels(pkg, src, &new_part)?;
+    }
+
+    let mut rels = Relationships::from_package(pkg, doc_part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid.clone(),
+        rel_type: match op.kind {
+            HfKind::Header => REL_HEADER,
+            HfKind::Footer => REL_FOOTER,
+        }
+        .into(),
+        target: hf::same_dir_rel_target(doc_part, &new_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, doc_part)?;
+
+    let mut cts = ContentTypes::from_package(pkg)?;
+    let ct = match op.kind {
+        HfKind::Header => CT_HEADER,
+        HfKind::Footer => CT_FOOTER,
+    };
+    cts.set_override(&new_part, ct)?;
+    cts.write_to(pkg)?;
+
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = hf::find_sect_pr_mut(&mut doc.root, op.n).unwrap();
+    let rid_attr = hf::rid_attr_name(sect);
+    hf::insert_hf_ref(sect, op.kind, op.hf_type, &rid_attr, &rid);
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn relink_section(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &SetHfLinkOp,
+) -> Result<(), Error> {
+    let old_part = hf::explicit_part_path(
+        pkg,
+        doc_part,
+        &docs.get(doc_part).unwrap().root,
+        op.n,
+        op.kind,
+        op.hf_type,
+    )?;
+
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = hf::find_sect_pr_mut(&mut doc.root, op.n).unwrap();
+    hf::remove_hf_ref(sect, op.kind, op.hf_type);
+    dirty.insert(doc_part.to_string(), ());
+
+    let Some(old) = old_part else {
+        return Ok(());
+    };
+    let still = hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    if still.iter().any(|h| h.part == old) {
+        return Ok(());
+    }
+
+    let mut rels = Relationships::from_package(pkg, doc_part)?;
+    rels.remove_by_target_part(doc_part, &old);
+    rels.write_to(pkg, doc_part)?;
+
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.remove_override(&old);
+    cts.write_to(pkg)?;
+
+    pkg.remove(&old);
+    pkg.remove(&rels_part_name(&old));
+    removed.insert(old.clone());
+    docs.remove(&old);
+    dirty.remove(&old);
+    Ok(())
+}
+pub(crate) fn apply_insert_section(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertSectionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertSectionPlace::After(p) => Some(p),
+        InsertSectionPlace::EndOfDocument => None,
+    };
+    super::sect::insert_section_break(&mut doc.root, after, op.break_type, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_section(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &DeleteSectionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let old_parts: Vec<String> = {
+        let catalog = hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+        catalog.into_iter().map(|h| h.part).collect()
+    };
+    {
+        let doc = docs.get_mut(doc_part).unwrap();
+        super::sect::delete_section_break(&mut doc.root, op.n, &op.id, i)?;
+    }
+    dirty.insert(doc_part.to_string(), ());
+    super::hf::drop_hf_parts_not_in_catalog(pkg, docs, dirty, removed, doc_part, &old_parts)
 }

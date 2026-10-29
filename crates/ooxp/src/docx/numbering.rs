@@ -497,3 +497,82 @@ pub fn stamp_para(node: &mut Map<String, Value>, p: &Element) {
     }
     *node = out;
 }
+
+use super::hf;
+use super::request::InsertNumberingOp;
+use super::request::SetNumberingOp;
+use super::request::SetParaNumberingOp;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_insert_numbering(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertNumberingOp,
+) -> Result<(), Error> {
+    let part = super::numbering::ensure_part(pkg, docs, dirty, doc_part)?;
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    super::numbering::insert_definition(&mut doc.root, op.kind);
+    dirty.insert(part, ());
+    Ok(())
+}
+pub(crate) fn apply_set_numbering(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = super::numbering::numbering_part(pkg, doc_part)? else {
+        return Err(super::numbering::missing_abstract(&op.id, i));
+    };
+    let doc = super::apply::load_part(pkg, docs, &part)?;
+    super::numbering::set_level(
+        &mut doc.root,
+        op.abstract_id,
+        op.ilvl,
+        op.num_fmt.as_deref(),
+        op.start,
+        op.lvl_text.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+pub(crate) fn apply_set_para_numbering(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(num_id) = op.num {
+        let num_part = super::numbering::numbering_part(pkg, doc_part)?
+            .ok_or_else(|| super::numbering::missing_num(&format!("num:{num_id}"), i))?;
+        {
+            let num_doc = super::apply::load_part(pkg, docs, &num_part)?;
+            if !super::numbering::num_exists(&num_doc.root, num_id) {
+                return Err(super::numbering::missing_num(&format!("num:{num_id}"), i));
+            }
+        }
+    }
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    match op.num {
+        Some(n) => super::numbering::bind_para(el, n, op.ilvl),
+        None => super::numbering::unbind_para(el),
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}

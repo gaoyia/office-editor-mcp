@@ -1151,3 +1151,127 @@ fn insert_after(map: &mut Map<String, Value>, after: &str, key: String, val: Val
     }
     *map = out;
 }
+
+use super::request::SetParaFormatOp;
+use super::request::SetRunFormatOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_set_para_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::format::apply_para(
+        el,
+        super::format::ParaFormatPatch {
+            align: op.align.as_ref().map(|v| v.as_deref()),
+            left: op.left,
+            right: op.right,
+            first_line: op.first_line,
+            hanging: op.hanging,
+            before: op.before,
+            after: op.after,
+            line: op.line,
+            line_rule: op.line_rule.as_ref().map(|v| v.as_deref()),
+            kinsoku: op.kinsoku,
+            overflow_punct: op.overflow_punct,
+            top_line_punct: op.top_line_punct,
+            auto_space_de: op.auto_space_de,
+            auto_space_dn: op.auto_space_dn,
+            borders: op.borders.as_ref().map(|v| v.as_ref()),
+            shd: op.shd.as_ref().map(|v| v.as_deref()),
+            tabs: op.tabs.as_ref().map(|v| v.as_deref()),
+        },
+    );
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_run_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRunFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let run = super::format::find_run_mut(el, op.run)
+        .ok_or_else(|| super::format::missing_run(&op.id, i))?;
+    super::format::apply_run(
+        run,
+        super::format::RunFormatPatch {
+            bold: op.bold,
+            italic: op.italic,
+            underline: op.underline.as_ref().map(|v| v.as_deref()),
+            sz: op.sz,
+            color: op.color.as_deref(),
+            font: op.font.as_deref(),
+            east_asia_font: op.east_asia_font.as_deref(),
+            em: op.em.as_ref().map(|v| v.as_deref()),
+            east_asian_layout: op.east_asian_layout.as_ref().map(|v| {
+                v.as_ref().map(|s| super::format::EastAsianLayout {
+                    id: s.id,
+                    combine: s.combine,
+                    combine_brackets: s.combine_brackets.clone(),
+                    vert: s.vert,
+                    vert_compress: s.vert_compress,
+                })
+            }),
+            highlight: op.highlight.as_ref().map(|v| v.as_deref()),
+            strike: op.strike,
+            dstrike: op.dstrike,
+            vert_align: op.vert_align.as_ref().map(|v| v.as_deref()),
+            spacing: op.spacing,
+            kern: op.kern,
+            scale: op.scale,
+        },
+    );
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn run_patch(
+    fmt: &super::create_round5::RunFormatOwned,
+) -> super::format::RunFormatPatch<'_> {
+    super::format::RunFormatPatch {
+        bold: fmt.bold,
+        italic: fmt.italic,
+        underline: fmt.underline.as_ref().map(|v| v.as_deref()),
+        sz: fmt.sz,
+        color: fmt.color.as_deref(),
+        font: fmt.font.as_deref(),
+        east_asia_font: fmt.east_asia_font.as_deref(),
+        em: fmt.em.as_ref().map(|v| v.as_deref()),
+        east_asian_layout: fmt.east_asian_layout.clone(),
+        highlight: fmt.highlight.as_ref().map(|v| v.as_deref()),
+        strike: fmt.strike,
+        dstrike: fmt.dstrike,
+        vert_align: fmt.vert_align.as_ref().map(|v| v.as_deref()),
+        spacing: fmt.spacing,
+        kern: fmt.kern,
+        scale: fmt.scale,
+    }
+}

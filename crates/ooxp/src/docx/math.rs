@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
 use crate::xml::{Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
 use super::MATH_NS;
@@ -663,4 +663,124 @@ fn missing_math(id: &str, i: usize) -> Error {
         ErrorKind::MathNotFound { id: id.to_string() },
         format!("ops[{i}].id"),
     )
+}
+
+use super::request::DeleteMathOp;
+use super::request::InsertMathOp;
+use super::request::InsertMathPlace;
+use super::request::SetMathOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn refuse_set_text_if_math(
+    root: &Element,
+    para: &para::BodyPara,
+    i: usize,
+) -> Result<(), Error> {
+    if super::math::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasMath,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+pub(crate) fn apply_insert_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    match &op.place {
+        InsertMathPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            super::math::ensure_math_ns(&mut doc.root);
+            super::math::insert_math(
+                &mut doc.root,
+                None,
+                op.kind,
+                &op.body,
+                op.jc.as_deref(),
+                &op.id,
+                i,
+            )?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertMathPlace::After(target) => {
+            let part_name = super::apply::part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            super::math::ensure_math_ns(&mut doc.root);
+            let path = super::apply::para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertMathNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::math::insert_math(
+                &mut doc.root,
+                Some(path.as_slice()),
+                op.kind,
+                &op.body,
+                op.jc.as_deref(),
+                &op.id,
+                i,
+            )?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_set_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::math::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::math::missing_math_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::math::ensure_math_ns(&mut doc.root);
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::math::missing_math_err(&op.id, i)
+    })?;
+    super::math::set_math(
+        story,
+        op.target.n,
+        op.body.as_ref(),
+        op.jc.as_ref().map(|v| v.as_deref()),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::math::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::math::missing_math_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::math::missing_math_err(&op.id, i)
+    })?;
+    super::math::delete_math(story, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

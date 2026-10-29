@@ -333,7 +333,7 @@ pub fn part_for_anchor(
     }
 }
 
-pub fn apply_insert_table(
+pub fn insert_table(
     root: &mut Element,
     anchor: &InsertAnchor,
     cells: &[Vec<String>],
@@ -428,12 +428,7 @@ pub fn apply_insert_table(
     Ok(())
 }
 
-pub fn apply_delete_table(
-    root: &mut Element,
-    r: &TableRef,
-    id: &str,
-    i: usize,
-) -> Result<(), Error> {
+pub fn delete_table(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
     let path = tbl_path(root, r, id, i)?;
     {
         let tbl = para::element_at(root, &path).ok_or_else(|| {
@@ -460,7 +455,7 @@ pub fn apply_delete_table(
     Ok(())
 }
 
-pub fn apply_insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
+pub fn insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
     let path = tbl_path(root, r, id, i)?;
     let (layout, src_idx) = {
         let tbl = para::element_at(root, &path).ok_or_else(|| missing_table(id, i))?;
@@ -491,7 +486,7 @@ pub fn apply_insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) ->
     Ok(())
 }
 
-pub fn apply_delete_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
+pub fn delete_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
     let TableRef::Row { row, .. } = r else {
         unreachable!();
     };
@@ -512,7 +507,7 @@ pub fn apply_delete_row(root: &mut Element, r: &TableRef, id: &str, i: usize) ->
     Ok(())
 }
 
-pub fn apply_insert_col(
+pub fn insert_col(
     root: &mut Element,
     r: &TableRef,
     after: u32,
@@ -551,7 +546,7 @@ pub fn apply_insert_col(
     Ok(())
 }
 
-pub fn apply_delete_col(
+pub fn delete_col(
     root: &mut Element,
     r: &TableRef,
     col: u32,
@@ -843,7 +838,7 @@ pub fn apply_set_table_style(
     Ok(())
 }
 
-pub fn apply_set_table_float(
+pub fn set_table_float(
     root: &mut Element,
     r: &TableRef,
     pos: Option<&TableFloat>,
@@ -1162,7 +1157,7 @@ pub fn parse_row_heights(
     Ok(out)
 }
 
-pub fn apply_set_table_width(
+pub fn set_table_width(
     root: &mut Element,
     r: &TableRef,
     patch: &TableWidthPatch,
@@ -1232,7 +1227,7 @@ pub fn apply_set_table_width(
     Ok(())
 }
 
-pub fn apply_set_table_align(
+pub fn set_table_align(
     root: &mut Element,
     r: &TableRef,
     align: Option<Option<&str>>,
@@ -1266,7 +1261,7 @@ pub fn apply_set_table_align(
     Ok(())
 }
 
-pub fn apply_set_table_row_height(
+pub fn set_table_row_height(
     root: &mut Element,
     r: &TableRef,
     h: Option<u32>,
@@ -1306,7 +1301,7 @@ pub fn apply_set_table_row_height(
     Ok(())
 }
 
-pub fn apply_set_table_cell_mar(
+pub fn set_table_cell_mar(
     root: &mut Element,
     r: &TableRef,
     top: Option<Option<u32>>,
@@ -1323,7 +1318,7 @@ pub fn apply_set_table_cell_mar(
     Ok(())
 }
 
-pub fn apply_set_table_borders(
+pub fn set_table_borders(
     root: &mut Element,
     r: &TableRef,
     patch: Option<&TableBordersPatch>,
@@ -1424,7 +1419,7 @@ fn parse_table_borders_patch(v: &Value, path: &str, op: &str) -> Result<TableBor
     })
 }
 
-pub fn apply_set_cell_borders(
+pub fn set_cell_borders(
     root: &mut Element,
     r: &TableRef,
     patch: Option<&TableBordersPatch>,
@@ -1470,7 +1465,7 @@ pub fn apply_set_cell_borders(
     Ok(())
 }
 
-pub fn apply_set_cell_format(
+pub fn set_cell_format(
     root: &mut Element,
     r: &TableRef,
     fill: Option<Option<&str>>,
@@ -3608,4 +3603,314 @@ fn missing_table(id: &str, i: usize) -> Error {
         ErrorKind::TableNotFound { id: id.to_string() },
         format!("ops[{i}].id"),
     )
+}
+
+use super::request::DeleteColOp;
+use super::request::DeleteRowOp;
+use super::request::DeleteTableOp;
+use super::request::InsertColOp;
+use super::request::InsertRowOp;
+use super::request::InsertTableOp;
+use super::request::MergeCellsOp;
+use super::request::SetCellBordersOp;
+use super::request::SetCellFormatOp;
+use super::request::SetTableAlignOp;
+use super::request::SetTableBordersOp;
+use super::request::SetTableCellMarOp;
+use super::request::SetTableFloatOp;
+use super::request::SetTableRowHeightOp;
+use super::request::SetTableWidthOp;
+use super::request::SplitCellsOp;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_set_table_float(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableFloatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_float(&mut doc.root, &op.target, op.pos.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_width(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableWidthOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_width(&mut doc.root, &op.target, &op.patch, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_align(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableAlignOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_align(
+        &mut doc.root,
+        &op.target,
+        op.align.as_ref().map(|a| a.as_deref()),
+        op.indent,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_row_height(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableRowHeightOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_row_height(
+        &mut doc.root,
+        &op.target,
+        op.h,
+        op.rule.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_borders(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_borders(&mut doc.root, &op.target, op.borders.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_cell_borders(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetCellBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_cell_borders(&mut doc.root, &op.target, op.borders.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_table_cell_mar(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableCellMarOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_table_cell_mar(
+        &mut doc.root,
+        &op.target,
+        op.top,
+        op.left,
+        op.bottom,
+        op.right,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_set_cell_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetCellFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::set_cell_format(
+        &mut doc.root,
+        &op.target,
+        op.fill.as_ref().map(|s| s.as_deref()),
+        op.top,
+        op.left,
+        op.bottom,
+        op.right,
+        op.tl2br.as_ref().map(|s| s.as_ref()),
+        op.tr2bl.as_ref().map(|s| s.as_ref()),
+        op.v_align.as_ref().map(|s| s.as_deref()),
+        op.no_wrap,
+        op.text_direction.as_ref().map(|s| s.as_deref()),
+        op.fit_text,
+        op.hide_mark,
+        op.headers.as_ref().map(|s| s.as_deref()),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_table(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertTableOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_anchor(catalog, doc_part, &op.anchor, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::insert_table(&mut doc.root, &op.anchor, &op.cells, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_table(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteTableOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::delete_table(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_row(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertRowOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::insert_row(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_row(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteRowOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::delete_row(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_insert_col(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertColOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::insert_col(&mut doc.root, &op.target, op.after, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_col(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteColOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::delete_col(&mut doc.root, &op.target, op.col, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_merge_cells(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &MergeCellsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::apply_merge(
+        &mut doc.root,
+        &op.target,
+        op.start_row,
+        op.start_col,
+        op.end_row,
+        op.end_col,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_split_cells(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SplitCellsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::tbl::apply_split(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

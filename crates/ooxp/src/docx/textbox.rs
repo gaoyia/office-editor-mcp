@@ -1995,3 +1995,274 @@ fn write_link_on(
         .ok_or_else(|| Error::new(ErrorKind::TextBoxNotFound { id: String::new() }))?;
     Ok(())
 }
+
+use super::hf;
+use super::para::HostPara;
+use super::request::DeleteTextBoxOp;
+use super::request::InsertTextBoxOp;
+use super::request::SetTextBoxDirectionOp;
+use super::request::SetTextBoxFillOp;
+use super::request::SetTextBoxLineOp;
+use super::request::SetTextBoxLinkOp;
+use super::request::SetTextBoxSizeOp;
+use super::request::SetTextBoxTextAnchorOp;
+use super::request::SetTextBoxWrapOp;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn txbx_missing(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::TextBoxNotFound { id: id.to_string() },
+        format!("ops[{i}].id"),
+    )
+}
+pub(crate) fn apply_insert_txbx(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertTextBoxOp,
+    i: usize,
+) -> Result<(), Error> {
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = super::apply::part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let para_id = para::next_para_hex(&doc.root);
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (super::textbox::DEFAULT_CX, super::textbox::DEFAULT_CY),
+    };
+    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::textbox::insert_textbox(p, doc_pr, cx, cy, &op.text, &para_id);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_txbx(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteTextBoxOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = {
+        let host = para::find_paragraph(&doc.root, op.target.host.body())
+            .ok_or_else(|| txbx_missing(&op.id, i))?;
+        if super::textbox::find_txbx_content_by_key(host, &op.target.key).is_none() {
+            return Err(txbx_missing(&op.id, i));
+        }
+        super::textbox::story_id_at(&doc.root, &op.target)
+    };
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    if !super::textbox::remove_textbox(host, &op.target.key) {
+        return Err(txbx_missing(&op.id, i));
+    }
+    if let Some(sid) = story {
+        super::textbox::resequence_story(&mut doc.root, &sid);
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    let drawing = super::textbox::find_textbox_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    if !picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(txbx_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_wrap(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxWrapOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    let drawing = super::textbox::find_textbox_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+        .map_err(|e| e.at(format!("ops[{i}]")))?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_fill(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxFillOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    super::textbox::with_wsp_mut(host, &op.target.key, |wsp| {
+        super::textbox::set_fill(wsp, op.color.as_deref())
+    })
+    .ok_or_else(|| txbx_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_line(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxLineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    super::textbox::with_wsp_mut(host, &op.target.key, |wsp| {
+        super::textbox::set_line(wsp, op.color.as_deref(), op.width)
+    })
+    .ok_or_else(|| txbx_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_dir(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxDirectionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    super::textbox::with_wsp_mut(host, &op.target.key, |wsp| {
+        super::textbox::set_direction(wsp, op.vertical);
+    })
+    .ok_or_else(|| txbx_missing(&op.id, i))?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_text_anchor(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxTextAnchorOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    super::textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    super::textbox::with_wsp_mut(host, &op.target.key, |wsp| {
+        super::textbox::set_text_anchor(wsp, op.value.as_deref());
+    })
+    .ok_or_else(|| txbx_missing(&op.id, i))?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_txbx_link(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxLinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_a = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    if let Some(next) = &op.next {
+        let part_b = super::apply::part_for_txbx(
+            pkg,
+            catalog,
+            doc_part,
+            next,
+            op.next_id.as_deref().unwrap_or(""),
+            i,
+        )?;
+        if part_a != part_b {
+            return Err(Error::with_path(
+                ErrorKind::TextBoxLinkCrossPart,
+                format!("ops[{i}].next"),
+            ));
+        }
+    }
+    let doc = super::apply::load_part(pkg, docs, &part_a)?;
+    if para::find_paragraph(&doc.root, op.target.host.body()).is_none()
+        || !super::textbox::textbox_exists(
+            para::find_paragraph(&doc.root, op.target.host.body()).unwrap(),
+            &op.target.key,
+        )
+    {
+        return Err(txbx_missing(&op.id, i));
+    }
+    if let Some(next) = &op.next {
+        let host = para::find_paragraph(&doc.root, next.host.body()).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::TextBoxNotFound {
+                    id: op.next_id.clone().unwrap_or_default(),
+                },
+                format!("ops[{i}].next"),
+            )
+        })?;
+        if !super::textbox::textbox_exists(host, &next.key) {
+            return Err(Error::with_path(
+                ErrorKind::TextBoxNotFound {
+                    id: op.next_id.clone().unwrap_or_default(),
+                },
+                format!("ops[{i}].next"),
+            ));
+        }
+    }
+    super::textbox::apply_link(&mut doc.root, &op.target, op.next.as_ref())?;
+    dirty.insert(part_a, ());
+    Ok(())
+}

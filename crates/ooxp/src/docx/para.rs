@@ -3,7 +3,7 @@
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
-use super::hf::{HfKind, HfType};
+use super::hf::{self, HfKind, HfType};
 
 #[derive(Debug, Clone)]
 pub enum ParaTarget {
@@ -1568,4 +1568,928 @@ pub fn is_last_collected(root: &Element, target: &BodyPara) -> bool {
             .attr_local("paraId")
             .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
     }
+}
+
+use super::request::DeleteParaOp;
+use super::request::InsertParaOp;
+use super::request::InsertParaPlace;
+use super::request::ParaRunSource;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+type RunSlice<'a> = (
+    String,
+    Option<Element>,
+    Option<&'a super::create_round5::RunFormatOwned>,
+);
+use super::comments;
+use super::format;
+use super::notes;
+use super::request::SetParaRunsOp;
+use super::request::SetParaTextOp;
+use super::textbox;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_para_text(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaTextOp,
+    i: usize,
+) -> Result<(), Error> {
+    let target = super::para::parse_para_id(&op.id, i)?;
+    match &target {
+        ParaTarget::Body(p) => {
+            let doc = super::apply::load_part(pkg, docs, doc_part)?;
+            super::field::refuse_set_text_if_field(&doc.root, p, i)?;
+            super::math::refuse_set_text_if_math(&doc.root, p, i)?;
+            super::ruby::refuse_set_text_if_ruby(&doc.root, p, i)?;
+            super::sdt::refuse_set_text_if_sdt(&doc.root, p, i)?;
+            let el = super::para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            super::para::set_visible_text(el, &op.text);
+            dirty.insert(doc_part.to_string(), ());
+        }
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => {
+            let part_name = super::apply::part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            super::field::refuse_set_text_if_field(&doc.root, para, i)?;
+            super::math::refuse_set_text_if_math(&doc.root, para, i)?;
+            super::ruby::refuse_set_text_if_ruby(&doc.root, para, i)?;
+            super::sdt::refuse_set_text_if_sdt(&doc.root, para, i)?;
+            let el = super::para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            super::para::set_visible_text(el, &op.text);
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InTextBox { host, key, para } => {
+            let part_name = super::apply::part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let host_p =
+                super::para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::field::refuse_set_text_if_field(content, para, i)?;
+            super::math::refuse_set_text_if_math(content, para, i)?;
+            super::ruby::refuse_set_text_if_ruby(content, para, i)?;
+            super::sdt::refuse_set_text_if_sdt(content, para, i)?;
+            let el = super::para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            super::para::set_visible_text(el, &op.text);
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let el = super::para::find_paragraph_mut(note, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::para::set_visible_text(el, &op.text);
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let part_name = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let comment =
+                comments::find_comment_mut(&mut doc.root, comment_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            comments::reject_ink(comment, &op.id, i)?;
+            let el = super::para::find_paragraph_mut(comment, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::para::set_visible_text(el, &op.text);
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_para_runs(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaRunsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let target = super::para::parse_para_id(&op.id, i)?;
+    match &target {
+        ParaTarget::Body(p) => {
+            let doc = super::apply::load_part(pkg, docs, doc_part)?;
+            super::field::refuse_set_text_if_field(&doc.root, p, i)?;
+            super::math::refuse_set_text_if_math(&doc.root, p, i)?;
+            super::ruby::refuse_set_text_if_ruby(&doc.root, p, i)?;
+            super::sdt::refuse_set_text_if_sdt(&doc.root, p, i)?;
+            let el = super::para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => {
+            let part_name = super::apply::part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            super::field::refuse_set_text_if_field(&doc.root, para, i)?;
+            super::math::refuse_set_text_if_math(&doc.root, para, i)?;
+            super::ruby::refuse_set_text_if_ruby(&doc.root, para, i)?;
+            super::sdt::refuse_set_text_if_sdt(&doc.root, para, i)?;
+            let el = super::para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InTextBox { host, key, para } => {
+            let part_name = super::apply::part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let host_p =
+                super::para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::field::refuse_set_text_if_field(content, para, i)?;
+            super::math::refuse_set_text_if_math(content, para, i)?;
+            super::ruby::refuse_set_text_if_ruby(content, para, i)?;
+            super::sdt::refuse_set_text_if_sdt(content, para, i)?;
+            let el = super::para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            super::link::refuse_set_text_if_hyperlink(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let el = super::para::find_paragraph_mut(note, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let part_name = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let comment =
+                comments::find_comment_mut(&mut doc.root, comment_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            comments::reject_ink(comment, &op.id, i)?;
+            let el = super::para::find_paragraph_mut(comment, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::revision::refuse_set_text_if_revision(el, i)?;
+            write_para_runs(el, op, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+pub(crate) fn write_para_runs(el: &mut Element, op: &SetParaRunsOp, i: usize) -> Result<(), Error> {
+    let visible = super::para::visible_text(el);
+    let chars: Vec<char> = visible.chars().collect();
+    let slices = match op.runs.first().map(|run| &run.source) {
+        Some(ParaRunSource::Match { .. }) => match_slices(el, &visible, &chars, op, i)?,
+        Some(ParaRunSource::Text(_)) => {
+            let joined: String = op
+                .runs
+                .iter()
+                .map(|run| match &run.source {
+                    ParaRunSource::Text(text) => text.as_str(),
+                    _ => "",
+                })
+                .collect();
+            if joined != visible {
+                return Err(Error::with_path(
+                    ErrorKind::ParaRunMismatch { text: joined },
+                    format!("ops[{i}].runs"),
+                ));
+            }
+            let mut cursor = 0usize;
+            let mut slices = Vec::new();
+            for run in &op.runs {
+                let ParaRunSource::Text(text) = &run.source else {
+                    continue;
+                };
+                let end = cursor + text.chars().count();
+                slices.push(slice_at(el, &chars, cursor, end, run.format.as_ref()));
+                cursor = end;
+            }
+            slices
+        }
+        _ => {
+            let mut cursor = 0usize;
+            let mut slices = Vec::new();
+            for (j, run) in op.runs.iter().enumerate() {
+                let ParaRunSource::Range { start, end } = run.source else {
+                    continue;
+                };
+                if start != cursor || end > chars.len() {
+                    return Err(Error::with_path(
+                        ErrorKind::OutOfRange {
+                            field: "start".into(),
+                            min: cursor as i64,
+                            max: chars.len() as i64,
+                        },
+                        format!("ops[{i}].runs[{j}].start"),
+                    ));
+                }
+                slices.push(slice_at(el, &chars, start, end, run.format.as_ref()));
+                cursor = end;
+            }
+            if cursor != chars.len() {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "end".into(),
+                        min: 0,
+                        max: chars.len() as i64,
+                    },
+                    format!("ops[{i}].runs"),
+                ));
+            }
+            slices
+        }
+    };
+    let pieces: Vec<super::para::WrittenRun> = slices
+        .iter()
+        .map(|(text, rpr, _)| super::para::WrittenRun {
+            text: text.clone(),
+            rpr: rpr.clone(),
+        })
+        .collect();
+    super::para::replace_visible_runs(el, &pieces);
+    let mut n = 0usize;
+    for child in el.children.iter_mut() {
+        let crate::xml::Node::Element(run) = child else {
+            continue;
+        };
+        if run.local_name() == "r" && run.element_children().any(|c| c.local_name() == "t") {
+            if let Some((_, _, Some(fmt))) = slices.get(n) {
+                format::apply_run(run, super::format::run_patch(fmt));
+            }
+            n += 1;
+        }
+    }
+    Ok(())
+}
+pub(crate) fn slice_at<'a>(
+    el: &Element,
+    chars: &[char],
+    start: usize,
+    end: usize,
+    format: Option<&'a super::create_round5::RunFormatOwned>,
+) -> RunSlice<'a> {
+    let text: String = chars[start..end].iter().collect();
+    let rpr = if start < chars.len() {
+        super::para::rpr_at_char(el, start)
+    } else {
+        super::para::first_text_rpr(el)
+    };
+    (text, rpr, format)
+}
+pub(crate) fn match_slices<'a>(
+    el: &Element,
+    visible: &str,
+    chars: &[char],
+    op: &'a SetParaRunsOp,
+    i: usize,
+) -> Result<Vec<RunSlice<'a>>, Error> {
+    let mut cursor_chars = 0usize;
+    let mut cursor_bytes = 0usize;
+    let mut slices = Vec::new();
+    for (j, run) in op.runs.iter().enumerate() {
+        let ParaRunSource::Match {
+            text: needle,
+            after,
+            before,
+            nth,
+        } = &run.source
+        else {
+            continue;
+        };
+        let Some((abs_bytes, end_bytes)) = crate::text_span::locate_span(
+            visible,
+            cursor_bytes,
+            needle.as_deref(),
+            after.as_deref(),
+            before.as_deref(),
+            *nth,
+        ) else {
+            let (field, text) = match needle {
+                Some(text) => ("match", text.clone()),
+                None => ("before", before.clone().unwrap_or_default()),
+            };
+            return Err(Error::with_path(
+                ErrorKind::ParaRunMismatch { text },
+                format!("ops[{i}].runs[{j}].{field}"),
+            ));
+        };
+        let gap = visible[cursor_bytes..abs_bytes].chars().count();
+        let start = cursor_chars + gap;
+        let end = start + visible[abs_bytes..end_bytes].chars().count();
+        if gap > 0 {
+            slices.push(slice_at(el, chars, cursor_chars, start, None));
+        }
+        slices.push(slice_at(el, chars, start, end, run.format.as_ref()));
+        cursor_chars = end;
+        cursor_bytes = visible
+            .chars()
+            .take(cursor_chars)
+            .map(|ch| ch.len_utf8())
+            .sum();
+    }
+    if cursor_chars < chars.len() {
+        slices.push(slice_at(el, chars, cursor_chars, chars.len(), None));
+    }
+    Ok(slices)
+}
+pub(crate) fn apply_insert_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertParaOp,
+    i: usize,
+) -> Result<(), Error> {
+    match &op.place {
+        InsertParaPlace::TextBox { box_target, after } => {
+            let part_name =
+                super::apply::part_for_txbx(pkg, catalog, doc_part, box_target, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let new_id = super::para::next_para_hex(&doc.root);
+            let host = super::para::find_paragraph_mut(&mut doc.root, box_target.host.body())
+                .ok_or_else(|| super::textbox::txbx_missing(&op.id, i))?;
+            let content = textbox::find_txbx_content_by_key_mut(host, &box_target.key)
+                .ok_or_else(|| super::textbox::txbx_missing(&op.id, i))?;
+            let new_p = super::para::new_paragraph(content, &new_id, &op.text);
+            if let Some(ParaTarget::InTextBox { para, .. }) = after {
+                insert_p_after(content, para, new_p).map_err(|_| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            } else {
+                content.children.push(Node::Element(new_p));
+            }
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        InsertParaPlace::Note {
+            kind,
+            note_id,
+            after,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let new_id = super::para::next_para_hex(&doc.root);
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::NoteNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let new_p = super::para::new_paragraph(note, &new_id, &op.text);
+            if let Some(para) = after {
+                insert_p_after(note, para, new_p).map_err(|_| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            } else {
+                note.children.push(Node::Element(new_p));
+            }
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        InsertParaPlace::Comment { comment_id, after } => {
+            let part_name = comments::part_name(pkg, doc_part)?
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+            let old_last = {
+                let doc = super::apply::load_part(pkg, docs, &part_name)?;
+                let comment = comments::find_comment(&doc.root, comment_id)
+                    .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+                comments::reject_ink(comment, &op.id, i)?;
+                comments::last_para_id(comment)
+            };
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let new_id = super::para::next_para_hex(&doc.root);
+            let comment = comments::find_comment_mut(&mut doc.root, comment_id)
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+            let new_p = super::para::new_paragraph(comment, &new_id, &op.text);
+            if let Some(para) = after {
+                insert_p_after(comment, para, new_p).map_err(|_| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            } else {
+                comment.children.push(Node::Element(new_p));
+            }
+            dirty.insert(part_name.clone(), ());
+            super::comments::retarget_comment_last(
+                pkg,
+                docs,
+                dirty,
+                doc_part,
+                comment_id,
+                old_last.as_deref(),
+            )?;
+            Ok(())
+        }
+        InsertParaPlace::Body { after } => apply_insert_story_para(
+            pkg,
+            docs,
+            dirty,
+            doc_part,
+            after.as_ref(),
+            &op.id,
+            &op.text,
+            i,
+        ),
+        InsertParaPlace::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            after,
+        } => {
+            let part_name = super::apply::part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            apply_insert_story_para(
+                pkg,
+                docs,
+                dirty,
+                &part_name,
+                after.as_ref(),
+                &op.id,
+                &op.text,
+                i,
+            )
+        }
+    }
+}
+pub(crate) fn apply_insert_story_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    after: Option<&super::para::BodyPara>,
+    id: &str,
+    text: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = super::apply::load_part(pkg, docs, part_name)?;
+    let new_id = super::para::next_para_hex(&doc.root);
+    if let Some(after) = after {
+        let path = super::para::find_paragraph_path(&doc.root, after).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let new_p = {
+            let host = super::para::element_at(&doc.root, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::para::new_paragraph(host, &new_id, text)
+        };
+        let (parent, idx) =
+            super::para::parent_and_index_mut(&mut doc.root, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+        parent.children.insert(idx + 1, Node::Element(new_p));
+    } else {
+        let body = super::para::story_body_mut(&mut doc.root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: part_name.to_string(),
+                    child: "body".into(),
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let new_p = super::para::new_paragraph(body, &new_id, text);
+        super::para::append_before_body_sect_pr(body, new_p);
+    }
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
+}
+pub(crate) fn insert_p_after(
+    parent: &mut Element,
+    para: &super::para::BodyPara,
+    new_p: Element,
+) -> Result<(), ()> {
+    let mut idx = 0usize;
+    let mut insert_at = None;
+    for (j, n) in parent.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "p" {
+                idx += 1;
+                let hit = match para {
+                    super::para::BodyPara::Index(n) => idx == *n,
+                    super::para::BodyPara::Hex(hex) => e
+                        .attr_local("paraId")
+                        .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+                };
+                if hit {
+                    insert_at = Some(j + 1);
+                    break;
+                }
+            }
+        }
+    }
+    let at = insert_at.ok_or(())?;
+    parent.children.insert(at, Node::Element(new_p));
+    Ok(())
+}
+pub(crate) fn apply_delete_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteParaOp,
+    i: usize,
+) -> Result<(), Error> {
+    match &op.inner {
+        ParaTarget::InTextBox { host, key, para } => {
+            let part_name = super::apply::part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let host_p =
+                super::para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let count = super::para::collect_paragraphs_in_txbx(content).len();
+            if count <= 1 {
+                return Err(Error::with_path(
+                    ErrorKind::LastTextBoxPara,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            remove_p_at(content, para).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::NoteNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            let count = super::para::collect_paragraphs(note).len();
+            if count <= 1 {
+                return Err(Error::with_path(
+                    ErrorKind::LastNotePara,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            remove_p_at(note, para).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let part_name = comments::part_name(pkg, doc_part)?
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+            let old_last = {
+                let doc = super::apply::load_part(pkg, docs, &part_name)?;
+                let comment = comments::find_comment(&doc.root, comment_id)
+                    .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+                comments::reject_ink(comment, &op.id, i)?;
+                comments::last_para_id(comment)
+            };
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let comment = comments::find_comment_mut(&mut doc.root, comment_id)
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+            let count = super::para::collect_paragraphs(comment).len();
+            if count <= 1 {
+                return Err(Error::with_path(
+                    ErrorKind::LastCommentPara,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            remove_p_at(comment, para).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            dirty.insert(part_name.clone(), ());
+            super::comments::retarget_comment_last(
+                pkg,
+                docs,
+                dirty,
+                doc_part,
+                comment_id,
+                old_last.as_deref(),
+            )?;
+            Ok(())
+        }
+        ParaTarget::Body(para) => {
+            apply_delete_story_para(pkg, docs, dirty, doc_part, para, &op.id, i)
+        }
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => {
+            let part_name = super::apply::part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            apply_delete_story_para(pkg, docs, dirty, &part_name, para, &op.id, i)
+        }
+    }
+}
+pub(crate) fn apply_delete_story_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    para: &super::para::BodyPara,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = super::apply::load_part(pkg, docs, part_name)?;
+    let path = super::para::find_paragraph_path(&doc.root, para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let parent_count = if path.len() <= 1 {
+        super::para::count_direct_p(&doc.root)
+    } else {
+        let parent =
+            super::para::element_at(&doc.root, &path[..path.len() - 1]).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+        super::para::count_direct_p(parent)
+    };
+    if parent_count <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastStoryPara,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let (has_rev, unmatched, has_sect, is_last) = {
+        let p_el = super::para::element_at(&doc.root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        (
+            super::para::para_has_revision(p_el),
+            super::para::para_has_unmatched_range(p_el),
+            super::para::para_has_sect_pr(p_el),
+            super::para::is_last_collected(&doc.root, para),
+        )
+    };
+    if has_rev {
+        return Err(Error::with_path(
+            ErrorKind::ParaHasRevision,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if unmatched {
+        return Err(Error::with_path(
+            ErrorKind::CrossParaMarker,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if has_sect && !is_last {
+        return Err(Error::with_path(
+            ErrorKind::SectionBreakPara,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if has_sect && is_last {
+        let sect = {
+            let p_mut = super::para::element_at_mut(&mut doc.root, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            super::para::take_ppr_sect_pr(p_mut)
+        };
+        if let Some(sect) = sect {
+            let paths = super::para::collect_paragraph_paths(&doc.root);
+            if let Some(dest_path) = paths.iter().rev().find(|pp| *pp != &path).cloned() {
+                let dest =
+                    super::para::element_at_mut(&mut doc.root, &dest_path).ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::ParaNotFound { id: id.to_string() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?;
+                super::para::put_ppr_sect_pr(dest, sect);
+            }
+        }
+    }
+    let (parent, idx) =
+        super::para::parent_and_index_mut(&mut doc.root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+    parent.children.remove(idx);
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
+}
+pub(crate) fn remove_p_at(parent: &mut Element, para: &super::para::BodyPara) -> Result<(), ()> {
+    let mut idx = 0usize;
+    let mut remove_at = None;
+    for (j, n) in parent.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "p" {
+                idx += 1;
+                let hit = match para {
+                    super::para::BodyPara::Index(n) => idx == *n,
+                    super::para::BodyPara::Hex(hex) => e
+                        .attr_local("paraId")
+                        .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+                };
+                if hit {
+                    remove_at = Some(j);
+                    break;
+                }
+            }
+        }
+    }
+    let at = remove_at.ok_or(())?;
+    parent.children.remove(at);
+    Ok(())
 }

@@ -6,7 +6,7 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
-use super::hf::HfPart;
+use super::hf::{self, HfPart};
 use super::notes;
 use super::para::{self, BodyPara, NoteKind, ParaTarget};
 use super::textbox;
@@ -1483,6 +1483,407 @@ pub fn strip_markers_in_hosts(
             strip_markers(&mut doc.root, ids);
             dirty.insert(part, ());
         }
+    }
+    Ok(())
+}
+
+use super::picture;
+use super::request::DeleteCommentOp;
+use super::request::InsertCommentOp;
+use super::request::ReplyCommentOp;
+use super::request::SetCommentDoneOp;
+use super::request::SetCommentMetaOp;
+use super::request::SetCommentTextOp;
+// 从 apply 搬来的操作体。
+pub(crate) fn retarget_comment_last(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    comment_id: &str,
+    old_last: Option<&str>,
+) -> Result<(), Error> {
+    let Some(part) = super::comments::part_name(pkg, doc_part)? else {
+        return Ok(());
+    };
+    let new_last = {
+        let doc = super::apply::load_part(pkg, docs, &part)?;
+        super::comments::find_comment(&doc.root, comment_id).and_then(super::comments::last_para_id)
+    };
+    let (Some(old), Some(new)) = (old_last, new_last.as_deref()) else {
+        return Ok(());
+    };
+    if super::comments::para_ids_match(old, new) {
+        return Ok(());
+    }
+    if let Some(ex) = super::comments::extended_part_name(pkg, doc_part)? {
+        let doc = super::apply::load_part(pkg, docs, &ex)?;
+        super::comments::retarget_para_id(&mut doc.root, old, new);
+        dirty.insert(ex, ());
+    }
+    super::comments::retarget_ids_parts(pkg, docs, dirty, doc_part, old, new)?;
+    Ok(())
+}
+pub(crate) fn apply_insert_comment(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertCommentOp,
+    i: usize,
+) -> Result<(), Error> {
+    let start_key = super::comments::story_key(doc_part, &op.start_target).map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::CommentPrefix,
+            },
+            format!("ops[{i}].start"),
+        )
+    })?;
+    let end_key = super::comments::story_key(doc_part, &op.end_target).map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::CommentPrefix,
+            },
+            format!("ops[{i}].end"),
+        )
+    })?;
+    if start_key != end_key {
+        return Err(Error::with_path(
+            ErrorKind::CommentRangeCrossPart,
+            format!("ops[{i}]"),
+        ));
+    }
+    let host_part =
+        super::apply::part_for_para(pkg, catalog, doc_part, &op.start_target, &op.start, i)?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &host_part)?;
+        let start_idx =
+            super::apply::para_index_of(&doc.root, &op.start_target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound {
+                        id: op.start.clone(),
+                    },
+                    format!("ops[{i}].start"),
+                )
+            })?;
+        let end_idx = super::apply::para_index_of(&doc.root, &op.end_target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.end.clone() },
+                format!("ops[{i}].end"),
+            )
+        })?;
+        if start_idx > end_idx {
+            return Err(Error::with_path(
+                ErrorKind::CommentRangeReversed,
+                format!("ops[{i}]"),
+            ));
+        }
+    }
+    let comments_part = super::comments::ensure_comments_part(pkg, docs, dirty, doc_part)?;
+    let extended_part = super::comments::ensure_extended_part(pkg, docs, dirty, doc_part)?;
+    let people_part = super::comments::ensure_people_part(pkg, docs, dirty, doc_part)?;
+    let (w_id, para_hex) = {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let w_id = super::comments::next_comment_id(&doc.root);
+        let para_hex = para::next_para_hex(&doc.root);
+        let (p_style, r_style) = super::comments::first_comment_styles(&doc.root);
+        super::comments::append_comment(
+            &mut doc.root,
+            &w_id,
+            &para_hex,
+            &op.text,
+            &op.author,
+            &op.initials,
+            op.date.as_deref(),
+            &p_style,
+            &r_style,
+        );
+        dirty.insert(comments_part.clone(), ());
+        (w_id, para_hex)
+    };
+    {
+        let doc = super::apply::load_part(pkg, docs, &extended_part)?;
+        super::comments::upsert_comment_ex(&mut doc.root, &para_hex, None, Some(false));
+        dirty.insert(extended_part, ());
+    }
+    {
+        let doc = super::apply::load_part(pkg, docs, &people_part)?;
+        super::comments::ensure_person(&mut doc.root, &op.author);
+        dirty.insert(people_part, ());
+    }
+    super::comments::patch_ids_parts(pkg, docs, dirty, doc_part, &para_hex)?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &host_part)?;
+        let p = super::apply::find_insert_para_mut(&mut doc.root, &op.start_target).ok_or_else(
+            || {
+                Error::with_path(
+                    ErrorKind::ParaNotFound {
+                        id: op.start.clone(),
+                    },
+                    format!("ops[{i}].start"),
+                )
+            },
+        )?;
+        super::comments::insert_range_start(p, &w_id);
+    }
+    {
+        let doc = super::apply::load_part(pkg, docs, &host_part)?;
+        let p =
+            super::apply::find_insert_para_mut(&mut doc.root, &op.end_target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.end.clone() },
+                    format!("ops[{i}].end"),
+                )
+            })?;
+        super::comments::insert_range_end(p, &w_id);
+        dirty.insert(host_part, ());
+    }
+    Ok(())
+}
+pub(crate) fn apply_reply_comment(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &ReplyCommentOp,
+    i: usize,
+) -> Result<(), Error> {
+    let comments_part = super::comments::part_name(pkg, doc_part)?
+        .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+    let (parent_last, p_style, r_style) = {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let parent = super::comments::find_comment(&doc.root, &op.comment_id)
+            .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+        super::comments::reject_ink(parent, &op.id, i)?;
+        let last = super::comments::last_para_id(parent)
+            .ok_or_else(|| super::comments::need_para_id(i))?;
+        let (p_style, r_style) = super::comments::styles_of(parent);
+        (last, p_style, r_style)
+    };
+    let comments_part = super::comments::ensure_comments_part(pkg, docs, dirty, doc_part)?;
+    let extended_part = super::comments::ensure_extended_part(pkg, docs, dirty, doc_part)?;
+    let people_part = super::comments::ensure_people_part(pkg, docs, dirty, doc_part)?;
+    let (w_id, para_hex) = {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let w_id = super::comments::next_comment_id(&doc.root);
+        let para_hex = para::next_para_hex(&doc.root);
+        super::comments::append_comment(
+            &mut doc.root,
+            &w_id,
+            &para_hex,
+            &op.text,
+            &op.author,
+            &op.initials,
+            op.date.as_deref(),
+            &p_style,
+            &r_style,
+        );
+        dirty.insert(comments_part, ());
+        (w_id, para_hex)
+    };
+    super::comments::insert_reply_markers_in_hosts(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.comment_id,
+        &w_id,
+    )?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &extended_part)?;
+        super::comments::upsert_comment_ex(
+            &mut doc.root,
+            &para_hex,
+            Some(&parent_last),
+            Some(false),
+        );
+        dirty.insert(extended_part, ());
+    }
+    {
+        let doc = super::apply::load_part(pkg, docs, &people_part)?;
+        super::comments::ensure_person(&mut doc.root, &op.author);
+        dirty.insert(people_part, ());
+    }
+    super::comments::patch_ids_parts(pkg, docs, dirty, doc_part, &para_hex)?;
+    Ok(())
+}
+pub(crate) fn apply_delete_comment(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteCommentOp,
+    i: usize,
+) -> Result<(), Error> {
+    let comments_part = super::comments::part_name(pkg, doc_part)?
+        .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+    {
+        let comments_doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        if super::comments::find_comment(&comments_doc.root, &op.comment_id).is_none() {
+            return Err(super::comments::comment_missing(&op.id, i));
+        }
+    }
+    let extended_part = super::comments::extended_part_name(pkg, doc_part)?;
+    let extended_root = if let Some(ex) = &extended_part {
+        Some(super::apply::load_part(pkg, docs, ex)?.root.clone())
+    } else {
+        None
+    };
+    let (ids, last_paras, embeds) = {
+        let comments_doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let ids = super::comments::cascade_ids(
+            &comments_doc.root,
+            extended_root.as_deref(),
+            &op.comment_id,
+        );
+        let mut last_paras = Vec::new();
+        let mut embeds = Vec::new();
+        for id in &ids {
+            if let Some(c) = super::comments::find_comment(&comments_doc.root, id) {
+                if let Some(p) = super::comments::last_para_id(c) {
+                    last_paras.push(p);
+                }
+                embeds.extend(super::comments::collect_blip_embeds(c));
+            }
+        }
+        (ids, last_paras, embeds)
+    };
+    let mut media = Vec::new();
+    for rid in &embeds {
+        if let Ok(m) = picture::resolve_embed(pkg, &comments_part, rid) {
+            media.push(m);
+        }
+    }
+    let id_set: HashSet<String> = ids.iter().cloned().collect();
+    super::comments::strip_markers_in_hosts(pkg, docs, dirty, doc_part, catalog, &id_set)?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        for id in &ids {
+            super::comments::remove_comment(&mut doc.root, id);
+        }
+        dirty.insert(comments_part.clone(), ());
+    }
+    if let Some(ex) = &extended_part {
+        let doc = super::apply::load_part(pkg, docs, ex)?;
+        for pid in &last_paras {
+            super::comments::remove_comment_ex_for_para(&mut doc.root, pid);
+        }
+        dirty.insert(ex.clone(), ());
+    }
+    for pid in &last_paras {
+        super::comments::remove_ids_for_para(pkg, docs, dirty, doc_part, pid)?;
+    }
+    let comments_root = docs.get(&comments_part).unwrap().root.clone();
+    for rid in embeds {
+        picture::remove_rel_if_unused(pkg, &comments_part, &rid, &comments_root)?;
+    }
+    for m in media {
+        if !picture::media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+pub(crate) fn apply_set_comment_text(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetCommentTextOp,
+    i: usize,
+) -> Result<(), Error> {
+    let comments_part = super::comments::part_name(pkg, doc_part)?
+        .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+    let old_last = {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let comment = super::comments::find_comment(&doc.root, &op.comment_id)
+            .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+        super::comments::reject_ink(comment, &op.id, i)?;
+        super::comments::last_para_id(comment)
+    };
+    {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let comment = super::comments::find_comment_mut(&mut doc.root, &op.comment_id)
+            .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+        super::comments::set_visible_keep_first(comment, &op.text);
+        dirty.insert(comments_part, ());
+    }
+    retarget_comment_last(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        &op.comment_id,
+        old_last.as_deref(),
+    )?;
+    Ok(())
+}
+pub(crate) fn apply_set_comment_meta(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetCommentMetaOp,
+    i: usize,
+) -> Result<(), Error> {
+    let comments_part = super::comments::part_name(pkg, doc_part)?
+        .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+    {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let comment = super::comments::find_comment_mut(&mut doc.root, &op.comment_id)
+            .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+        if let Some(a) = &op.author {
+            super::apply::set_w_attr(comment, "author", a);
+        }
+        if let Some(ini) = &op.initials {
+            super::apply::set_w_attr(comment, "initials", ini);
+        }
+        if let Some(d) = &op.date {
+            super::apply::set_w_attr(comment, "date", d);
+        }
+        dirty.insert(comments_part, ());
+    }
+    if let Some(author) = &op.author {
+        let people_part = super::comments::ensure_people_part(pkg, docs, dirty, doc_part)?;
+        let doc = super::apply::load_part(pkg, docs, &people_part)?;
+        super::comments::ensure_person(&mut doc.root, author);
+        dirty.insert(people_part, ());
+    }
+    Ok(())
+}
+pub(crate) fn apply_set_comment_done(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetCommentDoneOp,
+    i: usize,
+) -> Result<(), Error> {
+    let comments_part = super::comments::part_name(pkg, doc_part)?
+        .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+    let last = {
+        let doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let comment = super::comments::find_comment(&doc.root, &op.comment_id)
+            .ok_or_else(|| super::comments::comment_missing(&op.id, i))?;
+        super::comments::last_para_id(comment).ok_or_else(|| super::comments::need_para_id(i))?
+    };
+    let extended_part = super::comments::ensure_extended_part(pkg, docs, dirty, doc_part)?;
+    {
+        let comments_doc = super::apply::load_part(pkg, docs, &comments_part)?;
+        let comments_root = comments_doc.root.clone();
+        let ex = super::apply::load_part(pkg, docs, &extended_part)?;
+        if super::comments::fill_missing_comment_ex(&comments_root, &mut ex.root).is_err() {
+            return Err(super::comments::need_para_id(i));
+        }
+        if !super::comments::set_done_on_para(&mut ex.root, &last, op.done) {
+            super::comments::upsert_comment_ex(&mut ex.root, &last, None, Some(op.done));
+        }
+        dirty.insert(extended_part, ());
     }
     Ok(())
 }

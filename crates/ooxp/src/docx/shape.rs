@@ -8,7 +8,7 @@ use crate::xml::{Element, Node};
 
 use super::drawing_hlink;
 use super::para::{self, TxbxKey, TxbxTarget};
-use super::picture::{PicKind, WrapKind};
+use super::picture::{self, PicKind, WrapKind};
 use super::textbox::{self, WPS_NS};
 use super::{MC_NS, WP_NS};
 
@@ -981,4 +981,165 @@ fn find_first_shape_wsp_mut(el: &mut Element) -> Option<&mut Element> {
         }
         crate::xml::SearchMut::down(el)
     })
+}
+
+use super::hf;
+use super::para::HostPara;
+use super::request::DeleteShapeOp;
+use super::request::InsertShapeOp;
+use super::request::SetShapeFillOp;
+use super::request::SetShapeLineOp;
+use super::request::SetShapePosOp;
+use super::request::SetShapeSizeOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn shape_missing(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::ShapeNotFound { id: id.to_string() },
+        format!("ops[{i}].id"),
+    )
+}
+pub(crate) fn apply_insert_shape(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertShapeOp,
+    i: usize,
+) -> Result<(), Error> {
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = super::apply::part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (super::shape::DEFAULT_CX, super::shape::DEFAULT_CY),
+    };
+    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::shape::insert_shape(p, doc_pr, cx, cy, &op.prst);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_shape(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteShapeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !super::shape::remove_shape(host, &op.target.key) {
+        return Err(shape_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_shape_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    let drawing = super::shape::find_shape_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(shape_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_shape_pos(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapePosOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    let drawing = super::shape::find_shape_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !super::shape::set_pos(drawing, op.x, op.y) {
+        return Err(Error::with_path(
+            ErrorKind::DocxShapeNeedsAnchor,
+            format!("ops[{i}].id"),
+        ));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_shape_fill(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeFillOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    super::shape::with_wsp_mut(host, &op.target.key, |wsp| {
+        textbox::set_fill(wsp, op.color.as_deref())
+    })
+    .ok_or_else(|| shape_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_shape_line(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeLineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    super::shape::with_wsp_mut(host, &op.target.key, |wsp| {
+        textbox::set_line(wsp, op.color.as_deref(), op.width)
+    })
+    .ok_or_else(|| shape_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
 }

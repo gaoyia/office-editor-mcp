@@ -8,7 +8,7 @@ use crate::xml::{Element, Node};
 
 use super::drawing_hlink;
 use super::para::{self, TxbxKey, TxbxTarget};
-use super::picture::{PicKind, WrapKind};
+use super::picture::{self, PicKind, WrapKind};
 use super::textbox::{self, WPS_NS};
 use super::{MC_NS, WP_NS};
 
@@ -907,4 +907,74 @@ fn build_connector_wsp(doc_pr: u32, cx: i64, cy: i64, prst: &str) -> Element {
     wsp.push_element(sp);
     wsp.push_element(Element::new("wps:bodyPr"));
     wsp
+}
+
+use super::hf;
+use super::para::HostPara;
+use super::request::DeleteConnectorOp;
+use super::request::InsertConnectorOp;
+use crate::opc::Package;
+use crate::xml::Document;
+use std::collections::HashMap;
+// 从 apply 搬来的操作体。
+pub(crate) fn cxn_missing(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::ConnectorNotFound { id: id.to_string() },
+        format!("ops[{i}].id"),
+    )
+}
+pub(crate) fn apply_insert_connector(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertConnectorOp,
+    i: usize,
+) -> Result<(), Error> {
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = super::apply::part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (super::connector::DEFAULT_CX, super::connector::DEFAULT_CY),
+    };
+    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    super::connector::insert_connector(p, doc_pr, cx, cy, &op.prst);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_connector(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteConnectorOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::apply::part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| cxn_missing(&op.id, i))?;
+    if !super::connector::remove_connector(host, &op.target.key) {
+        return Err(cxn_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
 }

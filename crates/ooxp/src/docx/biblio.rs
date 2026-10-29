@@ -503,3 +503,119 @@ fn first_person(el: &Element) -> Option<&Element> {
     }
     None
 }
+
+use super::field;
+use super::hf;
+use super::request::DeleteBibliographyOp;
+use super::request::DeleteCitationOp;
+use super::request::DeleteSourceOp;
+use super::request::InsertBibliographyOp;
+use super::request::InsertBibliographyPlace;
+use super::request::InsertCitationOp;
+use super::request::InsertSourceOp;
+use super::sdt;
+// 从 apply 搬来的操作体。
+pub(crate) fn apply_insert_source(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertSourceOp,
+    i: usize,
+) -> Result<(), Error> {
+    super::biblio::insert_source(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        &super::biblio::SourceWrite {
+            tag: &op.tag,
+            source_type: &op.source_type,
+            title: &op.title,
+            year: op.year.as_deref(),
+            last: op.last.as_deref(),
+            first: op.first.as_deref(),
+            city: op.city.as_deref(),
+            publisher: op.publisher.as_deref(),
+        },
+        i,
+    )
+}
+pub(crate) fn apply_delete_source(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteSourceOp,
+    i: usize,
+) -> Result<(), Error> {
+    super::biblio::delete_source(pkg, docs, dirty, doc_part, op.n, &op.id, i)
+}
+pub(crate) fn apply_insert_citation(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertCitationOp,
+    i: usize,
+) -> Result<(), Error> {
+    if !super::biblio::has_tag(pkg, docs, doc_part, &op.tag)? {
+        return Err(Error::with_path(
+            ErrorKind::SourceNotFound { id: op.tag.clone() },
+            format!("ops[{i}].tag"),
+        ));
+    }
+    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let xml_id = sdt::next_sdt_id(&doc.root);
+    let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    field::insert_citation(el, &op.tag, xml_id);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+pub(crate) fn apply_delete_citation(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteCitationOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_citation(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_insert_bibliography(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertBibliographyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertBibliographyPlace::After(p) => Some(p),
+        InsertBibliographyPlace::EndOfDocument => None,
+    };
+    field::insert_bibliography(&mut doc.root, after, &op.instr, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+pub(crate) fn apply_delete_bibliography(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteBibliographyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_bibliography(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
