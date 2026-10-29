@@ -1326,16 +1326,7 @@ fn find_pic_mut_in<'a>(
 ) -> Option<&'a mut Element> {
     crate::xml::search_mut(el, |el| {
         if el.local_name() == "AlternateContent" {
-            if let Some(choice) = el
-                .children
-                .iter()
-                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-                .or_else(|| {
-                    el.children
-                        .iter()
-                        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
-                })
-            {
+            if let Some(choice) = crate::xml::alternate_child(el).unwrap_or(None) {
                 if matches!(&el.children[choice], Node::Element(_)) {
                     return crate::xml::SearchMut::Only(choice);
                 }
@@ -1407,10 +1398,10 @@ where
     let mut stack = vec![root];
     while let Some(el) = stack.pop() {
         if el.local_name() == "AlternateContent" {
-            if let Some(choice) = el.child_by_local("Choice") {
-                stack.push(choice);
-            } else if let Some(fallback) = el.child_by_local("Fallback") {
-                stack.push(fallback);
+            if let Some(index) = crate::xml::alternate_child(el)? {
+                if let Node::Element(child) = &el.children[index] {
+                    stack.push(child);
+                }
             }
             continue;
         }
@@ -1440,13 +1431,7 @@ where
         if local == "AlternateContent" {
             let index = {
                 let el = element_at(root, &path);
-                el.children.iter().position(|node| {
-                    matches!(node, Node::Element(child) if child.local_name() == "Choice")
-                }).or_else(|| {
-                    el.children.iter().position(|node| {
-                        matches!(node, Node::Element(child) if child.local_name() == "Fallback")
-                    })
-                })
+                crate::xml::alternate_child(el)?
             };
             if let Some(index) = index {
                 let mut child = path;
@@ -1910,9 +1895,12 @@ fn remove_anchor_in(el: &mut Element, search: &PicSearch<'_>, index: &mut usize)
     for (i, n) in el.children.iter_mut().enumerate() {
         let Node::Element(child) = n else { continue };
         if child.local_name() == "AlternateContent" {
-            let branch = child
-                .child_by_local("Choice")
-                .or_else(|| child.child_by_local("Fallback"));
+            let branch = crate::xml::alternate_child(child)
+                .unwrap_or(None)
+                .and_then(|index| match &child.children[index] {
+                    Node::Element(branch) => Some(branch),
+                    Node::Text(_) => None,
+                });
             if let Some(branch) = branch {
                 if pics_match_in(branch, search, index) {
                     drop = Some(i);

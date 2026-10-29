@@ -733,18 +733,7 @@ pub fn set_signed_twip_attr(el: &mut Element, local: &str, value: i64) {
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {
-    let mut fallback = None;
-    for (i, n) in el.children.iter().enumerate() {
-        if let crate::xml::Node::Element(e) = n {
-            if e.local_name() == "Choice" {
-                return Some(i);
-            }
-            if e.local_name() == "Fallback" && fallback.is_none() {
-                fallback = Some(i);
-            }
-        }
-    }
-    fallback
+    crate::xml::alternate_child(el).unwrap_or(None)
 }
 
 /// `titlePg` 在 `EG_SectPrContents` 里的位置，见 ECMA-376 §17.6.18。

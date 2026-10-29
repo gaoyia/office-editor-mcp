@@ -749,18 +749,7 @@ fn walk_shape(el: &Element, f: &mut impl FnMut(&Element)) {
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {
-    let mut fallback = None;
-    for (i, n) in el.children.iter().enumerate() {
-        let Node::Element(e) = n else {
-            continue;
-        };
-        match e.local_name() {
-            "Choice" => return Some(i),
-            "Fallback" if fallback.is_none() => fallback = Some(i),
-            _ => {}
-        }
-    }
-    fallback
+    crate::xml::alternate_child(el).unwrap_or(None)
 }
 
 pub const DEFAULT_CX: i64 = 1_828_800;

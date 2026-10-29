@@ -761,7 +761,7 @@ pub fn collect_paragraphs_in_txbx(content: &Element) -> Vec<&Element> {
     out
 }
 
-/// 遇到 `w:txbxContent` 停住；`mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
+/// 遇到 `w:txbxContent` 停住。`mc:AlternateContent` 进 `alternate_child` 选出的那一支。
 fn walk_paras<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
     let mut stack = vec![root];
     while let Some(el) = stack.pop() {
@@ -786,18 +786,7 @@ fn walk_paras<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
 }
 
 pub(crate) fn first_alt_child_index(el: &Element) -> Option<usize> {
-    let mut fallback = None;
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            if e.local_name() == "Choice" {
-                return Some(i);
-            }
-            if e.local_name() == "Fallback" && fallback.is_none() {
-                fallback = Some(i);
-            }
-        }
-    }
-    fallback
+    crate::xml::alternate_child(el).unwrap_or(None)
 }
 
 pub fn para_stable_id(p: &Element, index: usize) -> (String, bool) {

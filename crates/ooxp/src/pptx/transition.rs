@@ -274,10 +274,10 @@ fn find_transition(root: &Element) -> Option<&Element> {
 }
 
 fn transition_in_ac(ac: &Element) -> Option<&Element> {
-    let choice = ac
-        .element_children()
-        .find(|c| c.local_name() == "Choice")
-        .or_else(|| ac.element_children().find(|c| c.local_name() == "Fallback"))?;
+    let index = crate::xml::alternate_child(ac).unwrap_or(None)?;
+    let Node::Element(choice) = &ac.children[index] else {
+        return None;
+    };
     choice
         .element_children()
         .find(|c| c.local_name() == "transition")

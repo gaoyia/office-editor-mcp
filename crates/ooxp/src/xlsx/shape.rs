@@ -1241,8 +1241,11 @@ fn is_group_chrome(local: &str) -> bool {
 }
 
 fn first_choice(el: &Element) -> Option<&Element> {
-    el.child_by_local("Choice")
-        .or_else(|| el.child_by_local("Fallback"))
+    let index = crate::xml::alternate_child(el).unwrap_or(None)?;
+    match el.children.get(index) {
+        Some(Node::Element(child)) => Some(child),
+        _ => None,
+    }
 }
 
 pub(crate) fn visit_payloads<F>(anchor: &Element, f: &mut F) -> Result<(), Error>
@@ -1549,15 +1552,7 @@ fn find_object_in<'a>(
                 }
                 return crate::xml::SearchMut::Skip;
             }
-            let i = el
-                .children
-                .iter()
-                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-                .or_else(|| {
-                    el.children
-                        .iter()
-                        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
-                });
+            let i = crate::xml::alternate_child(el).unwrap_or(None);
             if let Some(i) = i {
                 if matches!(&el.children[i], Node::Element(_)) {
                     return crate::xml::SearchMut::Only(i);

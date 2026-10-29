@@ -85,6 +85,38 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 不能靠给类型本身加一层会挡住字段移出的 `Drop`：那样现有代码就不能把 `children` 或根移走。根放在 `ManuallyDrop` 里，`Document` 离开作用域时取出来，在堆上拆掉子节点。
 
+### 标记兼容性
+
+读取 `mc:AlternateContent` 时，全库用 `xml::alternate_child` 决定进入哪一支。create 写出的 `AlternateContent` 形状不变。
+
+`Choice` 的 `Requires` 按空白拆成前缀。每个前缀都在下表里，才进入这支。有一个不在表里，就跳过这支。多个 `Choice` 按文档顺序取第一支全部在表里的。都没有，就进入 `Fallback`。没有 `Fallback` 就不进入这段。
+
+| 前缀 | 用在 |
+| --- | --- |
+| `a14` | 公式，以及部分 OLE 锚点 |
+| `am3d` | 3D 模型 |
+| `p14` | 幻灯片墨迹，以及一部分切换 |
+| `p15` | 较新的切换 |
+| `pslz` | 幻灯片缩放 |
+| `psez` | 节缩放 |
+| `psuz` | 摘要缩放 |
+| `sle15` | 切片器 |
+| `tsle` | 时间线 |
+| `v` | 幻灯片 OLE |
+| `wpc` | 墨迹画布 |
+| `wpg` | 组合 |
+| `wps` | 文本框、形状、连接线 |
+| `x14` | 工作表 OLE |
+| `xdr14` | 工作表墨迹 |
+
+`Requires` 缺了、拆完没有前缀、或前缀名不合法，返回 `XmlBroken`，不改走另一支。
+
+命名空间声明常常在祖先上。这个函数只拿到 `AlternateContent` 这一元素，看不见祖先。本元素或当前 `Choice` 上若写了 `xmlns:前缀` 且值为空，返回 `XmlBroken`。没写这条声明时，不因此判损坏。
+
+返回 `Result` 的遍历用 `?` 把这个错误交上去。返回 `Option` 或 `()` 的遍历把 `Err` 当成没有可进的支，跳过这段。
+
+文本框内容、组合、OLE 各自原有的跳过规则仍由各遍历决定。
+
 ### json
 
 只处理领域信封：`schemaVersion`、`action`、各动作的必填字段。不认识的字段在第一期直接报错，避免默默丢数据。

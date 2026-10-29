@@ -1639,9 +1639,12 @@ fn remove_chart_anchor_in(el: &mut Element, key: &ChartKey, index: &mut usize) -
     for (i, n) in el.children.iter_mut().enumerate() {
         let Node::Element(child) = n else { continue };
         if child.local_name() == "AlternateContent" {
-            let branch = child
-                .child_by_local("Choice")
-                .or_else(|| child.child_by_local("Fallback"));
+            let branch = crate::xml::alternate_child(child)
+                .unwrap_or(None)
+                .and_then(|index| match &child.children[index] {
+                    Node::Element(branch) => Some(branch),
+                    Node::Text(_) => None,
+                });
             if let Some(branch) = branch {
                 if charts_match_in(branch, key, index) {
                     drop = Some(i);

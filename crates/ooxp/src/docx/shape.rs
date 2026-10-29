@@ -524,9 +524,7 @@ fn ac_has_shape(node: &Node, key: &TxbxKey, index: &mut usize) -> bool {
 }
 
 fn first_choice(ac: &Element) -> Option<usize> {
-    ac.children
-        .iter()
-        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
+    crate::xml::alternate_child(ac).unwrap_or(None)
 }
 
 fn walk_host(

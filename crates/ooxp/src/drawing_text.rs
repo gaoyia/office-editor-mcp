@@ -1485,18 +1485,7 @@ fn remove_attr_local(el: &mut Element, local: &str) {
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {
-    let mut fallback = None;
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            if e.local_name() == "Choice" {
-                return Some(i);
-            }
-            if e.local_name() == "Fallback" && fallback.is_none() {
-                fallback = Some(i);
-            }
-        }
-    }
-    fallback
+    crate::xml::alternate_child(el).unwrap_or(None)
 }
 
 fn for_each_p(el: &Element, f: &mut impl FnMut(&Element)) {

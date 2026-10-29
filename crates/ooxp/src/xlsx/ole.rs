@@ -515,15 +515,11 @@ fn for_each_ole_el<'a>(sheet: &'a Element, mut f: impl FnMut(&'a Element)) {
     };
     for child in parent.element_children() {
         if child.local_name() == "AlternateContent" {
-            if let Some(choice) = child.child_by_local("Choice") {
-                if let Some(obj) = find_ole_el(choice) {
-                    f(obj);
-                    continue;
-                }
-            }
-            if let Some(fb) = child.child_by_local("Fallback") {
-                if let Some(obj) = find_ole_el(fb) {
-                    f(obj);
+            if let Some(index) = crate::xml::alternate_child(child).unwrap_or(None) {
+                if let Node::Element(branch) = &child.children[index] {
+                    if let Some(obj) = find_ole_el(branch) {
+                        f(obj);
+                    }
                 }
             }
         } else if child.local_name() == "oleObject" {
@@ -957,21 +953,7 @@ fn ole_object_mut(el: &mut Element) -> Option<&mut Element> {
     if el.local_name() != "AlternateContent" {
         return None;
     }
-    let mut slot = None;
-    for (i, n) in el.children.iter().enumerate() {
-        let Node::Element(e) = n else {
-            continue;
-        };
-        if e.local_name() == "Choice" && e.child_by_local("oleObject").is_some() {
-            slot = Some(i);
-            break;
-        }
-        if e.local_name() == "Fallback" && slot.is_none() && e.child_by_local("oleObject").is_some()
-        {
-            slot = Some(i);
-        }
-    }
-    let i = slot?;
+    let i = crate::xml::alternate_child(el).unwrap_or(None)?;
     match &mut el.children[i] {
         Node::Element(host) => host.child_by_local_mut("oleObject"),
         Node::Text(_) => None,
@@ -1257,9 +1239,12 @@ fn remove_ole_entry(sheet: &mut Element, key: &OleKey) -> bool {
         let is_hit = match &parent.children[i] {
             Node::Element(e) => {
                 let obj = if e.local_name() == "AlternateContent" {
-                    e.child_by_local("Choice")
-                        .and_then(find_ole_el)
-                        .or_else(|| e.child_by_local("Fallback").and_then(find_ole_el))
+                    crate::xml::alternate_child(e)
+                        .unwrap_or(None)
+                        .and_then(|index| match &e.children[index] {
+                            Node::Element(branch) => find_ole_el(branch),
+                            Node::Text(_) => None,
+                        })
                 } else if e.local_name() == "oleObject" {
                     Some(e)
                 } else {
@@ -1335,11 +1320,10 @@ fn walk_payloads(root: &Element, f: &mut impl FnMut(&Element)) {
     let mut stack = vec![root];
     while let Some(el) = stack.pop() {
         if el.local_name() == "AlternateContent" {
-            if let Some(choice) = el
-                .child_by_local("Choice")
-                .or_else(|| el.child_by_local("Fallback"))
-            {
-                stack.push(choice);
+            if let Some(index) = crate::xml::alternate_child(el).unwrap_or(None) {
+                if let Node::Element(branch) = &el.children[index] {
+                    stack.push(branch);
+                }
             }
             continue;
         }

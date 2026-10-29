@@ -566,11 +566,7 @@ fn txbx_in_group(host: &Element, key: &TxbxKey) -> bool {
             return crate::xml::Search::Skip;
         }
         if el.local_name() == "AlternateContent" {
-            if let Some(i) = el
-                .children
-                .iter()
-                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-            {
+            if let Some(i) = crate::xml::alternate_child(el).unwrap_or(None) {
                 if let Node::Element(c) = &el.children[i] {
                     return crate::xml::Search::Only(c);
                 }
@@ -963,10 +959,7 @@ fn drawing_of_slot(node: &Node) -> Option<&Element> {
         return Some(el);
     }
     if el.local_name() == "AlternateContent" {
-        let i = el
-            .children
-            .iter()
-            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))?;
+        let i = crate::xml::alternate_child(el).unwrap_or(None)?;
         if let Node::Element(choice) = &el.children[i] {
             return choice
                 .element_children()
@@ -1020,11 +1013,7 @@ fn find_txbx_drawing<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element
             return crate::xml::Search::Skip;
         }
         if el.local_name() == "AlternateContent" {
-            if let Some(i) = el
-                .children
-                .iter()
-                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-            {
+            if let Some(i) = crate::xml::alternate_child(el).unwrap_or(None) {
                 if let Node::Element(c) = &el.children[i] {
                     return crate::xml::Search::Only(c);
                 }

@@ -911,9 +911,7 @@ fn walk_all<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
 }
 
 fn first_choice(ac: &Element) -> Option<usize> {
-    ac.children
-        .iter()
-        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
+    crate::xml::alternate_child(ac).unwrap_or(None)
 }
 
 fn drawing_kind(drawing: &Element) -> PicKind {

@@ -6,7 +6,7 @@ use std::mem::ManuallyDrop;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
-use crate::error::{Error, XmlIssue};
+use crate::error::{Error, ErrorKind, XmlIssue};
 
 #[derive(Clone, Debug)]
 pub struct Document {
@@ -537,6 +537,100 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
     Ok(())
 }
 
+/// 进入 `AlternateContent` 的哪一支。下标指向 `Choice` 或 `Fallback`。
+/// 没有可进的支时返回 `Ok(None)`。`Requires` 拆不开时返回 `XmlBroken`。
+pub(crate) fn alternate_child(el: &Element) -> Result<Option<usize>, Error> {
+    let mut fallback = None;
+    for (index, node) in el.children.iter().enumerate() {
+        let Node::Element(child) = node else {
+            continue;
+        };
+        match child.local_name() {
+            "Choice" => {
+                if choice_understood(el, child)? {
+                    return Ok(Some(index));
+                }
+            }
+            "Fallback" if fallback.is_none() => fallback = Some(index),
+            _ => {}
+        }
+    }
+    Ok(fallback)
+}
+
+fn choice_understood(ac: &Element, choice: &Element) -> Result<bool, Error> {
+    let Some(raw) = choice.attr_local("Requires") else {
+        return Err(alternate_broken());
+    };
+    let tokens: Vec<&str> = raw.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Err(alternate_broken());
+    }
+    for token in &tokens {
+        if !is_prefix_token(token) {
+            return Err(alternate_broken());
+        }
+        bound_ok(ac, choice, token)?;
+    }
+    Ok(tokens.iter().all(|token| prefix_understood(token)))
+}
+
+fn is_prefix_token(token: &str) -> bool {
+    let mut chars = token.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+}
+
+fn bound_ok(ac: &Element, choice: &Element, prefix: &str) -> Result<(), Error> {
+    for el in [choice, ac] {
+        if let Some(uri) = xmlns_uri(el, prefix) {
+            if uri.is_empty() {
+                return Err(alternate_broken());
+            }
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+fn xmlns_uri<'a>(el: &'a Element, prefix: &str) -> Option<&'a str> {
+    el.attrs.iter().find_map(|(key, value)| {
+        let rest = key.strip_prefix("xmlns:")?;
+        (rest == prefix).then_some(value.as_str())
+    })
+}
+
+fn prefix_understood(prefix: &str) -> bool {
+    matches!(
+        prefix,
+        "a14"
+            | "am3d"
+            | "p14"
+            | "p15"
+            | "pslz"
+            | "psez"
+            | "psuz"
+            | "sle15"
+            | "tsle"
+            | "v"
+            | "wpc"
+            | "wpg"
+            | "wps"
+            | "x14"
+            | "xdr14"
+    )
+}
+
+fn alternate_broken() -> Error {
+    Error::new(ErrorKind::XmlBroken {
+        issue: XmlIssue::Parse,
+        detail: Some("AlternateContent".into()),
+    })
+}
+
 pub fn escape_attr(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -650,5 +744,88 @@ mod tests {
         assert!(find_by_local(&doc.root, "missing").is_none());
         let bytes = doc.to_bytes().unwrap();
         assert!(bytes.windows(8).any(|window| window == b"<a>z</a>"));
+    }
+
+    fn branch(reqs: &[&str]) -> Element {
+        let mut ac = Element::new("mc:AlternateContent");
+        for req in reqs {
+            let mut choice = Element::new("mc:Choice").with_attr("Requires", *req);
+            choice.push_element(Element::new(*req));
+            ac.push_element(choice);
+        }
+        let mut fallback = Element::new("mc:Fallback");
+        fallback.push_element(Element::new("poster"));
+        ac.push_element(fallback);
+        ac
+    }
+
+    fn picked(el: &Element) -> &str {
+        let index = alternate_child(el).unwrap().unwrap();
+        match &el.children[index] {
+            Node::Element(child) => child.local_name(),
+            Node::Text(_) => "",
+        }
+    }
+
+    #[test]
+    fn understood_prefix_enters_choice() {
+        let el = branch(&["a14"]);
+        assert_eq!(picked(&el), "Choice");
+    }
+
+    #[test]
+    fn unknown_prefix_enters_fallback() {
+        let el = branch(&["w99"]);
+        assert_eq!(picked(&el), "Fallback");
+    }
+
+    #[test]
+    fn multiple_choices_take_the_first_fully_understood() {
+        let el = branch(&["w99", "a14 wps", "p14"]);
+        let index = alternate_child(&el).unwrap().unwrap();
+        match &el.children[index] {
+            Node::Element(child) => {
+                assert_eq!(child.local_name(), "Choice");
+                assert_eq!(child.attr_local("Requires"), Some("a14 wps"));
+            }
+            Node::Text(_) => panic!("text"),
+        }
+    }
+
+    #[test]
+    fn one_unknown_token_rejects_that_choice() {
+        let el = branch(&["a14 w99"]);
+        assert_eq!(picked(&el), "Fallback");
+    }
+
+    #[test]
+    fn unknown_without_fallback_skips() {
+        let mut choice = Element::new("mc:Choice").with_attr("Requires", "w99");
+        choice.push_element(Element::new("new"));
+        let mut ac = Element::new("mc:AlternateContent");
+        ac.push_element(choice);
+        assert!(alternate_child(&ac).unwrap().is_none());
+    }
+
+    #[test]
+    fn missing_requires_is_xml_broken() {
+        let mut choice = Element::new("mc:Choice");
+        choice.push_element(Element::new("x"));
+        let mut ac = Element::new("mc:AlternateContent");
+        ac.push_element(choice);
+        let err = alternate_child(&ac).unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
+    }
+
+    #[test]
+    fn empty_xmlns_is_xml_broken() {
+        let mut choice = Element::new("mc:Choice")
+            .with_attr("Requires", "a14")
+            .with_attr("xmlns:a14", "");
+        choice.push_element(Element::new("math"));
+        let mut ac = Element::new("mc:AlternateContent");
+        ac.push_element(choice);
+        let err = alternate_child(&ac).unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
     }
 }

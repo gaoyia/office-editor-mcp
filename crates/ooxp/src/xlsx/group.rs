@@ -668,5 +668,9 @@ fn is_group_chrome(local: &str) -> bool {
 }
 
 fn first_choice(el: &Element) -> Option<&Element> {
-    el.child_by_local("Choice")
+    let index = crate::xml::alternate_child(el).unwrap_or(None)?;
+    match el.children.get(index) {
+        Some(Node::Element(child)) => Some(child),
+        _ => None,
+    }
 }

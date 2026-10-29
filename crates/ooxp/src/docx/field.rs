@@ -1120,18 +1120,7 @@ fn remove_at(root: &mut Element, path: &[usize]) -> Result<(), Error> {
 }
 
 fn first_alt(el: &Element) -> Option<usize> {
-    let mut fallback = None;
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            if e.local_name() == "Choice" {
-                return Some(i);
-            }
-            if e.local_name() == "Fallback" && fallback.is_none() {
-                fallback = Some(i);
-            }
-        }
-    }
-    fallback
+    crate::xml::alternate_child(el).unwrap_or(None)
 }
 
 fn xml_broken(detail: &str) -> Error {
