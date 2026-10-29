@@ -1,4 +1,4 @@
-//! ZIP 打开、部件读写、保存时未改条目 raw copy。
+//! ZIP 打开、部件读写。未改条目整段搬本地记录和中央目录头，以留下 extra。
 
 use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
@@ -188,53 +188,403 @@ impl Package {
     }
 
     pub fn save_to_vec(&self) -> Result<Vec<u8>, Error> {
+        let source = match &self.original_bytes {
+            Some(bytes) => Some(SourceZip::read(bytes)?),
+            None => None,
+        };
+        let mut out = Vec::new();
+        let mut centrals = Vec::new();
+
+        for name in &self.original_order {
+            let Some(part) = self.parts.get(name) else {
+                continue;
+            };
+            if part.deleted {
+                continue;
+            }
+            if !part.dirty {
+                if let (Some(bytes), Some(source), Some(idx)) = (
+                    self.original_bytes.as_deref(),
+                    source.as_ref(),
+                    part.original_index,
+                ) {
+                    let (local, central) = source.clean_entry(bytes, idx)?;
+                    push_entry(&mut out, &mut centrals, local, central)?;
+                    continue;
+                }
+            }
+            let (local, central) = rewrite_part(name, &part.data)?;
+            push_entry(&mut out, &mut centrals, &local, central)?;
+        }
+
+        for name in &self.new_order {
+            if self.original_order.iter().any(|o| o == name) {
+                continue;
+            }
+            let Some(part) = self.parts.get(name) else {
+                continue;
+            };
+            if part.deleted {
+                continue;
+            }
+            let (local, central) = rewrite_part(name, &part.data)?;
+            push_entry(&mut out, &mut centrals, &local, central)?;
+        }
+
+        write_eocd(&mut out, &centrals)?;
+        Ok(out)
+    }
+}
+
+struct SourceZip {
+    cd_start: u64,
+    /// 按下标：本地头偏移、中央目录头偏移。
+    entries: Vec<(u64, u64)>,
+}
+
+impl SourceZip {
+    fn read(bytes: &[u8]) -> Result<Self, Error> {
+        let mut archive = ZipArchive::new(Cursor::new(bytes))?;
+        let cd_start = archive.central_directory_start();
+        let mut entries = Vec::with_capacity(archive.len());
+        for i in 0..archive.len() {
+            let file = archive.by_index(i)?;
+            entries.push((file.header_start(), file.central_header_start()));
+        }
+        Ok(Self { cd_start, entries })
+    }
+
+    fn clean_entry<'a>(&self, bytes: &'a [u8], index: usize) -> Result<(&'a [u8], Vec<u8>), Error> {
+        let Some(&(header, central_at)) = self.entries.get(index) else {
+            return Err(zip_broken("missing entry"));
+        };
+        let local = local_record(bytes, header, &self.entries, self.cd_start)?;
+        let central = central_record(bytes, central_at)?;
+        Ok((local, central))
+    }
+}
+
+fn push_entry(
+    out: &mut Vec<u8>,
+    centrals: &mut Vec<Vec<u8>>,
+    local: &[u8],
+    mut central: Vec<u8>,
+) -> Result<(), Error> {
+    let offset = u64::try_from(out.len()).map_err(|_| zip_broken("offset"))?;
+    patch_central_offset(&mut central, offset)?;
+    out.extend_from_slice(local);
+    centrals.push(central);
+    Ok(())
+}
+
+fn rewrite_part(name: &str, data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), Error> {
+    let bytes = {
         let mut cursor = Cursor::new(Vec::new());
         {
             let mut writer = ZipWriter::new(&mut cursor);
-            let deflate =
-                SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-
-            let mut orig = match &self.original_bytes {
-                Some(b) => Some(ZipArchive::new(Cursor::new(b.as_slice()))?),
-                None => None,
-            };
-
-            for name in &self.original_order {
-                let Some(part) = self.parts.get(name) else {
-                    continue;
-                };
-                if part.deleted {
-                    continue;
-                }
-                if !part.dirty {
-                    if let (Some(archive), Some(idx)) = (orig.as_mut(), part.original_index) {
-                        let file = archive.by_index(idx)?;
-                        writer.raw_copy_file(file)?;
-                        continue;
-                    }
-                }
-                writer.start_file(zip_name_from_opc(name), deflate)?;
-                writer.write_all(&part.data)?;
-            }
-
-            for name in &self.new_order {
-                if self.original_order.iter().any(|o| o == name) {
-                    continue;
-                }
-                let Some(part) = self.parts.get(name) else {
-                    continue;
-                };
-                if part.deleted {
-                    continue;
-                }
-                writer.start_file(zip_name_from_opc(name), deflate)?;
-                writer.write_all(&part.data)?;
-            }
-
+            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            writer.start_file(zip_name_from_opc(name), opts)?;
+            writer.write_all(data)?;
             writer.finish()?;
         }
-        Ok(cursor.into_inner())
+        cursor.into_inner()
+    };
+    let (header, central_at, cd_start) = {
+        let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice()))?;
+        if archive.len() != 1 {
+            return Err(zip_broken("rewritten entry"));
+        }
+        let cd_start = archive.central_directory_start();
+        let file = archive.by_index(0)?;
+        (file.header_start(), file.central_header_start(), cd_start)
+    };
+    let local = slice_bytes(&bytes, header, cd_start)?.to_vec();
+    let central = central_record(&bytes, central_at)?;
+    Ok((local, central))
+}
+
+fn local_record<'a>(
+    bytes: &'a [u8],
+    header: u64,
+    entries: &[(u64, u64)],
+    cd_start: u64,
+) -> Result<&'a [u8], Error> {
+    let header_at = u64_as_usize(header)?;
+    if bytes.get(header_at..header_at.saturating_add(4)) != Some(b"PK\x03\x04") {
+        return Err(zip_broken("local header"));
     }
+    if cd_start < header || cd_start > bytes.len() as u64 {
+        return Err(zip_broken("local header"));
+    }
+    let next = entries
+        .iter()
+        .map(|(start, _)| *start)
+        .filter(|start| *start > header && *start <= cd_start)
+        .min()
+        .unwrap_or(cd_start);
+    let end = match exact_local_end(bytes, header_at) {
+        Some(exact) if exact > next => return Err(zip_broken("local header")),
+        Some(exact) => exact,
+        None => next,
+    };
+    if end <= header {
+        return Err(zip_broken("local header"));
+    }
+    slice_bytes(bytes, header, end)
+}
+
+/// 没有数据描述符、大小也放得进 32 位时，本地记录的结束位置。
+fn exact_local_end(bytes: &[u8], header_at: usize) -> Option<u64> {
+    let head = bytes.get(header_at..header_at + 30)?;
+    let flags = u16::from_le_bytes([head[6], head[7]]);
+    if flags & 0x0008 != 0 {
+        return None;
+    }
+    let compressed = u32::from_le_bytes([head[18], head[19], head[20], head[21]]);
+    if compressed == u32::MAX {
+        return None;
+    }
+    let name_len = u16::from_le_bytes([head[26], head[27]]) as u64;
+    let extra_len = u16::from_le_bytes([head[28], head[29]]) as u64;
+    Some(
+        (header_at as u64)
+            .saturating_add(30)
+            .saturating_add(name_len)
+            .saturating_add(extra_len)
+            .saturating_add(u64::from(compressed)),
+    )
+}
+
+fn central_record(bytes: &[u8], start: u64) -> Result<Vec<u8>, Error> {
+    let start_at = u64_as_usize(start)?;
+    if bytes.get(start_at..start_at.saturating_add(4)) != Some(b"PK\x01\x02") {
+        return Err(zip_broken("central header"));
+    }
+    if start_at + 46 > bytes.len() {
+        return Err(zip_broken("central header"));
+    }
+    let name_len = u16_at(bytes, start_at + 28) as usize;
+    let extra_len = u16_at(bytes, start_at + 30) as usize;
+    let comment_len = u16_at(bytes, start_at + 32) as usize;
+    let end = 46usize
+        .checked_add(name_len)
+        .and_then(|n| n.checked_add(extra_len))
+        .and_then(|n| n.checked_add(comment_len))
+        .and_then(|n| n.checked_add(start_at))
+        .ok_or_else(|| zip_broken("central header"))?;
+    if end > bytes.len() {
+        return Err(zip_broken("central header"));
+    }
+    Ok(bytes[start_at..end].to_vec())
+}
+
+fn patch_central_offset(central: &mut Vec<u8>, offset: u64) -> Result<(), Error> {
+    if central.len() < 46 || central.get(..4) != Some(b"PK\x01\x02") {
+        return Err(zip_broken("central header"));
+    }
+    let name_len = u16_at(central, 28) as usize;
+    let extra_len = u16_at(central, 30) as usize;
+    let comment_len = u16_at(central, 32) as usize;
+    let extra_at = 46 + name_len;
+    let extra_end = extra_at + extra_len;
+    if extra_end.checked_add(comment_len) != Some(central.len()) {
+        return Err(zip_broken("central header"));
+    }
+    let comp32 = u32_at(central, 20);
+    let uncomp32 = u32_at(central, 24);
+    let off32 = u32_at(central, 42);
+
+    if let Some((field_at, field_len)) = find_zip64(central, extra_at, extra_end)? {
+        let mut pos = 0usize;
+        let wide = field_len >= 24;
+        if wide || uncomp32 == u32::MAX {
+            pos += 8;
+        }
+        if wide || comp32 == u32::MAX {
+            pos += 8;
+        }
+        let offset_present = wide || off32 == u32::MAX;
+        if offset_present {
+            if pos + 8 > field_len {
+                return Err(zip_broken("zip64 extra"));
+            }
+            let at = field_at + 4 + pos;
+            central[at..at + 8].copy_from_slice(&offset.to_le_bytes());
+            if offset > u32::MAX as u64 {
+                central[42..46].copy_from_slice(&u32::MAX.to_le_bytes());
+            } else if off32 != u32::MAX {
+                central[42..46].copy_from_slice(&(offset as u32).to_le_bytes());
+            }
+            return Ok(());
+        }
+        if offset <= u32::MAX as u64 && off32 != u32::MAX {
+            central[42..46].copy_from_slice(&(offset as u32).to_le_bytes());
+            return Ok(());
+        }
+        return extend_zip64_offset(central, field_at, field_len, offset);
+    }
+
+    if offset <= u32::MAX as u64 && off32 != u32::MAX {
+        central[42..46].copy_from_slice(&(offset as u32).to_le_bytes());
+        return Ok(());
+    }
+    if off32 == u32::MAX {
+        return Err(zip_broken("zip64 extra"));
+    }
+    insert_zip64_offset(central, offset)
+}
+
+fn find_zip64(
+    central: &[u8],
+    extra_at: usize,
+    extra_end: usize,
+) -> Result<Option<(usize, usize)>, Error> {
+    let mut i = extra_at;
+    let mut found = None;
+    while i + 4 <= extra_end {
+        let id = u16_at(central, i);
+        let len = u16_at(central, i + 2) as usize;
+        let next = i + 4 + len;
+        if next > extra_end {
+            return Err(zip_broken("central extra"));
+        }
+        if id == 0x0001 {
+            if found.is_some() {
+                return Err(zip_broken("zip64 extra"));
+            }
+            found = Some((i, len));
+        }
+        i = next;
+    }
+    if i != extra_end {
+        return Err(zip_broken("central extra"));
+    }
+    Ok(found)
+}
+
+fn extend_zip64_offset(
+    central: &mut Vec<u8>,
+    field_at: usize,
+    field_len: usize,
+    offset: u64,
+) -> Result<(), Error> {
+    let new_len = field_len + 8;
+    let new_extra = u16_at(central, 30) as usize + 8;
+    if new_len > u16::MAX as usize || new_extra > u16::MAX as usize {
+        return Err(zip_broken("zip64 extra"));
+    }
+    central[field_at + 2..field_at + 4].copy_from_slice(&(new_len as u16).to_le_bytes());
+    central[30..32].copy_from_slice(&(new_extra as u16).to_le_bytes());
+    central[42..46].copy_from_slice(&u32::MAX.to_le_bytes());
+    bump_zip64_version(central);
+    let insert_at = field_at + 4 + field_len;
+    central.splice(insert_at..insert_at, offset.to_le_bytes());
+    Ok(())
+}
+
+fn insert_zip64_offset(central: &mut Vec<u8>, offset: u64) -> Result<(), Error> {
+    let name_len = u16_at(central, 28) as usize;
+    let new_extra = u16_at(central, 30) as usize + 12;
+    if new_extra > u16::MAX as usize {
+        return Err(zip_broken("zip64 extra"));
+    }
+    central[30..32].copy_from_slice(&(new_extra as u16).to_le_bytes());
+    central[42..46].copy_from_slice(&u32::MAX.to_le_bytes());
+    bump_zip64_version(central);
+    let mut block = Vec::with_capacity(12);
+    block.extend_from_slice(&1u16.to_le_bytes());
+    block.extend_from_slice(&8u16.to_le_bytes());
+    block.extend_from_slice(&offset.to_le_bytes());
+    let extra_at = 46 + name_len;
+    central.splice(extra_at..extra_at, block);
+    Ok(())
+}
+
+fn bump_zip64_version(central: &mut [u8]) {
+    if u16_at(central, 6) < 45 {
+        central[6..8].copy_from_slice(&45u16.to_le_bytes());
+    }
+}
+
+fn write_eocd(out: &mut Vec<u8>, centrals: &[Vec<u8>]) -> Result<(), Error> {
+    let cd_offset = u64::try_from(out.len()).map_err(|_| zip_broken("offset"))?;
+    for central in centrals {
+        out.extend_from_slice(central);
+    }
+    let cd_size = u64::try_from(out.len()).map_err(|_| zip_broken("offset"))? - cd_offset;
+    let count = centrals.len() as u64;
+    let need_zip64 =
+        count > u16::MAX as u64 || cd_size > u32::MAX as u64 || cd_offset > u32::MAX as u64;
+    if need_zip64 {
+        let zip64_at = u64::try_from(out.len()).map_err(|_| zip_broken("offset"))?;
+        out.extend_from_slice(&0x0606_4b50u32.to_le_bytes());
+        out.extend_from_slice(&44u64.to_le_bytes());
+        out.extend_from_slice(&45u16.to_le_bytes());
+        out.extend_from_slice(&45u16.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&count.to_le_bytes());
+        out.extend_from_slice(&cd_size.to_le_bytes());
+        out.extend_from_slice(&cd_offset.to_le_bytes());
+        out.extend_from_slice(&0x0706_4b50u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&zip64_at.to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+    }
+    let count16 = if count > u16::MAX as u64 {
+        u16::MAX
+    } else {
+        count as u16
+    };
+    let size32 = if cd_size > u32::MAX as u64 {
+        u32::MAX
+    } else {
+        cd_size as u32
+    };
+    let off32 = if cd_offset > u32::MAX as u64 {
+        u32::MAX
+    } else {
+        cd_offset as u32
+    };
+    out.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out.extend_from_slice(&count16.to_le_bytes());
+    out.extend_from_slice(&count16.to_le_bytes());
+    out.extend_from_slice(&size32.to_le_bytes());
+    out.extend_from_slice(&off32.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes());
+    Ok(())
+}
+
+fn slice_bytes(bytes: &[u8], start: u64, end: u64) -> Result<&[u8], Error> {
+    let start = u64_as_usize(start)?;
+    let end = u64_as_usize(end)?;
+    if start > end || end > bytes.len() {
+        return Err(zip_broken("entry bounds"));
+    }
+    Ok(&bytes[start..end])
+}
+
+fn u64_as_usize(value: u64) -> Result<usize, Error> {
+    usize::try_from(value).map_err(|_| zip_broken("offset"))
+}
+
+fn u16_at(bytes: &[u8], at: usize) -> u16 {
+    u16::from_le_bytes([bytes[at], bytes[at + 1]])
+}
+
+fn u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+}
+
+fn zip_broken(detail: &str) -> Error {
+    Error::new(ErrorKind::OpcOpen {
+        reason: OpcReason::Zip {
+            detail: detail.to_string(),
+        },
+    })
 }
 
 #[cfg(test)]
@@ -255,6 +605,115 @@ mod tests {
         pkg.set("/keep.xml", b"unchanged-bytes".to_vec()).unwrap();
         pkg.set("/edit.xml", b"old".to_vec()).unwrap();
         pkg.save_to_vec().unwrap()
+    }
+
+    #[test]
+    fn untouched_stored_extra_is_kept() {
+        let shared = [0x34, 0x12, 4, 0, 0x11, 0x22, 0x33, 0x44];
+        let central_only = [0x35, 0x12, 2, 0, 0x09, 0x09];
+        let bytes = zip_with_extra();
+        let unchanged = Package::open_bytes(bytes.clone())
+            .unwrap()
+            .save_to_vec()
+            .unwrap();
+        assert_eq!(count_slice(&unchanged, &shared), 2);
+        assert_eq!(count_slice(&unchanged, &central_only), 1);
+        let mut pkg = Package::open_bytes(bytes).unwrap();
+        pkg.set("/edit.xml", b"new".to_vec()).unwrap();
+        let out = pkg.save_to_vec().unwrap();
+        let reopened = Package::open_bytes(out.clone()).unwrap();
+        assert_eq!(reopened.get("/keep.xml").unwrap(), b"keep-bytes");
+        assert_eq!(reopened.get("/edit.xml").unwrap(), b"new");
+        assert_eq!(
+            count_slice(&out, &shared),
+            2,
+            "本地头和中央目录都应留下 extra"
+        );
+        assert_eq!(
+            count_slice(&out, &central_only),
+            1,
+            "只在中央目录的 extra 丢了"
+        );
+        let mut archive = ZipArchive::new(Cursor::new(out.as_slice())).unwrap();
+        let file = archive.by_name("keep.xml").unwrap();
+        let extra = file.extra_data().unwrap_or_default();
+        assert!(
+            extra.windows(shared.len()).any(|window| window == shared),
+            "{extra:?}"
+        );
+        assert!(
+            extra
+                .windows(central_only.len())
+                .any(|window| window == central_only),
+            "{extra:?}"
+        );
+    }
+
+    #[test]
+    fn central_offset_patch_updates_zip64_and_plain_fields() {
+        let mut plain = central_header(b"a", &[], 5);
+        patch_central_offset(&mut plain, 20).unwrap();
+        assert_eq!(u32_at(&plain, 42), 20);
+
+        let mut extra = vec![0x01, 0x00, 8, 0];
+        extra.extend_from_slice(&10u64.to_le_bytes());
+        let mut zip64 = central_header(b"a", &extra, u32::MAX);
+        patch_central_offset(&mut zip64, 99).unwrap();
+        assert_eq!(u64::from_le_bytes(zip64[51..59].try_into().unwrap()), 99);
+
+        let mut grow = central_header(b"a", &[], 5);
+        patch_central_offset(&mut grow, u64::from(u32::MAX) + 3).unwrap();
+        assert_eq!(u32_at(&grow, 42), u32::MAX);
+        assert_eq!(
+            u64::from_le_bytes(grow[51..59].try_into().unwrap()),
+            u64::from(u32::MAX) + 3
+        );
+    }
+
+    fn central_header(name: &[u8], extra: &[u8], offset: u32) -> Vec<u8> {
+        let mut header = vec![0u8; 46];
+        header[0..4].copy_from_slice(b"PK\x01\x02");
+        header[28..30].copy_from_slice(&(name.len() as u16).to_le_bytes());
+        header[30..32].copy_from_slice(&(extra.len() as u16).to_le_bytes());
+        header[42..46].copy_from_slice(&offset.to_le_bytes());
+        header.extend_from_slice(name);
+        header.extend_from_slice(extra);
+        header
+    }
+
+    fn count_slice(hay: &[u8], needle: &[u8]) -> usize {
+        hay.windows(needle.len())
+            .filter(|window| *window == needle)
+            .count()
+    }
+
+    fn zip_with_extra() -> Vec<u8> {
+        use zip::write::FullFileOptions;
+
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = ZipWriter::new(&mut cursor);
+            let stored = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            writer.start_file("[Content_Types].xml", stored).unwrap();
+            writer.write_all(b"<Types/>").unwrap();
+            writer.start_file("_rels/.rels", stored).unwrap();
+            writer.write_all(b"<Relationships/>").unwrap();
+            let mut keep = FullFileOptions::default().compression_method(CompressionMethod::Stored);
+            keep.add_extra_data(
+                0x1234,
+                vec![0x11, 0x22, 0x33, 0x44].into_boxed_slice(),
+                false,
+            )
+            .unwrap();
+            keep.add_extra_data(0x1235, vec![0x09, 0x09].into_boxed_slice(), true)
+                .unwrap();
+            writer.start_file("keep.xml", keep).unwrap();
+            writer.write_all(b"keep-bytes").unwrap();
+            writer.start_file("edit.xml", stored).unwrap();
+            writer.write_all(b"old").unwrap();
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
     }
 
     #[test]
