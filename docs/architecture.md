@@ -23,6 +23,13 @@ ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/..
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
+本工具不支持预览，也不把页面画成图。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+
+- Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
+- PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
+
+怎么查到这句话，见 [json-contract.md](json-contract.md) 的 `help`。
+
 xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。
 xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id、3D 模型 id 与工作表墨迹 id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`，
 3D 模型 id 写出 `/xl/media/…` 的 GLB，墨迹 id 写出 `/xl/ink/…` 的 InkML。

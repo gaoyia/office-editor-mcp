@@ -14,6 +14,39 @@ fn help(body: serde_json::Value) -> Result<serde_json::Value, ooxp::Error> {
 }
 
 #[test]
+fn index_says_there_is_no_preview() {
+    let value = help(serde_json::json!({})).unwrap();
+    let help_action = value["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["action"] == "help")
+        .unwrap();
+    let limits = help_action["limits"].as_str().unwrap();
+    assert!(limits.contains("不支持预览"));
+    assert!(limits.contains("ExportAsFixedFormat"));
+    assert!(limits.contains("kwps"));
+    assert!(limits.contains("不调用它们"));
+    let english = help(serde_json::json!({"locale": "en"})).unwrap();
+    let help_action = english["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["action"] == "help")
+        .unwrap();
+    let limits = help_action["limits"].as_str().unwrap();
+    assert!(limits.to_lowercase().contains("does not preview"));
+    assert!(limits.contains("ExportAsFixedFormat"));
+    assert!(limits.contains("kwpp"));
+    let found = help(serde_json::json!({"q": "预览"})).unwrap();
+    assert!(found["matches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["action"] == "help"));
+}
+
+#[test]
 fn index_tells_actions_apart() {
     let value = help(serde_json::json!({})).unwrap();
     assert_eq!(value["kind"], "actions");

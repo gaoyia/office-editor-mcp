@@ -117,6 +117,13 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
+本工具不支持预览，也不把页面画成图。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+
+- Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
+- PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
+
+本工具不调用它们。不写 `format`、`q`、`op`、`name` 时，这句话写在 `help` 这一条的 `limits` 里。搜「预览」或 `preview` 也会命中。
+
 不带 `format`、`q`、`op`、`name` 时，只说明六个动作各自干什么，以及下一步该带哪些字段。
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
