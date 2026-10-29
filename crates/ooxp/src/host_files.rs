@@ -16,30 +16,29 @@ pub(crate) struct Cached {
 
 type Reader = fn(&str) -> Cached;
 
+struct Frame {
+    files: HashMap<String, Cached>,
+    reader: Option<Reader>,
+}
+
 thread_local! {
-    static FILES: RefCell<Option<HashMap<String, Cached>>> = const { RefCell::new(None) };
-    static READER: RefCell<Option<Reader>> = const { RefCell::new(None) };
+    static STACK: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
 }
 
 pub struct FileGuard;
 
 impl Drop for FileGuard {
     fn drop(&mut self) {
-        FILES.with(|slot| {
-            *slot.borrow_mut() = None;
-        });
-        READER.with(|slot| {
-            *slot.borrow_mut() = None;
+        STACK.with(|slot| {
+            slot.borrow_mut().pop();
         });
     }
 }
 
 pub fn install(files: HashMap<String, Cached>) -> FileGuard {
-    READER.with(|slot| {
-        *slot.borrow_mut() = None;
-    });
-    FILES.with(|slot| {
-        *slot.borrow_mut() = Some(files);
+    push(Frame {
+        files,
+        reader: None,
     });
     FileGuard
 }
@@ -47,38 +46,40 @@ pub fn install(files: HashMap<String, Cached>) -> FileGuard {
 /// 先记下怎么读。真正打开磁盘要等到某条操作来取这个路径。
 #[cfg(not(target_arch = "wasm32"))]
 pub fn install_reader(read: fn(&str) -> Cached) -> FileGuard {
-    READER.with(|slot| {
-        *slot.borrow_mut() = Some(read);
-    });
-    FILES.with(|slot| {
-        *slot.borrow_mut() = Some(HashMap::new());
+    push(Frame {
+        files: HashMap::new(),
+        reader: Some(read),
     });
     FileGuard
+}
+
+fn push(frame: Frame) {
+    STACK.with(|slot| slot.borrow_mut().push(frame));
 }
 
 pub fn read_user_file(path: &str) -> Result<Vec<u8>, Error> {
     if let Some(hit) = cached(path) {
         return hit;
     }
-    let reader = READER.with(|slot| *slot.borrow());
+    let reader = STACK.with(|slot| slot.borrow().last().and_then(|frame| frame.reader));
     let Some(reader) = reader else {
         return Err(missing(path));
     };
     let loaded = reader(path);
     let result = cached_result(path, &loaded);
-    FILES.with(|slot| {
-        if let Some(map) = slot.borrow_mut().as_mut() {
-            map.insert(path.to_string(), loaded);
+    STACK.with(|slot| {
+        if let Some(frame) = slot.borrow_mut().last_mut() {
+            frame.files.insert(path.to_string(), loaded);
         }
     });
     result
 }
 
 fn cached(path: &str) -> Option<Result<Vec<u8>, Error>> {
-    FILES.with(|slot| {
+    STACK.with(|slot| {
         let guard = slot.borrow();
-        let map = guard.as_ref()?;
-        map.get(path).map(|item| cached_result(path, item))
+        let frame = guard.last()?;
+        frame.files.get(path).map(|item| cached_result(path, item))
     })
 }
 
@@ -159,5 +160,42 @@ mod tests {
         assert_eq!(HITS.load(Ordering::SeqCst), 1);
         assert_eq!(read_user_file("a.png").unwrap(), b"a.png");
         assert_eq!(HITS.load(Ordering::SeqCst), 1);
+    }
+
+    static OUTER: AtomicUsize = AtomicUsize::new(0);
+    static INNER: AtomicUsize = AtomicUsize::new(0);
+
+    fn outer_read(path: &str) -> Cached {
+        OUTER.fetch_add(1, Ordering::SeqCst);
+        Cached {
+            bytes: Some(format!("outer:{path}").into_bytes()),
+            raw_os: None,
+            kind: io::ErrorKind::Other,
+        }
+    }
+
+    fn inner_read(path: &str) -> Cached {
+        INNER.fetch_add(1, Ordering::SeqCst);
+        Cached {
+            bytes: Some(format!("inner:{path}").into_bytes()),
+            raw_os: None,
+            kind: io::ErrorKind::Other,
+        }
+    }
+
+    #[test]
+    fn inner_guard_restores_the_outer_reader() {
+        OUTER.store(0, Ordering::SeqCst);
+        INNER.store(0, Ordering::SeqCst);
+        let outer = install_reader(outer_read);
+        {
+            let inner = install_reader(inner_read);
+            assert_eq!(read_user_file("a.bin").unwrap(), b"inner:a.bin");
+            drop(inner);
+        }
+        assert_eq!(read_user_file("b.bin").unwrap(), b"outer:b.bin");
+        assert_eq!(OUTER.load(Ordering::SeqCst), 1);
+        assert_eq!(INNER.load(Ordering::SeqCst), 1);
+        drop(outer);
     }
 }

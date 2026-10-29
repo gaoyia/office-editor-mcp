@@ -11,7 +11,7 @@ struct Env {
 }
 
 thread_local! {
-    static ENV: RefCell<Option<Env>> = const { RefCell::new(None) };
+    static ENV: RefCell<Vec<Env>> = const { RefCell::new(Vec::new()) };
 }
 
 pub struct EnvGuard;
@@ -19,7 +19,7 @@ pub struct EnvGuard;
 impl Drop for EnvGuard {
     fn drop(&mut self) {
         ENV.with(|slot| {
-            *slot.borrow_mut() = None;
+            slot.borrow_mut().pop();
         });
     }
 }
@@ -32,7 +32,7 @@ pub fn install(
     random: fn(&mut [u8]),
 ) -> EnvGuard {
     ENV.with(|slot| {
-        *slot.borrow_mut() = Some(Env {
+        slot.borrow_mut().push(Env {
             now_nanos,
             unix_secs_millis,
             unix_secs_nanos,
@@ -44,35 +44,35 @@ pub fn install(
 }
 
 pub fn now_nanos() -> u128 {
-    if let Some(v) = ENV.with(|slot| slot.borrow().as_ref().map(|env| (env.now_nanos)())) {
+    if let Some(v) = ENV.with(|slot| slot.borrow().last().map(|env| (env.now_nanos)())) {
         return v;
     }
     native_now_nanos()
 }
 
 pub fn unix_secs_millis() -> (u64, u32) {
-    if let Some(v) = ENV.with(|slot| slot.borrow().as_ref().map(|env| (env.unix_secs_millis)())) {
+    if let Some(v) = ENV.with(|slot| slot.borrow().last().map(|env| (env.unix_secs_millis)())) {
         return v;
     }
     native_unix_secs_millis()
 }
 
 pub fn unix_secs_nanos() -> (u64, u32) {
-    if let Some(v) = ENV.with(|slot| slot.borrow().as_ref().map(|env| (env.unix_secs_nanos)())) {
+    if let Some(v) = ENV.with(|slot| slot.borrow().last().map(|env| (env.unix_secs_nanos)())) {
         return v;
     }
     native_unix_secs_nanos()
 }
 
 pub fn pid() -> u128 {
-    if let Some(v) = ENV.with(|slot| slot.borrow().as_ref().map(|env| (env.pid)())) {
+    if let Some(v) = ENV.with(|slot| slot.borrow().last().map(|env| (env.pid)())) {
         return v;
     }
     native_pid()
 }
 
 pub fn fill_random(buf: &mut [u8]) {
-    if let Some(fill) = ENV.with(|slot| slot.borrow().as_ref().map(|env| env.random)) {
+    if let Some(fill) = ENV.with(|slot| slot.borrow().last().map(|env| env.random)) {
         fill(buf);
         return;
     }
@@ -152,4 +152,71 @@ pub fn install_native() -> EnvGuard {
         native_pid,
         native_fill_random,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static OUTER: AtomicUsize = AtomicUsize::new(0);
+    static INNER: AtomicUsize = AtomicUsize::new(0);
+
+    fn fixed_now() -> u128 {
+        1
+    }
+
+    fn fixed_millis() -> (u64, u32) {
+        (1, 0)
+    }
+
+    fn fixed_nanos() -> (u64, u32) {
+        (1, 0)
+    }
+
+    fn fixed_pid() -> u128 {
+        1
+    }
+
+    fn outer_random(buf: &mut [u8]) {
+        OUTER.fetch_add(1, Ordering::SeqCst);
+        buf.fill(1);
+    }
+
+    fn inner_random(buf: &mut [u8]) {
+        INNER.fetch_add(1, Ordering::SeqCst);
+        buf.fill(2);
+    }
+
+    #[test]
+    fn inner_guard_restores_the_outer_random() {
+        OUTER.store(0, Ordering::SeqCst);
+        INNER.store(0, Ordering::SeqCst);
+        let outer = install(
+            fixed_now,
+            fixed_millis,
+            fixed_nanos,
+            fixed_pid,
+            outer_random,
+        );
+        {
+            let inner = install(
+                fixed_now,
+                fixed_millis,
+                fixed_nanos,
+                fixed_pid,
+                inner_random,
+            );
+            let mut buf = [0u8; 1];
+            fill_random(&mut buf);
+            assert_eq!(buf, [2]);
+            drop(inner);
+        }
+        let mut buf = [0u8; 1];
+        fill_random(&mut buf);
+        assert_eq!(buf, [1]);
+        assert_eq!(OUTER.load(Ordering::SeqCst), 1);
+        assert_eq!(INNER.load(Ordering::SeqCst), 1);
+        drop(outer);
+    }
 }
