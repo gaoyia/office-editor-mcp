@@ -113,6 +113,15 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
 
+请求里每个字符串，无论是值还是键，都不得含有 XML 1.0 不允许的字符。遇到第一个就拒绝整份请求，不写文件。
+
+- `path` 指向该字段，文案带码位，例如 `U+000B`
+- 错误码是 `InvalidField`
+
+- 不允许：U+0000–U+0008、U+000B、U+000C、U+000E–U+001F、U+FFFE、U+FFFF
+- 允许：TAB、LF、CR，以及 U+0020 以上的普通字符
+- 图片、音视频、OLE、墨迹、3D、字体这些二进制不在这份检查里。它们从路径读入，不把字节放进 JSON
+
 ## help
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。

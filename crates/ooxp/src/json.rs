@@ -74,7 +74,67 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
             }));
         }
     };
+    reject_illegal_xml_chars(&value)?;
     Ok(Request { action, obj })
+}
+
+/// XML 1.0 不允许的码位。TAB、LF、CR 允许。代理项在 Rust 的 `char` 里不会出现。
+fn illegal_xml_scalar(c: char) -> bool {
+    let scalar = c as u32;
+    scalar <= 0x0008
+        || scalar == 0x000B
+        || scalar == 0x000C
+        || (0x000E..=0x001F).contains(&scalar)
+        || scalar == 0xFFFE
+        || scalar == 0xFFFF
+}
+
+fn reject_illegal_xml_chars(value: &Value) -> Result<(), Error> {
+    fn child_key(parent: &str, key: &str) -> String {
+        if parent.is_empty() {
+            key.to_string()
+        } else {
+            format!("{parent}.{key}")
+        }
+    }
+    fn child_index(parent: &str, index: usize) -> String {
+        if parent.is_empty() {
+            format!("[{index}]")
+        } else {
+            format!("{parent}[{index}]")
+        }
+    }
+    fn check(text: &str, path: &str) -> Result<(), Error> {
+        if let Some(scalar) = text.chars().find(|c| illegal_xml_scalar(*c)) {
+            return Err(Error::with_path(
+                ErrorKind::IllegalXmlChar {
+                    scalar: scalar as u32,
+                },
+                path,
+            ));
+        }
+        Ok(())
+    }
+    fn walk(value: &Value, path: &str) -> Result<(), Error> {
+        match value {
+            Value::String(text) => check(text, path),
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    walk(item, &child_index(path, index))?;
+                }
+                Ok(())
+            }
+            Value::Object(map) => {
+                for (key, item) in map {
+                    check(key, path)?;
+                    walk(item, &child_key(path, key))?;
+                }
+                Ok(())
+            }
+            Value::Null | Value::Bool(_) | Value::Number(_) => Ok(()),
+        }
+    }
+    walk(value, "")
 }
 
 pub fn deny_unknown(obj: &Map<String, Value>, allowed: &[&str]) -> Result<(), Error> {

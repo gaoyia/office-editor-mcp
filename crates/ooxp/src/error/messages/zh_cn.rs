@@ -8,6 +8,9 @@ use super::super::kind::{
 pub(super) fn render(kind: &ErrorKind) -> String {
     match kind {
         ErrorKind::InvalidJsonParse { detail } => format!("入参不是 JSON：{detail}"),
+        ErrorKind::IllegalXmlChar { scalar } => {
+            format!("字符串含有 XML 不允许的字符 U+{scalar:04X}")
+        }
         ErrorKind::InvalidJsonNotObject => "入参必须是 JSON 对象".into(),
         ErrorKind::MissingEnvelopeField { field } => format!("缺少 {field}"),
         ErrorKind::UnsupportedSchema => "schemaVersion 必须是 1".into(),

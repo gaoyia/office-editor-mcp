@@ -698,6 +698,7 @@ macro_rules! define_error_kinds {
 
 define_error_kinds! {
     InvalidJsonParse { detail: String } => vec![Self::InvalidJsonParse { detail: "x".into() }],
+    IllegalXmlChar { scalar: u32 } => vec![Self::IllegalXmlChar { scalar: 0x000B }],
     InvalidJsonNotObject => vec![Self::InvalidJsonNotObject],
     MissingEnvelopeField { field: String } => vec![Self::MissingEnvelopeField { field: "action".into() }],
     UnsupportedSchema => vec![Self::UnsupportedSchema],
@@ -2193,7 +2194,8 @@ impl ErrorKind {
             | Self::ProtectionPasswordWrong
             | Self::ProtectionPasswordNeedsDoc
             | Self::InvalidCustomPropType
-            | Self::EmptyCustomPropName => InvalidField,
+            | Self::EmptyCustomPropName
+            | Self::IllegalXmlChar { .. } => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,

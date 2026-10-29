@@ -62,6 +62,7 @@
   - apply 遇到第一期不认识的 `op`
 - **`InvalidField`**（退出码 2）
   - 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键
+  - 字符串含有 XML 不允许的字符。`path` 指向该字段，例如 `ops[2].text`、`workbook.sheets[0].cells[3].value`。文案带码位，例如 `U+000B`
 - **`InvalidRange`**（退出码 2）
   - A1 区域解析失败，或起止颠倒
 - **`InvalidId`**（退出码 2）

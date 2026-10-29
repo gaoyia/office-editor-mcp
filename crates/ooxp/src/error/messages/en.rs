@@ -8,6 +8,9 @@ use super::super::kind::{
 pub(super) fn render(kind: &ErrorKind) -> String {
     match kind {
         ErrorKind::InvalidJsonParse { detail } => format!("Input is not JSON: {detail}"),
+        ErrorKind::IllegalXmlChar { scalar } => {
+            format!("String contains a character XML does not allow: U+{scalar:04X}")
+        }
         ErrorKind::InvalidJsonNotObject => "Input must be a JSON object".into(),
         ErrorKind::MissingEnvelopeField { field } => format!("Missing {field}"),
         ErrorKind::UnsupportedSchema => "schemaVersion must be 1".into(),
