@@ -1102,11 +1102,11 @@ fn ensure_comment_rel_ext(root: &mut Element, rid: &str) {
         {
             return;
         }
-        lst.push_element(frag.root);
+        lst.push_element(frag.take_root());
         return;
     }
     let mut lst = Element::new(root.prefixed("extLst"));
-    lst.push_element(frag.root);
+    lst.push_element(frag.take_root());
     root.push_element(lst);
 }
 
@@ -1187,7 +1187,7 @@ fn build_cm(
         tx = tx_body_xml(text)
     );
     xml::parse(xml.as_bytes())
-        .map(|d| d.root)
+        .map(|d| d.take_root())
         .unwrap_or_else(|_| Element::new("p188:cm"))
 }
 
@@ -1197,7 +1197,7 @@ fn build_reply(guid: &str, author_id: &str, created: &str, text: &str) -> Elemen
         tx = tx_body_xml(text)
     );
     xml::parse(xml.as_bytes())
-        .map(|d| d.root)
+        .map(|d| d.take_root())
         .unwrap_or_else(|_| Element::new("p188:reply"))
 }
 

@@ -227,11 +227,7 @@ fn ensure_part(pkg: &mut Package, wb_part: &str) -> Result<String, Error> {
     let root = Element::new("connections").with_attr("xmlns", SML_NS);
     pkg.set(
         DEFAULT_PART,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
     )?;
     ensure_rel_and_ct(pkg, wb_part, DEFAULT_PART)?;
     Ok(DEFAULT_PART.to_string())

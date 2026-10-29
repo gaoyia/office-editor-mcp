@@ -300,11 +300,7 @@ fn write_link_part(
         .push_then(book);
     pkg.set(
         part,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
     )?;
     let mut rels = Relationships { rels: Vec::new() };
     rels.push(Relationship {

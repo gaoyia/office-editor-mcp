@@ -323,29 +323,24 @@ fn find_frame_in<'a>(
     idx: &mut usize,
     key: &SmartArtKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_frame_in(child, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if is_diagram_frame(el) {
-        *idx += 1;
-        if key_matches(el, *idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_frame_in(e, idx, key) {
-                return Some(found);
+        if is_diagram_frame(el) {
+            *idx += 1;
+            if key_matches(el, *idx, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn find_frame_immut<'a>(root: &'a Element, key: &SmartArtKey) -> Option<&'a Element> {
@@ -358,29 +353,24 @@ fn find_frame_immut_in<'a>(
     idx: &mut usize,
     key: &SmartArtKey,
 ) -> Option<&'a Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return find_frame_immut_in(child, idx, key);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    return crate::xml::Search::Only(child);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if is_diagram_frame(el) {
-        *idx += 1;
-        if key_matches(el, *idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_frame_immut_in(e, idx, key) {
-                return Some(found);
+        if is_diagram_frame(el) {
+            *idx += 1;
+            if key_matches(el, *idx, key) {
+                return crate::xml::Search::Hit(el);
             }
+            return crate::xml::Search::Skip;
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 /// 图示在 Choice 里则整段 AlternateContent 删掉，否则只删 graphicFrame。
@@ -460,10 +450,9 @@ fn find_removal_el<'a>(root: &'a Element, key: &SmartArtKey) -> Option<&'a Eleme
 }
 
 fn find_removal_in<'a>(el: &'a Element, idx: &mut usize, key: &SmartArtKey) -> Option<&'a Element> {
-    for n in &el.children {
-        let Node::Element(e) = n else {
-            continue;
-        };
+    let mut stack: Vec<&Element> = el.element_children().collect();
+    stack.reverse();
+    while let Some(e) = stack.pop() {
         if e.local_name() == "AlternateContent" {
             let mut found = false;
             peek_choice(e, idx, key, &mut found);
@@ -479,8 +468,9 @@ fn find_removal_in<'a>(el: &'a Element, idx: &mut usize, key: &SmartArtKey) -> O
             }
             continue;
         }
-        if let Some(found) = find_removal_in(e, idx, key) {
-            return Some(found);
+        let kids: Vec<&Element> = e.element_children().collect();
+        for child in kids.into_iter().rev() {
+            stack.push(child);
         }
     }
     None

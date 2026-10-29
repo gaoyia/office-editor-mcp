@@ -972,37 +972,32 @@ fn walk_all_paras(el: &Element, f: &mut impl FnMut(&Element)) {
 }
 
 fn find_p<'a>(el: &'a Element, idx: &mut usize, target: &BodyPara) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &el.children[i] {
-                return find_p(e, idx, target);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(e) = &el.children[i] {
+                    return crate::xml::Search::Only(e);
+                }
+            }
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "p" {
+            *idx += 1;
+            let hit = match target {
+                BodyPara::Index(n) => *idx == *n,
+                BodyPara::Hex(hex) => el
+                    .attr_local("paraId")
+                    .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+            };
+            if hit {
+                return crate::xml::Search::Hit(el);
             }
         }
-        return None;
-    }
-    if el.local_name() == "p" {
-        *idx += 1;
-        let hit = match target {
-            BodyPara::Index(n) => *idx == *n,
-            BodyPara::Hex(hex) => el
-                .attr_local("paraId")
-                .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-        };
-        if hit {
-            return Some(el);
-        }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_p(e, idx, target) {
-                return Some(found);
-            }
-        }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_p_mut<'a>(
@@ -1010,38 +1005,32 @@ fn find_p_mut<'a>(
     idx: &mut usize,
     target: &BodyPara,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &mut el.children[i] {
-                return find_p_mut(e, idx, target);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
+            }
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "p" {
+            *idx += 1;
+            let hit = match target {
+                BodyPara::Index(n) => *idx == *n,
+                BodyPara::Hex(hex) => el
+                    .attr_local("paraId")
+                    .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+            };
+            if hit {
+                return crate::xml::SearchMut::Hit;
             }
         }
-        return None;
-    }
-    if el.local_name() == "p" {
-        *idx += 1;
-        let hit = match target {
-            BodyPara::Index(n) => *idx == *n,
-            BodyPara::Hex(hex) => el
-                .attr_local("paraId")
-                .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-        };
-        if hit {
-            return Some(el);
-        }
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_p_mut(e, idx, target) {
-                return Some(found);
-            }
-        }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 pub struct WrittenRun {
@@ -1093,26 +1082,23 @@ fn first_direct_text_run_index(p: &Element) -> Option<usize> {
 }
 
 fn find_first_text_run(el: &Element) -> Option<&Element> {
-    if el.local_name() == "del" || el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &el.children[i] {
-                return find_first_text_run(e);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "del" || el.local_name() == "txbxContent" {
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(e) = &el.children[i] {
+                    return crate::xml::Search::Only(e);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "r" && el.element_children().any(|c| c.local_name() == "t") {
-        return Some(el);
-    }
-    for child in el.element_children() {
-        if let Some(found) = find_first_text_run(child) {
-            return Some(found);
+        if el.local_name() == "r" && el.element_children().any(|c| c.local_name() == "t") {
+            return crate::xml::Search::Hit(el);
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn rpr_covering(el: &Element, at: usize, seen: &mut usize) -> Option<Element> {
@@ -1357,36 +1343,41 @@ fn find_p_path_from(
     target: &BodyPara,
     path: &mut Vec<usize>,
 ) -> bool {
-    if el.local_name() == "txbxContent" {
-        return false;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            path.push(i);
-            let hit = matches!(
-                &el.children[i],
-                Node::Element(e) if find_p_path_from(e, idx, target, path)
-            );
-            if hit {
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    while let Some(rel) = stack.pop() {
+        let Some(node) = element_at(el, &rel) else {
+            continue;
+        };
+        if node.local_name() == "txbxContent" {
+            continue;
+        }
+        if node.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(node) {
+                if matches!(&node.children[i], Node::Element(_)) {
+                    let mut child = rel.clone();
+                    child.push(i);
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        if node.local_name() == "p" {
+            *idx += 1;
+            if p_matches(node, *idx, target) {
+                path.extend_from_slice(&rel);
                 return true;
             }
-            path.pop();
         }
-        return false;
-    }
-    if el.local_name() == "p" {
-        *idx += 1;
-        if p_matches(el, *idx, target) {
-            return true;
-        }
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            if find_p_path_from(e, idx, target, path) {
-                return true;
-            }
-            path.pop();
+        let indexes: Vec<usize> = node
+            .children
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| matches!(n, Node::Element(_)).then_some(i))
+            .collect();
+        for i in indexes.into_iter().rev() {
+            let mut child = rel.clone();
+            child.push(i);
+            stack.push(child);
         }
     }
     false

@@ -303,12 +303,7 @@ struct OpenField {
     in_result: bool,
 }
 
-fn walk_fields(
-    root: &Element,
-    path: &[usize],
-    open: &mut Vec<OpenField>,
-    out: &mut Vec<FieldRec>,
-) {
+fn walk_fields(root: &Element, path: &[usize], open: &mut Vec<OpenField>, out: &mut Vec<FieldRec>) {
     let mut stack = vec![(root, path.to_vec())];
     while let Some((el, path)) = stack.pop() {
         if el.local_name() == "txbxContent" {
@@ -1405,13 +1400,7 @@ fn sdt_contains_sect_pr(root: &Element, sdt_path: &[usize]) -> bool {
     let Some(sdt) = para::element_at(root, sdt_path) else {
         return false;
     };
-    fn walk(el: &Element) -> bool {
-        if el.local_name() == "sectPr" {
-            return true;
-        }
-        el.element_children().any(walk)
-    }
-    walk(sdt)
+    crate::xml::find_by_local(sdt, "sectPr").is_some()
 }
 
 /// 删掉该目录域之后，某段会只剩 `sectPr`，无法整段去掉。

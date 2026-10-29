@@ -647,33 +647,27 @@ pub fn find_sect_pr_mut(root: &mut Element, n: usize) -> Option<&mut Element> {
 }
 
 fn find_sect_mut<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let crate::xml::Node::Element(e) = &mut el.children[i] {
-                return find_sect_mut(e, idx, n);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "sectPr" {
-        *idx += 1;
-        if *idx == n {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let crate::xml::Node::Element(e) = child {
-            if let Some(found) = find_sect_mut(e, idx, n) {
-                return Some(found);
+        if el.local_name() == "sectPr" {
+            *idx += 1;
+            if *idx == n {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 /// 读元素上的整数属性；缺则为 `None`。`signed` 为假时负数报 `XmlBroken`。

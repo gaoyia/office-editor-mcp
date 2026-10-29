@@ -979,11 +979,11 @@ pub(crate) fn set_object_anchor(
         let mut index = 0usize;
         let patched = picture::walk_anchors_mut(&mut doc.root, &mut |anchor, _| {
             if !outer_contains(anchor, is_obj, key, &mut index) {
-                return false;
+                return Ok(false);
             }
             let _ = super::chart_drawing::patch_rel_box(anchor, rel);
-            true
-        });
+            Ok(true)
+        })?;
         if !patched {
             return Err(Error::with_path(not_found, path));
         }
@@ -1456,7 +1456,7 @@ fn update_outer_extent(
     let mut index = 0usize;
     picture::walk_anchors_mut(root, &mut |anchor, _| {
         if !outer_contains(anchor, is_obj, key, &mut index) {
-            return false;
+            return Ok(false);
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
             if let Some(v) = cx {
@@ -1476,8 +1476,9 @@ fn update_outer_extent(
                 }
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_absolute_pos(
@@ -1490,7 +1491,7 @@ fn update_absolute_pos(
     let mut index = 0usize;
     picture::walk_anchors_mut(root, &mut |anchor, _| {
         if !outer_contains(anchor, is_obj, key, &mut index) {
-            return false;
+            return Ok(false);
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
             if let Some(v) = pos_x {
@@ -1500,8 +1501,9 @@ fn update_absolute_pos(
                 picture::set_attr_local(pos, "y", &v.to_string());
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_outer_to(
@@ -1513,21 +1515,13 @@ fn update_outer_to(
     to_off_y: Option<i64>,
 ) -> Result<bool, Error> {
     let mut index = 0usize;
-    let mut marker_err = None;
-    let hit = picture::walk_anchors_mut(root, &mut |anchor, _| {
+    picture::walk_anchors_mut(root, &mut |anchor, _| {
         if !outer_contains(anchor, is_obj, key, &mut index) {
-            return false;
+            return Ok(false);
         }
-        if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
-            marker_err = Some(err);
-            return true;
-        }
-        true
-    });
-    if let Some(err) = marker_err {
-        return Err(err);
-    }
-    Ok(hit)
+        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;
+        Ok(true)
+    })
 }
 
 pub(crate) fn find_object_mut<'a>(
@@ -1544,61 +1538,63 @@ fn find_object_in<'a>(
     key: &DrawKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            if is_obj(el) {
-                *index += 1;
-                if key_matches(key, &payload_cnv(el), *index) {
-                    return Some(el);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if crate::drawing_math::is_math_ac(el) {
+                if is_obj(el) {
+                    *index += 1;
+                    if key_matches(key, &payload_cnv(el), *index) {
+                        return crate::xml::SearchMut::Hit;
+                    }
+                }
+                return crate::xml::SearchMut::Skip;
+            }
+            let i = el
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
+                .or_else(|| {
+                    el.children
+                        .iter()
+                        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
+                });
+            if let Some(i) = i {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
                 }
             }
-            return None;
+            return crate::xml::SearchMut::Skip;
         }
-        let i = el
-            .children
-            .iter()
-            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-            .or_else(|| {
+        if is_obj(el) {
+            *index += 1;
+            if key_matches(key, &payload_cnv(el), *index) {
+                return crate::xml::SearchMut::Hit;
+            }
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "grpSp" {
+            return crate::xml::SearchMut::Kids(
                 el.children
                     .iter()
-                    .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
-            })?;
-        let Node::Element(child) = &mut el.children[i] else {
-            return None;
-        };
-        return find_object_in(child, is_obj, key, index);
-    }
-    if is_obj(el) {
-        *index += 1;
-        if key_matches(key, &payload_cnv(el), *index) {
-            return Some(el);
+                    .enumerate()
+                    .filter_map(|(i, n)| match n {
+                        Node::Element(e) if !is_group_chrome(e.local_name()) => Some(i),
+                        _ => None,
+                    })
+                    .collect(),
+            );
         }
-        return None;
-    }
-    if el.local_name() == "grpSp" {
-        for child in el.children.as_mut_slice() {
-            if let Node::Element(e) = child {
-                if is_group_chrome(e.local_name()) {
-                    continue;
-                }
-                if let Some(found) = find_object_in(e, is_obj, key, index) {
-                    return Some(found);
-                }
-            }
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if is_geom(e.local_name()) {
-                continue;
-            }
-            if let Some(found) = find_object_in(e, is_obj, key, index) {
-                return Some(found);
-            }
-        }
-    }
-    None
+        crate::xml::SearchMut::Kids(
+            el.children
+                .iter()
+                .enumerate()
+                .filter_map(|(i, n)| match n {
+                    Node::Element(e) if !is_geom(e.local_name()) => Some(i),
+                    _ => None,
+                })
+                .collect(),
+        )
+    })
 }
 
 pub(crate) fn find_object<'a>(
@@ -1615,48 +1611,42 @@ fn find_object_immut<'a>(
     key: &DrawKey,
     index: &mut usize,
 ) -> Option<&'a Element> {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            if is_obj(el) {
-                *index += 1;
-                if key_matches(key, &payload_cnv(el), *index) {
-                    return Some(el);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if crate::drawing_math::is_math_ac(el) {
+                if is_obj(el) {
+                    *index += 1;
+                    if key_matches(key, &payload_cnv(el), *index) {
+                        return crate::xml::Search::Hit(el);
+                    }
                 }
+                return crate::xml::Search::Skip;
             }
-            return None;
-        }
-        if let Some(c) = first_choice(el) {
-            return find_object_immut(c, is_obj, key, index);
-        }
-        return None;
-    }
-    if is_obj(el) {
-        *index += 1;
-        if key_matches(key, &payload_cnv(el), *index) {
-            return Some(el);
-        }
-        return None;
-    }
-    if el.local_name() == "grpSp" {
-        for c in el.element_children() {
-            if is_group_chrome(c.local_name()) {
-                continue;
+            if let Some(c) = first_choice(el) {
+                return crate::xml::Search::Only(c);
             }
-            if let Some(found) = find_object_immut(c, is_obj, key, index) {
-                return Some(found);
+            return crate::xml::Search::Skip;
+        }
+        if is_obj(el) {
+            *index += 1;
+            if key_matches(key, &payload_cnv(el), *index) {
+                return crate::xml::Search::Hit(el);
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    for c in el.element_children() {
-        if is_geom(c.local_name()) {
-            continue;
+        if el.local_name() == "grpSp" {
+            return crate::xml::Search::Kids(
+                el.element_children()
+                    .filter(|c| !is_group_chrome(c.local_name()))
+                    .collect(),
+            );
         }
-        if let Some(found) = find_object_immut(c, is_obj, key, index) {
-            return Some(found);
-        }
-    }
-    None
+        crate::xml::Search::Kids(
+            el.element_children()
+                .filter(|c| !is_geom(c.local_name()))
+                .collect(),
+        )
+    })
 }
 
 pub(crate) fn remove_object(

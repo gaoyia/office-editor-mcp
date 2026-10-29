@@ -105,10 +105,7 @@ fn has_ext_uri(el: &Element, uri: &str) -> bool {
 }
 
 fn has_local(el: &Element, local: &str) -> bool {
-    if el.local_name() == local {
-        return true;
-    }
-    el.element_children().any(|c| has_local(c, local))
+    crate::xml::find_by_local(el, local).is_some()
 }
 
 fn wm_kind(drawing: &Element) -> &'static str {

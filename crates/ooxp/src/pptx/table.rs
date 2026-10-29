@@ -465,25 +465,20 @@ fn find_tbl(frame: &Element) -> Option<&Element> {
 }
 
 fn find_tbl_in(el: &Element) -> Option<&Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return find_tbl_in(child);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    return crate::xml::Search::Only(child);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "tbl" {
-        return Some(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(t) = find_tbl_in(e) {
-                return Some(t);
-            }
+        if el.local_name() == "tbl" {
+            return crate::xml::Search::Hit(el);
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_tbl_mut(frame: &mut Element) -> Option<&mut Element> {
@@ -516,25 +511,20 @@ pub(crate) fn cell_tx_mut<'a>(
 }
 
 fn find_tbl_mut_in(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_tbl_mut_in(child);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "tbl" {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(t) = find_tbl_mut_in(e) {
-                return Some(t);
-            }
+        if el.local_name() == "tbl" {
+            return crate::xml::SearchMut::Hit;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn col_count(tbl: &Element) -> usize {
@@ -1042,29 +1032,24 @@ fn find_frame_in<'a>(
     idx: &mut usize,
     key: &TableKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_frame_in(child, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if is_table_frame(el) {
-        *idx += 1;
-        if key_matches(el, *idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_frame_in(e, idx, key) {
-                return Some(found);
+        if is_table_frame(el) {
+            *idx += 1;
+            if key_matches(el, *idx, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn missing_table(id: &str, i: usize) -> Error {

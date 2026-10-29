@@ -598,36 +598,27 @@ fn walk_runs<'a>(root: &'a Element, in_del: bool, out: &mut Vec<&'a Element>) {
 }
 
 fn find_run_in<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "del" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = para::first_alt_child_index(el) {
-            if let Node::Element(e) = &mut el.children[i] {
-                return find_run_in(e, idx, n);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "del" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = para::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "r" {
-        *idx += 1;
-        if *idx == n {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_run_in(e, idx, n) {
-                return Some(found);
+        if el.local_name() == "r" {
+            *idx += 1;
+            if *idx == n {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn run_visible_text(r: &Element) -> String {

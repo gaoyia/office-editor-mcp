@@ -131,29 +131,8 @@ pub fn cnv_of_ac(ac: &Element) -> (Option<String>, String) {
         .unwrap_or((None, String::new()))
 }
 
-fn contains_omath(el: &Element) -> bool {
-    el.local_name() == "oMath" || el.element_children().any(contains_omath)
-}
-
 pub fn find_omath_mut(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "oMath" {
-        return Some(el);
-    }
-    let mut i = 0usize;
-    while i < el.children.len() {
-        let hit = match &el.children[i] {
-            crate::xml::Node::Element(e) => contains_omath(e),
-            _ => false,
-        };
-        if hit {
-            let crate::xml::Node::Element(child) = &mut el.children[i] else {
-                return None;
-            };
-            return find_omath_mut(child);
-        }
-        i += 1;
-    }
-    None
+    crate::xml::find_by_local_mut(el, "oMath")
 }
 
 fn math_t(text: &str) -> Element {

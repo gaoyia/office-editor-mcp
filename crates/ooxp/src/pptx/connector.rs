@@ -246,35 +246,29 @@ pub fn find_mut<'a>(root: &'a mut Element, key: &ShapeKey) -> Option<&'a mut Ele
 }
 
 fn find_in<'a>(el: &'a mut Element, idx: &mut usize, key: &ShapeKey) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_in(child, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "cxnSp" {
-        *idx += 1;
-        let hit = match key {
-            ShapeKey::Index(n) => *idx == *n,
-            ShapeKey::Id(req) => cnv_pr(el)
-                .and_then(|c| c.attr("id"))
-                .is_some_and(|id| shape::ids_match(id, req)),
-        };
-        if hit {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_in(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "cxnSp" {
+            *idx += 1;
+            if match key {
+                ShapeKey::Index(n) => *idx == *n,
+                ShapeKey::Id(req) => cnv_pr(el)
+                    .and_then(|c| c.attr("id"))
+                    .is_some_and(|id| shape::ids_match(id, req)),
+            } {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 pub fn insert(

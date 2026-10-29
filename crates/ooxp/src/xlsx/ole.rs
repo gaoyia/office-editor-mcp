@@ -1021,20 +1021,13 @@ fn patch_dummy_to(
 ) -> Result<bool, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
         let mut draw = xml::parse(pkg.get(&part)?)?;
-        let mut marker_err = None;
         let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
             if kind != AnchorKind::TwoCell || !dummy_in_anchor(anchor, sid) {
-                return false;
+                return Ok(false);
             }
-            if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
-                marker_err = Some(err);
-                return true;
-            }
-            true
-        });
-        if let Some(err) = marker_err {
-            return Err(err);
-        }
+            picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;
+            Ok(true)
+        })?;
         if hit {
             pkg.set(&part, draw.to_bytes()?)?;
             return Ok(true);
@@ -1057,7 +1050,7 @@ fn patch_dummy_ext(
             if !matches!(kind, AnchorKind::OneCell | AnchorKind::Absolute)
                 || !dummy_in_anchor(anchor, sid)
             {
-                return false;
+                return Ok(false);
             }
             let (cur_x, cur_y) = read_ext(anchor);
             let nx = cx.or(cur_x);
@@ -1071,8 +1064,8 @@ fn patch_dummy_ext(
                 }
             }
             set_nested_xfrm_ext(anchor, nx, ny);
-            true
-        });
+            Ok(true)
+        })?;
         if hit {
             pkg.set(&part, draw.to_bytes()?)?;
             return Ok(true);

@@ -244,12 +244,7 @@ impl WalkCtx {
     }
 }
 
-fn walk_rev(
-    root: &Element,
-    path: &[usize],
-    ctx: WalkCtx,
-    out: &mut Vec<(Vec<usize>, RevKind)>,
-) {
+fn walk_rev(root: &Element, path: &[usize], ctx: WalkCtx, out: &mut Vec<(Vec<usize>, RevKind)>) {
     let mut stack = vec![(root, path.to_vec(), ctx)];
     while let Some((el, path, ctx)) = stack.pop() {
         if el.local_name() == "txbxContent" {

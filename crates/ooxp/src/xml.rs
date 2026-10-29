@@ -1,6 +1,7 @@
 //! 小型 XML 树：给 OPC 关系文件和 SpreadsheetML 部件做手术刀式改写。
 
 use std::io::Cursor;
+use std::mem::ManuallyDrop;
 
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
@@ -10,7 +11,45 @@ use crate::error::{Error, XmlIssue};
 #[derive(Clone, Debug)]
 pub struct Document {
     pub decl: Option<String>,
-    pub root: Element,
+    /// 离开作用域时由 `Drop` 在堆上拆掉，避免深层树的递归析构。
+    pub root: ManuallyDrop<Element>,
+}
+
+impl Document {
+    pub fn new(decl: Option<String>, root: Element) -> Self {
+        Self {
+            decl,
+            root: ManuallyDrop::new(root),
+        }
+    }
+
+    /// 把根交出去。空壳留给 `Drop`，避免再拆一次。
+    pub fn take_root(mut self) -> Element {
+        let root = unsafe { ManuallyDrop::take(&mut self.root) };
+        unsafe {
+            std::ptr::write(&mut self.root, ManuallyDrop::new(Element::new("empty")));
+        }
+        root
+    }
+}
+
+impl Drop for Document {
+    fn drop(&mut self) {
+        let root = unsafe { ManuallyDrop::take(&mut self.root) };
+        dismantle(root);
+    }
+}
+
+/// 在堆上拆掉子元素，使这一棵树离开作用域时不再按层数递归析构。
+pub(crate) fn dismantle(mut el: Element) {
+    let mut stack = vec![std::mem::take(&mut el.children)];
+    while let Some(children) = stack.pop() {
+        for node in children {
+            if let Node::Element(mut child) = node {
+                stack.push(std::mem::take(&mut child.children));
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -175,6 +214,154 @@ pub(crate) fn walk_elements<'a>(root: &'a Element, f: &mut impl FnMut(&'a Elemen
     });
 }
 
+/// 先序查找第一个 local name 相符的元素。栈在堆上。
+pub(crate) fn find_by_local<'a>(root: &'a Element, local: &str) -> Option<&'a Element> {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == local {
+            return Some(el);
+        }
+        for child in el.children.iter().rev() {
+            if let Node::Element(inner) = child {
+                stack.push(inner);
+            }
+        }
+    }
+    None
+}
+
+/// 先序查找，命中后返回可变引用。栈在堆上。
+pub(crate) fn find_by_local_mut<'a>(root: &'a mut Element, local: &str) -> Option<&'a mut Element> {
+    if root.local_name() == local {
+        return Some(root);
+    }
+    let mut stack: Vec<Vec<usize>> = Vec::new();
+    push_element_children(root, &[], &mut stack);
+    while let Some(path) = stack.pop() {
+        if element_at_ref(root, &path).local_name() == local {
+            return Some(element_at_mut(root, &path));
+        }
+        push_element_children(root, &path, &mut stack);
+    }
+    None
+}
+
+/// 不可变先序查找的一步。`Kids` 按从左到右。
+pub(crate) enum Search<'a, T> {
+    Hit(T),
+    Skip,
+    Only(&'a Element),
+    Kids(Vec<&'a Element>),
+}
+
+impl<'a, T> Search<'a, T> {
+    pub(crate) fn down(el: &'a Element) -> Self {
+        Search::Kids(el.element_children().collect())
+    }
+}
+
+/// 可变先序查找的一步。下标是 `children` 里的位置。`Kids` 按从左到右。
+pub(crate) enum SearchMut {
+    Hit,
+    HitChild(usize),
+    Skip,
+    Only(usize),
+    Kids(Vec<usize>),
+}
+
+impl SearchMut {
+    pub(crate) fn down(el: &Element) -> Self {
+        SearchMut::Kids(element_indexes(el))
+    }
+}
+
+pub(crate) fn element_indexes(el: &Element) -> Vec<usize> {
+    el.children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| matches!(node, Node::Element(_)).then_some(index))
+        .collect()
+}
+
+/// 先序查找。栈在堆上。
+pub(crate) fn search<'a, T>(
+    root: &'a Element,
+    mut step: impl FnMut(&'a Element) -> Search<'a, T>,
+) -> Option<T> {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        match step(el) {
+            Search::Hit(value) => return Some(value),
+            Search::Skip => {}
+            Search::Only(child) => stack.push(child),
+            Search::Kids(children) => {
+                for child in children.into_iter().rev() {
+                    stack.push(child);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// 先序查找，命中后返回可变引用。栈在堆上。
+pub(crate) fn search_mut(
+    root: &mut Element,
+    mut step: impl FnMut(&Element) -> SearchMut,
+) -> Option<&mut Element> {
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    while let Some(path) = stack.pop() {
+        let decision = step(element_at_ref(root, &path));
+        match decision {
+            SearchMut::Hit => return Some(element_at_mut(root, &path)),
+            SearchMut::HitChild(index) => {
+                let mut child = path;
+                child.push(index);
+                return Some(element_at_mut(root, &child));
+            }
+            SearchMut::Skip => {}
+            SearchMut::Only(index) => {
+                let mut child = path;
+                child.push(index);
+                stack.push(child);
+            }
+            SearchMut::Kids(indexes) => {
+                for index in indexes.into_iter().rev() {
+                    let mut child = path.clone();
+                    child.push(index);
+                    stack.push(child);
+                }
+            }
+        }
+    }
+    None
+}
+
+pub(crate) fn element_at_ref<'a>(root: &'a Element, path: &[usize]) -> &'a Element {
+    let mut cur = root;
+    for &index in path {
+        cur = match &cur.children[index] {
+            Node::Element(child) => child,
+            Node::Text(_) => unreachable!("路径只指向元素"),
+        };
+    }
+    cur
+}
+
+fn push_element_children(root: &Element, path: &[usize], stack: &mut Vec<Vec<usize>>) {
+    let indexes: Vec<usize> = element_at_ref(root, path)
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(index, node)| matches!(node, Node::Element(_)).then_some(index))
+        .collect();
+    for index in indexes.into_iter().rev() {
+        let mut child = path.to_vec();
+        child.push(index);
+        stack.push(child);
+    }
+}
+
 pub(crate) fn element_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
     let mut cur = root;
     for &index in path {
@@ -249,7 +436,7 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
     }
 
     let root = root.ok_or_else(|| Error::xml(XmlIssue::NoRoot))?;
-    Ok(Document { decl, root })
+    Ok(Document::new(decl, root))
 }
 
 fn start_to_element(e: &BytesStart<'_>, reader: &Reader<&[u8]>) -> Result<Element, Error> {
@@ -388,7 +575,7 @@ mod tests {
     /// local name 都叫 `id`。精确名必须能把两者分开。
     fn sld_id() -> Element {
         let doc = parse(br#"<p:sldId id="256" r:id="rId2"/>"#).unwrap();
-        doc.root
+        doc.take_root()
     }
 
     #[test]
@@ -431,7 +618,7 @@ mod tests {
     #[test]
     fn remove_attr_needs_the_prefix_spelled_out() {
         let doc = parse(br#"<a:t xml:space="preserve"> x </a:t>"#).unwrap();
-        let mut el = doc.root;
+        let mut el = doc.take_root();
         el.remove_attr("space");
         assert_eq!(el.attr("xml:space"), Some("preserve"));
         el.remove_attr("xml:space");
@@ -455,27 +642,13 @@ mod tests {
             parent.push_element(el);
             el = parent;
         }
-        assert_eq!(el.text_content(), "z");
+        let doc = Document::new(None, el);
+        assert_eq!(doc.root.text_content(), "z");
         let mut seen = 0u32;
-        walk_elements(&el, &mut |_| seen += 1);
+        walk_elements(&doc.root, &mut |_| seen += 1);
         assert_eq!(seen, 8_001);
-        let mut doc = Document {
-            decl: None,
-            root: el,
-        };
+        assert!(find_by_local(&doc.root, "missing").is_none());
         let bytes = doc.to_bytes().unwrap();
-        dismantle(std::mem::replace(&mut doc.root, Element::new("a")));
         assert!(bytes.windows(8).any(|window| window == b"<a>z</a>"));
-    }
-
-    fn dismantle(mut el: Element) {
-        let mut stack = vec![std::mem::take(&mut el.children)];
-        while let Some(children) = stack.pop() {
-            for node in children {
-                if let Node::Element(mut child) = node {
-                    stack.push(std::mem::take(&mut child.children));
-                }
-            }
-        }
     }
 }

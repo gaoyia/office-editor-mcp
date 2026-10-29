@@ -217,47 +217,37 @@ fn collect_slot_text(el: &Element, out: &mut String) {
 }
 
 fn find_sp_ph<'a>(el: &'a Element, ph: &str) -> Option<&'a Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return find_sp_ph(child, ph);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    return crate::xml::Search::Only(child);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "sp" && notes::placeholder_type(el) == Some(ph) {
-        return Some(el);
-    }
-    for child in &el.children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_sp_ph(e, ph) {
-                return Some(found);
-            }
+        if el.local_name() == "sp" && notes::placeholder_type(el) == Some(ph) {
+            return crate::xml::Search::Hit(el);
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_sp_ph_mut<'a>(el: &'a mut Element, ph: &str) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_sp_ph_mut(child, ph);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "sp" && notes::placeholder_type(el) == Some(ph) {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_sp_ph_mut(e, ph) {
-                return Some(found);
-            }
+        if el.local_name() == "sp" && notes::placeholder_type(el) == Some(ph) {
+            return crate::xml::SearchMut::Hit;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn append_placeholder(root: &mut Element, ph: &str) -> Result<(), Error> {
@@ -272,7 +262,7 @@ fn append_placeholder(root: &mut Element, ph: &str) -> Result<(), Error> {
         r#"<?xml version="1.0" encoding="UTF-8"?><p:sp xmlns:a="{DML_NS}" xmlns:p="{PML_NS}"><p:nvSpPr><p:cNvPr id="{cnv}" name="{name}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="{ph}"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>"#
     );
     let frag = xml::parse(xml.as_bytes())?;
-    picture::insert_into_sp_tree(root, frag.root)
+    picture::insert_into_sp_tree(root, frag.take_root())
 }
 
 fn enable_hf(root: &mut Element, ph: &str) {

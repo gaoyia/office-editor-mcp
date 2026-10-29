@@ -1853,12 +1853,9 @@ fn table_cache_xml(name: &str, field: &str, table_id: u32, column: u32) -> Vec<u
     let mut lst = Element::new("extLst");
     lst.push_element(ext);
     root.push_element(lst);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
-    .to_bytes()
-    .unwrap_or_default()
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
+        .to_bytes()
+        .unwrap_or_default()
 }
 
 fn pivot_cache_xml(
@@ -1896,12 +1893,9 @@ fn pivot_cache_xml(
     let mut data = Element::new("data");
     data.push_element(tabular);
     root.push_element(data);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
-    .to_bytes()
-    .unwrap_or_default()
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
+        .to_bytes()
+        .unwrap_or_default()
 }
 
 fn timeline_cache_xml(
@@ -1934,12 +1928,9 @@ fn timeline_cache_xml(
         .with_attr("sourceName", field);
     root.push_element(pts);
     root.push_element(state);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
-    .to_bytes()
-    .unwrap_or_default()
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
+        .to_bytes()
+        .unwrap_or_default()
 }
 
 fn ensure_timelines_part(
@@ -1958,11 +1949,7 @@ fn ensure_timelines_part(
     let root = Element::new("timelines").with_attr("xmlns", X15_NS);
     pkg.set(
         &part,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
     )?;
     let rid = add_rel(pkg, sheet_part, REL_TIMELINE, &part)?;
     picture::ensure_xmlns(&mut sheet_doc.root, "r", REL_NS);
@@ -2078,11 +2065,7 @@ fn ensure_slicers_part(
     let root = Element::new("slicers").with_attr("xmlns", X14_NS);
     pkg.set(
         &part,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
     )?;
     let rid = add_rel(pkg, sheet_part, REL_SLICER, &part)?;
     picture::ensure_xmlns(&mut sheet_doc.root, "r", REL_NS);

@@ -1804,13 +1804,13 @@ fn update_extent(root: &mut Element, key: &ChartKey, cx: Option<i64>, cy: Option
             .element_children()
             .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
         else {
-            return false;
+            return Ok(false);
         };
         // 上面是不可变借用，下面再按 key 改。先记下是否匹配。
         let raw = cnv_of_frame(frame).0;
         index += 1;
         if !key_matches(key, &raw, index) {
-            return false;
+            return Ok(false);
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
             if let Some(v) = cx {
@@ -1830,8 +1830,9 @@ fn update_extent(root: &mut Element, key: &ChartKey, cx: Option<i64>, cy: Option
                 }
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_absolute_pos(
@@ -1846,12 +1847,12 @@ fn update_absolute_pos(
             .element_children()
             .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
         else {
-            return false;
+            return Ok(false);
         };
         let raw = cnv_of_frame(frame).0;
         index += 1;
         if !key_matches(key, &raw, index) {
-            return false;
+            return Ok(false);
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
             if let Some(v) = pos_x {
@@ -1861,8 +1862,9 @@ fn update_absolute_pos(
                 picture::set_attr_local(pos, "y", &v.to_string());
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_two_cell_to(
@@ -1873,29 +1875,21 @@ fn update_two_cell_to(
     to_off_y: Option<i64>,
 ) -> Result<bool, Error> {
     let mut index = 0usize;
-    let mut marker_err = None;
-    let hit = picture::walk_anchors_mut(root, &mut |anchor, _| {
+    picture::walk_anchors_mut(root, &mut |anchor, _| {
         let Some(frame) = anchor
             .element_children()
             .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
         else {
-            return false;
+            return Ok(false);
         };
         let raw = cnv_of_frame(frame).0;
         index += 1;
         if !key_matches(key, &raw, index) {
-            return false;
+            return Ok(false);
         }
-        if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
-            marker_err = Some(err);
-            return true;
-        }
-        true
-    });
-    if let Some(err) = marker_err {
-        return Err(err);
-    }
-    Ok(hit)
+        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;
+        Ok(true)
+    })
 }
 
 trait FromLocalName {

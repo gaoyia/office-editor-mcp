@@ -770,29 +770,26 @@ fn find_ac<'a>(root: &'a Element, key: &InkKey) -> Option<&'a Element> {
 }
 
 fn find_ac_walk<'a>(el: &'a Element, key: &InkKey, index: &mut usize) -> Option<&'a Element> {
-    if el.local_name() == "AlternateContent" {
-        let mut parts = Vec::new();
-        collect_parts(el, &mut parts);
-        if !parts.is_empty() {
-            let mut hit = false;
-            for part in &parts {
-                *index += 1;
-                if key_matches(key, &cnv_of(part).0, *index) {
-                    hit = true;
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            let mut parts = Vec::new();
+            collect_parts(el, &mut parts);
+            if !parts.is_empty() {
+                let mut hit = false;
+                for part in &parts {
+                    *index += 1;
+                    if key_matches(key, &cnv_of(part).0, *index) {
+                        hit = true;
+                    }
                 }
+                if hit {
+                    return crate::xml::Search::Hit(el);
+                }
+                return crate::xml::Search::Skip;
             }
-            if hit {
-                return Some(el);
-            }
-            return None;
         }
-    }
-    for c in el.element_children() {
-        if let Some(found) = find_ac_walk(c, key, index) {
-            return Some(found);
-        }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn collect_rids(el: &Element, out: &mut Vec<String>) {
@@ -919,10 +916,7 @@ fn rid_still_used(root: &Element, rid: &str) -> bool {
 }
 
 fn walk(el: &Element, f: &mut dyn FnMut(&Element)) {
-    f(el);
-    for c in el.element_children() {
-        walk(c, f);
-    }
+    crate::xml::walk_elements(el, &mut |node| f(node));
 }
 
 fn read_inkml(path: &str, json_path: &str) -> Result<Vec<u8>, Error> {

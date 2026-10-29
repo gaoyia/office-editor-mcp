@@ -535,18 +535,15 @@ fn find_ac<'a>(root: &'a Element, key: &InkKey) -> Option<&'a Element> {
 }
 
 fn find_ac_walk<'a>(el: &'a Element, key: &InkKey, index: &mut usize) -> Option<&'a Element> {
-    if el.local_name() == "AlternateContent" {
-        if ac_matches(el, key, index) {
-            return Some(el);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if ac_matches(el, key, index) {
+                return crate::xml::Search::Hit(el);
+            }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    for child in el.element_children() {
-        if let Some(found) = find_ac_walk(child, key, index) {
-            return Some(found);
-        }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_ac_mut<'a>(root: &'a mut Element, key: &InkKey) -> Option<&'a mut Element> {
@@ -558,21 +555,15 @@ fn find_ac_walk_mut<'a>(
     key: &InkKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if ac_matches(el, key, index) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_ac_walk_mut(e, key, index) {
-                return Some(found);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if ac_matches(el, key, index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn ac_matches(ac: &Element, key: &InkKey, index: &mut usize) -> bool {
@@ -763,10 +754,7 @@ fn rid_still_used(root: &Element, rid: &str) -> bool {
 }
 
 fn walk(el: &Element, f: &mut dyn FnMut(&Element)) {
-    f(el);
-    for c in el.element_children() {
-        walk(c, f);
-    }
+    crate::xml::walk_elements(el, &mut |node| f(node));
 }
 
 fn read_inkml(path: &str, json_path: &str) -> Result<Vec<u8>, Error> {

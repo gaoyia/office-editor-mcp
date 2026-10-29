@@ -1160,52 +1160,32 @@ fn find_grouped_pic_cnv_walk<'a>(
     key: &PicKey,
     idx: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == "pic" && pic_has_blip(el) {
-        *idx += 1;
-        if matches_grouped(el, key, *idx) {
-            return find_cnv_pr_mut(el);
+    let pic = crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_grouped_pic_cnv_walk(e, key, idx) {
-                return Some(found);
+        if el.local_name() == "pic" && pic_has_blip(el) {
+            *idx += 1;
+            if matches_grouped(el, key, *idx) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })?;
+    find_cnv_pr_mut(pic)
 }
 
 fn find_cnv_pr_mut(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "cNvPr" {
-        return Some(el);
-    }
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(c) = child {
-            if c.local_name() == "cNvPr" || has_cnv_pr(c) {
-                return find_cnv_pr_mut(c);
-            }
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "cNvPr" {
+            return crate::xml::SearchMut::Hit;
         }
-    }
-    None
-}
-
-fn has_cnv_pr(el: &Element) -> bool {
-    let mut hit = false;
-    walk_outside_txbx(el, &mut |e| {
-        if e.local_name() == "cNvPr" {
-            hit = true;
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
         }
-    });
-    hit
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn pic_has_blip(pic: &Element) -> bool {
@@ -1512,31 +1492,26 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
 }
 
 fn find_drawing_walk<'a>(el: &'a Element, idx: &mut usize, key: &PicKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &el.children[i] {
-                return find_drawing_walk(e, idx, key);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(e) = &el.children[i] {
+                    return crate::xml::Search::Only(e);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" {
-        if drawing_has_pic_match(el, idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_drawing_walk(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "drawing" {
+            if drawing_has_pic_match(el, idx, key) {
+                return crate::xml::Search::Hit(el);
             }
+            return crate::xml::Search::Skip;
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_drawing_mut_walk<'a>(
@@ -1544,32 +1519,26 @@ fn find_drawing_mut_walk<'a>(
     idx: &mut usize,
     key: &PicKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &mut el.children[i] {
-                return find_drawing_mut_walk(e, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" {
-        if drawing_has_pic_match(el, idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_drawing_mut_walk(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "drawing" {
+            if drawing_has_pic_match(el, idx, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
@@ -1738,18 +1707,7 @@ fn set_attr_local(el: &mut Element, local: &str, value: &str) {
 }
 
 fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_local_mut(e, local) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local_mut(el, local)
 }
 
 fn extent_el(cx: i64, cy: i64) -> Element {

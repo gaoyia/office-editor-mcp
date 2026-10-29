@@ -825,35 +825,33 @@ fn find_frame_walk_mut<'a>(
     key: &Model3dKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        let children = el.children.as_mut_slice();
-        for child in children {
-            if let Node::Element(e) = child {
-                if e.local_name() == "Choice" && crate::model3d::choice_requires_am3d(e) {
-                    if let Some(found) = find_frame_walk_mut(e, key, index) {
-                        return Some(found);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            let indexes: Vec<usize> = el
+                .children
+                .iter()
+                .enumerate()
+                .filter_map(|(i, n)| match n {
+                    Node::Element(e)
+                        if e.local_name() == "Choice"
+                            && crate::model3d::choice_requires_am3d(e) =>
+                    {
+                        Some(i)
                     }
-                }
+                    _ => None,
+                })
+                .collect();
+            return crate::xml::SearchMut::Kids(indexes);
+        }
+        if el.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(el) {
+            *index += 1;
+            if key_matches(key, &cnv_of(el).0, *index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(el) {
-        *index += 1;
-        if key_matches(key, &cnv_of(el).0, *index) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_frame_walk_mut(e, key, index) {
-                return Some(found);
-            }
-        }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_model3d(el: &mut Element, key: &Model3dKey) -> bool {

@@ -307,38 +307,29 @@ fn find_sp_mut<'a>(
     idx: &mut usize,
     target: &ShapeKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            return None;
-        }
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_sp_mut(child, idx, target);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
-        *idx += 1;
-        let hit = match target {
-            ShapeKey::Index(n) => *idx == *n,
-            ShapeKey::Id(req) => cnv_pr(el)
-                .and_then(|c| c.attr("id"))
-                .is_some_and(|id| ids_match(id, req)),
-        };
-        if hit {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_sp_mut(e, idx, target) {
-                return Some(found);
+        if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
+            *idx += 1;
+            if match target {
+                ShapeKey::Index(n) => *idx == *n,
+                ShapeKey::Id(req) => cnv_pr(el)
+                    .and_then(|c| c.attr("id"))
+                    .is_some_and(|id| ids_match(id, req)),
+            } {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 pub(crate) fn ids_match(file: &str, req: &str) -> bool {

@@ -841,10 +841,7 @@ fn build_cache_def(
         .with_attr("recordCount", records.len().to_string());
     root.push_element(src);
     root.push_element(fields);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
 fn shared_items(col: &[&CacheVal]) -> Element {
@@ -934,10 +931,7 @@ fn build_cache_records(records: &[Vec<CacheVal>]) -> Document {
         }
         root.push_element(r);
     }
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
 fn col_uniques(records: &[Vec<CacheVal>], col: usize) -> Vec<CacheVal> {
@@ -1016,10 +1010,7 @@ fn build_pivot_table_xml(
     push_location(&mut root, origin, axes, headers, unique_counts);
     push_layout(&mut root, axes, headers, unique_counts);
     push_style(&mut root);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
 fn replace_layout(

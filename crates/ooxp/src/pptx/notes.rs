@@ -491,25 +491,20 @@ fn find_body_mut(root: &mut Element) -> Option<&mut Element> {
 }
 
 fn find_sp_ph_mut<'a>(el: &'a mut Element, ph: &str) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_sp_ph_mut(child, ph);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "sp" && placeholder_type(el) == Some(ph) {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_sp_ph_mut(e, ph) {
-                return Some(found);
-            }
+        if el.local_name() == "sp" && placeholder_type(el) == Some(ph) {
+            return crate::xml::SearchMut::Hit;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn append_body_placeholder(root: &mut Element) -> Result<(), Error> {
@@ -518,7 +513,7 @@ fn append_body_placeholder(root: &mut Element) -> Result<(), Error> {
         r#"<?xml version="1.0" encoding="UTF-8"?><p:sp xmlns:a="{DML_NS}" xmlns:p="{PML_NS}"><p:nvSpPr><p:cNvPr id="{cnv}" name="备注占位符"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="zh-CN"/></a:p></p:txBody></p:sp>"#
     );
     let frag = xml::parse(xml.as_bytes())?;
-    picture::insert_into_sp_tree(root, frag.root)
+    picture::insert_into_sp_tree(root, frag.take_root())
 }
 
 pub fn reject_slide_image(sp: &Element, op_index: usize) -> Result<(), Error> {

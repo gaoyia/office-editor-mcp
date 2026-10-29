@@ -1185,7 +1185,7 @@ fn chart_json(
                     legend = legend_json(&doc.root);
                     data_labels = json!({ "show": data_labels_on(&doc.root) });
                     flags = flags_json(&doc.root, &ty);
-                    space_for_keys = Some(doc.root);
+                    space_for_keys = Some(doc.take_root());
                 }
             }
         }
@@ -1818,32 +1818,27 @@ fn find_target_para<'a>(root: &'a Element, target: &ChartTarget) -> Option<&'a E
 }
 
 fn find_chart_walk<'a>(el: &'a Element, idx: &mut usize, key: &ChartKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &el.children[i] {
-                return find_chart_walk(e, idx, key);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(e) = &el.children[i] {
+                    return crate::xml::Search::Only(e);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" && is_chart(el) {
-        *idx += 1;
-        if matches_key(el, key, *idx) {
-            return Some(el);
-        }
-        return None;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_chart_walk(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "drawing" && is_chart(el) {
+            *idx += 1;
+            if matches_key(el, key, *idx) {
+                return crate::xml::Search::Hit(el);
             }
+            return crate::xml::Search::Skip;
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 pub(crate) fn find_drawing_mut<'a>(
@@ -1895,33 +1890,27 @@ fn find_chart_mut_walk<'a>(
     idx: &mut usize,
     key: &ChartKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(e) = &mut el.children[i] {
-                return find_chart_mut_walk(e, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" && is_chart(el) {
-        *idx += 1;
-        if matches_key(el, key, *idx) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_chart_mut_walk(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "drawing" && is_chart(el) {
+            *idx += 1;
+            if matches_key(el, key, *idx) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_chart_from_target(root: &mut Element, target: &ChartTarget) -> bool {
@@ -2072,49 +2061,31 @@ fn find_child<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
 }
 
 fn find_desc<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(f) = find_desc(c, local) {
-            return Some(f);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, local)
 }
 
 fn descendants_local<'a>(el: &'a Element, local: &'a str) -> impl Iterator<Item = &'a Element> {
-    fn rec<'a>(el: &'a Element, local: &str, out: &mut Vec<&'a Element>) {
-        for c in el.element_children() {
-            if c.local_name() == local {
-                out.push(c);
-            }
-            rec(c, local, out);
-        }
-    }
     let mut out = Vec::new();
-    rec(el, local, &mut out);
+    crate::xml::walk_elements_if(el, |node| {
+        if !std::ptr::eq(node, el) && node.local_name() == local {
+            out.push(node);
+        }
+        true
+    });
     out.into_iter()
 }
 
 fn has_local(el: &Element, local: &str) -> bool {
-    if el.local_name() == local {
-        return true;
-    }
-    el.element_children().any(|c| has_local(c, local))
+    crate::xml::find_by_local(el, local).is_some()
 }
 
 fn join_t(el: &Element) -> String {
     let mut s = String::new();
-    fn rec(el: &Element, s: &mut String) {
-        if el.local_name() == "t" {
-            s.push_str(&el.text_content());
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "t" {
+            s.push_str(&node.text_content());
         }
-        for c in el.element_children() {
-            rec(c, s);
-        }
-    }
-    rec(el, &mut s);
+    });
     s
 }
 
@@ -2716,7 +2687,7 @@ fn set_chart_title(space: &mut Element, title: &str) {
     );
     if let Ok(doc) = xml::parse(xml.as_bytes()) {
         let mut nodes = Vec::new();
-        for n in doc.root.children {
+        for n in doc.take_root().children {
             nodes.push(n);
         }
         for n in nodes.into_iter().rev() {
@@ -2775,7 +2746,7 @@ fn set_axis_title(space: &mut Element, axis: &str, title: &str, i: usize) -> Res
             crate::chart::title_el(title)
         );
         if let Ok(doc) = xml::parse(xml.as_bytes()) {
-            if let Some(Node::Element(t)) = doc.root.children.into_iter().next() {
+            if let Some(Node::Element(t)) = doc.take_root().children.into_iter().next() {
                 ax.children
                     .insert(1.min(ax.children.len()), Node::Element(t));
             }
@@ -2960,7 +2931,7 @@ fn set_series_name(ser: &mut Element, name: &str) {
             str_ref(&f, &[json!(name)])
         );
         if let Ok(doc) = xml::parse(xml.as_bytes()) {
-            *tx = doc.root;
+            *tx = doc.take_root();
         }
         return;
     }
@@ -2985,9 +2956,9 @@ fn set_pts(ser: &mut Element, local: &str, values: &[Value]) {
             .iter()
             .position(|n| matches!(n, Node::Element(e) if e.local_name() == local))
         {
-            ser.children[old] = Node::Element(doc.root);
+            ser.children[old] = Node::Element(doc.take_root());
         } else {
-            ser.push_element(doc.root);
+            ser.push_element(doc.take_root());
         }
     }
 }
@@ -3176,7 +3147,7 @@ fn add_series(
     let wrapped = format!(r#"<c:root xmlns:c="{CHART_NS}">{xml}</c:root>"#);
     let doc = xml::parse(wrapped.as_bytes())?;
     let ser_el = doc
-        .root
+        .take_root()
         .children
         .into_iter()
         .find_map(|n| match n {

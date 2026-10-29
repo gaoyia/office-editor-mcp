@@ -565,17 +565,12 @@ pub fn sync_drawing_text(
 }
 
 fn find_by_model_id_mut<'a>(el: &'a mut Element, model_id: &str) -> Option<&'a mut Element> {
-    if el.attr_local("modelId") == Some(model_id) {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_by_model_id_mut(e, model_id) {
-                return Some(found);
-            }
+    crate::xml::search_mut(el, |el| {
+        if el.attr_local("modelId") == Some(model_id) {
+            return crate::xml::SearchMut::Hit;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 pub fn ensure_doc_pt(root: &mut Element) -> String {

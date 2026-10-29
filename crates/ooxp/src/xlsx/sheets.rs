@@ -571,10 +571,7 @@ fn empty_worksheet() -> Document {
         .with_attr("xmlns", SML_NS)
         .with_attr("xmlns:r", REL_NS);
     root.push_element(Element::new("sheetData"));
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
 fn sheet_name_still_referenced(

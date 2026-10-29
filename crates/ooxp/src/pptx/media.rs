@@ -1299,34 +1299,78 @@ fn find_media_path(
     key: &PicKey,
     path: &mut Vec<usize>,
 ) -> bool {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                path.push(i);
-                if find_media_path(child, idx, kind, key, path) {
-                    return true;
-                }
-                path.pop();
-            }
+    fn path_node<'b>(root: &'b Element, rel: &[usize]) -> Option<&'b Element> {
+        let mut cur = root;
+        for &i in rel {
+            cur = match cur.children.get(i)? {
+                Node::Element(child) => child,
+                Node::Text(_) => return None,
+            };
         }
-        return false;
+        Some(cur)
     }
-    for i in 0..el.children.len() {
-        let Node::Element(e) = &el.children[i] else {
+    struct Frame {
+        rel: Vec<usize>,
+        next: usize,
+    }
+    let mut stack = vec![Frame {
+        rel: Vec::new(),
+        next: 0,
+    }];
+    while !stack.is_empty() {
+        let rel = stack.last().unwrap().rel.clone();
+        let next = stack.last().unwrap().next;
+        let Some(node) = path_node(el, &rel) else {
+            stack.pop();
             continue;
         };
-        if media_kind(e) == Some(kind) {
-            *idx += 1;
-            if pic_matches(e, *idx, key) {
-                path.push(i);
-                return true;
+        if next == 0 && node.local_name() == "AlternateContent" {
+            let child = first_alt_child_index(node)
+                .filter(|i| matches!(&node.children[*i], Node::Element(_)));
+            stack.pop();
+            if let Some(i) = child {
+                let mut rel = rel;
+                rel.push(i);
+                stack.push(Frame { rel, next: 0 });
             }
-        } else if media_kind(e).is_none() {
-            path.push(i);
-            if find_media_path(e, idx, kind, key, path) {
-                return true;
+            continue;
+        }
+        if next >= node.children.len() {
+            stack.pop();
+            continue;
+        }
+        let step = match &node.children[next] {
+            Node::Element(child) => {
+                if media_kind(child) == Some(kind) {
+                    let hit = pic_matches(child, *idx + 1, key);
+                    Some((true, hit))
+                } else if media_kind(child).is_none() {
+                    Some((false, false))
+                } else {
+                    None
+                }
             }
-            path.pop();
+            Node::Text(_) => None,
+        };
+        stack.last_mut().unwrap().next += 1;
+        match step {
+            Some((true, hit)) => {
+                *idx += 1;
+                if hit {
+                    path.extend_from_slice(&rel);
+                    path.push(next);
+                    return true;
+                }
+            }
+            Some((false, _)) => {
+                let mut child = rel;
+                child.push(next);
+                stack.push(Frame {
+                    rel: child,
+                    next: 0,
+                });
+            }
+            None => {}
         }
     }
     false

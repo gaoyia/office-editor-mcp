@@ -591,7 +591,7 @@ fn build_threaded(
         xml::escape_text(text)
     ));
     xml::parse(xml.as_bytes())
-        .map(|d| d.root)
+        .map(|d| d.take_root())
         .unwrap_or_else(|_| Element::new("threadedComment"))
 }
 
@@ -635,7 +635,7 @@ fn ensure_person(pkg: &mut Package, wb_part: &str, name: &str) -> Result<String,
         xml::escape_attr(&id)
     );
     let el = xml::parse(person.as_bytes())
-        .map(|d| d.root)
+        .map(|d| d.take_root())
         .unwrap_or_else(|_| Element::new("person"));
     doc.root.push_element(el);
     pkg.set(&part, doc.to_bytes()?)?;

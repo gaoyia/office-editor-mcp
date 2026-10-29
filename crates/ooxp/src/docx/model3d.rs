@@ -352,40 +352,38 @@ fn find_frame_walk_mut<'a>(
     key: &TxbxKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el.children.iter_mut().find_map(|n| match n {
-            Node::Element(c) if c.local_name() == "Choice" => Some(c),
-            _ => None,
-        }) {
-            if crate::model3d::choice_requires_am3d(choice) {
-                return find_frame_walk_mut(choice, key, index);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = el
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(c) if c.local_name() == "Choice"))
+            {
+                if let Node::Element(choice) = &el.children[i] {
+                    if crate::model3d::choice_requires_am3d(choice) {
+                        return crate::xml::SearchMut::Only(i);
+                    }
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if matches!(el.local_name(), "inline" | "anchor") && crate::model3d::is_model3d_graphic(el) {
-        *index += 1;
-        let token = el
-            .child_by_local("docPr")
-            .and_then(|p| p.attr_local("id"))
-            .map(str::to_string);
-        if matches_key(&token, *index, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_frame_walk_mut(e, key, index) {
-                return Some(found);
+        if matches!(el.local_name(), "inline" | "anchor") && crate::model3d::is_model3d_graphic(el)
+        {
+            *index += 1;
+            let token = el
+                .child_by_local("docPr")
+                .and_then(|p| p.attr_local("id"))
+                .map(str::to_string);
+            if matches_key(&token, *index, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn matches_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
@@ -636,24 +634,18 @@ fn find_ac_walk_mut<'a>(
     key: &TxbxKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if ac_matches(el, key, index) {
-            return Some(el);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_ac_walk_mut(e, key, index) {
-                return Some(found);
+        if el.local_name() == "AlternateContent" {
+            if ac_matches(el, key, index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn ac_matches(ac: &Element, key: &TxbxKey, index: &mut usize) -> bool {

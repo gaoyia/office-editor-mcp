@@ -793,7 +793,7 @@ fn gradient_drawing(color1: &str, color2: &str) -> Result<Element, Error> {
         c1 = xml::escape_attr(color1),
         c2 = xml::escape_attr(color2),
     );
-    Ok(xml::parse(xml.as_bytes())?.root)
+    Ok(xml::parse(xml.as_bytes())?.take_root())
 }
 
 fn strip_fill(bg: &mut Element) {

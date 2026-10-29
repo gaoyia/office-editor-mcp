@@ -342,21 +342,16 @@ fn find_ac_mut<'a>(
     key: &MathKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
-        *index += 1;
-        if key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, *index) {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_ac_mut(e, key, index) {
-                return Some(found);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
+            *index += 1;
+            if key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, *index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn choice_sp_mut(ac: &mut Element) -> Option<&mut Element> {

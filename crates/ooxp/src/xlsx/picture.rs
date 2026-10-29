@@ -1324,53 +1324,45 @@ fn find_pic_mut_in<'a>(
     search: &PicSearch<'_>,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el
-            .children
-            .iter()
-            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
-            .or_else(|| {
-                el.children
-                    .iter()
-                    .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
-            })
-        {
-            if let Node::Element(child) = &mut el.children[choice] {
-                return find_pic_mut_in(child, search, index);
-            }
-        }
-        return None;
-    }
-    if AnchorKind::from_local(el.local_name()).is_some() {
-        let pic_i = el
-            .children
-            .iter()
-            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "pic" && has_blip(e)));
-        if let Some(pic_i) = pic_i {
-            let cnv = if let Node::Element(pic) = &el.children[pic_i] {
-                cnv_of(pic).0
-            } else {
-                return None;
-            };
-            if search.hit(&cnv, index) {
-                if let Node::Element(pic) = &mut el.children[pic_i] {
-                    return Some(pic);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(choice) = el
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
+                .or_else(|| {
+                    el.children
+                        .iter()
+                        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
+                })
+            {
+                if matches!(&el.children[choice], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(choice);
                 }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "grpSp" {
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(c) = child {
-            if let Some(found) = find_pic_mut_in(c, search, index) {
-                return Some(found);
+        if AnchorKind::from_local(el.local_name()).is_some() {
+            let pic_i = el.children.iter().position(
+                |n| matches!(n, Node::Element(e) if e.local_name() == "pic" && has_blip(e)),
+            );
+            if let Some(pic_i) = pic_i {
+                let cnv = if let Node::Element(pic) = &el.children[pic_i] {
+                    cnv_of(pic).0
+                } else {
+                    return crate::xml::SearchMut::Skip;
+                };
+                if search.hit(&cnv, index) {
+                    return crate::xml::SearchMut::HitChild(pic_i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        if el.local_name() == "grpSp" {
+            return crate::xml::SearchMut::Skip;
+        }
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn patch_matched_rel(
@@ -1383,21 +1375,21 @@ fn patch_matched_rel(
     walk_anchors_mut(root, &mut |anchor, _| {
         let cnv = {
             let Some(pic) = direct_pic(anchor) else {
-                return false;
+                return Ok(false);
             };
             if !has_blip(pic) {
-                return false;
+                return Ok(false);
             }
             cnv_of(pic).0
         };
         if search.hit(&cnv, &mut index) {
             let _ = super::chart_drawing::patch_rel_box(anchor, rel);
             hit = true;
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
-    });
+    })?;
     Ok(hit)
 }
 
@@ -1438,9 +1430,9 @@ where
     Ok(())
 }
 
-pub(crate) fn walk_anchors_mut<F>(root: &mut Element, f: &mut F) -> bool
+pub(crate) fn walk_anchors_mut<F>(root: &mut Element, f: &mut F) -> Result<bool, Error>
 where
-    F: FnMut(&mut Element, AnchorKind) -> bool,
+    F: FnMut(&mut Element, AnchorKind) -> Result<bool, Error>,
 {
     let mut stack = vec![Vec::<usize>::new()];
     while let Some(path) = stack.pop() {
@@ -1464,8 +1456,8 @@ where
             continue;
         }
         if let Some(kind) = AnchorKind::from_local(&local) {
-            if f(element_at(root, &path), kind) {
-                return true;
+            if f(element_at(root, &path), kind)? {
+                return Ok(true);
             }
             continue;
         }
@@ -1484,7 +1476,7 @@ where
             stack.push(child);
         }
     }
-    false
+    Ok(false)
 }
 
 fn element_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
@@ -1786,29 +1778,23 @@ where
 {
     let mut index = 0usize;
     let mut found = false;
-    let mut err = None;
     walk_anchors_mut(root, &mut |anchor, _| {
-        if found || err.is_some() {
-            return true;
+        if found {
+            return Ok(true);
         }
         let Some(pic) = direct_pic_mut(anchor) else {
-            return false;
+            return Ok(false);
         };
         if !has_blip(pic) {
-            return false;
+            return Ok(false);
         }
         if search.hit(&cnv_of(pic).0, &mut index) {
             found = true;
-            if let Err(e) = f(pic) {
-                err = Some(e);
-            }
-            return true;
+            f(pic)?;
+            return Ok(true);
         }
-        false
-    });
-    if let Some(e) = err {
-        return Err(e);
-    }
+        Ok(false)
+    })?;
     Ok(found)
 }
 
@@ -1995,13 +1981,13 @@ fn update_extent(
     let mut index = 0usize;
     walk_anchors_mut(root, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
-            return false;
+            return Ok(false);
         };
         if !has_blip(pic) {
-            return false;
+            return Ok(false);
         }
         if !search.hit(&cnv_of(pic).0, &mut index) {
-            return false;
+            return Ok(false);
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
             if let Some(v) = cx {
@@ -2021,8 +2007,9 @@ fn update_extent(
                 }
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_absolute_pos(
@@ -2034,13 +2021,13 @@ fn update_absolute_pos(
     let mut index = 0usize;
     walk_anchors_mut(root, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
-            return false;
+            return Ok(false);
         };
         if !has_blip(pic) {
-            return false;
+            return Ok(false);
         }
         if !search.hit(&cnv_of(pic).0, &mut index) {
-            return false;
+            return Ok(false);
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
             if let Some(v) = pos_x {
@@ -2050,8 +2037,9 @@ fn update_absolute_pos(
                 set_attr_local(pos, "y", &v.to_string());
             }
         }
-        true
+        Ok(true)
     })
+    .unwrap_or(false)
 }
 
 fn update_two_cell_to(
@@ -2062,27 +2050,19 @@ fn update_two_cell_to(
     to_off_y: Option<i64>,
 ) -> Result<bool, Error> {
     let mut index = 0usize;
-    let mut marker_err = None;
-    let hit = walk_anchors_mut(root, &mut |anchor, _| {
+    walk_anchors_mut(root, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
-            return false;
+            return Ok(false);
         };
         if !has_blip(pic) {
-            return false;
+            return Ok(false);
         }
         if !search.hit(&cnv_of(pic).0, &mut index) {
-            return false;
+            return Ok(false);
         }
-        if let Err(err) = apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
-            marker_err = Some(err);
-            return true;
-        }
-        true
-    });
-    if let Some(err) = marker_err {
-        return Err(err);
-    }
-    Ok(hit)
+        apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;
+        Ok(true)
+    })
 }
 
 pub(crate) fn drawing_is_empty(root: &Element) -> bool {
@@ -2112,10 +2092,7 @@ pub(crate) fn ensure_drawing_part(
         .with_attr("xmlns:xdr", XDR_NS)
         .with_attr("xmlns:a", A_NS)
         .with_attr("xmlns:r", REL_NS);
-    let doc = Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    };
+    let doc = Document::new(Some(DEFAULT_DECL.to_string()), root);
     pkg.set(&part, doc.to_bytes()?)?;
     let mut rels = Relationships::from_package(pkg, sheet_part)?;
     let rid = rels.next_rid();
@@ -2445,21 +2422,7 @@ pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
 }
 
 pub(crate) fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    let idx = el.children.iter().position(|n| match n {
-        Node::Element(c) => contains_local(c, local),
-        _ => false,
-    })?;
-    let Node::Element(child) = &mut el.children[idx] else {
-        return None;
-    };
-    find_local_mut(child, local)
-}
-
-fn contains_local(el: &Element, local: &str) -> bool {
-    el.local_name() == local || el.element_children().any(|c| contains_local(c, local))
+    crate::xml::find_by_local_mut(el, local)
 }
 
 pub(crate) fn build_anchor(
@@ -2779,5 +2742,22 @@ mod marker_tests {
         let cell = cell.unwrap();
         assert_eq!(cell.col, 16_384);
         assert_eq!(cell.row, 1_048_576);
+    }
+
+    #[test]
+    fn anchor_walk_surfaces_column_overflow() {
+        let mut anchor = Element::new("xdr:twoCellAnchor");
+        let mut from = Element::new("xdr:from");
+        from.push_element(Element::new("xdr:col").with_text("16384"));
+        from.push_element(Element::new("xdr:row").with_text("0"));
+        anchor.push_element(from);
+        let mut root = Element::new("xdr:wsDr");
+        root.push_element(anchor);
+        let err = super::walk_anchors_mut(&mut root, &mut |anchor, _| {
+            let _ = super::read_marker(anchor.child_by_local("from"))?;
+            Ok(true)
+        })
+        .unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
     }
 }

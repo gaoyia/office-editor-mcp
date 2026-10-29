@@ -105,11 +105,7 @@ pub fn insert(
     ));
     pkg.set(
         &drawing_part,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root: draw_root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), draw_root).to_bytes()?,
     )?;
 
     let mut cs_rels = Relationships { rels: Vec::new() };
@@ -297,10 +293,7 @@ fn chartsheet_xml(drawing_rid: &str) -> Document {
     root.push_element(views);
     root.push_element(margins);
     root.push_element(drawing);
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
 fn chart_parts_of_drawing(pkg: &Package, drawing_part: &str) -> Result<Vec<String>, Error> {

@@ -252,39 +252,27 @@ fn cnv_pr_mut(el: &mut Element) -> Option<&mut Element> {
 }
 
 fn find_local_outside_txbx<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(found) = find_local_outside_txbx(c, local) {
-            return Some(found);
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::Search::Skip;
         }
-    }
-    None
+        if el.local_name() == local {
+            return crate::xml::Search::Hit(el);
+        }
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_local_outside_txbx_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return None;
-    }
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(c) = child {
-            if c.local_name() == local || has_local_outside_txbx(c, local) {
-                return find_local_outside_txbx_mut(c, local);
-            }
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
-}
-
-fn has_local_outside_txbx(el: &Element, local: &str) -> bool {
-    find_local_outside_txbx(el, local).is_some()
+        if el.local_name() == local {
+            return crate::xml::SearchMut::Hit;
+        }
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_attr_local(el: &mut Element, local: &str) {

@@ -565,18 +565,12 @@ fn prog_id(obj: &Element) -> Option<String> {
 }
 
 fn embed_elem(obj: &Element) -> Option<&Element> {
-    fn rec(el: &Element) -> Option<&Element> {
+    crate::xml::search(obj, |el| {
         if el.local_name() == "OLEObject" && !is_link_type(el) {
-            return Some(el);
+            return crate::xml::Search::Hit(el);
         }
-        for c in el.element_children() {
-            if let Some(f) = rec(c) {
-                return Some(f);
-            }
-        }
-        None
-    }
-    rec(obj)
+        crate::xml::Search::down(el)
+    })
 }
 
 fn is_link_type(el: &Element) -> bool {
@@ -624,22 +618,11 @@ fn image_rids(obj: &Element) -> Vec<String> {
 }
 
 fn has_local(el: &Element, local: &str) -> bool {
-    if el.local_name() == local {
-        return true;
-    }
-    el.element_children().any(|c| has_local(c, local))
+    crate::xml::find_by_local(el, local).is_some()
 }
 
 fn find_desc<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(f) = find_desc(c, local) {
-            return Some(f);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, local)
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
@@ -687,34 +670,29 @@ fn find_object<'a>(root: &'a Element, target: &OleTarget) -> Option<&'a Element>
 }
 
 fn find_object_walk<'a>(el: &'a Element, idx: &mut usize, key: &OleKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = para::first_alt_child_index(el) {
-            if let Node::Element(e) = &el.children[i] {
-                return find_object_walk(e, idx, key);
-            }
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "object" {
-        if is_listed_markup(el) {
-            *idx += 1;
-            if matches_key(el, key, *idx) {
-                return Some(el);
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = para::first_alt_child_index(el) {
+                if let Node::Element(e) = &el.children[i] {
+                    return crate::xml::Search::Only(e);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_object_walk(e, idx, key) {
-                return Some(found);
+        if el.local_name() == "object" {
+            if is_listed_markup(el) {
+                *idx += 1;
+                if matches_key(el, key, *idx) {
+                    return crate::xml::Search::Hit(el);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn patch_object_size(

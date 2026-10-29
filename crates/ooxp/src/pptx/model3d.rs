@@ -612,21 +612,15 @@ fn find_ac_walk_mut<'a>(
     key: &Model3dKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if ac_matches(el, key, index) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_ac_walk_mut(e, key, index) {
-                return Some(found);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if ac_matches(el, key, index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn ac_matches(ac: &Element, key: &Model3dKey, index: &mut usize) -> bool {
@@ -756,18 +750,7 @@ fn ensure_a<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
 }
 
 fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_local_mut(e, local) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local_mut(el, local)
 }
 
 fn remove_model3d(el: &mut Element, key: &Model3dKey) -> bool {

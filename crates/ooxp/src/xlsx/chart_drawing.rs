@@ -83,11 +83,7 @@ pub fn ensure_user_shapes(
         .with_attr("xmlns:cdr", CDR_NS);
     pkg.set(
         &part,
-        Document {
-            decl: Some(DEFAULT_DECL.to_string()),
-            root,
-        }
-        .to_bytes()?,
+        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
     )?;
     let mut rels = Relationships::from_package(pkg, &chart_part)?;
     let rid = rels.next_rid();

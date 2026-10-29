@@ -484,10 +484,7 @@ fn ensure_drawing_hf_part(
         .with_attr("xmlns:xdr", XDR_NS)
         .with_attr("xmlns:a", A_NS)
         .with_attr("xmlns:r", REL_NS);
-    let doc = Document {
-        decl: Some(crate::xml::DEFAULT_DECL.to_string()),
-        root,
-    };
+    let doc = Document::new(Some(crate::xml::DEFAULT_DECL.to_string()), root);
     pkg.set(&part, doc.to_bytes()?)?;
     let mut rels = Relationships::from_package(pkg, sheet_part)?;
     let rid = rels.next_rid();

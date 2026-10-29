@@ -935,7 +935,7 @@ fn default_clr_scheme() -> Element {
         .as_bytes(),
     )
     .expect("默认 clrScheme")
-    .root
+    .take_root()
 }
 
 fn default_clr_scheme_inner() -> String {

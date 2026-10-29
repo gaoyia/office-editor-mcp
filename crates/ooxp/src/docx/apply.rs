@@ -6945,7 +6945,8 @@ fn apply_delete_comment(
     };
     let (ids, last_paras, embeds) = {
         let comments_doc = load_part(pkg, docs, &comments_part)?;
-        let ids = comments::cascade_ids(&comments_doc.root, extended_root.as_ref(), &op.comment_id);
+        let ids =
+            comments::cascade_ids(&comments_doc.root, extended_root.as_deref(), &op.comment_id);
         let mut last_paras = Vec::new();
         let mut embeds = Vec::new();
         for id in &ids {

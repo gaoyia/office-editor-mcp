@@ -652,10 +652,7 @@ fn build_table_xml(id: u32, name: &str, refer: &str, columns: &[String]) -> Docu
             .with_attr("showRowStripes", "1")
             .with_attr("showColumnStripes", "0"),
     );
-    Document {
-        decl: Some(DEFAULT_DECL.to_string()),
-        root: table,
-    }
+    Document::new(Some(DEFAULT_DECL.to_string()), table)
 }
 
 fn append_table_part(root: &mut Element, rid: &str) {

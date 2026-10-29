@@ -814,17 +814,7 @@ fn find_fallback_pic(el: &Element) -> Option<&Element> {
 }
 
 fn find_local<'a>(el: &'a Element, name: &str) -> Option<&'a Element> {
-    if el.local_name() == name {
-        return Some(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_local(e, name) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local(el, name)
 }
 
 fn find_node<'a>(root: &'a Element, key: &ZoomKey) -> Result<Option<&'a Element>, Error> {
@@ -1342,21 +1332,7 @@ fn find_fallback_pic_mut(el: &mut Element) -> Option<&mut Element> {
 }
 
 fn find_local_mut<'a>(el: &'a mut Element, name: &str) -> Option<&'a mut Element> {
-    if el.local_name() == name {
-        return Some(el);
-    }
-    let i = el.children.iter().position(|n| match n {
-        Node::Element(e) => contains_local(e, name),
-        _ => false,
-    })?;
-    let Node::Element(child) = &mut el.children[i] else {
-        return None;
-    };
-    find_local_mut(child, name)
-}
-
-fn contains_local(el: &Element, name: &str) -> bool {
-    el.local_name() == name || el.element_children().any(|c| contains_local(c, name))
+    crate::xml::find_by_local_mut(el, name)
 }
 
 fn find_node_mut<'a>(root: &'a mut Element, key: &ZoomKey) -> Option<&'a mut Element> {

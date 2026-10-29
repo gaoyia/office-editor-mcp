@@ -1029,7 +1029,7 @@ fn load_coverage(
         doc_root,
         catalog,
         &comments_doc.root,
-        extended.as_ref().map(|d| &d.root),
+        extended.as_ref().map(|d| &*d.root),
     )?;
     Ok(Some(cov))
 }
@@ -1064,7 +1064,7 @@ fn comments_array(
         let (done, parent) = comments::done_and_parent(
             comment,
             &comments_doc.root,
-            extended.as_ref().map(|d| &d.root),
+            extended.as_ref().map(|d| &*d.root),
         );
         let kind = if comments::is_ink(comment) {
             "ink"

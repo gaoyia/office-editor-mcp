@@ -107,39 +107,17 @@ pub fn collect_embed_rids(el: &Element) -> Vec<String> {
 }
 
 pub fn walk<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    f(el);
-    for c in el.element_children() {
-        walk(c, f);
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 /// 子孙里第一个 `am3d:model3d`。
 pub fn model3d_in(el: &Element) -> Option<&Element> {
-    if el.local_name() == "model3d" {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(found) = model3d_in(c) {
-            return Some(found);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, "model3d")
 }
 
 /// 子孙里第一个 `am3d:model3d`（可变）。
 pub fn model3d_in_mut(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "model3d" {
-        return Some(el);
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = model3d_in_mut(e) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local_mut(el, "model3d")
 }
 
 /// inspect：`camera` / `rot` / `lightRig`。宿主可以是 graphicFrame 或 `am3d:model3d`。

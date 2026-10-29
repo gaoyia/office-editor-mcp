@@ -150,7 +150,7 @@ pub fn ungroup(doc: &mut Document, op: &UngroupOp, op_index: usize) -> Result<()
     let path =
         find_path(&doc.root, &op.member).ok_or_else(|| member_not_found(&op.id, op_index))?;
     let mut grp_depth = None;
-    let mut cur = &doc.root;
+    let mut cur: &Element = &doc.root;
     for (d, &i) in path.iter().enumerate() {
         let Node::Element(e) = cur
             .children

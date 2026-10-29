@@ -39,28 +39,45 @@ fn collect_effects(
     host: &str,
     out: &mut Vec<Value>,
 ) {
-    fn rec(
-        el: &Element,
-        objects: &HashMap<String, String>,
-        host: &str,
+    struct Frame<'a> {
+        el: &'a Element,
         in_ia: bool,
-        click_on: Option<&str>,
-        out: &mut Vec<Value>,
-    ) {
+        click_on: Option<String>,
+    }
+    let mut stack = vec![Frame {
+        el,
+        in_ia: false,
+        click_on: None,
+    }];
+    while let Some(Frame {
+        el,
+        in_ia,
+        click_on,
+    }) = stack.pop()
+    {
         if el.local_name() == "AlternateContent" {
             if let Some(i) = shape::first_alt_child_index(el) {
                 if let Some(Node::Element(child)) = el.children.get(i) {
-                    rec(child, objects, host, in_ia, click_on, out);
+                    stack.push(Frame {
+                        el: child,
+                        in_ia,
+                        click_on,
+                    });
                 }
             }
-            return;
+            continue;
         }
         if el.local_name() == "cTn" && el.attr_local("nodeType") == Some("interactiveSeq") {
             let spid = click_on_spid(el);
-            for c in el.element_children() {
-                rec(c, objects, host, true, spid.as_deref(), out);
+            let kids: Vec<_> = el.element_children().collect();
+            for child in kids.into_iter().rev() {
+                stack.push(Frame {
+                    el: child,
+                    in_ia: true,
+                    click_on: spid.clone(),
+                });
             }
-            return;
+            continue;
         }
         if is_effect(el) {
             out.push(effect_json(
@@ -69,14 +86,19 @@ fn collect_effects(
                 host,
                 out.len() + 1,
                 in_ia,
-                click_on,
+                click_on.as_deref(),
             ));
         }
-        for c in el.element_children() {
-            rec(c, objects, host, in_ia, click_on, out);
+        let kids: Vec<_> = el.element_children().collect();
+        let click_on = click_on.clone();
+        for child in kids.into_iter().rev() {
+            stack.push(Frame {
+                el: child,
+                in_ia,
+                click_on: click_on.clone(),
+            });
         }
     }
-    rec(el, objects, host, false, None, out);
 }
 
 fn click_on_spid(seq: &Element) -> Option<String> {
@@ -1315,39 +1337,38 @@ fn ensure_main_seq_lst(timing: &mut Element) -> &mut Element {
 }
 
 fn find_ctn_path(el: &Element, node_type: &str) -> Option<Vec<usize>> {
-    fn rec(el: &Element, want: &str, path: &mut Vec<usize>) -> bool {
-        if el.local_name() == "AlternateContent" {
-            if let Some(i) = shape::first_alt_child_index(el) {
-                if let Some(Node::Element(child)) = el.children.get(i) {
-                    path.push(i);
-                    if rec(child, want, path) {
-                        return true;
-                    }
-                    path.pop();
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    while let Some(path) = stack.pop() {
+        let node = path.iter().fold(el, |cur, i| match &cur.children[*i] {
+            Node::Element(child) => child,
+            Node::Text(_) => unreachable!("路径只指向元素"),
+        });
+        if node.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(node) {
+                if matches!(&node.children[i], Node::Element(_)) {
+                    let mut child = path.clone();
+                    child.push(i);
+                    stack.push(child);
                 }
             }
-            return false;
+            continue;
         }
-        if el.local_name() == "cTn" && el.attr_local("nodeType") == Some(want) {
-            return true;
+        if node.local_name() == "cTn" && node.attr_local("nodeType") == Some(node_type) {
+            return Some(path);
         }
-        for (i, n) in el.children.iter().enumerate() {
-            if let Node::Element(c) = n {
-                path.push(i);
-                if rec(c, want, path) {
-                    return true;
-                }
-                path.pop();
-            }
+        let indexes: Vec<usize> = node
+            .children
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| matches!(n, Node::Element(_)).then_some(i))
+            .collect();
+        for i in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(i);
+            stack.push(child);
         }
-        false
     }
-    let mut path = Vec::new();
-    if rec(el, node_type, &mut path) {
-        Some(path)
-    } else {
-        None
-    }
+    None
 }
 
 fn get_mut_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
@@ -2046,15 +2067,11 @@ fn paragraph_count(root: &Element, spid: &str) -> u32 {
 
 fn count_p(el: &Element) -> u32 {
     let mut n = 0u32;
-    fn rec(el: &Element, n: &mut u32) {
-        if el.local_name() == "p" {
-            *n += 1;
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "p" {
+            n += 1;
         }
-        for c in el.element_children() {
-            rec(c, n);
-        }
-    }
-    rec(el, &mut n);
+    });
     n
 }
 

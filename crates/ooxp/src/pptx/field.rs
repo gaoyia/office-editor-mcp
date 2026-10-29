@@ -355,58 +355,79 @@ fn find_fld_in_shapes<'a>(
     key: &FieldKey,
     idx: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_fld_in_shapes(child, key, idx);
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    while let Some(path) = stack.pop() {
+        let kind = crate::xml::element_at_ref(el, &path)
+            .local_name()
+            .to_string();
+        if kind == "AlternateContent" {
+            let next = {
+                let node = crate::xml::element_at_ref(el, &path);
+                shape::first_alt_child_index(node)
+                    .filter(|i| matches!(&node.children[*i], Node::Element(_)))
+            };
+            if let Some(i) = next {
+                let mut child = path;
+                child.push(i);
+                stack.push(child);
+            }
+            continue;
+        }
+        if kind == "oleObj" {
+            continue;
+        }
+        if kind == "sp" {
+            let tx_i = crate::xml::element_at_ref(el, &path)
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "txBody"));
+            if let Some(tx_i) = tx_i {
+                let mut tx_path = path.clone();
+                tx_path.push(tx_i);
+                if let Some(rel) = fld_rel_path(crate::xml::element_at_ref(el, &tx_path), key, idx)
+                {
+                    tx_path.extend(rel);
+                    return Some(crate::xml::element_at_mut(el, &tx_path));
+                }
+                continue;
             }
         }
-        return None;
-    }
-    if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
-        if let Some(tx) = el.child_by_local_mut("txBody") {
-            return find_fld_in_tx(tx, key, idx);
-        }
-        return None;
-    }
-    if el.local_name() == "oleObj" {
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_fld_in_shapes(e, key, idx) {
-                return Some(found);
-            }
+        let indexes = crate::xml::element_indexes(crate::xml::element_at_ref(el, &path));
+        for i in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(i);
+            stack.push(child);
         }
     }
     None
 }
 
-fn find_fld_in_tx<'a>(
-    el: &'a mut Element,
-    key: &FieldKey,
-    idx: &mut usize,
-) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_fld_in_tx(child, key, idx);
+fn fld_rel_path(el: &Element, key: &FieldKey, idx: &mut usize) -> Option<Vec<usize>> {
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    while let Some(path) = stack.pop() {
+        let node = crate::xml::element_at_ref(el, &path);
+        if node.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(node) {
+                if matches!(&node.children[i], Node::Element(_)) {
+                    let mut child = path;
+                    child.push(i);
+                    stack.push(child);
+                }
             }
+            continue;
         }
-        return None;
-    }
-    if el.local_name() == "fld" {
-        *idx += 1;
-        if matches_key(el, key, *idx) {
-            return Some(el);
-        }
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_fld_in_tx(e, key, idx) {
-                return Some(found);
+        if node.local_name() == "fld" {
+            *idx += 1;
+            if matches_key(node, key, *idx) {
+                return Some(path);
             }
+            continue;
+        }
+        let indexes = crate::xml::element_indexes(node);
+        for i in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(i);
+            stack.push(child);
         }
     }
     None

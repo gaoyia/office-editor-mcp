@@ -364,56 +364,51 @@ fn matches_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool 
 }
 
 fn find_cxn_walk<'a>(el: &'a Element, key: &TxbxKey, index: &mut usize) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "drawing" {
-        if textbox::is_group(el) {
-            let mut hit = None;
-            walk_all(el, &mut |e| {
-                if is_connector_wsp(e) {
-                    *index += 1;
-                    let (doc_pr_id, _) = cnv_pr(e);
-                    let id = if doc_pr_id.is_some() {
-                        doc_pr_id
-                    } else {
-                        doc_pr(el).0
-                    };
-                    if hit.is_none() && matches_key(&id, *index, key) {
-                        hit = Some(());
+    crate::xml::search(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::Search::Skip;
+        }
+        if el.local_name() == "drawing" {
+            if textbox::is_group(el) {
+                let mut hit = None;
+                walk_all(el, &mut |e| {
+                    if is_connector_wsp(e) {
+                        *index += 1;
+                        let (doc_pr_id, _) = cnv_pr(e);
+                        let id = if doc_pr_id.is_some() {
+                            doc_pr_id
+                        } else {
+                            doc_pr(el).0
+                        };
+                        if hit.is_none() && matches_key(&id, *index, key) {
+                            hit = Some(());
+                        }
                     }
+                });
+                if hit.is_some() {
+                    return crate::xml::Search::Hit(el);
                 }
-            });
-            if hit.is_some() {
-                return Some(el);
+                return crate::xml::Search::Skip;
             }
-            return None;
-        }
-        if is_connector_drawing(el) {
-            *index += 1;
-            let (doc_pr_id, _) = doc_pr(el);
-            if matches_key(&doc_pr_id, *index, key) {
-                return Some(el);
+            if is_connector_drawing(el) {
+                *index += 1;
+                let (doc_pr_id, _) = doc_pr(el);
+                if matches_key(&doc_pr_id, *index, key) {
+                    return crate::xml::Search::Hit(el);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_choice(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return find_cxn_walk(child, key, index);
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_choice(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    return crate::xml::Search::Only(child);
+                }
             }
+            return crate::xml::Search::Skip;
         }
-        return None;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_cxn_walk(e, key, index) {
-                return Some(found);
-            }
-        }
-    }
-    None
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_cxn_wsp_mut<'a>(
@@ -421,40 +416,39 @@ fn find_cxn_wsp_mut<'a>(
     key: &TxbxKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_choice(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_cxn_wsp_mut(child, key, index);
+    let found = crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_choice(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" {
-        if textbox::is_group(el) {
-            let outer = doc_pr(el).0;
-            return find_group_cxn_wsp_in(el, key, index, &outer);
-        }
-        if is_connector_drawing(el) {
-            *index += 1;
-            let (doc_pr_id, _) = doc_pr(el);
-            if matches_key(&doc_pr_id, *index, key) {
-                return find_first_cxn_wsp_mut(el);
+        if el.local_name() == "drawing" {
+            if textbox::is_group(el) || is_connector_drawing(el) {
+                if is_connector_drawing(el) && !textbox::is_group(el) {
+                    *index += 1;
+                    let (doc_pr_id, _) = doc_pr(el);
+                    if !matches_key(&doc_pr_id, *index, key) {
+                        return crate::xml::SearchMut::Skip;
+                    }
+                }
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
+        crate::xml::SearchMut::down(el)
+    })?;
+    if textbox::is_group(found) {
+        let outer = doc_pr(found).0;
+        find_group_cxn_wsp_in(found, key, index, &outer)
+    } else {
+        find_first_cxn_wsp_mut(found)
     }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_cxn_wsp_mut(e, key, index) {
-                return Some(found);
-            }
-        }
-    }
-    None
 }
 
 fn find_group_cxn_wsp_in<'a>(
@@ -463,49 +457,37 @@ fn find_group_cxn_wsp_in<'a>(
     index: &mut usize,
     outer_doc_pr: &Option<String>,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if is_connector_wsp(el) {
-        *index += 1;
-        let (doc_pr_id, _) = cnv_pr(el);
-        let id = if doc_pr_id.is_some() {
-            doc_pr_id
-        } else {
-            outer_doc_pr.clone()
-        };
-        if matches_key(&id, *index, key) {
-            return Some(el);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_group_cxn_wsp_in(e, key, index, outer_doc_pr) {
-                return Some(found);
+        if is_connector_wsp(el) {
+            *index += 1;
+            let (doc_pr_id, _) = cnv_pr(el);
+            let id = if doc_pr_id.is_some() {
+                doc_pr_id
+            } else {
+                outer_doc_pr.clone()
+            };
+            if matches_key(&id, *index, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn find_first_cxn_wsp_mut(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if is_connector_wsp(el) {
-        return Some(el);
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_first_cxn_wsp_mut(e) {
-                return Some(found);
-            }
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        if is_connector_wsp(el) {
+            return crate::xml::SearchMut::Hit;
+        }
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_cxn_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {

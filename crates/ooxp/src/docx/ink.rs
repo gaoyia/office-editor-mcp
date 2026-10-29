@@ -474,32 +474,26 @@ fn find_drawing_walk<'a>(
     key: &TxbxKey,
     index: &mut usize,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
-        return None;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_choice(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_drawing_walk(child, ctx, key, index);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "txbxContent" {
+            return crate::xml::SearchMut::Skip;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_choice(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if el.local_name() == "drawing" {
-        if drawing_has_ink_key(el, ctx, key, index) {
-            return Some(el);
-        }
-        return None;
-    }
-    let children = el.children.as_mut_slice();
-    for child in children {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_drawing_walk(e, ctx, key, index) {
-                return Some(found);
+        if el.local_name() == "drawing" {
+            if drawing_has_ink_key(el, ctx, key, index) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn drawing_has_ink_key(
@@ -689,20 +683,16 @@ fn wpc_empty(el: &Element) -> bool {
 }
 
 fn find_wpc(el: &Element) -> Option<&Element> {
-    if el.local_name() == "wpc" {
-        return Some(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            if e.local_name() == "txbxContent" {
-                continue;
-            }
-            if let Some(hit) = find_wpc(e) {
-                return Some(hit);
-            }
+    crate::xml::search(el, |el| {
+        if el.local_name() == "wpc" {
+            return crate::xml::Search::Hit(el);
         }
-    }
-    None
+        crate::xml::Search::Kids(
+            el.element_children()
+                .filter(|e| e.local_name() != "txbxContent")
+                .collect(),
+        )
+    })
 }
 
 fn build_ink_ac(canvas_id: u32, ink_id: u32, rid: &str, cx: i64, cy: i64) -> Element {

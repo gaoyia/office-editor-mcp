@@ -555,15 +555,15 @@ fn grouped_txbx(drawing: &Element, key: &TxbxKey) -> bool {
 }
 
 fn txbx_in_group(host: &Element, key: &TxbxKey) -> bool {
-    fn walk(el: &Element, key: &TxbxKey, hit: &mut bool) {
+    crate::xml::search(host, |el| {
         if el.local_name() == "txbxContent" {
-            return;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "drawing" {
             if textbox::is_group(el) && grouped_txbx(el, key) {
-                *hit = true;
+                return crate::xml::Search::Hit(());
             }
-            return;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "AlternateContent" {
             if let Some(i) = el
@@ -572,20 +572,14 @@ fn txbx_in_group(host: &Element, key: &TxbxKey) -> bool {
                 .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
             {
                 if let Node::Element(c) = &el.children[i] {
-                    walk(c, key, hit);
+                    return crate::xml::Search::Only(c);
                 }
             }
-            return;
+            return crate::xml::Search::Skip;
         }
-        for n in &el.children {
-            if let Node::Element(e) = n {
-                walk(e, key, hit);
-            }
-        }
-    }
-    let mut hit = false;
-    walk(host, key, &mut hit);
-    hit
+        crate::xml::Search::down(el)
+    })
+    .is_some()
 }
 
 fn explode_group_node(node: &Node) -> Option<Vec<Element>> {
@@ -945,17 +939,7 @@ fn ensure_sp_pr(el: &mut Element) -> &mut Element {
 }
 
 fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for n in &mut el.children {
-        if let Node::Element(e) = n {
-            if let Some(found) = find_local_mut(e, local) {
-                return Some(found);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local_mut(el, local)
 }
 
 fn set_attr_local(el: &mut Element, local: &str, value: &str) {
@@ -993,63 +977,47 @@ fn drawing_of_slot(node: &Node) -> Option<&Element> {
 }
 
 fn find_pic_el(drawing: &Element) -> Option<&Element> {
-    fn walk(el: &Element) -> Option<&Element> {
+    crate::xml::search(drawing, |el| {
         if el.local_name() == "txbxContent" {
-            return None;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "pic" {
-            return Some(el);
+            return crate::xml::Search::Hit(el);
         }
-        for n in &el.children {
-            if let Node::Element(e) = n {
-                if let Some(f) = walk(e) {
-                    return Some(f);
-                }
-            }
-        }
-        None
-    }
-    walk(drawing)
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_wsp(drawing: &Element) -> Option<&Element> {
-    fn walk(el: &Element) -> Option<&Element> {
+    crate::xml::search(drawing, |el| {
         if el.local_name() == "txbxContent" {
-            return None;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "wsp" {
-            return Some(el);
+            return crate::xml::Search::Hit(el);
         }
-        for n in &el.children {
-            if let Node::Element(e) = n {
-                if let Some(f) = walk(e) {
-                    return Some(f);
-                }
-            }
-        }
-        None
-    }
-    walk(drawing)
+        crate::xml::Search::down(el)
+    })
 }
 
 fn find_txbx_drawing<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element> {
     let mut index = 0usize;
-    fn walk<'a>(el: &'a Element, key: &TxbxKey, index: &mut usize) -> Option<&'a Element> {
+    crate::xml::search(host, |el| {
         if el.local_name() == "txbxContent" {
-            return None;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "drawing" {
             if textbox::is_group(el) {
-                return None;
+                return crate::xml::Search::Skip;
             }
             if has_txbx_el(el) && !connector_drawing(el) {
-                *index += 1;
+                index += 1;
                 let (id, _) = doc_pr_of(el);
-                if para::matches_txbx_key(&id, *index, key) {
-                    return Some(el);
+                if para::matches_txbx_key(&id, index, key) {
+                    return crate::xml::Search::Hit(el);
                 }
             }
-            return None;
+            return crate::xml::Search::Skip;
         }
         if el.local_name() == "AlternateContent" {
             if let Some(i) = el
@@ -1058,21 +1026,13 @@ fn find_txbx_drawing<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element
                 .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
             {
                 if let Node::Element(c) = &el.children[i] {
-                    return walk(c, key, index);
+                    return crate::xml::Search::Only(c);
                 }
             }
-            return None;
+            return crate::xml::Search::Skip;
         }
-        for n in &el.children {
-            if let Node::Element(e) = n {
-                if let Some(f) = walk(e, key, index) {
-                    return Some(f);
-                }
-            }
-        }
-        None
-    }
-    walk(host, key, &mut index)
+        crate::xml::Search::down(el)
+    })
 }
 
 fn connector_drawing(drawing: &Element) -> bool {

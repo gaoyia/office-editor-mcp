@@ -239,28 +239,11 @@ fn px_to_emu_f(px: f64) -> i64 {
 }
 
 fn walk(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for c in el.element_children() {
-        walk(c, f);
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    let idx = el.children.iter().position(|n| match n {
-        Node::Element(c) => contains_local(c, local),
-        _ => false,
-    })?;
-    let Node::Element(child) = &mut el.children[idx] else {
-        return None;
-    };
-    find_local_mut(child, local)
-}
-
-fn contains_local(el: &Element, local: &str) -> bool {
-    el.local_name() == local || el.element_children().any(|c| contains_local(c, local))
+    crate::xml::find_by_local_mut(el, local)
 }
 
 fn set_attr_local(el: &mut Element, local: &str, value: &str) {

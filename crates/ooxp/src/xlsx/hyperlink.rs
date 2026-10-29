@@ -430,33 +430,11 @@ pub(crate) fn inspect_cnv(el: &Element, rels: Option<&Relationships>) -> Value {
 }
 
 fn find_cnv_pr(el: &Element) -> Option<&Element> {
-    if el.local_name() == "cNvPr" {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(found) = find_cnv_pr(c) {
-            return Some(found);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, "cNvPr")
 }
 
 fn find_cnv_pr_mut(el: &mut Element) -> Option<&mut Element> {
-    if el.local_name() == "cNvPr" {
-        return Some(el);
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(c) = child {
-            if c.local_name() == "cNvPr" || has_cnv_pr(c) {
-                return find_cnv_pr_mut(c);
-            }
-        }
-    }
-    None
-}
-
-fn has_cnv_pr(el: &Element) -> bool {
-    find_cnv_pr(el).is_some()
+    crate::xml::find_by_local_mut(el, "cNvPr")
 }
 
 pub(crate) fn apply_insert_drawing(

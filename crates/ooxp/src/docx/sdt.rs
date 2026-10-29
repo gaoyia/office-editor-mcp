@@ -1081,15 +1081,7 @@ fn first_desc_p<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> {
 }
 
 fn find_p(el: &Element) -> Option<&Element> {
-    if el.local_name() == "p" {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(p) = find_p(c) {
-            return Some(p);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, "p")
 }
 
 fn first_alt(el: &Element) -> Option<usize> {

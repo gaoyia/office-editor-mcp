@@ -4,7 +4,7 @@ use crate::error::Error;
 use crate::opc::{
     rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
 };
-use crate::xml::{self, Element, Node};
+use crate::xml::{self, Element};
 
 use super::data::{build_data_xml, RelIds};
 use super::{
@@ -147,29 +147,11 @@ pub fn find_rel_ids_mut(host_el: &mut Element) -> Option<&mut Element> {
 }
 
 pub fn find_local<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for c in el.element_children() {
-        if let Some(f) = find_local(c, local) {
-            return Some(f);
-        }
-    }
-    None
+    crate::xml::find_by_local(el, local)
 }
 
 pub fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    if el.local_name() == local {
-        return Some(el);
-    }
-    for c in el.children.as_mut_slice() {
-        if let Node::Element(e) = c {
-            if let Some(f) = find_local_mut(e, local) {
-                return Some(f);
-            }
-        }
-    }
-    None
+    crate::xml::find_by_local_mut(el, local)
 }
 
 pub fn set_rid_attr(el: &mut Element, local: &str, rid: &str) {

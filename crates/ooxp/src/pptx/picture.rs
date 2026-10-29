@@ -697,32 +697,27 @@ pub(crate) fn find_pic_mut<'a>(root: &'a mut Element, key: &PicKey) -> Option<&'
 }
 
 fn find_pic_in<'a>(el: &'a mut Element, idx: &mut usize, key: &PicKey) -> Option<&'a mut Element> {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &mut el.children[i] {
-                return find_pic_in(child, idx, key);
+    crate::xml::search_mut(el, |el| {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if matches!(&el.children[i], Node::Element(_)) {
+                    return crate::xml::SearchMut::Only(i);
+                }
             }
+            return crate::xml::SearchMut::Skip;
         }
-        return None;
-    }
-    if is_counted_pic(el) {
-        *idx += 1;
-        if pic_matches(el, *idx, key) {
-            return Some(el);
-        }
-        return None;
-    }
-    if el.local_name() == "oleObj" {
-        return None;
-    }
-    for child in el.children.as_mut_slice() {
-        if let Node::Element(e) = child {
-            if let Some(found) = find_pic_in(e, idx, key) {
-                return Some(found);
+        if is_counted_pic(el) {
+            *idx += 1;
+            if pic_matches(el, *idx, key) {
+                return crate::xml::SearchMut::Hit;
             }
+            return crate::xml::SearchMut::Skip;
         }
-    }
-    None
+        if el.local_name() == "oleObj" {
+            return crate::xml::SearchMut::Skip;
+        }
+        crate::xml::SearchMut::down(el)
+    })
 }
 
 fn remove_pic(root: &mut Element, key: &PicKey) -> bool {
