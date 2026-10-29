@@ -8123,7 +8123,7 @@
       "description": "写或清除该宿主 <p:transition>。",
       "descriptionEn": "Write or clear that host's <p:transition>.",
       "limits": "不写 <p:timing>。",
-      "limitsEn": "Does not write <p:timing>。",
+      "limitsEn": "Does not write <p:timing>.",
       "type": "object",
       "required": [
         "op",
@@ -14265,7 +14265,7 @@
       "description": "删掉该 c:errBars。",
       "descriptionEn": "Delete that c:errBars.",
       "limits": "找不到报 IdNotFound。",
-      "limitsEn": "A missing id returns IdNotFound。",
+      "limitsEn": "A missing id returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -14901,7 +14901,7 @@
       "description": "按 id 把图或嵌入对象的原始字节写到本地。",
       "descriptionEn": "Write the original bytes of a picture or an embedded object to a local file, by id.",
       "limits": "不改源文件，字节也不进 inspect 树。",
-      "limitsEn": "Does not modify the source file, and the bytes are not placed in the inspect tree。",
+      "limitsEn": "Does not modify the source file, and the bytes are not placed in the inspect tree.",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -14941,7 +14941,7 @@
       "description": "用 id 和 op 改文件里点名的内容。",
       "descriptionEn": "Use id and op to change the named content in the file.",
       "limits": "不要把整棵 inspect 树塞进请求。",
-      "limitsEn": "Do not send the whole inspect tree back as the edit。",
+      "limitsEn": "Do not send the whole inspect tree back as the edit.",
       "type": "object",
       "required": [
         "action",
@@ -15051,7 +15051,7 @@
       "description": "把图表背后的工作簿数据导出。",
       "descriptionEn": "Export the workbook data behind a chart.",
       "limits": "不改源文件，不算公式。",
-      "limitsEn": "Does not modify the source file and does not evaluate formulas。",
+      "limitsEn": "Does not modify the source file and does not evaluate formulas.",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -18358,7 +18358,7 @@
       "description": "写单元格的数字格式、字体、填充、边框与对齐。",
       "descriptionEn": "Write a cell's number format, font, fill, border, and alignment.",
       "limits": "不改值、不改公式。",
-      "limitsEn": "Does not change the value or the formula。",
+      "limitsEn": "Does not change the value or the formula.",
       "type": "object",
       "required": [
         "op",
@@ -18585,7 +18585,7 @@
       "description": "写行高。",
       "descriptionEn": "Write a row height.",
       "limits": "单位磅，对应 row/@ht。不算自动换行后的高度。",
-      "limitsEn": "The unit is points, stored in row/@ht. Wrapped-text height is not calculated。",
+      "limitsEn": "The unit is points, stored in row/@ht. Wrapped-text height is not calculated.",
       "type": "object",
       "required": [
         "op",
@@ -18626,7 +18626,7 @@
       "description": "合并工作表单元格。",
       "descriptionEn": "Merge worksheet cells.",
       "limits": "不要跟 Word 表的 mergeCells 混用。",
-      "limitsEn": "Do not confuse this with Word table mergeCells。",
+      "limitsEn": "Do not confuse this with Word table mergeCells.",
       "type": "object",
       "required": [
         "op",
@@ -18652,7 +18652,7 @@
       "description": "取消合并。",
       "descriptionEn": "Unmerge cells.",
       "limits": "不恢复合并时清掉的值。",
-      "limitsEn": "Does not restore values cleared by the merge。",
+      "limitsEn": "Does not restore values cleared by the merge.",
       "type": "object",
       "required": [
         "op",
@@ -18678,7 +18678,7 @@
       "description": "往 styles.xml 追加一条命名单元格样式。",
       "descriptionEn": "Append one named cell style to styles.xml.",
       "limits": "不套到任何格子上。",
-      "limitsEn": "Does not apply the style to any cell。",
+      "limitsEn": "Does not apply the style to any cell.",
       "type": "object",
       "required": [
         "op",
@@ -18861,7 +18861,7 @@
       "description": "删掉一条命名单元格样式。",
       "descriptionEn": "Delete one named cell style.",
       "limits": "不删 cellStyleXfs，不改格子上已有 s。",
-      "limitsEn": "Does not delete cellStyleXfs and does not change s already on cells。",
+      "limitsEn": "Does not delete cellStyleXfs and does not change s already on cells.",
       "type": "object",
       "required": [
         "op",

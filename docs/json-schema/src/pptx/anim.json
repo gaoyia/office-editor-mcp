@@ -131,7 +131,7 @@
       "description": "写或清除该宿主 <p:transition>。",
       "descriptionEn": "Write or clear that host's <p:transition>.",
       "limits": "不写 <p:timing>。",
-      "limitsEn": "Does not write <p:timing>。",
+      "limitsEn": "Does not write <p:timing>.",
       "type": "object",
       "required": [
         "op",

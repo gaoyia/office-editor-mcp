@@ -63,9 +63,37 @@ ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
     }
   }
 }
+
+{
+  "mcpServers": {
+    "ooxp": {
+      "command": "ooxp",
+      "args": ["mcp", "--lang", "en"]
+    }
+  }
+}
 ```
 
-工具是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help`。参数就是领域 JSON，不必再写 `action`。操作怎么填，调用 `help`。细节见 `docs/cli.md`。
+工具是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help`。操作怎么填，调用 `help`。细节见 `docs/cli.md`。
+
+参数有两种形状。
+
+| 形状 | 写什么 |
+| --- | --- |
+| 直接写 | 领域 JSON，不必再写 `action` |
+| 本地文件 | 只写 `requestPath` |
+
+文件里是同一份领域 JSON。`requestPath` 不是领域字段。
+
+语言是 `zh`（中文）或 `en`（英文）。它选择错误文案、`help` 的说明，以及 `ooxp mcp` 的 `initialize` 说明和工具介绍。写在越窄的地方，越先采用。
+
+| 位置 | 范围 |
+| --- | --- |
+| 请求里的 `locale` | 这一次请求 |
+| `--lang` | 这个进程 |
+| `OOXP_LANG` | 环境变量 |
+
+都没写时，错误文案是英文，`help` 是中文，`initialize` 的说明是中文。
 
 新建一份工作簿：
 
@@ -81,7 +109,7 @@ cargo run -p ooxp-cli -- --input docs/examples/xlsx-create.json
   "action": "help",
   "format": "xlsx",
   "op": "setCell",
-  "locale": "zh-CN"
+  "locale": "zh"
 }
 ```
 
@@ -89,7 +117,7 @@ cargo run -p ooxp-cli -- --input docs/examples/xlsx-create.json
 cargo run -p ooxp-cli -- --pretty
 ```
 
-把上面的 JSON 从 stdin 送进去。请求里的 `locale` 优先于 `--lang`，再优先于环境变量 `OOXP_LANG`。都没给时，错误文案是英文。`help` 不写 `locale` 时，说明是中文。
+把上面的 JSON 从 stdin 送进去。
 
 PowerShell 里如果中文显示乱码，先把输出解码设成 UTF-8：
 

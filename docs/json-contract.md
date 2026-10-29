@@ -101,7 +101,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
 `locale` 不属于动作参数，六种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
-这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。`ooxp mcp` 没有 `--lang`，只剩 `locale` 和 `OOXP_LANG`。自己另写的外部 MCP 没有后两档，只能写请求里的 `locale`。
+这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。`ooxp mcp --lang` 与这里的 `--lang` 同一档。没带时，错误文案只剩 `locale` 和 `OOXP_LANG`。`help` 在请求和 `--lang` 都没给语言时仍是中文。自己另写的外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
 禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
@@ -144,7 +144,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 带 `name` 时，打开一个定义，例如 `inspectScope`、`xlsxWorkbook`。新建和查看范围不在操作名单里，走这里。
 
-`op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。不写 `locale` 时，`description` 和 `limits` 是中文。`locale` 为 `en` 时这两条换成英文。一次结果里只出一种语言。
+`op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。不写 `locale` 时，`description` 和 `limits` 是中文。`locale` 为 `en` 时这两条换成英文。一次结果里只出一种语言。动作目录里的 `ask.search.q` 也跟着这一种语言：中文是「单元格」，英文是 `cell`。
 
 ## 稳定 id
 
@@ -2225,5 +2225,5 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ## 两层 JSON
 
-领域 JSON 就是本文。库只认这一层。命令行的 `ooxp mcp` 会解析 JSON-RPC，但交给库之前只留下领域 JSON，`action` 用工具名补上。外部调用方也可以自己包信封，把本文整个对象放进 `params`。
+领域 JSON 就是本文。库只认这一层。命令行的 `ooxp mcp` 会解析 JSON-RPC，但交给库之前只留下领域 JSON，`action` 用工具名补上。工具参数若只有 `requestPath`，命令行先读该文件，再把文件内容当作领域 JSON。`requestPath` 不是领域字段。外部调用方也可以自己包信封，把本文整个对象放进 `params`。
 不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格或段落字段去迁就 RPC。

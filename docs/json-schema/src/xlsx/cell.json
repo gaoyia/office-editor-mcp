@@ -127,7 +127,7 @@
       "description": "写单元格的数字格式、字体、填充、边框与对齐。",
       "descriptionEn": "Write a cell's number format, font, fill, border, and alignment.",
       "limits": "不改值、不改公式。",
-      "limitsEn": "Does not change the value or the formula。",
+      "limitsEn": "Does not change the value or the formula.",
       "type": "object",
       "required": [
         "op",
@@ -354,7 +354,7 @@
       "description": "写行高。",
       "descriptionEn": "Write a row height.",
       "limits": "单位磅，对应 row/@ht。不算自动换行后的高度。",
-      "limitsEn": "The unit is points, stored in row/@ht. Wrapped-text height is not calculated。",
+      "limitsEn": "The unit is points, stored in row/@ht. Wrapped-text height is not calculated.",
       "type": "object",
       "required": [
         "op",
@@ -395,7 +395,7 @@
       "description": "合并工作表单元格。",
       "descriptionEn": "Merge worksheet cells.",
       "limits": "不要跟 Word 表的 mergeCells 混用。",
-      "limitsEn": "Do not confuse this with Word table mergeCells。",
+      "limitsEn": "Do not confuse this with Word table mergeCells.",
       "type": "object",
       "required": [
         "op",
@@ -421,7 +421,7 @@
       "description": "取消合并。",
       "descriptionEn": "Unmerge cells.",
       "limits": "不恢复合并时清掉的值。",
-      "limitsEn": "Does not restore values cleared by the merge。",
+      "limitsEn": "Does not restore values cleared by the merge.",
       "type": "object",
       "required": [
         "op",
@@ -447,7 +447,7 @@
       "description": "往 styles.xml 追加一条命名单元格样式。",
       "descriptionEn": "Append one named cell style to styles.xml.",
       "limits": "不套到任何格子上。",
-      "limitsEn": "Does not apply the style to any cell。",
+      "limitsEn": "Does not apply the style to any cell.",
       "type": "object",
       "required": [
         "op",
@@ -630,7 +630,7 @@
       "description": "删掉一条命名单元格样式。",
       "descriptionEn": "Delete one named cell style.",
       "limits": "不删 cellStyleXfs，不改格子上已有 s。",
-      "limitsEn": "Does not delete cellStyleXfs and does not change s already on cells。",
+      "limitsEn": "Does not delete cellStyleXfs and does not change s already on cells.",
       "type": "object",
       "required": [
         "op",

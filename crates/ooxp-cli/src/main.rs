@@ -29,11 +29,13 @@ struct Cli {
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     if args.first().and_then(|arg| arg.to_str()) == Some("mcp") {
-        if args.len() != 1 {
-            eprintln!("mcp 不接受其他参数");
-            return ExitCode::from(1);
-        }
-        return mcp::serve();
+        return match mcp::parse_lang(&args) {
+            Ok(lang) => mcp::serve(lang),
+            Err(message) => {
+                eprintln!("{message}");
+                ExitCode::from(1)
+            }
+        };
     }
     let cli = Cli::parse();
     let fallback = Lang::resolve(

@@ -962,7 +962,7 @@
       "description": "删掉该 c:errBars。",
       "descriptionEn": "Delete that c:errBars.",
       "limits": "找不到报 IdNotFound。",
-      "limitsEn": "A missing id returns IdNotFound。",
+      "limitsEn": "A missing id returns IdNotFound.",
       "type": "object",
       "required": [
         "op",

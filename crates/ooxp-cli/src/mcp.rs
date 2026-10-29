@@ -6,9 +6,35 @@ use std::process::ExitCode;
 use ooxp::{peek_lang, run, written_json, Lang, RunOutput};
 use serde_json::{json, Map, Value};
 
-pub fn serve() -> ExitCode {
+pub fn parse_lang(args: &[std::ffi::OsString]) -> Result<Option<String>, &'static str> {
+    let Some(second) = args.get(1) else {
+        return Ok(None);
+    };
+    let Some(text) = second.to_str() else {
+        return Err("mcp 只接受 --lang。例如 ooxp mcp --lang zh-CN");
+    };
+    let tag = if text == "--lang" {
+        if args.len() != 3 {
+            return Err("mcp 只接受 --lang。例如 ooxp mcp --lang zh-CN");
+        }
+        args.get(2).and_then(|item| item.to_str())
+    } else if let Some(inline) = text.strip_prefix("--lang=") {
+        if args.len() != 2 {
+            return Err("mcp 只接受 --lang。例如 ooxp mcp --lang zh-CN");
+        }
+        Some(inline)
+    } else {
+        return Err("mcp 只接受 --lang。例如 ooxp mcp --lang zh-CN");
+    };
+    match tag {
+        Some(tag) if !tag.is_empty() => Ok(Some(tag.to_string())),
+        _ => Err("mcp 的 --lang 需要语言标签。例如 ooxp mcp --lang zh-CN"),
+    }
+}
+
+pub fn serve(default_lang: Option<String>) -> ExitCode {
     if io::stdin().is_terminal() {
-        eprintln!("ooxp mcp 正在等待编辑器从标准输入发送消息。");
+        eprintln!("{}", waiting_line(default_lang.as_deref()));
     }
     let stdin = io::stdin();
     let mut reader = io::BufReader::new(stdin.lock());
@@ -18,7 +44,7 @@ pub fn serve() -> ExitCode {
             Ok(None) => return ExitCode::SUCCESS,
             Err(_) => return ExitCode::from(1),
         };
-        if let Some(response) = reply(&message.body) {
+        if let Some(response) = reply_with_lang(&message.body, default_lang.as_deref()) {
             if write_message(message.content_length, &response).is_err() {
                 return ExitCode::from(1);
             }
@@ -26,7 +52,12 @@ pub fn serve() -> ExitCode {
     }
 }
 
+#[cfg(test)]
 pub fn reply(message: &str) -> Option<String> {
+    reply_with_lang(message, None)
+}
+
+fn reply_with_lang(message: &str, default_lang: Option<&str>) -> Option<String> {
     let value: Value = match serde_json::from_str(message) {
         Ok(value) => value,
         Err(_) => {
@@ -42,21 +73,47 @@ pub fn reply(message: &str) -> Option<String> {
         .and_then(|item| item.as_str())
         .unwrap_or("");
     let params = value.get("params").cloned().unwrap_or_else(|| json!({}));
-    Some(respond(id, dispatch(method, &params)))
+    Some(respond(id, dispatch(method, &params, default_lang)))
 }
 
-fn dispatch(method: &str, params: &Value) -> Result<Value, (i32, String)> {
+fn dispatch(
+    method: &str,
+    params: &Value,
+    default_lang: Option<&str>,
+) -> Result<Value, (i32, String)> {
     match method {
-        "initialize" => Ok(initialize(params)),
+        "initialize" => Ok(initialize(params, default_lang)),
         "ping" => Ok(json!({})),
-        "tools/list" => Ok(tools()),
-        "tools/call" => Ok(call_tool(params)),
+        "tools/list" => Ok(tools(chrome_lang(default_lang))),
+        "tools/call" => Ok(call_tool(params, default_lang)),
         "logging/setLevel" => Ok(json!({})),
         _ => Err((-32601, format!("未知方法: {method}"))),
     }
 }
 
-fn initialize(params: &Value) -> Value {
+const INSTRUCTIONS_ZH: &str = "\
+ooxp 是 Office Open XML Patch。它用领域 JSON 读写 docx、xlsx、pptx。真源是包里的 XML。程序按稳定 id 打补丁，其余部件按原字节写回。只有新建文件才整包生成。程序不计算公式，不排版，也不放映。
+
+不知道如何使用这些工具时，先调用 help。不带参数可以看六个动作怎么用。要某个格式的操作名单，带上 format。要某一条操作的字段，再带上 format 和 op。查完再调用对应的工具。
+
+调用先走 inspect，只用返回树上的 id。id 和 op 名都从 inspect 或 help 里取。接着用 apply，一次只写需要的 op。create 只用于新建文件，它是 action。op 名单里没有 create。要看它的字段，用 help 打开 name 为 createRequest 的定义。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。这三项不要同时出现。exportMedia 和 exportChartData 把字节写到 output 给出的另一个路径。这些字节不进入 inspect 树。
+
+六个工具的参数有两种形状。直接写领域 JSON，字段名保持原样。或者只写 requestPath，指向本机上一份领域 JSON 文件。两种不要同时写。action 由工具名补上。调用方写了 action 时，它必须和工具名相同。schemaVersion 可以省略，省略视为 1。写了又不是 1，调用会被拒绝。format 可以省略，程序从 path 的扩展名推断。path 是这份 Office 文件在本机的路径。apply 要另存时，把新路径写在 output，省略则写回 path。exportMedia 和 exportChartData 把落盘路径写在 output。这里没有命令行的 --output。调用被拒绝时，读错误里的 code 和字段，再改请求。
+
+help 一次只打开一层。它不读文件，也不改文件。不带参数时，它返回动作目录和 ask。带 format 时，它列出该格式的 op。带 q 时可以再加 format，结果会命中动作、定义和 op。带 format 和 op 时，它打开这一条操作。带 name 时，它打开一个定义。name 是定义名，例如 createRequest、inspectScope。q、op、name 不要同时出现。返回里的 kind 和 next 说明这一层是什么，以及下一步该带哪些字段。上一层的结果不是全部字段。help 不写 locale、进程也没给 --lang 时，说明是中文。";
+
+const INSTRUCTIONS_EN: &str = "\
+ooxp is Office Open XML Patch. It reads and writes docx, xlsx, and pptx with domain JSON. The source of truth is the XML in the package. The program patches that XML by stable id and writes every other part back as its original bytes. Only creating a file generates a whole package. The program does not calculate formulas, lay out pages, or run a slide show.
+
+If you do not know how to use these tools, call help first. With no arguments it shows how the six actions work. For one format's operation list, add format. For one operation's fields, add format and op. Then call the tool.
+
+Start with inspect, and use only ids from the returned tree. Take ids and op names from inspect or help. Then use apply, and send only the ops you need. create is only for a new file. It is an action. The op list has no create. To see its fields, open the definition named createRequest with help. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation. Do not send those three together. exportMedia and exportChartData write bytes to the path in output. Those bytes do not enter the inspect tree.
+
+Each of the six tools takes one of two shapes. Write domain JSON directly and keep the field names. Or write only requestPath, pointing at a domain JSON file on this machine. Do not send both. The tool name fills in action. If you write action, it must match the tool name. schemaVersion may be omitted, and that means 1. Any other value is rejected. format may be omitted; the program infers it from the path extension. path is the Office file on this machine. To save apply as another file, put the new path in output. Omit it to write back to path. exportMedia and exportChartData put the destination path in output. There is no command-line --output here. When a call is rejected, read the error code and field, then change the request.
+
+help opens one layer at a time. It does not read a file or change a file. With no arguments it returns the action index and ask. With format it lists that format's ops. With q it may also take format, and the hits include actions, definitions, and ops. With format and op it opens that one operation. With name it opens a definition. name is a definition name, such as createRequest or inspectScope. Do not send q, op, and name together. kind and next say what this layer is and which fields to send next. The previous layer is not the full field list. When help omits locale and the process has no --lang, the text is Chinese.";
+
+fn initialize(params: &Value, default_lang: Option<&str>) -> Value {
     let version = params
         .get("protocolVersion")
         .and_then(|item| item.as_str())
@@ -69,31 +126,58 @@ fn initialize(params: &Value) -> Value {
             "name": "ooxp",
             "version": env!("CARGO_PKG_VERSION")
         },
-        "instructions": "用领域 JSON 读写 docx、xlsx、pptx。六个工具的参数就是领域 JSON，不要另造字段。操作名单很长，先调用 help，再调用 apply。path 和 output 写在参数里。"
+        "instructions": instructions(default_lang)
     })
 }
 
-fn tools() -> Value {
+fn waiting_line(default_lang: Option<&str>) -> &'static str {
+    say(
+        chrome_lang(default_lang),
+        "ooxp mcp 正在等待编辑器从标准输入发送消息。",
+        "ooxp mcp is waiting for the editor to send messages on standard input.",
+    )
+}
+
+fn chrome_lang(default_lang: Option<&str>) -> Lang {
+    match default_lang {
+        Some(tag) => Lang::parse(tag),
+        None => Lang::ZhCn,
+    }
+}
+
+fn say<'a>(lang: Lang, zh: &'a str, en: &'a str) -> &'a str {
+    match lang {
+        Lang::ZhCn => zh,
+        Lang::En => en,
+    }
+}
+
+fn instructions(default_lang: Option<&str>) -> &'static str {
+    say(chrome_lang(default_lang), INSTRUCTIONS_ZH, INSTRUCTIONS_EN)
+}
+
+fn tools(lang: Lang) -> Value {
     json!({
         "tools": [
             tool(
                 "inspect",
-                "按 scope 看文件的一部分。不要一次要整份文件。改内容用 apply，不要把看到的树整份送回去。",
+                say(lang, "按 scope 看文件的一部分。范围不要一次覆盖整份文件。要改内容，改用 apply，并只用这次返回的 id。", "Read part of a file by scope. Do not cover the whole file at once. To change content, use apply, and use only ids from this result."),
                 json!({
-                    "path": { "type": "string", "minLength": 1, "description": "本地文件路径" },
+                    "path": { "type": "string", "minLength": 1, "description": say(lang, "本机上的 Office 文件路径", "Path of the Office file on this machine") },
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "scope": { "type": "object", "description": "查看范围。键用 help 的 name=inspectScope 查。" },
+                    "scope": { "type": "object", "description": say(lang, "查看范围。字段名用 help 打开 inspectScope。", "What to read. Open inspectScope with help for the field names.") },
                     "locale": { "type": "string" },
                     "schemaVersion": { "const": 1 },
                     "action": { "const": "inspect" }
                 }),
                 &["path"],
+                lang,
             ),
             tool(
                 "create",
-                "只用于新建文件。已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
+                say(lang, "只用于新建文件。已经存在的文件用 apply。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。", "Only for a new file. An existing file uses apply. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation."),
                 json!({
-                    "path": { "type": "string", "minLength": 1, "description": "要写出的本地路径" },
+                    "path": { "type": "string", "minLength": 1, "description": say(lang, "新建文件要写到的本机路径", "Local path for the new file") },
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
                     "workbook": { "type": "object" },
                     "document": { "type": "object" },
@@ -103,57 +187,61 @@ fn tools() -> Value {
                     "action": { "const": "create" }
                 }),
                 &["path"],
+                lang,
             ),
             tool(
                 "apply",
-                "用 id 和 op 改文件里点名的内容。不要把整棵 inspect 树塞进请求。某一条 op 怎么填，先调用 help。",
+                say(lang, "按 id 和 op 修改文件里点名的内容。请求里放 ops，不要放整棵 inspect 树。某一条 op 的字段先用 help 查。", "Change named content by id and op. Put ops in the request, not the whole inspect tree. Look up one op's fields with help first."),
                 json!({
-                    "path": { "type": "string", "minLength": 1, "description": "源文件路径" },
+                    "path": { "type": "string", "minLength": 1, "description": say(lang, "要修改的 Office 文件路径", "Path of the Office file to change") },
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "output": { "type": "string", "minLength": 1, "description": "另存路径。省略则写回 path" },
+                    "output": { "type": "string", "minLength": 1, "description": say(lang, "另存路径。省略时写回 path", "Save-as path. Omit it to write back to path") },
                     "ops": {
                         "type": "array",
                         "minItems": 1,
                         "items": { "type": "object" },
-                        "description": "操作列表。每条的形状用 help 按 format 和 op 查。"
+                        "description": say(lang, "操作列表。每条的字段用 help 按 format 和 op 查。", "Operation list. Look up each item's fields with help, using format and op.")
                     },
                     "locale": { "type": "string" },
                     "schemaVersion": { "const": 1 },
                     "action": { "const": "apply" }
                 }),
                 &["path", "ops"],
+                lang,
             ),
             tool(
                 "exportMedia",
-                "按 id 把图或嵌入对象的原始字节写到本地。不改源文件，字节也不进 inspect 树。",
+                say(lang, "按 id 把图、音视频、OLE、墨迹、3D 模型或嵌入字体的原字节写到 output。源文件保持不变。这些字节不进入 inspect 树。", "Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to output by id. The source file stays unchanged. Those bytes do not enter the inspect tree."),
                 json!({
-                    "path": { "type": "string", "minLength": 1 },
+                    "path": { "type": "string", "minLength": 1, "description": say(lang, "源 Office 文件的本机路径", "Local path of the source Office file") },
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "id": { "type": "string", "minLength": 1 },
-                    "output": { "type": "string", "minLength": 1, "description": "写出路径" },
+                    "id": { "type": "string", "minLength": 1, "description": say(lang, "inspect 树上的图、音视频、OLE、墨迹、3D 或嵌入字体 id", "Id of a picture, audio, video, OLE object, ink, 3D model, or embedded font on the inspect tree") },
+                    "output": { "type": "string", "minLength": 1, "description": say(lang, "字节要写到的本机路径", "Local path where the bytes are written") },
                     "locale": { "type": "string" },
                     "schemaVersion": { "const": 1 },
                     "action": { "const": "exportMedia" }
                 }),
                 &["path", "id", "output"],
+                lang,
             ),
             tool(
                 "exportChartData",
-                "按图表 id 把背后的工作簿数据导出。不改源文件，不算公式。",
+                say(lang, "按图表 id 把 docx 或 pptx 图表背后的工作簿写到 output。源文件保持不变，公式不计算。xlsx 没有这个动作。", "Write the workbook behind a docx or pptx chart to output by chart id. The source file stays unchanged, and formulas are not calculated. xlsx does not have this action."),
                 json!({
-                    "path": { "type": "string", "minLength": 1 },
+                    "path": { "type": "string", "minLength": 1, "description": say(lang, "源 docx 或 pptx 的本机路径", "Local path of the source docx or pptx") },
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "id": { "type": "string", "minLength": 1 },
-                    "output": { "type": "string", "minLength": 1, "description": "写出路径" },
+                    "id": { "type": "string", "minLength": 1, "description": say(lang, "inspect 树上的图表 id", "Chart id on the inspect tree") },
+                    "output": { "type": "string", "minLength": 1, "description": say(lang, "工作簿要写到的本机路径", "Local path where the workbook is written") },
                     "locale": { "type": "string" },
                     "schemaVersion": { "const": 1 },
                     "action": { "const": "exportChartData" }
                 }),
                 &["path", "id", "output"],
+                lang,
             ),
             tool(
                 "help",
-                "查某个操作怎么填。一次只打开一层。format、q、op、name 的用法见返回里的 ask。q、op、name 不要同时写。",
+                say(lang, "查动作、操作和字段怎么填。一次只打开一层。format、q、op、name 的用法见返回里的 ask。这三项不要同时出现。", "Look up how to fill an action, operation, or field. Open one layer at a time. The result's ask explains format, q, op, and name. Do not send q, op, and name together."),
                 json!({
                     "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
                     "q": { "type": "string", "minLength": 1 },
@@ -164,25 +252,44 @@ fn tools() -> Value {
                     "action": { "const": "help" }
                 }),
                 &[],
+                lang,
             ),
         ]
     })
 }
 
-fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
+fn tool(
+    name: &str,
+    description: &str,
+    mut properties: Value,
+    required: &[&str],
+    lang: Lang,
+) -> Value {
+    properties["requestPath"] = json!({
+        "type": "string",
+        "minLength": 1,
+        "description": say(
+            lang,
+            "本机上的领域 JSON 文件。使用时参数里只写这一个字段。",
+            "A domain JSON file on this machine. When used, it is the only field."
+        )
+    });
     json!({
         "name": name,
         "description": description,
         "inputSchema": {
             "type": "object",
             "properties": properties,
-            "required": required,
-            "additionalProperties": false
+            "additionalProperties": false,
+            "oneOf": [
+                { "required": required, "not": { "required": ["requestPath"] } },
+                { "required": ["requestPath"], "maxProperties": 1 }
+            ]
         }
     })
 }
 
-fn call_tool(params: &Value) -> Value {
+fn call_tool(params: &Value, default_lang: Option<&str>) -> Value {
     let name = params
         .get("name")
         .and_then(|item| item.as_str())
@@ -199,7 +306,7 @@ fn call_tool(params: &Value) -> Value {
             "未知工具: {name}。可用的工具是 inspect、create、apply、exportMedia、exportChartData、help。"
         ));
     }
-    let json_text = match domain_json(name, &arguments) {
+    let json_text = match domain_json(name, &arguments, default_lang) {
         Ok(text) => text,
         Err(error) => return tool_error(error),
     };
@@ -214,10 +321,48 @@ fn call_tool(params: &Value) -> Value {
     }
 }
 
-fn domain_json(name: &str, arguments: &Value) -> Result<String, String> {
+fn domain_json(
+    name: &str,
+    arguments: &Value,
+    default_lang: Option<&str>,
+) -> Result<String, String> {
     let Some(obj) = arguments.as_object() else {
         return Err("arguments 必须是对象。".to_string());
     };
+    let source = if obj.contains_key("requestPath") {
+        request_file(obj)?
+    } else {
+        obj.clone()
+    };
+    compose(name, &source, default_lang)
+}
+
+fn request_file(obj: &Map<String, Value>) -> Result<Map<String, Value>, String> {
+    if obj.len() != 1 {
+        return Err("requestPath 与其它字段不能同时出现。".to_string());
+    }
+    let path = match obj.get("requestPath").and_then(Value::as_str) {
+        Some(path) if !path.is_empty() => path,
+        _ => return Err("requestPath 必须是非空字符串。".to_string()),
+    };
+    let text =
+        std::fs::read_to_string(path).map_err(|err| format!("无法读取请求文件 {path}：{err}"))?;
+    let value: Value =
+        serde_json::from_str(&text).map_err(|_| format!("请求文件不是 JSON：{path}"))?;
+    let Some(file) = value.as_object() else {
+        return Err(format!("请求文件必须是 JSON 对象：{path}"));
+    };
+    if file.contains_key("requestPath") {
+        return Err("请求文件是领域 JSON，不能包含 requestPath。".to_string());
+    }
+    Ok(file.clone())
+}
+
+fn compose(
+    name: &str,
+    obj: &Map<String, Value>,
+    default_lang: Option<&str>,
+) -> Result<String, String> {
     if let Some(action) = obj.get("action").and_then(Value::as_str) {
         if action != name {
             return Err(format!("action 是 {action}，这个工具是 {name}。"));
@@ -230,6 +375,11 @@ fn domain_json(name: &str, arguments: &Value) -> Result<String, String> {
             continue;
         }
         body.insert(key.clone(), value.clone());
+    }
+    if let Some(lang) = default_lang {
+        if !body.contains_key("locale") {
+            body.insert("locale".to_string(), json!(lang));
+        }
     }
     serde_json::to_string(&body).map_err(|_| "无法组成领域 JSON。".to_string())
 }
@@ -367,6 +517,127 @@ mod tests {
             parsed["result"]["protocolVersion"].as_str(),
             Some("2024-11-05")
         );
+        let instructions = parsed["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("不知道如何使用这些工具时，先调用 help"));
+        assert!(instructions.contains("Office Open XML Patch"));
+        assert!(instructions.contains("createRequest"));
+        assert!(instructions.contains("inspectScope"));
+        assert!(instructions.contains("kind"));
+        assert!(instructions.contains("requestPath"));
+    }
+
+    #[test]
+    fn initialize_and_tools_follow_mcp_lang() {
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"demo","version":"0"}}}"#;
+        let english = reply_with_lang(request, Some("en")).unwrap();
+        let english: Value = serde_json::from_str(&english).unwrap();
+        let instructions = english["result"]["instructions"].as_str().unwrap();
+        assert!(instructions.contains("call help first"));
+        assert!(instructions.contains("requestPath"));
+        assert!(!instructions.contains("不知道如何使用"));
+
+        let chinese = reply_with_lang(request, Some("zh")).unwrap();
+        let chinese: Value = serde_json::from_str(&chinese).unwrap();
+        assert!(chinese["result"]["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("不知道如何使用这些工具时，先调用 help"));
+
+        let listed = reply_with_lang(
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+            Some("en"),
+        )
+        .unwrap();
+        let listed: Value = serde_json::from_str(&listed).unwrap();
+        assert!(listed["result"]["tools"][0]["description"]
+            .as_str()
+            .unwrap()
+            .contains("Read part of a file by scope"));
+    }
+
+    #[test]
+    fn lang_flag_is_optional() {
+        let args = [std::ffi::OsString::from("mcp")];
+        assert_eq!(parse_lang(&args).unwrap(), None);
+        let args = [
+            std::ffi::OsString::from("mcp"),
+            std::ffi::OsString::from("--lang"),
+            std::ffi::OsString::from("zh-CN"),
+        ];
+        assert_eq!(parse_lang(&args).unwrap().as_deref(), Some("zh-CN"));
+        let args = [
+            std::ffi::OsString::from("mcp"),
+            std::ffi::OsString::from("--pretty"),
+        ];
+        assert!(parse_lang(&args).is_err());
+        assert!(waiting_line(Some("en")).starts_with("ooxp mcp is waiting"));
+        assert!(waiting_line(None).contains("正在等待"));
+        assert!(waiting_line(Some("zh")).contains("正在等待"));
+    }
+
+    #[test]
+    fn default_lang_translates_help_until_locale_overrides_it() {
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"help","arguments":{"format":"xlsx","op":"setCell"}}}"#;
+        let english = reply_with_lang(request, Some("en")).unwrap();
+        let english: Value = serde_json::from_str(&english).unwrap();
+        let text = english["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("Change a cell's value or formula."));
+
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"help","arguments":{"format":"xlsx","op":"setCell","locale":"zh-CN"}}}"#;
+        let chinese = reply_with_lang(request, Some("en")).unwrap();
+        let chinese: Value = serde_json::from_str(&chinese).unwrap();
+        let text = chinese["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("改一个单元格的值或公式。"));
+    }
+
+    #[test]
+    fn english_help_index_uses_an_english_example() {
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"help","arguments":{}}}"#;
+        let english = reply_with_lang(request, Some("en")).unwrap();
+        let english: Value = serde_json::from_str(&english).unwrap();
+        let text = english["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("\"q\":\"cell\""));
+        assert!(!text.contains("单元格"));
+        assert!(!text.contains('。'));
+    }
+
+    #[test]
+    fn request_path_loads_the_domain_json_file() {
+        let path = std::env::temp_dir().join(format!("ooxp-mcp-req-{}.json", std::process::id()));
+        std::fs::write(&path, r#"{"format":"xlsx","op":"setCell"}"#).unwrap();
+        let path_text = path.display().to_string();
+        let response = call("help", json!({ "requestPath": path_text }));
+        let _ = std::fs::remove_file(&path);
+        assert!(response["result"].get("isError").is_none());
+        assert!(tool_message(&response).contains("改一个单元格的值或公式。"));
+    }
+
+    #[test]
+    fn request_path_rejects_other_fields_and_a_mismatched_action() {
+        let mixed = call(
+            "help",
+            json!({ "requestPath": "ignored.json", "format": "xlsx" }),
+        );
+        assert_eq!(mixed["result"]["isError"].as_bool(), Some(true));
+        assert!(tool_message(&mixed).contains("不能同时出现"));
+
+        let missing = call(
+            "help",
+            json!({ "requestPath": "ooxp-mcp-no-such-request.json" }),
+        );
+        assert_eq!(missing["result"]["isError"].as_bool(), Some(true));
+        assert!(tool_message(&missing).contains("无法读取请求文件"));
+
+        let path = std::env::temp_dir().join(format!("ooxp-mcp-act-{}.json", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"{"action":"inspect","format":"xlsx","op":"setCell"}"#,
+        )
+        .unwrap();
+        let response = call("help", json!({ "requestPath": path.display().to_string() }));
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(response["result"]["isError"].as_bool(), Some(true));
+        assert!(tool_message(&response).contains("这个工具是 help"));
     }
 
     #[test]

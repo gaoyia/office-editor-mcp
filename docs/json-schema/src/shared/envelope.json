@@ -319,7 +319,7 @@
       "description": "按 id 把图或嵌入对象的原始字节写到本地。",
       "descriptionEn": "Write the original bytes of a picture or an embedded object to a local file, by id.",
       "limits": "不改源文件，字节也不进 inspect 树。",
-      "limitsEn": "Does not modify the source file, and the bytes are not placed in the inspect tree。",
+      "limitsEn": "Does not modify the source file, and the bytes are not placed in the inspect tree.",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
@@ -359,7 +359,7 @@
       "description": "用 id 和 op 改文件里点名的内容。",
       "descriptionEn": "Use id and op to change the named content in the file.",
       "limits": "不要把整棵 inspect 树塞进请求。",
-      "limitsEn": "Do not send the whole inspect tree back as the edit。",
+      "limitsEn": "Do not send the whole inspect tree back as the edit.",
       "type": "object",
       "required": [
         "action",
@@ -469,7 +469,7 @@
       "description": "把图表背后的工作簿数据导出。",
       "descriptionEn": "Export the workbook data behind a chart.",
       "limits": "不改源文件，不算公式。",
-      "limitsEn": "Does not modify the source file and does not evaluate formulas。",
+      "limitsEn": "Does not modify the source file and does not evaluate formulas.",
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [

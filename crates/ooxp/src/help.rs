@@ -193,6 +193,13 @@ fn ref_def_name(reference: &str) -> String {
     rest.split('/').next().unwrap_or(rest).to_string()
 }
 
+fn ask_query(lang: HelpLang) -> &'static str {
+    match lang {
+        HelpLang::Zh => "单元格",
+        HelpLang::En => "cell",
+    }
+}
+
 fn index(lang: HelpLang) -> Value {
     json!({
         "kind": "actions",
@@ -206,7 +213,7 @@ fn index(lang: HelpLang) -> Value {
         ],
         "ask": {
             "list": {"format": "xlsx"},
-            "search": {"q": "单元格", "format": "xlsx"},
+            "search": {"q": ask_query(lang), "format": "xlsx"},
             "op": {"format": "xlsx", "op": "setCell"},
             "def": {"name": "inspectScope"}
         }
