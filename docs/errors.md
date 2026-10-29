@@ -51,7 +51,7 @@
 ## 错误码
 
 - **`InvalidJson`**（退出码 2）
-  - 入参不是 JSON，或缺 `schemaVersion` / `action`
+  - 入参不是 JSON，或缺 `action`
 - **`UnsupportedSchema`**（退出码 2）
   - `schemaVersion` 不是 `1`
 - **`UnsupportedAction`**（退出码 2）

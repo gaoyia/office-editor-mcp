@@ -5,7 +5,6 @@
   "title": "ooxp 领域请求",
   "type": "object",
   "required": [
-    "schemaVersion",
     "action"
   ],
   "properties": {
@@ -14599,7 +14598,6 @@
       "limitsEn": "Do not request the whole file at once. To change content, use apply. Do not send the whole tree you just saw back as the edit.",
       "type": "object",
       "required": [
-        "schemaVersion",
         "action",
         "path"
       ],
@@ -14851,7 +14849,6 @@
       "type": "object",
       "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
-        "schemaVersion",
         "action"
       ],
       "additionalProperties": false,
@@ -14908,7 +14905,6 @@
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
-        "schemaVersion",
         "action",
         "path",
         "id"
@@ -14948,7 +14944,6 @@
       "limitsEn": "Do not send the whole inspect tree back as the edit。",
       "type": "object",
       "required": [
-        "schemaVersion",
         "action",
         "path",
         "ops"
@@ -15060,7 +15055,6 @@
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
       "required": [
-        "schemaVersion",
         "action",
         "path",
         "id"
@@ -15101,7 +15095,6 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion",
         "action"
       ],
       "properties": {

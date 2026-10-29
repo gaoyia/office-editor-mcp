@@ -51,15 +51,9 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         .ok_or_else(|| Error::new(ErrorKind::InvalidJsonNotObject))?;
 
     match obj.get("schemaVersion") {
-        None => {
-            return Err(Error::new(ErrorKind::MissingEnvelopeField {
-                field: "schemaVersion".into(),
-            }));
-        }
-        Some(v) if v.as_u64() != Some(1) && v.as_i64() != Some(1) => {
-            return Err(Error::new(ErrorKind::UnsupportedSchema));
-        }
-        _ => {}
+        None => {}
+        Some(v) if v.as_u64() == Some(1) || v.as_i64() == Some(1) => {}
+        Some(_) => return Err(Error::new(ErrorKind::UnsupportedSchema)),
     }
 
     let action = obj.get("action").and_then(Value::as_str).ok_or_else(|| {

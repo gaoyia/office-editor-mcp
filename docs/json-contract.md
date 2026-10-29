@@ -1,6 +1,6 @@
 # 领域 JSON 契约
 
-`schemaVersion` 固定为 `1`。库和命令行只认这一层。外部 MCP 也必须整份使用这一层，不许改字段名和含义，不许拆扁成工具参数。
+`schemaVersion` 可省略，省略视为 `1`。写了就必须是 `1`。库和命令行只认这一层。外部 MCP 也必须整份使用这一层，不许改字段名和含义，不许拆扁成工具参数。
 
 xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [json-contract-xlsx.md](json-contract-xlsx.md)、
 [json-contract-docx.md](json-contract-docx.md)、[json-contract-pptx.md](json-contract-pptx.md)。
@@ -96,7 +96,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
-| `schemaVersion` | 整数 | 必须是 `1` |
+| `schemaVersion` | 整数 | 可选。省略视为 `1`。写了就必须是 `1` |
 | `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 

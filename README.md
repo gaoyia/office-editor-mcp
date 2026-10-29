@@ -92,7 +92,7 @@ let json = r#"{
 let out = ooxp::run(json, None)?;
 ```
 
-`format` 可以省略，省略时从 `path` 的扩展名推断。`schemaVersion` 必须是 `1`。
+`format` 可以省略，省略时从 `path` 的扩展名推断。`schemaVersion` 可以省略，省略视为 `1`。写了就必须是 `1`。
 
 ## 文档
 
