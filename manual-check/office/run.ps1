@@ -245,6 +245,7 @@ $order = @(
     'opc-resave'
     'xml-attr-newline'
     'id-pin'
+    'docx-tab-br'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'

@@ -1791,6 +1791,8 @@ pptx 母版 `theme.fonts` 同一套字段。pptx 页级 `themeOverride` 挂在�
   - 段落列表
   - 可空
   - 空则生成一个空的 `w:p`，否则 Word 可能打不开
+  - `\t` 写成 `w:tab`，`\n` 写成 `w:br`，与 `w:t` 同级，都在 `w:r` 里（ECMA-376 §17.3.3 `CT_R`）
+  - 写完再 inspect，`text` 与写入值相同
 - **`document.theme`**
   - 可选对象
   - 字段认 `name`、`colors`、`fonts`、`fmt`、`extraSchemes`
@@ -2404,9 +2406,11 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 替换规则（手术刀，不整篇重建目标部件）：
 
 1. 只改命中的那一个 `w:p`。`w:pPr`、书签、绘图、`w:hyperlink` 外壳、不认识的子元素都留着。不删 `w:drawing`。
-2. 在该段里找出不位于 `w:del` 中的、含 `w:t` 的 run。
-3. 若一个都没有：在 `w:pPr` 之后插入一个新的 `w:r`/`w:t`，文本放进去。
-4. 若有：把完整新文本写入其中第一个 `w:t`（需要保留首尾空格时加 `xml:space="preserve"`）；其余这类 `w:t` 删掉；因此变空、且里面再也没有别的 run 内容的 `w:r` 删掉。第一个 run 上已有的 `w:rPr` 保留。
+2. 在该段里找出不位于 `w:del` 中的、含 `w:t`、`w:tab` 或 `w:br` 的 run。
+3. 若一个都没有：在 `w:pPr` 之后插入一个新的 `w:r`，文本放进去。
+4. `\t` 写成 `w:tab`，`\n` 写成 `w:br`，与 `w:t` 同级（ECMA-376 §17.3.3 `CT_R`）。需要保留首尾空格的 `w:t` 加 `xml:space="preserve"`。
+   旧的 `w:t`、`w:tab`、`w:br` 一起清掉。因此变空、且里面再也没有别的 run 内容的 `w:r` 删掉。第一个 run 上已有的 `w:rPr` 保留。
+   写完再 inspect，`text` 与写入值相同。
 5. 段内若落在本期收入的域范围内，走第 9 条，不按本条拆域。
 6. 不往文本框里写字。第 2 步找 run 的时候，遇到 `w:txbxContent` 停住，遇到 `mc:AlternateContent` 只进第一个 `mc:Choice`（没有就进 `mc:Fallback`），判定与 inspect 那两条边界一致。
    某一段除文本框之外没有可改的 `w:t` 时走第 3 步插新 run，插在 `w:pPr` 之后、该段其余内容之前。这样 apply 写进去的文本，随后 inspect 读回来必须与写入值相同。

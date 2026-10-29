@@ -1183,8 +1183,8 @@ fn strip_visible_text_runs(el: &mut Element) {
         return;
     }
     if el.local_name() == "r" {
-        if el.element_children().any(|c| c.local_name() == "t") {
-            remove_all_t(el);
+        if el.element_children().any(is_visible_text_el) {
+            remove_visible_text(el);
         }
         return;
     }
@@ -1233,13 +1233,13 @@ fn rewrite_runs(el: &mut Element, first: &mut bool, text: &str) {
         return;
     }
     if el.local_name() == "r" {
-        let has_t = el.element_children().any(|c| c.local_name() == "t");
-        if has_t {
+        let has_visible = el.element_children().any(is_visible_text_el);
+        if has_visible {
             if !*first {
                 fill_first_run(el, text);
                 *first = true;
             } else {
-                remove_all_t(el);
+                remove_visible_text(el);
             }
         }
         return;
@@ -1260,23 +1260,98 @@ fn rewrite_runs(el: &mut Element, first: &mut bool, text: &str) {
 }
 
 fn fill_first_run(r: &mut Element, text: &str) {
-    let mut seen_t = false;
-    let mut drop_t = Vec::new();
-    for (i, child) in r.children.iter_mut().enumerate() {
-        if let Node::Element(e) = child {
-            if e.local_name() == "t" {
-                if !seen_t {
-                    apply_t_text(e, text);
-                    seen_t = true;
-                } else {
-                    drop_t.push(i);
+    r.children.retain(|n| match n {
+        Node::Element(e) => !is_visible_text_el(e),
+        Node::Text(_) => true,
+    });
+    let insert_at = r
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() != "rPr"))
+        .unwrap_or(r.children.len());
+    let pieces = visible_children(r, text);
+    for (offset, piece) in pieces.into_iter().enumerate() {
+        r.children.insert(insert_at + offset, Node::Element(piece));
+    }
+}
+
+fn is_visible_text_el(el: &Element) -> bool {
+    matches!(el.local_name(), "t" | "tab" | "br")
+}
+
+pub(crate) enum VisiblePiece {
+    Text(String),
+    Tab,
+    Break,
+}
+
+pub(crate) fn split_visible_text(text: &str) -> Vec<VisiblePiece> {
+    if text.is_empty() {
+        return vec![VisiblePiece::Text(String::new())];
+    }
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    for c in text.chars() {
+        match c {
+            '\t' => {
+                if !buf.is_empty() {
+                    out.push(VisiblePiece::Text(std::mem::take(&mut buf)));
                 }
+                out.push(VisiblePiece::Tab);
             }
+            '\n' => {
+                if !buf.is_empty() {
+                    out.push(VisiblePiece::Text(std::mem::take(&mut buf)));
+                }
+                out.push(VisiblePiece::Break);
+            }
+            other => buf.push(other),
         }
     }
-    for i in drop_t.into_iter().rev() {
-        r.children.remove(i);
+    if !buf.is_empty() {
+        out.push(VisiblePiece::Text(buf));
     }
+    out
+}
+
+fn visible_children(host: &Element, text: &str) -> Vec<Element> {
+    split_visible_text(text)
+        .into_iter()
+        .map(|piece| match piece {
+            VisiblePiece::Text(s) => {
+                let mut t = Element::new(host.prefixed("t"));
+                apply_t_text(&mut t, &s);
+                t
+            }
+            VisiblePiece::Tab => Element::new(host.prefixed("tab")),
+            VisiblePiece::Break => Element::new(host.prefixed("br")),
+        })
+        .collect()
+}
+
+pub(crate) fn visible_run_xml(text: &str) -> String {
+    if text.is_empty() {
+        return "<w:r><w:t/></w:r>".into();
+    }
+    let mut inner = String::new();
+    for piece in split_visible_text(text) {
+        match piece {
+            VisiblePiece::Text(s) => {
+                let space = if needs_xml_space(&s) {
+                    r#" xml:space="preserve""#
+                } else {
+                    ""
+                };
+                inner.push_str(&format!(
+                    "<w:t{space}>{}</w:t>",
+                    crate::xml::escape_text(&s)
+                ));
+            }
+            VisiblePiece::Tab => inner.push_str("<w:tab/>"),
+            VisiblePiece::Break => inner.push_str("<w:br/>"),
+        }
+    }
+    format!("<w:r>{inner}</w:r>")
 }
 
 fn apply_t_text(t: &mut Element, text: &str) {
@@ -1289,9 +1364,9 @@ fn apply_t_text(t: &mut Element, text: &str) {
     }
 }
 
-fn remove_all_t(r: &mut Element) {
+fn remove_visible_text(r: &mut Element) {
     r.children.retain(|n| match n {
-        Node::Element(e) => e.local_name() != "t",
+        Node::Element(e) => !is_visible_text_el(e),
         Node::Text(_) => true,
     });
 }
@@ -1313,10 +1388,10 @@ pub fn new_paragraph(parent: &Element, para_id: &str, text: &str) -> Element {
 }
 
 pub(crate) fn new_text_run(parent: &Element, text: &str) -> Element {
-    let mut t = Element::new(parent.prefixed("t"));
-    apply_t_text(&mut t, text);
     let mut r = Element::new(parent.prefixed("r"));
-    r.push_element(t);
+    for piece in visible_children(&r, text) {
+        r.push_element(piece);
+    }
     r
 }
 

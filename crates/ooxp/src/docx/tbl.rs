@@ -1588,15 +1588,7 @@ pub fn table_xml(cells: &[Vec<String>], para_ids: &[String]) -> String {
             let t = if text.is_empty() {
                 String::new()
             } else {
-                let space = if needs_space(text) {
-                    r#" xml:space="preserve""#
-                } else {
-                    ""
-                };
-                format!(
-                    "<w:r><w:t{space}>{}</w:t></w:r>",
-                    crate::xml::escape_text(text)
-                )
+                super::para::visible_run_xml(text)
             };
             tcs.push_str(&format!(
                 r#"<w:tc><w:tcPr><w:tcW w:w="{COL_W}" w:type="dxa"/></w:tcPr><w:p w14:paraId="{pid}" w14:textId="{pid}">{t}</w:p></w:tc>"#
@@ -3160,10 +3152,6 @@ fn merge_row_fixed(tbl: &mut Element, row: usize, c1: usize, c2: usize) -> Resul
 
 fn first_alt(el: &Element) -> Option<usize> {
     crate::xml::alternate_child(el).unwrap_or(None)
-}
-
-fn needs_space(text: &str) -> bool {
-    text.starts_with(' ') || text.starts_with('\t') || text.ends_with(' ') || text.ends_with('\t')
 }
 
 fn cell_fill(tc: &Element) -> Value {

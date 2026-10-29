@@ -1269,12 +1269,7 @@ fn para_xml(p: &NewPara, id: &str, first_break: bool, refs_xml: &str, title_pg: 
     } else if p.text.is_empty() {
         String::new()
     } else {
-        let space = if needs_xml_space(&p.text) {
-            r#" xml:space="preserve""#
-        } else {
-            ""
-        };
-        format!("<w:r><w:t{space}>{}</w:t></w:r>", xml::escape_text(&p.text))
+        super::para::visible_run_xml(&p.text)
     };
     let mut boxes = String::new();
     for b in &p.boxes {
@@ -1288,15 +1283,7 @@ fn para_xml(p: &NewPara, id: &str, first_break: bool, refs_xml: &str, title_pg: 
 }
 
 fn run_t_xml(text: &str) -> String {
-    if text.is_empty() {
-        return "<w:r><w:t/></w:r>".into();
-    }
-    let space = if needs_xml_space(text) {
-        r#" xml:space="preserve""#
-    } else {
-        ""
-    };
-    format!("<w:r><w:t{space}>{}</w:t></w:r>", xml::escape_text(text))
+    super::para::visible_run_xml(text)
 }
 
 fn sect_pr_inner_xml(ty: Option<&str>, refs_xml: &str, title_pg: bool) -> String {
@@ -3975,14 +3962,6 @@ fn nth_story_para_mut(root: &mut Element, index: usize) -> Option<&mut Element> 
         n += 1;
     }
     None
-}
-
-fn needs_xml_space(text: &str) -> bool {
-    text.starts_with(' ')
-        || text.starts_with('\t')
-        || text.ends_with(' ')
-        || text.ends_with('\t')
-        || text.contains('\n')
 }
 
 fn styles_xml() -> String {
