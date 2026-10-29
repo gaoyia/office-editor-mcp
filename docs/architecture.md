@@ -1,12 +1,15 @@
 # 架构
 
 状态：xlsx、docx、pptx 第一期已实现，并已通过 Microsoft Office 16.0 人工打开。验收只认官方 Office，不再要求 WPS。
+日期：2026-10-29
 
 ## 产品形态
 
 产品名是 `ooxp`，全称 Office Open XML Patch。一个 Rust 库，外加一个命令行工具。库只认领域 JSON。命令行把 stdin 或文件里的领域 JSON 交给库，再把结果写到 stdout 或磁盘。
 
-本仓库不实现 MCP 服务。外部 MCP 把领域 JSON 原样交给库即可。不许为了信封去改领域 JSON，也不许把动作拆扁成一套 MCP 专用字段。
+命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把六个动作登记成工具，参数仍是领域 JSON。库不解析这一层信封。
+
+不许为了信封去改领域 JSON，也不许把动作拆扁成一套 MCP 专用字段。
 
 对齐 Transitional OOXML，也就是 Office 默认存出来的那种包。
 ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/...`）只作对照，create 不按 Strict 生成。

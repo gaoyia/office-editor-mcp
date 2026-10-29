@@ -1,4 +1,6 @@
-//! ooxp 命令行：从文件或 stdin 读领域 JSON。
+//! ooxp 命令行：从文件或 stdin 读领域 JSON。`mcp` 改读 JSON-RPC。
+
+mod mcp;
 
 use std::io::{self, Read};
 use std::path::PathBuf;
@@ -25,6 +27,14 @@ struct Cli {
 }
 
 fn main() -> ExitCode {
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    if args.first().and_then(|arg| arg.to_str()) == Some("mcp") {
+        if args.len() != 1 {
+            eprintln!("mcp 不接受其他参数");
+            return ExitCode::from(1);
+        }
+        return mcp::serve();
+    }
     let cli = Cli::parse();
     let fallback = Lang::resolve(
         None,

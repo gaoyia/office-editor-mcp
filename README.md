@@ -1,10 +1,12 @@
 # ooxp
 
+`ooxp` 是 Office Open XML Patch。`oox` 是 Office Open XML，也就是 OOXML。`p` 是 Patch：按稳定 id 给包里的 XML 打补丁，其余部件按原字节写回。只有新建文件才整包生成。
+
 用领域 JSON 读写本地的 `.docx`、`.xlsx`、`.pptx`。仓库里是一个 Rust 库，外加命令行 `ooxp`。
 
 对齐 Office 默认存出来的 Transitional OOXML。公式当字符串保存。只支持这三种新格式，路径也可以是 `.xlsm`（inspect 树的 `format` 仍是 `xlsx`，不执行宏）。验收只认 Microsoft Office 16.0。
 
-本仓库不实现 MCP 服务。外部调用方把领域 JSON 原样交给库或命令行。传输信封怎么包都可以，`params` 里必须是完整的领域 JSON。
+命令行可以执行 `ooxp mcp`，从标准输入读 JSON-RPC。工具参数仍是领域 JSON。库不解析信封。外部调用方也可以自己包传输信封，`params` 里必须是完整的领域 JSON。
 
 ## 许可与捐赠
 
@@ -46,7 +48,22 @@ cargo test
 ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
 ```
 
-没有子命令。动作由 JSON 的 `action` 决定。`--input` 省略或写成 `-` 时从 stdin 读。成功的 JSON 写到 stdout，失败的 JSON 写到 stderr。
+除 `mcp` 外没有子命令。不带 `mcp` 时，动作由 JSON 的 `action` 决定。`--input` 省略或写成 `-` 时从 stdin 读。成功的 JSON 写到 stdout，失败的 JSON 写到 stderr。
+
+给编辑器当 MCP 用：
+
+```json
+{
+  "mcpServers": {
+    "ooxp": {
+      "command": "ooxp",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+工具是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help`。参数就是领域 JSON，不必再写 `action`。操作怎么填，调用 `help`。细节见 `docs/cli.md`。
 
 新建一份工作簿：
 

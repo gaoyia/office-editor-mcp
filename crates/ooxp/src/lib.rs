@@ -749,11 +749,7 @@ mod tests {
 
     #[test]
     fn omitted_schema_version_is_version_one() {
-        let out = run(
-            r#"{"action":"help","format":"xlsx","op":"setCell"}"#,
-            None,
-        )
-        .unwrap();
+        let out = run(r#"{"action":"help","format":"xlsx","op":"setCell"}"#, None).unwrap();
         match out {
             RunOutput::Help(tree) => assert_eq!(tree["op"], "setCell"),
             other => panic!("expected help, got {other:?}"),

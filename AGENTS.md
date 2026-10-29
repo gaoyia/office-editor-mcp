@@ -4,7 +4,7 @@
 
 ## 这个仓库要做什么
 
-做一个 **Rust 库，外加一个命令行工具**，用来读写本地的 Office 文件。本仓库不实现 MCP 服务。领域 JSON 必须能被外部 MCP 原样放进调用参数里使用：不要为了信封去改字段名，也不要把动作拆扁成一套 MCP 专用工具参数。
+做一个 **Rust 库，外加一个命令行工具**，用来读写本地的 Office 文件。命令行可以执行 `ooxp mcp`，从标准输入读 JSON-RPC，再把领域 JSON 交给库。库不解析 JSON-RPC。领域 JSON 必须原样放进工具参数：不要为了信封去改字段名，也不要把动作拆扁成一套 MCP 专用工具参数。
 
 只支持新版的 OOXML 格式，也就是 `.docx`、`.xlsx`、`.pptx`。老的二进制格式 `.doc`、`.xls`、`.ppt` 一概不管。另外有三件事明确不做：不写 Word 的排版引擎，不写 Excel 的公式计算引擎，不实现 PowerPoint 放映引擎，也不接受任意时间轴树。
 
@@ -23,7 +23,7 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 这里有两层 JSON，不要混成一层：
 
 - **领域 JSON**：读写 Office 文档用的约定，即 `inspect`、`create`、`apply`、`exportMedia` 的入参和出参。本仓库的库和命令行只认这一层。外部 MCP 也必须整份使用这一层，不许改名、拆扁或丢掉字段。
-- **传输 JSON**：MCP 或其他调用方自己的协议信封（例如 JSON-RPC 的 `jsonrpc` / `method` / `params`）。本仓库不实现、不解析这一层。信封想怎么包都行，但 `params` 里必须是完整的领域 JSON，不许为了迁就信封去改领域契约。
+- **传输 JSON**：JSON-RPC 的 `jsonrpc` / `method` / `params`。`ooxp mcp` 只在命令行里解析这一层，解析完把领域 JSON 交给库。外部调用方也可以自己包信封。`params` 或工具参数里必须是完整的领域 JSON，不许为了迁就信封去改领域契约。
 
 ## 实现上的硬约束
 
@@ -93,4 +93,4 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 
 ## 建议的开工顺序
 
-按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。xlsx、docx、pptx 第一期都已实现。本仓库不实现 MCP；外部 MCP 用同一套领域 JSON 调库即可。
+按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。xlsx、docx、pptx 第一期都已实现。`ooxp mcp` 只是命令行上的 JSON-RPC 入口，领域 JSON 仍原样交给库。

@@ -1,6 +1,6 @@
 # 领域 JSON 契约
 
-`schemaVersion` 可省略，省略视为 `1`。写了就必须是 `1`。库和命令行只认这一层。外部 MCP 也必须整份使用这一层，不许改字段名和含义，不许拆扁成工具参数。
+`schemaVersion` 可省略，省略视为 `1`。写了就必须是 `1`。库和命令行只认这一层。`ooxp mcp` 和外部 MCP 也必须整份使用这一层，不许改字段名和含义，不许拆扁成工具参数。
 
 xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [json-contract-xlsx.md](json-contract-xlsx.md)、
 [json-contract-docx.md](json-contract-docx.md)、[json-contract-pptx.md](json-contract-pptx.md)。
@@ -101,7 +101,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
 `locale` 不属于动作参数，六种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
-这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。外部 MCP 没有后两档，只能写请求里的 `locale`。
+这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。`ooxp mcp` 没有 `--lang`，只剩 `locale` 和 `OOXP_LANG`。自己另写的外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
 禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
@@ -2225,5 +2225,5 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ## 两层 JSON
 
-领域 JSON 就是本文，本仓库只认这一层。外部 MCP 可以把本文整个对象放进自己的信封（例如 RPC 的 `params`）。本仓库不实现、不解析那一层信封。
+领域 JSON 就是本文。库只认这一层。命令行的 `ooxp mcp` 会解析 JSON-RPC，但交给库之前只留下领域 JSON，`action` 用工具名补上。外部调用方也可以自己包信封，把本文整个对象放进 `params`。
 不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格或段落字段去迁就 RPC。

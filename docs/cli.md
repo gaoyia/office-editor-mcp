@@ -1,11 +1,14 @@
 # 命令行
 
-二进制名：`ooxp`。它只做三件事：读入一份领域 JSON，交给库，把结果写到 stdout 或磁盘。
+日期：2026-10-29
+
+二进制名：`ooxp`。不带 `mcp` 时只做三件事：读入一份领域 JSON，交给库，把结果写到 stdout 或磁盘。`ooxp mcp` 从标准输入读 JSON-RPC，把同一份领域 JSON 交给库。
 
 ## 调用
 
 ```text
 ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
+ooxp mcp
 ```
 
 - **`--input`**
@@ -24,7 +27,7 @@ ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
 
 请求没有 `locale`、命令行也没给 `--lang` 时，读环境变量 `OOXP_LANG`。再没有就用英文。标签匹配规则见 [errors.md](errors.md)。`--help` 本身不翻译。
 
-第一期不提供子命令。动作完全由 JSON 的 `action` 决定。
+除 `mcp` 外不提供子命令。`mcp` 必须单独出现，不能再带 `--input` 或其它参数。不带 `mcp` 时，动作完全由 JSON 的 `action` 决定。
 
 stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向普通文件时不要再读 stdin。
 
@@ -61,6 +64,37 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 用 `ProcessStartInfo` 时改设 `StandardOutputEncoding` 与 `StandardErrorEncoding`，`manual-check/office/` 下的脚本就是这么写的。
 
-## 与 MCP 的关系
+## mcp
 
-本仓库不提供 MCP 进程，也不解析 JSON-RPC。外部 MCP 应直接调用库，把领域 JSON 原样作为参数传入；也可以把同一份 JSON 交给本 CLI。不要为 MCP 另造一套字段。
+`ooxp mcp` 启动后从标准输入读消息，把结果写回标准输出。标准输入是终端时，向 stderr 写一句正在等待，然后继续等。多给了参数则向 stderr 写「mcp 不接受其他参数」，退出码 1，此时还没有协议消息。
+
+编辑器配置示例：
+
+```json
+{
+  "mcpServers": {
+    "ooxp": {
+      "command": "ooxp",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+`command` 也可以写成这个 exe 的完整路径。
+
+协议是 JSON-RPC 2.0。一行一条 JSON，也接受 `Content-Length` 头。没有 `id` 的通知不回复。认这些方法：
+
+- `initialize`：回报协议版本、服务器名 `ooxp`、以及先调用 `help` 的说明
+- `ping`
+- `tools/list`
+- `tools/call`
+- `logging/setLevel`：接受并返回空对象
+
+工具有六个，名字就是动作名。`arguments` 是领域 JSON 去掉 `action` 之后的字段。调用方写了 `action` 时必须和工具名相同。没写 `schemaVersion` 视为 `1`。写了又不是 `1`，工具结果带 `isError`，正文仍是命令行那种错误 JSON。
+
+`path` 和 `output` 写在 `arguments` 里。这个模式没有 `--output`，也没有 `--lang`。错误文案先看参数里的 `locale`，再看 `OOXP_LANG`，都没有则用英文。`help` 不写 `locale` 时说明仍是中文。
+
+成功时，`result.content[0].text` 是命令行会写到 stdout 的那份 JSON。失败时同一位置放 stderr 那种 `{"ok":false,"error":...}`，并带 `isError: true`。库看到的仍是领域 JSON，看不到 `jsonrpc`、`method`、`id`。
+
+操作名单不放进 `tools/list`。要查某个 `op` 怎么填，调用 `help`。

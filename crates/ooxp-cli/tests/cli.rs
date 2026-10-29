@@ -82,6 +82,37 @@ fn run_fail(args: &[&str], env_lang: Option<&str>, stdin: &str) -> (i32, serde_j
 }
 
 #[test]
+fn mcp_initialize_speaks_jsonrpc() {
+    let bin = env!("CARGO_BIN_EXE_ooxp");
+    let mut child = Command::new(bin)
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(
+            br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}
+"#,
+        )
+        .unwrap();
+    drop(child.stdin.take());
+    let out = child.wait_with_output().unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let json: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(json["result"]["serverInfo"]["name"], "ooxp");
+}
+
+#[test]
 fn error_default_is_english() {
     let (code, json) = run_fail(
         &["--input", "-"],

@@ -2,7 +2,7 @@
 
 只记账顺序，不验收。Word 全量指包里能表达的对象都能进 inspect（带稳定 id）、能 apply 增删改、create 能按同一套 JSON 生成。不是复刻 Word 运行时。
 
-xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。本仓库不实现 MCP；外部 MCP 用领域 JSON 调库，不在本目录开切片。
+xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。`ooxp mcp` 是命令行入口，不在本目录开切片。领域 JSON 原样交给库。
 
 每份计划仍是：先改当期 `docs/`，确认后再动代码。挂机一次只开一份，从待做序号 0 起。当期切片写在 `.plan/`，不写进本目录。
 
