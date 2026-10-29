@@ -379,16 +379,13 @@ fn collect_refs(el: &Element, kind: NoteKind, out: &mut Vec<String>, stop_txbx: 
 }
 
 fn walk_embeds(el: &Element, out: &mut Vec<String>) {
-    if el.local_name() == "blip" {
-        if let Some(rid) = el.attr_local("embed") {
-            out.push(rid.to_string());
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "blip" {
+            if let Some(rid) = node.attr_local("embed") {
+                out.push(rid.to_string());
+            }
         }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_embeds(e, out);
-        }
-    }
+    });
 }
 
 fn strip_refs(el: &mut Element, kind: NoteKind, note_id: &str) {

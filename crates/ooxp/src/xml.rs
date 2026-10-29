@@ -139,12 +139,51 @@ impl Element {
 }
 
 fn collect_text(el: &Element, out: &mut String) {
-    for n in &el.children {
-        match n {
-            Node::Text(t) => out.push_str(t),
-            Node::Element(e) => collect_text(e, out),
+    let mut stack: Vec<&Node> = el.children.iter().rev().collect();
+    while let Some(node) = stack.pop() {
+        match node {
+            Node::Text(text) => out.push_str(text),
+            Node::Element(child) => {
+                for inner in child.children.iter().rev() {
+                    stack.push(inner);
+                }
+            }
         }
     }
+}
+
+/// 先序走过元素及其子元素。栈在堆上。`enter` 返回 false 时不走进该元素的子节点，也不再对其调用方做额外处理。
+pub(crate) fn walk_elements_if<'a>(root: &'a Element, mut enter: impl FnMut(&'a Element) -> bool) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if !enter(el) {
+            continue;
+        }
+        for child in el.children.iter().rev() {
+            if let Node::Element(inner) = child {
+                stack.push(inner);
+            }
+        }
+    }
+}
+
+/// 先序走过元素及其子元素。栈在堆上。
+pub(crate) fn walk_elements<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    walk_elements_if(root, |el| {
+        f(el);
+        true
+    });
+}
+
+pub(crate) fn element_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
+    let mut cur = root;
+    for &index in path {
+        cur = match &mut cur.children[index] {
+            Node::Element(child) => child,
+            Node::Text(_) => unreachable!("路径只指向元素"),
+        };
+    }
+    cur
 }
 
 pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
@@ -266,32 +305,48 @@ impl Document {
 }
 
 fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(), Error> {
-    let mut start = BytesStart::new(el.name.as_str());
-    for (k, v) in &el.attrs {
-        start.push_attribute((k.as_str(), v.as_str()));
+    enum Frame<'a> {
+        Start(&'a Element),
+        End(&'a Element),
+        Text(&'a str),
     }
-    if el.children.is_empty() {
-        writer
-            .write_event(Event::Empty(start))
-            .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
-        return Ok(());
-    }
-    writer
-        .write_event(Event::Start(start))
-        .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
-    for child in &el.children {
-        match child {
-            Node::Text(t) => {
+    let mut stack = vec![Frame::Start(el)];
+    while let Some(frame) = stack.pop() {
+        match frame {
+            Frame::Text(text) => {
                 writer
-                    .write_event(Event::Text(BytesText::new(t)))
+                    .write_event(Event::Text(BytesText::new(text)))
                     .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
             }
-            Node::Element(e) => write_element(writer, e)?,
+            Frame::End(node) => {
+                writer
+                    .write_event(Event::End(BytesEnd::new(node.name.as_str())))
+                    .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
+            }
+            Frame::Start(node) => {
+                let mut start = BytesStart::new(node.name.as_str());
+                for (k, v) in &node.attrs {
+                    start.push_attribute((k.as_str(), v.as_str()));
+                }
+                if node.children.is_empty() {
+                    writer
+                        .write_event(Event::Empty(start))
+                        .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
+                    continue;
+                }
+                writer
+                    .write_event(Event::Start(start))
+                    .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
+                stack.push(Frame::End(node));
+                for child in node.children.iter().rev() {
+                    match child {
+                        Node::Text(text) => stack.push(Frame::Text(text)),
+                        Node::Element(inner) => stack.push(Frame::Start(inner)),
+                    }
+                }
+            }
         }
     }
-    writer
-        .write_event(Event::End(BytesEnd::new(el.name.as_str())))
-        .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
     Ok(())
 }
 
@@ -390,5 +445,37 @@ mod tests {
         let out = String::from_utf8(doc.to_bytes().unwrap()).unwrap();
         assert!(out.contains("&amp;Cfoo"), "{out}");
         assert!(!out.contains("&amp;amp;"), "{out}");
+    }
+
+    #[test]
+    fn deep_tree_walks_on_the_heap() {
+        let mut el = Element::new("a").with_text("z");
+        for _ in 0..8_000 {
+            let mut parent = Element::new("a");
+            parent.push_element(el);
+            el = parent;
+        }
+        assert_eq!(el.text_content(), "z");
+        let mut seen = 0u32;
+        walk_elements(&el, &mut |_| seen += 1);
+        assert_eq!(seen, 8_001);
+        let mut doc = Document {
+            decl: None,
+            root: el,
+        };
+        let bytes = doc.to_bytes().unwrap();
+        dismantle(std::mem::replace(&mut doc.root, Element::new("a")));
+        assert!(bytes.windows(8).any(|window| window == b"<a>z</a>"));
+    }
+
+    fn dismantle(mut el: Element) {
+        let mut stack = vec![std::mem::take(&mut el.children)];
+        while let Some(children) = stack.pop() {
+            for node in children {
+                if let Node::Element(mut child) = node {
+                    stack.push(std::mem::take(&mut child.children));
+                }
+            }
+        }
     }
 }

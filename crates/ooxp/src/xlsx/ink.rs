@@ -211,7 +211,7 @@ pub fn collect(
                     ink,
                     &format!("sheet:{sheet_name}"),
                     index,
-                )));
+                )?));
             }
             Ok(())
         })?;
@@ -251,15 +251,15 @@ fn info_of(
     part: &Element,
     id_base: &str,
     index: usize,
-) -> InkInfo {
+) -> Result<InkInfo, Error> {
     let (raw, name) = cnv_of(part);
     let stable = raw.is_some();
     let id = match &raw {
         Some(v) => format!("{id_base}/ink:{v}"),
         None => format!("{id_base}/ink:index:{index}"),
     };
-    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = picture::read_ext(anchor);
     let (pos_x, pos_y) = picture::read_pos(anchor);
     let edit_as = if kind == AnchorKind::TwoCell {
@@ -267,7 +267,7 @@ fn info_of(
     } else {
         None
     };
-    InkInfo {
+    Ok(InkInfo {
         id,
         cnv_pr_id: raw,
         name,
@@ -300,7 +300,7 @@ fn info_of(
         pos_x,
         pos_y,
         stable,
-    }
+    })
 }
 
 fn cnv_of(part: &Element) -> (Option<String>, String) {

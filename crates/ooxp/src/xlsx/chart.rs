@@ -304,8 +304,8 @@ fn chart_info(
         Some(v) => format!("sheet:{sheet_name}/chart:{v}"),
         None => format!("sheet:{sheet_name}/chart:index:{index}"),
     };
-    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = picture::read_ext(anchor);
     let (pos_x, pos_y) = picture::read_pos(anchor);
     let chartex = is_chartex(frame);
@@ -1105,7 +1105,7 @@ pub fn set_chart_size(
             to,
             to_off_x,
             to_off_y,
-        } => update_two_cell_to(&mut doc.root, &op.target.key, to, to_off_x, to_off_y),
+        } => update_two_cell_to(&mut doc.root, &op.target.key, to, to_off_x, to_off_y)?,
     };
     if !ok {
         return Err(Error::with_path(
@@ -1765,8 +1765,8 @@ fn snapshot_anchor(root: &Element, key: &ChartKey) -> Option<AnchorSnap> {
         if !key_matches(key, &cnv_of_frame(frame).0, index) {
             return Ok(());
         }
-        let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-        let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+        let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+        let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
         let (cx, cy) = picture::read_ext(anchor);
         let (pos_x, pos_y) = picture::read_pos(anchor);
         let (raw, name) = cnv_of_frame(frame);
@@ -1871,9 +1871,10 @@ fn update_two_cell_to(
     to: CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) -> bool {
+) -> Result<bool, Error> {
     let mut index = 0usize;
-    picture::walk_anchors_mut(root, &mut |anchor, _| {
+    let mut marker_err = None;
+    let hit = picture::walk_anchors_mut(root, &mut |anchor, _| {
         let Some(frame) = anchor
             .element_children()
             .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
@@ -1885,9 +1886,16 @@ fn update_two_cell_to(
         if !key_matches(key, &raw, index) {
             return false;
         }
-        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+        if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
+            marker_err = Some(err);
+            return true;
+        }
         true
-    })
+    });
+    if let Some(err) = marker_err {
+        return Err(err);
+    }
+    Ok(hit)
 }
 
 trait FromLocalName {

@@ -659,39 +659,44 @@ fn first_choice(ac: &Element) -> Option<usize> {
         .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
 }
 
-fn walk_host(el: &Element, f: &mut impl FnMut(&Element) -> Result<(), Error>) -> Result<(), Error> {
-    if el.local_name() == "txbxContent" {
-        return Ok(());
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_choice(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return walk_host(child, f);
-            }
+fn walk_host(
+    root: &Element,
+    f: &mut impl FnMut(&Element) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return Ok(());
-    }
-    if el.local_name() == "drawing" {
-        return f(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_host(e, f)?;
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_choice(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "drawing" {
+            f(el)?;
+            continue;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
     Ok(())
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }
 
 fn has_txbx(el: &Element) -> bool {

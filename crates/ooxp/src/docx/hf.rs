@@ -537,34 +537,41 @@ pub fn collect_sect_prs(root: &Element) -> Vec<&Element> {
 /// 每个 `w:sectPr` 从部件根走到该元素的子节点下标路径。
 pub fn collect_sect_pr_paths(root: &Element) -> Vec<Vec<usize>> {
     let mut out = Vec::new();
-    let mut path = Vec::new();
-    walk_sect_paths(root, &mut path, &mut out);
+    let path = Vec::new();
+    walk_sect_paths(root, &path, &mut out);
     out
 }
 
-fn walk_sect_paths(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            path.push(i);
-            if let crate::xml::Node::Element(child) = &el.children[i] {
-                walk_sect_paths(child, path, out);
-            }
-            path.pop();
+fn walk_sect_paths(root: &Element, path: &[usize], out: &mut Vec<Vec<usize>>) {
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "sectPr" {
-        out.push(path.clone());
-        return;
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let crate::xml::Node::Element(e) = n {
-            path.push(i);
-            walk_sect_paths(e, path, out);
-            path.pop();
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let crate::xml::Node::Element(child) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((child, next));
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "sectPr" {
+            out.push(path.clone());
+            continue;
+        }
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let crate::xml::Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -610,22 +617,25 @@ pub fn strip_hf_refs(sect: &mut Element) {
 }
 
 /// 遇到 `w:txbxContent` 停住；`mc:AlternateContent` 只进一支。
-fn walk_sect<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let crate::xml::Node::Element(child) = &el.children[i] {
-                walk_sect(child, f);
-            }
+fn walk_sect<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let crate::xml::Node::Element(e) = n {
-            walk_sect(e, f);
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let crate::xml::Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        f(el);
+        for node in el.children.iter().rev() {
+            if let crate::xml::Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
 }

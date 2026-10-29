@@ -194,7 +194,7 @@ pub fn collect(
                     ac,
                     &format!("sheet:{sheet_name}"),
                     index,
-                ));
+                )?);
             }
             Ok(())
         })?;
@@ -220,15 +220,15 @@ fn info_of(
     ac: &Element,
     id_base: &str,
     index: usize,
-) -> MathInfo {
+) -> Result<MathInfo, Error> {
     let (raw, name) = crate::drawing_math::cnv_of_ac(ac);
     let stable = raw.as_ref().is_some_and(|s| !s.is_empty());
     let id = match &raw {
         Some(v) if !v.is_empty() => format!("{id_base}/math:{v}"),
         _ => format!("{id_base}/math:index:{index}"),
     };
-    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = picture::read_ext(anchor);
     let (pos_x, pos_y) = picture::read_pos(anchor);
     let edit_as = if kind == AnchorKind::TwoCell {
@@ -236,7 +236,7 @@ fn info_of(
     } else {
         None
     };
-    MathInfo {
+    Ok(MathInfo {
         id,
         cnv_pr_id: raw.filter(|s| !s.is_empty()),
         name,
@@ -270,7 +270,7 @@ fn info_of(
         pos_y,
         text: crate::drawing_math::choice_omml_text(ac),
         stable,
-    }
+    })
 }
 
 pub fn list_json(items: &[MathInfo]) -> Vec<Value> {

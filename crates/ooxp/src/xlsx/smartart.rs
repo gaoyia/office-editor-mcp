@@ -124,7 +124,7 @@ fn smartart_json(
         Some(v) => format!("sheet:{sheet_name}/smartdiagram:{v}"),
         None => format!("sheet:{sheet_name}/smartdiagram:index:{index}"),
     };
-    let mut m = shape::geom_map(anchor, kind, id.clone(), raw_id, name, stable);
+    let mut m = shape::geom_map(anchor, kind, id.clone(), raw_id, name, stable)?;
     let rids = smartart::rel_ids(frame);
     let layout = rids
         .lo

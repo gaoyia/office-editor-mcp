@@ -1971,6 +1971,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 format!("Cannot resolve relationship target: {target}")
             }
             OpcReason::Zip { detail } => format!("Cannot open as ZIP: {detail}"),
+            OpcReason::DeclaredRatio => {
+                "Entry declares an uncompressed size at least 4096 times its compressed size"
+                    .into()
+            }
+            OpcReason::ExceedsDeclared => {
+                "Decompressed bytes exceed the uncompressed size in the central directory".into()
+            }
         },
         ErrorKind::PartMissing { name } => format!("Part not found: {name}"),
         ErrorKind::RelNotFound { source, rid } => match source {

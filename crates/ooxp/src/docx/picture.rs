@@ -1112,21 +1112,21 @@ pub(crate) fn is_group_drawing(drawing: &Element) -> bool {
 }
 
 fn walk_group_pics(drawing: &Element, f: &mut impl FnMut(&Element)) {
-    fn walk(el: &Element, f: &mut impl FnMut(&Element)) {
+    let mut stack = vec![drawing];
+    while let Some(el) = stack.pop() {
         if el.local_name() == "txbxContent" || el.local_name() == "object" {
-            return;
+            continue;
         }
         if el.local_name() == "pic" && pic_has_blip(el) {
             f(el);
-            return;
+            continue;
         }
-        for n in &el.children {
-            if let Node::Element(e) = n {
-                walk(e, f);
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
             }
         }
     }
-    walk(drawing, f);
 }
 
 pub(crate) fn grouped_pic_has_click(drawing: &Element, key: &PicKey) -> bool {
@@ -1422,15 +1422,13 @@ fn ac_is_group(node: &Node) -> bool {
 }
 
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_outside_txbx(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" || node.local_name() == "object" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }
 
 fn frame(drawing: &Element) -> Option<&Element> {
@@ -1465,38 +1463,37 @@ fn matches_key(drawing: &Element, key: &PicKey, index: usize) -> bool {
 }
 
 pub(crate) fn walk_drawings(
-    el: &Element,
+    root: &Element,
     f: &mut impl FnMut(&Element) -> Result<(), Error>,
 ) -> Result<(), Error> {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return Ok(());
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return walk_drawings(child, f);
-            }
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            continue;
         }
-        return Ok(());
-    }
-    if el.local_name() == "drawing" {
-        return f(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_drawings(e, f)?;
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "drawing" {
+            f(el)?;
+            continue;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
     Ok(())
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
-        }
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {

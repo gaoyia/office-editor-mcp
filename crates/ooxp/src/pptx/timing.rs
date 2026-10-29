@@ -531,21 +531,25 @@ fn resolve_part(
     }
 }
 
-fn walk_timings<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Some(Node::Element(child)) = el.children.get(i) {
-                walk_timings(child, f);
+fn walk_timings<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Some(Node::Element(child)) = el.children.get(i) {
+                    stack.push(child);
+                }
             }
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "timing" {
-        f(el);
-        return;
-    }
-    for c in el.element_children() {
-        walk_timings(c, f);
+        if el.local_name() == "timing" {
+            f(el);
+            continue;
+        }
+        let children: Vec<&Element> = el.element_children().collect();
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
     }
 }
 
@@ -741,24 +745,25 @@ fn effect_dur_ms(effect: &Element) -> Value {
 }
 
 fn walk_effect_body<'a>(effect: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    fn rec<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element), skip_nested: bool) {
+    let mut stack = vec![(effect, false)];
+    while let Some((el, skip_nested)) = stack.pop() {
         if el.local_name() == "AlternateContent" {
             if let Some(i) = shape::first_alt_child_index(el) {
                 if let Some(Node::Element(child)) = el.children.get(i) {
-                    rec(child, f, skip_nested);
+                    stack.push((child, skip_nested));
                 }
             }
-            return;
+            continue;
         }
         if skip_nested && is_effect(el) {
-            return;
+            continue;
         }
         f(el);
-        for c in el.element_children() {
-            rec(c, f, true);
+        let children: Vec<&Element> = el.element_children().collect();
+        for child in children.into_iter().rev() {
+            stack.push((child, true));
         }
     }
-    rec(effect, f, false);
 }
 
 fn short_filter(raw: &str) -> String {
@@ -1229,18 +1234,22 @@ fn max_ctn_id(el: &Element) -> u32 {
     max
 }
 
-fn walk_all<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Some(Node::Element(child)) = el.children.get(i) {
-                walk_all(child, f);
+fn walk_all<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Some(Node::Element(child)) = el.children.get(i) {
+                    stack.push(child);
+                }
             }
+            continue;
         }
-        return;
-    }
-    f(el);
-    for c in el.element_children() {
-        walk_all(c, f);
+        f(el);
+        let children: Vec<&Element> = el.element_children().collect();
+        for child in children.into_iter().rev() {
+            stack.push(child);
+        }
     }
 }
 
@@ -1373,8 +1382,8 @@ fn ensure_child<'a>(parent: &'a mut Element, name: &str) -> &'a mut Element {
 
 fn effect_paths(timing: &Element) -> Vec<Vec<usize>> {
     let mut out = Vec::new();
-    let mut path = Vec::new();
-    walk_choice_paths(timing, &mut path, &mut |p, e| {
+    let path = Vec::new();
+    walk_choice_paths(timing, &path, &mut |p, e| {
         if is_effect(e) {
             out.push(p.to_vec());
         }
@@ -1383,26 +1392,33 @@ fn effect_paths(timing: &Element) -> Vec<Vec<usize>> {
 }
 
 fn walk_choice_paths<'a>(
-    el: &'a Element,
-    path: &mut Vec<usize>,
+    root: &'a Element,
+    path: &[usize],
     f: &mut impl FnMut(&[usize], &'a Element),
 ) {
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Some(Node::Element(child)) = el.children.get(i) {
-                path.push(i);
-                walk_choice_paths(child, path, f);
-                path.pop();
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Some(Node::Element(child)) = el.children.get(i) {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((child, next));
+                }
+            }
+            continue;
+        }
+        f(&path, el);
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
             }
         }
-        return;
-    }
-    f(path, el);
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(c) = n {
-            path.push(i);
-            walk_choice_paths(c, path, f);
-            path.pop();
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

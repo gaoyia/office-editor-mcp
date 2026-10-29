@@ -320,7 +320,7 @@ fn sha512_spec(el: &Element, workbook: bool) -> Option<Sha512Spec> {
     let hash = STANDARD.decode(el.attr(hash_n)?).ok()?;
     let salt = STANDARD.decode(el.attr(salt_n)?).ok()?;
     let spin: u32 = el.attr(spin_n)?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 {
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
         return None;
     }
     Some(Sha512Spec { salt, hash, spin })
@@ -644,4 +644,23 @@ fn range_not_found(sheet: &str, index: usize, i: usize) -> Error {
         },
         format!("ops[{i}].id"),
     )
+}
+
+#[cfg(test)]
+#[test]
+fn huge_spin_is_not_a_hash_spec() {
+    let el = Element::new("sheetProtection")
+        .with_attr("algorithmName", "SHA-512")
+        .with_attr("hashValue", STANDARD.encode([1u8; 64]))
+        .with_attr("saltValue", STANDARD.encode([2u8; 16]))
+        .with_attr("spinCount", "10000001");
+    assert!(sha512_spec(&el, false).is_none());
+    let err = gate_existing_hash(Some(&el), false, Some("secret"), 0).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    let ok = Element::new("sheetProtection")
+        .with_attr("algorithmName", "SHA-512")
+        .with_attr("hashValue", STANDARD.encode([1u8; 64]))
+        .with_attr("saltValue", STANDARD.encode([2u8; 16]))
+        .with_attr("spinCount", "100000");
+    assert!(sha512_spec(&ok, false).is_some());
 }

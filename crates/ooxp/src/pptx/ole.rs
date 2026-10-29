@@ -575,12 +575,22 @@ fn apply_frame_size(frame: &mut Element, cx: Option<i64>, cy: Option<i64>) {
     });
 }
 
-fn walk_mut(el: &mut Element, f: &mut impl FnMut(&mut Element)) {
-    f(el);
-    let n = el.children.len();
-    for i in 0..n {
-        if let Node::Element(e) = &mut el.children[i] {
-            walk_mut(e, f);
+fn walk_mut(root: &mut Element, f: &mut impl FnMut(&mut Element)) {
+    let mut stack = vec![Vec::<usize>::new()];
+    while let Some(path) = stack.pop() {
+        let indexes: Vec<usize> = {
+            let el = crate::xml::element_at_mut(root, &path);
+            f(el);
+            el.children
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| matches!(node, Node::Element(_)).then_some(index))
+                .collect()
+        };
+        for index in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(index);
+            stack.push(child);
         }
     }
 }
@@ -657,12 +667,7 @@ fn collect_rids(el: &Element, out: &mut Vec<String>) {
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
-        }
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 fn push_rid(out: &mut Vec<String>, rid: &str) {

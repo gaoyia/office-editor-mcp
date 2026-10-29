@@ -300,16 +300,21 @@ fn collect_counted_blips(el: &Element, skip_reply_lst: bool) -> Vec<&Element> {
     out
 }
 
-fn walk_counted_blips<'a>(el: &'a Element, skip_reply_lst: bool, out: &mut Vec<&'a Element>) {
-    if skip_reply_lst && el.local_name() == "replyLst" {
-        return;
-    }
-    if is_counted_blip(el) {
-        out.push(el);
-        return;
-    }
-    for child in el.element_children() {
-        walk_counted_blips(child, skip_reply_lst, out);
+fn walk_counted_blips<'a>(root: &'a Element, skip_reply_lst: bool, out: &mut Vec<&'a Element>) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if skip_reply_lst && el.local_name() == "replyLst" {
+            continue;
+        }
+        if is_counted_blip(el) {
+            out.push(el);
+            continue;
+        }
+        for child in el.children.iter().rev() {
+            if let Node::Element(inner) = child {
+                stack.push(inner);
+            }
+        }
     }
 }
 

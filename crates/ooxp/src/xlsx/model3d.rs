@@ -208,7 +208,7 @@ pub fn collect(
                     frame,
                     &format!("sheet:{sheet_name}"),
                     index,
-                ));
+                )?);
             }
             Ok(())
         })?;
@@ -240,15 +240,15 @@ fn info_of(
     frame: &Element,
     id_base: &str,
     index: usize,
-) -> Model3dInfo {
+) -> Result<Model3dInfo, Error> {
     let (raw, name) = cnv_of(frame);
     let stable = raw.is_some();
     let id = match &raw {
         Some(v) => format!("{id_base}/model3d:{v}"),
         None => format!("{id_base}/model3d:index:{index}"),
     };
-    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = picture::read_ext(anchor);
     let (pos_x, pos_y) = picture::read_pos(anchor);
     let edit_as = if kind == AnchorKind::TwoCell {
@@ -257,7 +257,7 @@ fn info_of(
         None
     };
     let (camera, rot, light_rig) = crate::model3d::inspect_view(frame);
-    Model3dInfo {
+    Ok(Model3dInfo {
         id,
         cnv_pr_id: raw,
         name,
@@ -293,7 +293,7 @@ fn info_of(
         camera,
         rot,
         light_rig,
-    }
+    })
 }
 
 fn cnv_of(frame: &Element) -> (Option<String>, String) {

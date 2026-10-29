@@ -83,7 +83,7 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 `command` 也可以写成这个 exe 的完整路径。
 
-协议是 JSON-RPC 2.0。一行一条 JSON，也接受 `Content-Length` 头。没有 `id` 的通知不回复。认这些方法：
+协议是 JSON-RPC 2.0。一行一条 JSON，也接受 `Content-Length` 头。没有 `id` 的通知不回复。入站一帧最大 256 MiB，一行一条和 `Content-Length` 共用这个上限。超过则拒绝这条消息，不按声明的长度分配内存。`requestPath` 指向的文件不在这 256 MiB 里，文件有多大就读多大。认这些方法：
 
 - `initialize`：回报协议版本、服务器名 `ooxp`，以及一段说明。这段说明用启动时的 `--lang`。没带 `--lang` 时是中文。`zh` 是中文，其余标签按 [errors.md](errors.md) 归到英文
   - 名称含义、六个工具、调用顺序

@@ -2010,47 +2010,48 @@ fn collect_tbl_paths(root: &Element) -> Vec<(Vec<usize>, bool)> {
         for (i, n) in root.children.iter().enumerate() {
             if let Node::Element(e) = n {
                 path.push(i);
-                walk_tbl(e, &mut path, false, &mut out);
+                walk_tbl(e, &path, false, &mut out);
                 path.pop();
             }
         }
         return out;
     }
-    walk_tbl(root, &mut path, false, &mut out);
+    walk_tbl(root, &path, false, &mut out);
     out
 }
 
-fn walk_tbl(el: &Element, path: &mut Vec<usize>, in_tc: bool, out: &mut Vec<(Vec<usize>, bool)>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_tbl(c, path, in_tc, out);
-            }
-            path.pop();
+fn walk_tbl(root: &Element, path: &[usize], in_tc: bool, out: &mut Vec<(Vec<usize>, bool)>) {
+    let mut stack = vec![(root, path.to_vec(), in_tc)];
+    while let Some((el, path, in_tc)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "tbl" {
-        out.push((path.clone(), in_tc));
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next, in_tc));
+                }
+            }
+            continue;
+        }
+        let child_flag = if el.local_name() == "tbl" {
+            out.push((path.clone(), in_tc));
+            false
+        } else {
+            in_tc || el.local_name() == "tc"
+        };
+        let mut kids = Vec::new();
         for (i, n) in el.children.iter().enumerate() {
-            if let Node::Element(e) = n {
-                path.push(i);
-                walk_tbl(e, path, false, out);
-                path.pop();
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next, child_flag));
             }
         }
-        return;
-    }
-    let next = in_tc || el.local_name() == "tc";
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_tbl(e, path, next, out);
-            path.pop();
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

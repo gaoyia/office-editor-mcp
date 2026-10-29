@@ -488,57 +488,68 @@ fn collect_sdts(root: &Element) -> Vec<SdtRec> {
 }
 
 fn walk_sdts(
-    el: &Element,
-    path: &mut Vec<usize>,
+    root: &Element,
+    path: &[usize],
     in_para: bool,
     parent: Option<usize>,
     out: &mut Vec<SdtRec>,
 ) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_sdts(c, path, in_para, parent, out);
-            }
-            path.pop();
+    let mut stack = vec![(root, path.to_vec(), in_para, parent)];
+    while let Some((el, path, in_para, parent)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "sdt" {
-        let nested_parent = if let Some(kind) = classify(el) {
-            let idx = out.len();
-            out.push(SdtRec {
-                path: path.clone(),
-                kind,
-                level: if in_para {
-                    SdtLevel::Inline
-                } else {
-                    SdtLevel::Block
-                },
-                parent,
-            });
-            Some(idx)
-        } else {
-            parent
-        };
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next, in_para, parent));
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "sdt" {
+            let nested_parent = if let Some(kind) = classify(el) {
+                let idx = out.len();
+                out.push(SdtRec {
+                    path: path.clone(),
+                    kind,
+                    level: if in_para {
+                        SdtLevel::Inline
+                    } else {
+                        SdtLevel::Block
+                    },
+                    parent,
+                });
+                Some(idx)
+            } else {
+                parent
+            };
+            let mut kids = Vec::new();
+            for (i, n) in el.children.iter().enumerate() {
+                if let Node::Element(child) = n {
+                    let mut next = path.clone();
+                    next.push(i);
+                    kids.push((child, next, in_para, nested_parent));
+                }
+            }
+            for item in kids.into_iter().rev() {
+                stack.push(item);
+            }
+            continue;
+        }
+        let now_para = in_para || el.local_name() == "p";
+        let mut kids = Vec::new();
         for (i, n) in el.children.iter().enumerate() {
-            if let Node::Element(c) = n {
-                path.push(i);
-                walk_sdts(c, path, in_para, nested_parent, out);
-                path.pop();
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next, now_para, parent));
             }
         }
-        return;
-    }
-    let now_para = in_para || el.local_name() == "p";
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(c) = n {
-            path.push(i);
-            walk_sdts(c, path, now_para, parent, out);
-            path.pop();
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -748,11 +759,19 @@ fn content_has_tbl(sdt: &Element) -> bool {
     sdt.child_by_local("sdtContent").is_some_and(walk_has_tbl)
 }
 
-fn walk_has_tbl(el: &Element) -> bool {
-    if el.local_name() == "tbl" {
-        return true;
+fn walk_has_tbl(root: &Element) -> bool {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "tbl" {
+            return true;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
+        }
     }
-    el.element_children().any(walk_has_tbl)
+    false
 }
 
 fn clear_showing_plchdr(sdt: &mut Element) {
@@ -1245,14 +1264,13 @@ fn collect_blip_rids(el: &Element) -> Vec<String> {
 }
 
 fn walk_blips(el: &Element, out: &mut Vec<String>) {
-    if el.local_name() == "blip" || el.local_name() == "svgBlip" {
-        if let Some(v) = el.attr_local("embed") {
-            out.push(v.to_string());
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "blip" || node.local_name() == "svgBlip" {
+            if let Some(v) = node.attr_local("embed") {
+                out.push(v.to_string());
+            }
         }
-    }
-    for c in el.element_children() {
-        walk_blips(c, out);
-    }
+    });
 }
 
 fn ensure_w14(root: &mut Element) {

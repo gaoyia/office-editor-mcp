@@ -773,14 +773,13 @@ pub(crate) fn next_cnv_id(root: &Element) -> u32 {
 }
 
 fn walk_all_cnv(el: &Element, max: &mut u32) {
-    if el.local_name() == "cNvPr" {
-        if let Some(n) = el.attr("id").and_then(|s| s.parse::<u32>().ok()) {
-            *max = (*max).max(n);
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "cNvPr" {
+            if let Some(n) = node.attr("id").and_then(|s| s.parse::<u32>().ok()) {
+                *max = (*max).max(n);
+            }
         }
-    }
-    for c in el.element_children() {
-        walk_all_cnv(c, max);
-    }
+    });
 }
 
 fn slide_size(pres_root: &Element) -> (i64, i64) {

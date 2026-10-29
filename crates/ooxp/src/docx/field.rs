@@ -304,103 +304,110 @@ struct OpenField {
 }
 
 fn walk_fields(
-    el: &Element,
-    path: &mut Vec<usize>,
-    stack: &mut Vec<OpenField>,
+    root: &Element,
+    path: &[usize],
+    open: &mut Vec<OpenField>,
     out: &mut Vec<FieldRec>,
 ) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_fields(c, path, stack, out);
-            }
-            path.pop();
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    match el.local_name() {
-        "fldSimple" => {
-            let instr = el.attr_local("instr").unwrap_or("").to_string();
-            out.push(FieldRec {
-                kind: FieldKind::Simple,
-                start: path.clone(),
-                end: path.clone(),
-                separate: None,
-                instr,
-                instr_text: Vec::new(),
-                result: para::visible_text(el),
-            });
-        }
-        "fldChar" => match el.attr_local("fldCharType") {
-            Some("begin") => stack.push(OpenField {
-                start: path.clone(),
-                separate: None,
-                instr: String::new(),
-                instr_text: Vec::new(),
-                result: String::new(),
-                in_result: false,
-            }),
-            Some("separate") => {
-                if let Some(top) = stack.last_mut() {
-                    top.separate = Some(path.clone());
-                    top.in_result = true;
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
                 }
             }
-            Some("end") => {
-                if let Some(open) = stack.pop() {
-                    out.push(FieldRec {
-                        kind: FieldKind::Complex,
-                        start: open.start,
-                        end: path.clone(),
-                        separate: open.separate,
-                        instr: open.instr,
-                        instr_text: open.instr_text,
-                        result: open.result,
-                    });
+            continue;
+        }
+        match el.local_name() {
+            "fldSimple" => {
+                let instr = el.attr_local("instr").unwrap_or("").to_string();
+                out.push(FieldRec {
+                    kind: FieldKind::Simple,
+                    start: path.clone(),
+                    end: path.clone(),
+                    separate: None,
+                    instr,
+                    instr_text: Vec::new(),
+                    result: para::visible_text(el),
+                });
+            }
+            "fldChar" => match el.attr_local("fldCharType") {
+                Some("begin") => open.push(OpenField {
+                    start: path.clone(),
+                    separate: None,
+                    instr: String::new(),
+                    instr_text: Vec::new(),
+                    result: String::new(),
+                    in_result: false,
+                }),
+                Some("separate") => {
+                    if let Some(top) = open.last_mut() {
+                        top.separate = Some(path.clone());
+                        top.in_result = true;
+                    }
+                }
+                Some("end") => {
+                    if let Some(field) = open.pop() {
+                        out.push(FieldRec {
+                            kind: FieldKind::Complex,
+                            start: field.start,
+                            end: path.clone(),
+                            separate: field.separate,
+                            instr: field.instr,
+                            instr_text: field.instr_text,
+                            result: field.result,
+                        });
+                    }
+                }
+                _ => {}
+            },
+            "instrText" => {
+                if let Some(top) = open.last_mut() {
+                    if !top.in_result {
+                        top.instr.push_str(&el.text_content());
+                        top.instr_text.push(path.clone());
+                    }
+                }
+            }
+            "t" => {
+                for field in open.iter_mut() {
+                    if field.in_result {
+                        field.result.push_str(&el.text_content());
+                    }
+                }
+            }
+            "tab" => {
+                for field in open.iter_mut() {
+                    if field.in_result {
+                        field.result.push('\t');
+                    }
+                }
+            }
+            "br" => {
+                for field in open.iter_mut() {
+                    if field.in_result {
+                        field.result.push('\n');
+                    }
                 }
             }
             _ => {}
-        },
-        "instrText" => {
-            if let Some(top) = stack.last_mut() {
-                if !top.in_result {
-                    top.instr.push_str(&el.text_content());
-                    top.instr_text.push(path.clone());
-                }
+        }
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
             }
         }
-        "t" => {
-            for open in stack.iter_mut() {
-                if open.in_result {
-                    open.result.push_str(&el.text_content());
-                }
-            }
-        }
-        "tab" => {
-            for open in stack.iter_mut() {
-                if open.in_result {
-                    open.result.push('\t');
-                }
-            }
-        }
-        "br" => {
-            for open in stack.iter_mut() {
-                if open.in_result {
-                    open.result.push('\n');
-                }
-            }
-        }
-        _ => {}
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_fields(e, path, stack, out);
-            path.pop();
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -551,34 +558,41 @@ fn enclosing_block(root: &Element, path: &[usize]) -> Vec<usize> {
 }
 
 fn collect_blocks(root: &Element) -> Vec<Vec<usize>> {
-    let mut path = Vec::new();
+    let path = Vec::new();
     let mut out = Vec::new();
-    walk_blocks(root, &mut path, &mut out);
+    walk_blocks(root, &path, &mut out);
     out
 }
 
-fn walk_blocks(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_blocks(c, path, out);
-            }
-            path.pop();
+fn walk_blocks(root: &Element, path: &[usize], out: &mut Vec<Vec<usize>>) {
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if matches!(el.local_name(), "r" | "fldSimple") && !path.is_empty() {
-        out.push(path.clone());
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_blocks(e, path, out);
-            path.pop();
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
+                }
+            }
+            continue;
+        }
+        if matches!(el.local_name(), "r" | "fldSimple") && !path.is_empty() {
+            out.push(path.clone());
+        }
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

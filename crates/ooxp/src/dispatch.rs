@@ -97,7 +97,7 @@ pub fn run(
     // 先拒掉多余字段，再读盘。缺文件不能盖过 InvalidField。
     screen(&req)?;
     let _clock = crate::host_env::install_native();
-    let _files = crate::host_files::load_json(&Value::Object(req.obj.clone()));
+    let _files = crate::host_files::install_reader(crate::host_files::cache_read);
     let package = match req.action {
         Action::Help | Action::Create => None,
         Action::Inspect | Action::Apply | Action::ExportMedia | Action::ExportChartData => {

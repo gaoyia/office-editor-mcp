@@ -1726,6 +1726,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             OpcReason::MissingOfficeDocument => "根关系里没有 officeDocument".into(),
             OpcReason::RelTarget { target } => format!("无法解析关系目标：{target}"),
             OpcReason::Zip { detail } => format!("无法作为 ZIP 打开：{detail}"),
+            OpcReason::DeclaredRatio => {
+                "条目声明的未压缩大小达到压缩后大小的 4096 倍".into()
+            }
+            OpcReason::ExceedsDeclared => "解压结果超过中央目录声明的未压缩大小".into(),
         },
         ErrorKind::PartMissing { name } => format!("找不到部件 {name}"),
         ErrorKind::RelNotFound { source, rid } => match source {

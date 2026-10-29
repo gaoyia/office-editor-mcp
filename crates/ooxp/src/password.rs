@@ -3,6 +3,9 @@
 
 use sha2::{Digest, Sha512};
 
+/// 核对已有哈希时最多跑这么多圈。再大就不跑，交给调用方按「有密码但不能核」拒绝。
+pub(crate) const MAX_CHECK_SPIN: u32 = 10_000_000;
+
 /// Excel 16.0、PowerPoint 16.0 与 Word 16.0 共用的 SHA-512 迭代。
 ///
 /// `password` 按 UTF-16LE 编码（不要 BOM）。

@@ -919,7 +919,7 @@ fn hit_json(
         Some(c) => (Some(c.kind), c.source_name.clone(), Some(c.field.clone())),
         None => (None, None, None),
     };
-    let mut m = shape::geom_map(&hit.anchor, hit.kind, id, hit.cnv.clone(), name, stable);
+    let mut m = shape::geom_map(&hit.anchor, hit.kind, id, hit.cnv.clone(), name, stable)?;
     let stable_v = m.remove("stable").unwrap_or(json!(stable));
     let mut out = Map::new();
     for (k, v) in m {

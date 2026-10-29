@@ -140,7 +140,7 @@ fn sha512_spec(el: &Element) -> Option<Sha512Spec> {
     let hash = STANDARD.decode(el.attr_local("hashData")?).ok()?;
     let salt = STANDARD.decode(el.attr_local("saltData")?).ok()?;
     let spin: u32 = el.attr_local("spinCount")?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 {
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
         return None;
     }
     Some(Sha512Spec { salt, hash, spin })
@@ -217,4 +217,23 @@ fn insert_index(root: &Element) -> usize {
         return i;
     }
     root.children.len()
+}
+
+#[cfg(test)]
+#[test]
+fn huge_spin_is_not_a_hash_spec() {
+    let el = Element::new("p:modifyVerifier")
+        .with_attr("cryptAlgorithmSid", "14")
+        .with_attr("hashData", STANDARD.encode([1u8; 64]))
+        .with_attr("saltData", STANDARD.encode([2u8; 16]))
+        .with_attr("spinCount", "10000001");
+    assert!(sha512_spec(&el).is_none());
+    let err = gate_existing_hash(Some(&el), Some("secret"), 0).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    let ok = Element::new("p:modifyVerifier")
+        .with_attr("cryptAlgorithmSid", "14")
+        .with_attr("hashData", STANDARD.encode([1u8; 64]))
+        .with_attr("saltData", STANDARD.encode([2u8; 16]))
+        .with_attr("spinCount", "100000");
+    assert!(sha512_spec(&ok).is_some());
 }

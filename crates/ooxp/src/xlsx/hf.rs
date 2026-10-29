@@ -281,7 +281,7 @@ fn collect_hf_objects(
                         box_n[i],
                         shape::DrawObjKind::TextBox,
                         Some(&rels),
-                    ));
+                    )?);
                 } else if shape::is_shape(el) {
                     shape_n[i] += 1;
                     shapes[i].1.push(shape::object_json(
@@ -292,7 +292,7 @@ fn collect_hf_objects(
                         shape_n[i],
                         shape::DrawObjKind::Shape,
                         Some(&rels),
-                    ));
+                    )?);
                 } else if shape::is_connector(el) {
                     cxn_n[i] += 1;
                     connectors[i].1.push(shape::object_json(
@@ -303,7 +303,7 @@ fn collect_hf_objects(
                         cxn_n[i],
                         shape::DrawObjKind::Connector,
                         Some(&rels),
-                    ));
+                    )?);
                 }
                 Ok(())
             })

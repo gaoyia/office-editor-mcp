@@ -717,49 +717,49 @@ fn parse_emu(el: Option<&Element>, local: &str) -> Result<Option<i64>, Error> {
     })
 }
 
-fn walk_host(el: &Element, f: &mut impl FnMut(&Element) -> Result<(), Error>) -> Result<(), Error> {
-    if el.local_name() == "txbxContent" {
-        return Ok(());
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return walk_host(child, f);
-            }
+fn walk_host(
+    root: &Element,
+    f: &mut impl FnMut(&Element) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return Ok(());
-    }
-    if el.local_name() == "drawing" {
-        return f(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_host(e, f)?;
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "drawing" {
+            f(el)?;
+            continue;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
     Ok(())
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
-        }
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 /// 只走图形结构，不进框内段落，避免把框里嵌套的图误当成外层组合。
 fn walk_shape(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_shape(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {

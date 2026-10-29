@@ -245,7 +245,7 @@ fn collect_kind(
                 index,
                 kind,
                 Some(rels),
-            ));
+            )?);
             Ok(())
         },
     )?;
@@ -260,7 +260,7 @@ pub(crate) fn object_json(
     index: usize,
     kind: DrawObjKind,
     rels: Option<&Relationships>,
-) -> Value {
+) -> Result<Value, Error> {
     let (raw_id, name) = cnv_of_object(el);
     let (prefix, with_text, with_prst) = match kind {
         DrawObjKind::TextBox => ("sp", true, false),
@@ -272,7 +272,7 @@ pub(crate) fn object_json(
         Some(v) => format!("{id_base}/{prefix}:{v}"),
         None => format!("{id_base}/{prefix}:index:{index}"),
     };
-    let mut m = geom_map(anchor, akind, id, raw_id, name, stable);
+    let mut m = geom_map(anchor, akind, id, raw_id, name, stable)?;
     let stable_v = m.remove("stable").unwrap_or(json!(stable));
     if with_prst {
         m.insert("prst".into(), json!(prst_of(el)));
@@ -285,7 +285,7 @@ pub(crate) fn object_json(
     if kind != DrawObjKind::Connector {
         m.insert("hyperlink".into(), super::hyperlink::inspect_cnv(el, rels));
     }
-    Value::Object(m)
+    Ok(Value::Object(m))
 }
 
 pub(crate) fn geom_map(
@@ -295,9 +295,9 @@ pub(crate) fn geom_map(
     raw_id: Option<String>,
     name: String,
     stable: bool,
-) -> Map<String, Value> {
-    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+) -> Result<Map<String, Value>, Error> {
+    let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = picture::read_ext(anchor);
     let (pos_x, pos_y) = picture::read_pos(anchor);
     let mut m = Map::new();
@@ -345,7 +345,7 @@ pub(crate) fn geom_map(
         }
     }
     m.insert("stable".into(), json!(stable));
-    m
+    Ok(m)
 }
 
 pub fn insert_textbox(
@@ -927,7 +927,7 @@ pub(crate) fn set_object_size(
             to,
             to_off_x,
             to_off_y,
-        } => update_outer_to(&mut doc.root, is_obj, key, to, to_off_x, to_off_y),
+        } => update_outer_to(&mut doc.root, is_obj, key, to, to_off_x, to_off_y)?,
     };
     if !ok {
         return Err(Error::with_path(not_found, path));
@@ -1372,8 +1372,8 @@ fn snapshot_outer(
         if !outer_contains(anchor, is_obj, key, &mut index) {
             return Ok(());
         }
-        let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
-        let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
+        let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
+        let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"))?;
         let (cx, cy) = picture::read_ext(anchor);
         let (pos_x, pos_y) = picture::read_pos(anchor);
         let Some(payload) = payload_of(anchor) else {
@@ -1511,15 +1511,23 @@ fn update_outer_to(
     to: a1::CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) -> bool {
+) -> Result<bool, Error> {
     let mut index = 0usize;
-    picture::walk_anchors_mut(root, &mut |anchor, _| {
+    let mut marker_err = None;
+    let hit = picture::walk_anchors_mut(root, &mut |anchor, _| {
         if !outer_contains(anchor, is_obj, key, &mut index) {
             return false;
         }
-        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+        if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
+            marker_err = Some(err);
+            return true;
+        }
         true
-    })
+    });
+    if let Some(err) = marker_err {
+        return Err(err);
+    }
+    Ok(hit)
 }
 
 pub(crate) fn find_object_mut<'a>(

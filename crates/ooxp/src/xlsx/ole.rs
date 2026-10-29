@@ -416,7 +416,7 @@ pub fn set_size(
             to_off_y,
         } => {
             let pr =
-                patch_object_pr_to(&mut sheet_doc.root, &op.target.key, to, to_off_x, to_off_y);
+                patch_object_pr_to(&mut sheet_doc.root, &op.target.key, to, to_off_x, to_off_y)?;
             let dummy = if sid.is_empty() {
                 false
             } else {
@@ -621,15 +621,15 @@ fn fill_geom(
 ) -> Result<(), Error> {
     if let Some(pr) = obj.child_by_local("objectPr") {
         if let Some(anchor) = pr.child_by_local("anchor") {
-            fill_two_cell(m, anchor);
+            fill_two_cell(m, anchor)?;
             return Ok(());
         }
     }
     if let Some(sid) = sid {
         if let Some((kind, el)) = find_dummy_anchor(pkg, sheet_part, sheet, sid)? {
             match kind {
-                AnchorKind::TwoCell => fill_two_cell(m, &el),
-                AnchorKind::OneCell => fill_one_cell(m, &el),
+                AnchorKind::TwoCell => fill_two_cell(m, &el)?,
+                AnchorKind::OneCell => fill_one_cell(m, &el)?,
                 AnchorKind::Absolute => fill_abs(m, &el),
                 AnchorKind::RelSize | AnchorKind::AbsSize => {}
             }
@@ -647,9 +647,9 @@ fn fill_geom(
     Ok(())
 }
 
-fn fill_two_cell(m: &mut Map<String, Value>, anchor: &Element) {
-    let (from, fox, foy) = picture::read_marker(anchor.child_by_local("from"));
-    let (to, tox, toy) = picture::read_marker(anchor.child_by_local("to"));
+fn fill_two_cell(m: &mut Map<String, Value>, anchor: &Element) -> Result<(), Error> {
+    let (from, fox, foy) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, tox, toy) = picture::read_marker(anchor.child_by_local("to"))?;
     m.insert("anchor".into(), json!("twoCell"));
     m.insert(
         "from".into(),
@@ -664,10 +664,11 @@ fn fill_two_cell(m: &mut Map<String, Value>, anchor: &Element) {
     m.insert("toOffX".into(), json!(tox));
     m.insert("toOffY".into(), json!(toy));
     m.insert("editAs".into(), json!("twoCell"));
+    Ok(())
 }
 
-fn fill_one_cell(m: &mut Map<String, Value>, anchor: &Element) {
-    let (from, fox, foy) = picture::read_marker(anchor.child_by_local("from"));
+fn fill_one_cell(m: &mut Map<String, Value>, anchor: &Element) -> Result<(), Error> {
+    let (from, fox, foy) = picture::read_marker(anchor.child_by_local("from"))?;
     m.insert("anchor".into(), json!("oneCell"));
     m.insert(
         "from".into(),
@@ -678,6 +679,7 @@ fn fill_one_cell(m: &mut Map<String, Value>, anchor: &Element) {
     let (cx, cy) = read_ext(anchor);
     m.insert("cx".into(), json!(cx));
     m.insert("cy".into(), json!(cy));
+    Ok(())
 }
 
 fn fill_abs(m: &mut Map<String, Value>, anchor: &Element) {
@@ -920,9 +922,9 @@ fn patch_object_pr_to(
     to: a1::CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) -> bool {
+) -> Result<bool, Error> {
     let Some(parent) = sheet.child_by_local_mut("oleObjects") else {
-        return false;
+        return Ok(false);
     };
     let mut idx = 0usize;
     for i in 0..parent.children.len() {
@@ -940,12 +942,12 @@ fn patch_object_pr_to(
             .child_by_local_mut("objectPr")
             .and_then(|pr| pr.child_by_local_mut("anchor"))
         else {
-            return false;
+            return Ok(false);
         };
-        write_to_marker(anchor, to, to_off_x, to_off_y);
-        return true;
+        write_to_marker(anchor, to, to_off_x, to_off_y)?;
+        return Ok(true);
     }
-    false
+    Ok(false)
 }
 
 fn ole_object_mut(el: &mut Element) -> Option<&mut Element> {
@@ -981,15 +983,16 @@ fn write_to_marker(
     to: a1::CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) {
-    let (_, cur_x, cur_y) = picture::read_marker(anchor.child_by_local("to"));
+) -> Result<(), Error> {
+    let (_, cur_x, cur_y) = picture::read_marker(anchor.child_by_local("to"))?;
     let ox = to_off_x.unwrap_or(cur_x);
     let oy = to_off_y.unwrap_or(cur_y);
     if let Some(marker) = anchor.child_by_local_mut("to") {
         set_marker_nums(marker, to, ox, oy);
-        return;
+        return Ok(());
     }
     anchor.push_element(picture::marker_el("to", to, ox, oy));
+    Ok(())
 }
 
 fn set_marker_nums(marker: &mut Element, cell: a1::CellRef, off_x: i64, off_y: i64) {
@@ -1018,13 +1021,20 @@ fn patch_dummy_to(
 ) -> Result<bool, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
         let mut draw = xml::parse(pkg.get(&part)?)?;
+        let mut marker_err = None;
         let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
             if kind != AnchorKind::TwoCell || !dummy_in_anchor(anchor, sid) {
                 return false;
             }
-            picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+            if let Err(err) = picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
+                marker_err = Some(err);
+                return true;
+            }
             true
         });
+        if let Some(err) = marker_err {
+            return Err(err);
+        }
         if hit {
             pkg.set(&part, draw.to_bytes()?)?;
             return Ok(true);
@@ -1328,22 +1338,29 @@ fn cnv_id(el: &Element) -> Option<String> {
         .map(str::to_string)
 }
 
-fn walk_payloads(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "AlternateContent" {
-        if let Some(c) = el
-            .child_by_local("Choice")
-            .or_else(|| el.child_by_local("Fallback"))
-        {
-            walk_payloads(c, f);
-        }
-        return;
-    }
-    f(el);
-    for c in el.element_children() {
-        if matches!(c.local_name(), "from" | "to" | "ext" | "pos" | "clientData") {
+fn walk_payloads(root: &Element, f: &mut impl FnMut(&Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if let Some(choice) = el
+                .child_by_local("Choice")
+                .or_else(|| el.child_by_local("Fallback"))
+            {
+                stack.push(choice);
+            }
             continue;
         }
-        walk_payloads(c, f);
+        f(el);
+        let children: Vec<&Element> = el.element_children().collect();
+        for child in children.into_iter().rev() {
+            if matches!(
+                child.local_name(),
+                "from" | "to" | "ext" | "pos" | "clientData"
+            ) {
+                continue;
+            }
+            stack.push(child);
+        }
     }
 }
 

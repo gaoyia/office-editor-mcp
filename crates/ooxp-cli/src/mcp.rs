@@ -426,13 +426,13 @@ struct Incoming {
     content_length: bool,
 }
 
+const MAX_FRAME: usize = 256 * 1024 * 1024;
+
 fn read_message(reader: &mut impl BufRead) -> io::Result<Option<Incoming>> {
-    let mut line = String::new();
     loop {
-        line.clear();
-        if reader.read_line(&mut line)? == 0 {
+        let Some(line) = read_capped_line(reader)? else {
             return Ok(None);
-        }
+        };
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -450,12 +450,17 @@ fn read_message(reader: &mut impl BufRead) -> io::Result<Option<Incoming>> {
             .trim()
             .parse()
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        if len > MAX_FRAME {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "消息超过 256 MiB",
+            ));
+        }
         loop {
-            line.clear();
-            if reader.read_line(&mut line)? == 0 {
+            let Some(header) = read_capped_line(reader)? else {
                 return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "缺少消息正文"));
-            }
-            if line.trim().is_empty() {
+            };
+            if header.trim().is_empty() {
                 break;
             }
         }
@@ -468,6 +473,42 @@ fn read_message(reader: &mut impl BufRead) -> io::Result<Option<Incoming>> {
             content_length: true,
         }));
     }
+}
+
+fn read_capped_line(reader: &mut impl BufRead) -> io::Result<Option<String>> {
+    let mut buf = Vec::new();
+    loop {
+        let next = {
+            let view = reader.fill_buf()?;
+            if view.is_empty() {
+                None
+            } else if let Some(i) = view.iter().position(|byte| *byte == b'\n') {
+                Some((view[..=i].to_vec(), true))
+            } else {
+                Some((view.to_vec(), false))
+            }
+        };
+        let Some((chunk, done)) = next else {
+            if buf.is_empty() {
+                return Ok(None);
+            }
+            break;
+        };
+        if buf.len().saturating_add(chunk.len()) > MAX_FRAME {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "消息超过 256 MiB",
+            ));
+        }
+        reader.consume(chunk.len());
+        buf.extend_from_slice(&chunk);
+        if done {
+            break;
+        }
+    }
+    String::from_utf8(buf)
+        .map(Some)
+        .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
 fn write_message(content_length: bool, body: &str) -> io::Result<()> {
@@ -722,5 +763,16 @@ mod tests {
         assert!(inspected["result"].get("isError").is_none());
         assert!(tool_message(&inspected).contains("cell:Sheet1!A1"));
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn content_length_over_256_mib_is_rejected_before_alloc() {
+        let header = format!("Content-Length: {}\r\n\r\n", 256 * 1024 * 1024 + 1);
+        let mut cursor = std::io::Cursor::new(header.into_bytes());
+        let err = match read_message(&mut cursor) {
+            Err(err) => err,
+            Ok(_) => panic!("超长 Content-Length 应被拒绝"),
+        };
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 }

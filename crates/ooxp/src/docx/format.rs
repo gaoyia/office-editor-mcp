@@ -568,28 +568,31 @@ fn collect_runs(p: &Element) -> Vec<&Element> {
     out
 }
 
-fn walk_runs<'a>(el: &'a Element, in_del: bool, out: &mut Vec<&'a Element>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = para::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                walk_runs(child, in_del, out);
+fn walk_runs<'a>(root: &'a Element, in_del: bool, out: &mut Vec<&'a Element>) {
+    let mut stack = vec![(root, in_del)];
+    while let Some((el, in_del)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = para::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push((child, in_del));
+                }
             }
+            continue;
         }
-        return;
-    }
-    let in_del = in_del || el.local_name() == "del";
-    if el.local_name() == "r" {
-        if !in_del {
-            out.push(el);
+        let in_del = in_del || el.local_name() == "del";
+        if el.local_name() == "r" {
+            if !in_del {
+                out.push(el);
+            }
+            continue;
         }
-        return;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_runs(e, in_del, out);
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push((child, in_del));
+            }
         }
     }
 }
@@ -633,22 +636,25 @@ fn run_visible_text(r: &Element) -> String {
     out
 }
 
-fn walk_run_text(el: &Element, in_del: bool, out: &mut String) {
-    if el.local_name() == "instrText" {
-        return;
-    }
-    let in_del = in_del || el.local_name() == "del";
-    if !in_del {
-        match el.local_name() {
-            "t" => out.push_str(&el.text_content()),
-            "tab" => out.push('\t'),
-            "br" => out.push('\n'),
-            _ => {}
+fn walk_run_text(root: &Element, in_del: bool, out: &mut String) {
+    let mut stack = vec![(root, in_del)];
+    while let Some((el, in_del)) = stack.pop() {
+        if el.local_name() == "instrText" {
+            continue;
         }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_run_text(e, in_del, out);
+        let in_del = in_del || el.local_name() == "del";
+        if !in_del {
+            match el.local_name() {
+                "t" => out.push_str(&el.text_content()),
+                "tab" => out.push('\t'),
+                "br" => out.push('\n'),
+                _ => {}
+            }
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push((child, in_del));
+            }
         }
     }
 }

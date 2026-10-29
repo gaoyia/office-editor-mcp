@@ -330,32 +330,39 @@ fn collect_rubies(root: &Element) -> Vec<RubyRec> {
     out
 }
 
-fn walk_rubies(el: &Element, path: &mut Vec<usize>, in_del: bool, out: &mut Vec<RubyRec>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = para::first_alt_child_index(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_rubies(c, path, in_del, out);
+fn walk_rubies(root: &Element, path: &[usize], in_del: bool, out: &mut Vec<RubyRec>) {
+    let mut stack = vec![(root, path.to_vec(), in_del)];
+    while let Some((el, path, in_del)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = para::first_alt_child_index(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next, in_del));
+                }
             }
-            path.pop();
+            continue;
         }
-        return;
-    }
-    let in_del = in_del || el.local_name() == "del";
-    if el.local_name() == "ruby" {
-        if !in_del {
-            out.push(RubyRec { path: path.clone() });
+        let in_del = in_del || el.local_name() == "del";
+        if el.local_name() == "ruby" {
+            if !in_del {
+                out.push(RubyRec { path: path.clone() });
+            }
+            continue;
         }
-        return;
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(c) = n {
-            path.push(i);
-            walk_rubies(c, path, in_del, out);
-            path.pop();
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next, in_del));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -404,14 +411,18 @@ fn collect_t(el: &Element) -> String {
     out
 }
 
-fn walk_t(el: &Element, in_del: bool, out: &mut String) {
-    let in_del = in_del || el.local_name() == "del";
-    if el.local_name() == "t" && !in_del {
-        out.push_str(&el.text_content());
-        return;
-    }
-    for c in el.element_children() {
-        walk_t(c, in_del, out);
+fn walk_t(root: &Element, in_del: bool, out: &mut String) {
+    let mut stack = vec![(root, in_del)];
+    while let Some((el, in_del)) = stack.pop() {
+        let in_del = in_del || el.local_name() == "del";
+        if el.local_name() == "t" && !in_del {
+            out.push_str(&el.text_content());
+            continue;
+        }
+        let children: Vec<&Element> = el.element_children().collect();
+        for child in children.into_iter().rev() {
+            stack.push((child, in_del));
+        }
     }
 }
 

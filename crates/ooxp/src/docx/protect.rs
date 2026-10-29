@@ -326,7 +326,7 @@ fn word_hash_spec(el: &Element) -> Option<WordHashSpec> {
     let hash = STANDARD.decode(el.attr_local("hash")?).ok()?;
     let salt = STANDARD.decode(el.attr_local("salt")?).ok()?;
     let spin: u32 = el.attr_local("cryptSpinCount")?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 {
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
         return None;
     }
     Some(WordHashSpec { salt, hash, spin })
@@ -611,4 +611,23 @@ fn write_protection_uses_utf16_sha512() {
     assert_ne!(hash, word_sha512_spin("secret", &salt, SPIN_COUNT));
     assert_eq!(el.attr_local("cryptAlgorithmSid"), Some("14"));
     assert_eq!(el.attr_local("cryptSpinCount"), Some("100000"));
+}
+
+#[cfg(test)]
+#[test]
+fn huge_spin_is_not_a_hash_spec() {
+    let el = Element::new("w:writeProtection")
+        .with_attr("w:cryptAlgorithmSid", "14")
+        .with_attr("w:hash", STANDARD.encode([1u8; 64]))
+        .with_attr("w:salt", STANDARD.encode([2u8; 16]))
+        .with_attr("w:cryptSpinCount", "10000001");
+    assert!(word_hash_spec(&el).is_none());
+    let err = gate_existing_hash(&el, Some("secret"), 0, "password", false).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    let ok = Element::new("w:writeProtection")
+        .with_attr("w:cryptAlgorithmSid", "14")
+        .with_attr("w:hash", STANDARD.encode([1u8; 64]))
+        .with_attr("w:salt", STANDARD.encode([2u8; 16]))
+        .with_attr("w:cryptSpinCount", "100000");
+    assert!(word_hash_spec(&ok).is_some());
 }

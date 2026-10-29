@@ -11,6 +11,9 @@ use crate::error::{Error, ErrorKind, OpcReason};
 use super::names::{normalize_part_name, zip_name_from_opc};
 use super::{CONTENT_TYPES_PART, ROOT_RELS_PART};
 
+/// 声明的未压缩大小达到压缩后大小的这个倍数就拒绝。
+const EXPAND_LIMIT: u64 = 4096;
+
 #[derive(Debug)]
 struct Part {
     data: Vec<u8>,
@@ -27,6 +30,38 @@ pub struct Package {
     /// 新建部件的追加顺序。
     new_order: Vec<String>,
     parts: HashMap<String, Part>,
+}
+
+fn expands_too_far(declared: u64, compressed: u64) -> bool {
+    if declared == 0 {
+        return false;
+    }
+    if compressed == 0 {
+        return true;
+    }
+    match compressed.checked_mul(EXPAND_LIMIT) {
+        Some(limit) => declared >= limit,
+        None => false,
+    }
+}
+
+fn read_counted(file: &mut impl Read, declared: u64) -> Result<Vec<u8>, Error> {
+    let mut data = Vec::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        let next = (data.len() as u64).saturating_add(n as u64);
+        if next > declared {
+            return Err(Error::new(ErrorKind::OpcOpen {
+                reason: OpcReason::ExceedsDeclared,
+            }));
+        }
+        data.extend_from_slice(&buf[..n]);
+    }
+    Ok(data)
 }
 
 impl Package {
@@ -51,8 +86,14 @@ impl Package {
                 continue;
             }
             let opc = normalize_part_name(&raw_name)?;
-            let mut data = Vec::new();
-            file.read_to_end(&mut data)?;
+            let declared = file.size();
+            let compressed = file.compressed_size();
+            if expands_too_far(declared, compressed) {
+                return Err(Error::new(ErrorKind::OpcOpen {
+                    reason: OpcReason::DeclaredRatio,
+                }));
+            }
+            let data = read_counted(&mut file, declared)?;
             original_order.push(opc.clone());
             parts.insert(
                 opc,
@@ -241,5 +282,69 @@ mod tests {
         }
         let err = Package::open_bytes(cursor.into_inner()).unwrap_err();
         assert_eq!(err.code(), ErrorCode::OpcOpen);
+    }
+
+    #[test]
+    fn declared_ratio_is_opc_open() {
+        let mut bytes = stored_zip("a.txt", b"x");
+        set_uncompressed(&mut bytes, 4096);
+        let err = Package::open_bytes(bytes).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::OpcOpen);
+        assert!(err.to_string().contains("4096"), "{}", err);
+    }
+
+    #[test]
+    fn zero_compressed_with_a_declared_size_is_opc_open() {
+        let mut bytes = stored_zip("a.txt", b"x");
+        set_sizes(&mut bytes, 0, 8);
+        let err = Package::open_bytes(bytes).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::OpcOpen);
+        assert!(err.to_string().contains("4096"), "{}", err);
+    }
+
+    #[test]
+    fn output_past_the_declared_size_is_opc_open() {
+        let mut bytes = stored_zip("a.txt", b"abcdefgh");
+        set_uncompressed(&mut bytes, 1);
+        let err = Package::open_bytes(bytes).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::OpcOpen);
+        assert!(err.to_string().contains("central directory"), "{}", err);
+    }
+
+    fn stored_zip(name: &str, data: &[u8]) -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = ZipWriter::new(&mut cursor);
+            let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            writer.start_file(name, opt).unwrap();
+            writer.write_all(data).unwrap();
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
+    }
+
+    fn set_uncompressed(bytes: &mut [u8], declared: u32) {
+        let compressed = u32::from_le_bytes(size_field(bytes, true));
+        set_sizes(bytes, compressed, declared);
+    }
+
+    fn set_sizes(bytes: &mut [u8], compressed: u32, declared: u32) {
+        patch_pair(bytes, b"PK\x03\x04", 18, compressed, declared);
+        patch_pair(bytes, b"PK\x01\x02", 20, compressed, declared);
+    }
+
+    fn size_field(bytes: &[u8], compressed: bool) -> [u8; 4] {
+        let at = find_sig(bytes, b"PK\x03\x04").unwrap() + if compressed { 18 } else { 22 };
+        bytes[at..at + 4].try_into().unwrap()
+    }
+
+    fn patch_pair(bytes: &mut [u8], sig: &[u8; 4], at: usize, compressed: u32, declared: u32) {
+        let start = find_sig(bytes, sig).unwrap();
+        bytes[start + at..start + at + 4].copy_from_slice(&compressed.to_le_bytes());
+        bytes[start + at + 4..start + at + 8].copy_from_slice(&declared.to_le_bytes());
+    }
+
+    fn find_sig(bytes: &[u8], sig: &[u8; 4]) -> Option<usize> {
+        bytes.windows(4).position(|window| window == sig)
     }
 }

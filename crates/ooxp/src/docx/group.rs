@@ -1180,13 +1180,11 @@ fn has_txbx_el(el: &Element) -> bool {
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }

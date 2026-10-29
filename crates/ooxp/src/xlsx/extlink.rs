@@ -477,12 +477,11 @@ fn formulas_use(root: &Element, min: u32) -> bool {
 }
 
 fn walk_formulas(el: &Element, visit: &mut impl FnMut(&str)) {
-    if el.local_name() == "f" {
-        visit(&el.text_content());
-    }
-    for c in el.element_children() {
-        walk_formulas(c, visit);
-    }
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "f" {
+            visit(&node.text_content());
+        }
+    });
 }
 
 /// `[10]` 解析成 10，不会当成 `[1]` 的前缀。

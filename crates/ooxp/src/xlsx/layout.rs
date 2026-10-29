@@ -714,8 +714,8 @@ const DEFAULT_COL_CHARS: f64 = 8.43;
 const DEFAULT_ROW_PT: f64 = 15.0;
 pub(crate) const EMU_PER_PIXEL: i64 = 9525;
 pub(crate) const EMU_PER_POINT: i64 = 12_700;
-const MAX_COL: u32 = 16_384;
-const MAX_ROW: u32 = 1_048_576;
+pub(crate) const MAX_COL: u32 = 16_384;
+pub(crate) const MAX_ROW: u32 = 1_048_576;
 
 fn chars_to_emu(chars: f64) -> i64 {
     let px = (chars * MAX_DIGIT_WIDTH + 5.0).floor().max(0.0) as i64;
@@ -761,7 +761,12 @@ fn col_width_emu(sheet: &Element, col: u32) -> i64 {
 }
 
 pub(crate) fn col_origin_emu(sheet: &Element, col: u32) -> i64 {
-    (1..col).map(|c| col_width_emu(sheet, c)).sum()
+    let end = col.min(MAX_COL.saturating_add(1));
+    let mut x = 0i64;
+    for c in 1..end {
+        x = x.saturating_add(col_width_emu(sheet, c));
+    }
+    x
 }
 
 pub(crate) fn row_origin_emu(sheet: &Element, row: u32) -> i64 {
@@ -882,5 +887,13 @@ mod tests {
     #[test]
     fn xml_twenty_is_excel_nineteen_point_two_nine() {
         assert_eq!(xml_width_to_chars(20.0), 19.29);
+    }
+
+    #[test]
+    fn huge_column_does_not_walk_every_index() {
+        let sheet = crate::xml::Element::new("worksheet");
+        let origin = super::col_origin_emu(&sheet, u32::MAX);
+        let capped = super::col_origin_emu(&sheet, super::MAX_COL.saturating_add(1));
+        assert_eq!(origin, capped);
     }
 }

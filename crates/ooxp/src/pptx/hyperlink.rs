@@ -297,83 +297,90 @@ fn collect_sites(root: &Element, host_prefix: &str) -> Vec<LinkSite> {
 }
 
 fn walk_links(
-    el: &Element,
+    root: &Element,
     path: &[usize],
     host_prefix: &str,
     counters: &mut Counters,
     out: &mut Vec<LinkSite>,
 ) {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            return;
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if crate::drawing_math::is_math_ac(el) {
+                continue;
+            }
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((child, next));
+                }
+            }
+            continue;
         }
-        if let Some(i) = shape::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                let mut next = path.to_vec();
+        if el.local_name() == "oleObj" {
+            continue;
+        }
+        if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
+            counters.shapes += 1;
+            let (host, _, _) = shape::shape_stable_id(el, host_prefix, counters.shapes);
+            push_cnv_links(el, &path, "shape", &host, out);
+            if let Some(i) = child_index(el, "txBody") {
+                if let Some(tx) = el.child_by_local("txBody") {
+                    let mut next = path;
+                    next.push(i);
+                    collect_runs(tx, &next, "run", &host, out);
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "sp" {
+            continue;
+        }
+        if picture::is_counted_pic(el) {
+            counters.pics += 1;
+            let host = box_id(host_prefix, "pic", el, counters.pics);
+            push_cnv_links(el, &path, "pic", &host, out);
+            continue;
+        }
+        if el.local_name() == "pic" {
+            continue;
+        }
+        if el.local_name() == "graphicFrame" {
+            if is_zoom_frame(el) {
+                continue;
+            }
+            if is_table_frame(el) {
+                counters.tables += 1;
+                let host = box_id(host_prefix, "table", el, counters.tables);
+                push_cnv_links(el, &path, "table", &host, out);
+                collect_cell_runs(el, &path, &host, out);
+                continue;
+            }
+            if is_chart_frame(el) {
+                counters.charts += 1;
+                let host = box_id(host_prefix, "chart", el, counters.charts);
+                push_cnv_links(el, &path, "chart", &host, out);
+                continue;
+            }
+            if is_diagram_frame(el) {
+                counters.smart += 1;
+                let host = box_id(host_prefix, "smartdiagram", el, counters.smart);
+                push_cnv_links(el, &path, "smartArt", &host, out);
+                continue;
+            }
+            continue;
+        }
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
                 next.push(i);
-                walk_links(child, &next, host_prefix, counters, out);
+                kids.push((child, next));
             }
         }
-        return;
-    }
-    if el.local_name() == "oleObj" {
-        return;
-    }
-    if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
-        counters.shapes += 1;
-        let (host, _, _) = shape::shape_stable_id(el, host_prefix, counters.shapes);
-        push_cnv_links(el, path, "shape", &host, out);
-        if let Some(i) = child_index(el, "txBody") {
-            if let Some(tx) = el.child_by_local("txBody") {
-                let mut next = path.to_vec();
-                next.push(i);
-                collect_runs(tx, &next, "run", &host, out);
-            }
-        }
-        return;
-    }
-    if el.local_name() == "sp" {
-        return;
-    }
-    if picture::is_counted_pic(el) {
-        counters.pics += 1;
-        let host = box_id(host_prefix, "pic", el, counters.pics);
-        push_cnv_links(el, path, "pic", &host, out);
-        return;
-    }
-    if el.local_name() == "pic" {
-        return;
-    }
-    if el.local_name() == "graphicFrame" {
-        if is_zoom_frame(el) {
-            return;
-        }
-        if is_table_frame(el) {
-            counters.tables += 1;
-            let host = box_id(host_prefix, "table", el, counters.tables);
-            push_cnv_links(el, path, "table", &host, out);
-            collect_cell_runs(el, path, &host, out);
-            return;
-        }
-        if is_chart_frame(el) {
-            counters.charts += 1;
-            let host = box_id(host_prefix, "chart", el, counters.charts);
-            push_cnv_links(el, path, "chart", &host, out);
-            return;
-        }
-        if is_diagram_frame(el) {
-            counters.smart += 1;
-            let host = box_id(host_prefix, "smartdiagram", el, counters.smart);
-            push_cnv_links(el, path, "smartArt", &host, out);
-            return;
-        }
-        return;
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            let mut next = path.to_vec();
-            next.push(i);
-            walk_links(e, &next, host_prefix, counters, out);
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

@@ -120,15 +120,13 @@ pub fn family_of(uid: &str) -> Option<LayoutKind> {
 }
 
 fn walk_skip_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_skip_txbx(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }
 
 pub fn rel_ids(host_el: &Element) -> RelIds {

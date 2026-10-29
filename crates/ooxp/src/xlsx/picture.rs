@@ -955,7 +955,7 @@ pub fn set_picture_size(
             to,
             to_off_x,
             to_off_y,
-        } => update_two_cell_to(&mut doc.root, &search, to, to_off_x, to_off_y),
+        } => update_two_cell_to(&mut doc.root, &search, to, to_off_x, to_off_y)?,
     };
     if !ok {
         return Err(Error::with_path(
@@ -1139,8 +1139,8 @@ fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap>
         if !search.hit(&cnv_of(pic).0, &mut index) {
             return Ok(());
         }
-        let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"));
-        let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"));
+        let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"))?;
+        let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"))?;
         let (cx, cy) = read_ext(anchor);
         let (pos_x, pos_y) = read_pos(anchor);
         let rid = blip_rid(pic).unwrap_or_default();
@@ -1408,59 +1408,94 @@ where
     walk_anchor_nodes(root, f)
 }
 
-fn walk_anchor_nodes<F>(el: &Element, f: &mut F) -> Result<(), Error>
+fn walk_anchor_nodes<F>(root: &Element, f: &mut F) -> Result<(), Error>
 where
     F: FnMut(&Element, AnchorKind) -> Result<(), Error>,
 {
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el.child_by_local("Choice") {
-            return walk_anchor_nodes(choice, f);
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if let Some(choice) = el.child_by_local("Choice") {
+                stack.push(choice);
+            } else if let Some(fallback) = el.child_by_local("Fallback") {
+                stack.push(fallback);
+            }
+            continue;
         }
-        if let Some(fallback) = el.child_by_local("Fallback") {
-            return walk_anchor_nodes(fallback, f);
+        if let Some(kind) = AnchorKind::from_local(el.local_name()) {
+            f(el, kind)?;
+            continue;
         }
-        return Ok(());
-    }
-    if let Some(kind) = AnchorKind::from_local(el.local_name()) {
-        return f(el, kind);
-    }
-    if el.local_name() == "grpSp" {
-        return Ok(());
-    }
-    for child in el.element_children() {
-        walk_anchor_nodes(child, f)?;
+        if el.local_name() == "grpSp" {
+            continue;
+        }
+        for child in el.children.iter().rev() {
+            if let Node::Element(inner) = child {
+                stack.push(inner);
+            }
+        }
     }
     Ok(())
 }
 
-pub(crate) fn walk_anchors_mut<F>(el: &mut Element, f: &mut F) -> bool
+pub(crate) fn walk_anchors_mut<F>(root: &mut Element, f: &mut F) -> bool
 where
     F: FnMut(&mut Element, AnchorKind) -> bool,
 {
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el.child_by_local_mut("Choice") {
-            return walk_anchors_mut(choice, f);
+    let mut stack = vec![Vec::<usize>::new()];
+    while let Some(path) = stack.pop() {
+        let local = element_at(root, &path).local_name().to_string();
+        if local == "AlternateContent" {
+            let index = {
+                let el = element_at(root, &path);
+                el.children.iter().position(|node| {
+                    matches!(node, Node::Element(child) if child.local_name() == "Choice")
+                }).or_else(|| {
+                    el.children.iter().position(|node| {
+                        matches!(node, Node::Element(child) if child.local_name() == "Fallback")
+                    })
+                })
+            };
+            if let Some(index) = index {
+                let mut child = path;
+                child.push(index);
+                stack.push(child);
+            }
+            continue;
         }
-        if let Some(fallback) = el.child_by_local_mut("Fallback") {
-            return walk_anchors_mut(fallback, f);
-        }
-        return false;
-    }
-    if let Some(kind) = AnchorKind::from_local(el.local_name()) {
-        return f(el, kind);
-    }
-    if el.local_name() == "grpSp" {
-        return false;
-    }
-    let n = el.children.len();
-    for i in 0..n {
-        if let Node::Element(child) = &mut el.children[i] {
-            if walk_anchors_mut(child, f) {
+        if let Some(kind) = AnchorKind::from_local(&local) {
+            if f(element_at(root, &path), kind) {
                 return true;
             }
+            continue;
+        }
+        if local == "grpSp" {
+            continue;
+        }
+        let indexes: Vec<usize> = element_at(root, &path)
+            .children
+            .iter()
+            .enumerate()
+            .filter_map(|(index, node)| matches!(node, Node::Element(_)).then_some(index))
+            .collect();
+        for index in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(index);
+            stack.push(child);
         }
     }
     false
+}
+
+fn element_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
+    let mut cur = root;
+    for &index in path {
+        cur = match &mut cur.children[index] {
+            Node::Element(child) => child,
+            Node::Text(_) => unreachable!("锚点路径只指向元素"),
+        };
+    }
+    cur
 }
 
 pub(crate) fn direct_pic(anchor: &Element) -> Option<&Element> {
@@ -1480,10 +1515,7 @@ pub(crate) fn has_blip(el: &Element) -> bool {
 }
 
 pub(crate) fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for c in el.element_children() {
-        walk_all(c, f);
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 fn pic_info(
@@ -1518,8 +1550,8 @@ pub(crate) fn pic_info_at(
         Some(v) => format!("{id_base}/pic:{v}"),
         None => format!("{id_base}/pic:index:{index}"),
     };
-    let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"));
-    let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"));
+    let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"))?;
+    let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"))?;
     let (cx, cy) = read_ext(anchor);
     let (pos_x, pos_y) = read_pos(anchor);
     let (from_x, from_y, to_x, to_y) = super::chart_drawing::read_rel_box(anchor);
@@ -1610,9 +1642,9 @@ pub(crate) fn cnv_of(pic: &Element) -> (Option<String>, String) {
     (raw, name)
 }
 
-pub(crate) fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i64) {
+pub(crate) fn read_marker(el: Option<&Element>) -> Result<(Option<a1::CellRef>, i64, i64), Error> {
     let Some(el) = el else {
-        return (None, 0, 0);
+        return Ok((None, 0, 0));
     };
     let col = el
         .child_by_local("col")
@@ -1635,10 +1667,21 @@ pub(crate) fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i6
         .and_then(|s| s.trim().parse::<i64>().ok())
         .unwrap_or(0);
     let cell = a1::CellRef {
-        col: (col + 1).max(1) as u32,
-        row: (row + 1).max(1) as u32,
+        col: marker_index(col, i64::from(super::layout::MAX_COL))?,
+        row: marker_index(row, i64::from(super::layout::MAX_ROW))?,
     };
-    (Some(cell), col_off, row_off)
+    Ok((Some(cell), col_off, row_off))
+}
+
+fn marker_index(raw: i64, max: i64) -> Result<u32, Error> {
+    let Some(next) = raw.checked_add(1) else {
+        return Err(Error::xml(crate::error::XmlIssue::Parse));
+    };
+    let n = next.max(1);
+    if n > max {
+        return Err(Error::xml(crate::error::XmlIssue::Parse));
+    }
+    Ok(n as u32)
 }
 
 pub(crate) fn read_ext(anchor: &Element) -> (Option<i64>, Option<i64>) {
@@ -2017,9 +2060,10 @@ fn update_two_cell_to(
     to: a1::CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) -> bool {
+) -> Result<bool, Error> {
     let mut index = 0usize;
-    walk_anchors_mut(root, &mut |anchor, _| {
+    let mut marker_err = None;
+    let hit = walk_anchors_mut(root, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
             return false;
         };
@@ -2029,9 +2073,16 @@ fn update_two_cell_to(
         if !search.hit(&cnv_of(pic).0, &mut index) {
             return false;
         }
-        apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+        if let Err(err) = apply_two_cell_to(anchor, to, to_off_x, to_off_y) {
+            marker_err = Some(err);
+            return true;
+        }
         true
-    })
+    });
+    if let Some(err) = marker_err {
+        return Err(err);
+    }
+    Ok(hit)
 }
 
 pub(crate) fn drawing_is_empty(root: &Element) -> bool {
@@ -2488,14 +2539,15 @@ pub(crate) fn apply_two_cell_to(
     to: a1::CellRef,
     to_off_x: Option<i64>,
     to_off_y: Option<i64>,
-) {
-    let (_, cur_x, cur_y) = read_marker(anchor.child_by_local("to"));
+) -> Result<(), Error> {
+    let (_, cur_x, cur_y) = read_marker(anchor.child_by_local("to"))?;
     rewrite_to_marker(
         anchor,
         to,
         to_off_x.unwrap_or(cur_x),
         to_off_y.unwrap_or(cur_y),
     );
+    Ok(())
 }
 
 fn rewrite_to_marker(anchor: &mut Element, to: a1::CellRef, off_x: i64, off_y: i64) {
@@ -2702,4 +2754,30 @@ fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
         i += 2 + len;
     }
     None
+}
+
+#[cfg(test)]
+mod marker_tests {
+    use super::read_marker;
+    use crate::xml::Element;
+
+    #[test]
+    fn column_past_excel_max_is_xml_broken() {
+        let mut from = Element::new("xdr:from");
+        from.push_element(Element::new("xdr:col").with_text("16384"));
+        from.push_element(Element::new("xdr:row").with_text("0"));
+        let err = read_marker(Some(&from)).unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
+    }
+
+    #[test]
+    fn last_excel_column_is_kept() {
+        let mut from = Element::new("xdr:from");
+        from.push_element(Element::new("xdr:col").with_text("16383"));
+        from.push_element(Element::new("xdr:row").with_text("1048575"));
+        let (cell, _, _) = read_marker(Some(&from)).unwrap();
+        let cell = cell.unwrap();
+        assert_eq!(cell.col, 16_384);
+        assert_eq!(cell.row, 1_048_576);
+    }
 }

@@ -847,26 +847,28 @@ fn styled_rpr(
 
 /// 遇到 `mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
 /// 公式框整段不进 `shapes`。
-pub fn walk_choice<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            return;
-        }
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                walk_choice(child, f);
+pub fn walk_choice<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "AlternateContent" {
+            if crate::drawing_math::is_math_ac(el) {
+                continue;
             }
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
         }
-        return;
-    }
-    f(el);
-    // 预览 `p:pic` 在 oleObj 里，不要算进 pictures。
-    if el.local_name() == "oleObj" {
-        return;
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_choice(e, f);
+        f(el);
+        if el.local_name() == "oleObj" {
+            continue;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
 }

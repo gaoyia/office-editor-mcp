@@ -162,8 +162,8 @@ pub fn delete_edit_range(root: &mut Element, n: usize, id: &str, i: usize) -> Re
 fn collect_hits(root: &Element) -> Vec<PermHit> {
     let mut starts = Vec::new();
     let mut ends: HashMap<String, Vec<usize>> = HashMap::new();
-    let mut path = Vec::new();
-    walk_perm(root, &mut path, true, &mut starts, &mut ends);
+    let path = Vec::new();
+    walk_perm(root, &path, true, &mut starts, &mut ends);
     let mut out = Vec::new();
     for rec in starts {
         let end = rec.xml_id.as_ref().and_then(|id| ends.get(id).cloned());
@@ -179,47 +179,44 @@ fn collect_hits(root: &Element) -> Vec<PermHit> {
 }
 
 fn walk_perm(
-    el: &Element,
-    path: &mut Vec<usize>,
+    root: &Element,
+    path: &[usize],
     skip_txbx: bool,
     starts: &mut Vec<PermStartRec>,
     ends: &mut HashMap<String, Vec<usize>>,
 ) {
-    if skip_txbx && el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_perm(c, path, skip_txbx, starts, ends);
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if skip_txbx && el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
+                }
             }
-            path.pop();
+            continue;
         }
-        return;
-    }
-    match el.local_name() {
-        "permStart" => {
-            starts.push(PermStartRec {
-                path: path.clone(),
-                xml_id: el.attr_local("id").map(str::to_string),
-                ed_grp: el.attr_local("edGrp").map(str::to_string),
-                ed: el.attr_local("ed").map(str::to_string),
-            });
-        }
-        "permEnd" => {
-            if let Some(id) = el.attr_local("id") {
-                ends.entry(id.to_string()).or_insert_with(|| path.clone());
+        match el.local_name() {
+            "permStart" => {
+                starts.push(PermStartRec {
+                    path: path.clone(),
+                    xml_id: el.attr_local("id").map(str::to_string),
+                    ed_grp: el.attr_local("edGrp").map(str::to_string),
+                    ed: el.attr_local("ed").map(str::to_string),
+                });
             }
+            "permEnd" => {
+                if let Some(id) = el.attr_local("id") {
+                    ends.entry(id.to_string()).or_insert_with(|| path.clone());
+                }
+            }
+            _ => {}
         }
-        _ => {}
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_perm(e, path, skip_txbx, starts, ends);
-            path.pop();
-        }
+        push_element_children(el, &path, &mut stack);
     }
 }
 
@@ -230,18 +227,15 @@ fn next_perm_xml_id(root: &Element) -> String {
 }
 
 fn walk_xml_ids(el: &Element, max: &mut i64) {
-    if matches!(el.local_name(), "permStart" | "permEnd") {
-        if let Some(id) = el.attr_local("id") {
-            if let Ok(n) = id.parse::<i64>() {
-                *max = (*max).max(n);
+    crate::xml::walk_elements(el, &mut |node| {
+        if matches!(node.local_name(), "permStart" | "permEnd") {
+            if let Some(id) = node.attr_local("id") {
+                if let Ok(n) = id.parse::<i64>() {
+                    *max = (*max).max(n);
+                }
             }
         }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_xml_ids(e, max);
-        }
-    }
+    });
 }
 
 fn insert_perm_start(p: &mut Element, xml_id: &str, ed_grp: Option<&str>, ed: Option<&str>) {
@@ -276,48 +270,63 @@ fn insert_perm_end(p: &mut Element, xml_id: &str) {
 
 fn text_between(root: &Element, start: &[usize], end: &[usize]) -> String {
     let mut out = String::new();
-    let mut path = Vec::new();
+    let path = Vec::new();
     let mut on = false;
-    walk_text(root, &mut path, start, end, &mut on, &mut out);
+    walk_text(root, &path, start, end, &mut on, &mut out);
     out
 }
 
 fn walk_text(
-    el: &Element,
-    path: &mut Vec<usize>,
+    root: &Element,
+    path: &[usize],
     start: &[usize],
     end: &[usize],
     on: &mut bool,
     out: &mut String,
 ) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_text(c, path, start, end, on, out);
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
+                }
             }
-            path.pop();
+            continue;
         }
-        return;
+        if path.as_slice() == start {
+            *on = true;
+        } else if path.as_slice() == end {
+            *on = false;
+            continue;
+        } else if *on && el.local_name() == "t" {
+            out.push_str(&el.text_content());
+            continue;
+        }
+        push_element_children(el, &path, &mut stack);
     }
-    if path.as_slice() == start {
-        *on = true;
-    } else if path.as_slice() == end {
-        *on = false;
-        return;
-    } else if *on && el.local_name() == "t" {
-        out.push_str(&el.text_content());
-        return;
-    }
+}
+
+fn push_element_children<'a>(
+    el: &'a Element,
+    path: &[usize],
+    stack: &mut Vec<(&'a Element, Vec<usize>)>,
+) {
+    let mut kids = Vec::new();
     for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_text(e, path, start, end, on, out);
-            path.pop();
+        if let Node::Element(child) = n {
+            let mut next = path.to_vec();
+            next.push(i);
+            kids.push((child, next));
         }
+    }
+    for item in kids.into_iter().rev() {
+        stack.push(item);
     }
 }
 

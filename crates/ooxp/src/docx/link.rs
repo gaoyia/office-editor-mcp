@@ -382,28 +382,35 @@ fn collect_hyperlink_paths(root: &Element) -> Vec<Vec<usize>> {
     out
 }
 
-fn walk_hyperlinks(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_hyperlinks(c, path, out);
-            }
-            path.pop();
+fn walk_hyperlinks(root: &Element, path: &[usize], out: &mut Vec<Vec<usize>>) {
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "hyperlink" {
-        out.push(path.clone());
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_hyperlinks(e, path, out);
-            path.pop();
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "hyperlink" {
+            out.push(path.clone());
+        }
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -437,43 +444,50 @@ fn collect_bookmark_pairs(root: &Element) -> Vec<BookmarkPair> {
 }
 
 fn walk_bookmarks(
-    el: &Element,
-    path: &mut Vec<usize>,
+    root: &Element,
+    path: &[usize],
     skip_txbx: bool,
     starts: &mut Vec<(Vec<usize>, Option<String>, String)>,
     ends: &mut HashMap<String, Vec<usize>>,
 ) {
-    if skip_txbx && el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_bookmarks(c, path, skip_txbx, starts, ends);
+    let mut stack = vec![(root, path.to_vec())];
+    while let Some((el, path)) = stack.pop() {
+        if skip_txbx && el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next));
+                }
             }
-            path.pop();
+            continue;
         }
-        return;
-    }
-    match el.local_name() {
-        "bookmarkStart" => {
-            let xml_id = el.attr_local("id").map(str::to_string);
-            let name = el.attr_local("name").unwrap_or("").to_string();
-            starts.push((path.clone(), xml_id, name));
+        match el.local_name() {
+            "bookmarkStart" => {
+                let xml_id = el.attr_local("id").map(str::to_string);
+                let name = el.attr_local("name").unwrap_or("").to_string();
+                starts.push((path.clone(), xml_id, name));
+            }
+            "bookmarkEnd" => {
+                if let Some(id) = el.attr_local("id") {
+                    ends.entry(id.to_string()).or_insert_with(|| path.clone());
+                }
+            }
+            _ => {}
         }
-        "bookmarkEnd" => {
-            if let Some(id) = el.attr_local("id") {
-                ends.entry(id.to_string()).or_insert_with(|| path.clone());
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next));
             }
         }
-        _ => {}
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_bookmarks(e, path, skip_txbx, starts, ends);
-            path.pop();
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }
@@ -487,8 +501,8 @@ pub(crate) fn all_bookmark_names(root: &Element) -> HashSet<String> {
 pub(crate) fn all_bookmark_spans(root: &Element) -> Vec<BookmarkSpan> {
     let mut starts = Vec::new();
     let mut ends: HashMap<String, Vec<usize>> = HashMap::new();
-    let mut path = Vec::new();
-    walk_bookmarks(root, &mut path, true, &mut starts, &mut ends);
+    let path = Vec::new();
+    walk_bookmarks(root, &path, true, &mut starts, &mut ends);
     let mut out = Vec::new();
     for (start, xml_id, name) in starts {
         let Some(xml_id) = xml_id else {
@@ -522,18 +536,15 @@ pub(crate) fn next_bookmark_xml_id(root: &Element) -> String {
 }
 
 fn walk_xml_ids(el: &Element, max: &mut i64) {
-    if matches!(el.local_name(), "bookmarkStart" | "bookmarkEnd") {
-        if let Some(id) = el.attr_local("id") {
-            if let Ok(n) = id.parse::<i64>() {
-                *max = (*max).max(n);
+    crate::xml::walk_elements(el, &mut |node| {
+        if matches!(node.local_name(), "bookmarkStart" | "bookmarkEnd") {
+            if let Some(id) = node.attr_local("id") {
+                if let Ok(n) = id.parse::<i64>() {
+                    *max = (*max).max(n);
+                }
             }
         }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_xml_ids(e, max);
-        }
-    }
+    });
 }
 
 fn unused_ooxp_name(taken: &HashSet<String>) -> String {

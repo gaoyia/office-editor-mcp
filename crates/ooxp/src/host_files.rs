@@ -1,4 +1,5 @@
-//! 调用方事先读好的用户文件。库按 JSON 里的路径来取，不再自己打开磁盘。
+//! 调用方提供的用户文件。库按路径来取。
+//! 本机由 `install_reader` 在真正用到该路径时再读磁盘；事先放进 `install` 的字节直接取。
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -13,8 +14,11 @@ pub(crate) struct Cached {
     kind: io::ErrorKind,
 }
 
+type Reader = fn(&str) -> Cached;
+
 thread_local! {
     static FILES: RefCell<Option<HashMap<String, Cached>>> = const { RefCell::new(None) };
+    static READER: RefCell<Option<Reader>> = const { RefCell::new(None) };
 }
 
 pub struct FileGuard;
@@ -24,39 +28,76 @@ impl Drop for FileGuard {
         FILES.with(|slot| {
             *slot.borrow_mut() = None;
         });
+        READER.with(|slot| {
+            *slot.borrow_mut() = None;
+        });
     }
 }
 
 pub fn install(files: HashMap<String, Cached>) -> FileGuard {
+    READER.with(|slot| {
+        *slot.borrow_mut() = None;
+    });
     FILES.with(|slot| {
         *slot.borrow_mut() = Some(files);
     });
     FileGuard
 }
 
+/// 先记下怎么读。真正打开磁盘要等到某条操作来取这个路径。
+#[cfg(not(target_arch = "wasm32"))]
+pub fn install_reader(read: fn(&str) -> Cached) -> FileGuard {
+    READER.with(|slot| {
+        *slot.borrow_mut() = Some(read);
+    });
+    FILES.with(|slot| {
+        *slot.borrow_mut() = Some(HashMap::new());
+    });
+    FileGuard
+}
+
 pub fn read_user_file(path: &str) -> Result<Vec<u8>, Error> {
+    if let Some(hit) = cached(path) {
+        return hit;
+    }
+    let reader = READER.with(|slot| *slot.borrow());
+    let Some(reader) = reader else {
+        return Err(missing(path));
+    };
+    let loaded = reader(path);
+    let result = cached_result(path, &loaded);
+    FILES.with(|slot| {
+        if let Some(map) = slot.borrow_mut().as_mut() {
+            map.insert(path.to_string(), loaded);
+        }
+    });
+    result
+}
+
+fn cached(path: &str) -> Option<Result<Vec<u8>, Error>> {
     FILES.with(|slot| {
         let guard = slot.borrow();
-        let Some(map) = guard.as_ref() else {
-            return Err(missing(path));
-        };
-        match map.get(path) {
-            Some(Cached {
-                bytes: Some(bytes), ..
-            }) => Ok(bytes.clone()),
-            Some(Cached {
-                raw_os: Some(code), ..
-            }) => Err(io_path(
-                io::Error::from_raw_os_error(*code),
-                PathBuf::from(path),
-            )),
-            Some(Cached { kind, .. }) => Err(io_path(
-                io::Error::new(*kind, "read failed"),
-                PathBuf::from(path),
-            )),
-            None => Err(missing(path)),
-        }
+        let map = guard.as_ref()?;
+        map.get(path).map(|item| cached_result(path, item))
     })
+}
+
+fn cached_result(path: &str, item: &Cached) -> Result<Vec<u8>, Error> {
+    match item {
+        Cached {
+            bytes: Some(bytes), ..
+        } => Ok(bytes.clone()),
+        Cached {
+            raw_os: Some(code), ..
+        } => Err(io_path(
+            io::Error::from_raw_os_error(*code),
+            PathBuf::from(path),
+        )),
+        Cached { kind, .. } => Err(io_path(
+            io::Error::new(*kind, "read failed"),
+            PathBuf::from(path),
+        )),
+    }
 }
 
 fn missing(path: &str) -> Error {
@@ -64,46 +105,6 @@ fn missing(path: &str) -> Error {
         io::Error::new(io::ErrorKind::NotFound, "file was not provided"),
         PathBuf::from(path),
     )
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn load_json(value: &serde_json::Value) -> FileGuard {
-    let mut paths = Vec::new();
-    collect_paths(value, &mut paths);
-    paths.sort();
-    paths.dedup();
-    let map = paths
-        .into_iter()
-        .map(|path| {
-            let cached = cache_read(&path);
-            (path, cached)
-        })
-        .collect();
-    install(map)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn collect_paths(value: &serde_json::Value, out: &mut Vec<String>) {
-    match value {
-        serde_json::Value::Object(map) => {
-            for (key, child) in map {
-                if key == "file" || key == "sound" {
-                    if let Some(path) = child.as_str() {
-                        if !path.is_empty() {
-                            out.push(path.to_string());
-                        }
-                    }
-                }
-                collect_paths(child, out);
-            }
-        }
-        serde_json::Value::Array(items) => {
-            for item in items {
-                collect_paths(item, out);
-            }
-        }
-        _ => {}
-    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -131,4 +132,32 @@ pub fn success(path: &str, bytes: Vec<u8>) -> (String, Cached) {
             kind: io::ErrorKind::Other,
         },
     )
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static HITS: AtomicUsize = AtomicUsize::new(0);
+
+    fn hit(path: &str) -> Cached {
+        HITS.fetch_add(1, Ordering::SeqCst);
+        Cached {
+            bytes: Some(path.as_bytes().to_vec()),
+            raw_os: None,
+            kind: io::ErrorKind::Other,
+        }
+    }
+
+    #[test]
+    fn reader_waits_until_the_path_is_used() {
+        HITS.store(0, Ordering::SeqCst);
+        let _guard = install_reader(hit);
+        assert_eq!(HITS.load(Ordering::SeqCst), 0);
+        assert_eq!(read_user_file("a.png").unwrap(), b"a.png");
+        assert_eq!(HITS.load(Ordering::SeqCst), 1);
+        assert_eq!(read_user_file("a.png").unwrap(), b"a.png");
+        assert_eq!(HITS.load(Ordering::SeqCst), 1);
+    }
 }

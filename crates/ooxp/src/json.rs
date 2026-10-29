@@ -171,8 +171,15 @@ pub fn require_ops(obj: &Map<String, Value>) -> Result<&[Value], Error> {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     use std::fs;
+    use std::io;
 
     use crate::error::io_path;
+    if path.is_dir() {
+        return Err(io_path(
+            io::Error::new(io::ErrorKind::AlreadyExists, "目标路径是目录"),
+            path.to_path_buf(),
+        ));
+    }
     let parent = path.parent().filter(|p| !p.as_os_str().is_empty());
     if let Some(dir) = parent {
         fs::create_dir_all(dir).map_err(|e| io_path(e, dir.to_path_buf()))?;
@@ -259,6 +266,17 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
         assert!(!dir.join("a.xlsx.ooxp.bak").exists());
         assert!(!dir.join("a.xlsx.ooxp.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_atomic_refuses_a_directory() {
+        let dir = std::env::temp_dir().join(format!("ooxp-atomic-dir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = write_atomic(&dir, b"nope").unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::Io);
+        assert!(dir.is_dir());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

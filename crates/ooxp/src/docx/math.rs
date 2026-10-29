@@ -270,38 +270,45 @@ fn collect_maths(root: &Element) -> Vec<MathRec> {
     out
 }
 
-fn walk_maths(el: &Element, path: &mut Vec<usize>, parent: &str, out: &mut Vec<MathRec>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_maths(c, path, "AlternateContent", out);
-            }
-            path.pop();
+fn walk_maths(root: &Element, path: &[usize], parent: &str, out: &mut Vec<MathRec>) {
+    let mut stack = vec![(root, path.to_vec(), parent.to_string())];
+    while let Some((el, path, parent)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    if el.local_name() == "oMath" {
-        let kind = if parent == "oMathPara" {
-            MathKind::Display
-        } else {
-            MathKind::Inline
-        };
-        out.push(MathRec {
-            path: path.clone(),
-            kind,
-        });
-        return;
-    }
-    let name = el.local_name();
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(c) = n {
-            path.push(i);
-            walk_maths(c, path, name, out);
-            path.pop();
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next, "AlternateContent".to_string()));
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "oMath" {
+            let kind = if parent == "oMathPara" {
+                MathKind::Display
+            } else {
+                MathKind::Inline
+            };
+            out.push(MathRec {
+                path: path.clone(),
+                kind,
+            });
+            continue;
+        }
+        let name = el.local_name().to_string();
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut next = path.clone();
+                next.push(i);
+                kids.push((child, next, name.clone()));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

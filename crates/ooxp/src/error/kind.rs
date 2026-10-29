@@ -632,12 +632,22 @@ pub(crate) enum SheetNameReason {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OpcReason {
     EmptyPartName,
-    InvalidPartName { name: String },
+    InvalidPartName {
+        name: String,
+    },
     MissingContentTypes,
     MissingRootRels,
     MissingOfficeDocument,
-    RelTarget { target: String },
-    Zip { detail: String },
+    RelTarget {
+        target: String,
+    },
+    Zip {
+        detail: String,
+    },
+    /// 声明的未压缩大小达到压缩后大小的 4096 倍，或压缩后为 0 且声明大于 0。
+    DeclaredRatio,
+    /// 解压读到的字节超过中央目录声明的未压缩大小。
+    ExceedsDeclared,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1737,6 +1747,8 @@ impl OpcReason {
             Self::Zip {
                 detail: "bad".into(),
             },
+            Self::DeclaredRatio,
+            Self::ExceedsDeclared,
         ]
     }
 }

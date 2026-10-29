@@ -121,6 +121,8 @@
   - `setShapeFormat` 的 `sz` 大于 400000
 - **`OpcOpen`**（退出码 3）
   - 不是 ZIP，或缺少 `[Content_Types].xml` / 根关系
+  - 条目声明的未压缩大小达到压缩后大小的 4096 倍，或压缩后为 0 且声明大于 0
+  - 解压读到的字节超过中央目录声明的未压缩大小
 - **`OpcPartMissing`**（退出码 3）
   - 入口部件不存在，目标工作表或幻灯片部件不存在，关系 id 找不到，或者关系指向外部资源
 - **`XmlBroken`**（退出码 3）
@@ -174,6 +176,7 @@
   - 目标 `writeProtection` 已有密码哈希却不给对得上的 `writePassword` 就要改对应字段
   - `p:modifyVerifier` / docx / xlsx 已有密码哈希却不给对得上的 `password`
     （含 pptx 非 `cryptAlgorithmSid=14` 加 `hashData`、docx 非 `cryptAlgorithmSid=14`、xlsx 遗留 XOR）
+  - 已有口令哈希的圈数大于 1000 万。本库不跑这圈，也不把它说成口令错误。`inspect` 和不改保护的打开不核对圈数
 
 ### 各码在具体 op 上的判定
 

@@ -2058,15 +2058,13 @@ fn bool_val(el: Option<&Element>) -> bool {
 }
 
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" || el.local_name() == "object" {
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_outside_txbx(e, f);
+    crate::xml::walk_elements_if(el, |node| {
+        if node.local_name() == "txbxContent" || node.local_name() == "object" {
+            return false;
         }
-    }
+        f(node);
+        true
+    });
 }
 
 fn find_child<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {

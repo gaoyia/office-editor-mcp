@@ -215,9 +215,9 @@ pub fn apply_revision(
 }
 
 fn collect_rev_hits(root: &Element) -> Vec<(Vec<usize>, RevKind)> {
-    let mut path = Vec::new();
+    let path = Vec::new();
     let mut out = Vec::new();
-    walk_rev(root, &mut path, WalkCtx::root(), &mut out);
+    walk_rev(root, &path, WalkCtx::root(), &mut out);
     out
 }
 
@@ -245,36 +245,43 @@ impl WalkCtx {
 }
 
 fn walk_rev(
-    el: &Element,
-    path: &mut Vec<usize>,
+    root: &Element,
+    path: &[usize],
     ctx: WalkCtx,
     out: &mut Vec<(Vec<usize>, RevKind)>,
 ) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt(el) {
-            path.push(i);
-            if let Node::Element(c) = &el.children[i] {
-                walk_rev(c, path, ctx, out);
+    let mut stack = vec![(root, path.to_vec(), ctx)];
+    while let Some((el, path, ctx)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt(el) {
+                if let Node::Element(c) = &el.children[i] {
+                    let mut next = path;
+                    next.push(i);
+                    stack.push((c, next, ctx));
+                }
             }
-            path.pop();
+            continue;
         }
-        return;
-    }
-    if let Some(kind) = classify_rev(el, ctx) {
-        out.push((path.clone(), kind));
-        if kind.is_change() {
-            return;
+        if let Some(kind) = classify_rev(el, ctx) {
+            out.push((path.clone(), kind));
+            if kind.is_change() {
+                continue;
+            }
         }
-    }
-    let next = ctx.enter(el);
-    for (i, n) in el.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            path.push(i);
-            walk_rev(e, path, next, out);
-            path.pop();
+        let next = ctx.enter(el);
+        let mut kids = Vec::new();
+        for (i, n) in el.children.iter().enumerate() {
+            if let Node::Element(child) = n {
+                let mut child_path = path.clone();
+                child_path.push(i);
+                kids.push((child, child_path, next));
+            }
+        }
+        for item in kids.into_iter().rev() {
+            stack.push(item);
         }
     }
 }

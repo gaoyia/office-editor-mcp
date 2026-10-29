@@ -642,12 +642,11 @@ fn collect_t(el: &Element) -> String {
 }
 
 fn walk_t(el: &Element, out: &mut String) {
-    if el.local_name() == "t" {
-        out.push_str(&el.text_content());
-    }
-    for c in el.element_children() {
-        walk_t(c, out);
-    }
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "t" {
+            out.push_str(&node.text_content());
+        }
+    });
 }
 
 fn body_blocks(body: &Element) -> Vec<Element> {

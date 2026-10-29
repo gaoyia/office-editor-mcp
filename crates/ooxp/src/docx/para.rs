@@ -762,22 +762,25 @@ pub fn collect_paragraphs_in_txbx(content: &Element) -> Vec<&Element> {
 }
 
 /// 遇到 `w:txbxContent` 停住；`mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
-fn walk_paras<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                walk_paras(child, f);
-            }
+fn walk_paras<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_paras(e, f);
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        f(el);
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
 }
@@ -862,33 +865,36 @@ pub fn visible_text(p: &Element) -> String {
     out
 }
 
-fn walk_visible(el: &Element, in_del: bool, out: &mut String) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                walk_visible(child, in_del, out);
+fn walk_visible(root: &Element, in_del: bool, out: &mut String) {
+    let mut stack = vec![(root, in_del)];
+    while let Some((el, in_del)) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push((child, in_del));
+                }
+            }
+            continue;
+        }
+        let in_del = in_del || el.local_name() == "del";
+        if el.local_name() == "instrText" {
+            continue;
+        }
+        if !in_del {
+            match el.local_name() {
+                "t" => out.push_str(&el.text_content()),
+                "tab" => out.push('\t'),
+                "br" => out.push('\n'),
+                _ => {}
             }
         }
-        return;
-    }
-    let in_del = in_del || el.local_name() == "del";
-    if el.local_name() == "instrText" {
-        return;
-    }
-    if !in_del {
-        match el.local_name() {
-            "t" => out.push_str(&el.text_content()),
-            "tab" => out.push('\t'),
-            "br" => out.push('\n'),
-            _ => {}
-        }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_visible(e, in_del, out);
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push((child, in_del));
+            }
         }
     }
 }
@@ -958,14 +964,11 @@ pub fn next_para_hex(root: &Element) -> String {
 }
 
 fn walk_all_paras(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "p" {
-        f(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all_paras(e, f);
+    crate::xml::walk_elements(el, &mut |node| {
+        if node.local_name() == "p" {
+            f(node);
         }
-    }
+    });
 }
 
 fn find_p<'a>(el: &'a Element, idx: &mut usize, target: &BodyPara) -> Option<&'a Element> {
@@ -1477,22 +1480,25 @@ pub fn append_before_body_sect_pr(parent: &mut Element, new_p: Element) {
     }
 }
 
-fn walk_story_descendants(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                walk_story_descendants(child, f);
-            }
+fn walk_story_descendants(root: &Element, f: &mut impl FnMut(&Element)) {
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return;
-    }
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_story_descendants(e, f);
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        f(el);
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
 }

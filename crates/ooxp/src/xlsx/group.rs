@@ -86,7 +86,7 @@ pub fn group_shapes(
                 )
             })?;
         let bbox =
-            anchor_box(&sheet_doc.root, &draw_doc.root, hit.anchor_index).unwrap_or(EmuBox {
+            anchor_box(&sheet_doc.root, &draw_doc.root, hit.anchor_index)?.unwrap_or(EmuBox {
                 x: 0,
                 y: 0,
                 cx: shape::DEFAULT_CX,
@@ -432,52 +432,64 @@ fn anchor_has_other_payload(anchor: &Element) -> bool {
     })
 }
 
-fn anchor_box(sheet: &Element, root: &Element, anchor_index: usize) -> Option<EmuBox> {
-    let host = anchor_host(root, anchor_index)?;
-    let kind = AnchorKind::from_local(host.local_name())?;
+fn anchor_box(
+    sheet: &Element,
+    root: &Element,
+    anchor_index: usize,
+) -> Result<Option<EmuBox>, Error> {
+    let Some(host) = anchor_host(root, anchor_index) else {
+        return Ok(None);
+    };
+    let Some(kind) = AnchorKind::from_local(host.local_name()) else {
+        return Ok(None);
+    };
     match kind {
         AnchorKind::Absolute => {
             let (x, y) = picture::read_pos(host);
             let (cx, cy) = picture::read_ext(host);
-            Some(EmuBox {
+            Ok(Some(EmuBox {
                 x: x.unwrap_or(0),
                 y: y.unwrap_or(0),
                 cx: cx.unwrap_or(shape::DEFAULT_CX),
                 cy: cy.unwrap_or(shape::DEFAULT_CY),
-            })
+            }))
         }
         AnchorKind::OneCell => {
-            let (from, off_x, off_y) = picture::read_marker(host.child_by_local("from"));
-            let from = from?;
+            let (from, off_x, off_y) = picture::read_marker(host.child_by_local("from"))?;
+            let Some(from) = from else {
+                return Ok(None);
+            };
             let (cx, cy) = picture::read_ext(host);
             let (x, y) = (
                 layout::col_origin_emu(sheet, from.col).saturating_add(off_x),
                 layout::row_origin_emu(sheet, from.row).saturating_add(off_y),
             );
-            Some(EmuBox {
+            Ok(Some(EmuBox {
                 x,
                 y,
                 cx: cx.unwrap_or(shape::DEFAULT_CX),
                 cy: cy.unwrap_or(shape::DEFAULT_CY),
-            })
+            }))
         }
         AnchorKind::TwoCell => {
-            let (from, off_x, off_y) = picture::read_marker(host.child_by_local("from"));
-            let (to, to_x, to_y) = picture::read_marker(host.child_by_local("to"));
-            let from = from?;
+            let (from, off_x, off_y) = picture::read_marker(host.child_by_local("from"))?;
+            let (to, to_x, to_y) = picture::read_marker(host.child_by_local("to"))?;
+            let Some(from) = from else {
+                return Ok(None);
+            };
             let to = to.unwrap_or(from);
             let x = layout::col_origin_emu(sheet, from.col).saturating_add(off_x);
             let y = layout::row_origin_emu(sheet, from.row).saturating_add(off_y);
             let x2 = layout::col_origin_emu(sheet, to.col).saturating_add(to_x);
             let y2 = layout::row_origin_emu(sheet, to.row).saturating_add(to_y);
-            Some(EmuBox {
+            Ok(Some(EmuBox {
                 x,
                 y,
                 cx: (x2 - x).max(1),
                 cy: (y2 - y).max(1),
-            })
+            }))
         }
-        AnchorKind::RelSize | AnchorKind::AbsSize => None,
+        AnchorKind::RelSize | AnchorKind::AbsSize => Ok(None),
     }
 }
 

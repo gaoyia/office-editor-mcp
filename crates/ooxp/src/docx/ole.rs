@@ -643,35 +643,34 @@ fn find_desc<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
 }
 
 fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
-    f(el);
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_all(e, f);
-        }
-    }
+    crate::xml::walk_elements(el, f);
 }
 
 fn walk_objects(
-    el: &Element,
+    root: &Element,
     f: &mut impl FnMut(&Element) -> Result<(), Error>,
 ) -> Result<(), Error> {
-    if el.local_name() == "txbxContent" {
-        return Ok(());
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(i) = para::first_alt_child_index(el) {
-            if let Node::Element(child) = &el.children[i] {
-                return walk_objects(child, f);
-            }
+    let mut stack = vec![root];
+    while let Some(el) = stack.pop() {
+        if el.local_name() == "txbxContent" {
+            continue;
         }
-        return Ok(());
-    }
-    if el.local_name() == "object" {
-        return f(el);
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            walk_objects(e, f)?;
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = para::first_alt_child_index(el) {
+                if let Node::Element(child) = &el.children[i] {
+                    stack.push(child);
+                }
+            }
+            continue;
+        }
+        if el.local_name() == "object" {
+            f(el)?;
+            continue;
+        }
+        for node in el.children.iter().rev() {
+            if let Node::Element(child) = node {
+                stack.push(child);
+            }
         }
     }
     Ok(())
@@ -859,12 +858,22 @@ fn apply_object_size(obj: &mut Element, cx: Option<i64>, cy: Option<i64>) {
     }
 }
 
-fn walk_mut(el: &mut Element, f: &mut impl FnMut(&mut Element)) {
-    f(el);
-    let n = el.children.len();
-    for i in 0..n {
-        if let Node::Element(e) = &mut el.children[i] {
-            walk_mut(e, f);
+fn walk_mut(root: &mut Element, f: &mut impl FnMut(&mut Element)) {
+    let mut stack = vec![Vec::<usize>::new()];
+    while let Some(path) = stack.pop() {
+        let indexes: Vec<usize> = {
+            let el = crate::xml::element_at_mut(root, &path);
+            f(el);
+            el.children
+                .iter()
+                .enumerate()
+                .filter_map(|(index, node)| matches!(node, Node::Element(_)).then_some(index))
+                .collect()
+        };
+        for index in indexes.into_iter().rev() {
+            let mut child = path.clone();
+            child.push(index);
+            stack.push(child);
         }
     }
 }
