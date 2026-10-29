@@ -2,7 +2,7 @@
 name = "ooxp-cli"
 version = { workspace = true }
 edition = { workspace = true }
-license = { workspace = true }
+license-file = "../../LICENSE"
 description = "ooxp 命令行"
 
 [[bin]]

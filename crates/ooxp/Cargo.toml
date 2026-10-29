@@ -2,7 +2,7 @@
 name = "ooxp"
 version = { workspace = true }
 edition = { workspace = true }
-license = { workspace = true }
+license-file = "../../LICENSE"
 description = "Office Open XML Patch：用领域 JSON 读写 .xlsx / .docx / .pptx"
 
 [dependencies]
