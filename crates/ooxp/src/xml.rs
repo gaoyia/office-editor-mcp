@@ -3,6 +3,7 @@
 use std::io::Cursor;
 use std::mem::ManuallyDrop;
 
+use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
@@ -501,8 +502,9 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
     while let Some(frame) = stack.pop() {
         match frame {
             Frame::Text(text) => {
+                let escaped = escape_text_node(text);
                 writer
-                    .write_event(Event::Text(BytesText::new(text)))
+                    .write_event(Event::Text(BytesText::from_escaped(escaped.as_str())))
                     .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
             }
             Frame::End(node) => {
@@ -512,8 +514,14 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
             }
             Frame::Start(node) => {
                 let mut start = BytesStart::new(node.name.as_str());
-                for (k, v) in &node.attrs {
-                    start.push_attribute((k.as_str(), v.as_str()));
+                let escaped_attrs: Vec<String> = node
+                    .attrs
+                    .iter()
+                    .map(|(_, value)| escape_attr_node(value))
+                    .collect();
+                for ((key, _), value) in node.attrs.iter().zip(escaped_attrs.iter()) {
+                    // 字节形式不再转义。`(&str, &str)` 会把 `&#10;` 里的 `&` 再转成 `&amp;`。
+                    start.push_attribute(Attribute::from((key.as_bytes(), value.as_bytes())));
                 }
                 if node.children.is_empty() {
                     writer
@@ -631,17 +639,89 @@ fn alternate_broken() -> Error {
     })
 }
 
+struct EscapeSet {
+    gt: bool,
+    apos: bool,
+    quot: bool,
+    tab: bool,
+    lf: bool,
+    cr: bool,
+}
+
+fn escape_chars(s: &str, set: EscapeSet) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' if set.gt => out.push_str("&gt;"),
+            '\'' if set.apos => out.push_str("&apos;"),
+            '"' if set.quot => out.push_str("&quot;"),
+            '\t' if set.tab => out.push_str("&#9;"),
+            '\n' if set.lf => out.push_str("&#10;"),
+            '\r' if set.cr => out.push_str("&#13;"),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// 元素树属性。与 quick-xml 的 `escape` 同一套五个字符，再补上会被属性值规整掉的空白。
+fn escape_attr_node(s: &str) -> String {
+    escape_chars(
+        s,
+        EscapeSet {
+            gt: true,
+            apos: true,
+            quot: true,
+            tab: true,
+            lf: true,
+            cr: true,
+        },
+    )
+}
+
+/// 元素树文本。与 `BytesText::new` 同一套五个字符，再把 CR 写成字符引用。
+fn escape_text_node(s: &str) -> String {
+    escape_chars(
+        s,
+        EscapeSet {
+            gt: true,
+            apos: true,
+            quot: true,
+            tab: false,
+            lf: false,
+            cr: true,
+        },
+    )
+}
+
 pub fn escape_attr(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    escape_chars(
+        s,
+        EscapeSet {
+            gt: true,
+            apos: false,
+            quot: true,
+            tab: true,
+            lf: true,
+            cr: true,
+        },
+    )
 }
 
 pub fn escape_text(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
+    escape_chars(
+        s,
+        EscapeSet {
+            gt: true,
+            apos: false,
+            quot: false,
+            tab: false,
+            lf: false,
+            cr: true,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -717,6 +797,25 @@ mod tests {
         assert_eq!(el.attr("xml:space"), Some("preserve"));
         el.remove_attr("xml:space");
         assert_eq!(el.attr("xml:space"), None);
+    }
+
+    #[test]
+    fn whitespace_roundtrips_as_char_refs() {
+        let src = br#"<a x="1&#10;2&#9;3&#13;4">a&#13;b</a>"#;
+        let out = String::from_utf8(parse(src).unwrap().to_bytes().unwrap()).unwrap();
+        assert!(out.contains(r#"x="1&#10;2&#9;3&#13;4""#), "{out}");
+        assert!(out.contains(">a&#13;b<"), "{out}");
+        assert!(!out.contains('\n'), "{out}");
+        assert!(!out.contains('\t'), "{out}");
+        assert!(!out.contains('\r'), "{out}");
+    }
+
+    #[test]
+    fn escape_helpers_keep_their_character_sets() {
+        assert_eq!(escape_attr("a\tb\nc\rd\"'"), "a&#9;b&#10;c&#13;d&quot;'");
+        assert_eq!(escape_text("a\tb\nc\rd<"), "a\tb\nc&#13;d&lt;");
+        assert!(!escape_text("a\nb").contains("&#10;"));
+        assert!(!escape_attr("it's").contains("&apos;"));
     }
 
     #[test]

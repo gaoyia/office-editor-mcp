@@ -7,6 +7,7 @@
 ## 本机结果（2026-09-26）
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
+2026-10-30 补跑 `xml-attr-newline.ps1`。数据验证提示是两行，中间还有制表符，无 Repair。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。

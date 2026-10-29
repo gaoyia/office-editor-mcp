@@ -243,6 +243,7 @@ $order = @(
     'pptx-notes'
     'pptx-comments'
     'opc-resave'
+    'xml-attr-newline'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'

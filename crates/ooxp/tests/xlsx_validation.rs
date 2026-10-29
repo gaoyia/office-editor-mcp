@@ -1,8 +1,11 @@
 //! 数据验证：inspect 名单、insert / set / delete、公式当字符串。
 
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
+
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipWriter};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
@@ -86,6 +89,29 @@ fn inspect_noscope(path: &Path) -> serde_json::Value {
         panic!("inspect 应返回树");
     };
     tree["sheets"][0].clone()
+}
+
+fn rewrite_part(path: &Path, name: &str, next: &str) {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let n = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if n == name {
+                data = next.as_bytes().to_vec();
+            }
+            zip_out.start_file(&n, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(path, out.into_inner()).unwrap();
 }
 
 fn part_text(path: &Path, name: &str) -> String {
@@ -313,4 +339,41 @@ fn hide_dropdown() {
     assert_eq!(sh["dataValidations"][0]["dropdown"], json!(false));
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(xml.contains(r#"showDropDown="1""#), "{xml}");
+}
+
+#[test]
+fn prompt_newline_survives_another_cell_edit() {
+    let src = create_book("prompt-nl");
+    let with_dv = tmp("prompt-nl-dv");
+    apply(
+        &src,
+        &with_dv,
+        json!([{
+            "op": "insertDataValidation",
+            "id": "sheet:Sheet1",
+            "sqref": "A1",
+            "type": "list",
+            "formula1": "1,2",
+            "prompt": "KEEPME"
+        }]),
+    )
+    .unwrap();
+    let sheet = "xl/worksheets/sheet1.xml";
+    let xml = part_text(&with_dv, sheet)
+        .replace(r#"prompt="KEEPME""#, r#"prompt="line1&#10;line2&#9;x""#);
+    assert!(xml.contains("&#10;"), "{xml}");
+    rewrite_part(&with_dv, sheet, &xml);
+    let out = tmp("prompt-nl-out");
+    apply(
+        &with_dv,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "value": 2 }]),
+    )
+    .unwrap();
+    let written = part_text(&out, sheet);
+    assert!(
+        written.contains(r#"prompt="line1&#10;line2&#9;x""#),
+        "{written}"
+    );
+    assert!(!written.contains("prompt=\"line1\n"), "{written}");
 }

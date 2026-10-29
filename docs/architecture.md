@@ -91,6 +91,16 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 不能靠给类型本身加一层会挡住字段移出的 `Drop`：那样现有代码就不能把 `children` 或根移走。根放在 `ManuallyDrop` 里，`Document` 离开作用域时取出来，在堆上拆掉子节点。
 
+写回时由本库转义，再以已转义的字节交给 quick-xml 0.37.5，避免它再转一遍：
+
+- `(&[u8], &[u8])` 转成属性，以及 `BytesText::from_escaped`，都不再转义。
+- `(&str, &str)` 和 `BytesText::new` 会按 `<`、`>`、`&`、`'`、`"` 再转一次。
+- 属性值在这五个字符之外，把 TAB、LF、CR 写成 `&#9;`、`&#10;`、`&#13;`。
+  XML 1.0 §3.3.3 会把属性里这三个原样字符规整成空格。
+- 文本在这五个字符之外，把 CR 写成 `&#13;`。
+  XML 1.0 §2.11 会把文本里的 CR 规整成 LF。TAB 和 LF 留在文本里。
+- 字符串拼接用的 `escape_attr` 补上 TAB、LF、CR，`escape_text` 补上 CR。这两处仍不转义 `'`。
+
 ### 标记兼容性
 
 读取 `mc:AlternateContent` 时，全库用 `xml::alternate_child` 决定进入哪一支。create 写出的 `AlternateContent` 形状不变。

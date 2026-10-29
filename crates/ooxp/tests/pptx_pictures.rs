@@ -1,12 +1,13 @@
 //! 幻灯片图：名单、换/插/删、尺寸、位置、导出。
 
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
-use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const PNG_1X1: &[u8] = &[
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
@@ -107,6 +108,29 @@ fn part_names(path: &Path) -> Vec<String> {
     let bytes = std::fs::read(path).unwrap();
     let zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
     zip.file_names().map(str::to_string).collect()
+}
+
+fn rewrite_part(path: &Path, name: &str, next: &str) {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let n = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if n == name {
+                data = next.as_bytes().to_vec();
+            }
+            zip_out.start_file(&n, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(path, out.into_inner()).unwrap();
 }
 
 fn insert_one(src: &Path, out: &Path, png: &Path) {
@@ -595,4 +619,46 @@ fn create_rejects_kind_one_size_and_shape_pictures() {
         err.field_path(),
         Some("presentation.slides[0].pictures[0].file")
     );
+}
+
+#[test]
+fn picture_descr_newline_survives_shape_text_edit() {
+    let png = write_png("descr", PNG_1X1);
+    let src = create_deck("descr");
+    let with_pic = tmp("descr-pic").with_extension("pptx");
+    insert_one(&src, &with_pic, &png);
+    let slide = "ppt/slides/slide1.xml";
+    let xml = String::from_utf8(part_bytes(&with_pic, slide)).unwrap();
+    let at = xml.find("name=\"图片").expect(&xml);
+    let end = xml[at..].find("/>").expect(&xml) + at;
+    let mut patched = xml.clone();
+    patched.insert_str(end, " descr=\"line1&#10;line2\"");
+    rewrite_part(&with_pic, slide, &patched);
+
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": with_pic.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"]
+        .as_str()
+        .expect("应有形状 id");
+    let out = tmp("descr-out").with_extension("pptx");
+    apply(
+        &with_pic,
+        &out,
+        json!([{ "op": "setShapeText", "id": shape_id, "text": "改过" }]),
+    )
+    .unwrap();
+    let written = String::from_utf8(part_bytes(&out, slide)).unwrap();
+    assert!(written.contains(r#"descr="line1&#10;line2""#), "{written}");
+    assert!(!written.contains("descr=\"line1\n"), "{written}");
 }
