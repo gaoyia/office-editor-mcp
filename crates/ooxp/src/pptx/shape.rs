@@ -126,6 +126,45 @@ pub fn rid_attr(el: &Element) -> Option<&str> {
     })
 }
 
+/// apply 开始时各页的 `p:sldId/@id`。之后按这个编号找页，不按当时的位置。
+#[derive(Clone, Debug)]
+pub struct SlideFreeze {
+    ids: Vec<Option<u32>>,
+}
+
+impl SlideFreeze {
+    pub fn capture(slides: &[SlideMeta]) -> Self {
+        Self {
+            ids: slides.iter().map(|slide| slide.sld_id).collect(),
+        }
+    }
+
+    pub fn get<'a>(&self, slides: &'a [SlideMeta], n: usize) -> Option<&'a SlideMeta> {
+        let sid = self.ids.get(n.wrapping_sub(1)).copied().flatten()?;
+        slides.iter().find(|slide| slide.sld_id == Some(sid))
+    }
+
+    pub fn pos(&self, slides: &[SlideMeta], n: usize) -> Option<usize> {
+        let sid = self.ids.get(n.wrapping_sub(1)).copied().flatten()?;
+        slides.iter().position(|slide| slide.sld_id == Some(sid))
+    }
+
+    /// 重新列出之后，把 `index` 改回 apply 开始时的页号。新页记 0，不能被旧页号点中。
+    pub fn restore_indexes(&self, slides: &mut [SlideMeta]) {
+        for slide in slides.iter_mut() {
+            slide.index = slide
+                .sld_id
+                .and_then(|id| {
+                    self.ids
+                        .iter()
+                        .position(|saved| *saved == Some(id))
+                        .map(|pos| pos + 1)
+                })
+                .unwrap_or(0);
+        }
+    }
+}
+
 pub fn list_slides(
     pkg: &Package,
     pres_part: &str,

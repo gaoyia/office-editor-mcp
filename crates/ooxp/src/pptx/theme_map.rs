@@ -149,12 +149,15 @@ fn host_slide_part(
     on_notes: bool,
     json_path: &str,
 ) -> Result<String, Error> {
-    let meta = slides.get(slide.saturating_sub(1)).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound { n: slide as u32 },
-            json_path.to_string(),
-        )
-    })?;
+    let meta = slides
+        .iter()
+        .find(|item| item.index == slide)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound { n: slide as u32 },
+                json_path.to_string(),
+            )
+        })?;
     if !on_notes {
         return Ok(meta.part.clone());
     }

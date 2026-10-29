@@ -520,6 +520,10 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
                     .map(|(_, value)| escape_attr_node(value))
                     .collect();
                 for ((key, _), value) in node.attrs.iter().zip(escaped_attrs.iter()) {
+                    // 段落序号只活在这次 apply 的内存里，不能写进文件。
+                    if key == "ooxp:pin" {
+                        continue;
+                    }
                     // 字节形式不再转义。`(&str, &str)` 会把 `&#10;` 里的 `&` 再转成 `&amp;`。
                     start.push_attribute(Attribute::from((key.as_bytes(), value.as_bytes())));
                 }

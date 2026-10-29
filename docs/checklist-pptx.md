@@ -10,6 +10,7 @@ Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 2026-10-30 补跑 `xml-attr-newline.ps1`。图片替代文字是两行，无 Repair。
+2026-10-30 补跑 `id-pin.ps1`。删掉第一页后再改原来的第三页，PowerPoint 16.0 第二页正文是改过的那一页，无 Repair。
 
 ## 本机结果（2026-09-28）
 

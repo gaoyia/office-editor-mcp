@@ -906,11 +906,58 @@ pub fn find_paragraph_mut<'a>(root: &'a mut Element, target: &BodyPara) -> Optio
 
 pub fn same_para(p: &Element, target: &BodyPara, index: usize) -> bool {
     match target {
-        BodyPara::Index(n) => *n == index,
+        BodyPara::Index(n) => index_matches(p, *n, index),
         BodyPara::Hex(hex) => p
             .attr_local("paraId")
             .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
     }
+}
+
+/// 有 `ooxp:pin` 时按 apply 开始时的序号认。没有这个标记的新段落不占用旧序号。
+fn index_matches(p: &Element, wanted: usize, live: usize) -> bool {
+    match p.attr("ooxp:pin") {
+        Some(pin) if !pin.is_empty() => pin == wanted.to_string(),
+        // 空 pin 是本批新建的段落，不占用 apply 开始时的序号。
+        Some(_) => false,
+        None => live == wanted,
+    }
+}
+
+/// 按 `find_p` 的同一套顺序给已有段落记下序号。文本框、注、批注各自从 1 起。
+pub(crate) fn pin_paragraph_indexes(root: &mut Element) {
+    fn fresh(local: &str) -> bool {
+        matches!(local, "txbxContent" | "footnote" | "endnote" | "comment")
+    }
+    fn walk(el: &mut Element, idx: &mut usize) {
+        if fresh(el.local_name()) {
+            let mut inner = 0usize;
+            for child in el.children.iter_mut() {
+                if let Node::Element(child) = child {
+                    walk(child, &mut inner);
+                }
+            }
+            return;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = first_alt_child_index(el) {
+                if let Node::Element(child) = &mut el.children[i] {
+                    walk(child, idx);
+                }
+            }
+            return;
+        }
+        if el.local_name() == "p" && el.attr("ooxp:pin").is_none() {
+            *idx += 1;
+            el.set_attr("ooxp:pin", idx.to_string());
+        }
+        for child in el.children.iter_mut() {
+            if let Node::Element(child) = child {
+                walk(child, idx);
+            }
+        }
+    }
+    let mut idx = 0usize;
+    walk(root, &mut idx);
 }
 
 pub fn find_paragraph_in_txbx<'a>(content: &'a Element, target: &BodyPara) -> Option<&'a Element> {
@@ -976,7 +1023,7 @@ fn find_p<'a>(el: &'a Element, idx: &mut usize, target: &BodyPara) -> Option<&'a
         if el.local_name() == "p" {
             *idx += 1;
             let hit = match target {
-                BodyPara::Index(n) => *idx == *n,
+                BodyPara::Index(n) => index_matches(el, *n, *idx),
                 BodyPara::Hex(hex) => el
                     .attr_local("paraId")
                     .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
@@ -1009,7 +1056,7 @@ fn find_p_mut<'a>(
         if el.local_name() == "p" {
             *idx += 1;
             let hit = match target {
-                BodyPara::Index(n) => *idx == *n,
+                BodyPara::Index(n) => index_matches(el, *n, *idx),
                 BodyPara::Hex(hex) => el
                     .attr_local("paraId")
                     .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
@@ -1255,6 +1302,8 @@ fn is_empty_run(r: &Element) -> bool {
 
 pub fn new_paragraph(parent: &Element, para_id: &str, text: &str) -> Element {
     let mut p = Element::new(parent.prefixed("p"));
+    // 空标记：本批新建的段落不占用 apply 开始时的序号。写出时会丢掉。
+    p.set_attr("ooxp:pin", "");
     p.set_attr("w14:paraId", para_id);
     p.set_attr("w14:textId", para_id);
     if !text.is_empty() {

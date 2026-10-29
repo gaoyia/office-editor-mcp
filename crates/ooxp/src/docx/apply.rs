@@ -29,7 +29,8 @@ use super::watermark;
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     let doc_part = opc::office_document_part(&pkg)?;
-    let doc_xml = xml::parse(pkg.get(&doc_part)?)?;
+    let mut doc_xml = xml::parse(pkg.get(&doc_part)?)?;
+    super::para::pin_paragraph_indexes(&mut doc_xml.root);
     let mut catalog = hf::catalog(&pkg, &doc_part, &doc_xml.root)?;
 
     // 按部件缓存已解析的文档；最后一并写回脏部件。
@@ -957,7 +958,8 @@ pub(crate) fn load_part<'a>(
     part_name: &str,
 ) -> Result<&'a mut Document, Error> {
     if !docs.contains_key(part_name) {
-        let parsed = xml::parse(pkg.get(part_name)?)?;
+        let mut parsed = xml::parse(pkg.get(part_name)?)?;
+        super::para::pin_paragraph_indexes(&mut parsed.root);
         docs.insert(part_name.to_string(), parsed);
     }
     Ok(docs.get_mut(part_name).unwrap())

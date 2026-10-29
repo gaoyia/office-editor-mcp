@@ -163,6 +163,17 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 三种格式的 id 表见 [xlsx](json-contract-xlsx.md#稳定-id)、[docx](json-contract-docx.md#稳定-id)、[pptx](json-contract-pptx.md#稳定-id)。
 
+一次 apply 里，下面两类 id 按 apply 开始时的文件解释，不随本批前面的增删改序号：
+
+- docx 的 `para:index:{n}`，以及页眉页脚、框内、注内、批注内的 `…/para:index:{k}`
+- pptx 的 `slide:{n}`，以及挂在它下面的形状、图、图表、表、备注、批注等 id
+
+被前面的 op 删掉后再点名，报 `IdNotFound`，不落到旁边的对象上。同一批里新建的对象不能用这两类位置 id 点名，要等下一次 inspect。
+
+`after`、`start`、`end` 这类字段如果点的是上面两类 id，同样按 apply 开始时解释。
+
+其余按位置编号的 id 仍会在本批增删后重排。那是后续切片，不在这一条里。
+
 ## inspect
 
 成功响应的对象字段按各分册响应节示例的语义顺序写出，不是按字母排序。命令行打印同一棵树，见 [cli.md](cli.md)。

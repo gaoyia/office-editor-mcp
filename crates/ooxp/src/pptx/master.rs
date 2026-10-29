@@ -656,12 +656,15 @@ pub fn set_slide_layout(
     layout: usize,
     op_index: usize,
 ) -> Result<(), Error> {
-    let meta = slides.get(slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound { n: slide as u32 },
-            format!("ops[{op_index}].id"),
-        )
-    })?;
+    let meta = slides
+        .iter()
+        .find(|item| item.index == slide)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound { n: slide as u32 },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
     let catalog = catalog(pkg, pres_part, pres_root)?;
     let dest = catalog
         .layout(master, layout)

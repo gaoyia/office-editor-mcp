@@ -225,8 +225,8 @@
 
 `{n}` 从 1 起，按 Presentation 部件（§13.3.6）里 `p:sldIdLst` / `p:sldId` 的出现顺序（§19.2.1.34），再跟 `r:id` 找到幻灯片部件。
 `n` 不是文件名里的数字，也不是 `p:sldId/@id`（那是 `ST_SlideId`，常见从 256 起）。隐藏页仍占序号，仍可 inspect 和 apply。
-`insertSlide` / `deleteSlide` / `moveSlide` 之后名单重排，旧的 `slide:{n}` 以及挂在它下面的形状 / 图 / 图表 / 表 / 备注 / 批注 id 都按新顺序计。
-只够同一次 inspect 之后立刻 apply；同一 `apply` 里后面的 op 用新序号。
+一次 apply 里，`slide:{n}` 以及挂在它下面的 id 按 apply 开始时的文件解释，不随本批 `insertSlide` / `deleteSlide` / `moveSlide` 改序号。
+见 [json-contract.md](json-contract.md#稳定-id)。
 
 母版 `{n}` 从 1 起，按 Presentation 里 `p:sldMasterIdLst` / `p:sldMasterId` 的出现顺序（§19.2.1.35、§13.3.10），再跟 `r:id` 找到 slideMaster 部件。
 不是文件名里的数字，也不是 `sldMasterId/@id`。版式 `{k}` 从 1 起，按**该母版** `p:sldLayoutIdLst` / `p:sldLayoutId` 的出现顺序，

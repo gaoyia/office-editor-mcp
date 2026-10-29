@@ -504,7 +504,20 @@ fn resolve_part(
                     path,
                 ));
             }
-            Ok((slides[slide - 1].part.clone(), target.prefix()))
+            Ok((
+                slides
+                    .iter()
+                    .find(|item| item.index == *slide)
+                    .ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::SlideNotFound { n: *slide as u32 },
+                            format!("ops[{op_index}].id"),
+                        )
+                    })?
+                    .part
+                    .clone(),
+                target.prefix(),
+            ))
         }
         AnimTarget::Notes { slide } => {
             if *slide < 1 || *slide > slides.len() {
@@ -513,7 +526,20 @@ fn resolve_part(
                     path,
                 ));
             }
-            let part = notes::notes_slide_part(pkg, &slides[slide - 1].part)?.ok_or_else(|| {
+            let part = notes::notes_slide_part(
+                pkg,
+                &slides
+                    .iter()
+                    .find(|item| item.index == *slide)
+                    .ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::SlideNotFound { n: *slide as u32 },
+                            format!("ops[{op_index}].id"),
+                        )
+                    })?
+                    .part,
+            )?
+            .ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::AnimHostNotFound {
                         id: target.prefix(),

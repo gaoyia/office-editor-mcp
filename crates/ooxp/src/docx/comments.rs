@@ -627,12 +627,7 @@ pub fn para_index_in_parent(parent: &Element, para: &BodyPara, in_txbx: bool) ->
         para::collect_paragraphs(parent)
     };
     for (i, p) in paras.iter().enumerate() {
-        let hit = match para {
-            BodyPara::Index(n) => i + 1 == *n,
-            BodyPara::Hex(hex) => p
-                .attr_local("paraId")
-                .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-        };
+        let hit = super::para::same_para(p, para, i + 1);
         if hit {
             return Some(i);
         }

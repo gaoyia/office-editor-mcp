@@ -750,7 +750,7 @@ pub fn apply_insert(
     op_index: usize,
 ) -> Result<(), Error> {
     let _ = op_index;
-    let sld_id = slide_numeric_id(&pres.root, meta.index).unwrap_or(256);
+    let sld_id = meta.sld_id.unwrap_or(256);
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
         _ => {
@@ -1213,15 +1213,6 @@ fn xml_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-fn slide_numeric_id(pres: &Element, index: usize) -> Option<u32> {
-    let lst = pres.child_by_local("sldIdLst")?;
-    lst.element_children()
-        .filter(|e| e.local_name() == "sldId")
-        .nth(index.saturating_sub(1))
-        .and_then(|e| e.attr("id"))
-        .and_then(|s| s.parse().ok())
 }
 
 fn new_guid() -> String {

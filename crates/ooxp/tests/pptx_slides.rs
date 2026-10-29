@@ -293,7 +293,7 @@ fn delete_middle_and_wrong_ids() {
 }
 
 #[test]
-fn later_op_uses_new_index() {
+fn later_op_keeps_original_slide() {
     let src = create_deck("seq");
     let out = tmp("seq-out");
     apply(
@@ -307,7 +307,7 @@ fn later_op_uses_new_index() {
             },
             {
                 "op": "setShapeText",
-                "id": "slide:3/shape:2",
+                "id": "slide:2/shape:2",
                 "text": "改过的第二页"
             }
         ]),
@@ -315,6 +315,57 @@ fn later_op_uses_new_index() {
     .unwrap();
     let tree = inspect_scope(&out, Some(json!({ "slide": 3 })));
     assert_eq!(slide_texts(&tree, 2), ["改过的第二页"]);
+}
+
+#[test]
+fn delete_then_edit_uses_original_slide() {
+    let path = tmp("pin-del");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [
+                    { "shapes": [{ "text": "第一页" }] },
+                    { "shapes": [{ "text": "第二页" }] },
+                    { "shapes": [{ "text": "第三页" }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let out = tmp("pin-del-out");
+    apply(
+        &path,
+        &out,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "setShapeText", "id": "slide:3/shape:2", "text": "仍是第三页" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, Some(json!({ "slide": 2 })));
+    assert_eq!(slide_texts(&tree, 1), ["仍是第三页"]);
+}
+
+#[test]
+fn move_then_edit_uses_original_slide() {
+    let src = create_deck("pin-mov");
+    let out = tmp("pin-mov-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "moveSlide", "id": "slide:2" },
+            { "op": "setShapeText", "id": "slide:2/shape:2", "text": "搬走的第二页" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, Some(json!({ "slide": 1 })));
+    assert_eq!(slide_texts(&tree, 0), ["搬走的第二页"]);
 }
 
 #[test]
