@@ -6,8 +6,8 @@ use serde_json::{json, Map, Number, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
-    rels_part_name, resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship,
-    Relationships,
+    rels_part_name, resolve_rel_target, same_part_name, split_dir_file, ContentTypes, Package,
+    Relationship, Relationships,
 };
 use crate::xlsx;
 use crate::xml::{self, Document, Element, Node};
@@ -2608,7 +2608,10 @@ fn part_still_used(pkg: &Package, target: &str) -> Result<bool, Error> {
             if r.is_external() {
                 continue;
             }
-            if resolve_rel_target(&source, &r.target).ok().as_deref() == Some(target) {
+            if resolve_rel_target(&source, &r.target)
+                .ok()
+                .is_some_and(|part| same_part_name(&part, target))
+            {
                 return Ok(true);
             }
         }

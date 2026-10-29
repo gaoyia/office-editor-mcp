@@ -23,6 +23,22 @@ pub fn normalize_part_name(name: &str) -> Result<String, Error> {
     Ok(format!("/{trimmed}"))
 }
 
+/// 只用于比较。ASCII 字母折成小写，其余字符不动。
+pub fn fold_part_name(name: &str) -> String {
+    name.to_ascii_lowercase()
+}
+
+/// 规范化后再折叠。任一名字不合法则不是同一个部件。
+pub fn same_part_name(a: &str, b: &str) -> bool {
+    let Ok(a) = normalize_part_name(a) else {
+        return false;
+    };
+    let Ok(b) = normalize_part_name(b) else {
+        return false;
+    };
+    fold_part_name(&a) == fold_part_name(&b)
+}
+
 /// ZIP 里通常不带前导 `/`。
 pub fn zip_name_from_opc(opc: &str) -> &str {
     opc.strip_prefix('/').unwrap_or(opc)
@@ -131,5 +147,15 @@ mod tests {
         assert_eq!(p, "/xl/worksheets/sheet1.xml");
         let p = resolve_rel_target("/", "xl/workbook.xml").unwrap();
         assert_eq!(p, "/xl/workbook.xml");
+    }
+
+    #[test]
+    fn ascii_case_folds_to_the_same_part() {
+        assert!(same_part_name("/xl/Workbook.xml", "xl/workbook.xml"));
+        assert_eq!(
+            fold_part_name("/xl/Workbook.xml"),
+            fold_part_name("/xl/workbook.xml")
+        );
+        assert!(!same_part_name("/xl/workbook.xml", "/xl/workbook2.xml"));
     }
 }

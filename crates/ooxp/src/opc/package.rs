@@ -8,7 +8,7 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use crate::error::{Error, ErrorKind, OpcReason};
 
-use super::names::{normalize_part_name, zip_name_from_opc};
+use super::names::{fold_part_name, normalize_part_name, same_part_name, zip_name_from_opc};
 use super::{CONTENT_TYPES_PART, ROOT_RELS_PART};
 
 /// 声明的未压缩大小达到压缩后大小的这个倍数就拒绝。
@@ -30,6 +30,8 @@ pub struct Package {
     /// 新建部件的追加顺序。
     new_order: Vec<String>,
     parts: HashMap<String, Part>,
+    /// 折叠名 → 包里留下的拼写。查找、contains 走这里。
+    by_fold: HashMap<String, String>,
 }
 
 fn expands_too_far(declared: u64, compressed: u64) -> bool {
@@ -71,12 +73,14 @@ impl Package {
             original_order: Vec::new(),
             new_order: Vec::new(),
             parts: HashMap::new(),
+            by_fold: HashMap::new(),
         }
     }
 
     pub fn open_bytes(bytes: Vec<u8>) -> Result<Self, Error> {
         let mut archive = ZipArchive::new(Cursor::new(bytes.as_slice()))?;
         let mut parts = HashMap::new();
+        let mut by_fold = HashMap::new();
         let mut original_order = Vec::new();
 
         for i in 0..archive.len() {
@@ -86,6 +90,12 @@ impl Package {
                 continue;
             }
             let opc = normalize_part_name(&raw_name)?;
+            let fold = fold_part_name(&opc);
+            if by_fold.contains_key(&fold) {
+                return Err(Error::new(ErrorKind::OpcOpen {
+                    reason: OpcReason::DuplicatePartName { name: opc },
+                }));
+            }
             let declared = file.size();
             let compressed = file.compressed_size();
             if expands_too_far(declared, compressed) {
@@ -95,6 +105,7 @@ impl Package {
             }
             let data = read_counted(&mut file, declared)?;
             original_order.push(opc.clone());
+            by_fold.insert(fold, opc.clone());
             parts.insert(
                 opc,
                 Part {
@@ -111,6 +122,7 @@ impl Package {
             original_order,
             new_order: Vec::new(),
             parts,
+            by_fold,
         };
         if !pkg.contains(CONTENT_TYPES_PART) {
             return Err(Error::new(ErrorKind::OpcOpen {
@@ -125,20 +137,31 @@ impl Package {
         Ok(pkg)
     }
 
+    fn stored_name(&self, name: &str) -> Option<&str> {
+        let opc = normalize_part_name(name).ok()?;
+        self.by_fold.get(&fold_part_name(&opc)).map(String::as_str)
+    }
+
     pub fn contains(&self, name: &str) -> bool {
-        self.parts.get(name).map(|p| !p.deleted).unwrap_or(false)
+        self.stored_name(name)
+            .and_then(|key| self.parts.get(key))
+            .is_some_and(|part| !part.deleted)
     }
 
     pub fn get(&self, name: &str) -> Result<&[u8], Error> {
-        self.parts
-            .get(name)
-            .filter(|p| !p.deleted)
-            .map(|p| p.data.as_slice())
-            .ok_or_else(|| {
-                Error::new(ErrorKind::PartMissing {
-                    name: name.to_string(),
-                })
+        let missing = || {
+            Error::new(ErrorKind::PartMissing {
+                name: name.to_string(),
             })
+        };
+        let Some(key) = self.stored_name(name) else {
+            return Err(missing());
+        };
+        self.parts
+            .get(key)
+            .filter(|part| !part.deleted)
+            .map(|part| part.data.as_slice())
+            .ok_or_else(missing)
     }
 
     /// 列出未删除部件，顺序为原顺序再加新建。
@@ -151,7 +174,7 @@ impl Package {
             }
         }
         for n in &self.new_order {
-            if self.contains(n) && !self.original_order.iter().any(|o| o == n) {
+            if self.contains(n) && !self.original_order.iter().any(|o| same_part_name(o, n)) {
                 names.push(n.clone());
             }
         }
@@ -161,13 +184,17 @@ impl Package {
     /// 写入或覆盖部件，并标脏。
     pub fn set(&mut self, name: &str, data: Vec<u8>) -> Result<(), Error> {
         let name = normalize_part_name(name)?;
-        if let Some(part) = self.parts.get_mut(&name) {
-            part.data = data;
-            part.dirty = true;
-            part.deleted = false;
-            return Ok(());
+        let fold = fold_part_name(&name);
+        if let Some(stored) = self.by_fold.get(&fold).cloned() {
+            if let Some(part) = self.parts.get_mut(&stored) {
+                part.data = data;
+                part.dirty = true;
+                part.deleted = false;
+                return Ok(());
+            }
         }
         self.new_order.push(name.clone());
+        self.by_fold.insert(fold, name.clone());
         self.parts.insert(
             name,
             Part {
@@ -181,7 +208,10 @@ impl Package {
     }
 
     pub fn remove(&mut self, name: &str) {
-        if let Some(part) = self.parts.get_mut(name) {
+        let Some(key) = self.stored_name(name).map(str::to_string) else {
+            return;
+        };
+        if let Some(part) = self.parts.get_mut(&key) {
             part.deleted = true;
             part.dirty = true;
         }
@@ -218,7 +248,7 @@ impl Package {
         }
 
         for name in &self.new_order {
-            if self.original_order.iter().any(|o| o == name) {
+            if self.original_order.iter().any(|o| same_part_name(o, name)) {
                 continue;
             }
             let Some(part) = self.parts.get(name) else {
@@ -805,5 +835,55 @@ mod tests {
 
     fn find_sig(bytes: &[u8], sig: &[u8; 4]) -> Option<usize> {
         bytes.windows(4).position(|window| window == sig)
+    }
+
+    #[test]
+    fn different_case_target_reads_the_part() {
+        let bytes = zip_files(&[
+            ("[Content_Types].xml", b"<Types/>"),
+            (
+                "_rels/.rels",
+                br#"<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>"#,
+            ),
+            ("xl/Workbook.xml", b"<workbook/>"),
+        ]);
+        let pkg = Package::open_bytes(bytes).unwrap();
+        assert!(pkg
+            .part_names()
+            .iter()
+            .any(|name| name == "/xl/Workbook.xml"));
+        let target = crate::opc::resolve_rel_target("/", "xl/workbook.xml").unwrap();
+        assert_eq!(pkg.get(&target).unwrap(), b"<workbook/>");
+        let out = pkg.save_to_vec().unwrap();
+        let spelled = b"xl/Workbook.xml";
+        assert!(out.windows(spelled.len()).any(|window| window == spelled));
+    }
+
+    #[test]
+    fn duplicate_folded_names_are_opc_open() {
+        let bytes = zip_files(&[
+            ("[Content_Types].xml", b"<Types/>"),
+            ("_rels/.rels", b"<Relationships/>"),
+            ("xl/Workbook.xml", b"a"),
+            ("xl/workbook.xml", b"b"),
+        ]);
+        let err = Package::open_bytes(bytes).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::OpcOpen);
+        assert!(err.to_string().contains("Duplicate part name"), "{err}");
+    }
+
+    fn zip_files(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = ZipWriter::new(&mut cursor);
+            for (name, data) in files {
+                let opt =
+                    SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+                writer.start_file(*name, opt).unwrap();
+                writer.write_all(data).unwrap();
+            }
+            writer.finish().unwrap();
+        }
+        cursor.into_inner()
     }
 }

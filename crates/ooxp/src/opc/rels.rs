@@ -3,7 +3,7 @@
 use crate::error::{Error, ErrorCode, ErrorKind, OpcReason, RelSource};
 use crate::xml;
 
-use super::names::{normalize_part_name, rels_part_name, resolve_rel_target};
+use super::names::{normalize_part_name, rels_part_name, resolve_rel_target, same_part_name};
 use super::Package;
 
 pub const RELS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -103,7 +103,7 @@ impl Relationships {
                 return true;
             }
             match resolve_rel_target(source_part, &r.target) {
-                Ok(p) => p != target_opc,
+                Ok(p) => !same_part_name(&p, target_opc),
                 Err(_) => true,
             }
         });

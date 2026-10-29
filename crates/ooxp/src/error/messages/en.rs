@@ -1978,6 +1978,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             OpcReason::ExceedsDeclared => {
                 "Decompressed bytes exceed the uncompressed size in the central directory".into()
             }
+            OpcReason::DuplicatePartName { name } => format!("Duplicate part name: {name}"),
         },
         ErrorKind::PartMissing { name } => format!("Part not found: {name}"),
         ErrorKind::RelNotFound { source, rid } => match source {

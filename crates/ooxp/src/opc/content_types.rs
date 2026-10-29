@@ -3,7 +3,7 @@
 use crate::error::Error;
 use crate::xml;
 
-use super::names::normalize_part_name;
+use super::names::{normalize_part_name, same_part_name};
 use super::Package;
 
 pub const CONTENT_TYPES_PART: &str = "/[Content_Types].xml";
@@ -68,7 +68,11 @@ impl ContentTypes {
 
     pub fn set_override(&mut self, part_name: &str, content_type: &str) -> Result<(), Error> {
         let part = normalize_part_name(part_name)?;
-        if let Some((_, ct)) = self.overrides.iter_mut().find(|(p, _)| p == &part) {
+        if let Some((_, ct)) = self
+            .overrides
+            .iter_mut()
+            .find(|(p, _)| same_part_name(p, &part))
+        {
             *ct = content_type.to_string();
             return Ok(());
         }
@@ -77,7 +81,8 @@ impl ContentTypes {
     }
 
     pub fn remove_override(&mut self, part_name: &str) {
-        self.overrides.retain(|(p, _)| p != part_name);
+        self.overrides
+            .retain(|(p, _)| !same_part_name(p, part_name));
     }
 
     #[allow(dead_code)]

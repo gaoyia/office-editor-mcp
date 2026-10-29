@@ -6,8 +6,8 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
-    rels_part_name, resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship,
-    Relationships,
+    rels_part_name, resolve_rel_target, same_part_name, split_dir_file, ContentTypes, Package,
+    Relationship, Relationships,
 };
 use crate::xml::{Element, Node};
 
@@ -973,7 +973,10 @@ pub fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
             if r.is_external() {
                 continue;
             }
-            if resolve_rel_target(&source, &r.target).ok().as_deref() == Some(media_opc) {
+            if resolve_rel_target(&source, &r.target)
+                .ok()
+                .is_some_and(|part| same_part_name(&part, media_opc))
+            {
                 return Ok(true);
             }
         }

@@ -648,6 +648,10 @@ pub(crate) enum OpcReason {
     DeclaredRatio,
     /// 解压读到的字节超过中央目录声明的未压缩大小。
     ExceedsDeclared,
+    /// 折叠后相同的部件名出现了两次。
+    DuplicatePartName {
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1749,6 +1753,9 @@ impl OpcReason {
             },
             Self::DeclaredRatio,
             Self::ExceedsDeclared,
+            Self::DuplicatePartName {
+                name: "/xl/workbook.xml".into(),
+            },
         ]
     }
 }

@@ -2,7 +2,8 @@
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
-    rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
+    rels_part_name, resolve_rel_target, same_part_name, ContentTypes, Package, Relationship,
+    Relationships,
 };
 use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
 
@@ -738,7 +739,10 @@ fn part_still_used(pkg: &Package, part: &str) -> Result<bool, Error> {
             if r.is_external() {
                 continue;
             }
-            if resolve_rel_target(&source, &r.target).ok().as_deref() == Some(part) {
+            if resolve_rel_target(&source, &r.target)
+                .ok()
+                .is_some_and(|found| same_part_name(&found, part))
+            {
                 return Ok(true);
             }
         }

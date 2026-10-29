@@ -310,7 +310,10 @@ fn part_still_referenced(pkg: &Package, part: &str, skip_host: &str) -> bool {
             if r.is_external() {
                 continue;
             }
-            if opc::resolve_rel_target(&name, &r.target).ok().as_deref() == Some(part) {
+            if opc::resolve_rel_target(&name, &r.target)
+                .ok()
+                .is_some_and(|found| opc::same_part_name(&found, part))
+            {
                 return true;
             }
         }

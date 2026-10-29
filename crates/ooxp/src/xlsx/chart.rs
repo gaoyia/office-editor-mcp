@@ -5,7 +5,8 @@ use serde_json::{json, Map, Value};
 use crate::chart::{self, ChartRestrict, ChartType, CHARTEX_NS, CHART_NS};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
-    rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
+    rels_part_name, resolve_rel_target, same_part_name, ContentTypes, Package, Relationship,
+    Relationships,
 };
 use crate::xml::{self, Document, Element, Node};
 
@@ -1585,7 +1586,10 @@ pub(crate) fn chart_still_used(pkg: &Package, chart_part: &str) -> Result<bool, 
             if r.is_external() {
                 continue;
             }
-            if resolve_rel_target(&source, &r.target).ok().as_deref() == Some(chart_part) {
+            if resolve_rel_target(&source, &r.target)
+                .ok()
+                .is_some_and(|part| same_part_name(&part, chart_part))
+            {
                 return Ok(true);
             }
         }

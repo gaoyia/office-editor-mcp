@@ -546,7 +546,9 @@ fn add_root_part(
         .into_iter()
         .any(|r| {
             !r.is_external()
-                && opc::resolve_rel_target("/", &r.target).ok().as_deref() == Some(path)
+                && opc::resolve_rel_target("/", &r.target)
+                    .ok()
+                    .is_some_and(|found| opc::same_part_name(&found, path))
         });
     if !already {
         let target = path.trim_start_matches('/');
