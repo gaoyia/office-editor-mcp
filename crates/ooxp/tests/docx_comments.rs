@@ -116,16 +116,13 @@ fn write_png(tag: &str) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: serde_json::Value) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -133,33 +130,27 @@ fn inspect(path: &Path, scope: serde_json::Value) -> serde_json::Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: serde_json::Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: serde_json::Value) -> ooxp::Error {
     let out = tmp_dir().join("err.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -476,16 +467,13 @@ fn set_comment_meta_and_last_para() {
 #[test]
 fn insert_comment_creates_parts_on_create_file() {
     let path = tmp_dir().join("create-host.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hello" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hello" }] }
+    })
+    .to_string())
     .unwrap();
     let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 5 }));
     assert_eq!(tree0["commentCount"], 0);
@@ -583,28 +571,22 @@ fn rejects_container_id_and_xlsx() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let xlsx = tmp_dir().join("cmt.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("cmt-x-out.xlsx").to_string_lossy(),
-            "ops": [{ "op": "insertComment", "start": "para:1", "end": "para:1", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("cmt-x-out.xlsx").to_string_lossy(),
+        "ops": [{ "op": "insertComment", "start": "para:1", "end": "para:1", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

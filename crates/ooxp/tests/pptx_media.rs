@@ -61,44 +61,35 @@ fn write_wav(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -106,16 +97,13 @@ fn inspect_bare(path: &Path) -> serde_json::Value {
 }
 
 fn inspect_media(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "media": true, "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "media": true, "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -230,17 +218,14 @@ fn insert_video_inspect_export_delete() {
         .any(|n| n == "ppt/media/image1.png"));
 
     let exported = tmp("exp").with_extension("mp4");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": inserted.to_string_lossy(),
-            "id": "slide:1/video:3",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": inserted.to_string_lossy(),
+        "id": "slide:1/video:3",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), MP4_FTYP);
 
@@ -291,17 +276,14 @@ fn insert_audio_and_wrong_file() {
     assert!(!xml.contains("<p:timing"));
 
     let exported = tmp("exp-a").with_extension("wav");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": inserted.to_string_lossy(),
-            "id": "slide:1/audio:3",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": inserted.to_string_lossy(),
+        "id": "slide:1/audio:3",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), tiny_wav());
 
@@ -375,16 +357,13 @@ fn insert_rejects_notes_master_and_root_id() {
 #[test]
 fn xlsx_and_docx_reject_media_ops_and_scope() {
     let xlsx = tmp("wb").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let mp4 = write_mp4("x");
     let err = apply(
@@ -399,16 +378,13 @@ fn xlsx_and_docx_reject_media_ops_and_scope() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "media": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "media": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -560,16 +536,13 @@ fn insert_video_clip_fields() {
 }
 
 fn inspect_notes_media(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "media": true, "notes": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "media": true, "notes": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

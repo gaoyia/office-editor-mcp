@@ -21,36 +21,30 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_docx(tag: &str) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [
-                    { "style": "Heading1", "text": "第一章" },
-                    { "text": "hello" }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [
+                { "style": "Heading1", "text": "第一章" },
+                { "text": "hello" }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -58,34 +52,28 @@ fn inspect(path: &Path) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = seq_path("should-not-write", "docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -271,33 +259,27 @@ fn page_bg_ops_reject_bad_fields() {
 #[test]
 fn page_bg_ops_not_for_xlsx() {
     let xlsx = seq_path("pb-x", "xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let xout = seq_path("pb-x-out", "xlsx");
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": xout.to_string_lossy(),
-            "ops": [{
-                "op": "setPageBackground",
-                "id": "docx:document",
-                "color": "FF0000"
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": xout.to_string_lossy(),
+        "ops": [{
+            "op": "setPageBackground",
+            "id": "docx:document",
+            "color": "FF0000"
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
     assert!(!xout.exists());
@@ -344,24 +326,21 @@ fn art_page_borders_and_gradient_fill() {
     assert!(xml.contains("wps:wsp"));
 
     let created = seq_path("create-bg", "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "hello" }],
-                "pageBackground": { "color": "EEEEEE" },
-                "pageBorders": {
-                    "offsetFrom": "page",
-                    "top": { "val": "apples", "sz": 20, "space": 24, "color": "auto" }
-                }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }],
+            "pageBackground": { "color": "EEEEEE" },
+            "pageBorders": {
+                "offsetFrom": "page",
+                "top": { "val": "apples", "sz": 20, "space": 24, "color": "auto" }
             }
-        })
-        .to_string(),
-        None,
-    )
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&created);
     assert_eq!(tree["pageBackground"]["color"], "EEEEEE");

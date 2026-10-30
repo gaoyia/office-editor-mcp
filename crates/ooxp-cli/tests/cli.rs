@@ -158,6 +158,100 @@ fn env_lang_used_when_no_locale_or_flag() {
 }
 
 #[test]
+fn output_flag_is_rejected() {
+    let bin = env!("CARGO_BIN_EXE_ooxp");
+    let out = Command::new(bin)
+        .args(["--output", "x.xlsx", "--input", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap()
+        .wait_with_output()
+        .unwrap();
+    assert!(!out.status.success());
+}
+
+#[test]
+fn create_without_path_reports_missing_path() {
+    let (code, json) = run_fail(
+        &["--input", "-"],
+        None,
+        r#"{"schemaVersion":1,"action":"create","workbook":{"sheets":[{"name":"Sheet1"}]}}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["code"], "InvalidField");
+    assert_eq!(json["error"]["message"], "Missing path");
+    assert_eq!(json["error"]["path"], "path");
+}
+
+#[test]
+fn export_without_output_reports_missing_output() {
+    let (code, json) = run_fail(
+        &["--input", "-"],
+        None,
+        r#"{"schemaVersion":1,"action":"exportMedia","path":"a.docx","id":"para:1/pic:1"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["code"], "InvalidField");
+    assert_eq!(json["error"]["message"], "Missing output");
+}
+
+#[test]
+fn apply_without_output_overwrites_path() {
+    let bin = env!("CARGO_BIN_EXE_ooxp");
+    let xlsx = tmp("cli-overwrite.xlsx");
+    let _ = fs::remove_file(&xlsx);
+    let path = serde_json::Value::String(xlsx.to_string_lossy().into_owned());
+    let create = format!(
+        r#"{{"schemaVersion":1,"action":"create","path":{path},"workbook":{{"sheets":[{{"name":"Sheet1","cells":[{{"ref":"A1","value":1}}]}}]}}}}"#
+    );
+    let mut child = Command::new(bin)
+        .args(["--input", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(create.as_bytes())
+        .unwrap();
+    let created = child.wait_with_output().unwrap();
+    assert!(
+        created.status.success(),
+        "{}",
+        String::from_utf8_lossy(&created.stderr)
+    );
+    let apply = format!(
+        r#"{{"schemaVersion":1,"action":"apply","path":{path},"ops":[{{"op":"setCell","id":"cell:Sheet1!A1","value":2}}]}}"#
+    );
+    let mut child = Command::new(bin)
+        .args(["--input", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(apply.as_bytes())
+        .unwrap();
+    let applied = child.wait_with_output().unwrap();
+    assert!(
+        applied.status.success(),
+        "{}",
+        String::from_utf8_lossy(&applied.stderr)
+    );
+    let stdout = String::from_utf8(applied.stdout).unwrap();
+    assert!(stdout.contains("cli-overwrite.xlsx"));
+}
+
+#[test]
 fn unknown_locale_falls_back_to_english() {
     let (code, json) = run_fail(
         &["--input", "-"],

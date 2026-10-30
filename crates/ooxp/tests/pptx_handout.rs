@@ -23,37 +23,31 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_scope(path: &Path, scope: Option<Value>) -> Value {
@@ -65,23 +59,20 @@ fn inspect_scope(path: &Path, scope: Option<Value>) -> Value {
     if let Some(scope) = scope {
         req["scope"] = scope;
     }
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     tree
 }
 
 fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -276,19 +267,16 @@ fn bad_id_and_missing_slot_are_invalid() {
 #[test]
 fn create_rejects_presentation_handout() {
     let bad = tmp("create-handout").with_extension("pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": bad.to_string_lossy(),
-            "presentation": {
-                "handout": {},
-                "slides": [{ "shapes": [{ "text": "甲" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": bad.to_string_lossy(),
+        "presentation": {
+            "handout": {},
+            "slides": [{ "shapes": [{ "text": "甲" }] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!bad.exists());
@@ -297,16 +285,13 @@ fn create_rejects_presentation_handout() {
 #[test]
 fn xlsx_and_docx_reject_handout() {
     let xlsx = tmp_dir().join("scope.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&xlsx, json!({ "handout": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
@@ -321,16 +306,13 @@ fn xlsx_and_docx_reject_handout() {
     assert!(!out.exists());
 
     let docx = tmp_dir().join("scope.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "甲" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&docx, json!({ "handout": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);

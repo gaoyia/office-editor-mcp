@@ -22,59 +22,50 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [
-                    {
-                        "name": "Sheet1",
-                        "cells": [
-                            { "ref": "A1", "value": 1 },
-                            { "ref": "A10", "value": 10 },
-                            { "ref": "A20", "value": 20 }
-                        ]
-                    },
-                    {
-                        "name": "Sheet2",
-                        "cells": [{ "ref": "A1", "value": 2 }]
-                    }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [
+                {
+                    "name": "Sheet1",
+                    "cells": [
+                        { "ref": "A1", "value": 1 },
+                        { "ref": "A10", "value": 10 },
+                        { "ref": "A20", "value": 20 }
+                    ]
+                },
+                {
+                    "name": "Sheet2",
+                    "cells": [{ "ref": "A1", "value": 2 }]
+                }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_tree(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

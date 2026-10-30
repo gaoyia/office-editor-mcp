@@ -37,63 +37,51 @@ fn write_png(tag: &str) -> PathBuf {
 
 fn create_doc(tag: &str, document: Value) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(src: &Path, ops: Value) -> ooxp::Error {
     let out = tmp("err");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

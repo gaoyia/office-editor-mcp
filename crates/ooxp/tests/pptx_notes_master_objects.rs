@@ -48,66 +48,54 @@ fn write_mp4(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_xlsx(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": "嵌入" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "嵌入" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -167,17 +155,14 @@ fn notes_video_lists_and_skips_root_count() {
     let id = notes["videos"][0]["id"].as_str().unwrap();
     assert!(id.starts_with("slide:1/notes/video:"), "{id}");
     let exported = tmp("nv-exp").with_extension("mp4");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": id,
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": id,
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), MP4_FTYP);
 }
@@ -342,17 +327,14 @@ fn master_picture_and_table() {
     let tid = first_id_starting(&m["tables"], "master:1/table:");
     assert_eq!(m["tables"][0]["rows"][0]["cells"][0]["text"], "母版表");
     let exported = tmp("mp-exp").with_extension("png");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": pid,
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": pid,
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
     let _ = tid;

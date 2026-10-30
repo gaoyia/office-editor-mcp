@@ -23,49 +23,40 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -73,16 +64,13 @@ fn inspect_bare(path: &Path) -> Value {
 }
 
 fn inspect_links(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "hyperlinks": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "hyperlinks": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -90,16 +78,13 @@ fn inspect_links(path: &Path) -> Value {
 }
 
 fn inspect_shapes(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "slide": 1, "maxShapes": 20 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "slide": 1, "maxShapes": 20 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -406,18 +391,15 @@ fn already_linked_and_create_unknown_field() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("create-hl").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "hyperlinks": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("create-hl").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "hyperlinks": [] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -637,16 +619,13 @@ fn write_png(tag: &str) -> PathBuf {
 }
 
 fn inspect_scope(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -821,28 +800,25 @@ fn insert_on_pic_table_chart_smartart_and_cell() {
 #[test]
 fn create_run_and_hover_link() {
     let path = tmp("create-ev").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{
-                        "text": "悬停",
-                        "url": "https://example.com/c-hover",
-                        "event": "hover"
-                    }, {
-                        "text": "run链",
-                        "url": "https://example.com/c-run",
-                        "on": "run"
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{
+                    "text": "悬停",
+                    "url": "https://example.com/c-hover",
+                    "event": "hover"
+                }, {
+                    "text": "run链",
+                    "url": "https://example.com/c-run",
+                    "on": "run"
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_links(&path);
     let links = tree["slides"][0]["hyperlinks"].as_array().unwrap();

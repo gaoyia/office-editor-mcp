@@ -82,7 +82,7 @@ mod tests {
                 }]
             }
         });
-        let out = run(&req.to_string(), None).unwrap();
+        let out = run(&req.to_string()).unwrap();
         match out {
             RunOutput::Written { .. } => {}
             _ => panic!("create 应写出文件"),
@@ -94,7 +94,7 @@ mod tests {
             "path": path.to_string_lossy(),
             "scope": { "sheet": "Sheet1", "range": "A1:D20" }
         });
-        let RunOutput::Inspect(tree) = run(&inspect_req.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&inspect_req.to_string()).unwrap() else {
             panic!("inspect 应返回树");
         };
         assert_eq!(tree["id"], "xlsx:workbook");
@@ -120,7 +120,7 @@ mod tests {
                 { "op": "setCell", "id": "cell:Sheet1!C1", "value": null }
             ]
         });
-        run(&apply_req.to_string(), None).unwrap();
+        run(&apply_req.to_string()).unwrap();
 
         let inspect2 = json!({
             "schemaVersion": 1,
@@ -128,7 +128,7 @@ mod tests {
             "path": patched.to_string_lossy(),
             "scope": { "sheet": "Sheet1", "range": "A1:C1" }
         });
-        let RunOutput::Inspect(tree2) = run(&inspect2.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree2) = run(&inspect2.to_string()).unwrap() else {
             panic!();
         };
         let cells2 = tree2["sheets"][0]["cells"].as_array().unwrap();
@@ -140,11 +140,8 @@ mod tests {
 
     #[test]
     fn apply_rejects_whole_tree() {
-        let err = run(
-            r#"{"schemaVersion":1,"action":"apply","path":"a.xlsx","sheets":[]}"#,
-            None,
-        )
-        .unwrap_err();
+        let err =
+            run(r#"{"schemaVersion":1,"action":"apply","path":"a.xlsx","sheets":[]}"#).unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
     }
 
@@ -157,13 +154,13 @@ mod tests {
             "path": path.to_string_lossy(),
             "workbook": { "sheets": [{ "name": "Sheet1" }] }
         });
-        run(&req.to_string(), None).unwrap();
+        run(&req.to_string()).unwrap();
         let inspect_req = json!({
             "schemaVersion": 1,
             "action": "inspect",
             "path": path.to_string_lossy()
         });
-        let RunOutput::Inspect(tree) = run(&inspect_req.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&inspect_req.to_string()).unwrap() else {
             panic!();
         };
         assert!(tree["sheets"][0].get("cells").is_none());
@@ -189,14 +186,14 @@ mod tests {
                 ]
             }
         });
-        run(&req.to_string(), None).unwrap();
+        run(&req.to_string()).unwrap();
 
         let outline = json!({
             "schemaVersion": 1,
             "action": "inspect",
             "path": path.to_string_lossy()
         });
-        let RunOutput::Inspect(tree) = run(&outline.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&outline.to_string()).unwrap() else {
             panic!();
         };
         assert_eq!(tree["id"], "docx:document");
@@ -240,7 +237,7 @@ mod tests {
             "path": path.to_string_lossy(),
             "scope": { "from": 1, "maxParas": 200 }
         });
-        let RunOutput::Inspect(tree) = run(&scoped.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&scoped.to_string()).unwrap() else {
             panic!();
         };
         let paras = tree["paragraphs"].as_array().unwrap();
@@ -258,7 +255,7 @@ mod tests {
             "output": patched.to_string_lossy(),
             "ops": [{ "op": "setParaText", "id": heading_id, "text": "新标题" }]
         });
-        run(&apply.to_string(), None).unwrap();
+        run(&apply.to_string()).unwrap();
 
         let again = json!({
             "schemaVersion": 1,
@@ -266,7 +263,7 @@ mod tests {
             "path": patched.to_string_lossy(),
             "scope": { "from": 1, "maxParas": 10 }
         });
-        let RunOutput::Inspect(tree) = run(&again.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&again.to_string()).unwrap() else {
             panic!();
         };
         assert_eq!(tree["paragraphs"][0]["text"], "新标题");
@@ -281,16 +278,13 @@ mod tests {
     #[test]
     fn docx_create_writes_compatibility_mode_15() {
         let path = tmp("settings.docx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "document": { "paragraphs": [{ "text": "a" }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        })
+        .to_string())
         .unwrap();
         let settings = part_text(&path, "/word/settings.xml");
         assert!(settings.contains(r#"w:name="compatibilityMode""#));
@@ -304,16 +298,13 @@ mod tests {
 
     #[test]
     fn xlsx_create_rejects_pictures_field() {
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": tmp("pic-reject.xlsx").to_string_lossy(),
-                "workbook": { "sheets": [{ "name": "Sheet1" }], "pictures": [] }
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("pic-reject.xlsx").to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }], "pictures": [] }
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
         assert_eq!(err.field_path(), Some("workbook.pictures"));
@@ -321,16 +312,13 @@ mod tests {
 
     #[test]
     fn pptx_create_rejects_pictures_field() {
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": tmp("pic-reject.pptx").to_string_lossy(),
-                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }], "pictures": [] }
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("pic-reject.pptx").to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }], "pictures": [] }
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
         assert_eq!(err.field_path(), Some("presentation.pictures"));
@@ -339,16 +327,13 @@ mod tests {
     #[test]
     fn xlsx_create_styles_use_rgb_not_theme() {
         let path = tmp("styles-rgb.xlsx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "workbook": { "sheets": [{ "name": "Sheet1" }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string())
         .unwrap();
         let styles = part_text(&path, "/xl/styles.xml");
         assert!(styles.contains(r#"<color rgb="FF000000"/>"#));
@@ -364,17 +349,14 @@ mod tests {
             "path": path.to_string_lossy(),
             "document": { "paragraphs": [{ "text": "a" }] }
         });
-        run(&req.to_string(), None).unwrap();
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
-            })
-            .to_string(),
-            None,
-        )
+        run(&req.to_string()).unwrap();
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
     }
@@ -382,78 +364,60 @@ mod tests {
     #[test]
     fn xlsx_rejects_docx_picture_id_and_foreign_ops() {
         let path = tmp("pic-reject.xlsx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": path.to_string_lossy(),
-                "scope": { "pictures": true }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "pictures": true }
+        })
+        .to_string())
         .unwrap() else {
             panic!("pictures: true 应合法");
         };
         assert_eq!(tree["pictureCount"], 0);
         assert_eq!(tree["sheets"][0]["pictures"], json!([]));
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": path.to_string_lossy(),
-                "scope": { "notes": true }
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "notes": true }
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "replacePicture", "id": "header:default:1/pic:1", "file": "a.png" }]
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "replacePicture", "id": "header:default:1/pic:1", "file": "a.png" }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidId);
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "insertFootnote", "id": "para:1", "text": "x" }]
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "insertFootnote", "id": "para:1", "text": "x" }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "setPictureWrap", "id": "sheet:Sheet1/pic:1", "kind": "inline" }]
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "setPictureWrap", "id": "sheet:Sheet1/pic:1", "kind": "inline" }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
     }
@@ -461,54 +425,42 @@ mod tests {
     #[test]
     fn pptx_rejects_export_media_xlsx_rejects_docx_id() {
         let xlsx = tmp("export-reject.xlsx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": xlsx.to_string_lossy(),
-                "workbook": { "sheets": [{ "name": "Sheet1" }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string())
         .unwrap();
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "exportMedia",
-                "path": xlsx.to_string_lossy(),
-                "id": "header:default:1/pic:1",
-                "output": tmp("export-reject.png").to_string_lossy()
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": xlsx.to_string_lossy(),
+            "id": "header:default:1/pic:1",
+            "output": tmp("export-reject.png").to_string_lossy()
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidId);
 
         let pptx = tmp("export-reject.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": pptx.to_string_lossy(),
-                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": pptx.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+        })
+        .to_string())
         .unwrap();
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "exportMedia",
-                "path": pptx.to_string_lossy(),
-                "id": "slide:1/shape:2",
-                "output": tmp("export-reject-ppt.png").to_string_lossy()
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": pptx.to_string_lossy(),
+            "id": "slide:1/shape:2",
+            "output": tmp("export-reject-ppt.png").to_string_lossy()
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidId);
     }
@@ -527,14 +479,14 @@ mod tests {
                 ]
             }
         });
-        run(&req.to_string(), None).unwrap();
+        run(&req.to_string()).unwrap();
 
         let outline = json!({
             "schemaVersion": 1,
             "action": "inspect",
             "path": path.to_string_lossy()
         });
-        let RunOutput::Inspect(tree) = run(&outline.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&outline.to_string()).unwrap() else {
             panic!();
         };
         assert_eq!(tree["id"], "pptx:presentation");
@@ -559,7 +511,7 @@ mod tests {
             "path": path.to_string_lossy(),
             "scope": { "slide": 1, "maxShapes": 200 }
         });
-        let RunOutput::Inspect(tree) = run(&scoped.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&scoped.to_string()).unwrap() else {
             panic!();
         };
         let shapes = tree["slides"][0]["shapes"].as_array().unwrap();
@@ -578,7 +530,7 @@ mod tests {
             "output": patched.to_string_lossy(),
             "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新标题" }]
         });
-        run(&apply.to_string(), None).unwrap();
+        run(&apply.to_string()).unwrap();
 
         let again = json!({
             "schemaVersion": 1,
@@ -586,7 +538,7 @@ mod tests {
             "path": patched.to_string_lossy(),
             "scope": { "slide": 1, "maxShapes": 10 }
         });
-        let RunOutput::Inspect(tree) = run(&again.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&again.to_string()).unwrap() else {
             panic!();
         };
         assert_eq!(tree["slides"][0]["shapes"][0]["text"], "新标题");
@@ -598,7 +550,7 @@ mod tests {
             "path": patched.to_string_lossy(),
             "scope": { "slide": 2 }
         });
-        let RunOutput::Inspect(tree) = run(&page2.to_string(), None).unwrap() else {
+        let RunOutput::Inspect(tree) = run(&page2.to_string()).unwrap() else {
             panic!();
         };
         assert_eq!(tree["slides"][1]["shapes"][0]["text"], "第二页");
@@ -613,17 +565,14 @@ mod tests {
             "path": path.to_string_lossy(),
             "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
         });
-        run(&req.to_string(), None).unwrap();
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
-            })
-            .to_string(),
-            None,
-        )
+        run(&req.to_string()).unwrap();
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
     }
@@ -631,27 +580,21 @@ mod tests {
     #[test]
     fn pptx_empty_slides_still_one_page() {
         let path = tmp("empty.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "presentation": { "slides": [] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": { "slides": [] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": path.to_string_lossy(),
-                "scope": { "slide": 1 }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };
@@ -662,27 +605,21 @@ mod tests {
     #[test]
     fn pptx_newline_roundtrip() {
         let path = tmp("nl.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "presentation": { "slides": [{ "shapes": [{ "text": "上\n下" }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "上\n下" }] }] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": path.to_string_lossy(),
-                "scope": { "slide": 1 }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };
@@ -692,27 +629,21 @@ mod tests {
     #[test]
     fn pptx_scope_slide_out_of_range_has_no_shapes() {
         let path = tmp("oor.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": path.to_string_lossy(),
-                "scope": { "slide": 9 }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "slide": 9 }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };
@@ -722,34 +653,28 @@ mod tests {
     #[test]
     fn pptx_apply_slide_id_is_invalid() {
         let path = tmp("badid.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": path.to_string_lossy(),
-                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+        })
+        .to_string())
         .unwrap();
-        let err = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": path.to_string_lossy(),
-                "ops": [{ "op": "setShapeText", "id": "slide:1", "text": "x" }]
-            })
-            .to_string(),
-            None,
-        )
+        let err = run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1", "text": "x" }]
+        })
+        .to_string())
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidId);
     }
 
     #[test]
     fn omitted_schema_version_is_version_one() {
-        let out = run(r#"{"action":"help","format":"xlsx","op":"setCell"}"#, None).unwrap();
+        let out = run(r#"{"action":"help","format":"xlsx","op":"setCell"}"#).unwrap();
         match out {
             RunOutput::Help(tree) => assert_eq!(tree["op"], "setCell"),
             other => panic!("expected help, got {other:?}"),
@@ -758,11 +683,7 @@ mod tests {
 
     #[test]
     fn error_message_defaults_to_english() {
-        let err = run(
-            r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#,
-            None,
-        )
-        .unwrap_err();
+        let err = run(r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#).unwrap_err();
         let en = err.to_json(Lang::En);
         assert_eq!(en["error"]["code"], "UnsupportedSchema");
         assert_eq!(en["error"]["message"], "schemaVersion must be 1");
@@ -774,7 +695,6 @@ mod tests {
     fn locale_is_accepted_on_inspect() {
         let err = run(
             r#"{"schemaVersion":1,"action":"inspect","path":"no-such-ooxp.xlsx","locale":"zh-CN"}"#,
-            None,
         )
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::Io);
@@ -789,27 +709,21 @@ mod tests {
     #[test]
     fn inspect_field_order_matches_contract() {
         let xlsx = tmp("order.xlsx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": xlsx.to_string_lossy(),
-                "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": xlsx.to_string_lossy(),
-                "scope": { "sheet": "Sheet1", "range": "A1" }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": xlsx.to_string_lossy(),
+            "scope": { "sheet": "Sheet1", "range": "A1" }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };
@@ -897,30 +811,24 @@ mod tests {
         );
 
         let docx = tmp("order.docx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": docx.to_string_lossy(),
-                "document": { "paragraphs": [
-                    { "style": "Heading1", "text": "标题" },
-                    { "text": "hello" }
-                ] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": docx.to_string_lossy(),
+            "document": { "paragraphs": [
+                { "style": "Heading1", "text": "标题" },
+                { "text": "hello" }
+            ] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": docx.to_string_lossy(),
-                "scope": { "from": 1, "maxParas": 10 }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": docx.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 10 }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };
@@ -1073,30 +981,24 @@ mod tests {
         );
 
         let pptx = tmp("order.pptx");
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "create",
-                "path": pptx.to_string_lossy(),
-                "presentation": { "slides": [
-                    { "shapes": [{ "text": "标题" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ] }
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": pptx.to_string_lossy(),
+            "presentation": { "slides": [
+                { "shapes": [{ "text": "标题" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ] }
+        })
+        .to_string())
         .unwrap();
-        let RunOutput::Inspect(tree) = run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "inspect",
-                "path": pptx.to_string_lossy(),
-                "scope": { "slide": 1 }
-            })
-            .to_string(),
-            None,
-        )
+        let RunOutput::Inspect(tree) = run(&json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": pptx.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string())
         .unwrap() else {
             panic!();
         };

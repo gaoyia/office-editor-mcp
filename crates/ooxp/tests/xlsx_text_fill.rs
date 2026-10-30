@@ -24,50 +24,41 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": 1 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 1 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_boxes(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "textBoxes": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "textBoxes": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -166,25 +157,22 @@ fn insert_then_gradient_and_outline() {
 #[test]
 fn text_fill_none_and_create_box() {
     let path = tmp("create");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "textBoxes": [{
-                        "from": "B2",
-                        "text": "渐变",
-                        "textFill": gradient_fill()
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "textBoxes": [{
+                    "from": "B2",
+                    "text": "渐变",
+                    "textFill": gradient_fill()
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let box0 = &inspect_boxes(&path)["sheets"][0]["textBoxes"][0];
     assert_eq!(box0["textFill"]["type"], "gradient");

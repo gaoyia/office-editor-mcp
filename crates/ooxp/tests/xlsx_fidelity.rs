@@ -98,7 +98,7 @@ fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, oo
         "output": out.to_string_lossy(),
         "ops": ops,
     });
-    run(&req.to_string(), None)
+    run(&req.to_string())
 }
 
 fn sheet_data_of(text: &str) -> &str {
@@ -117,7 +117,7 @@ fn implicit_cells_inspect_and_set_cell() {
         "path": src.to_string_lossy(),
         "scope": { "sheet": "Sheet1", "range": "A1:C3" },
     });
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     let cells = tree["sheets"][0]["cells"].as_array().unwrap();
@@ -413,7 +413,7 @@ fn inspect_reads_shared_string_and_shared_formula() {
         "path": src.to_string_lossy(),
         "scope": { "sheet": "Sheet1", "range": "A1:C3" },
     });
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     let cells = tree["sheets"][0]["cells"].as_array().unwrap();
@@ -444,7 +444,7 @@ fn inspect_bad_shared_string_index_is_xml_broken() {
         "path": src.to_string_lossy(),
         "scope": { "sheet": "Sheet1", "range": "A1" },
     });
-    let err = run(&req.to_string(), None).unwrap_err();
+    let err = run(&req.to_string()).unwrap_err();
     assert_eq!(err.code(), ErrorCode::XmlBroken);
 }
 
@@ -484,16 +484,13 @@ fn insert_table_is_not_for_xlsx() {
 #[test]
 fn scope_tables_is_not_for_xlsx() {
     let src = write_sample("tbl-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "tables": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "tables": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -514,16 +511,13 @@ fn accept_revision_is_not_for_xlsx() {
 #[test]
 fn scope_revisions_is_not_for_xlsx() {
     let src = write_sample("rev-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "revisions": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "revisions": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -531,16 +525,13 @@ fn scope_revisions_is_not_for_xlsx() {
 #[test]
 fn xlsx_accepts_hyperlinks_scope() {
     let src = write_sample("hl-scope");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "hyperlinks": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "hyperlinks": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -552,16 +543,13 @@ fn xlsx_accepts_hyperlinks_scope() {
 #[test]
 fn xlsx_accepts_sparklines_scope() {
     let src = write_sample("sk-scope");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "sparklines": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "sparklines": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -593,16 +581,13 @@ fn insert_hyperlink_is_not_for_xlsx() {
 #[test]
 fn scope_fields_is_not_for_xlsx() {
     let src = write_sample("fld-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "fields": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "fields": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

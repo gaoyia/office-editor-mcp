@@ -56,48 +56,39 @@ fn remain_document() -> Value {
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_err(document: Value) -> ooxp::Error {
     let path = seq_path("err", "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap_err()
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

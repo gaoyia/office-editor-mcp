@@ -101,16 +101,13 @@ fn write_layout(tag: &str, uid: &str) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("expected inspect");
     };
@@ -118,33 +115,27 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply_ops(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("err.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -436,21 +427,18 @@ fn set_colors_style_size() {
 #[test]
 fn create_with_smartart() {
     let path = tmp_dir().join("create.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [
-                    { "text": "", "smartArts": [{ "layout": "org" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [
+                { "text": "", "smartArts": [{ "layout": "org" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&path, json!({ "smartArt": true }));
     assert_eq!(tree["smartArtCount"], 1);
@@ -464,43 +452,34 @@ fn create_with_smartart() {
 #[test]
 fn xlsx_accepts_smartart_scope_and_rejects_bad_insert_id() {
     let path = tmp_dir().join("book.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
+    })
+    .to_string())
     .unwrap();
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "smartArt": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "smartArt": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
     assert_eq!(tree["smartArtCount"], 0);
     assert_eq!(tree["sheets"][0]["smartArts"], json!([]));
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": tmp_dir().join("x.xlsx").to_string_lossy(),
-            "ops": [{ "op": "insertSmartArt", "id": "Sheet1!A1", "layout": "list" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": tmp_dir().join("x.xlsx").to_string_lossy(),
+        "ops": [{ "op": "insertSmartArt", "id": "Sheet1!A1", "layout": "list" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
@@ -508,29 +487,26 @@ fn xlsx_accepts_smartart_scope_and_rejects_bad_insert_id() {
 #[test]
 fn header_smartart_lists_and_set_text() {
     let path = tmp_dir().join("hf.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "正文" }],
-                "headers": [{
-                    "type": "default",
-                    "paragraphs": [{
-                        "text": "",
-                        "smartArts": [{
-                            "layout": "list",
-                            "points": [{ "text": "眉甲" }, { "text": "眉乙" }]
-                        }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "正文" }],
+            "headers": [{
+                "type": "default",
+                "paragraphs": [{
+                    "text": "",
+                    "smartArts": [{
+                        "layout": "list",
+                        "points": [{ "text": "眉甲" }, { "text": "眉乙" }]
                     }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&path, json!({ "headerFooter": true, "smartArt": true }));
     assert_eq!(tree["smartArtCount"], 0);

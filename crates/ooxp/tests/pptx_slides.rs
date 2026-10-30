@@ -24,55 +24,46 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_one(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "仅一页" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "仅一页" }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path) -> Value {
@@ -88,7 +79,7 @@ fn inspect_scope(path: &Path, scope: Option<Value>) -> Value {
     if let Some(scope) = scope {
         req["scope"] = scope;
     }
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     tree
@@ -320,22 +311,19 @@ fn later_op_keeps_original_slide() {
 #[test]
 fn delete_then_edit_uses_original_slide() {
     let path = tmp("pin-del");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "第一页" }] },
-                    { "shapes": [{ "text": "第二页" }] },
-                    { "shapes": [{ "text": "第三页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "第一页" }] },
+                { "shapes": [{ "text": "第二页" }] },
+                { "shapes": [{ "text": "第三页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let out = tmp("pin-del-out");
     apply(
@@ -405,54 +393,42 @@ fn insert_keeps_named_slide_bytes() {
 #[test]
 fn foreign_format_rejects() {
     let xlsx = tmp("book").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp("xlsx-out").with_extension("xlsx").to_string_lossy(),
-            "ops": [{ "op": "insertSlide", "id": "pptx:presentation" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp("xlsx-out").with_extension("xlsx").to_string_lossy(),
+        "ops": [{ "op": "insertSlide", "id": "pptx:presentation" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("doc").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hi" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hi" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": docx.to_string_lossy(),
-            "output": tmp("docx-out").with_extension("docx").to_string_lossy(),
-            "ops": [{ "op": "deleteSlide", "id": "slide:1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": docx.to_string_lossy(),
+        "output": tmp("docx-out").with_extension("docx").to_string_lossy(),
+        "ops": [{ "op": "deleteSlide", "id": "slide:1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

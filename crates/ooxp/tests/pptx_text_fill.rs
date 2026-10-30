@@ -24,49 +24,40 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str, text: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": text }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": text }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_slide(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -238,23 +229,20 @@ fn mixed_run_sizes_list_runs() {
 #[test]
 fn create_gradient_skips_default_black() {
     let path = tmp("create-grad");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{
-                        "text": "渐变",
-                        "textFill": gradient_fill()
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{
+                    "text": "渐变",
+                    "textFill": gradient_fill()
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let sh = &inspect_slide(&path)["slides"][0]["shapes"][0];
     assert_eq!(sh["color"], Value::Null);
@@ -314,32 +302,26 @@ fn rejects_color_with_text_fill_and_empty_op_and_docx() {
     assert!(!dest.exists());
 
     let docx = tmp("doc").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hi" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hi" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": docx.to_string_lossy(),
-            "output": tmp("docx-out").with_extension("docx").to_string_lossy(),
-            "ops": [{
-                "op": "setShapeFormat",
-                "id": "slide:1/shape:2",
-                "textFill": { "type": "none" }
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": docx.to_string_lossy(),
+        "output": tmp("docx-out").with_extension("docx").to_string_lossy(),
+        "ops": [{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "textFill": { "type": "none" }
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

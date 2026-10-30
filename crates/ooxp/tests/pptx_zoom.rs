@@ -26,31 +26,25 @@ fn create_deck(tag: &str, n: usize) -> PathBuf {
     let slides: Vec<Value> = (1..=n)
         .map(|i| json!({ "shapes": [{ "text": format!("页{i}") }] }))
         .collect();
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": slides }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": slides }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -58,31 +52,25 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap_err()
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
 }
 
 fn object_keys(v: &Value) -> Vec<&str> {
@@ -233,25 +221,22 @@ fn delete_removes_zoom_and_preview() {
 #[test]
 fn insert_section_zoom_targets_section() {
     let src = tmp("sec-src").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": src.to_string_lossy(),
-            "presentation": {
-                "sections": [
-                    { "name": "开场", "start": 1 },
-                    { "name": "内容", "start": 2 }
-                ],
-                "slides": [
-                    { "shapes": [{ "text": "甲" }] },
-                    { "shapes": [{ "text": "乙" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "sections": [
+                { "name": "开场", "start": 1 },
+                { "name": "内容", "start": 2 }
+            ],
+            "slides": [
+                { "shapes": [{ "text": "甲" }] },
+                { "shapes": [{ "text": "乙" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let out = tmp("sec").with_extension("pptx");
     apply(
@@ -336,16 +321,13 @@ fn wrong_ids_and_foreign_reject() {
     assert!(!out.exists());
 
     let book = tmp("xlsx-zoom").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": book.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": book.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &book,
@@ -363,32 +345,26 @@ fn wrong_ids_and_foreign_reject() {
     let err = inspect_err(&book, json!({ "zooms": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("create-zoom").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "zooms": [{}] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("create-zoom").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "zooms": [{}] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("docx-zoom").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "甲" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &docx,
@@ -406,26 +382,23 @@ fn wrong_ids_and_foreign_reject() {
 
 fn create_sectioned_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "sections": [
-                    { "name": "开场", "start": 1 },
-                    { "name": "内容", "start": 2 }
-                ],
-                "slides": [
-                    { "shapes": [{ "text": "甲" }] },
-                    { "shapes": [{ "text": "乙" }] },
-                    { "shapes": [{ "text": "丙" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "sections": [
+                { "name": "开场", "start": 1 },
+                { "name": "内容", "start": 2 }
+            ],
+            "slides": [
+                { "shapes": [{ "text": "甲" }] },
+                { "shapes": [{ "text": "乙" }] },
+                { "shapes": [{ "text": "丙" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
@@ -561,16 +534,13 @@ fn set_zoom_rejects_wrong_fields() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let book = tmp("xlsx-set-zoom").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": book.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": book.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &book,

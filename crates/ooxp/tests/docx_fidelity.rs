@@ -56,16 +56,13 @@ fn write_sample(tag: &str) -> PathBuf {
 }
 
 fn inspect_all(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 200 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 200 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -73,17 +70,14 @@ fn inspect_all(path: &Path) -> serde_json::Value {
 }
 
 fn apply(path: &Path, out: &Path, id: &str, text: &str) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setParaText", "id": id, "text": text }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setParaText", "id": id, "text": text }]
+    })
+    .to_string())
 }
 
 fn part(path: &Path, name: &str) -> String {
@@ -314,16 +308,13 @@ fn inspect_hf(path: &Path, expand: bool) -> serde_json::Value {
     if expand {
         scope = json!({ "headerFooter": true });
     }
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -406,17 +397,14 @@ fn header_container_id_is_invalid() {
 }
 
 fn apply_ops(path: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
 }
 
 #[test]
@@ -533,16 +521,13 @@ fn apply_distance_on_create_keeps_page_margins() {
     let dir = tmp_dir();
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let created = dir.join(format!("dist-create-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let before = part(&created, "word/document.xml");
     assert!(before.contains(r#"w:top="1440""#));
@@ -630,16 +615,13 @@ fn apply_page_margin_keeps_header_distance_on_create() {
     let dir = tmp_dir();
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let created = dir.join(format!("sect-create-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let out = dir.join(format!("sect-create-out-{n}.docx"));
     apply_ops(
@@ -1089,16 +1071,13 @@ fn write_pic_sample(tag: &str) -> PathBuf {
 }
 
 fn inspect_pics(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -1438,16 +1417,13 @@ fn write_body_pic_sample(tag: &str) -> PathBuf {
 }
 
 fn inspect_body_pics(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 20, "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 20, "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -1457,15 +1433,12 @@ fn inspect_body_pics(path: &Path) -> serde_json::Value {
 #[test]
 fn inspect_lists_body_pictures() {
     let path = write_body_pic_sample("body-pic-list");
-    let tree0 = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let tree0 = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(tree0) = tree0 else {
         panic!("inspect 应返回树");
@@ -1635,17 +1608,14 @@ fn set_para_text_keeps_body_pictures() {
 }
 
 fn export_pic(path: &Path, id: &str, output: &Path) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": path.to_string_lossy(),
-            "id": id,
-            "output": output.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": path.to_string_lossy(),
+        "id": id,
+        "output": output.to_string_lossy()
+    })
+    .to_string())
 }
 
 #[test]
@@ -1754,16 +1724,13 @@ fn export_rejects_external_rel() {
 #[test]
 fn export_missing_output_is_invalid_field() {
     let path = write_pic_sample("export-noout");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": path.to_string_lossy(),
-            "id": "header:default:1/pic:1"
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": path.to_string_lossy(),
+        "id": "header:default:1/pic:1"
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -1799,15 +1766,12 @@ fn write_txbx_sample(tag: &str) -> PathBuf {
 #[test]
 fn inspect_lists_body_textboxes() {
     let path = write_txbx_sample("txbx-list");
-    let tree0 = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let tree0 = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(tree0) = tree0 else {
         panic!("inspect 应返回树");
@@ -1815,16 +1779,13 @@ fn inspect_lists_body_textboxes() {
     assert_eq!(tree0["textBoxCount"], 2);
     assert!(tree0.get("paragraphs").is_none());
 
-    let only_box = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "textBoxes": true }
-        })
-        .to_string(),
-        None,
-    )
+    let only_box = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "textBoxes": true }
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(only_box) = only_box else {
         panic!();
@@ -1832,16 +1793,13 @@ fn inspect_lists_body_textboxes() {
     assert_eq!(only_box["textBoxCount"], 2);
     assert!(only_box.get("paragraphs").is_none());
 
-    let tree = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 10, "textBoxes": true, "textBoxContent": true }
-        })
-        .to_string(),
-        None,
-    )
+    let tree = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 10, "textBoxes": true, "textBoxContent": true }
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(tree) = tree else {
         panic!();
@@ -1875,31 +1833,25 @@ fn inspect_lists_body_textboxes() {
 #[test]
 fn inspect_text_box_content_requires_text_boxes() {
     let path = write_txbx_sample("txbx-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "textBoxContent": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "textBoxContent": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
 fn inspect_boxes(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 20, "textBoxes": true, "textBoxContent": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 20, "textBoxes": true, "textBoxContent": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -2076,32 +2028,26 @@ fn set_textbox_text_anchor() {
     assert_eq!(err_id.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp_dir().join("txbx-anchor.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("txbx-anchor-out.xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "setTextBoxTextAnchor",
-                "id": "sheet:Sheet1/sp:1",
-                "textAnchor": "ctr"
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("txbx-anchor-out.xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "setTextBoxTextAnchor",
+            "id": "sheet:Sheet1/sp:1",
+            "textAnchor": "ctr"
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }
@@ -2284,20 +2230,17 @@ fn create_document_with_textbox() {
         "txbx-create-{}.docx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [
-                    { "text": "外层", "textBoxes": [{ "text": "框字", "cx": 1828800, "cy": 914400 }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [
+                { "text": "外层", "textBoxes": [{ "text": "框字", "cx": 1828800, "cy": 914400 }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_boxes(&path);
     assert_eq!(tree["textBoxCount"], 1);
@@ -2321,21 +2264,18 @@ fn create_docx_path(tag: &str) -> PathBuf {
 fn create_body_inline_picture() {
     let png = write_temp_png("create-body", PNG_1X1);
     let path = create_docx_path("create-body-pic");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [
-                    { "style": "Heading1", "text": "标题" },
-                    { "text": "hello", "pictures": [{ "file": png.to_string_lossy() }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [
+                { "style": "Heading1", "text": "标题" },
+                { "text": "hello", "pictures": [{ "file": png.to_string_lossy() }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_body_pics(&path);
     assert_eq!(tree["pictureCount"], 1);
@@ -2384,20 +2324,15 @@ fn create_header_anchor_and_mixed_body() {
                 }]
             }
         })
-        .to_string(),
-        None,
-    )
+        .to_string())
     .unwrap();
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 20, "pictures": true, "headerFooter": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 20, "pictures": true, "headerFooter": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -2440,18 +2375,15 @@ fn create_header_anchor_and_mixed_body() {
 fn create_pictures_rejects_missing_file_and_one_size() {
     let png = write_temp_png("create-bad", PNG_1X1);
     let path = create_docx_path("create-pic-miss");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [{ "text": "a", "pictures": [{}] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "a", "pictures": [{}] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -2460,39 +2392,33 @@ fn create_pictures_rejects_missing_file_and_one_size() {
     );
 
     let path2 = create_docx_path("create-pic-size");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path2.to_string_lossy(),
-            "document": {
-                "paragraphs": [{
-                    "text": "a",
-                    "pictures": [{ "file": png.to_string_lossy(), "cx": 9525 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path2.to_string_lossy(),
+        "document": {
+            "paragraphs": [{
+                "text": "a",
+                "pictures": [{ "file": png.to_string_lossy(), "cx": 9525 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("document.paragraphs[0].pictures[0]"));
 
     let path3 = create_docx_path("create-hf-even");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path3.to_string_lossy(),
-            "document": {
-                "paragraphs": [{ "text": "a" }],
-                "headers": [{ "type": "even", "paragraphs": [{ "text": "偶" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path3.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "a" }],
+            "headers": [{ "type": "even", "paragraphs": [{ "text": "偶" }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_hf(&path3, true);
     assert_eq!(tree["headers"][0]["type"], "even");
@@ -2502,22 +2428,19 @@ fn create_pictures_rejects_missing_file_and_one_size() {
     assert!(part(&path3, "word/settings.xml").contains("evenAndOddHeaders"));
 
     let path4 = create_docx_path("create-hf-dup");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path4.to_string_lossy(),
-            "document": {
-                "paragraphs": [{ "text": "a" }],
-                "headers": [
-                    { "type": "default", "paragraphs": [{ "text": "一" }] },
-                    { "type": "default", "paragraphs": [{ "text": "二" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path4.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "a" }],
+            "headers": [
+                { "type": "default", "paragraphs": [{ "text": "一" }] },
+                { "type": "default", "paragraphs": [{ "text": "二" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("document.headers"));
@@ -2545,9 +2468,7 @@ fn insert_picture_inside_textbox() {
             "path": out.to_string_lossy(),
             "scope": { "from": 1, "maxParas": 20, "pictures": true, "textBoxes": true, "textBoxContent": true }
         })
-        .to_string(),
-        None,
-    )
+        .to_string())
     .unwrap() else {
         panic!();
     };
@@ -2730,16 +2651,13 @@ fn insert_header_para_and_refuse_last_delete() {
 #[test]
 fn insert_header_footer_on_blank_and_guards() {
     let src = create_docx_path("nh-src");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": src.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "正文" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "正文" }] }
+    })
+    .to_string())
     .unwrap();
 
     let err = apply_ops(
@@ -2809,16 +2727,13 @@ fn insert_header_footer_on_blank_and_guards() {
 #[test]
 fn title_page_and_even_odd_flags() {
     let src = create_docx_path("nh-flags-src");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": src.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "正文" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "正文" }] }
+    })
+    .to_string())
     .unwrap();
 
     let out = tmp_dir().join("nh-flags.docx");
@@ -2895,23 +2810,20 @@ fn insert_header_refuses_linked_section() {
 #[test]
 fn create_first_and_even_headers() {
     let path = create_docx_path("create-hf-both");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [{ "text": "a" }],
-                "headers": [
-                    { "type": "default", "paragraphs": [{ "text": "奇" }] },
-                    { "type": "even", "paragraphs": [{ "text": "偶" }] },
-                    { "type": "first", "paragraphs": [{ "text": "首" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "a" }],
+            "headers": [
+                { "type": "default", "paragraphs": [{ "text": "奇" }] },
+                { "type": "even", "paragraphs": [{ "text": "偶" }] },
+                { "type": "first", "paragraphs": [{ "text": "首" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_hf(&path, true);
     assert_eq!(tree["headers"].as_array().unwrap().len(), 3);
@@ -2937,16 +2849,13 @@ fn create_first_and_even_headers() {
 }
 
 fn inspect_tables(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "tables": true, "from": 1, "maxParas": 200 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "tables": true, "from": 1, "maxParas": 200 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -2956,15 +2865,12 @@ fn inspect_tables(path: &Path) -> serde_json::Value {
 #[test]
 fn inspect_tables_lists_cell_paragraphs() {
     let path = write_sample("tbl-list");
-    let bare = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let bare = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(bare) = bare else {
         panic!();
@@ -3085,21 +2991,18 @@ fn delete_last_table_row_is_invalid_field() {
 #[test]
 fn create_document_with_table() {
     let path = create_docx_path("create-tbl");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{
-                    "cells": [["A1", "B1"], ["A2", "B2"]]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{
+                "cells": [["A1", "B1"], ["A2", "B2"]]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     assert_eq!(tree["tableCount"], 1);

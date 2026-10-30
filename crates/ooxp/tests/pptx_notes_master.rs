@@ -23,47 +23,38 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "标题" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "标题" }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_scope(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -71,16 +62,13 @@ fn inspect_scope(path: &Path, scope: Value) -> Value {
 }
 
 fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -383,49 +371,40 @@ fn reject_bad_hosts() {
     assert!(!out.exists());
 
     let xlsx = tmp("scope").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&xlsx, json!({ "notesMaster": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("scope").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "甲" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&docx, json!({ "notesMaster": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let bad = tmp("create-nm").with_extension("pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": bad.to_string_lossy(),
-            "presentation": {
-                "notesMaster": {},
-                "slides": [{ "shapes": [{ "text": "甲" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": bad.to_string_lossy(),
+        "presentation": {
+            "notesMaster": {},
+            "slides": [{ "shapes": [{ "text": "甲" }] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!bad.exists());

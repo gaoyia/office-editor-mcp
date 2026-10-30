@@ -58,16 +58,13 @@ fn write_sample(tag: &str) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -75,34 +72,28 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("should-not-write.docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -286,66 +277,51 @@ fn style_ops_reject_bad_ids() {
 #[test]
 fn styles_not_for_xlsx_or_pptx() {
     let xlsx = tmp_dir().join("st.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "styles": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "styles": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     let out = tmp_dir().join("st-x-out.xlsx");
-    let err_op = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setStyle", "id": "style:Normal", "sz": 48 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_op = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setStyle", "id": "style:Normal", "sz": 48 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_op.code(), ErrorCode::InvalidField);
 
     let pptx = tmp_dir().join("st.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err_p = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": pptx.to_string_lossy(),
-            "scope": { "styles": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err_p = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": pptx.to_string_lossy(),
+        "scope": { "styles": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
 }

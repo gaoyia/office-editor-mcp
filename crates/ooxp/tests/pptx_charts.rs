@@ -23,44 +23,35 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -68,16 +59,13 @@ fn inspect_bare(path: &Path) -> Value {
 }
 
 fn inspect_charts(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "charts": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "charts": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -257,17 +245,14 @@ fn insert_inspect_series_pos_type_delete_export() {
     let embed_name = embed_part(&inserted);
     let embed = part_bytes(&inserted, &embed_name);
     let exported = tmp("exp").with_extension("xlsx");
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": inserted.to_string_lossy(),
-            "id": "slide:1/chart:3",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": inserted.to_string_lossy(),
+        "id": "slide:1/chart:3",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportChartData 应写出文件");
     };
@@ -299,29 +284,23 @@ fn insert_inspect_series_pos_type_delete_export() {
     let embed2_name = embed_part(&updated);
     let embed2 = part_bytes(&updated, &embed2_name);
     let exported2 = tmp("exp2").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": updated.to_string_lossy(),
-            "id": "slide:1/chart:3",
-            "output": exported2.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": updated.to_string_lossy(),
+        "id": "slide:1/chart:3",
+        "output": exported2.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported2).unwrap(), embed2);
-    let RunOutput::Inspect(cells) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": exported2.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "B2:B4" }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(cells) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": exported2.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "B2:B4" }
+    })
+    .to_string())
     .unwrap() else {
         panic!("应能 inspect embedding");
     };
@@ -558,67 +537,52 @@ fn rejects_foreign_chart_fields_and_set_chart_pos_on_other_formats() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp("book").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp("xlsx-pos").with_extension("xlsx").to_string_lossy(),
-            "ops": [{ "op": "setChartPos", "id": "sheet:Sheet1/chart:1", "x": 1, "y": 1 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp("xlsx-pos").with_extension("xlsx").to_string_lossy(),
+        "ops": [{ "op": "setChartPos", "id": "sheet:Sheet1/chart:1", "x": 1, "y": 1 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": xlsx.to_string_lossy(),
-            "id": "sheet:Sheet1/chart:1",
-            "output": tmp("xlsx-exp").with_extension("xlsx").to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": xlsx.to_string_lossy(),
+        "id": "sheet:Sheet1/chart:1",
+        "output": tmp("xlsx-exp").with_extension("xlsx").to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("doc").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hi" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hi" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": docx.to_string_lossy(),
-            "output": tmp("docx-pos").with_extension("docx").to_string_lossy(),
-            "ops": [{ "op": "setChartPos", "id": "para:AAAA0001/chart:7", "x": 1, "y": 1 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": docx.to_string_lossy(),
+        "output": tmp("docx-pos").with_extension("docx").to_string_lossy(),
+        "ops": [{ "op": "setChartPos", "id": "para:AAAA0001/chart:7", "x": 1, "y": 1 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -626,33 +590,30 @@ fn rejects_foreign_chart_fields_and_set_chart_pos_on_other_formats() {
 #[test]
 fn create_writes_slide_chart() {
     let path = tmp("create-chart").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "charts": [{
-                        "type": "col",
-                        "title": "销量",
-                        "x": 914400,
-                        "y": 1828800,
-                        "cx": 5486400,
-                        "cy": 3200400,
-                        "series": [{
-                            "name": "系列甲",
-                            "categories": ["甲", "乙", "丙"],
-                            "values": [1, 2, 3]
-                        }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "charts": [{
+                    "type": "col",
+                    "title": "销量",
+                    "x": 914400,
+                    "y": 1828800,
+                    "cx": 5486400,
+                    "cy": 3200400,
+                    "series": [{
+                        "name": "系列甲",
+                        "categories": ["甲", "乙", "丙"],
+                        "values": [1, 2, 3]
                     }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_charts(&path);
     assert_eq!(tree["chartCount"], 1);
@@ -671,17 +632,14 @@ fn create_writes_slide_chart() {
         .any(|n| n.starts_with("ppt/embeddings/") && n.ends_with(".xlsx")));
     let embed = part_bytes(&path, &embed_part(&path));
     let exported = tmp("create-exp").with_extension("xlsx");
-    let RunOutput::Written { .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": path.to_string_lossy(),
-            "id": "slide:1/chart:3",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": path.to_string_lossy(),
+        "id": "slide:1/chart:3",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportChartData 应写出文件");
     };
@@ -691,18 +649,15 @@ fn create_writes_slide_chart() {
 #[test]
 fn create_empty_charts_writes_no_chart() {
     let path = tmp("empty-charts").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "charts": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "charts": [] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_charts(&path);
     assert_eq!(tree["chartCount"], 0);
@@ -725,31 +680,28 @@ fn create_picture_then_chart_ids() {
     )
     .unwrap();
     let path = tmp("pic-then-chart").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "pictures": [{
-                        "file": png.to_string_lossy(),
-                        "x": 0,
-                        "y": 0,
-                        "cx": 914400,
-                        "cy": 914400
-                    }],
-                    "charts": [{
-                        "type": "col",
-                        "series": [{ "categories": ["a", "b"], "values": [1, 2] }]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "pictures": [{
+                    "file": png.to_string_lossy(),
+                    "x": 0,
+                    "y": 0,
+                    "cx": 914400,
+                    "cy": 914400
+                }],
+                "charts": [{
+                    "type": "col",
+                    "series": [{ "categories": ["a", "b"], "values": [1, 2] }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_charts(&path);
     assert_eq!(tree["pictureCount"], 1);
@@ -759,60 +711,51 @@ fn create_picture_then_chart_ids() {
 
 #[test]
 fn create_rejects_data_from_kind_and_root_charts() {
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("data-from").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "charts": [{
-                        "type": "col",
-                        "from": "A1",
-                        "dataFrom": "A10",
-                        "series": [{ "values": [1], "categories": ["a"] }]
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("data-from").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "charts": [{
+                    "type": "col",
+                    "from": "A1",
+                    "dataFrom": "A10",
+                    "series": [{ "values": [1], "categories": ["a"] }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("kind").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "charts": [{
-                        "type": "col",
-                        "kind": "anchor",
-                        "series": [{ "values": [1], "categories": ["a"] }]
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("kind").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "charts": [{
+                    "type": "col",
+                    "kind": "anchor",
+                    "series": [{ "values": [1], "categories": ["a"] }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("root-charts").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "charts": [{ "type": "col", "series": [{ "values": [1] }] }],
-                "slides": [{ "shapes": [{ "text": "a" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("root-charts").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "charts": [{ "type": "col", "series": [{ "values": [1] }] }],
+            "slides": [{ "shapes": [{ "text": "a" }] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

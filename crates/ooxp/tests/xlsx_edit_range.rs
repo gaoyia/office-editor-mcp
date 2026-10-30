@@ -29,34 +29,28 @@ fn tmp_xlsm(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path) -> Value {
@@ -64,16 +58,13 @@ fn inspect(path: &Path) -> Value {
 }
 
 fn inspect_with(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -420,21 +411,18 @@ fn duplicate_name_and_chartsheet_and_missing_fields() {
     );
 
     let created = tmp("create-pr");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "protectedRanges": [{ "name": "Range1", "sqref": "A1" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "protectedRanges": [{ "name": "Range1", "sqref": "A1" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let created_tree = inspect_with(&created, json!({ "protectedRanges": true }));
     assert_eq!(
@@ -478,19 +466,16 @@ fn legacy_xor_is_not_implemented() {
 #[test]
 fn xlsm_create_keeps_macro_ct_and_vba_bytes() {
     let path = tmp_xlsm("new");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "xlsm",
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsm",
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&path);
     assert_eq!(tree["format"], "xlsx");
@@ -527,16 +512,13 @@ fn xlsm_create_keeps_macro_ct_and_vba_bytes() {
 #[test]
 fn docx_and_pptx_reject_ops_and_scope() {
     let docx = tmp("d").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hi" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hi" }] }
+    })
+    .to_string())
     .unwrap();
     assert_fail(
         &docx,
@@ -548,30 +530,24 @@ fn docx_and_pptx_reject_ops_and_scope() {
         }]),
         ErrorCode::InvalidField,
     );
-    let err_scope = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": docx.to_string_lossy(),
-            "scope": { "protectedRanges": true, "from": 1, "maxParas": 10 }
-        })
-        .to_string(),
-        None,
-    )
+    let err_scope = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": docx.to_string_lossy(),
+        "scope": { "protectedRanges": true, "from": 1, "maxParas": 10 }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_scope.code(), ErrorCode::InvalidField);
 
     let pptx = tmp("p").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+    })
+    .to_string())
     .unwrap();
     assert_fail(
         &pptx,
@@ -583,16 +559,13 @@ fn docx_and_pptx_reject_ops_and_scope() {
         }]),
         ErrorCode::InvalidField,
     );
-    let err_pptx_scope = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": pptx.to_string_lossy(),
-            "scope": { "protectedRanges": true, "slide": 1, "maxShapes": 10 }
-        })
-        .to_string(),
-        None,
-    )
+    let err_pptx_scope = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": pptx.to_string_lossy(),
+        "scope": { "protectedRanges": true, "slide": 1, "maxShapes": 10 }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_pptx_scope.code(), ErrorCode::InvalidField);
 }

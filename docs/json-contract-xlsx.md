@@ -1374,7 +1374,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 
 | 字段 | 含义 |
 | --- | --- |
-| `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给一个落盘路径，命令行用 `--output` |
+| `path` | 输出路径，必填。已存在则覆盖。缺了报 `MissingField` |
 | `workbook.sheets` | 至少一张表 |
 | `workbook.props` | 可选。文件属性，字段与 [json-contract.md](json-contract.md#setprops) 的 `setProps` / `setCustomProp` 相同 |
 | `sheets[].name` | 工作表名。Excel 限制：最长 31 个字符，不含 `:*?/[]\\`，不能叫 `History`，同一工作簿内不重复 |

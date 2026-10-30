@@ -36,30 +36,24 @@ fn write_png(tag: &str) -> PathBuf {
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_tables(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "tables": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "tables": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -83,33 +77,30 @@ fn slide_xml(path: &Path) -> String {
 
 fn create_table_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 2,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cells": [
-                            [
-                                { "text": "甲", "fill": "FF0000" },
-                                "乙"
-                            ],
-                            ["丙", "丁"]
-                        ]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 2,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cells": [
+                        [
+                            { "text": "甲", "fill": "FF0000" },
+                            "乙"
+                        ],
+                        ["丙", "丁"]
+                    ]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
@@ -207,17 +198,14 @@ fn set_table_cell_fill_grad_patt_blip() {
     assert!(xml.contains("r:embed"));
 
     let exported = tmp("cell-export").with_extension("png");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": "slide:1/table:3/r:2/c:1",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": "slide:1/table:3/r:2/c:1",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!exported.exists());
@@ -227,45 +215,42 @@ fn set_table_cell_fill_grad_patt_blip() {
 fn create_cell_fill_objects() {
     let png = write_png("create-blip");
     let path = tmp("create-obj").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 1,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cells": [[
-                            {
-                                "text": "渐变",
-                                "fill": {
-                                    "type": "grad",
-                                    "stops": [
-                                        { "pos": 0, "color": "111111" },
-                                        { "pos": 100000, "color": "EEEEEE" }
-                                    ]
-                                }
-                            },
-                            {
-                                "text": "图",
-                                "fill": {
-                                    "type": "blip",
-                                    "file": png.to_string_lossy()
-                                }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 1,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cells": [[
+                        {
+                            "text": "渐变",
+                            "fill": {
+                                "type": "grad",
+                                "stops": [
+                                    { "pos": 0, "color": "111111" },
+                                    { "pos": 100000, "color": "EEEEEE" }
+                                ]
                             }
-                        ]]
-                    }]
+                        },
+                        {
+                            "text": "图",
+                            "fill": {
+                                "type": "blip",
+                                "file": png.to_string_lossy()
+                            }
+                        }
+                    ]]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     let c0 = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0]["fill"];
@@ -364,16 +349,13 @@ fn set_table_cell_fill_rejects_bad_payload() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp("xlsx").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &xlsx,

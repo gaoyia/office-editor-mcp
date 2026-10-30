@@ -32,32 +32,26 @@ fn write_ink(tag: &str, body: &str) -> PathBuf {
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect_tree(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -65,49 +59,40 @@ fn inspect_tree(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = seq_path("should-not-write", "docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
 fn export_media(path: &Path, id: &str, output: &Path) -> RunOutput {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": path.to_string_lossy(),
-            "id": id,
-            "output": output.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": path.to_string_lossy(),
+        "id": id,
+        "output": output.to_string_lossy()
+    })
+    .to_string())
     .unwrap()
 }
 
@@ -467,114 +452,93 @@ fn reject_bad_inkml_and_foreign_ops() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let xlsx = seq_path("xlsx", "xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let ink = write_ink("xlsx", INKML);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": seq_path("xlsx-out", "xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "insertInkCanvas",
-                "id": "sheet:Sheet1",
-                "file": ink.to_string_lossy()
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": seq_path("xlsx-out", "xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "insertInkCanvas",
+            "id": "sheet:Sheet1",
+            "file": ink.to_string_lossy()
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": seq_path("xlsx-size", "xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "setInkCanvasSize",
-                "id": "sheet:Sheet1/ink:1",
-                "cx": 1000
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": seq_path("xlsx-size", "xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "setInkCanvasSize",
+            "id": "sheet:Sheet1/ink:1",
+            "cx": 1000
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": seq_path("xlsx-wrap", "xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "setInkCanvasWrap",
-                "id": "sheet:Sheet1/ink:1",
-                "kind": "inline"
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": seq_path("xlsx-wrap", "xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "setInkCanvasWrap",
+            "id": "sheet:Sheet1/ink:1",
+            "kind": "inline"
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "inkCanvases": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "inkCanvases": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let pptx = seq_path("pptx", "pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "format": "pptx",
-            "presentation": { "slides": [{ "shapes": [{ "text": "hi" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "format": "pptx",
+        "presentation": { "slides": [{ "shapes": [{ "text": "hi" }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": seq_path("pptx-size", "pptx").to_string_lossy(),
-            "ops": [{
-                "op": "setInkCanvasSize",
-                "id": "slide:1/ink:1",
-                "cx": 1000
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": seq_path("pptx-size", "pptx").to_string_lossy(),
+        "ops": [{
+            "op": "setInkCanvasSize",
+            "id": "slide:1/ink:1",
+            "cx": 1000
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

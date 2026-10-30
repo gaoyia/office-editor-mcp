@@ -57,21 +57,18 @@ fn embed_xlsx() -> Vec<u8> {
         "embed-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": "嵌入" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "嵌入" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     std::fs::read(&path).unwrap()
 }
@@ -111,34 +108,28 @@ fn create_docx(tag: &str) -> PathBuf {
         "{tag}-{}.docx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "宿主" }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "宿主" }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -146,17 +137,14 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
@@ -166,17 +154,14 @@ fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -208,21 +193,18 @@ fn write_xlsx(tag: &str) -> PathBuf {
         "{tag}-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": 1 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 1 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
@@ -293,17 +275,14 @@ fn export_media_matches_embedding_bytes() {
         "export-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": path.to_string_lossy(),
-            "id": id,
-            "output": out.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": path.to_string_lossy(),
+        "id": id,
+        "output": out.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportMedia 应写出文件");
     };
@@ -346,17 +325,14 @@ fn insert_ole_xlsx_lists_and_export_matches_and_styles_untouched() {
         "insert-export-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": o["id"],
-            "output": exp.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": o["id"],
+        "output": exp.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exp).unwrap(), xlsx_bytes);
     let names = zip_names(&out);
@@ -391,22 +367,19 @@ fn create_with_ole_objects() {
         "create-{}.docx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{
-                    "text": "带 OLE",
-                    "oleObjects": [{ "file": xlsx.to_string_lossy() }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{
+                "text": "带 OLE",
+                "oleObjects": [{ "file": xlsx.to_string_lossy() }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&path, json!({ "oleObjects": true }));
     assert_eq!(tree["oleObjectCount"], 1);
@@ -431,30 +404,24 @@ fn wrong_id_is_invalid_id() {
 #[test]
 fn xlsx_rejects_ole_ops_pptx_uses_slide_ids() {
     let book = write_xlsx("reject-book");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": book.to_string_lossy(),
-            "output": tmp_dir().join("x.xlsx").to_string_lossy(),
-            "ops": [{ "op": "insertOle", "id": "sheet:Sheet1", "file": book.to_string_lossy() }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": book.to_string_lossy(),
+        "output": tmp_dir().join("x.xlsx").to_string_lossy(),
+        "ops": [{ "op": "insertOle", "id": "sheet:Sheet1", "file": book.to_string_lossy() }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": book.to_string_lossy(),
-            "output": tmp_dir().join("x2.xlsx").to_string_lossy(),
-            "ops": [{ "op": "deleteOle", "id": "para:1/ole:_1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": book.to_string_lossy(),
+        "output": tmp_dir().join("x2.xlsx").to_string_lossy(),
+        "ops": [{ "op": "deleteOle", "id": "para:1/ole:_1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 
@@ -462,40 +429,31 @@ fn xlsx_rejects_ole_ops_pptx_uses_slide_ids() {
         "reject-{}.pptx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": tmp_dir().join("p.pptx").to_string_lossy(),
-            "ops": [{ "op": "insertOle", "id": "slide:1", "file": book.to_string_lossy() }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": tmp_dir().join("p.pptx").to_string_lossy(),
+        "ops": [{ "op": "insertOle", "id": "slide:1", "file": book.to_string_lossy() }]
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": tmp_dir().join("p2.pptx").to_string_lossy(),
-            "ops": [{ "op": "deleteOle", "id": "para:1/ole:_1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": tmp_dir().join("p2.pptx").to_string_lossy(),
+        "ops": [{ "op": "deleteOle", "id": "para:1/ole:_1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
@@ -568,17 +526,14 @@ fn set_ole_size_rewrites_preview_box() {
     assert!(xml.contains("w:dxaOrig=\"2880\""));
     assert!(xml.contains("w:dyaOrig=\"1440\""));
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": out.to_string_lossy(),
-            "output": tmp_dir().join("size-bad.docx").to_string_lossy(),
-            "ops": [{ "op": "setOleSize", "id": para, "cx": 1 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": out.to_string_lossy(),
+        "output": tmp_dir().join("size-bad.docx").to_string_lossy(),
+        "ops": [{ "op": "setOleSize", "id": para, "cx": 1 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }

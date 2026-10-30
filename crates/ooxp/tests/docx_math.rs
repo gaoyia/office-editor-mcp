@@ -26,37 +26,31 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, maths: bool, header_footer: bool) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": {
-                "from": 1,
-                "maxParas": 20,
-                "maths": maths,
-                "headerFooter": header_footer
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": {
+            "from": 1,
+            "maxParas": 20,
+            "maths": maths,
+            "headerFooter": header_footer
+        }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -64,34 +58,28 @@ fn inspect(path: &Path, maths: bool, header_footer: bool) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = seq_path("should-not-write", "docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -268,42 +256,33 @@ fn set_para_text_blocked_and_bad_ids() {
 #[test]
 fn xlsx_pptx_reject_math_ops() {
     let xlsx = seq_path("math-x", "xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let xout = seq_path("math-x-out", "xlsx");
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": xout.to_string_lossy(),
-            "ops": [{ "op": "insertMath", "id": "docx:document", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": xout.to_string_lossy(),
+        "ops": [{ "op": "insertMath", "id": "docx:document", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidId);
 
-    let listed = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "A1", "maths": true }
-        })
-        .to_string(),
-        None,
-    )
+    let listed = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1", "maths": true }
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(tree) = listed else {
         panic!("inspect 应返回树");
@@ -312,29 +291,23 @@ fn xlsx_pptx_reject_math_ops() {
     assert_eq!(tree["sheets"][0]["maths"], json!([]));
 
     let pptx = seq_path("math-p", "pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+    })
+    .to_string())
     .unwrap();
     let pout = seq_path("math-p-out", "pptx");
-    let err_p = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": pout.to_string_lossy(),
-            "ops": [{ "op": "deleteMath", "id": "math:1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_p = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": pout.to_string_lossy(),
+        "ops": [{ "op": "deleteMath", "id": "math:1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidId);
 }

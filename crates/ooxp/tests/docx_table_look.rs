@@ -17,35 +17,29 @@ fn tmp_dir() -> PathBuf {
 fn create_table(tag: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect_tables(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "tables": true, "from": 1, "maxParas": 20 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "tables": true, "from": 1, "maxParas": 20 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -53,33 +47,27 @@ fn inspect_tables(path: &Path) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("should-not.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -187,28 +175,22 @@ fn table_style_and_look() {
 #[test]
 fn table_look_not_for_xlsx() {
     let xlsx = tmp_dir().join("t.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("t-out.xlsx").to_string_lossy(),
-            "ops": [{ "op": "setTableFloat", "id": "table:1", "pos": null }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("t-out.xlsx").to_string_lossy(),
+        "ops": [{ "op": "setTableFloat", "id": "table:1", "pos": null }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -253,23 +235,20 @@ fn cell_valign_inspect_apply_create_and_clear() {
     assert!(!xml_c.contains("vAlign"));
 
     let created = tmp_dir().join("valign-create.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{
-                    "cells": [["A1", "B1"], ["A2", "B2"]],
-                    "cellFormats": [{ "r": 1, "c": 1, "vAlign": "bottom" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{
+                "cells": [["A1", "B1"], ["A2", "B2"]],
+                "cellFormats": [{ "r": 1, "c": 1, "vAlign": "bottom" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree_cr = inspect_tables(&created);
     assert_eq!(
@@ -294,28 +273,22 @@ fn cell_valign_inspect_apply_create_and_clear() {
     assert_eq!(err_id.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp_dir().join("valign.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("valign-out.xlsx").to_string_lossy(),
-            "ops": [{ "op": "setCellFormat", "id": "table:1/r1c1", "vAlign": "center" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("valign-out.xlsx").to_string_lossy(),
+        "ops": [{ "op": "setCellFormat", "id": "table:1/r1c1", "vAlign": "center" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }

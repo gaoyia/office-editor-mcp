@@ -20,16 +20,13 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_one(tag: &str, text: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": text }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": text }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
@@ -67,16 +64,13 @@ fn rewrite(path: &Path, xml: &str) {
 }
 
 fn para_text(path: &Path) -> String {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 5 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 5 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -84,16 +78,13 @@ fn para_text(path: &Path) -> String {
 }
 
 fn para_id(path: &Path) -> String {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 5 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 5 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -101,17 +92,14 @@ fn para_id(path: &Path) -> String {
 }
 
 fn set_text(src: &Path, out: &Path, id: &str, text: &str) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setParaText", "id": id, "text": text }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setParaText", "id": id, "text": text }]
+    })
+    .to_string())
     .unwrap();
 }
 

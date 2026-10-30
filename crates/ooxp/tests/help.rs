@@ -6,7 +6,7 @@ fn help(body: serde_json::Value) -> Result<serde_json::Value, ooxp::Error> {
         .as_object_mut()
         .unwrap()
         .extend(body.as_object().cloned().unwrap_or_default());
-    match run(&request.to_string(), None) {
+    match run(&request.to_string()) {
         Ok(RunOutput::Help(value)) => Ok(value),
         Ok(other) => panic!("help 应返回帮助 JSON，得到 {other:?}"),
         Err(err) => Err(err),

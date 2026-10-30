@@ -15,9 +15,6 @@ struct Cli {
     /// 领域 JSON 路径。`-` 或省略时从 stdin 读。
     #[arg(long)]
     input: Option<String>,
-    /// create 缺 path、或 apply / exportMedia 缺 output 时的落盘路径。
-    #[arg(long)]
-    output: Option<PathBuf>,
     /// 错误文案语言。请求里的 locale 优先。
     #[arg(long)]
     lang: Option<String>,
@@ -61,7 +58,7 @@ fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
         cli.lang.as_deref(),
         std::env::var("OOXP_LANG").ok().as_deref(),
     );
-    let out = run(&json_text, cli.output.as_deref()).map_err(|e| (e, Some(lang)))?;
+    let out = run(&json_text).map_err(|e| (e, Some(lang)))?;
     match out {
         RunOutput::Inspect(tree) | RunOutput::Help(tree) => {
             let text = if cli.pretty {

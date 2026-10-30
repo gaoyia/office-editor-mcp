@@ -1,23 +1,19 @@
 # 命令行
 
-日期：2026-10-29
+日期：2026-10-30
 
 二进制名：`ooxp`。不带 `mcp` 时只做三件事：读入一份领域 JSON，交给库，把结果写到 stdout 或磁盘。`ooxp mcp` 从标准输入读 JSON-RPC，把同一份领域 JSON 交给库。
 
 ## 调用
 
 ```text
-ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
+ooxp [--input <文件|->] [--lang <标签>] [--pretty]
 ooxp mcp [--lang <标签>]
 ```
 
 - **`--input`**
   - 领域 JSON 的路径
   - 值为 `-` 或省略该参数时，从 stdin 读
-- **`--output`**
-  - 仅当请求里没有 `path`（create）或没有 `output`（apply / exportMedia / exportChartData）时作为落盘路径
-  - inspect 忽略此参数
-  - `exportMedia` 与 `exportChartData` 不得把源 `path` 当默认输出
 - **`--lang`**
   - 错误 `message` 的语言
   - 请求里写了 `locale` 时以请求为准
@@ -27,7 +23,7 @@ ooxp mcp [--lang <标签>]
 
 请求没有 `locale`、命令行也没给 `--lang` 时，读环境变量 `OOXP_LANG`。再没有就用英文。标签匹配规则见 [errors.md](errors.md)。`--help` 本身不翻译。
 
-除 `mcp` 外不提供子命令。`mcp` 不能带 `--input`、`--output` 或 `--pretty`。它可以带 `--lang`，作为没写 `locale` 时的默认语言。不带 `mcp` 时，动作完全由 JSON 的 `action` 决定。
+除 `mcp` 外不提供子命令。`mcp` 不能带 `--input` 或 `--pretty`。它可以带 `--lang`，作为没写 `locale` 时的默认语言。不带 `mcp` 时，动作完全由 JSON 的 `action` 决定。落盘路径只写在领域 JSON 里。
 
 stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向普通文件时不要再读 stdin。
 
@@ -109,7 +105,16 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 没写 `schemaVersion` 视为 `1`。写了又不是 `1`，工具结果带 `isError`，正文仍是命令行那种错误 JSON。
 
-`path` 写在 `arguments` 里，表示要打开的 Office 文件。`apply` 另存、`exportMedia` 和 `exportChartData` 落盘时，目标路径写在 `output`。这个模式没有 `--output`。`--lang` 是这个进程的默认语言。它决定 `initialize` 的说明，以及 `tools/list` 里的工具介绍。参数里的 `locale` 优先于它，再看 `OOXP_LANG`，都没有则错误文案用英文。`help` 在请求和 `--lang` 都没给语言时，说明仍是中文。给了 `--lang` 又没写 `locale` 时，`help` 的说明跟着 `--lang`。
+`path` 写在 `arguments` 里，表示要打开的 Office 文件。`apply` 另存时把新路径写在 `output`，省略则写回 `path`。`exportMedia` 和 `exportChartData` 的 `output` 必填。`--lang` 是这个进程的默认语言。它决定 `initialize` 的说明，以及 `tools/list` 里的工具介绍。参数里的 `locale` 优先于它，再看 `OOXP_LANG`，都没有则错误文案用英文。`help` 在请求和 `--lang` 都没给语言时，说明仍是中文。给了 `--lang` 又没写 `locale` 时，`help` 的说明跟着 `--lang`。
+
+工具自己拒绝请求时，正文仍是上面的错误 JSON，`code` 用这些值：
+
+- 未知工具：`UnsupportedAction`
+- `arguments` 不是对象，或请求文件不是 JSON、不是对象：`InvalidJson`
+- `requestPath` 与其它字段同时出现、请求文件里有 `requestPath`、或 `action` 与工具名不符：`InvalidField`
+- 请求文件读不到：`Io`
+
+JSON-RPC 解析失败仍是 `-32700`，未知方法仍是 `-32601`。这两处的 `message` 跟着 `--lang`。`mcp` 的参数不对时，命令行报错同样跟着 `--lang`，没有则用 `OOXP_LANG`，再没有用英文。
 
 成功时，`result.content[0].text` 是命令行会写到 stdout 的那份 JSON。失败时同一位置放 stderr 那种 `{"ok":false,"error":...}`，并带 `isError: true`。库看到的仍是领域 JSON，看不到 `jsonrpc`、`method`、`id`。
 

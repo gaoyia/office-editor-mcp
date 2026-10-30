@@ -23,48 +23,39 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_err(document: Value) -> ooxp::Error {
     let path = seq_path("err", "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap_err()
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -186,20 +177,17 @@ fn create_round5_rejects_empty_runs_box_after_zero_and_foreign_fields() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let xlsx = seq_path("xlsx", "xlsx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": {
-                "sheets": [{ "name": "Sheet1" }],
-                "groups": [{ "ids": ["a", "b"] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": {
+            "sheets": [{ "name": "Sheet1" }],
+            "groups": [{ "ids": ["a", "b"] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

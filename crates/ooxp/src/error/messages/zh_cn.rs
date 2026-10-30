@@ -19,6 +19,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CannotInferFormat { path } => format!("无法从路径推断格式：{path}"),
         ErrorKind::UnsupportedFormat { format } => format!("不支持的 format：{format}"),
         ErrorKind::MissingField { field } => format!("缺少 {field}"),
+        ErrorKind::PackageRequired => "缺少文件字节".into(),
         ErrorKind::WrongType { field, expected } => {
             format!("{field} 必须是{}", type_name(*expected))
         }

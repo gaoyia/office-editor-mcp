@@ -287,7 +287,7 @@ apply 的入参是操作列表，不是树。下面这种写法非法，必须�
 | `output` | 否 | 省略则覆盖 `path` |
 | `ops` | 是 | 非空数组。按数组顺序执行，中途失败则整次 apply 不写文件。空数组不是原样保存，报 `EmptyArray`。零脏写回只在 OPC 层，见 [opc.md](opc.md) |
 
-create 与 apply 落盘时先写入目标同目录的临时文件，再改名为目标路径。临时文件改名失败时，先把备份改回原路径；改回失败则报 `Io`，错误路径是目标文件。改名成功后删除备份；删除失败也报 `Io`，此时目标文件已经是新内容，错误路径是备份文件。
+create 与 apply 落盘时先写入目标同目录的临时文件，再改名覆盖目标路径。改名失败时删掉临时文件，原文件不动，报 `Io`，错误路径是目标文件。目录里不留 `.ooxp.bak`。
 
 只属于某一种格式的 op 正文见 [xlsx](json-contract-xlsx.md#apply)、[docx](json-contract-docx.md#apply)、[pptx](json-contract-pptx.md#apply)。
 跨格式 op（图、图表、SmartArt、批注、超链接、文本框、表格插删行列、`setProps`、`setProtection`、`setShapeText` 等）仍写在本文。
@@ -2184,10 +2184,9 @@ xlsx 文本框和带文字的形状用同一条，id 例如 `sheet:Sheet1/sp:1`�
   - docx 也可以是墨迹画布 id，与 `inkCanvases[].id` 相同
   - pptx 也可以是视频 / 音频 id，与 `videos[].id` / `audios[].id` 相同
   - docx 也可以是嵌入字体 id，与 `embeddedFonts[].id` 相同
-- **`output`**（否）
+- **`output`**（是）
   - 本地目标路径
-  - 省略时用命令行 `--output`
-  - 两者都缺报 `MissingField`
+  - 缺了报 `MissingField`
   - 不得默认写成源 `path`，以免把图片字节盖掉文档
 - **`format`**（否）
   - 可省略，从 `path` 扩展名推断
@@ -2233,7 +2232,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | --- | --- | --- |
 | `path` | 是 | 源 docx 或 pptx |
 | `id` | 是 | 图表 id，与 inspect 的 `charts[].id` 相同 |
-| `output` | 否 | 本地目标路径。省略时用命令行 `--output`。两者都缺报 `MissingField`。不得默认写成源 `path` |
+| `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 `id` 必须是图表 id，含正文、页眉页脚、框内、注内与批注内带前缀的 id，以及 pptx 备注图表 id `slide:{n}/notes/chart:…`。对系列 id、段落 id、形状 id、图 id 报 `InvalidId`。

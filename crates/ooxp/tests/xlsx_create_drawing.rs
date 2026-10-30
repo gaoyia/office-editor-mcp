@@ -23,30 +23,24 @@ fn tmp(tag: &str) -> PathBuf {
 }
 
 fn create_book(path: &Path, sheets: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": { "sheets": sheets }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": sheets }
+    })
+    .to_string())
     .unwrap();
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -178,19 +172,16 @@ fn create_empty_arrays_omit_parts() {
 #[test]
 fn create_rejects_root_comments() {
     let path = tmp("bad");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "comments": [],
-                "sheets": [{ "name": "Sheet1" }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "comments": [],
+            "sheets": [{ "name": "Sheet1" }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("workbook.comments"));
@@ -199,21 +190,18 @@ fn create_rejects_root_comments() {
 #[test]
 fn create_rejects_smartart_kind_and_missing_from() {
     let path = tmp("kind");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "smartArts": [{ "layout": "list", "from": "A1", "kind": "anchor" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "smartArts": [{ "layout": "list", "from": "A1", "kind": "anchor" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -221,21 +209,18 @@ fn create_rejects_smartart_kind_and_missing_from() {
         Some("workbook.sheets[0].smartArts[0].kind")
     );
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "textBoxes": [{ "text": "框" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "textBoxes": [{ "text": "框" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -247,24 +232,21 @@ fn create_rejects_smartart_kind_and_missing_from() {
 #[test]
 fn create_rejects_hyperlink_overlap() {
     let path = tmp("overlap");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "hyperlinks": [
-                        { "ref": "A1:B1", "url": "https://a.example/" },
-                        { "ref": "B1", "url": "https://b.example/" }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "hyperlinks": [
+                    { "ref": "A1:B1", "url": "https://a.example/" },
+                    { "ref": "B1", "url": "https://b.example/" }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(

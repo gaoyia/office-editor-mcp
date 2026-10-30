@@ -29,32 +29,26 @@ fn apply_out(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("ooxp-excel-source-tests");
     std::fs::create_dir_all(&dir).unwrap();
     let out = dir.join(format!("excel-applied-{tag}.xlsx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": fixture().to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": apply_ops()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": fixture().to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": apply_ops()
+    })
+    .to_string())
     .unwrap();
     out
 }
 
 fn inspect(path: &Path, sheet: &str, range: &str) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "sheet": sheet, "range": range }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": sheet, "range": range }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

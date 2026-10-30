@@ -23,58 +23,49 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "handout": { "header": "讲义头" },
-                "slides": [
-                    {
-                        "shapes": [{ "text": "标题" }],
-                        "notes": "备注"
-                    }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "handout": { "header": "讲义头" },
+            "slides": [
+                {
+                    "shapes": [{ "text": "标题" }],
+                    "notes": "备注"
+                }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_plain(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "标题" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "标题" }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_scope(path: &Path, scope: Value) -> Value {
@@ -84,7 +75,7 @@ fn inspect_scope(path: &Path, scope: Value) -> Value {
         "path": path.to_string_lossy(),
         "scope": scope
     });
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     tree
@@ -231,16 +222,13 @@ fn reject_page_id_and_missing_notes_master() {
     assert!(!out.exists());
 
     let xlsx = tmp_dir().join("tnh.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let out = tmp_dir().join("xlsx-tnh.xlsx");
     let err = apply(

@@ -23,57 +23,48 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": "嵌入" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "嵌入" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_embed(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": 42 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 42 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -81,17 +72,14 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
 }
 
 fn object_keys(v: &Value) -> Vec<&str> {
@@ -249,17 +237,14 @@ fn export_media_matches_embedding_bytes() {
     let tree = inspect(&book, json!({ "oleObjects": true }));
     let id = tree["sheets"][0]["oleObjects"][0]["id"].as_str().unwrap();
     let out = tmp("export").with_extension("xlsx");
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": book.to_string_lossy(),
-            "id": id,
-            "output": out.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": book.to_string_lossy(),
+        "id": id,
+        "output": out.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportMedia 应写出文件");
     };

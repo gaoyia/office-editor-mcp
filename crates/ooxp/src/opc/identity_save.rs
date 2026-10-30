@@ -56,7 +56,7 @@ fn create_file(name: &str, extra: Value) -> Vec<u8> {
     req["schemaVersion"] = json!(1);
     req["action"] = json!("create");
     req["path"] = json!(path.to_string_lossy());
-    run(&req.to_string(), None).unwrap();
+    run(&req.to_string()).unwrap();
     std::fs::read(&path).unwrap()
 }
 

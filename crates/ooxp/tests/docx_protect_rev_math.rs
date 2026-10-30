@@ -37,7 +37,7 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 }
 
 fn run_json(req: &Value) -> Result<RunOutput, ooxp::Error> {
-    run(&req.to_string(), None)
+    run(&req.to_string())
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {

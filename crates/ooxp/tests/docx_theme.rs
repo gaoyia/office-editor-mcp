@@ -43,47 +43,38 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_docx(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "hello" }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -269,17 +260,14 @@ fn xlsx_rejects_theme_ops() {
         "xlsx-reject-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let out = tmp("xlsx-out");
     let err = apply(
@@ -348,24 +336,21 @@ fn set_theme_override_and_clear() {
 #[test]
 fn create_writes_theme_and_keeps_default_without() {
     let with_theme = tmp("create-theme");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": with_theme.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "hello" }],
-                "theme": {
-                    "name": "Office Theme",
-                    "colors": { "accent1": "FF0000" },
-                    "fonts": { "majorLatin": "Arial" }
-                }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": with_theme.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }],
+            "theme": {
+                "name": "Office Theme",
+                "colors": { "accent1": "FF0000" },
+                "fonts": { "majorLatin": "Arial" }
             }
-        })
-        .to_string(),
-        None,
-    )
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&with_theme);
     assert_eq!(tree["theme"]["name"], "Office Theme");
@@ -405,17 +390,14 @@ fn xlsx_rejects_theme_fmt_and_override() {
         "xlsx-reject-fmt-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let out = tmp("xlsx-fmt-out");
     let err = apply(
@@ -512,32 +494,29 @@ fn set_theme_names_scripts_and_extra() {
 #[test]
 fn create_theme_remain_fields() {
     let path = tmp("create-remain");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "hello" }],
-                "theme": {
-                    "name": "Office Theme",
-                    "colors": { "name": "Palette", "accent1": "112233" },
-                    "fonts": {
-                        "name": "Faces",
-                        "majorScripts": [{ "script": "Hang", "typeface": "Malgun Gothic" }]
-                    },
-                    "fmt": { "name": "Fmt" },
-                    "extraSchemes": [{ "name": "Extra", "colors": { "accent1": "ABCDEF" } }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }],
+            "theme": {
+                "name": "Office Theme",
+                "colors": { "name": "Palette", "accent1": "112233" },
+                "fonts": {
+                    "name": "Faces",
+                    "majorScripts": [{ "script": "Hang", "typeface": "Malgun Gothic" }]
                 },
-                "eastAsianSettings": {
-                    "themeFontLang": { "val": "ja-JP", "eastAsia": "zh-CN" }
-                }
+                "fmt": { "name": "Fmt" },
+                "extraSchemes": [{ "name": "Extra", "colors": { "accent1": "ABCDEF" } }]
+            },
+            "eastAsianSettings": {
+                "themeFontLang": { "val": "ja-JP", "eastAsia": "zh-CN" }
             }
-        })
-        .to_string(),
-        None,
-    )
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&path);
     assert_eq!(tree["theme"]["colors"]["name"], "Palette");

@@ -43,7 +43,7 @@ fn object_keys(v: &Value) -> Vec<&str> {
 }
 
 fn run_json(req: &Value) -> Result<RunOutput, ooxp::Error> {
-    run(&req.to_string(), None)
+    run(&req.to_string())
 }
 
 fn inspect(path: &Path) -> Value {

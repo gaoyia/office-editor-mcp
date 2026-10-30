@@ -20,24 +20,21 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_five(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": {
-                "paragraphs": [
-                    { "text": "P1" },
-                    { "text": "P2" },
-                    { "text": "P3" },
-                    { "text": "P4" },
-                    { "text": "P5" }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [
+                { "text": "P1" },
+                { "text": "P2" },
+                { "text": "P3" },
+                { "text": "P4" },
+                { "text": "P5" }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
@@ -95,16 +92,13 @@ fn strip_para_id(path: &Path) {
 }
 
 fn texts(path: &Path) -> Vec<String> {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 10 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 10 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -121,20 +115,17 @@ fn insert_then_edit_keeps_original_paragraph() {
     let src = create_five("pin");
     strip_para_id(&src);
     let out = tmp("pin-out");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [
-                { "op": "insertPara", "id": "para:index:1", "text": "NEW" },
-                { "op": "setParaText", "id": "para:index:4", "text": "EDIT" }
-            ]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [
+            { "op": "insertPara", "id": "para:index:1", "text": "NEW" },
+            { "op": "setParaText", "id": "para:index:4", "text": "EDIT" }
+        ]
+    })
+    .to_string())
     .unwrap();
     assert_eq!(texts(&out), ["P1", "NEW", "P2", "P3", "EDIT", "P5"]);
     let xml = part(&out, "word/document.xml");
@@ -147,20 +138,17 @@ fn delete_then_reuse_index_is_not_found() {
     strip_para_id(&src);
     let before = std::fs::read(&src).unwrap();
     let out = tmp("del-out");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [
-                { "op": "deletePara", "id": "para:index:2" },
-                { "op": "setParaText", "id": "para:index:2", "text": "x" }
-            ]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [
+            { "op": "deletePara", "id": "para:index:2" },
+            { "op": "setParaText", "id": "para:index:2", "text": "x" }
+        ]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::IdNotFound);
     assert_eq!(std::fs::read(&src).unwrap(), before);

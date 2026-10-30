@@ -76,16 +76,13 @@ fn part_bytes(path: &Path, name: &str) -> Vec<u8> {
 #[test]
 fn inspect_follows_sld_id_list_not_filename() {
     let path = write_sample("order");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -100,16 +97,13 @@ fn inspect_follows_sld_id_list_not_filename() {
 #[test]
 fn inspect_skips_fallback_and_pictures() {
     let path = write_sample("choice");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "slide": 2 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "slide": 2 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -126,29 +120,23 @@ fn apply_hits_first_duplicate_and_keeps_timing_and_other_slide() {
     let src = write_sample("apply");
     let src_slide2 = part_bytes(&src, "ppt/slides/slide2.xml");
     let out = tmp_dir().join("applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:2/shape:4", "text": "改过" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:2/shape:4", "text": "改过" }]
+    })
+    .to_string())
     .unwrap();
 
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 2 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "slide": 2 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -172,16 +160,13 @@ fn apply_hits_first_duplicate_and_keeps_timing_and_other_slide() {
 #[test]
 fn apply_missing_shape_is_id_not_found() {
     let src = write_sample("missing");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:99", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:99", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::IdNotFound);
 }
@@ -190,17 +175,14 @@ fn apply_missing_shape_is_id_not_found() {
 fn apply_preserves_run_bold() {
     let src = write_sample("bold");
     let out = tmp_dir().join("bold-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:2/shape:4", "text": "仍粗" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:2/shape:4", "text": "仍粗" }]
+    })
+    .to_string())
     .unwrap();
     let slide1 = part(&out, "ppt/slides/slide1.xml");
     assert!(slide1.contains(r#"<a:rPr b="1"/>"#));
@@ -255,16 +237,13 @@ fn write_multi_sample(tag: &str) -> PathBuf {
 
 /// 读回来的文本必须和写进去的一模一样，这是契约「setShapeText」第 9 条。
 fn read_back(path: &Path) -> String {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -283,17 +262,14 @@ fn count_paras(xml: &str) -> usize {
 fn apply_keeps_written_para_and_drops_empty_siblings() {
     let src = write_multi_sample("multi");
     let out = tmp_dir().join("multi-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新文本" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新文本" }]
+    })
+    .to_string())
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
@@ -320,17 +296,14 @@ fn apply_keeps_written_para_and_drops_empty_siblings() {
 fn apply_puts_br_between_runs_not_inside() {
     let src = write_multi_sample("br");
     let out = tmp_dir().join("br-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "上\n下" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "上\n下" }]
+    })
+    .to_string())
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
@@ -356,17 +329,14 @@ fn apply_single_line_clears_existing_br() {
     assert_eq!(read_back(&src), "上\n下", "样本本身应当是两行");
 
     let out = tmp_dir().join("existing-br-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "单行" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "单行" }]
+    })
+    .to_string())
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
@@ -382,17 +352,14 @@ fn apply_multiline_then_single_line_roundtrips() {
     let two = tmp_dir().join("rt-two.pptx");
     let one = tmp_dir().join("rt-one.pptx");
     for (from, to, text) in [(&src, &two, "甲\n乙\n丙"), (&two, &one, "只剩一行")] {
-        run(
-            &json!({
-                "schemaVersion": 1,
-                "action": "apply",
-                "path": from.to_string_lossy(),
-                "output": to.to_string_lossy(),
-                "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": text }]
-            })
-            .to_string(),
-            None,
-        )
+        run(&json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": from.to_string_lossy(),
+            "output": to.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": text }]
+        })
+        .to_string())
         .unwrap();
         assert_eq!(read_back(to), text);
     }
@@ -404,17 +371,14 @@ fn apply_multiline_then_single_line_roundtrips() {
 fn apply_drops_leading_empty_para() {
     let src = write_slide_sample("leading-empty", LEADING_EMPTY_SLIDE);
     let out = tmp_dir().join("leading-empty-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
+    })
+    .to_string())
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
@@ -438,17 +402,14 @@ fn apply_keeps_sibling_that_still_has_field() {
     let src = write_slide_sample("fld", FLD_SLIDE);
     assert_eq!(read_back(&src), "标题");
     let out = tmp_dir().join("fld-applied.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
+    })
+    .to_string())
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
@@ -466,17 +427,14 @@ fn apply_keeps_sibling_that_still_has_field() {
 fn accept_revision_is_not_for_pptx() {
     let src = write_sample("rev-foreign");
     let out = tmp_dir().join("rev-foreign-out.pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "acceptRevision", "id": "rev:1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "acceptRevision", "id": "rev:1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -484,16 +442,13 @@ fn accept_revision_is_not_for_pptx() {
 #[test]
 fn scope_revisions_is_not_for_pptx() {
     let src = write_sample("rev-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "revisions": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "revisions": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -501,16 +456,13 @@ fn scope_revisions_is_not_for_pptx() {
 #[test]
 fn scope_bookmarks_is_not_for_pptx() {
     let src = write_sample("bm-scope");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "bookmarks": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "bookmarks": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -519,17 +471,14 @@ fn scope_bookmarks_is_not_for_pptx() {
 fn delete_bookmark_is_not_for_pptx() {
     let src = write_sample("bm-foreign");
     let out = tmp_dir().join("bm-foreign-out.pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "deleteBookmark", "id": "bookmark:1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "deleteBookmark", "id": "bookmark:1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -537,16 +486,13 @@ fn delete_bookmark_is_not_for_pptx() {
 #[test]
 fn scope_fields_lists_pptx_a_fld() {
     let src = write_slide_sample("fld-scope", FLD_SLIDE);
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": src.to_string_lossy(),
-            "scope": { "fields": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "fields": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -564,17 +510,14 @@ fn scope_fields_lists_pptx_a_fld() {
 fn insert_field_docx_instr_is_not_for_pptx() {
     let src = write_sample("fld-foreign");
     let out = tmp_dir().join("fld-foreign-out.pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "insertField", "id": "para:1", "instr": " PAGE " }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "insertField", "id": "para:1", "instr": " PAGE " }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

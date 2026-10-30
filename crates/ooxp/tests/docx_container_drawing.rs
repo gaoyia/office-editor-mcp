@@ -23,37 +23,31 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_docx(tag: &str) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [
-                    { "style": "Heading1", "text": "第一章" },
-                    { "text": "hello" }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [
+                { "style": "Heading1", "text": "第一章" },
+                { "text": "hello" }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -61,34 +55,28 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = seq_path("should-not-write", "docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -151,17 +139,14 @@ fn insert_chart_in_comment_not_counted_on_root() {
     assert!(part_text(&with_chart, "[Content_Types].xml").contains("chart+xml"));
 
     let xlsx = seq_path("cmt-export", "xlsx");
-    let RunOutput::Written { .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": with_chart.to_string_lossy(),
-            "id": chart_id,
-            "output": xlsx.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": with_chart.to_string_lossy(),
+        "id": chart_id,
+        "output": xlsx.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportChartData 应写出文件");
     };

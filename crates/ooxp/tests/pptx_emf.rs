@@ -31,32 +31,26 @@ fn write_bytes(tag: &str, ext: &str, bytes: &[u8]) -> PathBuf {
 
 fn create_deck(tag: &str, slides: Value) -> PathBuf {
     let path = seq_path(tag, "pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "pptx",
-            "presentation": { "slides": slides }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "pptx",
+        "presentation": { "slides": slides }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect_pics(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "pictures": true, "notes": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "pictures": true, "notes": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -64,17 +58,14 @@ fn inspect_pics(path: &Path) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
@@ -119,17 +110,14 @@ fn insert_emf_writes_original_and_content_type() {
     let slide = part_text(&out, "ppt/slides/slide1.xml");
     assert!(!slide.contains("svgBlip"), "{slide}");
     let exp = seq_path("exp", "emf");
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": pic["id"],
-            "output": exp.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": pic["id"],
+        "output": exp.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("export 应写出");
     };
@@ -170,21 +158,18 @@ fn reject_junk() {
     let src = create_deck("rej", json!([{ "shapes": [{ "text": "host" }] }]));
     let junk = write_bytes("j", "bin", b"not-an-image");
     let out = seq_path("should-not", "pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{
-                "op": "insertPicture",
-                "id": "slide:1",
-                "file": junk.to_string_lossy()
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{
+            "op": "insertPicture",
+            "id": "slide:1",
+            "file": junk.to_string_lossy()
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());

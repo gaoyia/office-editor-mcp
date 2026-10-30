@@ -22,45 +22,36 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_charts(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "charts": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "charts": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -68,16 +59,13 @@ fn inspect_charts(path: &Path) -> serde_json::Value {
 }
 
 fn inspect_cells(path: &Path, range: &str) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": range }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": range }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -100,15 +88,12 @@ fn part_text(path: &Path, name: &str) -> String {
 #[test]
 fn inspect_chart_count_without_list() {
     let path = create_book("count");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -316,17 +301,14 @@ fn rejects_wrap_and_export_chart_data() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": out.to_string_lossy(),
-            "id": "sheet:Sheet1/chart:1",
-            "output": tmp("exp").with_extension("xlsx").to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": out.to_string_lossy(),
+        "id": "sheet:Sheet1/chart:1",
+        "output": tmp("exp").with_extension("xlsx").to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -416,31 +398,28 @@ fn insert_requires_sheet_and_data_from() {
 #[test]
 fn create_writes_worksheet_chart() {
     let path = tmp("create-chart");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "charts": [{
-                        "type": "col",
-                        "title": "销量",
-                        "from": "E2",
-                        "dataFrom": "A10",
-                        "series": [{
-                            "name": "Q1",
-                            "categories": ["甲", "乙", "丙"],
-                            "values": [1, 2, 3]
-                        }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "charts": [{
+                    "type": "col",
+                    "title": "销量",
+                    "from": "E2",
+                    "dataFrom": "A10",
+                    "series": [{
+                        "name": "Q1",
+                        "categories": ["甲", "乙", "丙"],
+                        "values": [1, 2, 3]
                     }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
 
     let tree = inspect_charts(&path);
@@ -479,27 +458,24 @@ fn create_writes_worksheet_chart() {
 
 #[test]
 fn create_rejects_chart_wrap() {
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("create-wrap").to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "charts": [{
-                        "type": "col",
-                        "from": "E2",
-                        "dataFrom": "A10",
-                        "wrap": "square",
-                        "series": [{ "values": [1, 2, 3] }]
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("create-wrap").to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "charts": [{
+                    "type": "col",
+                    "from": "E2",
+                    "dataFrom": "A10",
+                    "wrap": "square",
+                    "series": [{ "values": [1, 2, 3] }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("workbook.sheets[0].charts[0].wrap"));

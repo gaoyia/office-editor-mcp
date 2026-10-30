@@ -55,33 +55,30 @@ fn embed_xlsx() -> Vec<u8> {
         "embed-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [
-                        { "ref": "A2", "value": "甲" },
-                        { "ref": "A3", "value": "乙" },
-                        { "ref": "A4", "value": "丙" },
-                        { "ref": "B1", "value": "系列甲" },
-                        { "ref": "B2", "value": 1 },
-                        { "ref": "B3", "value": 2 },
-                        { "ref": "B4", "value": 3 },
-                        { "ref": "C1", "value": "系列乙" },
-                        { "ref": "C2", "value": 10 },
-                        { "ref": "C3", "value": 20 },
-                        { "ref": "C4", "value": 30 }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A2", "value": "甲" },
+                    { "ref": "A3", "value": "乙" },
+                    { "ref": "A4", "value": "丙" },
+                    { "ref": "B1", "value": "系列甲" },
+                    { "ref": "B2", "value": 1 },
+                    { "ref": "B3", "value": 2 },
+                    { "ref": "B4", "value": 3 },
+                    { "ref": "C1", "value": "系列乙" },
+                    { "ref": "C2", "value": 10 },
+                    { "ref": "C3", "value": 20 },
+                    { "ref": "C4", "value": 30 }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     std::fs::read(&path).unwrap()
 }
@@ -125,16 +122,13 @@ fn write_sample(tag: &str, combo: bool) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -142,33 +136,27 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("err.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -351,30 +339,24 @@ fn set_series_updates_cache_and_embedding_leaves_other() {
     assert!(chart.contains("<c:v>20</c:v>"));
     assert!(chart.contains("<c:v>30</c:v>"));
     let xlsx = tmp_dir().join("set-ser-embed.xlsx");
-    let RunOutput::Written { .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": out.to_string_lossy(),
-            "id": "para:AAAA0001/chart:7",
-            "output": xlsx.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": out.to_string_lossy(),
+        "id": "para:AAAA0001/chart:7",
+        "output": xlsx.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportChartData 应写出文件");
     };
-    let RunOutput::Inspect(book) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "B1:C4", "maxCells": 20 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(book) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "B1:C4", "maxCells": 20 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -541,17 +523,14 @@ fn export_chart_data_matches_embedding_bytes() {
     let path = write_sample("exp", false);
     let embed = part_bytes(&path, "word/embeddings/Microsoft_Excel_Worksheet1.xlsx");
     let out = tmp_dir().join("chart-data.xlsx");
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": path.to_string_lossy(),
-            "id": "para:AAAA0001/chart:7",
-            "output": out.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": path.to_string_lossy(),
+        "id": "para:AAAA0001/chart:7",
+        "output": out.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportChartData 应写出文件");
     };
@@ -560,17 +539,14 @@ fn export_chart_data_matches_embedding_bytes() {
         content_type.as_deref(),
         Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     );
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": path.to_string_lossy(),
-            "id": "para:AAAA0001",
-            "output": tmp_dir().join("bad.xlsx").to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": path.to_string_lossy(),
+        "id": "para:AAAA0001",
+        "output": tmp_dir().join("bad.xlsx").to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
@@ -624,99 +600,78 @@ fn add_and_delete_series_and_title_legend_labels() {
 #[test]
 fn xlsx_and_pptx_reject_charts() {
     let xlsx = tmp_dir().join("no-chart.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("no-chart-out.xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "insertChart",
-                "id": "para:AAAA0001",
-                "type": "pie",
-                "series": [{ "values": [1] }]
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("no-chart-out.xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "pie",
+            "series": [{ "values": [1] }]
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "charts": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "charts": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("xlsx 现在认 scope.charts");
     };
     assert_eq!(tree["chartCount"], 0);
     assert_eq!(tree["sheets"][0]["charts"], json!([]));
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportChartData",
-            "path": xlsx.to_string_lossy(),
-            "id": "para:AAAA0001/chart:7",
-            "output": tmp_dir().join("no.xlsx").to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartData",
+        "path": xlsx.to_string_lossy(),
+        "id": "para:AAAA0001/chart:7",
+        "output": tmp_dir().join("no.xlsx").to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let pptx = tmp_dir().join("no-chart.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "hi" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "hi" }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": tmp_dir().join("no-chart-out.pptx").to_string_lossy(),
-            "ops": [{ "op": "setChartTitle", "id": "para:AAAA0001/chart:7", "title": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": tmp_dir().join("no-chart-out.pptx").to_string_lossy(),
+        "ops": [{ "op": "setChartTitle", "id": "para:AAAA0001/chart:7", "title": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": pptx.to_string_lossy(),
-            "scope": { "charts": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": pptx.to_string_lossy(),
+        "scope": { "charts": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("pptx 现在认 scope.charts");
     };
@@ -756,32 +711,29 @@ fn embed_xlsx_bubble() -> Vec<u8> {
         "embed-b-{}.xlsx",
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [
-                        { "ref": "A2", "value": "甲" },
-                        { "ref": "A3", "value": "乙" },
-                        { "ref": "A4", "value": "丙" },
-                        { "ref": "B1", "value": "系列甲" },
-                        { "ref": "B2", "value": 1 },
-                        { "ref": "B3", "value": 2 },
-                        { "ref": "B4", "value": 3 },
-                        { "ref": "C2", "value": 4 },
-                        { "ref": "C3", "value": 5 },
-                        { "ref": "C4", "value": 6 }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A2", "value": "甲" },
+                    { "ref": "A3", "value": "乙" },
+                    { "ref": "A4", "value": "丙" },
+                    { "ref": "B1", "value": "系列甲" },
+                    { "ref": "B2", "value": 1 },
+                    { "ref": "B3", "value": 2 },
+                    { "ref": "B4", "value": 3 },
+                    { "ref": "C2", "value": 4 },
+                    { "ref": "C3", "value": 5 },
+                    { "ref": "C4", "value": 6 }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     std::fs::read(&path).unwrap()
 }

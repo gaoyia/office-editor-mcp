@@ -17,35 +17,29 @@ fn tmp_dir() -> PathBuf {
 fn create_table(tag: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect_tables(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "tables": true, "from": 1, "maxParas": 20 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "tables": true, "from": 1, "maxParas": 20 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -53,33 +47,27 @@ fn inspect_tables(path: &Path) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("should-not.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -238,30 +226,27 @@ fn set_table_width_pct_and_auto() {
 fn create_table_width_align_height() {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("create-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{
-                    "cells": [["A1", "B1"], ["A2", "B2"]],
-                    "align": "center",
-                    "indent": 120,
-                    "width": { "type": "dxa", "w": 3600 },
-                    "cols": [1800, 1800],
-                    "rowHeights": [
-                        { "h": 400, "rule": "exact" },
-                        { "h": null }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{
+                "cells": [["A1", "B1"], ["A2", "B2"]],
+                "align": "center",
+                "indent": 120,
+                "width": { "type": "dxa", "w": 3600 },
+                "cols": [1800, 1800],
+                "rowHeights": [
+                    { "h": 400, "rule": "exact" },
+                    { "h": null }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let t = &inspect_tables(&path)["tables"][0];
     assert_eq!(t["align"], "center");
@@ -313,28 +298,22 @@ fn set_table_width_rejects() {
 #[test]
 fn set_table_width_not_for_xlsx() {
     let xlsx = tmp_dir().join("t.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("t-out.xlsx").to_string_lossy(),
-            "ops": [{ "op": "setTableWidth", "id": "table:1", "w": 1440 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("t-out.xlsx").to_string_lossy(),
+        "ops": [{ "op": "setTableWidth", "id": "table:1", "w": 1440 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

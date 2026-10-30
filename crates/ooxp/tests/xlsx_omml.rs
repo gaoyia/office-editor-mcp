@@ -24,32 +24,26 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_book(tag: &str, sheet: Value) -> PathBuf {
     let path = seq_path(tag, "xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": { "sheets": [sheet] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [sheet] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -57,17 +51,14 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
@@ -192,58 +183,49 @@ fn reject_expr_and_empty_text() {
         json!({ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }),
     );
     let out = seq_path("should-not", "xlsx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{
-                "op": "insertMath",
-                "id": "sheet:Sheet1",
-                "text": "x",
-                "expr": { "type": "text", "text": "x" }
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{
+            "op": "insertMath",
+            "id": "sheet:Sheet1",
+            "text": "x",
+            "expr": { "type": "text", "text": "x" }
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 
-    let err_empty = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{
-                "op": "insertMath",
-                "id": "sheet:Sheet1",
-                "text": ""
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_empty = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{
+            "op": "insertMath",
+            "id": "sheet:Sheet1",
+            "text": ""
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_empty.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
 
 fn apply_err(path: &Path, out: &Path, ops: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 

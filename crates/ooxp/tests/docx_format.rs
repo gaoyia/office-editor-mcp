@@ -58,16 +58,13 @@ fn write_sample(tag: &str) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -75,34 +72,28 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("should-not-write.docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -372,80 +363,62 @@ fn format_ops_reject_bad_input() {
 #[test]
 fn format_not_for_xlsx_or_pptx() {
     let xlsx = tmp_dir().join("fmt.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "runs": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "runs": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     let out = tmp_dir().join("fmt-x-out.xlsx");
-    let err_op = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": [{ "op": "setParaFormat", "id": "para:1", "align": "center" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_op = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{ "op": "setParaFormat", "id": "para:1", "align": "center" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_op.code(), ErrorCode::InvalidField);
 
     let pptx = tmp_dir().join("fmt.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err_p = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": pptx.to_string_lossy(),
-            "scope": { "runs": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err_p = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": pptx.to_string_lossy(),
+        "scope": { "runs": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
     let pout = tmp_dir().join("fmt-p-out.pptx");
-    let err_p_op = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": pout.to_string_lossy(),
-            "ops": [{ "op": "setRunFormat", "id": "para:1/run:1", "bold": true }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_p_op = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": pout.to_string_lossy(),
+        "ops": [{ "op": "setRunFormat", "id": "para:1/run:1", "bold": true }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_p_op.code(), ErrorCode::InvalidField);
 }
@@ -570,33 +543,27 @@ fn para_borders_shd_tabs_and_run_remain() {
     assert_eq!(err_box.code(), ErrorCode::InvalidField);
 
     let xlsx = tmp_dir().join("remain.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let xout = tmp_dir().join("remain-x-out.xlsx");
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": xout.to_string_lossy(),
-            "ops": [{
-                "op": "setRunFormat",
-                "id": "para:AAAA0001/run:1",
-                "highlight": "yellow"
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": xout.to_string_lossy(),
+        "ops": [{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "highlight": "yellow"
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }
@@ -683,21 +650,18 @@ fn set_run_format_spacing_and_kern() {
     assert_eq!(err_k.code(), ErrorCode::InvalidField);
 
     let created = tmp_dir().join("spacing-create.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{
-                    "runs": [{ "text": "字", "spacing": 40, "kern": 28 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{
+                "runs": [{ "text": "字", "spacing": 40, "kern": 28 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree_c = inspect(&created, json!({ "from": 1, "maxParas": 5, "runs": true }));
     let rc = &tree_c["paragraphs"][0]["runs"][0];
@@ -768,52 +732,43 @@ fn set_run_format_scale() {
     assert_eq!(err601.code(), ErrorCode::InvalidField);
 
     let created = tmp_dir().join("scale-create.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{
-                    "runs": [{ "text": "字", "scale": 200 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{
+                "runs": [{ "text": "字", "scale": 200 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree_c = inspect(&created, json!({ "from": 1, "maxParas": 5, "runs": true }));
     assert_eq!(tree_c["paragraphs"][0]["runs"][0]["scale"], 200);
 
     let xlsx = tmp_dir().join("scale.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("scale-x-out.xlsx").to_string_lossy(),
-            "ops": [{
-                "op": "setRunFormat",
-                "id": "para:AAAA0001/run:1",
-                "scale": 200
-            }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("scale-x-out.xlsx").to_string_lossy(),
+        "ops": [{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "scale": 200
+        }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }

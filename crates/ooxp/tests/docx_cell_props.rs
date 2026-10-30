@@ -17,35 +17,29 @@ fn tmp_dir() -> PathBuf {
 fn create_table(tag: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.docx"));
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{ "cells": [["A1", "B1"], ["A2", "B2"]] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect_tables(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "tables": true, "from": 1, "maxParas": 20 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "tables": true, "from": 1, "maxParas": 20 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect");
     };
@@ -53,33 +47,27 @@ fn inspect_tables(path: &Path) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = tmp_dir().join("should-not.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -204,29 +192,26 @@ fn cell_remain_inspect_apply_create_and_clear() {
     assert!(!xml_c.contains("<w:headers"));
 
     let created = tmp_dir().join("remain-create.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": created.to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{ "text": "前" }],
-                "tables": [{
-                    "cells": [["A1", "B1"], ["A2", "B2"]],
-                    "cellFormats": [{
-                        "r": 1,
-                        "c": 1,
-                        "noWrap": true,
-                        "textDirection": "tbRl",
-                        "headers": ["A1"]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "前" }],
+            "tables": [{
+                "cells": [["A1", "B1"], ["A2", "B2"]],
+                "cellFormats": [{
+                    "r": 1,
+                    "c": 1,
+                    "noWrap": true,
+                    "textDirection": "tbRl",
+                    "headers": ["A1"]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree_cr = inspect_tables(&created);
     let cell_cr = cell0(&tree_cr);
@@ -256,28 +241,22 @@ fn cell_remain_inspect_apply_create_and_clear() {
     assert_eq!(err_id.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp_dir().join("remain.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp_dir().join("remain-out.xlsx").to_string_lossy(),
-            "ops": [{ "op": "setCellFormat", "id": "table:1/r1c1", "noWrap": true }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp_dir().join("remain-out.xlsx").to_string_lossy(),
+        "ops": [{ "op": "setCellFormat", "id": "table:1/r1c1", "noWrap": true }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }

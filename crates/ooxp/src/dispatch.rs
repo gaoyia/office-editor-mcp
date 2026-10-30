@@ -1,8 +1,6 @@
 //! 按 format 把信封交给 xlsx / docx / pptx。
 //! `run_bytes` 不碰磁盘。本机的 `run` 才按路径读写。
 
-use std::io;
-
 use serde_json::Value;
 
 use crate::error::{Error, ErrorKind};
@@ -83,10 +81,7 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
 
 /// 本机入口：按 JSON 里的路径读包、写结果。不编进 wasm。
 #[cfg(not(target_arch = "wasm32"))]
-pub fn run(
-    input_json: &str,
-    cli_output: Option<&std::path::Path>,
-) -> Result<crate::json::RunOutput, Error> {
+pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
     use std::fs;
     use std::path::PathBuf;
 
@@ -114,7 +109,7 @@ pub fn run(
             ops_applied,
             content_type,
         } => {
-            let path = output_path(&req, cli_output)?;
+            let path = output_path(&req)?;
             write_atomic(&path, &bytes)?;
             Ok(RunOutput::Written {
                 path,
@@ -126,18 +121,14 @@ pub fn run(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn output_path(
-    req: &Request,
-    cli_output: Option<&std::path::Path>,
-) -> Result<std::path::PathBuf, Error> {
-    use std::path::{Path, PathBuf};
+fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
+    use std::path::PathBuf;
     match req.action {
         Action::Create => req
             .obj
             .get("path")
             .and_then(Value::as_str)
             .map(PathBuf::from)
-            .or_else(|| cli_output.map(Path::to_path_buf))
             .ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::MissingField {
@@ -153,7 +144,6 @@ fn output_path(
                 .get("output")
                 .and_then(Value::as_str)
                 .map(PathBuf::from)
-                .or_else(|| cli_output.map(Path::to_path_buf))
                 .unwrap_or_else(|| PathBuf::from(path)))
         }
         Action::ExportMedia | Action::ExportChartData => req
@@ -161,7 +151,6 @@ fn output_path(
             .get("output")
             .and_then(Value::as_str)
             .map(PathBuf::from)
-            .or_else(|| cli_output.map(Path::to_path_buf))
             .ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::MissingField {
@@ -226,28 +215,27 @@ fn screen(req: &Request) -> Result<(), Error> {
                 "locale",
             ],
         ),
-        Action::ExportMedia | Action::ExportChartData => deny_unknown(
-            &req.obj,
-            &[
-                "schemaVersion",
-                "action",
-                "path",
-                "format",
-                "id",
-                "output",
-                "locale",
-            ],
-        ),
+        Action::ExportMedia | Action::ExportChartData => {
+            deny_unknown(
+                &req.obj,
+                &[
+                    "schemaVersion",
+                    "action",
+                    "path",
+                    "format",
+                    "id",
+                    "output",
+                    "locale",
+                ],
+            )?;
+            str_field(&req.obj, "output")?;
+            Ok(())
+        }
     }
 }
 
 fn require_package(package: Option<&[u8]>) -> Result<&[u8], Error> {
-    package.ok_or_else(|| {
-        Error::from(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "package bytes are required",
-        ))
-    })
+    package.ok_or_else(|| Error::new(ErrorKind::PackageRequired))
 }
 
 fn help_value(req: &Request) -> Result<Value, Error> {
@@ -542,5 +530,15 @@ mod tests {
             panic!("inspect 应返回树");
         };
         assert_eq!(tree["sheets"][0]["name"], "Sheet1");
+    }
+
+    #[test]
+    fn inspect_without_package_bytes_is_invalid_field() {
+        let request = r#"{"schemaVersion":1,"action":"inspect","path":"a.xlsx"}"#;
+        let err = run_bytes(request, None, &[]).unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::InvalidField);
+        let body = err.to_json(crate::Lang::En);
+        assert_eq!(body["error"]["message"], "Package bytes are required");
+        assert!(body["error"].get("path").is_none());
     }
 }

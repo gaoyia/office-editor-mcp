@@ -47,7 +47,7 @@ cargo test
 ## 命令行
 
 ```text
-ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
+ooxp [--input <文件|->] [--lang <标签>] [--pretty]
 ```
 
 除 `mcp` 外没有子命令。不带 `mcp` 时，动作由 JSON 的 `action` 决定。`--input` 省略或写成 `-` 时从 stdin 读。成功的 JSON 写到 stdout，失败的 JSON 写到 stderr。

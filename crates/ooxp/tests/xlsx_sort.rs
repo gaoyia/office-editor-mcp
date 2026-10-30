@@ -22,41 +22,35 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [
-                        { "ref": "A1", "value": 3 },
-                        { "ref": "A2", "value": 1 },
-                        { "ref": "A3", "value": 2 }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": 3 },
+                    { "ref": "A2", "value": 1 },
+                    { "ref": "A3", "value": 2 }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_tree(path: &Path) -> serde_json::Value {
@@ -64,16 +58,13 @@ fn inspect_tree(path: &Path) -> serde_json::Value {
 }
 
 fn inspect_tree_scope(path: &Path, scope: serde_json::Value) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -276,29 +267,26 @@ fn rejects_missing_ref_and_out_of_range() {
 #[test]
 fn create_writes_sort_state() {
     let path = tmp("create-sort");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [
-                        { "ref": "A1", "value": 3 },
-                        { "ref": "A2", "value": 1 },
-                        { "ref": "A3", "value": 2 }
-                    ],
-                    "sortState": {
-                        "ref": "A1:A3",
-                        "columns": [{ "ref": "A1:A3", "descending": true }]
-                    }
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": 3 },
+                    { "ref": "A2", "value": 1 },
+                    { "ref": "A3", "value": 2 }
+                ],
+                "sortState": {
+                    "ref": "A1:A3",
+                    "columns": [{ "ref": "A1:A3", "descending": true }]
+                }
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let st = &inspect_tree(&path)["sheets"][0]["sortState"];
     assert_eq!(st["ref"], json!("A1:A3"));

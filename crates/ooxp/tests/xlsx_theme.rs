@@ -43,47 +43,38 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_xlsx(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -296,24 +287,21 @@ fn set_theme_override_and_clear() {
 #[test]
 fn create_writes_theme_and_keeps_default_without() {
     let with_theme = tmp("create-theme");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": with_theme.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }],
-                "theme": {
-                    "name": "Office Theme",
-                    "colors": { "accent1": "FF0000" },
-                    "fonts": { "majorLatin": "Arial" }
-                }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": with_theme.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }],
+            "theme": {
+                "name": "Office Theme",
+                "colors": { "accent1": "FF0000" },
+                "fonts": { "majorLatin": "Arial" }
             }
-        })
-        .to_string(),
-        None,
-    )
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect(&with_theme);
     assert_eq!(tree["theme"]["name"], "Office Theme");

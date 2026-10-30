@@ -46,45 +46,36 @@ fn write_png(tag: &str, bytes: &[u8]) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_pics(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -153,15 +144,12 @@ fn insert_one(src: &Path, out: &Path, png: &Path) {
 #[test]
 fn inspect_picture_count_without_list() {
     let path = create_deck("count");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -264,17 +252,14 @@ fn insert_inspect_replace_size_pos_delete_export() {
     assert_eq!(after_pos["slides"][0]["pictures"][0]["cx"], 2743200);
 
     let exported = tmp("exp").with_extension("png");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": moved.to_string_lossy(),
-            "id": "slide:1/pic:3",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": moved.to_string_lossy(),
+        "id": "slide:1/pic:3",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1_B);
 
@@ -380,52 +365,40 @@ fn wrap_and_anchor_still_rejected_on_pptx() {
 #[test]
 fn set_picture_pos_rejected_on_xlsx_and_docx() {
     let xlsx = tmp("pos").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "ops": [{ "op": "setPicturePos", "id": "sheet:Sheet1/pic:1", "x": 1 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "ops": [{ "op": "setPicturePos", "id": "sheet:Sheet1/pic:1", "x": 1 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("pos").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": docx.to_string_lossy(),
-            "ops": [{ "op": "setPicturePos", "id": "para:index:1/pic:1", "x": 1 }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": docx.to_string_lossy(),
+        "ops": [{ "op": "setPicturePos", "id": "para:index:1/pic:1", "x": 1 }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -445,16 +418,13 @@ fn set_shape_text_does_not_touch_picture() {
     .unwrap();
     let tree = inspect_pics(&out);
     assert_eq!(tree["slides"][0]["pictures"][0]["id"], "slide:1/pic:3");
-    let RunOutput::Inspect(scoped) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(scoped) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -465,36 +435,33 @@ fn set_shape_text_does_not_touch_picture() {
 fn create_writes_two_pictures() {
     let png = write_png("create", PNG_1X1);
     let path = tmp("create-pics").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "pictures": [
-                        {
-                            "file": png.to_string_lossy(),
-                            "x": 914400,
-                            "y": 1828800,
-                            "cx": 1828800,
-                            "cy": 1828800
-                        },
-                        {
-                            "file": png.to_string_lossy(),
-                            "x": 3657600,
-                            "y": 1828800,
-                            "cx": 1828800,
-                            "cy": 1828800
-                        }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "pictures": [
+                    {
+                        "file": png.to_string_lossy(),
+                        "x": 914400,
+                        "y": 1828800,
+                        "cx": 1828800,
+                        "cy": 1828800
+                    },
+                    {
+                        "file": png.to_string_lossy(),
+                        "x": 3657600,
+                        "y": 1828800,
+                        "cx": 1828800,
+                        "cy": 1828800
+                    }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
 
     let tree = inspect_pics(&path);
@@ -518,18 +485,15 @@ fn create_writes_two_pictures() {
 #[test]
 fn create_empty_pictures_writes_no_pic() {
     let path = tmp("empty-pics").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "pictures": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "pictures": [] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_pics(&path);
     assert_eq!(tree["pictureCount"], 0);
@@ -540,23 +504,20 @@ fn create_empty_pictures_writes_no_pic() {
 #[test]
 fn create_rejects_kind_one_size_and_shape_pictures() {
     let png = write_png("bad", PNG_1X1);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("kind").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "pictures": [{
-                        "file": png.to_string_lossy(),
-                        "kind": "inline"
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("kind").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "pictures": [{
+                    "file": png.to_string_lossy(),
+                    "kind": "inline"
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -564,38 +525,32 @@ fn create_rejects_kind_one_size_and_shape_pictures() {
         Some("presentation.slides[0].pictures[0].kind")
     );
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("onesz").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "pictures": [{ "file": png.to_string_lossy(), "cx": 914400 }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("onesz").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "pictures": [{ "file": png.to_string_lossy(), "cx": 914400 }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("presentation.slides[0].pictures[0]"));
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("shapepic").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "a", "pictures": [] }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("shapepic").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "a", "pictures": [] }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -603,16 +558,13 @@ fn create_rejects_kind_one_size_and_shape_pictures() {
         Some("presentation.slides[0].shapes[0].pictures")
     );
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("nofile").with_extension("pptx").to_string_lossy(),
-            "presentation": { "slides": [{ "pictures": [{ "x": 0, "y": 0 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("nofile").with_extension("pptx").to_string_lossy(),
+        "presentation": { "slides": [{ "pictures": [{ "x": 0, "y": 0 }] }] }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -635,16 +587,13 @@ fn picture_descr_newline_survives_shape_text_edit() {
     patched.insert_str(end, " descr=\"line1&#10;line2\"");
     rewrite_part(&with_pic, slide, &patched);
 
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": with_pic.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": with_pic.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

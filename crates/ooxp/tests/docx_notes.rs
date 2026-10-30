@@ -75,16 +75,13 @@ fn write_png(tag: &str) -> PathBuf {
 }
 
 fn inspect(path: &Path, scope: serde_json::Value) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -92,33 +89,27 @@ fn inspect(path: &Path, scope: serde_json::Value) -> serde_json::Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: serde_json::Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: serde_json::Value) -> ooxp::Error {
     let out = tmp_dir().join("err.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -315,16 +306,13 @@ fn insert_and_delete_footnote() {
 #[test]
 fn insert_footnote_creates_part_on_create_file() {
     let path = tmp_dir().join("create-host.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hello" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hello" }] }
+    })
+    .to_string())
     .unwrap();
     let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 5 }));
     let para = tree0["paragraphs"][0]["id"].as_str().unwrap();

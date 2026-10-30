@@ -21,37 +21,31 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> Value {
@@ -63,16 +57,13 @@ fn inspect_tables(path: &Path) -> Value {
 }
 
 fn inspect_scope(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -397,29 +388,26 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
 #[test]
 fn create_with_tables() {
     let path = tmp("create");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 2,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cx": 5486400,
-                        "cy": 3200400,
-                        "cells": [["甲", "乙"], ["丙", "丁"]]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 2,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cx": 5486400,
+                    "cy": 3200400,
+                    "cells": [["甲", "乙"], ["丙", "丁"]]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     assert_eq!(tree["tableCount"], 1);
@@ -520,16 +508,13 @@ fn wrong_ids_and_missing_fields() {
 #[test]
 fn docx_and_xlsx_reject_pptx_table_ops() {
     let docx = tmp("d").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &docx,
@@ -540,16 +525,13 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let xlsx = tmp("x").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &xlsx,
@@ -635,31 +617,28 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
 #[test]
 fn table_grid_widths_and_heights() {
     let path = tmp("grid-create");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 2,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cx": 5486400,
-                        "cy": 3200400,
-                        "colWidths": [1270000, 2540000],
-                        "rowHeights": [635000, 1270000],
-                        "cells": [["甲", "乙"], ["丙", "丁"]]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 2,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cx": 5486400,
+                    "cy": 3200400,
+                    "colWidths": [1270000, 2540000],
+                    "rowHeights": [635000, 1270000],
+                    "cells": [["甲", "乙"], ["丙", "丁"]]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     let t = &tree["slides"][0]["tables"][0];
@@ -741,43 +720,40 @@ fn table_grid_widths_and_heights() {
 #[test]
 fn table_cell_fill_and_borders() {
     let path = tmp("fill-create");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 2,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cells": [
-                            [
-                                {
-                                    "text": "甲",
-                                    "fill": "ff0000",
-                                    "borders": {
-                                        "left": {
-                                            "color": "000000",
-                                            "width": 12700,
-                                            "dash": "dash"
-                                        }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 2,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cells": [
+                        [
+                            {
+                                "text": "甲",
+                                "fill": "ff0000",
+                                "borders": {
+                                    "left": {
+                                        "color": "000000",
+                                        "width": 12700,
+                                        "dash": "dash"
                                     }
-                                },
-                                "乙"
-                            ],
-                            ["丙", "丁"]
-                        ]
-                    }]
+                                }
+                            },
+                            "乙"
+                        ],
+                        ["丙", "丁"]
+                    ]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
@@ -943,40 +919,37 @@ fn table_cell_fill_and_borders() {
 #[test]
 fn table_cell_inset() {
     let path = tmp("mar-create");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "tables": [{
-                        "rows": 2,
-                        "cols": 2,
-                        "x": 914400,
-                        "y": 1828800,
-                        "cells": [
-                            [
-                                {
-                                    "text": "甲",
-                                    "cellMar": {
-                                        "top": 12700,
-                                        "left": 25400,
-                                        "bottom": 0
-                                    }
-                                },
-                                "乙"
-                            ],
-                            ["丙", "丁"]
-                        ]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "tables": [{
+                    "rows": 2,
+                    "cols": 2,
+                    "x": 914400,
+                    "y": 1828800,
+                    "cells": [
+                        [
+                            {
+                                "text": "甲",
+                                "cellMar": {
+                                    "top": 12700,
+                                    "left": 25400,
+                                    "bottom": 0
+                                }
+                            },
+                            "乙"
+                        ],
+                        ["丙", "丁"]
+                    ]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_tables(&path);
     let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];

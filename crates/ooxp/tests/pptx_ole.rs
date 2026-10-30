@@ -23,52 +23,43 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn create_xlsx(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": "嵌入" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "嵌入" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, scope: Value) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -76,17 +67,14 @@ fn inspect(path: &Path, scope: Value) -> Value {
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
 }
 
 fn object_keys(v: &Value) -> Vec<&str> {
@@ -281,17 +269,14 @@ fn export_media_matches_embedding_bytes() {
     let tree = inspect(&deck, json!({ "oleObjects": true }));
     let id = tree["slides"][0]["oleObjects"][0]["id"].as_str().unwrap();
     let out = tmp("export").with_extension("xlsx");
-    let RunOutput::Written { content_type, .. } = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": deck.to_string_lossy(),
-            "id": id,
-            "output": out.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Written { content_type, .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": deck.to_string_lossy(),
+        "id": id,
+        "output": out.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("exportMedia 应写出文件");
     };
@@ -375,16 +360,13 @@ fn wrong_ids_and_xlsx_reject() {
     assert!(!out.exists());
 
     let book = tmp("xlsx-ole").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": book.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": book.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &book,
@@ -394,34 +376,28 @@ fn wrong_ids_and_xlsx_reject() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": book.to_string_lossy(),
-            "scope": { "oleObjects": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": book.to_string_lossy(),
+        "scope": { "oleObjects": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("xlsx inspect oleObjects 应返回树");
     };
     assert_eq!(tree["oleObjectCount"], 0);
     assert_eq!(tree["sheets"][0]["oleObjects"], json!([]));
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("create-ole").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "fields": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("create-ole").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "fields": [] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -429,28 +405,22 @@ fn wrong_ids_and_xlsx_reject() {
 #[test]
 fn xlsx_export_media_rejects_pptx_ole_id() {
     let book = tmp("xlsx-export").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": book.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": book.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": book.to_string_lossy(),
-            "id": "slide:1/ole:4",
-            "output": tmp("xlsx-ole.png").to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": book.to_string_lossy(),
+        "id": "slide:1/ole:4",
+        "output": tmp("xlsx-ole.png").to_string_lossy()
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }

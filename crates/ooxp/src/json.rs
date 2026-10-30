@@ -255,35 +255,11 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
             None => PathBuf::from(name),
         }
     };
-    let bak = {
-        let mut name = path
-            .file_name()
-            .unwrap_or_else(|| std::ffi::OsStr::new("ooxp"))
-            .to_os_string();
-        name.push(".ooxp.bak");
-        match parent {
-            Some(dir) => dir.join(name),
-            None => PathBuf::from(name),
-        }
-    };
 
     fs::write(&tmp, bytes).map_err(|e| io_path(e, tmp.clone()))?;
-
-    let had_dest = path.exists();
-    if had_dest {
-        fs::rename(path, &bak).map_err(|e| io_path(e, path.to_path_buf()))?;
-    }
     if let Err(e) = fs::rename(&tmp, path) {
-        if had_dest {
-            if let Err(restore) = fs::rename(&bak, path) {
-                return Err(io_path(restore, path.to_path_buf()));
-            }
-        }
         let _ = fs::remove_file(&tmp);
         return Err(io_path(e, path.to_path_buf()));
-    }
-    if had_dest {
-        fs::remove_file(&bak).map_err(|err| io_path(err, bak))?;
     }
     Ok(())
 }

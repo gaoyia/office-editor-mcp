@@ -28,44 +28,35 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -73,16 +64,13 @@ fn inspect_bare(path: &Path) -> Value {
 }
 
 fn inspect_smart(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "smartArt": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "smartArt": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -418,28 +406,25 @@ fn insert_rejects_kind_wrap() {
 #[test]
 fn create_smartarts_and_empty_and_rejects() {
     let path = tmp("create").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "标题" }],
-                    "smartArts": [{
-                        "layout": "list",
-                        "points": [
-                            { "text": "甲" },
-                            { "text": "乙" },
-                            { "text": "丙" }
-                        ]
-                    }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "标题" }],
+                "smartArts": [{
+                    "layout": "list",
+                    "points": [
+                        { "text": "甲" },
+                        { "text": "乙" },
+                        { "text": "丙" }
+                    ]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_smart(&path);
     assert_eq!(tree["smartArtCount"], 1);
@@ -452,18 +437,15 @@ fn create_smartarts_and_empty_and_rejects() {
         .any(|n| n == "ppt/diagrams/data1.xml"));
 
     let empty = tmp("empty").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": empty.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "smartArts": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": empty.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "a" }], "smartArts": [] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_smart(&empty);
     assert_eq!(tree["smartArtCount"], 0);
@@ -472,73 +454,61 @@ fn create_smartarts_and_empty_and_rejects() {
         .iter()
         .any(|n| n.contains("diagrams/data")));
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("kind").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "a" }],
-                    "smartArts": [{ "layout": "list", "kind": "anchor" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("kind").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "a" }],
+                "smartArts": [{ "layout": "list", "kind": "anchor" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("wrap").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "a" }],
-                    "smartArts": [{ "layout": "list", "wrap": "square" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("wrap").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "a" }],
+                "smartArts": [{ "layout": "list", "wrap": "square" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("from").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "slides": [{
-                    "shapes": [{ "text": "a" }],
-                    "smartArts": [{ "layout": "list", "from": "A1" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("from").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{ "text": "a" }],
+                "smartArts": [{ "layout": "list", "from": "A1" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("root").with_extension("pptx").to_string_lossy(),
-            "presentation": {
-                "smartArts": [{ "layout": "list" }],
-                "slides": [{ "shapes": [{ "text": "a" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("root").with_extension("pptx").to_string_lossy(),
+        "presentation": {
+            "smartArts": [{ "layout": "list" }],
+            "slides": [{ "shapes": [{ "text": "a" }] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
@@ -546,27 +516,21 @@ fn create_smartarts_and_empty_and_rejects() {
 #[test]
 fn xlsx_accepts_smartart_scope() {
     let path = tmp("book").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
+    })
+    .to_string())
     .unwrap();
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "smartArt": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "smartArt": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -577,16 +541,13 @@ fn xlsx_accepts_smartart_scope() {
 #[test]
 fn docx_xlsx_reject_set_smartart_pos() {
     let docx = tmp("d").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &docx,
@@ -597,16 +558,13 @@ fn docx_xlsx_reject_set_smartart_pos() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let xlsx = tmp("x").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [] }] }
+    })
+    .to_string())
     .unwrap();
     let err = apply(
         &xlsx,

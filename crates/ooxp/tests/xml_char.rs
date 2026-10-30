@@ -35,9 +35,7 @@ fn xlsx_create_rejects_a_control_char_and_writes_nothing() {
             "path": path,
             "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": "a\u{0001}b" }] }] }
         })
-        .to_string(),
-        None,
-    )
+        .to_string())
     .unwrap_err();
     assert_rejected(err, "workbook.sheets[0].cells[0].value", "U+0001");
     assert!(!path.exists());
@@ -46,16 +44,13 @@ fn xlsx_create_rejects_a_control_char_and_writes_nothing() {
 #[test]
 fn docx_create_rejects_vertical_tab() {
     let path = tmp("docx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path,
-            "document": { "paragraphs": [{ "text": "x\u{000B}y" }] }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path,
+        "document": { "paragraphs": [{ "text": "x\u{000B}y" }] }
+    })
+    .to_string())
     .unwrap_err();
     assert_rejected(err, "document.paragraphs[0].text", "U+000B");
     assert!(!path.exists());
@@ -64,28 +59,22 @@ fn docx_create_rejects_vertical_tab() {
 #[test]
 fn pptx_apply_rejects_a_control_char_without_touching_the_file() {
     let path = tmp("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path,
-            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path,
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    })
+    .to_string())
     .unwrap();
     let before = std::fs::read(&path).unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path,
-            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "a\u{0001}b" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path,
+        "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "a\u{0001}b" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_rejected(err, "ops[0].text", "U+0001");
     assert_eq!(std::fs::read(&path).unwrap(), before);
@@ -93,15 +82,12 @@ fn pptx_apply_rejects_a_control_char_without_touching_the_file() {
 
 #[test]
 fn illegal_key_is_rejected() {
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "help",
-            "\u{0001}": 1
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "help",
+        "\u{0001}": 1
+    })
+    .to_string())
     .unwrap_err();
     assert_rejected(err, "", "U+0001");
 }
@@ -109,21 +95,18 @@ fn illegal_key_is_rejected() {
 #[test]
 fn tab_lf_cr_cjk_and_emoji_are_allowed() {
     let path = tmp("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path,
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": "a\tb\nc\r中文😀" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path,
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "a\tb\nc\r中文😀" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     assert!(path.exists());
     let _ = std::fs::remove_file(path);

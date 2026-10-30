@@ -46,45 +46,36 @@ fn write_png(tag: &str, bytes: &[u8]) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_pics(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -153,15 +144,12 @@ fn insert_one(src: &Path, out: &Path, png: &Path) {
 #[test]
 fn inspect_picture_count_without_list() {
     let path = create_book("count");
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -257,17 +245,14 @@ fn insert_inspect_replace_size_anchor_delete_export() {
     assert_eq!(after_move["sheets"][0]["pictures"][0]["anchor"], "oneCell");
 
     let exported = tmp("exp").with_extension("png");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": moved.to_string_lossy(),
-            "id": "sheet:Sheet1/pic:1",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": moved.to_string_lossy(),
+        "id": "sheet:Sheet1/pic:1",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1_B);
 
@@ -405,16 +390,13 @@ fn insert_and_set_cell_share_sheet() {
         ]),
     )
     .unwrap();
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "A1", "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1", "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -618,30 +600,27 @@ fn insert_into_excel_like_drawing_adds_r_ns_and_short_rel() {
 fn create_writes_one_cell_and_two_cell() {
     let png = write_png("create", PNG_1X1);
     let path = tmp("create-pics").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [{ "ref": "A1", "value": 1 }],
-                    "pictures": [
-                        { "file": png.to_string_lossy(), "from": "B2" },
-                        {
-                            "file": png.to_string_lossy(),
-                            "from": "D2",
-                            "to": "F8",
-                            "anchor": "twoCell"
-                        }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 1 }],
+                "pictures": [
+                    { "file": png.to_string_lossy(), "from": "B2" },
+                    {
+                        "file": png.to_string_lossy(),
+                        "from": "D2",
+                        "to": "F8",
+                        "anchor": "twoCell"
+                    }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
 
     let tree = inspect_pics(&path);
@@ -667,25 +646,22 @@ fn create_writes_one_cell_and_two_cell() {
 #[test]
 fn create_rejects_kind_wrap_and_missing_from() {
     let png = write_png("bad", PNG_1X1);
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("kind").with_extension("xlsx").to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "pictures": [{
-                        "file": png.to_string_lossy(),
-                        "from": "B2",
-                        "kind": "inline"
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("kind").with_extension("xlsx").to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "pictures": [{
+                    "file": png.to_string_lossy(),
+                    "from": "B2",
+                    "kind": "inline"
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -693,21 +669,18 @@ fn create_rejects_kind_wrap_and_missing_from() {
         Some("workbook.sheets[0].pictures[0].kind")
     );
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("nofrom").with_extension("xlsx").to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "pictures": [{ "file": png.to_string_lossy() }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("nofrom").with_extension("xlsx").to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "pictures": [{ "file": png.to_string_lossy() }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(
@@ -715,27 +688,24 @@ fn create_rejects_kind_wrap_and_missing_from() {
         Some("workbook.sheets[0].pictures[0].from")
     );
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": tmp("chart-kind").with_extension("xlsx").to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "charts": [{
-                        "type": "col",
-                        "from": "E2",
-                        "dataFrom": "A10",
-                        "kind": "inline",
-                        "series": [{ "values": [1, 2, 3] }]
-                    }]
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": tmp("chart-kind").with_extension("xlsx").to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "charts": [{
+                    "type": "col",
+                    "from": "E2",
+                    "dataFrom": "A10",
+                    "kind": "inline",
+                    "series": [{ "values": [1, 2, 3] }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("workbook.sheets[0].charts[0].kind"));
@@ -744,18 +714,15 @@ fn create_rejects_kind_wrap_and_missing_from() {
 #[test]
 fn create_empty_charts_writes_no_chart() {
     let path = tmp("empty-charts").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "charts": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "charts": [] }]
+        }
+    })
+    .to_string())
     .unwrap();
     assert!(!part_names(&path).iter().any(|n| n.contains("charts")));
     assert!(!part_names(&path).iter().any(|n| n.contains("drawings")));
@@ -764,18 +731,15 @@ fn create_empty_charts_writes_no_chart() {
 #[test]
 fn create_empty_pictures_writes_no_drawing() {
     let path = tmp("empty-pics").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "pictures": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "pictures": [] }]
+        }
+    })
+    .to_string())
     .unwrap();
     assert!(!part_names(&path).iter().any(|n| n.contains("drawings")));
 }
@@ -784,42 +748,36 @@ fn create_empty_pictures_writes_no_drawing() {
 fn create_picture_then_chart_shares_drawing() {
     let png = write_png("pic-then-chart", PNG_1X1);
     let path = tmp("pic-then-chart").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "pictures": [{ "file": png.to_string_lossy(), "from": "B2" }],
-                    "charts": [{
-                        "type": "col",
-                        "from": "E2",
-                        "dataFrom": "A10",
-                        "series": [{
-                            "name": "Q1",
-                            "categories": ["甲", "乙", "丙"],
-                            "values": [1, 2, 3]
-                        }]
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "pictures": [{ "file": png.to_string_lossy(), "from": "B2" }],
+                "charts": [{
+                    "type": "col",
+                    "from": "E2",
+                    "dataFrom": "A10",
+                    "series": [{
+                        "name": "Q1",
+                        "categories": ["甲", "乙", "丙"],
+                        "values": [1, 2, 3]
                     }]
                 }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "pictures": true, "charts": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "pictures": true, "charts": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

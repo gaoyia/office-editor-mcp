@@ -37,49 +37,40 @@ fn write_png(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag).with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_bare(path: &Path) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -91,16 +82,13 @@ fn inspect_notes(path: &Path, pictures: bool) -> Value {
     if pictures {
         scope["pictures"] = json!(true);
     }
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -273,16 +261,13 @@ fn set_shape_text_on_notes_and_rejects_slide_image() {
     .unwrap();
     let tree = inspect_notes(&out, false);
     assert_eq!(body_text(&tree["slides"][0]["notes"]), "改过的备注");
-    let scoped = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let scoped = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap();
     let RunOutput::Inspect(slide_tree) = scoped else {
         panic!();
@@ -319,16 +304,13 @@ fn notes_and_slide_text_do_not_cross() {
     .unwrap();
     let notes = inspect_notes(&out, false);
     assert_eq!(body_text(&notes["slides"][0]["notes"]), "备注新字");
-    let RunOutput::Inspect(slide_tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(slide_tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "slide": 1 }
+    })
+    .to_string())
     .unwrap() else {
         panic!();
     };
@@ -390,17 +372,14 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
     );
 
     let exported = tmp("exp").with_extension("png");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "exportMedia",
-            "path": out.to_string_lossy(),
-            "id": "slide:1/notes/pic:5",
-            "output": exported.to_string_lossy()
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": out.to_string_lossy(),
+        "id": "slide:1/notes/pic:5",
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
 
@@ -449,54 +428,42 @@ fn rejects_bad_ids_and_foreign_formats() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let xlsx = tmp("book").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": tmp("xlsx").with_extension("xlsx").to_string_lossy(),
-            "ops": [{ "op": "setNotesText", "id": "slide:1", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": tmp("xlsx").with_extension("xlsx").to_string_lossy(),
+        "ops": [{ "op": "setNotesText", "id": "slide:1", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp("doc").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "hi" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "hi" }] }
+    })
+    .to_string())
     .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": docx.to_string_lossy(),
-            "output": tmp("docx").with_extension("docx").to_string_lossy(),
-            "ops": [{ "op": "setNotesText", "id": "slide:1", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": docx.to_string_lossy(),
+        "output": tmp("docx").with_extension("docx").to_string_lossy(),
+        "ops": [{ "op": "setNotesText", "id": "slide:1", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }

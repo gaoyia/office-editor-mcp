@@ -22,60 +22,51 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_book(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "cells": [
-                        { "ref": "A1", "value": "产品" },
-                        { "ref": "B1", "value": "数量" },
-                        { "ref": "C1", "value": "金额" },
-                        { "ref": "A2", "value": "甲" },
-                        { "ref": "B2", "value": 1 },
-                        { "ref": "C2", "value": 10 },
-                        { "ref": "A3", "value": "乙" },
-                        { "ref": "B3", "value": 2 },
-                        { "ref": "C3", "value": 20 }
-                    ]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": "产品" },
+                    { "ref": "B1", "value": "数量" },
+                    { "ref": "C1", "value": "金额" },
+                    { "ref": "A2", "value": "甲" },
+                    { "ref": "B2", "value": 1 },
+                    { "ref": "C2", "value": 10 },
+                    { "ref": "A3", "value": "乙" },
+                    { "ref": "B3", "value": 2 },
+                    { "ref": "C3", "value": 20 }
+                ]
+            }]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_sheet(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "A1:C4" }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1:C4" }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -83,15 +74,12 @@ fn inspect_sheet(path: &Path) -> serde_json::Value {
 }
 
 fn inspect_noscope(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };

@@ -265,7 +265,7 @@
       "limits": "已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
       "limitsEn": "A file that already exists uses apply. xlsx uses workbook, docx uses document, and pptx uses presentation. Do not write all three together.",
       "type": "object",
-      "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
+      "comment": "path 必填。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
         "action"
       ],
@@ -321,7 +321,7 @@
       "limits": "不改源文件，字节也不进 inspect 树。",
       "limitsEn": "Does not modify the source file, and the bytes are not placed in the inspect tree.",
       "type": "object",
-      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "comment": "output 必填。不得默认写成源 path。",
       "required": [
         "action",
         "path",
@@ -471,7 +471,7 @@
       "limits": "不改源文件，不算公式。",
       "limitsEn": "Does not modify the source file and does not evaluate formulas.",
       "type": "object",
-      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "comment": "output 必填。不得默认写成源 path。",
       "required": [
         "action",
         "path",

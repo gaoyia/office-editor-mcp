@@ -24,37 +24,31 @@ fn tmp(tag: &str) -> PathBuf {
 
 fn create_deck(tag: &str) -> PathBuf {
     let path = tmp(tag);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "slides": [
-                    { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
-                    { "shapes": [{ "text": "第二页" }] }
-                ]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "标题" }, { "text": "第二框" }] },
+                { "shapes": [{ "text": "第二页" }] }
+            ]
+        }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect(path: &Path) -> Value {
@@ -74,23 +68,20 @@ fn inspect_scope_opt(path: &Path, scope: Option<Value>) -> Value {
     if let Some(scope) = scope {
         req["scope"] = scope;
     }
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     tree
 }
 
 fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -398,18 +389,15 @@ fn set_timing_is_unsupported_and_create_rejects_timing_field() {
     assert!(!dest.exists());
 
     let bad = tmp("create-timing");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": bad.to_string_lossy(),
-            "presentation": {
-                "slides": [{ "shapes": [{ "text": "甲" }], "timing": [] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": bad.to_string_lossy(),
+        "presentation": {
+            "slides": [{ "shapes": [{ "text": "甲" }], "timing": [] }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!bad.exists());
@@ -418,31 +406,25 @@ fn set_timing_is_unsupported_and_create_rejects_timing_field() {
 #[test]
 fn xlsx_and_docx_reject_scope_timing() {
     let xlsx = tmp_dir().join("scope.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&xlsx, json!({ "timing": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let docx = tmp_dir().join("scope.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "甲" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&docx, json!({ "timing": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
@@ -712,16 +694,13 @@ fn insert_anim_rejects_bad_fields() {
 #[test]
 fn xlsx_and_docx_reject_insert_anim() {
     let docx = tmp("d").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let dest = tmp("d-out").with_extension("docx");
     let err = apply(
@@ -734,16 +713,13 @@ fn xlsx_and_docx_reject_insert_anim() {
     assert!(!dest.exists());
 
     let xlsx = tmp("x").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let dest = tmp("x-out").with_extension("xlsx");
     let err = apply(
@@ -1039,16 +1015,13 @@ fn master_placeholder_anim_writes_on_master_xml() {
 #[test]
 fn xlsx_and_docx_reject_set_anim() {
     let docx = tmp("d-set").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let dest = tmp("d-set-out").with_extension("docx");
     let err = apply(
@@ -1061,16 +1034,13 @@ fn xlsx_and_docx_reject_set_anim() {
     assert!(!dest.exists());
 
     let xlsx = tmp("x-set").with_extension("xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1" }] }
+    })
+    .to_string())
     .unwrap();
     let dest = tmp("x-set-out").with_extension("xlsx");
     let err = apply(
@@ -1321,16 +1291,13 @@ fn xlsx_and_docx_reject_move_anim() {
     assert!(!dest.exists());
 
     let docx = tmp("d-mv").with_extension("docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "a" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "a" }] }
+    })
+    .to_string())
     .unwrap();
     let dest = tmp("d-mv-out").with_extension("docx");
     let err = apply(

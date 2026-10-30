@@ -1784,9 +1784,9 @@ pptx 母版 `theme.fonts` 同一套字段。pptx 页级 `themeOverride` 挂在�
 带框内表、框内链、段边框底纹制表位、`runs[]`、组合与 `writePassword` 的示例见 `docs/examples/docx-create-round5.json`。
 
 - **`path`**
-  - 输出路径
+  - 输出路径，必填
   - 已存在则覆盖
-  - 省略时必须由调用方另给落盘路径，命令行用 `--output`
+  - 缺了报 `MissingField`
 - **`document.paragraphs`**
   - 段落列表
   - 可空

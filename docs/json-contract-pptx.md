@@ -1246,9 +1246,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 ```
 
 - **`path`**
-  - 输出路径
+  - 输出路径，必填
   - 已存在则覆盖
-  - 省略时必须由调用方另给落盘路径，命令行用 `--output`
+  - 缺了报 `MissingField`
 - **`presentation.slides`**
   - 页列表
   - 可空

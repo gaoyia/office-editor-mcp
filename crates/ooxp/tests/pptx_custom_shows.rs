@@ -26,32 +26,26 @@ fn create_deck(tag: &str, n: usize) -> PathBuf {
     let slides: Vec<Value> = (1..=n)
         .map(|i| json!({ "shapes": [{ "text": format!("页{i}") }] }))
         .collect();
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": { "slides": slides }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": { "slides": slides }
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn apply(src: &Path, out: &Path, ops: Value) -> Result<RunOutput, ooxp::Error> {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": src.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops,
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops,
+    })
+    .to_string())
 }
 
 fn inspect_scope(path: &Path, scope: Option<Value>) -> Value {
@@ -63,23 +57,20 @@ fn inspect_scope(path: &Path, scope: Option<Value>) -> Value {
     if let Some(scope) = scope {
         req["scope"] = scope;
     }
-    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+    let RunOutput::Inspect(tree) = run(&req.to_string()).unwrap() else {
         panic!("inspect 应返回树");
     };
     tree
 }
 
 fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": scope
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -458,19 +449,16 @@ fn rejects_bad_id_empty_name_taken_and_need_field() {
 #[test]
 fn create_empty_custom_shows_ok() {
     let path = tmp("create-cs").with_extension("pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "presentation": {
-                "customShows": [],
-                "slides": [{ "shapes": [{ "text": "甲" }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "customShows": [],
+            "slides": [{ "shapes": [{ "text": "甲" }] }]
+        }
+    })
+    .to_string())
     .unwrap();
     let tree = inspect_scope(&path, Some(json!({ "customShows": true })));
     assert_eq!(tree["customShowCount"], 0);
@@ -480,16 +468,13 @@ fn create_empty_custom_shows_ok() {
 #[test]
 fn xlsx_and_docx_reject_custom_shows() {
     let xlsx = tmp_dir().join("scope.xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&xlsx, json!({ "customShows": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);
@@ -504,16 +489,13 @@ fn xlsx_and_docx_reject_custom_shows() {
     assert!(!out.exists());
 
     let docx = tmp_dir().join("scope.docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": docx.to_string_lossy(),
-            "document": { "paragraphs": [{ "text": "甲" }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": docx.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
     .unwrap();
     let err = inspect_err(&docx, json!({ "customShows": true }));
     assert_eq!(err.code(), ErrorCode::InvalidField);

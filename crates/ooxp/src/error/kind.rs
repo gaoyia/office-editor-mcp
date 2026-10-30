@@ -707,6 +707,7 @@ define_error_kinds! {
     CannotInferFormat { path: String } => vec![Self::CannotInferFormat { path: "a.bin".into() }],
     UnsupportedFormat { format: String } => vec![Self::UnsupportedFormat { format: "xls".into() }],
     MissingField { field: String } => vec![Self::MissingField { field: "path".into() }],
+    PackageRequired => vec![Self::PackageRequired],
     WrongType { field: String, expected: TypeName } => TypeName::all_samples()
         .into_iter()
         .map(|expected| Self::WrongType { field: "scope".into(), expected })
@@ -1800,6 +1801,7 @@ impl ErrorKind {
             Self::UnsupportedOp { .. } => UnsupportedOp,
             Self::UnknownField { .. }
             | Self::MissingField { .. }
+            | Self::PackageRequired
             | Self::WrongType { .. }
             | Self::EmptyArray { .. }
             | Self::MinValue { .. }

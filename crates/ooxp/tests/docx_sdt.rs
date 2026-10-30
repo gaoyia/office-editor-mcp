@@ -44,37 +44,31 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
     let path = seq_path(tag, "docx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "format": "docx",
-            "document": document
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": document
+    })
+    .to_string())
     .unwrap();
     path
 }
 
 fn inspect(path: &Path, content_controls: bool, header_footer: bool) -> Value {
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": {
-                "from": 1,
-                "maxParas": 20,
-                "contentControls": content_controls,
-                "headerFooter": header_footer
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": {
+            "from": 1,
+            "maxParas": 20,
+            "contentControls": content_controls,
+            "headerFooter": header_footer
+        }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -82,34 +76,28 @@ fn inspect(path: &Path, content_controls: bool, header_footer: bool) -> Value {
 }
 
 fn apply(path: &Path, out: &Path, ops: Value) {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap();
 }
 
 fn apply_err(path: &Path, ops: Value) -> ooxp::Error {
     let out = seq_path("should-not-write", "docx");
     let _ = std::fs::remove_file(&out);
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": path.to_string_lossy(),
-            "output": out.to_string_lossy(),
-            "ops": ops
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
     .unwrap_err()
 }
 
@@ -325,69 +313,54 @@ fn set_para_text_blocked_and_rejects() {
 #[test]
 fn xlsx_pptx_reject_sdt_ops() {
     let xlsx = seq_path("sdt-x", "xlsx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": xlsx.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    })
+    .to_string())
     .unwrap();
     let xout = seq_path("sdt-x-out", "xlsx");
-    let err_x = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": xlsx.to_string_lossy(),
-            "output": xout.to_string_lossy(),
-            "ops": [{ "op": "insertContentControl", "id": "docx:document", "text": "x" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_x = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": xlsx.to_string_lossy(),
+        "output": xout.to_string_lossy(),
+        "ops": [{ "op": "insertContentControl", "id": "docx:document", "text": "x" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
 
-    let err_scope = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": xlsx.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "A1", "contentControls": true }
-        })
-        .to_string(),
-        None,
-    )
+    let err_scope = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": xlsx.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1", "contentControls": true }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_scope.code(), ErrorCode::InvalidField);
 
     let pptx = seq_path("sdt-p", "pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": pptx.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+    })
+    .to_string())
     .unwrap();
     let pout = seq_path("sdt-p-out", "pptx");
-    let err_p = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "apply",
-            "path": pptx.to_string_lossy(),
-            "output": pout.to_string_lossy(),
-            "ops": [{ "op": "deleteContentControl", "id": "sdt:1" }]
-        })
-        .to_string(),
-        None,
-    )
+    let err_p = run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": pptx.to_string_lossy(),
+        "output": pout.to_string_lossy(),
+        "ops": [{ "op": "deleteContentControl", "id": "sdt:1" }]
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
 }
@@ -479,16 +452,13 @@ fn insert_checkbox_picture_group_equation() {
     assert!(xml.contains("<w:equation/>") || xml.contains("<w:equation "));
     assert_eq!(part_bytes(&out, "word/media/image1.png"), PNG_1X1);
 
-    let RunOutput::Inspect(pic_tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "from": 1, "maxParas": 20, "pictures": true }
-        })
-        .to_string(),
-        None,
-    )
+    let RunOutput::Inspect(pic_tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 20, "pictures": true }
+    })
+    .to_string())
     .unwrap() else {
         panic!("inspect 应返回树");
     };
@@ -580,22 +550,19 @@ fn create_sdt_types_and_handmade_inspect() {
     let xml = part_text(&path, "word/document.xml");
     assert!(xml.contains("<w:equation/>") || xml.contains("<w:equation "));
 
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": seq_path("sdt-create-bad", "docx").to_string_lossy(),
-            "format": "docx",
-            "document": {
-                "paragraphs": [{
-                    "text": "段",
-                    "contentControls": [{ "kind": "picture" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": seq_path("sdt-create-bad", "docx").to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{
+                "text": "段",
+                "contentControls": [{ "kind": "picture" }]
+            }]
+        }
+    })
+    .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 

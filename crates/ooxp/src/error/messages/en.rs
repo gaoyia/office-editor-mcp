@@ -19,6 +19,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CannotInferFormat { path } => format!("Cannot infer format from path: {path}"),
         ErrorKind::UnsupportedFormat { format } => format!("Unsupported format: {format}"),
         ErrorKind::MissingField { field } => format!("Missing {field}"),
+        ErrorKind::PackageRequired => "Package bytes are required".into(),
         ErrorKind::WrongType { field, expected } => {
             format!("{field} must be {}", type_name(*expected))
         }
