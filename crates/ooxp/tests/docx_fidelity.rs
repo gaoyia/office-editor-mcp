@@ -2941,27 +2941,31 @@ fn apply_insert_row_col_and_delete_table() {
 #[test]
 fn apply_insert_table_then_merge() {
     let path = write_sample("tbl-merge");
-    let out = tmp_dir().join("tbl-merge-out.docx");
+    let mid = tmp_dir().join("tbl-merge-mid.docx");
     apply_ops(
         &path,
+        &mid,
+        json!([{
+            "op": "insertTable",
+            "id": "docx:document",
+            "rows": 2,
+            "cols": 2,
+            "cells": [["A1", "B1"], ["A2", "B2"]]
+        }]),
+    )
+    .unwrap();
+    let out = tmp_dir().join("tbl-merge-out.docx");
+    apply_ops(
+        &mid,
         &out,
-        json!([
-            {
-                "op": "insertTable",
-                "id": "docx:document",
-                "rows": 2,
-                "cols": 2,
-                "cells": [["A1", "B1"], ["A2", "B2"]]
-            },
-            {
-                "op": "mergeCells",
-                "id": "table:2",
-                "startRow": 1,
-                "startCol": 1,
-                "endRow": 1,
-                "endCol": 2
-            }
-        ]),
+        json!([{
+            "op": "mergeCells",
+            "id": "table:2",
+            "startRow": 1,
+            "startCol": 1,
+            "endRow": 1,
+            "endCol": 2
+        }]),
     )
     .unwrap();
     let tree = inspect_tables(&out);

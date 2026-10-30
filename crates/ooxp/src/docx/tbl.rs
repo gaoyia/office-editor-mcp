@@ -15,6 +15,9 @@ use super::textbox;
 const COL_W: u32 = 1440;
 const MAX_ROWS: u64 = 500;
 const MAX_COLS: u64 = 63;
+const PIN_TBL: &str = "ooxp:pin-tbl";
+const PIN_TR: &str = "ooxp:pin-tr";
+const PIN_COL: &str = "ooxp:pin-col";
 
 #[derive(Debug, Clone)]
 pub enum TableStory {
@@ -465,17 +468,13 @@ pub fn insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Resul
         if trs.is_empty() {
             return Err(missing_table(id, i));
         }
-        let after = match r {
-            TableRef::Table { .. } => trs.len() - 1,
+        let src_idx = match r {
+            TableRef::Table { .. } => *trs.last().ok_or_else(|| missing_table(id, i))?,
             TableRef::Row { row, .. } => {
-                if *row < 1 || *row > trs.len() {
-                    return Err(missing_table(id, i));
-                }
-                *row - 1
+                tr_child_for_pin(tbl, *row).ok_or_else(|| missing_table(id, i))?
             }
             _ => unreachable!(),
         };
-        let src_idx = trs[after];
         let layout = row_spans(child_el(tbl, src_idx))?;
         (layout, src_idx)
     };
@@ -500,10 +499,8 @@ pub fn delete_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Resul
             format!("ops[{i}].id"),
         ));
     }
-    if *row < 1 || *row > trs.len() {
-        return Err(missing_table(id, i));
-    }
-    tbl.children.remove(trs[*row - 1]);
+    let idx = tr_child_for_pin(tbl, *row).ok_or_else(|| missing_table(id, i))?;
+    tbl.children.remove(idx);
     Ok(())
 }
 
@@ -541,7 +538,7 @@ pub fn insert_col(
     for (k, tr_i) in trs.into_iter().enumerate() {
         let pid = id_pool.get(k).cloned().unwrap_or_else(|| "00000001".into());
         let tr = child_el_mut(tbl, tr_i);
-        insert_tc_at(tr, pos, w, &pid)?;
+        insert_tc_at(tr, pos + 1, w, &pid)?;
     }
     Ok(())
 }
@@ -571,7 +568,7 @@ pub fn delete_col(
     let trs = tr_indices(tbl);
     for tr_i in trs {
         let tr = child_el_mut(tbl, tr_i);
-        delete_tc_at(tr, pos - 1)?;
+        delete_tc_at(tr, pos)?;
     }
     remove_grid_col(tbl, pos - 1);
     Ok(())
@@ -602,9 +599,7 @@ pub fn apply_merge(
         let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
         reject_complex(tbl, i)?;
         reject_grid_mismatch(tbl, i)?;
-        let rows = tr_indices(tbl).len();
-        let cols = col_count(tbl)?;
-        if r1 < 1 || r2 > rows || c1 < 1 || c2 > cols {
+        if tr_child_for_pin(tbl, r1).is_none() || tr_child_for_pin(tbl, r2).is_none() {
             return Err(missing_table(id, i));
         }
         if !merge_is_simple(tbl, r1, c1, r2, c2)? {
@@ -1274,11 +1269,8 @@ pub fn set_table_row_height(
     };
     let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
-    let trs = tr_indices(tbl);
-    if *row < 1 || *row > trs.len() {
-        return Err(missing_table(id, i));
-    }
-    let tr = child_el_mut(tbl, trs[*row - 1]);
+    let idx = tr_child_for_pin(tbl, *row).ok_or_else(|| missing_table(id, i))?;
+    let tr = child_el_mut(tbl, idx);
     match h {
         None => {
             if let Some(pr) = tr.child_by_local_mut("trPr") {
@@ -1990,6 +1982,117 @@ fn collect_cell_ps<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
     }
 }
 
+/// 按 `collect_tbl_paths` 的顺序给表、行、格记下 apply 开始时的编号。文本框各自从 1 起。
+pub(crate) fn pin_table_indexes(root: &mut Element) {
+    let mut n = 0usize;
+    pin_tbl_walk(root, &mut n, true);
+}
+
+fn pin_tbl_walk(el: &mut Element, n: &mut usize, top: bool) {
+    if !top && el.local_name() == "txbxContent" {
+        let mut inner = 0usize;
+        let kids = element_indexes(el);
+        for i in kids {
+            if let Node::Element(child) = &mut el.children[i] {
+                pin_tbl_walk(child, &mut inner, false);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                pin_tbl_walk(child, n, false);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "tbl" && el.attr(PIN_TBL).is_none() {
+        *n += 1;
+        el.set_attr(PIN_TBL, n.to_string());
+        pin_rows(el);
+    }
+    let kids = element_indexes(el);
+    for i in kids {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_tbl_walk(child, n, false);
+        }
+    }
+}
+
+fn element_indexes(el: &Element) -> Vec<usize> {
+    el.children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| match n {
+            Node::Element(_) => Some(i),
+            _ => None,
+        })
+        .collect()
+}
+
+fn pin_rows(tbl: &mut Element) {
+    let trs = tr_indices(tbl);
+    let mut row = 0usize;
+    for idx in trs {
+        let tr = child_el_mut(tbl, idx);
+        if tr.attr(PIN_TR).is_none() {
+            row += 1;
+            tr.set_attr(PIN_TR, row.to_string());
+        }
+        let mut col = 1usize;
+        for child in &mut tr.children {
+            if let Node::Element(tc) = child {
+                if tc.local_name() != "tc" {
+                    continue;
+                }
+                if tc.attr(PIN_COL).is_none() {
+                    tc.set_attr(PIN_COL, col.to_string());
+                }
+                let span = tc
+                    .child_by_local("tcPr")
+                    .and_then(|pr| pr.child_by_local("gridSpan"))
+                    .and_then(|gs| gs.attr_local("val"))
+                    .and_then(|s| s.parse::<usize>().ok())
+                    .unwrap_or(1)
+                    .max(1);
+                col += span;
+            }
+        }
+    }
+}
+
+fn mark_new_table(tbl: &mut Element) {
+    tbl.set_attr(PIN_TBL, "");
+}
+
+fn mark_new_row(tr: &mut Element) {
+    tr.set_attr(PIN_TR, "");
+}
+
+fn mark_new_cell(tc: &mut Element) {
+    tc.set_attr(PIN_COL, "");
+}
+
+fn tr_child_for_pin(tbl: &Element, row: usize) -> Option<usize> {
+    let trs = tr_indices(tbl);
+    for (live, idx) in trs.iter().enumerate() {
+        let tr = child_el(tbl, *idx);
+        if crate::xml::pin_matches(tr, PIN_TR, row, live + 1) {
+            return Some(*idx);
+        }
+    }
+    None
+}
+
+fn pinned_col(tc: &Element, live: usize) -> Option<usize> {
+    match tc.attr(PIN_COL) {
+        Some(pin) if !pin.is_empty() => pin.parse().ok(),
+        Some(_) => None,
+        None => Some(live),
+    }
+}
+
 fn collect_tbl_paths(root: &Element) -> Vec<(Vec<usize>, bool)> {
     let mut path = Vec::new();
     let mut out = Vec::new();
@@ -2140,12 +2243,22 @@ fn parse_n(s: &str, path: &str) -> Result<usize, Error> {
 
 fn tbl_path(root: &Element, r: &TableRef, id: &str, i: usize) -> Result<Vec<usize>, Error> {
     match r.story() {
-        TableStory::Body | TableStory::HeaderFooter { .. } => collect_tbl_paths(root)
-            .get(r.table_n() - 1)
-            .map(|(p, _)| p.clone())
-            .ok_or_else(|| missing_table(id, i)),
+        TableStory::Body | TableStory::HeaderFooter { .. } => {
+            pinned_tbl_path(root, r.table_n(), id, i)
+        }
         TableStory::TextBox { host, key } => box_tbl_path(root, host, key, r.table_n(), id, i),
     }
+}
+
+fn pinned_tbl_path(root: &Element, n: usize, id: &str, i: usize) -> Result<Vec<usize>, Error> {
+    let paths = collect_tbl_paths(root);
+    for (live, (path, _)) in paths.iter().enumerate() {
+        let tbl = para::element_at(root, path).ok_or_else(|| missing_table(id, i))?;
+        if crate::xml::pin_matches(tbl, PIN_TBL, n, live + 1) {
+            return Ok(path.clone());
+        }
+    }
+    Err(missing_table(id, i))
 }
 
 fn box_tbl_path(
@@ -2163,10 +2276,9 @@ fn box_tbl_path(
             format!("ops[{i}].id"),
         )
     })?;
-    let rel = collect_tbl_paths(content);
-    let (tpath, _) = rel.get(n - 1).ok_or_else(|| missing_table(id, i))?;
+    let rel = pinned_tbl_path(content, n, id, i)?;
     let mut full = content_full;
-    full.extend(tpath);
+    full.extend(rel);
     Ok(full)
 }
 
@@ -2452,6 +2564,7 @@ fn build_table_el(hint: &Element, cells: &[Vec<String>], ids: &[String]) -> Elem
         grid.push_element(gc);
     }
     tbl.push_element(grid);
+    mark_new_table(&mut tbl);
     let mut k = 0usize;
     for row in cells {
         let spans = vec![1usize; row.len()];
@@ -2480,6 +2593,7 @@ fn build_row(hint: &Element, spans: &[usize], ids: &mut Vec<String>) -> Element 
 
 fn build_row_texts(hint: &Element, texts: &[String], spans: &[usize], ids: &[String]) -> Element {
     let mut tr = Element::new(hint.prefixed("tr"));
+    mark_new_row(&mut tr);
     for (i, text) in texts.iter().enumerate() {
         let span = spans.get(i).copied().unwrap_or(1);
         let pid = ids.get(i).map(String::as_str).unwrap_or("00000001");
@@ -2490,6 +2604,7 @@ fn build_row_texts(hint: &Element, texts: &[String], spans: &[usize], ids: &[Str
 
 fn build_tc(hint: &Element, text: &str, span: usize, width: u32, para_id: &str) -> Element {
     let mut tc = Element::new(hint.prefixed("tc"));
+    mark_new_cell(&mut tc);
     let mut pr = Element::new(tc.prefixed("tcPr"));
     let mut w = Element::new(pr.prefixed("tcW"));
     w.set_attr(&w.prefixed("w"), (width * span as u32).to_string());
@@ -2596,23 +2711,19 @@ fn find_tc_mut<'a>(
     id: &str,
     i: usize,
 ) -> Result<&'a mut Element, Error> {
-    let trs = tr_indices(tbl);
-    if row < 1 || row > trs.len() {
-        return Err(missing_table(id, i));
-    }
-    let tr_i = trs[row - 1];
+    let tr_i = tr_child_for_pin(tbl, row).ok_or_else(|| missing_table(id, i))?;
     let tr = child_el_mut(tbl, tr_i);
-    let mut cursor = 1usize;
+    let mut live = 1usize;
     let mut hit = None;
     for (j, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let span = grid_span(tc).unwrap_or(1);
-                if cursor == col {
+                if pinned_col(tc, live) == Some(col) {
                     hit = Some(j);
                     break;
                 }
-                cursor += span;
+                live += span;
             }
         }
     }
@@ -2816,23 +2927,24 @@ fn remove_grid_col(tbl: &mut Element, pos: usize) {
     }
 }
 
-fn insert_tc_at(tr: &mut Element, pos: usize, w: u32, para_id: &str) -> Result<(), Error> {
-    let mut cursor = 0usize;
+fn insert_tc_at(tr: &mut Element, before: usize, w: u32, para_id: &str) -> Result<(), Error> {
+    let mut live = 1usize;
     let mut insert_before = None;
     let mut bump = None;
     for (i, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let span = grid_span(tc)?;
-                if cursor == pos {
+                let start = pinned_col(tc, live).unwrap_or(0);
+                if start == before {
                     insert_before = Some(i);
                     break;
                 }
-                if cursor < pos && pos < cursor + span {
+                if start < before && before < start + span {
                     bump = Some(i);
                     break;
                 }
-                cursor += span;
+                live += span;
             }
         }
     }
@@ -2850,18 +2962,19 @@ fn insert_tc_at(tr: &mut Element, pos: usize, w: u32, para_id: &str) -> Result<(
     Ok(())
 }
 
-fn delete_tc_at(tr: &mut Element, pos: usize) -> Result<(), Error> {
-    let mut cursor = 0usize;
+fn delete_tc_at(tr: &mut Element, col: usize) -> Result<(), Error> {
+    let mut live = 1usize;
     let mut hit = None;
     for (i, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let span = grid_span(tc)?;
-                if pos >= cursor && pos < cursor + span {
+                let start = pinned_col(tc, live).unwrap_or(0);
+                if start > 0 && col >= start && col < start + span {
                     hit = Some((i, span));
                     break;
                 }
-                cursor += span;
+                live += span;
             }
         }
     }
@@ -2921,17 +3034,19 @@ fn merge_is_simple(
 }
 
 fn row_cell_starts(tbl: &Element, row: usize) -> Result<Vec<CellInfo>, Error> {
-    let trs = tbl.children_by_local("tr");
-    let tr = trs.get(row - 1).ok_or_else(|| xml_broken("tr"))?;
+    let idx = tr_child_for_pin(tbl, row).ok_or_else(|| xml_broken("tr"))?;
+    let tr = child_el(tbl, idx);
     let mut cursor = 1usize;
     let mut out = Vec::new();
     for tc in tr.children_by_local("tc") {
         let span = grid_span(tc)?;
-        out.push(CellInfo {
-            span,
-            v_merge: v_merge_of(tc)?,
-            start_col: cursor,
-        });
+        if let Some(start) = pinned_col(tc, cursor) {
+            out.push(CellInfo {
+                span,
+                v_merge: v_merge_of(tc)?,
+                start_col: start,
+            });
+        }
         cursor += span;
     }
     Ok(out)
@@ -3005,19 +3120,18 @@ fn ensure_tc_pr(tc: &mut Element) -> &mut Element {
 }
 
 fn tc_at_mut(tbl: &mut Element, row: usize, col: usize) -> Option<&mut Element> {
-    let trs = tr_indices(tbl);
-    let tr = child_el_mut(tbl, *trs.get(row - 1)?);
-    let mut cursor = 1usize;
+    let tr = child_el_mut(tbl, tr_child_for_pin(tbl, row)?);
+    let mut live = 1usize;
     let mut hit = None;
     for (j, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let span = grid_span(tc).ok()?;
-                if cursor == col {
+                if pinned_col(tc, live) == Some(col) {
                     hit = Some(j);
                     break;
                 }
-                cursor += span;
+                live += span;
             }
         }
     }
@@ -3033,9 +3147,16 @@ fn cell_info(tbl: &Element, row: usize, col: usize) -> Option<CellInfo> {
 }
 
 fn vertical_end(tbl: &Element, row: usize, col: usize, span: usize) -> usize {
-    let nrows = tbl.children_by_local("tr").len();
+    let followers: Vec<usize> = tr_indices(tbl)
+        .into_iter()
+        .filter_map(|idx| {
+            let pin = child_el(tbl, idx).attr(PIN_TR)?;
+            let n = pin.parse::<usize>().ok()?;
+            (n > row).then_some(n)
+        })
+        .collect();
     let mut last = row;
-    for r in row + 1..=nrows {
+    for r in followers {
         match cell_info(tbl, r, col) {
             Some(info) if info.span == span && matches!(info.v_merge, Some(VMerge::Continue)) => {
                 last = r;
@@ -3050,22 +3171,21 @@ fn split_row_cell(tbl: &mut Element, row: usize, col: usize, span: usize) -> Res
     if span <= 1 {
         return Ok(());
     }
-    let trs = tr_indices(tbl);
-    let tr_i = trs[row - 1];
+    let tr_i = tr_child_for_pin(tbl, row).ok_or_else(|| xml_broken("tr"))?;
     let extra = span - 1;
     let mut ids = alloc_para_ids(child_el(tbl, tr_i), extra);
     let tr = child_el_mut(tbl, tr_i);
-    let mut cursor = 1usize;
+    let mut live = 1usize;
     let mut hit = None;
     for (j, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let s = grid_span(tc)?;
-                if cursor == col {
+                if pinned_col(tc, live) == Some(col) {
                     hit = Some(j);
                     break;
                 }
-                cursor += s;
+                live += s;
             }
         }
     }
@@ -3112,19 +3232,20 @@ fn absorb_vertical(tbl: &mut Element, r1: usize, c1: usize, r2: usize) -> Result
 }
 
 fn merge_row_fixed(tbl: &mut Element, row: usize, c1: usize, c2: usize) -> Result<(), Error> {
-    let trs = tr_indices(tbl);
-    let tr_i = trs[row - 1];
+    let tr_i = tr_child_for_pin(tbl, row).ok_or_else(|| xml_broken("tr"))?;
     let tr = child_el_mut(tbl, tr_i);
-    let mut cursor = 1usize;
+    let mut live = 1usize;
     let mut idxs = Vec::new();
     for (j, n) in tr.children.iter().enumerate() {
         if let Node::Element(tc) = n {
             if tc.local_name() == "tc" {
                 let span = grid_span(tc)?;
-                if cursor >= c1 && cursor <= c2 {
-                    idxs.push(j);
+                if let Some(start) = pinned_col(tc, live) {
+                    if start >= c1 && start <= c2 {
+                        idxs.push(j);
+                    }
                 }
-                cursor += span;
+                live += span;
             }
         }
     }

@@ -11,6 +11,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-10-30 补跑 `id-pin.ps1`。同一批里先插段再改 `para:index:4`，Word 16.0 读到的是原来的第四段。
 2026-10-31 补跑 `strict-docx.ps1`。Word 16.0 另存的 Strict 文档可以 inspect，页边距按 twip 读出，apply 被拒绝，源文件不变。没有 Repair。
 2026-10-31 补跑 `docx-create-password.ps1`。create 写入的限制编辑口令，Word 16.0 认，错口令解不开，对口令能解开。没有 Repair。
+2026-10-31 补跑 `docx-table-pin.ps1`。先插行再给原第 3 行上色，字仍在原来那一行。先删第一列再合并原来的第 2、3 列，两格合成一格。Word 16.0 没有 Repair。
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 

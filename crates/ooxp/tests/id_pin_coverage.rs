@@ -962,7 +962,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteCol",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "delete_col_then_original_cell",
     },
     Row {
         format: "docx",
@@ -1094,7 +1094,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteRow",
         family: "row:{r}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "delete_row_then_missing",
     },
     Row {
         format: "docx",
@@ -1142,7 +1142,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteTable",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "delete_table_then_missing",
     },
     Row {
         format: "docx",
@@ -1208,7 +1208,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertCol",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_col_then_original_cell",
     },
     Row {
         format: "docx",
@@ -1352,7 +1352,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertRow",
         family: "table:{n}、row:{r}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_row_then_original_cell",
     },
     Row {
         format: "docx",
@@ -1394,7 +1394,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertTable",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
@@ -1424,7 +1424,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "mergeCells",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "delete_col_then_merge_original_columns",
     },
     Row {
         format: "docx",
@@ -1472,13 +1472,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setCellBorders",
         family: "r{r}c{c}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_row_then_original_cell",
     },
     Row {
         format: "docx",
         op: "setCellFormat",
         family: "r{r}c{c}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_row_then_original_cell",
     },
     Row {
         format: "docx",
@@ -1874,43 +1874,43 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setTableAlign",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
         op: "setTableBorders",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
         op: "setTableCellMar",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
         op: "setTableFloat",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
         op: "setTableRowHeight",
         family: "row:{r}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_row_then_original_cell",
     },
     Row {
         format: "docx",
         op: "setTableStyle",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
         op: "setTableWidth",
         family: "table:{n}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_table_then_original_table",
     },
     Row {
         format: "docx",
@@ -2012,7 +2012,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "splitCells",
         family: "r{r}c{c}",
-        test: "待第二期：位置id第二期-docx表格行列",
+        test: "insert_row_then_original_cell",
     },
     Row {
         format: "docx",

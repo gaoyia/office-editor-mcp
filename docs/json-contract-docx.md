@@ -267,8 +267,11 @@ Word 16.0 自己插入的水印通常是 VML；另存若把 DrawingML 改成 VML
 对段落 id、图 id、框 id 或节 id 发这两个 op 报 `InvalidId`。
 
 正文与页眉页脚表的 `{n}` 从 1 起，按该故事里 `w:tbl` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌套在单元格里的表也编号，不另起前缀。
-OOXML 没有表级稳定 id，因此 `table:{n}` 在增删表之后会变，只够同一次 inspect 之后立刻 apply。行号 `{r}` 是该表内 `w:tr` 的文档顺序，从 1 起。
+一次 apply 里，`table:{n}`、`row:{r}`、`r{r}c{c}`，以及 `insertCol` / `deleteCol` 的列号、`mergeCells` 的 `startRow` / `startCol` / `endRow` / `endCol`，都按 apply 开始时的表解释。
+本批新建的表、行、格不占旧编号，要等下一次 inspect。被删掉的表、行或列，后面再点名报 `IdNotFound`。
+行号 `{r}` 是该表内 `w:tr` 的文档顺序，从 1 起。
 列号 `{c}` 是该 `w:tc` 在 `w:tblGrid` 上的起始列，从 1 起；`w:gridSpan` 缺省为 1（§17.4.17）。水平合并只出一个单元格节点，`gridSpan` 大于 1。
+被合并吞掉的格子没有自己的 id。再点名那个列号报 `IdNotFound`。留下来的格子仍用合并前的起始列号。
 垂直合并的继续格仍有 `w:tc`，树上 `vMerge` 为 `continue`。没有 `tblGrid` 时，`colCount` 取第一行各格 `gridSpan` 之和。
 
 文本框里的表另编号：`{n}` 是该框 `w:txbxContent` 里 `w:tbl` 的文档顺序（再遇嵌套 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice），id 为 `{框 id}/table:{n}`。
