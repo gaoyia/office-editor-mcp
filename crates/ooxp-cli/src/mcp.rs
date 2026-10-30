@@ -79,6 +79,16 @@ fn reply_with_lang(message: &str, default_lang: Option<&str>) -> Option<String> 
             ));
         }
     };
+    if value.is_array() {
+        let lang = error_lang(default_lang);
+        return Some(respond(
+            Value::Null,
+            Err((
+                -32600,
+                line(lang, "不接受批量请求", "Batch requests are not accepted"),
+            )),
+        ));
+    }
     let id = value.get("id").filter(|id| !id.is_null()).cloned()?;
     let method = value
         .get("method")
@@ -132,12 +142,28 @@ Each of the six tools takes one of two shapes. Write domain JSON directly and ke
 
 help opens one layer at a time. It does not read a file or change a file. With no arguments it returns the action index and ask. With format it lists that format's ops. With q it may also take format, and the hits include actions, definitions, and ops. With format and op it opens that one operation. With name it opens a definition. name is a definition name, such as createRequest or inspectScope. Do not send q, op, and name together. kind and next say what this layer is and which fields to send next. The previous layer is not the full field list. When help omits locale and the process has no --lang, the text is Chinese.";
 
-fn initialize(params: &Value, default_lang: Option<&str>) -> Value {
-    let version = params
+/// 按时间从旧到新。最后一项是协商时回的最新版。
+/// `2025-03-26` 要求必须收下批量请求，不在名单里。
+/// `2026-07-28` 取消了 `initialize`，不在名单里。
+const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &["2024-11-05", "2025-06-18", "2025-11-25"];
+
+fn negotiated_protocol_version(params: &Value) -> &'static str {
+    let requested = params
         .get("protocolVersion")
         .and_then(|item| item.as_str())
-        .filter(|version| !version.is_empty())
-        .unwrap_or("2024-11-05");
+        .filter(|version| !version.is_empty());
+    requested
+        .and_then(|version| {
+            SUPPORTED_PROTOCOL_VERSIONS
+                .iter()
+                .copied()
+                .find(|item| *item == version)
+        })
+        .unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[SUPPORTED_PROTOCOL_VERSIONS.len() - 1])
+}
+
+fn initialize(params: &Value, default_lang: Option<&str>) -> Value {
+    let version = negotiated_protocol_version(params);
     json!({
         "protocolVersion": version,
         "capabilities": { "tools": { "listChanged": false } },
@@ -620,14 +646,11 @@ fn read_message(reader: &mut impl BufRead) -> io::Result<Option<Incoming>> {
         if trimmed.is_empty() {
             continue;
         }
-        if trimmed.starts_with('{') {
+        let Some(len_text) = trimmed.strip_prefix("Content-Length:") else {
             return Ok(Some(Incoming {
                 body: trimmed.to_string(),
                 content_length: false,
             }));
-        }
-        let Some(len_text) = trimmed.strip_prefix("Content-Length:") else {
-            continue;
         };
         let len: usize = len_text
             .trim()
@@ -1017,5 +1040,82 @@ mod tests {
             Ok(_) => panic!("超长 Content-Length 应被拒绝"),
         };
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    fn rpc_error(response: &str) -> Value {
+        serde_json::from_str(response).unwrap()
+    }
+
+    #[test]
+    fn garbage_line_is_a_parse_error() {
+        let mut cursor = std::io::Cursor::new(b"\n\nnot-json\n".to_vec());
+        let incoming = read_message(&mut cursor).unwrap().unwrap();
+        assert_eq!(incoming.body, "not-json");
+        let parsed = rpc_error(&reply_with_lang(&incoming.body, Some("zh")).unwrap());
+        assert!(parsed["id"].is_null());
+        assert_eq!(parsed["error"]["code"].as_i64(), Some(-32700));
+        assert_eq!(parsed["error"]["message"].as_str(), Some("无法解析 JSON"));
+    }
+
+    #[test]
+    fn batch_request_is_rejected() {
+        let raw = r#"[{"jsonrpc":"2.0","id":1,"method":"ping"},{"jsonrpc":"2.0","method":"notifications/initialized"}]"#;
+        let mut cursor = std::io::Cursor::new(format!("{raw}\n").into_bytes());
+        let incoming = read_message(&mut cursor).unwrap().unwrap();
+        assert!(incoming.body.starts_with('['));
+        let parsed = rpc_error(&reply_with_lang(&incoming.body, Some("zh")).unwrap());
+        assert!(parsed["id"].is_null());
+        assert_eq!(parsed["error"]["code"].as_i64(), Some(-32600));
+        assert_eq!(parsed["error"]["message"].as_str(), Some("不接受批量请求"));
+    }
+
+    #[test]
+    fn protocol_errors_follow_lang() {
+        let garbage = rpc_error(&reply_with_lang("not-json", Some("en")).unwrap());
+        assert_eq!(garbage["error"]["code"].as_i64(), Some(-32700));
+        assert_eq!(
+            garbage["error"]["message"].as_str(),
+            Some("Cannot parse JSON")
+        );
+        let batch = rpc_error(&reply_with_lang("[{}]", Some("en")).unwrap());
+        assert_eq!(batch["error"]["code"].as_i64(), Some(-32600));
+        assert_eq!(
+            batch["error"]["message"].as_str(),
+            Some("Batch requests are not accepted")
+        );
+    }
+
+    fn protocol_version(raw: &str) -> String {
+        let parsed = rpc_error(&reply(raw).unwrap());
+        parsed["result"]["protocolVersion"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn protocol_version_is_negotiated() {
+        assert_eq!(
+            protocol_version(
+                r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#
+            ),
+            "2025-06-18"
+        );
+        assert_eq!(
+            protocol_version(
+                r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}"#
+            ),
+            "2025-11-25"
+        );
+        for unknown in ["2025-03-26", "2026-07-28", ""] {
+            let request = format!(
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocolVersion":"{unknown}"}}}}"#
+            );
+            assert_eq!(protocol_version(&request), "2025-11-25", "{unknown}");
+        }
+        assert_eq!(
+            protocol_version(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#),
+            "2025-11-25"
+        );
     }
 }
