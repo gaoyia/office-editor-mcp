@@ -245,6 +245,7 @@ $order = @(
     'opc-resave'
     'xml-attr-newline'
     'id-pin'
+    'pptx-id-pin-refs'
     'docx-tab-br'
     'xlsx-xml-comment'
     'xlsx-implicit-cell'
