@@ -1395,9 +1395,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidSheetProtection { field } => {
             format!("chartsheet does not accept {field}")
         }
-        ErrorKind::ProtectionPassword => {
-            "setProtection does not write password hashes".into()
-        }
         ErrorKind::StrictPackage => {
             "This file is Strict Open XML. This program only writes Transitional. Save it as Transitional in Office first.".into()
         }

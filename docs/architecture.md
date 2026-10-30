@@ -502,7 +502,7 @@ docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用
 docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`。
 段上的 `shapes`、`connectors`、`rubies`、`citations`、`indexEntries`、`crossRefs`、`editRange`，以及图与框的 DrawingML 链和表外观，同样复用已有 apply。
 docx create 第五轮复用已有 apply：框内表与框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段 `borders` / `shd` / `tabs`、`runs[]` 的 `setRunFormat`、`groups[]` 的 `groupShapes`，以及 `protection.writePassword`。docx create 不写修订痕迹。
-限制编辑口令 `password` 仍报 `NotImplemented`。
+限制编辑口令 `password` 与修改口令 `writePassword` 都按 `setProtection` 写入哈希。
 pptx 的 `slides[].pictures` 复用 `insertPicture`，`slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`。
 `slides[].inks` 复用 `insertInk`，`slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`。
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`。

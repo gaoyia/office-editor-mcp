@@ -2080,8 +2080,7 @@ pptx 母版 `theme.fonts` 同一套字段。pptx 页级 `themeOverride` 挂在�
 - **`document.protection`**
   - 可选
   - 文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`）
-  - 出现 `password` 仍报 `NotImplemented`
-  - `writePassword` 按 `setProtection` 同一套规则写修改密码哈希
+  - `password` 与 `writePassword` 按 `setProtection` 同一套规则写哈希
 - **`document.watermarks`**
   - 可选
   - 水印列表
@@ -2276,7 +2275,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 同一段上先写骨架里的文字或 `runs[]` / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再段 `borders` / `shd` / `tabs`，再 run 格式，再框内表，再框内书签 / 链 / 域 / 公式 / 控件 / 拼音，再正文书签，再超链接，再域，再公式，再内容控件，再无框形状，再连接线，再拼音，再索引项，再引文，再交叉引用，再例外编辑区，再绑编号。
 全部故事写完后再写 `tocs` / `captions` / `indexes` / `bibliographies`，再写 `groups`。
 `numberings` 与 `styles` 在任何段落绑定之前写入。`sources` 在引文之前写入。不写修订痕迹。
-也不写批注的回复再回复。出现 `password` 仍报 `NotImplemented`。给了 `writePassword` 时按 `setProtection` 写入。
+也不写批注的回复再回复。给了 `password` 或 `writePassword` 时按 `setProtection` 写入。
 给了 `tables[].style` / `look` / `pos` / `align` / `indent` / `width` / `cols` / `rowHeights` / `cellMar` / `borders` / `cellFormats` 时按对应 set op 写入。框内表同样。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。

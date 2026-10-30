@@ -797,7 +797,6 @@ define_error_kinds! {
     InvalidSheetProtection { field: String } => {
         vec![Self::InvalidSheetProtection { field: "formatCells".into() }]
     },
-    ProtectionPassword => vec![Self::ProtectionPassword],
     ProtectionHasPassword => vec![Self::ProtectionHasPassword],
     StrictPackage => vec![Self::StrictPackage],
     ProtectionPasswordBlank => vec![Self::ProtectionPasswordBlank],
@@ -2305,7 +2304,6 @@ impl ErrorKind {
             | Self::ContentControlRepeating
             | Self::ContentControlGroup
             | Self::ContentControlHasTable
-            | Self::ProtectionPassword
             | Self::ProtectionHasPassword
             | Self::StrictPackage => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,

@@ -243,6 +243,74 @@ fn blank_password_and_password_only_are_invalid() {
     );
 }
 
+fn protection_attr_names(xml: &str) -> Vec<String> {
+    let start = xml.find("documentProtection").expect("documentProtection");
+    let end = xml[start..].find('>').unwrap() + start;
+    let mut names = Vec::new();
+    for part in xml[start..end].split_whitespace() {
+        let Some((name, _)) = part.split_once('=') else {
+            continue;
+        };
+        names.push(name.rsplit(':').next().unwrap().to_string());
+    }
+    names.sort();
+    names
+}
+
+#[test]
+fn create_password_matches_apply_hash_attrs_and_unlocks() {
+    let created = tmp("create-pw");
+    run_json(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }],
+            "protection": { "enforced": true, "edit": "readOnly", "password": "secret" }
+        }
+    }))
+    .unwrap();
+    let applied = tmp("apply-pw");
+    let host = create_docx("apply-host");
+    apply(
+        &host,
+        &applied,
+        json!([{
+            "op": "setProtection",
+            "id": "docx:document",
+            "enforced": true,
+            "edit": "readOnly",
+            "password": "secret"
+        }]),
+    )
+    .unwrap();
+    let created_xml = part_text(&created, "word/settings.xml");
+    let applied_xml = part_text(&applied, "word/settings.xml");
+    assert_eq!(
+        protection_attr_names(&created_xml),
+        protection_attr_names(&applied_xml)
+    );
+    assert!(created_xml.contains(r#"cryptAlgorithmSid="14""#));
+    assert!(created_xml.contains(r#"cryptSpinCount="100000""#));
+    assert_ne!(created_xml, applied_xml, "盐应当不同");
+
+    let opened = tmp("create-open");
+    apply(
+        &created,
+        &opened,
+        json!([{
+            "op": "setProtection",
+            "id": "docx:document",
+            "enforced": false,
+            "password": "secret"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&opened, "word/settings.xml");
+    assert!(!xml.contains("documentProtection"), "{xml}");
+}
+
 #[test]
 fn other_hash_stays_not_implemented_even_with_password() {
     let src = write_zip("other", SETTINGS_OTHER);

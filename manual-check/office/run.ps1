@@ -119,6 +119,7 @@ $order = @(
     'docx-ole'
     'docx-protect'
     'docx-protect-hash'
+    'docx-create-password'
     'docx-protect-rev-math'
     'docx-watermark'
     'docx-theme'

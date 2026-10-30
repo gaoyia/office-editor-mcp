@@ -410,7 +410,7 @@ fn write_password_hash_gate_and_create_reject() {
         }
     }))
     .unwrap_err();
-    assert_eq!(create_err.code(), ErrorCode::NotImplemented);
+    assert_eq!(create_err.code(), ErrorCode::InvalidField);
 
     let other = write_zip("wp-other", DOC_MOVE, SETTINGS_WRITE_OTHER);
     let err_other = apply_err(

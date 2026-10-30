@@ -15998,6 +15998,10 @@
         "readOnlyRecommended": {
           "type": "boolean"
         },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        },
         "writePassword": {
           "type": "string",
           "minLength": 1

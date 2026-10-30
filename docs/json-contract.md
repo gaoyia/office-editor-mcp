@@ -547,8 +547,8 @@ docx：
 某节例外见 [docx 分册](json-contract-docx.md#setformprot) 的 `setFormProt`。`w:permStart` / `w:permEnd` 见该分册例外编辑区。
 已经是目标状态则空操作，仍计入 `opsApplied`。不把哈希放进树。
 
-create 的 `document.protection` 复用同一套规则。出现 `password` 仍报 `NotImplemented`。
-`writePassword` 按上面规则写修改密码哈希。出现 `hasPassword` 报 `InvalidField`（`hasPassword` 是树上的只读字段）。
+create 的 `document.protection` 复用同一套规则，包括 `password` 与 `writePassword`。
+出现 `hasPassword` 报 `InvalidField`（`hasPassword` 是树上的只读字段）。
 
 带密码示例见 `docs/examples/docx-apply-protect-password.json`。
 

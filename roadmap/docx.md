@@ -115,6 +115,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C16 | `.plan/2026年-10月-11日-✅-三家主题objectDefaults.md` | 主题剩余已过 |
 | C15 | `.plan/2026年-10月-11日-✅-三家3D相机与灯光.md` | C7、C12 已过 |
 | 68 | `.plan/2026年-10月-19日-✅-三家OLE事后改尺寸.md` | OLE 已过。与 xlsx 46、pptx 54 同一份计划。Office 16.0 打开无修复 |
+| 69 | `.plan/2026年-10月-31日-✅-docx-create写限制编辑口令.md` | 保护（27）已过。Office 16.0 用口令解开 |
 
 页眉改字、距边界、链接前节、图文混排已过，见对应 ✅ 计划。第一期段落改字见总计划。
 
@@ -126,7 +127,6 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 69 | `.plan/2026年-10月-31日-❌-docx-create写限制编辑口令.md` | 保护（27）已过 |
 | 70 | `.plan/2026年-10月-31日-❌-docx-3D浮动写入.md` | C7、C12 已过；先探测 |
 | 71 | `.plan/2026年-10月-31日-❌-docx-NOTEREF交叉引用.md` | 交叉引用与题注（30）已过 |
 | 72 | `.plan/2026年-10月-31日-❌-docx-内容控件数据绑定与重复节.md` | 内容控件（22）已过；先探测 |

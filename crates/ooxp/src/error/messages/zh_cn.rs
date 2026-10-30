@@ -1253,7 +1253,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidSheetProtection { field } => {
             format!("图表工作表不认 {field}")
         }
-        ErrorKind::ProtectionPassword => "setProtection 不写密码哈希".into(),
         ErrorKind::ProtectionHasPassword => {
             "这份文件带密码哈希，不能改保护字段".into()
         }

@@ -248,7 +248,7 @@ fn create_round4_rejects_password_edit_range_false_and_foreign_fields() {
         "paragraphs": [{ "text": "a" }],
         "protection": { "password": "secret" }
     }));
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let err = create_err(json!({
         "paragraphs": [{ "text": "a", "editRange": false }]
