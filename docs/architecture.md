@@ -101,7 +101,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `smartart` 管图示数据和四件套，不含宿主 graphicFrame。三种格式的 SmartArt 模块调用它。
 - `ole` 做嵌入对象分类和 Package 包装，不执行 OLE 服务器。它可以调用 `opc`。三种格式调用它，彼此不引用。
 - `model3d` 认 GLB，读写 `am3d` 的相机、旋转和光源，并写出 GLB 与后备图。三种格式的 3D 模块调用它。媒体目录由调用方传入。
-- `image` 认 EMF、WMF、TIFF，以及 PNG、JPEG、GIF、BMP 的尺寸。认图的格式模块调用它。SVG 由 `svg` 认。
+- `image` 认 EMF、WMF、TIFF，以及 PNG、JPEG、GIF、BMP 的尺寸，并把调用方给的图读成 `ImageFile`。认图的格式模块调用它。SVG 由 `svg` 认，`image` 只放 PNG 占位，原件放进 `ImageFile.svg`。
 - `ink` 放 InkML 常量、校验和写媒体。AlternateContent 外壳留在各格式。三种格式的墨迹模块调用它。
 - `svg` 管 Office 2016 的 SVG 扩展。xlsx、docx、pptx 调用它。
 - `drawing_text` 读写 `a:rPr`、`a:pPr`、`a:bodyPr`。xlsx、pptx 的形状和表，以及 `shape_runs` 调用它。
@@ -145,6 +145,8 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 元素树不设层数上限。解析、遍历、写回和按子元素查找都用堆上的栈。
 
 释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 的 `Drop` 都把子节点收到堆上的栈再拆。要拿走 `children`，用 `take_children`，不能直接移出字段。`Document` 的 `Drop` 和 `take_root` 用 `mem::replace` 换出根，没有 `unsafe`。
+
+只在一次调用的内存里挂在元素上的属性，名字以 `ooxp:` 开头，写回时丢掉，不进文件。docx 用 `ooxp:pin` 记下段落在 apply 开始时的序号。
 
 注释和处理指令收成原样节点，写回时按解析到的字节拼回去。`text_content` 不收它们。
 

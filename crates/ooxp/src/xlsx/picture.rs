@@ -1,7 +1,5 @@
 //! 工作表 SpreadsheetDrawing 图片：收集、换、插、删、改尺寸与锚点。
 
-use std::path::{Path, PathBuf};
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
@@ -448,14 +446,7 @@ pub struct PicInfo {
     pub to_y: Option<f64>,
 }
 
-pub struct ImageFile {
-    pub bytes: Vec<u8>,
-    pub ext: String,
-    pub content_type: String,
-    pub cx: i64,
-    pub cy: i64,
-    pub svg: Option<Vec<u8>>,
-}
+pub(crate) use crate::image::{read_image, ImageFile};
 
 pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<(String, Option<HfSlot>), Error> {
     if id.contains("/pic:") {
@@ -2520,38 +2511,6 @@ fn build_pic(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
     pic.push_element(blip_fill);
     pic.push_element(sp_pr);
     pic
-}
-
-pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
-    let p = PathBuf::from(path);
-    let bytes = crate::host_files::read_user_file(path)?;
-    classify_image(bytes, &p)
-}
-
-fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
-    if let Some(r) = crate::image::raster(&bytes) {
-        return Ok(ImageFile {
-            bytes,
-            ext: r.ext.into(),
-            content_type: r.content_type.into(),
-            cx: r.cx,
-            cy: r.cy,
-            svg: None,
-        });
-    }
-    if crate::svg::looks_like(&bytes) {
-        let (cx, cy) = crate::svg::size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes: crate::ole::PREVIEW_PNG.to_vec(),
-            ext: "png".into(),
-            content_type: "image/png".into(),
-            cx,
-            cy,
-            svg: Some(bytes),
-        });
-    }
-    let _ = path;
-    Err(Error::new(ErrorKind::InvalidImageFile))
 }
 
 #[cfg(test)]

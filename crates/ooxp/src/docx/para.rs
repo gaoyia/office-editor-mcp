@@ -913,9 +913,12 @@ pub fn same_para(p: &Element, target: &BodyPara, index: usize) -> bool {
     }
 }
 
+/// 必须以 `xml::TRANSIENT_ATTR_PREFIX` 开头，写回时才会被丢掉。
+const PIN_ATTR: &str = "ooxp:pin";
+
 /// 有 `ooxp:pin` 时按 apply 开始时的序号认。没有这个标记的新段落不占用旧序号。
 fn index_matches(p: &Element, wanted: usize, live: usize) -> bool {
-    match p.attr("ooxp:pin") {
+    match p.attr(PIN_ATTR) {
         Some(pin) if !pin.is_empty() => pin == wanted.to_string(),
         // 空 pin 是本批新建的段落，不占用 apply 开始时的序号。
         Some(_) => false,
@@ -946,9 +949,9 @@ pub(crate) fn pin_paragraph_indexes(root: &mut Element) {
             }
             return;
         }
-        if el.local_name() == "p" && el.attr("ooxp:pin").is_none() {
+        if el.local_name() == "p" && el.attr(PIN_ATTR).is_none() {
             *idx += 1;
-            el.set_attr("ooxp:pin", idx.to_string());
+            el.set_attr(PIN_ATTR, idx.to_string());
         }
         for child in el.children.iter_mut() {
             if let Node::Element(child) = child {
@@ -1378,7 +1381,7 @@ fn is_empty_run(r: &Element) -> bool {
 pub fn new_paragraph(parent: &Element, para_id: &str, text: &str) -> Element {
     let mut p = Element::new(parent.prefixed("p"));
     // 空标记：本批新建的段落不占用 apply 开始时的序号。写出时会丢掉。
-    p.set_attr("ooxp:pin", "");
+    p.set_attr(PIN_ATTR, "");
     p.set_attr("w14:paraId", para_id);
     p.set_attr("w14:textId", para_id);
     if !text.is_empty() {

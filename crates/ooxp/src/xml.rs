@@ -536,6 +536,9 @@ fn decl_to_string(d: &BytesDecl) -> String {
 
 pub const DEFAULT_DECL: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
 
+/// 只在一次调用的内存里挂在元素上的属性用这个前缀。写回时丢掉，不进文件。
+pub(crate) const TRANSIENT_ATTR_PREFIX: &str = "ooxp:";
+
 impl Document {
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         // 声明单独拼在前面：写进 Writer 内部的 Cursor 会被后续 write_event 从头覆盖。
@@ -589,8 +592,7 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
                     .map(|(_, value)| escape_attr_node(value))
                     .collect();
                 for ((key, _), value) in node.attrs.iter().zip(escaped_attrs.iter()) {
-                    // 段落序号只活在这次 apply 的内存里，不能写进文件。
-                    if key == "ooxp:pin" {
+                    if key.starts_with(TRANSIENT_ATTR_PREFIX) {
                         continue;
                     }
                     // 字节形式不再转义。`(&str, &str)` 会把 `&#10;` 里的 `&` 再转成 `&amp;`。

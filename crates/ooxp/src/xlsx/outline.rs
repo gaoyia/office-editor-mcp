@@ -46,8 +46,8 @@ fn inspect_rows(sheet: &Element) -> Value {
             continue;
         };
         let level = parse_level(row.attr("outlineLevel"));
-        let collapsed = attr_true(row, "collapsed");
-        let hidden = attr_true(row, "hidden");
+        let collapsed = crate::xml::attr_is_true_trimmed(row, "collapsed");
+        let hidden = crate::xml::attr_is_true_trimmed(row, "hidden");
         if level == 0 && !collapsed && !hidden {
             continue;
         }
@@ -56,7 +56,7 @@ fn inspect_rows(sheet: &Element) -> Value {
             json!({
                 "r": r,
                 "level": level,
-                "hidden": attr_true(row, "hidden"),
+                "hidden": crate::xml::attr_is_true_trimmed(row, "hidden"),
                 "collapsed": collapsed,
             }),
         ));
@@ -79,8 +79,8 @@ fn inspect_cols(sheet: &Element) -> Value {
                 continue;
             }
             let level = parse_level(col.attr("outlineLevel"));
-            let collapsed = attr_true(col, "collapsed");
-            let hidden = attr_true(col, "hidden");
+            let collapsed = crate::xml::attr_is_true_trimmed(col, "collapsed");
+            let hidden = crate::xml::attr_is_true_trimmed(col, "hidden");
             if level == 0 && !collapsed && !hidden {
                 continue;
             }
@@ -88,7 +88,7 @@ fn inspect_cols(sheet: &Element) -> Value {
                 "min": a1::col_to_letters(min),
                 "max": a1::col_to_letters(max),
                 "level": level,
-                "hidden": attr_true(col, "hidden"),
+                "hidden": crate::xml::attr_is_true_trimmed(col, "hidden"),
                 "collapsed": collapsed,
             }));
         }
@@ -459,10 +459,6 @@ fn max_col_level(sheet: &Element) -> u32 {
 
 fn parse_level(raw: Option<&str>) -> u32 {
     raw.and_then(|s| s.trim().parse().ok()).unwrap_or(0)
-}
-
-fn attr_true(el: &Element, name: &str) -> bool {
-    crate::xml::attr_is_true_trimmed(el, name)
 }
 
 fn attr_default_true(el: Option<&Element>, name: &str) -> bool {

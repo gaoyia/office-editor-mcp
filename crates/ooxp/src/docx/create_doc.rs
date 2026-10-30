@@ -4,6 +4,7 @@
 use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, TypeName};
+use crate::op_fields::deny_keys_at;
 
 use super::biblio;
 use super::east_asia::{self, KinsokuChars, ThemeFontLang};
@@ -106,7 +107,7 @@ fn parse_styles(v: Option<&Value>) -> Result<Vec<InsertStyleOp>, Error> {
     for (i, item) in arr.iter().enumerate() {
         let path = format!("document.styles[{i}]");
         let obj = as_object(item, &path)?;
-        deny_keys(obj, &path, &["styleId", "type", "name", "basedOn"])?;
+        deny_keys_at(obj, &path, &["styleId", "type", "name", "basedOn"])?;
         let style_id = require_string(obj, &path, "styleId")?;
         styles::validate_style_id_token(&style_id, &format!("{path}.styleId"))?;
         let ty = match obj.get("type").and_then(Value::as_str) {
@@ -170,7 +171,7 @@ fn parse_sources(v: Option<&Value>) -> Result<Vec<InsertSourceOp>, Error> {
     for (i, item) in arr.iter().enumerate() {
         let path = format!("document.sources[{i}]");
         let obj = as_object(item, &path)?;
-        deny_keys(
+        deny_keys_at(
             obj,
             &path,
             &[
@@ -259,7 +260,7 @@ fn parse_after_blocks(
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["after", "instr"])?;
+        deny_keys_at(obj, &item_path, &["after", "instr"])?;
         let after = parse_after(obj.get("after"), &format!("{item_path}.after"), para_n)?;
         let instr = match obj.get("instr") {
             None => default_instr.to_string(),
@@ -291,7 +292,7 @@ fn parse_captions(v: Option<&Value>, para_n: usize) -> Result<Vec<CaptionBlock>,
     for (i, item) in arr.iter().enumerate() {
         let path = format!("document.captions[{i}]");
         let obj = as_object(item, &path)?;
-        deny_keys(obj, &path, &["after", "label", "title", "bookmark"])?;
+        deny_keys_at(obj, &path, &["after", "label", "title", "bookmark"])?;
         let after = parse_after(obj.get("after"), &format!("{path}.after"), para_n)?;
         let label = match obj.get("label") {
             None => "Figure".to_string(),
@@ -346,7 +347,7 @@ fn parse_doc_parts(v: Option<&Value>) -> Result<Vec<InsertDocPartOp>, Error> {
     for (i, item) in arr.iter().enumerate() {
         let path = format!("document.docParts[{i}]");
         let obj = as_object(item, &path)?;
-        deny_keys(
+        deny_keys_at(
             obj,
             &path,
             &["name", "text", "gallery", "category", "behavior"],
@@ -435,7 +436,7 @@ fn parse_fonts(v: Option<&Value>) -> Result<Vec<InsertEmbeddedFontOp>, Error> {
     for (i, item) in arr.iter().enumerate() {
         let path = format!("document.embeddedFonts[{i}]");
         let obj = as_object(item, &path)?;
-        deny_keys(obj, &path, &["name", "file", "style"])?;
+        deny_keys_at(obj, &path, &["name", "file", "style"])?;
         let name = require_string(obj, &path, "name")?;
         if name.is_empty() || name.chars().all(char::is_whitespace) {
             return Err(Error::with_path(
@@ -473,7 +474,7 @@ fn parse_font_embed(v: Option<&Value>) -> Result<Option<SetFontEmbedOp>, Error> 
         return Ok(None);
     };
     let obj = as_object(v, "document.fontEmbed")?;
-    deny_keys(
+    deny_keys_at(
         obj,
         "document.fontEmbed",
         &["trueType", "systemFonts", "subset"],
@@ -499,7 +500,7 @@ fn parse_east_asia(v: Option<&Value>) -> Result<Option<SetEastAsianSettingsOp>, 
         return Ok(None);
     };
     let obj = as_object(v, "document.eastAsianSettings")?;
-    deny_keys(
+    deny_keys_at(
         obj,
         "document.eastAsianSettings",
         &[
@@ -563,7 +564,7 @@ fn opt_kinsoku(
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
         Some(Value::Object(inner)) => {
-            deny_keys(inner, &format!("{prefix}.{field}"), &["lang", "chars"])?;
+            deny_keys_at(inner, &format!("{prefix}.{field}"), &["lang", "chars"])?;
             let lang = match inner.get("lang") {
                 Some(Value::String(s)) if !s.is_empty() => s.clone(),
                 _ => {
@@ -597,7 +598,7 @@ fn opt_theme_font_lang(v: Option<&Value>) -> Result<Option<Option<ThemeFontLang>
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
         Some(Value::Object(inner)) => {
-            deny_keys(
+            deny_keys_at(
                 inner,
                 "document.eastAsianSettings.themeFontLang",
                 &["val", "eastAsia", "bidi"],
@@ -673,22 +674,6 @@ fn parse_after(v: Option<&Value>, path: &str, para_n: usize) -> Result<Option<u3
         }
         Some(_) => Err(wrong_type("after", TypeName::Integer, path)),
     }
-}
-
-pub fn deny_keys(
-    obj: &serde_json::Map<String, Value>,
-    path: &str,
-    allowed: &[&str],
-) -> Result<(), Error> {
-    for k in obj.keys() {
-        if !allowed.contains(&k.as_str()) {
-            return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
-                format!("{path}.{k}"),
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn as_opt_array<'a>(v: Option<&'a Value>, path: &str) -> Result<Option<&'a Vec<Value>>, Error> {
@@ -937,7 +922,7 @@ pub fn parse_drawing_hlink(v: Option<&Value>, path: &str) -> Result<Option<Drawi
         return Ok(None);
     };
     let obj = as_object(v, path)?;
-    deny_keys(obj, path, &["url", "anchor", "tooltip"])?;
+    deny_keys_at(obj, path, &["url", "anchor", "tooltip"])?;
     let url = opt_string(obj, path, "url")?;
     let anchor = opt_string(obj, path, "anchor")?;
     match (&url, &anchor) {
@@ -1015,7 +1000,7 @@ fn parse_preset_shapes(
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["prst", "cx", "cy", "hyperlink"])?;
+        deny_keys_at(obj, &item_path, &["prst", "cx", "cy", "hyperlink"])?;
         let cx = parse_emu(obj.get("cx"), &item_path, "cx")?;
         let cy = parse_emu(obj.get("cy"), &item_path, "cy")?;
         if cx.is_some() != cy.is_some() {
@@ -1063,7 +1048,7 @@ pub fn parse_rubies(v: Option<&Value>, prefix: &str) -> Result<Vec<RubySpec>, Er
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(
+        deny_keys_at(
             obj,
             &item_path,
             &[
@@ -1138,7 +1123,7 @@ pub fn parse_citations(v: Option<&Value>, prefix: &str) -> Result<Vec<CitationSp
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["tag"])?;
+        deny_keys_at(obj, &item_path, &["tag"])?;
         let tag = require_string(obj, &item_path, "tag")?;
         if biblio::tag_invalid(&tag) {
             return Err(Error::with_path(
@@ -1160,7 +1145,7 @@ pub fn parse_index_entries(v: Option<&Value>, prefix: &str) -> Result<Vec<IndexE
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["entry"])?;
+        deny_keys_at(obj, &item_path, &["entry"])?;
         let entry = require_string(obj, &item_path, "entry")?;
         field::parse_index_entry(&entry)
             .map_err(|kind| Error::with_path(kind, format!("{item_path}.entry")))?;
@@ -1178,7 +1163,7 @@ pub fn parse_cross_refs(v: Option<&Value>, prefix: &str) -> Result<Vec<CrossRefS
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["bookmark", "kind"])?;
+        deny_keys_at(obj, &item_path, &["bookmark", "kind"])?;
         let bookmark = require_string(obj, &item_path, "bookmark")?;
         if bookmark.is_empty() || bookmark.chars().any(char::is_whitespace) {
             return Err(Error::with_path(
@@ -1219,7 +1204,7 @@ pub fn parse_edit_range(v: Option<&Value>, prefix: &str) -> Result<Option<EditRa
             path,
         )),
         Some(Value::Object(obj)) => {
-            deny_keys(obj, &path, &["edGrp", "ed"])?;
+            deny_keys_at(obj, &path, &["edGrp", "ed"])?;
             let ed_grp = match obj.get("edGrp") {
                 None => None,
                 Some(Value::String(s)) if super::perm::ed_grp_ok(s) => Some(s.clone()),
@@ -1290,7 +1275,7 @@ pub fn parse_table_extra(
     let look = match obj.get("look") {
         None => None,
         Some(Value::Object(m)) => {
-            deny_keys(
+            deny_keys_at(
                 m,
                 &format!("{path}.look"),
                 &[
@@ -1323,7 +1308,7 @@ pub fn parse_table_extra(
         None => None,
         Some(Value::Object(m)) => {
             let p = format!("{path}.pos");
-            deny_keys(
+            deny_keys_at(
                 m,
                 &p,
                 &[
@@ -1391,7 +1376,7 @@ pub fn parse_table_extra(
         None => None,
         Some(Value::Object(m)) => {
             let p = format!("{path}.width");
-            deny_keys(m, &p, &["type", "w"])?;
+            deny_keys_at(m, &p, &["type", "w"])?;
             Some((
                 tbl::parse_opt_width_type(m, &p)?,
                 tbl::parse_opt_twip(m, &p, "w")?,
@@ -1430,7 +1415,7 @@ pub fn parse_table_extra(
         None => None,
         Some(Value::Object(m)) => {
             let p = format!("{path}.cellMar");
-            deny_keys(m, &p, &["top", "left", "bottom", "right"])?;
+            deny_keys_at(m, &p, &["top", "left", "bottom", "right"])?;
             let top = opt_null_u32(m, &p, "top")?;
             let left = opt_null_u32(m, &p, "left")?;
             let bottom = opt_null_u32(m, &p, "bottom")?;
@@ -1489,7 +1474,7 @@ fn parse_cell_formats(
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{field_path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(
+        deny_keys_at(
             obj,
             &item_path,
             &[
@@ -1875,7 +1860,7 @@ fn opt_null_diagonal(
         Some(Value::Null) => Ok(Some(None)),
         Some(Value::Object(m)) => {
             let p = format!("{path}.{field}");
-            deny_keys(m, &p, &["val", "sz", "color"])?;
+            deny_keys_at(m, &p, &["val", "sz", "color"])?;
             let val = match m.get("val") {
                 None => "single".to_string(),
                 Some(Value::String(s)) if tbl::is_diagonal_val(s) => s.clone(),

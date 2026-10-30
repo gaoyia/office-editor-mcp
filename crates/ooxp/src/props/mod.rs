@@ -3,6 +3,7 @@
 use serde_json::{json, Map, Number, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
+use crate::op_fields::require_id;
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -751,19 +752,6 @@ fn deny_op_keys(obj: &Map<String, Value>, i: usize, allowed: &[&str]) -> Result<
         }
     }
     Ok(())
-}
-
-fn require_id(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
-    obj.get("id")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField { field: "id".into() },
-                format!("ops[{i}].id"),
-            )
-        })
 }
 
 fn require_root_id(obj: &Map<String, Value>, i: usize, root_id: &str) -> Result<(), Error> {

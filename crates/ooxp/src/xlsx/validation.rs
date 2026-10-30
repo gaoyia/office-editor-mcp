@@ -50,18 +50,24 @@ fn inspect_one(el: &Element, sheet: &str, n: usize) -> Value {
     if let Some(f2) = el.child_by_local("formula2") {
         obj.insert("formula2".into(), json!(f2.text_content()));
     }
-    obj.insert("allowBlank".into(), json!(attr_true(el, "allowBlank")));
+    obj.insert(
+        "allowBlank".into(),
+        json!(crate::xml::attr_is_true_trimmed(el, "allowBlank")),
+    );
     if type_ == "list" {
         // XML showDropDown 为真表示隐藏下拉，与 JSON dropdown 相反。
-        obj.insert("dropdown".into(), json!(!attr_true(el, "showDropDown")));
+        obj.insert(
+            "dropdown".into(),
+            json!(!crate::xml::attr_is_true_trimmed(el, "showDropDown")),
+        );
     }
     obj.insert(
         "showInputMessage".into(),
-        json!(attr_true(el, "showInputMessage")),
+        json!(crate::xml::attr_is_true_trimmed(el, "showInputMessage")),
     );
     obj.insert(
         "showErrorMessage".into(),
-        json!(attr_true(el, "showErrorMessage")),
+        json!(crate::xml::attr_is_true_trimmed(el, "showErrorMessage")),
     );
     if let Some(v) = el.attr("errorStyle") {
         obj.insert("errorStyle".into(), json!(v));
@@ -243,7 +249,7 @@ fn apply_patch(el: &mut Element, op: &SetDataValidationOp, i: usize) -> Result<(
         }
         dropdown = None;
     } else if dropdown.is_none() {
-        dropdown = Some(!attr_true(el, "showDropDown"));
+        dropdown = Some(!crate::xml::attr_is_true_trimmed(el, "showDropDown"));
     }
     if type_ == DvType::List {
         if let Some(f) = &formula1 {
@@ -466,8 +472,4 @@ fn patch_attr(el: &mut Element, name: &str, p: &Patch<String>) {
         Patch::Clear => el.remove_attr(name),
         Patch::Set(s) => el.set_attr(name, s),
     }
-}
-
-fn attr_true(el: &Element, name: &str) -> bool {
-    crate::xml::attr_is_true_trimmed(el, name)
 }

@@ -52,7 +52,7 @@ fn inspect_one(g: &Element, sheet: &str, n: usize) -> Value {
         "negative",
         "displayXAxis",
     ] {
-        if attr_true(g, name) {
+        if crate::xml::attr_is_true(g, name) {
             obj.insert(name.into(), json!(true));
         }
     }
@@ -512,10 +512,6 @@ fn not_found(id: &str, i: usize) -> Error {
         ErrorKind::SparklineNotFound { id: id.to_string() },
         format!("ops[{i}].id"),
     )
-}
-
-fn attr_true(el: &Element, name: &str) -> bool {
-    crate::xml::attr_is_true(el, name)
 }
 
 fn set_flag(el: &mut Element, name: &str, on: bool) {

@@ -77,7 +77,7 @@ fn inspect_cols(root: &Element, start: CellRef, end: CellRef) -> Value {
                 .attr("width")
                 .and_then(parse_xml_f64)
                 .map(xml_width_to_chars);
-            let best_fit = attr_true(col, "bestFit");
+            let best_fit = crate::xml::attr_is_true_trimmed(col, "bestFit");
             if width.is_none() && !best_fit {
                 continue;
             }
@@ -655,10 +655,6 @@ fn col_span(col: &Element) -> Option<(u32, u32)> {
         return None;
     }
     Some((min, max))
-}
-
-fn attr_true(el: &Element, name: &str) -> bool {
-    crate::xml::attr_is_true_trimmed(el, name)
 }
 
 fn parse_xml_f64(s: &str) -> Option<f64> {

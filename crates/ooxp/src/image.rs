@@ -1,6 +1,7 @@
 //! 图文件头：EMF / WMF / TIFF，以及 PNG / JPEG / GIF / BMP 的尺寸。
 //! 不认 SVGZ / WebP。SVG 由 `svg` 认。
 
+use crate::error::{Error, ErrorKind};
 use crate::opc::Relationships;
 
 /// `[Content_Types].xml` 的 Default `emf`。
@@ -235,6 +236,46 @@ pub(crate) fn raster(bytes: &[u8]) -> Option<Raster> {
         cx: m.cx,
         cy: m.cy,
     })
+}
+
+/// 调用方给的一张图。
+pub struct ImageFile {
+    pub bytes: Vec<u8>,
+    pub ext: String,
+    pub content_type: String,
+    pub cx: i64,
+    pub cy: i64,
+    /// 有值表示这是 SVG：`bytes` 是 PNG 占位，原件在这里。
+    pub svg: Option<Vec<u8>>,
+}
+
+pub fn read_image(path: &str) -> Result<ImageFile, Error> {
+    image_file(crate::host_files::read_user_file(path)?)
+}
+
+fn image_file(bytes: Vec<u8>) -> Result<ImageFile, Error> {
+    if let Some(r) = raster(&bytes) {
+        return Ok(ImageFile {
+            bytes,
+            ext: r.ext.into(),
+            content_type: r.content_type.into(),
+            cx: r.cx,
+            cy: r.cy,
+            svg: None,
+        });
+    }
+    if crate::svg::looks_like(&bytes) {
+        let (cx, cy) = crate::svg::size(&bytes).unwrap_or((914400, 914400));
+        return Ok(ImageFile {
+            bytes: crate::ole::PREVIEW_PNG.to_vec(),
+            ext: "png".into(),
+            content_type: "image/png".into(),
+            cx,
+            cy,
+            svg: Some(bytes),
+        });
+    }
+    Err(Error::new(ErrorKind::InvalidImageFile))
 }
 
 pub(crate) fn png_size(bytes: &[u8]) -> Option<(i64, i64)> {

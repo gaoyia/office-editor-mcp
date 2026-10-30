@@ -1,7 +1,5 @@
 //! 幻灯片 `p:pic`：收集、换、插、删、改尺寸与画布坐标。不引用 xlsx / docx。
 
-use std::path::{Path, PathBuf};
-
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
@@ -22,14 +20,7 @@ const GAP_EMU: i64 = 360_000;
 const DEFAULT_SLIDE_CX: i64 = 12_192_000;
 const DEFAULT_SLIDE_CY: i64 = 6_858_000;
 
-pub struct ImageFile {
-    pub bytes: Vec<u8>,
-    pub ext: String,
-    pub content_type: String,
-    pub cx: i64,
-    pub cy: i64,
-    pub svg: Option<Vec<u8>>,
-}
+pub(crate) use crate::image::{read_image, ImageFile};
 
 #[derive(Debug, Clone)]
 pub enum PicKey {
@@ -1466,36 +1457,4 @@ pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
         return;
     }
     el.set_attr(local, value);
-}
-
-pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
-    let p = PathBuf::from(path);
-    let bytes = crate::host_files::read_user_file(path)?;
-    classify_image(bytes, &p)
-}
-
-fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
-    if let Some(r) = crate::image::raster(&bytes) {
-        return Ok(ImageFile {
-            bytes,
-            ext: r.ext.into(),
-            content_type: r.content_type.into(),
-            cx: r.cx,
-            cy: r.cy,
-            svg: None,
-        });
-    }
-    if crate::svg::looks_like(&bytes) {
-        let (cx, cy) = crate::svg::size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes: crate::ole::PREVIEW_PNG.to_vec(),
-            ext: "png".into(),
-            content_type: "image/png".into(),
-            cx,
-            cy,
-            svg: Some(bytes),
-        });
-    }
-    let _ = path;
-    Err(Error::new(ErrorKind::InvalidImageFile))
 }

@@ -69,22 +69,22 @@ fn inspect_one(
     if let Some(r) = el.attr("rank").and_then(|s| s.parse::<u64>().ok()) {
         obj.insert("rank".into(), json!(r));
     }
-    if attr_true(el, "percent") {
+    if crate::xml::attr_is_true(el, "percent") {
         obj.insert("percent".into(), json!(true));
     }
-    if attr_true(el, "bottom") {
+    if crate::xml::attr_is_true(el, "bottom") {
         obj.insert("bottom".into(), json!(true));
     }
     if attr_false(el, "aboveAverage") {
         obj.insert("aboveAverage".into(), json!(false));
     }
-    if attr_true(el, "equalAverage") {
+    if crate::xml::attr_is_true(el, "equalAverage") {
         obj.insert("equalAverage".into(), json!(true));
     }
     if let Some(s) = el.attr("stdDev").and_then(|s| s.parse::<i64>().ok()) {
         obj.insert("stdDev".into(), json!(s));
     }
-    if attr_true(el, "stopIfTrue") {
+    if crate::xml::attr_is_true(el, "stopIfTrue") {
         obj.insert("stopIfTrue".into(), json!(true));
     }
     if let Some(id) = el.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) {
@@ -128,7 +128,7 @@ fn inspect_data_bar(el: &Element) -> Value {
     if let Some(n) = el.attr("maxLength").and_then(|s| s.parse::<u64>().ok()) {
         obj.insert("maxLength".into(), json!(n));
     }
-    if el.attr("showValue").is_some() && !attr_true(el, "showValue") {
+    if el.attr("showValue").is_some() && !crate::xml::attr_is_true(el, "showValue") {
         obj.insert("showValue".into(), json!(false));
     }
     Value::Object(obj)
@@ -141,13 +141,13 @@ fn inspect_icon_set(el: &Element) -> Value {
         json!(el.attr("iconSet").unwrap_or("3TrafficLights1")),
     );
     obj.insert("cfvo".into(), inspect_cfvo_list(el));
-    if el.attr("showValue").is_some() && !attr_true(el, "showValue") {
+    if el.attr("showValue").is_some() && !crate::xml::attr_is_true(el, "showValue") {
         obj.insert("showValue".into(), json!(false));
     }
-    if attr_true(el, "reverse") {
+    if crate::xml::attr_is_true(el, "reverse") {
         obj.insert("reverse".into(), json!(true));
     }
-    if el.attr("percent").is_some() && !attr_true(el, "percent") {
+    if el.attr("percent").is_some() && !crate::xml::attr_is_true(el, "percent") {
         obj.insert("percent".into(), json!(false));
     }
     Value::Object(obj)
@@ -168,7 +168,7 @@ fn inspect_cfvo(el: &Element) -> Value {
     if let Some(v) = el.attr("val") {
         obj.insert("val".into(), json!(v));
     }
-    if el.attr("gte").is_some() && !attr_true(el, "gte") {
+    if el.attr("gte").is_some() && !crate::xml::attr_is_true(el, "gte") {
         obj.insert("gte".into(), json!(false));
     }
     Value::Object(obj)
@@ -858,10 +858,6 @@ fn format_sqref(ranges: &[(CellRef, CellRef)]) -> String {
         .join(" ")
 }
 
-fn attr_true(el: &Element, name: &str) -> bool {
-    crate::xml::attr_is_true(el, name)
-}
-
 fn attr_false(el: &Element, name: &str) -> bool {
     matches!(
         el.attr(name),
@@ -881,14 +877,14 @@ fn extra_from_rule(rule: &Element) -> CfExtraCheck<'_> {
     CfExtraCheck {
         text: rule.attr("text"),
         rank: rule.attr("rank").and_then(|s| s.parse().ok()),
-        percent: if attr_true(rule, "percent") {
+        percent: if crate::xml::attr_is_true(rule, "percent") {
             Some(true)
         } else if rule.attr("percent").is_some() {
             Some(false)
         } else {
             None
         },
-        bottom: if attr_true(rule, "bottom") {
+        bottom: if crate::xml::attr_is_true(rule, "bottom") {
             Some(true)
         } else if rule.attr("bottom").is_some() {
             Some(false)
@@ -897,12 +893,12 @@ fn extra_from_rule(rule: &Element) -> CfExtraCheck<'_> {
         },
         above_average: if attr_false(rule, "aboveAverage") {
             Some(false)
-        } else if attr_true(rule, "aboveAverage") {
+        } else if crate::xml::attr_is_true(rule, "aboveAverage") {
             Some(true)
         } else {
             None
         },
-        equal_average: if attr_true(rule, "equalAverage") {
+        equal_average: if crate::xml::attr_is_true(rule, "equalAverage") {
             Some(true)
         } else if rule.attr("equalAverage").is_some() {
             Some(false)

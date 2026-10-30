@@ -1,7 +1,5 @@
 //! 页眉、页脚和正文里的 DrawingML 图片：收集、定位、换媒体、插删、改尺寸与绕排。
 
-use std::path::{Path, PathBuf};
-
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
@@ -208,15 +206,7 @@ pub struct PicInfo {
     pub hyperlink: Value,
 }
 
-pub struct ImageFile {
-    pub bytes: Vec<u8>,
-    pub ext: String,
-    pub content_type: String,
-    pub cx: i64,
-    pub cy: i64,
-    /// 有值表示这是 SVG：`bytes` 是 PNG 占位，原件在这里。
-    pub svg: Option<Vec<u8>>,
-}
+pub(crate) use crate::image::{read_image, ImageFile};
 
 pub struct AddedMedia {
     pub blip_rid: String,
@@ -678,12 +668,6 @@ pub fn part_for_pic(
 pub fn remove_picture(root: &mut Element, key: &PicKey) -> bool {
     let mut idx = 0usize;
     remove_picture_walk(root, &mut idx, key)
-}
-
-pub fn read_image(path: &str) -> Result<ImageFile, Error> {
-    let p = PathBuf::from(path);
-    let bytes = crate::host_files::read_user_file(path)?;
-    classify_image(bytes, &p)
 }
 
 pub fn next_media_part(pkg: &Package, ext: &str) -> String {
@@ -1865,31 +1849,6 @@ fn position_v(pos: &WrapPos) -> Element {
         });
     }
     el
-}
-
-fn classify_image(bytes: Vec<u8>, _path: &Path) -> Result<ImageFile, Error> {
-    if let Some(r) = crate::image::raster(&bytes) {
-        return Ok(ImageFile {
-            bytes,
-            ext: r.ext.into(),
-            content_type: r.content_type.into(),
-            cx: r.cx,
-            cy: r.cy,
-            svg: None,
-        });
-    }
-    if crate::svg::looks_like(&bytes) {
-        let (cx, cy) = crate::svg::size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes: crate::ole::PREVIEW_PNG.to_vec(),
-            ext: "png".into(),
-            content_type: "image/png".into(),
-            cx,
-            cy,
-            svg: Some(bytes),
-        });
-    }
-    Err(Error::new(ErrorKind::InvalidImageFile))
 }
 
 /// 换媒体。返回是否改了 drawing XML，以及要从整部件根上再扫的 SVG 关系 id。

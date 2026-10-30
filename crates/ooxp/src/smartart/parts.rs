@@ -2,7 +2,8 @@
 
 use crate::error::Error;
 use crate::opc::{
-    rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
+    rel_target, rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship,
+    Relationships,
 };
 use crate::xml::{self, Element};
 
@@ -11,38 +12,6 @@ use super::{
     colors_xml, style_xml, ColorsKind, LayoutKind, NewPoint, StyleKind, CT_COLORS, CT_DATA,
     CT_LAYOUT, CT_STYLE, REL_CS, REL_DM, REL_LO, REL_QS,
 };
-
-/// 从源部件到目标部件的相对关系 Target，算法与 `pptx/picture.rs` 相同。
-pub fn rel_target_from(source_part: &str, target_opc: &str) -> String {
-    let src_dir = split_dir_file(source_part).0;
-    let tgt = target_opc.trim_start_matches('/');
-    let src = src_dir.trim_start_matches('/');
-    if src.is_empty() || src == "/" {
-        return tgt.to_string();
-    }
-    if let Some(rest) = tgt.strip_prefix(&format!("{src}/")) {
-        return rest.to_string();
-    }
-    let src_parts: Vec<&str> = src.split('/').filter(|s| !s.is_empty()).collect();
-    let tgt_parts: Vec<&str> = tgt.split('/').filter(|s| !s.is_empty()).collect();
-    let mut common = 0usize;
-    while common < src_parts.len()
-        && common < tgt_parts.len()
-        && src_parts[common] == tgt_parts[common]
-    {
-        common += 1;
-    }
-    let up = src_parts.len() - common;
-    let rest = tgt_parts[common..].join("/");
-    format!("{}{rest}", "../".repeat(up))
-}
-
-fn split_dir_file(part: &str) -> (&str, &str) {
-    match part.rsplit_once('/') {
-        Some((dir, file)) => (dir, file),
-        None => ("", part),
-    }
-}
 
 pub fn write_four_parts(
     pkg: &mut Package,
@@ -88,7 +57,7 @@ fn push_rel(rels: &mut Relationships, host: &str, rel_type: &str, part: &str) ->
     rels.push(Relationship {
         id: id.clone(),
         rel_type: rel_type.into(),
-        target: rel_target_from(host, part),
+        target: rel_target(host, part, true),
         target_mode: None,
         extra: Vec::new(),
     });
@@ -203,7 +172,7 @@ pub fn retarget_satellite(
         host_rels.push(Relationship {
             id: rid.clone(),
             rel_type: rel_type.into(),
-            target: rel_target_from(host, &part),
+            target: rel_target(host, &part, true),
             target_mode: None,
             extra: Vec::new(),
         });

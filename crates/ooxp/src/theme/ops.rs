@@ -4,6 +4,7 @@
 use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
+use crate::op_fields::deny_keys;
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::theme::{ExtraScheme, FmtFillKind, FontSlot, ObjectDefaultsPatch, ScriptFont};
 use crate::xml;
@@ -1347,18 +1348,6 @@ fn parse_extra_colors(obj: &Map<String, Value>, path: &str) -> Result<NamedColor
         }
     }
     Ok(NamedColorSlots { name, slots })
-}
-
-fn deny_keys(obj: &Map<String, Value>, i: usize, allowed: &[&str]) -> Result<(), Error> {
-    for k in obj.keys() {
-        if !allowed.contains(&k.as_str()) {
-            return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
-                format!("ops[{i}].{k}"),
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn theme_part(pkg: &Package, doc_part: &str) -> Result<Option<String>, Error> {
