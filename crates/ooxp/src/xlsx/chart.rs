@@ -337,7 +337,7 @@ fn chart_info(
                     let (c, v) = chart::axis_titles(&doc.root, chart::uses_xy_axes(&ty));
                     cat_axis = json!(c);
                     val_axis = json!(v);
-                    series = chart::series_json(&id, &doc.root, |f| {
+                    series = chart::series_json(&id, &doc.root, true, |f| {
                         read_formula_cells(pkg, f, sheet_name, sst, sheets)
                     })?;
                     legend = chart::legend_json(&doc.root);

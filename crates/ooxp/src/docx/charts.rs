@@ -2,14 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
-use serde_json::{json, Map, Number, Value};
+use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_rel_target, same_part_name, split_dir_file, ContentTypes, Package,
     Relationship, Relationships,
 };
-use crate::xlsx;
 use crate::xml::{self, Document, Element, Node};
 
 use super::comments;
@@ -48,14 +47,7 @@ const WRAPPERS: &[&str] = &[
     "surface3DChart",
 ];
 
-pub use crate::chart::{ChartExtra, ChartType, NewSeries};
-
-/// 哪一类图表 op，用来套分层限制。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ChartRestrict {
-    Decorate,
-    Data,
-}
+pub use crate::chart::{ChartExtra, ChartRestrict, ChartType, NewSeries};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChartKey {
@@ -564,14 +556,14 @@ pub fn apply_insert(
     }
     let series = normalize_insert_series(op.chart_type, &op.series);
     let cats = shared_categories(&series);
-    let embed = build_embedding(op.chart_type, &series, &cats)?;
-    let embed_part = next_numbered(
+    let embed = crate::chart::embed::build(op.chart_type, &series, &cats)?;
+    let embed_part = crate::chart::embed::next_part(
         pkg,
         "/word/embeddings",
         "Microsoft_Excel_Worksheet",
         ".xlsx",
     );
-    let chart_part = next_numbered(
+    let chart_part = crate::chart::embed::next_part(
         pkg,
         "/word/charts",
         crate::chart::part_stem(op.chart_type),
@@ -713,7 +705,7 @@ pub fn apply_title(
     i: usize,
 ) -> Result<(), Error> {
     let mut space = load_chart_space(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.0.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.0.root, &op.id, i, ChartRestrict::Decorate)?;
     set_chart_title(&mut space.0.root, &op.title);
     pkg.set(&space.1, space.0.to_bytes()?)?;
     Ok(())
@@ -729,7 +721,7 @@ pub fn apply_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, host) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     let n = series_count(&space.root);
     if op.target.index >= n {
         return Err(Error::with_path(
@@ -769,7 +761,7 @@ pub fn apply_add_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
     let ty = inspect_type(&space.root, false);
     if ty == "pie" {
@@ -815,7 +807,7 @@ pub fn apply_delete_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
     let n = series_count(&space.root);
     if op.target.index >= n {
@@ -845,7 +837,7 @@ pub fn apply_type(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     if op.chart_type == ChartType::Combo {
         return Err(Error::with_path(
             ErrorKind::InvalidChartType,
@@ -873,7 +865,7 @@ pub fn apply_axis_title(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_axis_title(&mut space.root, &op.axis, &op.title, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -889,7 +881,7 @@ pub fn apply_legend(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_legend(&mut space.root, op.show, op.pos.as_deref());
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -905,7 +897,7 @@ pub fn apply_data_labels(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_data_labels(&mut space.root, op.show);
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -921,7 +913,7 @@ pub fn apply_insert_trendline(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::insert_trendline(&mut space.root, &op.id, op.target.index, &op.spec, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -937,7 +929,7 @@ pub fn apply_set_trendline(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::set_trendline(
         &mut space.root,
         &op.id,
@@ -960,7 +952,7 @@ pub fn apply_delete_trendline(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::delete_trendline(
         &mut space.root,
         &op.id,
@@ -982,7 +974,7 @@ pub fn apply_insert_error_bars(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::insert_error_bars(&mut space.root, &op.id, op.target.index, &op.spec, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -998,7 +990,7 @@ pub fn apply_set_error_bars(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::set_error_bars(
         &mut space.root,
         &op.id,
@@ -1021,7 +1013,7 @@ pub fn apply_delete_error_bars(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::delete_error_bars(
         &mut space.root,
         &op.id,
@@ -1043,7 +1035,7 @@ pub fn apply_series_axis(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::remain::set_series_axis(
         &mut space.root,
         &op.id,
@@ -1220,208 +1212,9 @@ fn chart_json(
 }
 
 fn series_json(chart_id: &str, space: &Element, embed: Option<&[u8]>) -> Result<Vec<Value>, Error> {
-    if space.child_by_local("chartData").is_some() {
-        return Ok(crate::chart::chartex::series_json(chart_id, space));
-    }
-    let mut out = Vec::new();
-    let mut index = 0usize;
-    let Some(plot) = plot_area(space) else {
-        return Ok(out);
-    };
-    for wrap in plot.element_children() {
-        if !WRAPPERS.contains(&wrap.local_name()) {
-            continue;
-        }
-        let bubble = wrap.local_name() == "bubbleChart";
-        let xy = bubble || wrap.local_name() == "scatterChart";
-        let (cat_local, val_local) = if xy { ("xVal", "yVal") } else { ("cat", "val") };
-        for ser in wrap.element_children() {
-            if ser.local_name() != "ser" {
-                continue;
-            }
-            let name = series_name(ser);
-            let (cats, cat_stale) = read_pts(ser, cat_local, embed);
-            let (vals, val_stale) = read_pts(ser, val_local, embed);
-            let mut node = json!({
-                "id": format!("{chart_id}/series:{index}"),
-                "index": index,
-                "name": name,
-                "categories": cats,
-                "values": vals,
-            });
-            let mut stale = cat_stale || val_stale;
-            if bubble {
-                let (sizes, size_stale) = read_pts(ser, "bubbleSize", embed);
-                node["sizes"] = json!(sizes);
-                stale |= size_stale;
-            }
-            let mut map = node.as_object().cloned().unwrap_or_default();
-            crate::chart::remain::attach_series_extras(&mut map, space, ser, chart_id, index);
-            if stale {
-                map.insert("cacheStale".into(), json!(true));
-            }
-            out.push(Value::Object(map));
-            index += 1;
-        }
-    }
-    Ok(out)
-}
-
-fn read_pts(ser: &Element, local: &str, embed: Option<&[u8]>) -> (Vec<Value>, bool) {
-    let Some(el) = find_child(ser, local) else {
-        return (Vec::new(), false);
-    };
-    let cache = cache_values(el);
-    let formula = formula_of(el);
-    let embed_vals = match (embed, formula.as_deref()) {
-        (Some(bytes), Some(f)) => read_embed_formula(bytes, f),
-        _ => None,
-    };
-    match (cache, embed_vals) {
-        (Some(c), Some(e)) => {
-            let stale = !values_equal(&c, &e);
-            (e, stale)
-        }
-        (None, Some(e)) => (e, false),
-        (Some(c), None) => (c, false),
-        (None, None) => (Vec::new(), false),
-    }
-}
-
-fn cache_values(el: &Element) -> Option<Vec<Value>> {
-    let cache = find_desc(el, "numCache")
-        .or_else(|| find_desc(el, "strCache"))
-        .or_else(|| find_desc(el, "numLit"))
-        .or_else(|| find_desc(el, "strLit"));
-    let cache = cache?;
-    let mut pts: Vec<(u32, String)> = Vec::new();
-    for pt in descendants_local(cache, "pt") {
-        let idx = pt
-            .attr_local("idx")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let v = pt
-            .child_by_local("v")
-            .map(|e| e.text_content())
-            .unwrap_or_default();
-        pts.push((idx, v));
-    }
-    if pts.is_empty() {
-        return Some(Vec::new());
-    }
-    pts.sort_by_key(|(i, _)| *i);
-    Some(to_json_array(
-        pts.into_iter().map(|(_, v)| v).collect::<Vec<_>>(),
-    ))
-}
-
-fn formula_of(el: &Element) -> Option<String> {
-    find_desc(el, "f").map(|f| f.text_content())
-}
-
-fn read_embed_formula(bytes: &[u8], formula: &str) -> Option<Vec<Value>> {
-    let (sheet, range) = parse_chart_formula(formula)?;
-    let scope = xlsx::parse_scope(Some(&json!({
-        "sheet": sheet,
-        "range": range,
-        "maxCells": 20000
-    })))
-    .ok()??;
-    let tree = xlsx::inspect(bytes, Some(scope)).ok()?;
-    let (start, end) = xlsx::a1::parse_range(&range).ok()?;
-    let mut by_ref = HashMap::new();
-    if let Some(cells) = tree["sheets"][0]["cells"].as_array() {
-        for c in cells {
-            if let Some(r) = c["ref"].as_str() {
-                by_ref.insert(r.to_string(), c["value"].clone());
-            }
-        }
-    }
-    let mut out = Vec::new();
-    let mut texts = Vec::new();
-    let mut all_num = true;
-    for row in start.row..=end.row {
-        for col in start.col..=end.col {
-            let a1 = xlsx::a1::format_cell(col, row);
-            match by_ref.get(&a1) {
-                Some(Value::Number(n)) => {
-                    out.push(Value::Number(n.clone()));
-                    texts.push(n.to_string());
-                }
-                Some(Value::String(s)) => {
-                    all_num = false;
-                    out.push(Value::String(s.clone()));
-                    texts.push(s.clone());
-                }
-                Some(Value::Bool(b)) => {
-                    all_num = false;
-                    out.push(json!(b));
-                    texts.push(b.to_string());
-                }
-                Some(Value::Null) | None => {
-                    all_num = false;
-                    out.push(json!(""));
-                    texts.push(String::new());
-                }
-                Some(other) => {
-                    all_num = false;
-                    out.push(other.clone());
-                    texts.push(other.to_string());
-                }
-            }
-        }
-    }
-    if all_num {
-        Some(out)
-    } else {
-        Some(texts.into_iter().map(Value::String).collect())
-    }
-}
-
-fn parse_chart_formula(f: &str) -> Option<(String, String)> {
-    let mut s = f.trim().trim_start_matches('=').trim();
-    if let Some(rest) = s.strip_prefix('[') {
-        s = rest.split_once(']')?.1.trim_start_matches('!').trim();
-    }
-    let (sheet, range) = if let Some(rest) = s.strip_prefix('\'') {
-        let end = rest.find('\'')?;
-        let sheet = rest[..end].replace("''", "'");
-        let after = rest[end + 1..].trim_start_matches('!').trim();
-        (sheet, after)
-    } else {
-        let (a, b) = s.split_once('!')?;
-        (a.to_string(), b.trim())
-    };
-    Some((sheet, range.replace('$', "")))
-}
-
-fn to_json_array(raw: Vec<String>) -> Vec<Value> {
-    let nums: Option<Vec<Number>> = raw.iter().map(|s| parse_num(s)).collect::<Option<Vec<_>>>();
-    if let Some(n) = nums {
-        n.into_iter().map(Value::Number).collect()
-    } else {
-        raw.into_iter().map(Value::String).collect()
-    }
-}
-
-fn parse_num(s: &str) -> Option<Number> {
-    let t = s.trim();
-    if t.is_empty() {
-        return None;
-    }
-    if let Ok(i) = t.parse::<i64>() {
-        return Some(Number::from(i));
-    }
-    t.parse::<f64>().ok().and_then(Number::from_f64)
-}
-
-fn values_equal(a: &[Value], b: &[Value]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.iter().zip(b).all(|(x, y)| match (x, y) {
-        (Value::Number(m), Value::Number(n)) => m.as_f64() == n.as_f64(),
-        _ => *x == *y,
+    // 契约不报 nameRef / catRef / valRef / sizeRef。
+    crate::chart::series_json(chart_id, space, false, |f| {
+        embed.and_then(|bytes| crate::chart::embed::read_formula(bytes, f))
     })
 }
 
@@ -1616,24 +1409,6 @@ fn secondary_axis(space: &Element, ty: &str) -> bool {
     } else {
         val_n > 1
     }
-}
-
-fn series_name(ser: &Element) -> Option<String> {
-    let tx = ser.child_by_local("tx")?;
-    if let Some(v) = tx.child_by_local("v") {
-        let s = v.text_content();
-        return if s.is_empty() { None } else { Some(s) };
-    }
-    if let Some(cache) = find_desc(tx, "strCache").or_else(|| find_desc(tx, "numCache")) {
-        if let Some(pt) = descendants_local(cache, "pt").next() {
-            let s = pt
-                .child_by_local("v")
-                .map(|e| e.text_content())
-                .unwrap_or_default();
-            return if s.is_empty() { None } else { Some(s) };
-        }
-    }
-    None
 }
 
 fn is_chart(drawing: &Element) -> bool {
@@ -2045,10 +1820,6 @@ fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
     });
 }
 
-fn find_child<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    el.element_children().find(|c| c.local_name() == local)
-}
-
 fn find_desc<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
     crate::xml::find_by_local(el, local)
 }
@@ -2303,30 +2074,6 @@ fn load_chart_space_host(
     Ok((space, chart_part, host))
 }
 
-fn reject_restricted(
-    space: &Element,
-    id: &str,
-    i: usize,
-    class: ChartRestrict,
-) -> Result<(), Error> {
-    let ty = inspect_type(space, false);
-    let flags = flags_json(space, &ty);
-    let hard = matches!(ty.as_str(), "other" | "chartex");
-    if hard {
-        return Err(Error::with_path(
-            ErrorKind::RestrictedChart { id: id.to_string() },
-            format!("ops[{i}].id"),
-        ));
-    }
-    if class == ChartRestrict::Data && flags.iter().any(|f| f.as_str() == Some("pivot")) {
-        return Err(Error::with_path(
-            ErrorKind::RestrictedChart { id: id.to_string() },
-            format!("ops[{i}].id"),
-        ));
-    }
-    Ok(())
-}
-
 fn uses_xy_axes(ty: &str) -> bool {
     matches!(ty, "scatter" | "bubble")
 }
@@ -2441,131 +2188,6 @@ fn shared_categories(series: &[NewSeries]) -> Vec<Value> {
     }
     let n = series.first().map(|s| s.values.len()).unwrap_or(0);
     (1..=n).map(|i| json!(i.to_string())).collect()
-}
-
-fn build_embedding(ty: ChartType, series: &[NewSeries], cats: &[Value]) -> Result<Vec<u8>, Error> {
-    let mut cells = Vec::new();
-    for (i, cat) in cats.iter().enumerate() {
-        cells.push(json!({ "ref": format!("A{}", i + 2), "value": cat }));
-    }
-    if ty == ChartType::Bubble {
-        for (si, s) in series.iter().enumerate() {
-            let y_col = xlsx::a1::col_to_letters((si as u32) * 2 + 2);
-            let sz_col = xlsx::a1::col_to_letters((si as u32) * 2 + 3);
-            let name = s.name.clone().unwrap_or_else(|| format!("系列{}", si + 1));
-            cells.push(json!({ "ref": format!("{y_col}1"), "value": name }));
-            for (ri, v) in s.values.iter().enumerate() {
-                cells.push(json!({ "ref": format!("{}{}", y_col, ri + 2), "value": v }));
-            }
-            let sizes = s.sizes.clone().unwrap_or_else(|| ones(s.values.len()));
-            for (ri, v) in sizes.iter().enumerate() {
-                cells.push(json!({ "ref": format!("{}{}", sz_col, ri + 2), "value": v }));
-            }
-        }
-    } else {
-        for (si, s) in series.iter().enumerate() {
-            let col = xlsx::a1::col_to_letters((si as u32) + 2);
-            let name = s.name.clone().unwrap_or_else(|| format!("系列{}", si + 1));
-            cells.push(json!({ "ref": format!("{col}1"), "value": name }));
-            for (ri, v) in s.values.iter().enumerate() {
-                cells.push(json!({ "ref": format!("{}{}", col, ri + 2), "value": v }));
-            }
-        }
-    }
-    xlsx::create(&json!({ "sheets": [{ "name": "Sheet1", "cells": cells }] }))
-}
-
-fn ser_xml(
-    idx: u32,
-    name: &str,
-    name_ref: &str,
-    cat_ref: &str,
-    cats: &[Value],
-    val_ref: &str,
-    vals: &[Value],
-    xy: bool,
-    sizes: Option<(&[Value], &str)>,
-) -> String {
-    let (cat_tag, val_tag) = if xy {
-        ("c:xVal", "c:yVal")
-    } else {
-        ("c:cat", "c:val")
-    };
-    let mut body = format!(
-        r#"<c:ser><c:idx val="{idx}"/><c:order val="{idx}"/><c:tx>{}</c:tx><{cat_tag}>{}</{cat_tag}><{val_tag}>{}</{val_tag}>"#,
-        str_ref(name_ref, &[json!(name)]),
-        str_or_num_ref(cat_ref, cats),
-        str_or_num_ref(val_ref, vals),
-    );
-    if let Some((sz, sz_ref)) = sizes {
-        body.push_str(&format!(
-            "<c:bubbleSize>{}</c:bubbleSize><c:bubble3D val=\"0\"/>",
-            str_or_num_ref(sz_ref, sz)
-        ));
-    }
-    body.push_str("</c:ser>");
-    body
-}
-
-fn str_ref(f: &str, pts: &[Value]) -> String {
-    let mut body = format!(
-        r#"<c:strRef><c:f>{}</c:f><c:strCache><c:ptCount val="{}" />"#,
-        xml::escape_text(f),
-        pts.len()
-    );
-    for (i, p) in pts.iter().enumerate() {
-        body.push_str(&format!(
-            r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#,
-            xml::escape_text(&value_text(p))
-        ));
-    }
-    body.push_str("</c:strCache></c:strRef>");
-    body
-}
-
-fn num_ref(f: &str, pts: &[Value]) -> String {
-    let mut body = format!(
-        r#"<c:numRef><c:f>{}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="{}" />"#,
-        xml::escape_text(f),
-        pts.len()
-    );
-    for (i, p) in pts.iter().enumerate() {
-        body.push_str(&format!(
-            r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#,
-            xml::escape_text(&value_text(p))
-        ));
-    }
-    body.push_str("</c:numCache></c:numRef>");
-    body
-}
-
-fn str_or_num_ref(f: &str, pts: &[Value]) -> String {
-    if pts.iter().all(|v| v.is_number()) {
-        num_ref(f, pts)
-    } else {
-        str_ref(f, pts)
-    }
-}
-
-fn value_text(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => String::new(),
-        _ => v.to_string(),
-    }
-}
-
-fn next_numbered(pkg: &Package, dir: &str, stem: &str, ext: &str) -> String {
-    let mut n = 1u32;
-    loop {
-        let name = format!("{dir}/{stem}{n}{ext}");
-        if !pkg.contains(&name) {
-            return name;
-        }
-        n += 1;
-    }
 }
 
 fn chart_satellites(pkg: &Package, chart_part: &str) -> Result<Vec<String>, Error> {
@@ -2834,17 +2456,9 @@ fn write_series(
     sizes: Option<&[Value]>,
     i: usize,
 ) -> Result<(), Error> {
-    if index >= series_count(space) {
-        return Err(Error::with_path(
-            ErrorKind::ChartSeriesNotFound {
-                id: format!("series:{index}"),
-            },
-            format!("ops[{i}].id"),
-        ));
-    }
-    let embed_snapshot = with_ser_mut(space, index, |ser| {
+    let snapshot = crate::chart::with_ser_mut(space, index, |ser| {
         if let Some(n) = name {
-            set_series_name(ser, n);
+            crate::chart::set_series_name(ser, n);
         }
         if let Some(c) = cats {
             let local = if ser.child_by_local("xVal").is_some() {
@@ -2852,7 +2466,9 @@ fn write_series(
             } else {
                 "cat"
             };
-            set_pts(ser, local, c);
+            let f = ser.child_by_local(local).and_then(crate::chart::formula_of);
+            let new_f = crate::chart::embed::resized_formula(f.as_deref(), c.len());
+            crate::chart::set_pts(ser, local, c, new_f.as_deref());
         }
         if let Some(v) = vals {
             let local = if ser.child_by_local("yVal").is_some() {
@@ -2860,14 +2476,20 @@ fn write_series(
             } else {
                 "val"
             };
-            set_pts(ser, local, v);
+            let f = ser.child_by_local(local).and_then(crate::chart::formula_of);
+            let new_f = crate::chart::embed::resized_formula(f.as_deref(), v.len());
+            crate::chart::set_pts(ser, local, v, new_f.as_deref());
         }
         if let Some(s) = sizes {
-            set_pts(ser, "bubbleSize", s);
+            let f = ser
+                .child_by_local("bubbleSize")
+                .and_then(crate::chart::formula_of);
+            let new_f = crate::chart::embed::resized_formula(f.as_deref(), s.len());
+            crate::chart::set_pts(ser, "bubbleSize", s, new_f.as_deref());
         }
         ser.clone()
     });
-    let Some(ser) = embed_snapshot else {
+    let Some(ser) = snapshot else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound {
                 id: format!("series:{index}"),
@@ -2878,177 +2500,10 @@ fn write_series(
     if let Some(embed_rid) = external_data_rid(space) {
         let embed_part = crate::opc::resolve_id(pkg, chart_part, &embed_rid)?;
         let bytes = pkg.get(&embed_part)?.to_vec();
-        let updated = patch_embed(&bytes, &ser, name, cats, vals, sizes)?;
+        let updated = crate::chart::embed::patch_series(&bytes, &ser, name, cats, vals, sizes)?;
         pkg.set(&embed_part, updated)?;
     }
     Ok(())
-}
-
-fn with_ser_mut<R>(
-    space: &mut Element,
-    index: usize,
-    f: impl FnOnce(&mut Element) -> R,
-) -> Option<R> {
-    let mut seen = 0usize;
-    let plot = plot_area_mut(space)?;
-    for w in plot.element_children_mut() {
-        if !WRAPPERS.contains(&w.local_name()) {
-            continue;
-        }
-        for c in w.element_children_mut() {
-            if c.local_name() == "ser" {
-                if seen == index {
-                    return Some(f(c));
-                }
-                seen += 1;
-            }
-        }
-    }
-    None
-}
-
-fn set_series_name(ser: &mut Element, name: &str) {
-    let mut tx = ser.child_by_local_mut("tx");
-    if tx.is_none() {
-        ser.children.insert(
-            2.min(ser.children.len()),
-            Node::Element(Element::new("c:tx")),
-        );
-        tx = ser.child_by_local_mut("tx");
-    }
-    let Some(tx) = tx else {
-        return;
-    };
-    if let Some(f) = formula_of(tx) {
-        let xml = format!(
-            r#"<c:tx xmlns:c="{CHART_NS}">{}</c:tx>"#,
-            str_ref(&f, &[json!(name)])
-        );
-        if let Ok(doc) = xml::parse(xml.as_bytes()) {
-            *tx = doc.take_root();
-        }
-        return;
-    }
-    tx.children.clear();
-    tx.push_element(Element::new("c:v").with_text(name));
-}
-
-fn set_pts(ser: &mut Element, local: &str, values: &[Value]) {
-    let tag = format!("c:{local}");
-    let existing_f = ser
-        .child_by_local(local)
-        .and_then(formula_of)
-        .unwrap_or_else(|| default_formula(local, values.len()));
-    let f = resize_formula(&existing_f, values.len());
-    let xml = format!(
-        r#"<{tag} xmlns:c="{CHART_NS}">{}</{tag}>"#,
-        str_or_num_ref(&f, values)
-    );
-    if let Ok(doc) = xml::parse(xml.as_bytes()) {
-        if let Some(old) = ser
-            .children
-            .iter()
-            .position(|n| matches!(n, Node::Element(e) if e.local_name() == local))
-        {
-            ser.children[old] = Node::Element(doc.take_root());
-        } else {
-            ser.push_element(doc.take_root());
-        }
-    }
-}
-
-fn default_formula(local: &str, n: usize) -> String {
-    let end = n.max(1) + 1;
-    match local {
-        "cat" | "xVal" => format!("Sheet1!$A$2:$A${end}"),
-        "bubbleSize" => format!("Sheet1!$C$2:$C${end}"),
-        _ => format!("Sheet1!$B$2:$B${end}"),
-    }
-}
-
-fn resize_formula(f: &str, n: usize) -> String {
-    let Some((sheet, range)) = parse_chart_formula(f) else {
-        return f.to_string();
-    };
-    let Ok((start, mut end)) = xlsx::a1::parse_range(&range) else {
-        return f.to_string();
-    };
-    let len = n.max(1) as u32;
-    if start.col == end.col {
-        end.row = start.row + len - 1;
-    } else if start.row == end.row {
-        end.col = start.col + len - 1;
-    }
-    let a = xlsx::a1::format_cell(start.col, start.row);
-    let b = xlsx::a1::format_cell(end.col, end.row);
-    let (ac, ar) = split_a1(&a);
-    let (bc, br) = split_a1(&b);
-    format!("{sheet}!${ac}${ar}:${bc}${br}")
-}
-
-fn split_a1(a1: &str) -> (String, String) {
-    let i = a1.find(|c: char| c.is_ascii_digit()).unwrap_or(a1.len());
-    (a1[..i].to_string(), a1[i..].to_string())
-}
-
-fn patch_embed(
-    bytes: &[u8],
-    ser: &Element,
-    name: Option<&str>,
-    cats: Option<&[Value]>,
-    vals: Option<&[Value]>,
-    sizes: Option<&[Value]>,
-) -> Result<Vec<u8>, Error> {
-    let mut ops = Vec::new();
-    if let Some(n) = name {
-        if let Some(f) = ser.child_by_local("tx").and_then(formula_of) {
-            if let Some((sheet, range)) = parse_chart_formula(&f) {
-                let a1 = range.split(':').next().unwrap_or(&range);
-                ops.push(json!({
-                    "op": "setCell",
-                    "id": format!("cell:{sheet}!{a1}"),
-                    "value": n
-                }));
-            }
-        }
-    }
-    if let Some(c) = cats {
-        push_range_ops(&mut ops, ser, "cat", "xVal", c);
-    }
-    if let Some(v) = vals {
-        push_range_ops(&mut ops, ser, "val", "yVal", v);
-    }
-    if let Some(s) = sizes {
-        push_range_ops(&mut ops, ser, "bubbleSize", "bubbleSize", s);
-    }
-    if ops.is_empty() {
-        return Ok(bytes.to_vec());
-    }
-    let parsed = xlsx::parse_ops(&ops)?;
-    xlsx::apply(bytes, &parsed)
-}
-
-fn push_range_ops(ops: &mut Vec<Value>, ser: &Element, a: &str, b: &str, values: &[Value]) {
-    let el = ser.child_by_local(a).or_else(|| ser.child_by_local(b));
-    let Some(f) = el.and_then(formula_of) else {
-        return;
-    };
-    let Some((sheet, range)) = parse_chart_formula(&f) else {
-        return;
-    };
-    let Ok((start, _)) = xlsx::a1::parse_range(&range) else {
-        return;
-    };
-    for (i, v) in values.iter().enumerate() {
-        let col = start.col;
-        let row = start.row + i as u32;
-        let a1 = xlsx::a1::format_cell(col, row);
-        ops.push(json!({
-            "op": "setCell",
-            "id": format!("cell:{sheet}!{a1}"),
-            "value": v
-        }));
-    }
 }
 
 fn add_series(
@@ -3073,7 +2528,7 @@ fn add_series(
         } else {
             "cat"
         };
-        cache_values(first.child_by_local(local).unwrap_or(first)).unwrap_or_default()
+        crate::chart::cache_values(first.child_by_local(local).unwrap_or(first)).unwrap_or_default()
     } else {
         return Err(Error::with_path(
             ErrorKind::NeedChartCategories,
@@ -3091,13 +2546,13 @@ fn add_series(
         .map(str::to_string)
         .unwrap_or_else(|| format!("系列{}", n + 1));
     let y_col_n = next_free_col(space);
-    let col = xlsx::a1::col_to_letters(y_col_n);
+    let col = crate::chart::col_letters(y_col_n);
     let size_col_n = if ty == "bubble" {
         Some(next_free_col_after(space, y_col_n))
     } else {
         None
     };
-    let cat_ref = formula_of(
+    let cat_ref = crate::chart::formula_of(
         collect_sers(space)
             .first()
             .and_then(|s| s.child_by_local("cat").or_else(|| s.child_by_local("xVal")))
@@ -3120,14 +2575,14 @@ fn add_series(
     };
     let size_pair = match (sizes_owned.as_deref(), size_col_n.as_ref()) {
         (Some(sz), Some(cn)) => {
-            let letters = xlsx::a1::col_to_letters(*cn);
+            let letters = crate::chart::col_letters(*cn);
             let r = format!("Sheet1!${letters}$2:${letters}${}", sz.len() + 1);
             Some((sz, r))
         }
         _ => None,
     };
     let size_pair_ref = size_pair.as_ref().map(|(sz, r)| (*sz, r.as_str()));
-    let xml = ser_xml(
+    let xml = crate::chart::ser_xml(
         idx,
         &name,
         &name_ref,
@@ -3171,7 +2626,7 @@ fn add_series(
             }));
         }
         if let (Some(sz), Some(cn)) = (sizes_owned.as_ref(), size_col_n) {
-            let letters = xlsx::a1::col_to_letters(cn);
+            let letters = crate::chart::col_letters(cn);
             for (ri, v) in sz.iter().enumerate() {
                 ops.push(json!({
                     "op": "setCell",
@@ -3180,8 +2635,7 @@ fn add_series(
                 }));
             }
         }
-        let parsed = xlsx::parse_ops(&ops)?;
-        let updated = xlsx::apply(&bytes, &parsed)?;
+        let updated = crate::chart::embed::apply_ops(&bytes, ops)?;
         pkg.set(&embed_part, updated)?;
     }
     Ok(())
@@ -3195,12 +2649,10 @@ fn next_free_col_after(space: &Element, after: u32) -> u32 {
     let mut used: HashSet<u32> = HashSet::new();
     for ser in collect_sers(space) {
         for local in ["tx", "cat", "val", "xVal", "yVal", "bubbleSize"] {
-            if let Some(f) = ser.child_by_local(local).and_then(formula_of) {
-                if let Some((_, range)) = parse_chart_formula(&f) {
-                    if let Ok((start, end)) = xlsx::a1::parse_range(&range) {
-                        for c in start.col..=end.col {
-                            used.insert(c);
-                        }
+            if let Some(f) = ser.child_by_local(local).and_then(crate::chart::formula_of) {
+                if let Some(refer) = crate::chart::parse_a1_formula(&f) {
+                    for c in refer.start.col..=refer.end.col {
+                        used.insert(c);
                     }
                 }
             }

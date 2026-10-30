@@ -795,6 +795,7 @@ pub fn reject_restricted(
 pub fn series_json<F>(
     chart_id: &str,
     space: &Element,
+    refs: bool,
     mut read_cells: F,
 ) -> Result<Vec<Value>, Error>
 where
@@ -830,16 +831,24 @@ where
             node.insert("id".into(), json!(format!("{chart_id}/series:{index}")));
             node.insert("index".into(), json!(index));
             node.insert("name".into(), json!(name));
-            node.insert("nameRef".into(), json!(name_ref));
+            if refs {
+                node.insert("nameRef".into(), json!(name_ref));
+            }
             node.insert("categories".into(), json!(cats));
-            node.insert("catRef".into(), json!(cat_ref));
+            if refs {
+                node.insert("catRef".into(), json!(cat_ref));
+            }
             node.insert("values".into(), json!(vals));
-            node.insert("valRef".into(), json!(val_ref));
+            if refs {
+                node.insert("valRef".into(), json!(val_ref));
+            }
             let mut stale = cat_stale || val_stale;
             if bubble {
                 let (sizes, size_ref, size_stale) = read_pts(ser, "bubbleSize", &mut read_cells);
                 node.insert("sizes".into(), json!(sizes));
-                node.insert("sizeRef".into(), json!(size_ref));
+                if refs {
+                    node.insert("sizeRef".into(), json!(size_ref));
+                }
                 stale |= size_stale;
             }
             remain::attach_series_extras(&mut node, space, ser, chart_id, index);
@@ -857,7 +866,7 @@ fn read_pts<F>(ser: &Element, local: &str, read_cells: &mut F) -> (Vec<Value>, O
 where
     F: FnMut(&str) -> Option<Vec<Value>>,
 {
-    let Some(el) = find_child(ser, local) else {
+    let Some(el) = ser.child_by_local(local) else {
         return (Vec::new(), None, false);
     };
     let cache = cache_values(el);
@@ -2960,10 +2969,6 @@ pub(crate) fn bool_val(el: Option<&Element>) -> bool {
         el.and_then(|e| e.attr_local("val")).unwrap_or("0"),
         "1" | "true" | "on" | "True"
     )
-}
-
-fn find_child<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    el.element_children().find(|c| c.local_name() == local)
 }
 
 fn find_desc<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {

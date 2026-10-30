@@ -2263,6 +2263,20 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内�
   - 检查：拒错
   - 通过标准：`cx` / `cy` 都不给报 `InvalidField`。对 xlsx 发 `setInkCanvasSize` 报 `InvalidField`。不强制开 Word
 
+## 图表走共享层
+
+脚本 `manual-check/office/cases/docx-chart-shared.ps1`。
+
+- **Cs1**
+  - 检查：插入柱形图
+  - 通过标准：✅ Word 16.0 无修复，能看见图表，编辑数据能打开 embedding
+- **Cs2**
+  - 检查：改系列
+  - 通过标准：✅ `setChartSeries` 后 Word 无修复，图表仍在，embedding 能打开
+- **Cs3**
+  - 检查：趋势线
+  - 通过标准：✅ `insertTrendline` 后 Word 无修复，图表仍在，embedding 能打开
+
 ## 原样保存（opc 验收）
 
 与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

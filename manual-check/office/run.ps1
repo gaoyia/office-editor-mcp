@@ -249,6 +249,7 @@ $order = @(
     'xlsx-xml-comment'
     'xlsx-implicit-cell'
     'pptx-connector-line'
+    'docx-chart-shared'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'
