@@ -247,6 +247,7 @@ $order = @(
     'id-pin'
     'docx-tab-br'
     'xlsx-xml-comment'
+    'xlsx-implicit-cell'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'

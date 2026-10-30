@@ -602,23 +602,25 @@ fn inspect_cells(
 
     let mut cells = Vec::new();
     let mut truncated = false;
-    'rows: for row in sheet_data.children_by_local("row") {
-        for c in row.children_by_local("c") {
-            let Some(r) = c.attr("r") else {
-                continue;
-            };
-            let Ok(pref) = a1::parse_cell(r) else {
-                continue;
-            };
-            if !a1::in_range(pref, start, end) {
-                continue;
-            }
-            if cells.len() as u32 >= scope.max_cells {
-                truncated = true;
-                break 'rows;
-            }
-            cells.push(cell_to_json(c, sheet_name, sst, styles, &index)?);
+    let mut failed: Option<Error> = None;
+    formula::for_each_cell(sheet_data, |pref, c| {
+        if failed.is_some() || truncated {
+            return;
         }
+        if !a1::in_range(pref, start, end) {
+            return;
+        }
+        if cells.len() as u32 >= scope.max_cells {
+            truncated = true;
+            return;
+        }
+        match cell_to_json(c, sheet_name, sst, styles, &index, pref) {
+            Ok(cell) => cells.push(cell),
+            Err(e) => failed = Some(e),
+        }
+    });
+    if let Some(e) = failed {
+        return Err(e);
     }
     Ok((cells, truncated, range_norm))
 }
@@ -629,9 +631,8 @@ fn cell_to_json(
     sst: &[String],
     styles: &style::Stylebook,
     index: &formula::FormulaIndex,
+    pref: a1::CellRef,
 ) -> Result<Value, Error> {
-    let raw_ref = c.attr("r").unwrap_or("");
-    let pref = a1::parse_cell(raw_ref)?;
     let refer = a1::format_cell(pref.col, pref.row);
     let t = c.attr("t").unwrap_or("");
     let f_el = c.child_by_local("f");

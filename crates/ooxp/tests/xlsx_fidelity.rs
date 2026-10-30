@@ -108,6 +108,57 @@ fn sheet_data_of(text: &str) -> &str {
 }
 
 #[test]
+fn implicit_cells_inspect_and_set_cell() {
+    let sheet = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row><c><v>1</v></c><c><v>2</v></c><c><v>3</v></c></row><row><c><v>4</v></c><c><v>5</v></c><c><v>6</v></c></row><row><c><v>7</v></c><c><v>8</v></c><c><v>9</v></c></row></sheetData></worksheet>"#;
+    let src = write_with_sheet1("implicit-cells", sheet);
+    let req = json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1:C3" },
+    });
+    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    let cells = tree["sheets"][0]["cells"].as_array().unwrap();
+    assert_eq!(cells.len(), 9, "{cells:?}");
+    let find = |id: &str| {
+        cells
+            .iter()
+            .find(|c| c["id"] == id)
+            .unwrap_or_else(|| panic!("树里没有 {id}"))
+    };
+    assert_eq!(find("cell:Sheet1!A1")["value"], 1);
+    assert_eq!(find("cell:Sheet1!C1")["value"], 3);
+    assert_eq!(find("cell:Sheet1!A2")["value"], 4);
+    assert_eq!(find("cell:Sheet1!B2")["value"], 5);
+    assert_eq!(find("cell:Sheet1!C3")["value"], 9);
+
+    let out = tmp_dir().join("implicit-cells-out.xlsx");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "setCell", "id": "cell:Sheet1!B2", "value": 50 },
+            { "op": "setCell", "id": "cell:Sheet1!A5", "value": 70 }
+        ]),
+    )
+    .unwrap();
+    let xml = part(&out, "xl/worksheets/sheet1.xml");
+    let data = sheet_data_of(&xml);
+    assert_eq!(data.matches(r#"<c r="B2""#).count(), 1, "{data}");
+    assert!(data.contains(r#"<c r="B2"><v>50</v></c>"#), "{data}");
+    assert!(data.contains(r#"<c r="A1"><v>1</v></c>"#), "{data}");
+    assert!(
+        data.contains(r#"<row r="5"><c r="A5"><v>70</v></c></row>"#),
+        "{data}"
+    );
+    let row5 = data.find(r#"<row r="5""#).unwrap();
+    let row3 = data.find(r#"<row r="3""#).unwrap();
+    assert!(row3 < row5, "A5 插到了第 3 行前面：{data}");
+}
+
+#[test]
 fn rewritten_parts_keep_xml_declaration() {
     let src = write_sample("decl");
     let out = tmp_dir().join("decl-out.xlsx");
@@ -271,7 +322,10 @@ fn dirty_sheet_keeps_comments() {
     )
     .unwrap();
     let text = part(&out, "xl/worksheets/sheet1.xml");
-    assert!(text.contains("<!-- DIRTY-DROP -->"), "脏表注释应留下：{text}");
+    assert!(
+        text.contains("<!-- DIRTY-DROP -->"),
+        "脏表注释应留下：{text}"
+    );
     assert!(
         sheet_data_of(&text).contains(r#"<c r="A1" s="3"><v>42</v></c>"#),
         "{text}"

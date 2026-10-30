@@ -1711,9 +1711,8 @@ fn make_refs_explicit(worksheet: &mut Element) {
         if row.local_name() != "row" {
             continue;
         }
-        let declared = row.attr("r").and_then(|s| s.parse::<u32>().ok());
-        let row_num = declared.unwrap_or(prev_row + 1);
-        if declared.is_none() {
+        let row_num = a1::row_after(prev_row, row.attr("r"));
+        if row.attr("r").and_then(|s| s.parse::<u32>().ok()).is_none() {
             row.set_attr("r", row_num.to_string());
         }
         prev_row = row_num;
@@ -1723,15 +1722,12 @@ fn make_refs_explicit(worksheet: &mut Element) {
             if c.local_name() != "c" {
                 continue;
             }
-            let declared_col = c
-                .attr("r")
-                .and_then(|s| a1::parse_cell(s).ok())
-                .map(|p| p.col);
-            let col = declared_col.unwrap_or(prev_col + 1);
-            if declared_col.is_none() {
-                c.set_attr("r", a1::format_cell(col, row_num));
+            let place = a1::place_cell(row_num, prev_col, c.attr("r"));
+            let cell = place.cell();
+            if matches!(place, a1::CellPlace::Omitted { .. }) {
+                c.set_attr("r", a1::format_cell(cell.col, cell.row));
             }
-            prev_col = col;
+            prev_col = cell.col;
         }
     }
 }

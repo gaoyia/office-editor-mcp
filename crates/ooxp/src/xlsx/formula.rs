@@ -350,15 +350,16 @@ pub fn shift_a1_formula(formula: &str, from: CellRef, to: CellRef) -> String {
     out
 }
 
-fn for_each_cell(sheet_data: &Element, mut visit: impl FnMut(CellRef, &Element)) {
+pub(crate) fn for_each_cell(sheet_data: &Element, mut visit: impl FnMut(CellRef, &Element)) {
+    let mut prev_row = 0u32;
     for row in sheet_data.children_by_local("row") {
+        let row_num = a1::row_after(prev_row, row.attr("r"));
+        prev_row = row_num;
+        let mut prev_col = 0u32;
         for c in row.children_by_local("c") {
-            let Some(r) = c.attr("r") else {
-                continue;
-            };
-            let Ok(cell) = a1::parse_cell(r) else {
-                continue;
-            };
+            let place = a1::place_cell(row_num, prev_col, c.attr("r"));
+            let cell = place.cell();
+            prev_col = cell.col;
             visit(cell, c);
         }
     }

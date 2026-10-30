@@ -30,6 +30,42 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
     Ok(parse_cell_abs(input)?.cell())
 }
 
+/// `<row>` 没有 `r`，或 `r` 不是行号时，编号是上一行加一。第一行是 1。
+/// ECMA-376 §18.3.1.73。
+pub fn row_after(prev: u32, attr: Option<&str>) -> u32 {
+    attr.and_then(|s| s.parse::<u32>().ok()).unwrap_or(prev + 1)
+}
+
+/// 格子相对所在行的位置。ECMA-376 §18.3.1.4。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CellPlace {
+    /// `r` 是合法 A1，位置以它为准。
+    Parsed(CellRef),
+    /// 没有 `r`，或 `r` 解析不成 A1。列是上一格加一，行是所在 `<row>` 的行号。
+    Omitted { col: u32, row: u32 },
+}
+
+impl CellPlace {
+    pub fn cell(self) -> CellRef {
+        match self {
+            CellPlace::Parsed(cell) => cell,
+            CellPlace::Omitted { col, row } => CellRef { col, row },
+        }
+    }
+}
+
+pub fn place_cell(row: u32, prev_col: u32, attr: Option<&str>) -> CellPlace {
+    if let Some(raw) = attr {
+        if let Ok(cell) = parse_cell(raw) {
+            return CellPlace::Parsed(cell);
+        }
+    }
+    CellPlace::Omitted {
+        col: prev_col + 1,
+        row,
+    }
+}
+
 pub fn parse_cell_abs(input: &str) -> Result<AbsCellRef, Error> {
     let s = input.trim();
     if s.is_empty() {

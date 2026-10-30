@@ -1251,6 +1251,9 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `rows` / `cols` / `filters` / `values` 是字段名字符串数组，分别来自 `<rowFields>`、`<colFields>`、`<pageFields>`、`<dataFields>`，
   经 `<pivotFields>` 下标解到 `cacheField/@name`（`dataField/@name` 若有则优先）。
   解不出则为 `""`。不报缓存记录、合计数字、`cacheId` 以外的缓存属性、切片器或透视表样式。
+- `<row>` 没有 `r`，或 `r` 不是行号时，行号是上一行加一，第一行是 1（ECMA-376 §18.3.1.73）。
+  `<c>` 没有 `r`，或 `r` 不是 A1 时，列是同一行上一格加一，行号用所在行，第一格是 A（§18.3.1.4）。
+  格子自己的 `r` 能解析时，位置以它为准，不跟所在行的行号强行对齐。
 - 范围内有内容的格子超过 `maxCells` 时，按行优先、从左到右截断，`truncated` 为 `true`。未截断则为 `false`。
 - `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
 - `value` 是缓存显示值，不是库算出来的。公式格的 `value` 来自 `<v>`，可能过期。没有 `<v>` 时 `value` 为 `null`。
@@ -1549,6 +1552,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 `value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。
 `array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。
 `arrayRef` / `sharedRef` 非法时报 `InvalidRange`。`setCell` 不改工作表 `<hyperlinks>`，也不改 `extLst` 里的迷你图。
+`setCell` 改表之前，把省略的行号和格子引用写成显式 `r`。已经是合法 `r` 的不改写。随后按这个编号找格子，不会把省略 `r` 的行当成第 0 行另插一行。
 示例见 `docs/examples/xlsx-apply-formula.json`、`docs/examples/xlsx-apply-shared-master.json` 与 `docs/examples/xlsx-apply-datatable.json`。
 
 共享公式（§18.3.1.40，`t="shared"`）：主格的 `<f>` 带 `ref` 和 `si`，从属格只带 `si`。
