@@ -1,5 +1,7 @@
 //! 按 id 改单元格或工作表图，改单元格时标记打开时重算。
 
+use std::cell::Cell;
+
 use super::formula;
 use super::hyperlink;
 use super::request::{
@@ -45,8 +47,12 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     let mut styles_doc: Option<(String, Document)> = None;
     let mut touched_cells = false;
     let mut workbook_dirty = false;
+    let mut hot: Option<SheetHot> = None;
 
     for (i, op) in ops.iter().enumerate() {
+        if !matches!(op, XlsxOp::SetCell(_)) {
+            hot = None;
+        }
         match op {
             XlsxOp::SetCell(op) => {
                 touched_cells = true;
@@ -74,9 +80,30 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     })?;
                 let part = meta.1.clone();
                 let cell = a1::parse_cell(&a1)?;
-                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let reuse = hot.as_ref().is_some_and(|h| h.part == part);
+                load_dirty(&pkg, &mut dirty_sheets, &part, !reuse)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
-                apply_set_cell(&mut doc.root, cell, op, i)?;
+                if !reuse {
+                    let sheet_data = doc.root.child_by_local("sheetData");
+                    hot = Some(SheetHot {
+                        part: part.clone(),
+                        index: sheet_data.map(formula::index_sheet).unwrap_or_default(),
+                        binary: sheet_data.is_none_or(grid_is_sorted),
+                        fresh: true,
+                    });
+                }
+                let hot = hot.as_mut().unwrap();
+                if !hot.fresh {
+                    hot.index = doc
+                        .root
+                        .child_by_local("sheetData")
+                        .map(formula::index_sheet)
+                        .unwrap_or_default();
+                    hot.fresh = true;
+                }
+                let _binary = BinaryGrid::enter(hot.binary);
+                let keep = apply_set_cell_with(&mut doc.root, cell, op, i, &hot.index)?;
+                hot.fresh = keep;
             }
             XlsxOp::SetCellStyle(op) => {
                 let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
@@ -1702,6 +1729,41 @@ fn parse_cell_id(id: &str, op_index: usize) -> Result<(String, String), Error> {
 
 /// SpreadsheetML 允许 `<row>` 和 `<c>` 省略 `r`，此时编号由出现顺序推出（§18.3.1.73、§18.3.1.4）。
 /// 这里把隐式编号写成显式，语义不变，但后续插入新行就不会改变别的行的编号。
+/// 一次 apply 里连续 `setCell` 打在同一张表上时复用。换表、或中间插入别的 op，就丢掉。
+struct SheetHot {
+    part: String,
+    index: formula::FormulaIndex,
+    /// 行号、行内列号都严格递增，且没有缺 `r` 的行或格。定位用二分。
+    binary: bool,
+    /// 上一条没有改共享公式、数组公式或数据表的布局。
+    fresh: bool,
+}
+
+thread_local! {
+    /// `setCell` 进入期间为真，让 `ensure_cell` 走二分。离开时恢复，别的 op 仍线性扫描。
+    static BINARY_GRID: Cell<bool> = const { Cell::new(false) };
+}
+
+struct BinaryGrid(bool);
+
+impl BinaryGrid {
+    fn enter(on: bool) -> Self {
+        let prev = BINARY_GRID.with(|c| c.replace(on));
+        Self(prev)
+    }
+}
+
+impl Drop for BinaryGrid {
+    fn drop(&mut self) {
+        let prev = self.0;
+        BINARY_GRID.with(|c| c.set(prev));
+    }
+}
+
+fn binary_grid() -> bool {
+    BINARY_GRID.with(|c| c.get())
+}
+
 fn make_refs_explicit(worksheet: &mut Element) {
     let Some(sheet_data) = worksheet.child_by_local_mut("sheetData") else {
         return;
@@ -1742,8 +1804,22 @@ pub(crate) fn apply_set_cell(
         .child_by_local("sheetData")
         .map(formula::index_sheet)
         .unwrap_or_default();
+    let binary = worksheet
+        .child_by_local("sheetData")
+        .is_none_or(grid_is_sorted);
+    let _binary = BinaryGrid::enter(binary);
+    apply_set_cell_with(worksheet, cell, op, op_index, &index).map(|_| ())
+}
 
-    if let Some(formula::Occupied::DataTable { master }) = formula::occupy_at(&index, cell) {
+/// 返回值：公式索引还能不能留给下一条 `setCell`。
+fn apply_set_cell_with(
+    worksheet: &mut Element,
+    cell: a1::CellRef,
+    op: &SetCellOp,
+    op_index: usize,
+    index: &formula::FormulaIndex,
+) -> Result<bool, Error> {
+    if let Some(formula::Occupied::DataTable { master }) = formula::occupy_at(index, cell) {
         let extras = op.array.is_some()
             || op.array_ref.is_some()
             || op.shared.is_some()
@@ -1757,14 +1833,14 @@ pub(crate) fn apply_set_cell(
                 format!("ops[{op_index}].id"),
             ));
         }
-        return write_data_table_inputs(worksheet, cell, op, op_index);
+        return write_data_table_inputs(worksheet, cell, op, op_index).map(|()| false);
     }
 
-    let array_master = match formula::occupy_at(&index, cell) {
+    let array_master = match formula::occupy_at(index, cell) {
         Some(formula::Occupied::Array { master }) => Some(master),
         _ => None,
     };
-    let shared_here = match formula::occupy_at(&index, cell) {
+    let shared_here = match formula::occupy_at(index, cell) {
         Some(formula::Occupied::Shared { si, master }) => Some((si, master)),
         _ => None,
     };
@@ -1801,23 +1877,25 @@ pub(crate) fn apply_set_cell(
                     .map(|g| (g.start, g.end))
             })
             .unwrap_or((cell, cell));
-        return write_array_formula(worksheet, cell, start, end, op, &index, op_index);
+        return write_array_formula(worksheet, cell, start, end, op, index, op_index)
+            .map(|()| false);
     }
 
     if is_array_master && op.formula.is_some() && !wants_drop_array {
         let g = index.arrays.iter().find(|g| g.master == cell).unwrap();
-        return write_array_formula(worksheet, cell, g.start, g.end, op, &index, op_index);
+        return write_array_formula(worksheet, cell, g.start, g.end, op, index, op_index)
+            .map(|()| false);
     }
 
     if is_array_master {
         apply_plain_or_clear(worksheet, cell, op);
-        return Ok(());
+        return Ok(false);
     }
 
     if let Some((_, master)) = &shared_here {
         if *master != cell && !wants_shared_keep {
             apply_plain_or_clear(worksheet, cell, op);
-            return Ok(());
+            return Ok(false);
         }
     }
 
@@ -1834,15 +1912,16 @@ pub(crate) fn apply_set_cell(
             explode_shared_group(worksheet, &si, master, &body);
         }
         apply_plain_or_clear(worksheet, cell, op);
-        return Ok(());
+        return Ok(false);
     }
 
     if wants_shared_keep || (is_shared_master && op.formula.is_some()) {
-        return write_shared_formula(worksheet, cell, op, &index, is_shared_master, op_index);
+        return write_shared_formula(worksheet, cell, op, index, is_shared_master, op_index)
+            .map(|()| false);
     }
 
     apply_plain_or_clear(worksheet, cell, op);
-    Ok(())
+    Ok(true)
 }
 
 fn write_data_table_inputs(
@@ -2286,18 +2365,21 @@ pub(crate) fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {
 }
 
 pub(crate) fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut Element {
-    let _ = ensure_row(sheet_data, cell.row);
-    let row_idx = find_row_insert_pos(sheet_data, cell.row).0;
+    let (row_idx, row_found) = find_row_insert_pos(sheet_data, cell.row);
+    if !row_found {
+        let mut el = Element::new("row");
+        el.set_attr("r", cell.row.to_string());
+        sheet_data.children.insert(row_idx, Node::Element(el));
+    }
     let Node::Element(row) = &mut sheet_data.children[row_idx] else {
         unreachable!();
     };
-    let col_pos = find_cell_insert_pos(row, cell.col);
-    if !col_pos.1 {
+    let (col_idx, col_found) = find_cell_insert_pos(row, cell.col);
+    if !col_found {
         let mut c = Element::new("c");
         c.set_attr("r", a1::format_cell(cell.col, cell.row));
-        row.children.insert(col_pos.0, Node::Element(c));
+        row.children.insert(col_idx, Node::Element(c));
     }
-    let col_idx = find_cell_insert_pos(row, cell.col).0;
     let Node::Element(c) = &mut row.children[col_idx] else {
         unreachable!();
     };
@@ -2305,13 +2387,12 @@ pub(crate) fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut E
 }
 
 pub(crate) fn ensure_row(sheet_data: &mut Element, row: u32) -> &mut Element {
-    let row_pos = find_row_insert_pos(sheet_data, row);
-    if !row_pos.1 {
+    let (row_idx, found) = find_row_insert_pos(sheet_data, row);
+    if !found {
         let mut el = Element::new("row");
         el.set_attr("r", row.to_string());
-        sheet_data.children.insert(row_pos.0, Node::Element(el));
+        sheet_data.children.insert(row_idx, Node::Element(el));
     }
-    let row_idx = find_row_insert_pos(sheet_data, row).0;
     let Node::Element(row_el) = &mut sheet_data.children[row_idx] else {
         unreachable!();
     };
@@ -2322,7 +2403,59 @@ pub(crate) fn find_row_index(sheet_data: &Element, row: u32) -> Option<usize> {
     find_row_insert_pos(sheet_data, row).found_then()
 }
 
+fn grid_is_sorted(sheet_data: &Element) -> bool {
+    let mut prev_row = 0u32;
+    for n in &sheet_data.children {
+        let Some(r) = row_key(n) else {
+            return false;
+        };
+        if r <= prev_row {
+            return false;
+        }
+        prev_row = r;
+        let Node::Element(row) = n else {
+            return false;
+        };
+        let mut prev_col = 0u32;
+        for cn in &row.children {
+            let Some(col) = cell_col(cn) else {
+                return false;
+            };
+            if col <= prev_col {
+                return false;
+            }
+            prev_col = col;
+        }
+    }
+    true
+}
+
+fn row_key(n: &Node) -> Option<u32> {
+    let Node::Element(e) = n else {
+        return None;
+    };
+    if e.local_name() != "row" {
+        return None;
+    }
+    e.attr("r")?.parse().ok()
+}
+
+fn cell_col(n: &Node) -> Option<u32> {
+    let Node::Element(e) = n else {
+        return None;
+    };
+    if e.local_name() != "c" {
+        return None;
+    }
+    a1::parse_cell(e.attr("r")?).ok().map(|c| c.col)
+}
+
 fn find_row_insert_pos(sheet_data: &Element, row: u32) -> (usize, bool) {
+    if binary_grid() {
+        if let Some(pos) = find_row_binary(sheet_data, row) {
+            return pos;
+        }
+    }
     for (i, n) in sheet_data.children.iter().enumerate() {
         let Node::Element(e) = n else { continue };
         if e.local_name() != "row" {
@@ -2339,7 +2472,32 @@ fn find_row_insert_pos(sheet_data: &Element, row: u32) -> (usize, bool) {
     (sheet_data.children.len(), false)
 }
 
+fn find_row_binary(sheet_data: &Element, row: u32) -> Option<(usize, bool)> {
+    let children = &sheet_data.children;
+    let mut lo = 0;
+    let mut hi = children.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let r = row_key(&children[mid])?;
+        if r < row {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if lo < children.len() && row_key(&children[lo])? == row {
+        Some((lo, true))
+    } else {
+        Some((lo, false))
+    }
+}
+
 fn find_cell_insert_pos(row: &Element, col: u32) -> (usize, bool) {
+    if binary_grid() {
+        if let Some(pos) = find_cell_binary(row, col) {
+            return pos;
+        }
+    }
     for (i, n) in row.children.iter().enumerate() {
         let Node::Element(e) = n else { continue };
         if e.local_name() != "c" {
@@ -2357,6 +2515,26 @@ fn find_cell_insert_pos(row: &Element, col: u32) -> (usize, bool) {
         }
     }
     (row.children.len(), false)
+}
+
+fn find_cell_binary(row: &Element, col: u32) -> Option<(usize, bool)> {
+    let children = &row.children;
+    let mut lo = 0;
+    let mut hi = children.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let c = cell_col(&children[mid])?;
+        if c < col {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if lo < children.len() && cell_col(&children[lo])? == col {
+        Some((lo, true))
+    } else {
+        Some((lo, false))
+    }
 }
 
 pub(crate) fn clear_cell(sheet_data: &mut Element, cell: a1::CellRef) {
