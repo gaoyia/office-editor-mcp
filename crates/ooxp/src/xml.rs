@@ -539,6 +539,83 @@ pub const DEFAULT_DECL: &str = r#"<?xml version="1.0" encoding="UTF-8" standalon
 /// 只在一次调用的内存里挂在元素上的属性用这个前缀。写回时丢掉，不进文件。
 pub(crate) const TRANSIENT_ATTR_PREFIX: &str = "ooxp:";
 
+/// 编号时这个元素怎么走。
+pub(crate) enum PinNode {
+    /// 子树单独从 1 起，不计回外层。
+    Restart,
+    /// 只进入这一个子元素。`None` 表示整段跳过。
+    Only(Option<usize>),
+    /// 给它编号，再走子节点。
+    Member,
+    /// 不编号，走子节点。
+    Descend,
+}
+
+/// 族名空串用 `ooxp:pin`，否则用 `ooxp:pin-族名`。
+pub(crate) fn pin_attr(family: &str) -> String {
+    if family.is_empty() {
+        format!("{TRANSIENT_ATTR_PREFIX}pin")
+    } else {
+        format!("{TRANSIENT_ATTR_PREFIX}pin-{family}")
+    }
+}
+
+/// 有编号时按 apply 开始时的序号认。空编号是本批新建的，不占旧序号。没有编号时退回当时数到的位置。
+pub(crate) fn pin_matches(el: &Element, attr: &str, wanted: usize, live: usize) -> bool {
+    match el.attr(attr) {
+        Some(pin) if !pin.is_empty() => pin == wanted.to_string(),
+        Some(_) => false,
+        None => live == wanted,
+    }
+}
+
+/// 按 `classify` 的顺序给还没有编号的成员记下序号。已有编号的不再改。
+pub(crate) fn pin_tree(root: &mut Element, attr: &str, classify: &impl Fn(&Element) -> PinNode) {
+    fn walk(
+        el: &mut Element,
+        idx: &mut usize,
+        attr: &str,
+        classify: &impl Fn(&Element) -> PinNode,
+    ) {
+        match classify(el) {
+            PinNode::Restart => {
+                let mut inner = 0usize;
+                for child in el.children.iter_mut() {
+                    if let Node::Element(child) = child {
+                        walk(child, &mut inner, attr, classify);
+                    }
+                }
+            }
+            PinNode::Only(Some(i)) => {
+                if let Some(Node::Element(child)) = el.children.get_mut(i) {
+                    walk(child, idx, attr, classify);
+                }
+            }
+            PinNode::Only(None) => {}
+            PinNode::Member => {
+                if el.attr(attr).is_none() {
+                    *idx += 1;
+                    el.set_attr(attr, idx.to_string());
+                }
+                for child in el.children.iter_mut() {
+                    if let Node::Element(child) = child {
+                        walk(child, idx, attr, classify);
+                    }
+                }
+            }
+            PinNode::Descend => {
+                for child in el.children.iter_mut() {
+                    if let Node::Element(child) = child {
+                        walk(child, idx, attr, classify);
+                    }
+                }
+            }
+        }
+    }
+    let mut idx = 0usize;
+    walk(root, &mut idx, attr, classify);
+}
+
 impl Document {
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
         // 声明单独拼在前面：写进 Writer 内部的 Cursor 会被后续 write_event 从头覆盖。

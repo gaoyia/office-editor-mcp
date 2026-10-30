@@ -163,16 +163,25 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 三种格式的 id 表见 [xlsx](json-contract-xlsx.md#稳定-id)、[docx](json-contract-docx.md#稳定-id)、[pptx](json-contract-pptx.md#稳定-id)。
 
-一次 apply 里，下面两类 id 按 apply 开始时的文件解释，不随本批前面的增删改序号：
+一次 apply 里，已经固定的位置 id 按 apply 开始时的文件解释，不随本批前面的增删改序号。
+
+已经固定：
 
 - docx 的 `para:index:{n}`，以及页眉页脚、框内、注内、批注内的 `…/para:index:{k}`
-- pptx 的 `slide:{n}`，以及挂在它下面的形状、图、图表、表、备注、批注等 id
+- pptx 的 `slide:{n}`，以及挂在它下面、按内容编号的形状、图、图表、表、备注、批注等 id
 
-被前面的 op 删掉后再点名，报 `IdNotFound`，不落到旁边的对象上。同一批里新建的对象不能用这两类位置 id 点名，要等下一次 inspect。
+被前面的 op 删掉后再点名，报 `IdNotFound`，不落到旁边的对象上。同一批里新建的对象不能用这些位置 id 点名，要等下一次 inspect。
 
-`after`、`start`、`end` 这类字段如果点的是上面两类 id，同样按 apply 开始时解释。
+`after`、`start`、`end` 这类字段如果点的是已经固定的位置 id，同样按 apply 开始时解释。
 
-其余按位置编号的 id 仍会在本批增删后重排。那是后续切片，不在这一条里。
+还没有固定、本批增删后仍会重排的族，按后续切片接上。每接上一族，就从下面删掉：
+
+- docx 表、行、格，含页眉页脚与框内
+- docx 段内的书签、域、链接、公式、拼音、内容控件、编辑区、修订、run，以及绘图对象的 `:index:{k}`
+- docx 节、页眉页脚容器、目录、题注、交叉引用、索引、引文、书目、构建基块、嵌入字体
+- xlsx 表内名单、工作簿名单，以及 drawing 对象的 `:index:{k}`
+- pptx 母版、版式、节、自定义放映，以及页上对象的 `:index:{k}`、链接、域、表的行列
+- 三种格式共用的 `trendline:{k}`、`errorBars:{k}`
 
 ## inspect
 

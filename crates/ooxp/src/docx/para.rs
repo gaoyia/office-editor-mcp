@@ -918,49 +918,28 @@ const PIN_ATTR: &str = "ooxp:pin";
 
 /// 有 `ooxp:pin` 时按 apply 开始时的序号认。没有这个标记的新段落不占用旧序号。
 fn index_matches(p: &Element, wanted: usize, live: usize) -> bool {
-    match p.attr(PIN_ATTR) {
-        Some(pin) if !pin.is_empty() => pin == wanted.to_string(),
-        // 空 pin 是本批新建的段落，不占用 apply 开始时的序号。
-        Some(_) => false,
-        None => live == wanted,
+    crate::xml::pin_matches(p, PIN_ATTR, wanted, live)
+}
+
+fn paragraph_pin(el: &Element) -> crate::xml::PinNode {
+    if matches!(
+        el.local_name(),
+        "txbxContent" | "footnote" | "endnote" | "comment"
+    ) {
+        crate::xml::PinNode::Restart
+    } else if el.local_name() == "AlternateContent" {
+        crate::xml::PinNode::Only(first_alt_child_index(el))
+    } else if el.local_name() == "p" {
+        crate::xml::PinNode::Member
+    } else {
+        crate::xml::PinNode::Descend
     }
 }
 
 /// 按 `find_p` 的同一套顺序给已有段落记下序号。文本框、注、批注各自从 1 起。
 pub(crate) fn pin_paragraph_indexes(root: &mut Element) {
-    fn fresh(local: &str) -> bool {
-        matches!(local, "txbxContent" | "footnote" | "endnote" | "comment")
-    }
-    fn walk(el: &mut Element, idx: &mut usize) {
-        if fresh(el.local_name()) {
-            let mut inner = 0usize;
-            for child in el.children.iter_mut() {
-                if let Node::Element(child) = child {
-                    walk(child, &mut inner);
-                }
-            }
-            return;
-        }
-        if el.local_name() == "AlternateContent" {
-            if let Some(i) = first_alt_child_index(el) {
-                if let Node::Element(child) = &mut el.children[i] {
-                    walk(child, idx);
-                }
-            }
-            return;
-        }
-        if el.local_name() == "p" && el.attr(PIN_ATTR).is_none() {
-            *idx += 1;
-            el.set_attr(PIN_ATTR, idx.to_string());
-        }
-        for child in el.children.iter_mut() {
-            if let Node::Element(child) = child {
-                walk(child, idx);
-            }
-        }
-    }
-    let mut idx = 0usize;
-    walk(root, &mut idx);
+    let attr = crate::xml::pin_attr("");
+    crate::xml::pin_tree(root, &attr, &paragraph_pin);
 }
 
 pub fn find_paragraph_in_txbx<'a>(content: &'a Element, target: &BodyPara) -> Option<&'a Element> {

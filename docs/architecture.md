@@ -140,7 +140,9 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 
 释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 的 `Drop` 都把子节点收到堆上的栈再拆。要拿走 `children`，用 `take_children`，不能直接移出字段。`Document` 的 `Drop` 和 `take_root` 用 `mem::replace` 换出根，没有 `unsafe`。
 
-只在一次调用的内存里挂在元素上的属性，名字以 `ooxp:` 开头，写回时丢掉，不进文件。docx 用 `ooxp:pin` 记下段落在 apply 开始时的序号。
+只在一次调用的内存里挂在元素上的属性，名字以 `ooxp:` 开头，写回时丢掉，不进文件。
+一个族在 apply 开始、第一次装载部件时按文档顺序编号一次，属性名是 `ooxp:pin` 或 `ooxp:pin-族名`。之后按这个编号找元素。编号为空表示本批新建，不占旧编号。编号不把部件标脏。
+docx 段落用 `ooxp:pin`。文本框、脚注、尾注、批注各自从 1 起。
 
 注释和处理指令收成原样节点，写回时按解析到的字节拼回去。`text_content` 不收它们。
 
