@@ -903,7 +903,7 @@ fn build_track_ext(tracks: &[(MediaTrackWrite, String)], display_loc: &str) -> E
         .with_attr("displayLoc", display_loc);
     let mut lst = Element::new("p174:trackLst");
     for (t, rid) in tracks {
-        let id = t.id.clone().unwrap_or_else(super::section::new_guid);
+        let id = t.id.clone().unwrap_or_else(crate::host_env::new_guid);
         let mut tr = Element::new("p174:track")
             .with_attr("id", id)
             .with_attr("label", &t.label)

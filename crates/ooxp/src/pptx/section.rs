@@ -1,7 +1,6 @@
 //! 幻灯片节：`p14:sectionLst` 分组元数据。页顺序仍以 `p:sldIdLst` 为准。
 
 use serde_json::{json, Map, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::Package;
@@ -13,8 +12,6 @@ use super::request::{
 
 pub const P14_NS: &str = "http://schemas.microsoft.com/office/powerpoint/2010/main";
 pub const SECTION_EXT_URI: &str = "{521415D9-36F7-43E2-AB2F-B90AF26B5E84}";
-
-static GUID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 pub struct SectionInfo {
     pub index: usize,
@@ -665,7 +662,7 @@ fn new_section(name: &str, sids: &[u32]) -> Element {
     }
     let mut sec = Element::new("p14:section")
         .with_attr("name", name)
-        .with_attr("id", new_guid());
+        .with_attr("id", crate::host_env::new_guid());
     sec.push_element(lst);
     sec
 }
@@ -712,22 +709,4 @@ fn remove_sid_from_section_lst(lst: &mut Element, sid: u32) {
             });
         }
     }
-}
-
-pub(crate) fn new_guid() -> String {
-    let t = crate::host_env::now_nanos();
-    let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = crate::host_env::pid();
-    let mix = t ^ (n << 48) ^ (pid << 16);
-    let mut b = [0u8; 16];
-    for (i, byte) in b.iter_mut().enumerate() {
-        *byte = (mix >> ((i % 16) * 8)) as u8 ^ (i as u8).wrapping_mul(31);
-    }
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    format!(
-        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14],
-        b[15]
-    )
 }

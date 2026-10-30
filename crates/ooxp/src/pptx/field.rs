@@ -6,7 +6,6 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
 use super::picture;
-use super::section;
 use super::shape::{self, ShapeTarget};
 
 const DML_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -289,12 +288,12 @@ fn el_id(el: &Element) -> Option<&str> {
 
 fn fresh_guid(used: &[String]) -> String {
     for _ in 0..8 {
-        let g = section::new_guid();
+        let g = crate::host_env::new_guid();
         if !used.iter().any(|u| u == &g) {
             return g;
         }
     }
-    section::new_guid()
+    crate::host_env::new_guid()
 }
 
 fn needs_xml_space(text: &str) -> bool {

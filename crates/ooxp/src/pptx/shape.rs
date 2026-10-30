@@ -139,6 +139,12 @@ impl SlideFreeze {
         }
     }
 
+    /// 按 apply 开始时的页号取页。`index` 在 `list_slides` 刚返回时等于当时的位置；
+    /// 增删重排之后要先 `restore_indexes`，新页的 `index` 是 0，旧页号点不中。
+    pub fn slide_at_start(slides: &[SlideMeta], n: usize) -> Option<&SlideMeta> {
+        slides.iter().find(|slide| slide.index == n)
+    }
+
     pub fn get<'a>(&self, slides: &'a [SlideMeta], n: usize) -> Option<&'a SlideMeta> {
         let sid = self.ids.get(n.wrapping_sub(1)).copied().flatten()?;
         slides.iter().find(|slide| slide.sld_id == Some(sid))

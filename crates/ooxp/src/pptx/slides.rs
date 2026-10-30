@@ -55,7 +55,7 @@ pub fn insert(
     pres_rels.write_to(pkg, pres_part)?;
     picture::ensure_xmlns(&mut pres.root, "r", REL_NS);
     ensure_sld_id_lst(&mut pres.root);
-    let neighbor_sid = neighbor.and_then(|m| slide_st_id(&pres.root, m.index));
+    let neighbor_sid = neighbor.and_then(|m| m.sld_id);
     let lst = sld_id_lst_mut(&mut pres.root)?;
     let sid = next_sld_id(lst);
     let tag = sld_id_tag(lst);
@@ -416,14 +416,6 @@ fn remove_sld_id(root: &mut Element, pos: usize) -> Option<String> {
         return None;
     };
     shape::rid_attr(&el).map(str::to_string)
-}
-
-fn slide_st_id(pres_root: &Element, index: usize) -> Option<u32> {
-    let lst = pres_root.child_by_local("sldIdLst")?;
-    lst.element_children()
-        .filter(|e| e.local_name() == "sldId")
-        .nth(index.checked_sub(1)?)
-        .and_then(|e| e.attr("id")?.parse().ok())
 }
 
 fn keep_shared(rel_type: &str) -> bool {

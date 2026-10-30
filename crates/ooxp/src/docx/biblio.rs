@@ -290,7 +290,10 @@ fn ensure_biblio_part(
     let item = format!("/customXml/item{n}.xml");
     let props = format!("/customXml/itemProps{n}.xml");
     pkg.set(&item, empty_sources_xml().into_bytes())?;
-    pkg.set(&props, item_props_xml(&new_guid()).into_bytes())?;
+    pkg.set(
+        &props,
+        item_props_xml(&crate::host_env::random_guid()).into_bytes(),
+    )?;
     let parsed = xml::parse(pkg.get(&item)?)?;
     docs.insert(item.clone(), parsed);
     dirty.insert(item.clone(), ());
@@ -348,18 +351,6 @@ fn empty_sources_xml() -> String {
 fn item_props_xml(guid: &str) -> String {
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><ds:datastoreItem ds:itemID="{guid}" xmlns:ds="{DS_NS}"><ds:schemaRefs><ds:schemaRef ds:uri="{BIBLIO_NS}"/></ds:schemaRefs></ds:datastoreItem>"#
-    )
-}
-
-fn new_guid() -> String {
-    let mut b = [0u8; 16];
-    crate::host_env::fill_random(&mut b);
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    format!(
-        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13],
-        b[14], b[15]
     )
 }
 
@@ -427,7 +418,7 @@ fn append_source(root: &mut Element, write: &SourceWrite<'_>, order: usize) {
     let mut src = Element::new(root.prefixed("Source"));
     push_text_child(&mut src, "Tag", write.tag);
     push_text_child(&mut src, "SourceType", write.source_type);
-    push_text_child(&mut src, "Guid", &new_guid());
+    push_text_child(&mut src, "Guid", &crate::host_env::random_guid());
     push_author(&mut src, write.last, write.first);
     push_text_child(&mut src, "Title", write.title);
     if let Some(y) = write.year {

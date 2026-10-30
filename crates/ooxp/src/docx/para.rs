@@ -1415,12 +1415,7 @@ pub fn story_body_mut(root: &mut Element) -> Option<&mut Element> {
 }
 
 fn p_matches(el: &Element, idx: usize, target: &BodyPara) -> bool {
-    match target {
-        BodyPara::Index(n) => idx == *n,
-        BodyPara::Hex(hex) => el
-            .attr_local("paraId")
-            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-    }
+    same_para(el, target, idx)
 }
 
 /// 从部件根走到目标 `w:p` 的子节点下标路径。
@@ -1689,12 +1684,7 @@ pub fn is_last_collected(root: &Element, target: &BodyPara) -> bool {
     let Some(last) = paras.last() else {
         return false;
     };
-    match target {
-        BodyPara::Index(n) => *n == paras.len(),
-        BodyPara::Hex(hex) => last
-            .attr_local("paraId")
-            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-    }
+    same_para(last, target, paras.len())
 }
 
 use super::request::DeleteParaOp;
@@ -2350,13 +2340,7 @@ pub(crate) fn insert_p_after(
         if let Node::Element(e) = n {
             if e.local_name() == "p" {
                 idx += 1;
-                let hit = match para {
-                    super::para::BodyPara::Index(n) => idx == *n,
-                    super::para::BodyPara::Hex(hex) => e
-                        .attr_local("paraId")
-                        .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-                };
-                if hit {
+                if same_para(e, para, idx) {
                     insert_at = Some(j + 1);
                     break;
                 }
@@ -2603,13 +2587,7 @@ pub(crate) fn remove_p_at(parent: &mut Element, para: &super::para::BodyPara) ->
         if let Node::Element(e) = n {
             if e.local_name() == "p" {
                 idx += 1;
-                let hit = match para {
-                    super::para::BodyPara::Index(n) => idx == *n,
-                    super::para::BodyPara::Hex(hex) => e
-                        .attr_local("paraId")
-                        .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-                };
-                if hit {
+                if same_para(e, para, idx) {
                     remove_at = Some(j);
                     break;
                 }

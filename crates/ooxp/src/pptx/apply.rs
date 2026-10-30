@@ -679,7 +679,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertSlideSection(op) => {
-                section::insert(&mut pkg, &pres_part, &mut pres, op, i)?;
+                let mut op = op.clone();
+                if let Some(n) = op.start {
+                    op.start = Some(slide_now(&frozen, &slides, n, format!("ops[{i}].start"))?);
+                }
+                section::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
             PptxOp::SetSlideSectionName(op) => {
                 section::set_name(&mut pkg, &pres_part, &mut pres, op, i)?;
@@ -688,15 +692,23 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 section::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::SetSlideSection(op) => {
-                section::set_slide(&mut pkg, &pres_part, &mut pres, op, i)?;
+                let mut op = op.clone();
+                op.slide = slide_now(&frozen, &slides, op.slide, format!("ops[{i}].id"))?;
+                section::set_slide(&mut pkg, &pres_part, &mut pres, &op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
                 frozen.restore_indexes(&mut slides);
             }
             PptxOp::InsertCustomShow(op) => {
-                custom_show::insert(&mut pkg, &pres_part, &mut pres, op, i)?;
+                let mut op = op.clone();
+                op.slides = slides_now(&frozen, &slides, &op.slides, i)?;
+                custom_show::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
             PptxOp::SetCustomShow(op) => {
-                custom_show::set(&mut pkg, &pres_part, &mut pres, op, i)?;
+                let mut op = op.clone();
+                if let Some(list) = &op.slides {
+                    op.slides = Some(slides_now(&frozen, &slides, list, i)?);
+                }
+                custom_show::set(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
             PptxOp::DeleteCustomShow(op) => {
                 custom_show::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
@@ -2257,17 +2269,39 @@ fn comment_slide_meta<'a>(
     i: usize,
 ) -> Result<&'a shape::SlideMeta, Error> {
     let target = comments::parse_comment_id(id, &format!("ops[{i}].id"))?;
-    slides
-        .iter()
-        .find(|slide| slide.index == target.slide)
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::SlideNotFound {
-                    n: target.slide as u32,
-                },
-                format!("ops[{i}].id"),
-            )
-        })
+    shape::SlideFreeze::slide_at_start(slides, target.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })
+}
+
+/// 只认 `sldIdLst` 当前顺序的模块（节、自定义放映）用：apply 开始时的页号换成当前位置。
+fn slide_now(
+    frozen: &shape::SlideFreeze,
+    slides: &[shape::SlideMeta],
+    n: usize,
+    json_path: String,
+) -> Result<usize, Error> {
+    frozen
+        .pos(slides, n)
+        .map(|pos| pos + 1)
+        .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, json_path))
+}
+
+fn slides_now(
+    frozen: &shape::SlideFreeze,
+    slides: &[shape::SlideMeta],
+    list: &[usize],
+    i: usize,
+) -> Result<Vec<usize>, Error> {
+    list.iter()
+        .enumerate()
+        .map(|(j, &n)| slide_now(frozen, slides, n, format!("ops[{i}].slides[{j}]")))
+        .collect()
 }
 
 fn notes_or_slide_part(
@@ -2346,8 +2380,7 @@ fn ensure_host_part(
             json_path,
         );
     }
-    let meta = slides
-        .get(slide.saturating_sub(1))
+    let meta = shape::SlideFreeze::slide_at_start(slides, slide)
         .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: slide as u32 }, json_path))?;
     if on_notes {
         notes::ensure_notes_slide(pkg, pres_part, pres, &meta.part)

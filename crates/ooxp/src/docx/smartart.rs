@@ -1228,12 +1228,7 @@ fn hf_local_index(root: &Element, para: &BodyPara, n: usize) -> Option<usize> {
 }
 
 fn para_matches(p: &Element, index: usize, para: &BodyPara) -> bool {
-    match para {
-        BodyPara::Index(n) => index == *n,
-        BodyPara::Hex(hex) => p
-            .attr_local("paraId")
-            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-    }
+    para::same_para(p, para, index)
 }
 
 fn find_walk<'a>(el: &'a Element, idx: &mut usize, key: &DiagramKey) -> Option<&'a Element> {

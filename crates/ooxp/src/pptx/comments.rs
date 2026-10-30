@@ -752,7 +752,7 @@ pub fn apply_insert(
         .date
         .clone()
         .unwrap_or_else(crate::host_env::utc_now_millis);
-    let guid = crate::host_env::new_comment_guid();
+    let guid = crate::host_env::new_guid();
     let mut slide_doc = xml::parse(pkg.get(&meta.part)?)?;
     let part = ensure_comments_part(pkg, &meta.part, &mut slide_doc, sld_id)?;
     pkg.set(&meta.part, slide_doc.to_bytes()?)?;
@@ -800,7 +800,7 @@ pub fn apply_reply(
         .date
         .clone()
         .unwrap_or_else(crate::host_env::utc_now_millis);
-    let reply_id = crate::host_env::new_comment_guid();
+    let reply_id = crate::host_env::new_guid();
     let reply = build_reply(&reply_id, &author_id, &created, &op.text);
     let mut doc = xml::parse(pkg.get(&part)?)?;
     let cm = find_cm_mut(&mut doc.root, parent).ok_or_else(|| {
@@ -1138,7 +1138,7 @@ fn ensure_author(
     }) {
         return Ok(existing.attr("id").unwrap_or("").to_string());
     }
-    let id = crate::host_env::new_comment_guid();
+    let id = crate::host_env::new_guid();
     let user_id: String = id
         .chars()
         .filter(|c| c.is_ascii_hexdigit())

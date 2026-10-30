@@ -518,18 +518,6 @@ fn minimal_font_table() -> String {
     )
 }
 
-fn new_guid() -> String {
-    let mut b = [0u8; 16];
-    crate::host_env::fill_random(&mut b);
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    format!(
-        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13],
-        b[14], b[15]
-    )
-}
-
 fn identities(
     pkg: &Package,
     docs: &HashMap<String, Document>,
@@ -616,7 +604,7 @@ fn build_doc_part(host: &Element, write: &DocPartWrite<'_>) -> Element {
     let mut behaviors = Element::new(pr.prefixed("behaviors"));
     behaviors.push_element(val_el(&behaviors, "behavior", write.behavior));
     pr.push_element(behaviors);
-    pr.push_element(val_el(&pr, "guid", &new_guid()));
+    pr.push_element(val_el(&pr, "guid", &crate::host_env::random_guid()));
     part.push_element(pr);
     let mut body = Element::new(part.prefixed("docPartBody"));
     body.push_element(para::new_paragraph(&body, "00000001", write.text));

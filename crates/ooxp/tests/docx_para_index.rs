@@ -154,3 +154,68 @@ fn delete_then_reuse_index_is_not_found() {
     assert_eq!(std::fs::read(&src).unwrap(), before);
     assert!(!out.exists());
 }
+
+fn apply_after_insert(tag: &str, second: serde_json::Value) -> PathBuf {
+    let src = create_five(tag);
+    strip_para_id(&src);
+    let out = tmp(&format!("{tag}-out"));
+    let mut ops = vec![json!({ "op": "insertPara", "id": "para:index:1", "text": "NEW" })];
+    ops.push(second);
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": ops
+    })
+    .to_string())
+    .unwrap();
+    out
+}
+
+fn para_block(xml: &str, text: &str) -> String {
+    xml.split("</w:p>")
+        .find(|block| block.contains(&format!(">{text}<")))
+        .unwrap_or_else(|| panic!("找不到 {text}"))
+        .to_string()
+}
+
+#[test]
+fn insert_then_delete_removes_original_paragraph() {
+    let out = apply_after_insert(
+        "del-pin",
+        json!({ "op": "deletePara", "id": "para:index:4" }),
+    );
+    assert_eq!(texts(&out), ["P1", "NEW", "P2", "P3", "P5"]);
+}
+
+#[test]
+fn insert_then_insert_para_follows_original() {
+    let out = apply_after_insert(
+        "ins-pin",
+        json!({ "op": "insertPara", "id": "para:index:4", "text": "AFTER" }),
+    );
+    assert_eq!(texts(&out), ["P1", "NEW", "P2", "P3", "P4", "AFTER", "P5"]);
+}
+
+#[test]
+fn insert_then_bookmark_marks_original() {
+    let out = apply_after_insert(
+        "bm-pin",
+        json!({ "op": "insertBookmark", "id": "para:index:4", "name": "PinBm" }),
+    );
+    let xml = part(&out, "word/document.xml");
+    assert!(para_block(&xml, "P4").contains("bookmarkStart"));
+    assert!(!para_block(&xml, "P3").contains("bookmarkStart"));
+}
+
+#[test]
+fn insert_then_section_breaks_original() {
+    let out = apply_after_insert(
+        "sect-pin",
+        json!({ "op": "insertSection", "id": "para:index:4", "type": "nextPage" }),
+    );
+    let xml = part(&out, "word/document.xml");
+    assert!(para_block(&xml, "P4").contains("w:sectPr"));
+    assert!(!para_block(&xml, "P3").contains("w:sectPr"));
+}

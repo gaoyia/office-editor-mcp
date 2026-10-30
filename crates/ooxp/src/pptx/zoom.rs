@@ -1060,7 +1060,7 @@ fn build_tile(
     cy: i64,
     return_to_parent: bool,
 ) -> Element {
-    let guid = section::new_guid();
+    let guid = crate::host_env::new_guid();
     let mut zm_pr = Element::new(format!("{prefix}:zmPr")).with_attr("id", guid);
     if return_to_parent {
         zm_pr = zm_pr.with_attr("returnToParent", "1");
@@ -1101,12 +1101,9 @@ fn build_tile(
 }
 
 fn slide_meta(slides: &[SlideMeta], n: usize, path: &str) -> Result<SlideRef, Error> {
-    let meta = slides
-        .get(n.wrapping_sub(1))
-        .filter(|_| n >= 1)
-        .ok_or_else(|| {
-            Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
-        })?;
+    let meta = super::shape::SlideFreeze::slide_at_start(slides, n).ok_or_else(|| {
+        Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
+    })?;
     let sld_id = meta.sld_id.ok_or_else(|| {
         Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
     })?;

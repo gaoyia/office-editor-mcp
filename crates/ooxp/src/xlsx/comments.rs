@@ -332,7 +332,7 @@ pub fn apply_insert(
         .date
         .clone()
         .unwrap_or_else(crate::host_env::utc_now_millis);
-    let guid = crate::host_env::new_comment_guid();
+    let guid = crate::host_env::new_guid();
     let refer = a1::format_cell(cell.col, cell.row);
     let tc_part = ensure_threaded_part(pkg, sheet_part)?;
     let mut tc = xml::parse(pkg.get(&tc_part)?)?;
@@ -378,7 +378,7 @@ pub fn apply_reply(
         .date
         .clone()
         .unwrap_or_else(crate::host_env::utc_now_millis);
-    let reply_id = crate::host_env::new_comment_guid();
+    let reply_id = crate::host_env::new_guid();
     tc.root.push_element(build_threaded(
         &refer,
         &created,
@@ -626,7 +626,7 @@ fn ensure_person(pkg: &mut Package, wb_part: &str, name: &str) -> Result<String,
     {
         return Ok(p.attr("id").unwrap_or("").to_string());
     }
-    let id = crate::host_env::new_comment_guid();
+    let id = crate::host_env::new_guid();
     let person = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?><person xmlns="{TC_NS}" displayName="{}" id="{}" userId="Name" providerId="None"/>"#,
         xml::escape_attr(name),

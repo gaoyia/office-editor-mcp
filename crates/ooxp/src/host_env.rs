@@ -73,17 +73,29 @@ pub fn pid() -> u128 {
     native_pid()
 }
 
-static COMMENT_GUID_SEQ: AtomicU64 = AtomicU64::new(1);
+static GUID_SEQ: AtomicU64 = AtomicU64::new(1);
 
-pub fn new_comment_guid() -> String {
+/// 由时间、进程号和本进程计数拼出的 GUID，带花括号，大写。
+pub fn new_guid() -> String {
     let t = now_nanos();
-    let n = COMMENT_GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
+    let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
     let proc = pid();
     let mix = t ^ (n << 48) ^ (proc << 16);
     let mut b = [0u8; 16];
     for (i, byte) in b.iter_mut().enumerate() {
         *byte = (mix >> ((i % 16) * 8)) as u8 ^ (i as u8).wrapping_mul(31);
     }
+    braced_guid(b)
+}
+
+/// 由随机数拼出的 GUID，格式与 `new_guid` 相同。
+pub fn random_guid() -> String {
+    let mut b = [0u8; 16];
+    fill_random(&mut b);
+    braced_guid(b)
+}
+
+fn braced_guid(mut b: [u8; 16]) -> String {
     b[6] = (b[6] & 0x0f) | 0x40;
     b[8] = (b[8] & 0x3f) | 0x80;
     format!(

@@ -476,15 +476,12 @@ pub fn resolve_tree_part(
 ) -> Result<String, Error> {
     match host {
         TreeHost::Slide { n, on_notes } => {
-            let meta = slides
-                .iter()
-                .find(|slide| slide.index == *n)
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: *n as u32 },
-                        json_path.to_string(),
-                    )
-                })?;
+            let meta = super::shape::SlideFreeze::slide_at_start(slides, *n).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::SlideNotFound { n: *n as u32 },
+                    json_path.to_string(),
+                )
+            })?;
             if *on_notes {
                 super::notes::notes_slide_part(pkg, &meta.part)?
                     .ok_or_else(|| Error::with_path(missing, json_path.to_string()))
@@ -922,17 +919,14 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         ));
     }
     let part = if target.comment.is_some() {
-        let meta = slides
-            .iter()
-            .find(|slide| slide.index == target.slide)
-            .ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SlideNotFound {
-                        n: target.slide as u32,
-                    },
-                    "id",
-                )
-            })?;
+        let meta = shape::SlideFreeze::slide_at_start(&slides, target.slide).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: target.slide as u32,
+                },
+                "id",
+            )
+        })?;
         meta.part.clone()
     } else {
         resolve_tree_part(
@@ -946,17 +940,14 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         )?
     };
     if let Some(cm) = &target.comment {
-        let meta = slides
-            .iter()
-            .find(|slide| slide.index == target.slide)
-            .ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SlideNotFound {
-                        n: target.slide as u32,
-                    },
-                    "id",
-                )
-            })?;
+        let meta = shape::SlideFreeze::slide_at_start(&slides, target.slide).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: target.slide as u32,
+                },
+                "id",
+            )
+        })?;
         return super::comments::export_pic(&pkg, &meta.part, cm, &target.key, id);
     }
     let doc = crate::xml::parse(pkg.get(&part)?)?;

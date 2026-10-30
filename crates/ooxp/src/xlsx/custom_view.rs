@@ -2,7 +2,6 @@
 //! 不按视图恢复隐藏行 / 列，不实现放映引擎。
 
 use serde_json::{json, Map, Value};
-use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Document, Element, Node};
@@ -10,8 +9,6 @@ use crate::xml::{Document, Element, Node};
 use super::layout;
 use super::names;
 use super::view;
-
-static GUID_SEQ: AtomicU32 = AtomicU32::new(1);
 
 const DEF_WIN_W: i64 = 1456;
 const DEF_WIN_H: i64 = 1007;
@@ -245,7 +242,7 @@ fn unique_guid(wb: &Element) -> String {
         .filter_map(|el| el.attr("guid").map(str::to_string))
         .collect();
     loop {
-        let g = new_guid();
+        let g = crate::host_env::new_guid();
         if used.iter().all(|u| !guid_eq(Some(u), &g)) {
             return g;
         }
@@ -491,22 +488,4 @@ fn guid_eq(have: Option<&str>, want: &str) -> bool {
         return want.is_empty();
     };
     have.eq_ignore_ascii_case(want)
-}
-
-fn new_guid() -> String {
-    let t = crate::host_env::now_nanos();
-    let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = crate::host_env::pid();
-    let mix = t ^ (n << 48) ^ (pid << 16);
-    let mut b = [0u8; 16];
-    for (i, byte) in b.iter_mut().enumerate() {
-        *byte = (mix >> ((i % 16) * 8)) as u8 ^ (i as u8).wrapping_mul(31);
-    }
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    format!(
-        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13],
-        b[14], b[15]
-    )
 }

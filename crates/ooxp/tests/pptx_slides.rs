@@ -390,6 +390,219 @@ fn insert_keeps_named_slide_bytes() {
     assert_eq!(part_bytes(&moved, "ppt/slides/slide1.xml"), before);
 }
 
+fn four_slides(tag: &str) -> PathBuf {
+    let path = tmp(tag);
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "S1" }] },
+                { "shapes": [{ "text": "S2" }] },
+                { "shapes": [{ "text": "S3" }] },
+                { "shapes": [{ "text": "S4" }] }
+            ]
+        }
+    })
+    .to_string())
+    .unwrap();
+    path
+}
+
+fn counts(path: &Path, key: &str) -> Vec<u64> {
+    inspect(path)["slides"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|slide| slide[key].as_u64().unwrap_or(0))
+        .collect()
+}
+
+fn shape_on_third(path: &Path) -> String {
+    let tree = inspect_scope(path, Some(json!({ "slide": 3 })));
+    tree["slides"][2]["shapes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|shape| shape["text"] == "S3")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[test]
+fn delete_then_object_ops_keep_original_slide() {
+    let src = four_slides("obj");
+    let shape = shape_on_third(&src);
+    let cases = [
+        (
+            "table",
+            json!({ "op": "insertTable", "id": "slide:3", "rows": 1, "cols": 1 }),
+            "tableCount",
+        ),
+        (
+            "connector",
+            json!({ "op": "insertConnector", "id": "slide:3" }),
+            "connectorCount",
+        ),
+        (
+            "math",
+            json!({ "op": "insertMath", "id": "slide:3", "text": "x" }),
+            "mathCount",
+        ),
+        (
+            "field",
+            json!({ "op": "insertField", "id": shape.clone(), "type": "slidenum", "text": "3" }),
+            "fieldCount",
+        ),
+        (
+            "link",
+            json!({ "op": "insertHyperlink", "id": shape, "url": "https://example.com/" }),
+            "hyperlinkCount",
+        ),
+    ];
+    for (tag, op, key) in cases {
+        let out = tmp(tag);
+        apply(
+            &src,
+            &out,
+            json!([
+                { "op": "deleteSlide", "id": "slide:1" },
+                op
+            ]),
+        )
+        .unwrap();
+        assert_eq!(counts(&out, key), [0, 1, 0], "{tag}");
+    }
+}
+
+fn part_text(path: &Path, name: &str) -> String {
+    String::from_utf8(part_bytes(path, name)).unwrap()
+}
+
+fn rel_target_of(path: &Path, rels: &str, rid: &str) -> String {
+    let xml = part_text(path, rels);
+    let at = xml.find(&format!("Id=\"{rid}\"")).unwrap();
+    let rest = &xml[at..];
+    let start = rest.find("Target=\"").unwrap() + "Target=\"".len();
+    rest[start..start + rest[start..].find('"').unwrap()].to_string()
+}
+
+/// A 节是 S1–S3，B 节是 S4。
+fn four_slides_two_sections(tag: &str) -> PathBuf {
+    let src = four_slides(&format!("{tag}-src"));
+    let out = tmp(tag);
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertSlideSection", "id": "pptx:presentation", "name": "A" },
+            { "op": "insertSlideSection", "id": "pptx:presentation", "name": "B" },
+            { "op": "setSlideSection", "id": "slide:4", "section": "section:2" }
+        ]),
+    )
+    .unwrap();
+    out
+}
+
+fn section_slides(path: &Path) -> Vec<Value> {
+    inspect_scope(path, Some(json!({ "sections": true })))["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["slides"].clone())
+        .collect()
+}
+
+#[test]
+fn delete_then_slide_refs_keep_original_slide() {
+    let src = four_slides("refs");
+
+    let zoom = tmp("refs-zoom");
+    apply(
+        &src,
+        &zoom,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "insertZoom", "id": "slide:2", "type": "slide", "target": "slide:3" }
+        ]),
+    )
+    .unwrap();
+    let rels = part_text(&zoom, "ppt/slides/_rels/slide2.xml.rels");
+    assert!(rels.contains("Target=\"slide3.xml\""), "{rels}");
+    assert!(!rels.contains("Target=\"slide4.xml\""), "{rels}");
+
+    let show = tmp("refs-show");
+    apply(
+        &src,
+        &show,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "insertCustomShow", "id": "pptx:presentation", "name": "T", "slides": ["slide:3"] }
+        ]),
+    )
+    .unwrap();
+    let pres = part_text(&show, "ppt/presentation.xml");
+    let at = pres.find("<p:sld r:id=\"").unwrap() + "<p:sld r:id=\"".len();
+    let rid = &pres[at..at + pres[at..].find('"').unwrap()];
+    assert_eq!(
+        rel_target_of(&show, "ppt/_rels/presentation.xml.rels", rid),
+        "slides/slide3.xml"
+    );
+}
+
+#[test]
+fn delete_then_section_ops_keep_original_slide() {
+    let src = four_slides_two_sections("secs");
+
+    let moved = tmp("secs-set");
+    apply(
+        &src,
+        &moved,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "setSlideSection", "id": "slide:3", "section": "section:2" }
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        section_slides(&moved),
+        [json!(["slide:1"]), json!(["slide:2", "slide:3"])]
+    );
+
+    let started = tmp("secs-start");
+    apply(
+        &src,
+        &started,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "insertSlideSection", "id": "pptx:presentation", "name": "C", "start": "slide:3" }
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        section_slides(&started),
+        [json!(["slide:1"]), json!(["slide:2"]), json!(["slide:3"])]
+    );
+
+    let inserted = tmp("secs-insert");
+    apply(
+        &src,
+        &inserted,
+        json!([
+            { "op": "deleteSlide", "id": "slide:1" },
+            { "op": "insertSlide", "id": "pptx:presentation", "after": "slide:3" }
+        ]),
+    )
+    .unwrap();
+    assert_eq!(
+        section_slides(&inserted),
+        [json!(["slide:1", "slide:2", "slide:3"]), json!(["slide:4"])]
+    );
+}
+
 #[test]
 fn foreign_format_rejects() {
     let xlsx = tmp("book").with_extension("xlsx");
