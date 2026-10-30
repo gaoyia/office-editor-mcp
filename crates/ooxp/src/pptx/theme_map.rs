@@ -4,7 +4,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
-use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
+use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Element, Node};
 
 use super::handout;
@@ -16,7 +16,6 @@ use super::request::{
 };
 use super::shape::SlideMeta;
 use super::theme::CLR_MAP_KEYS;
-use super::{CT_THEME_OVERRIDE, REL_THEME_OVERRIDE};
 
 const DEFAULT_CLR_MAP: &[(&str, &str)] = &[
     ("bg1", "lt1"),
@@ -243,32 +242,15 @@ fn override_part(pkg: &Package, host_part: &str) -> Result<Option<String>, Error
 
 fn create_override_part(pkg: &mut Package, host_part: &str) -> Result<String, Error> {
     let dest = next_override_part(pkg);
-    let mut xml_bytes = crate::theme::default_override_xml().into_bytes();
-    if let Some(theme) = theme_for_host(pkg, host_part)? {
-        let theme_doc = xml::parse(pkg.get(&theme)?)?;
-        if let Some(scheme) = crate::theme::clone_clr_scheme(&theme_doc.root) {
-            let mut ov = xml::parse(&xml_bytes)?;
-            ov.root.children.retain(|n| match n {
-                Node::Element(e) => e.local_name() != "clrScheme",
-                _ => true,
-            });
-            ov.root.children.insert(0, Node::Element(scheme));
-            xml_bytes = ov.to_bytes()?;
-        }
-    }
-    pkg.set(&dest, xml_bytes)?;
-    let mut rels = Relationships::from_package(pkg, host_part)?;
-    rels.push(Relationship {
-        id: rels.next_rid(),
-        rel_type: REL_THEME_OVERRIDE.into(),
-        target: picture::rel_target_from(host_part, &dest),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    rels.write_to(pkg, host_part)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&dest, CT_THEME_OVERRIDE)?;
-    cts.write_to(pkg)?;
+    let theme = theme_for_host(pkg, host_part)?;
+    crate::theme::ops::install_override(
+        pkg,
+        host_part,
+        &dest,
+        theme.as_deref(),
+        picture::rel_target_from,
+        false,
+    )?;
     Ok(dest)
 }
 

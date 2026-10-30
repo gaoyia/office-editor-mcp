@@ -7,6 +7,8 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, TypeName};
 use crate::xml::{self, Element, Node};
 
+pub(crate) mod ops;
+
 pub const DML_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
 pub const COLOR_SLOTS: &[&str] = &[

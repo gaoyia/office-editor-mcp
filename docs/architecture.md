@@ -60,7 +60,7 @@ crates/ooxp/                 库
   host_files.rs              用户文件字节
   props/                     core / app / custom
   password.rs                保护口令哈希
-  theme.rs                   DrawingML theme
+  theme/                     DrawingML theme 的解析、inspect 与补丁
   chart/                     c:chart 与 chartex
   smartart/                  图示数据与四件套
   ole.rs                     嵌入对象分类与包装
@@ -90,7 +90,9 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `host_files` 按路径提供用户文件字节。`dispatch` 装入读取回调。插图、OLE、媒体等模块调用它。
 - `props` 管 core / app / custom。三种格式调用它。它可以调用 `opc` 与 `json`，不依赖格式模块。
 - `password` 算保护口令哈希，不破解密码。xlsx、docx、pptx 的保护模块调用它。
-- `theme` 读写 DrawingML theme 部件，不把 `phClr` 展开成 RGB。三种格式的主题模块调用它。
+- `theme` 负责主题 op 的字段解析、inspect 与 XML 补丁。
+格式模块只交给它 theme 部件名、themeOverride 部件名和宿主 id 的写法。
+三种格式的主题模块调用它。它不把 `phClr` 或 `schemeClr` 展开成 RGB。
 - `chart` 管 `c:chart` 与 chartex。它可以调用 `xlsx` 读写 embedding。xlsx、docx、pptx 调用它。pptx 不直接引用 `xlsx` 或 `docx`。
 - `smartart` 管图示数据和四件套，不含宿主 graphicFrame。三种格式的 SmartArt 模块调用它。
 - `ole` 做嵌入对象分类和 Package 包装，不执行 OLE 服务器。它可以调用 `opc`。三种格式调用它，彼此不引用。

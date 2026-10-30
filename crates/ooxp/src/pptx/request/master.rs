@@ -294,8 +294,8 @@ pub(super) fn parse_set_theme_colors(
             slots.push(((*slot).to_string(), parse_hex_slot(v, i, slot)?));
         }
     }
-    let name = super::theme_remain::parse_opt_null_name(obj, i, "name")?;
-    let theme_name = super::theme_remain::parse_opt_null_name(obj, i, "themeName")?;
+    let name = crate::theme::ops::parse_opt_null_name(obj, i, "name")?;
+    let theme_name = crate::theme::ops::parse_opt_null_name(obj, i, "themeName")?;
     if slots.is_empty() && name.is_none() && theme_name.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
@@ -381,9 +381,9 @@ pub(super) fn parse_set_theme_fonts(
     if let Some(s) = parse_theme_face(obj, i, "minorCs", true)? {
         fonts.push((super::super::theme::FontSlot::MinorCs, s));
     }
-    let name = super::theme_remain::parse_opt_null_name(obj, i, "name")?;
-    let major_scripts = super::theme_remain::parse_opt_scripts(obj, i, "majorScripts")?;
-    let minor_scripts = super::theme_remain::parse_opt_scripts(obj, i, "minorScripts")?;
+    let name = crate::theme::ops::parse_opt_null_name(obj, i, "name")?;
+    let major_scripts = crate::theme::ops::parse_opt_scripts(obj, i, "majorScripts")?;
+    let minor_scripts = crate::theme::ops::parse_opt_scripts(obj, i, "minorScripts")?;
     if fonts.is_empty() && name.is_none() && major_scripts.is_none() && minor_scripts.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
