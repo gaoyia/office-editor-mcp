@@ -334,7 +334,7 @@ pub fn apply_set_notes_text(
             format!("ops[{op_index}].id"),
         )
     })?;
-    shape::set_txbody_text(tx, &op.text);
+    crate::drawing_text::set_txbody_text(tx, &op.text);
     pkg.set(&notes_part, doc.to_bytes()?)?;
     Ok(())
 }

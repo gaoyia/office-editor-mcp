@@ -31,23 +31,11 @@ pub struct CxnInfo {
 }
 
 pub fn is_writable_prst(s: &str) -> bool {
-    matches!(
-        s,
-        "line"
-            | "straightConnector1"
-            | "bentConnector2"
-            | "bentConnector3"
-            | "bentConnector4"
-            | "bentConnector5"
-            | "curvedConnector2"
-            | "curvedConnector3"
-            | "curvedConnector4"
-            | "curvedConnector5"
-    )
+    crate::drawing_geom::is_writable_connector_prst(s)
 }
 
 pub fn is_connector_geom(prst: &str) -> bool {
-    is_writable_prst(prst)
+    crate::drawing_geom::is_writable_connector_prst(prst)
 }
 
 /// `wps:wsp` 且没有文本框内容，几何是连接线，或带 `cNvCnPr`。

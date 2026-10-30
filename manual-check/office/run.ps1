@@ -248,6 +248,7 @@ $order = @(
     'docx-tab-br'
     'xlsx-xml-comment'
     'xlsx-implicit-cell'
+    'pptx-connector-line'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'

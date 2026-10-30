@@ -1181,6 +1181,10 @@ OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `man
   - 通过标准：✅ `insertConnector` 后 inspect `connectors: true` 时 id 为 `slide:…/cxn:…` 且 `stable`
   - COM Connector 为真
   - 无 Repair
+- **Sg2b**
+  - 检查：直线 `prst=line`
+  - 通过标准：✅ PowerPoint 16.0 打开后无 Repair，连接线可选中，改 `Left` 能留下
+  - 脚本：`manual-check/office/cases/pptx-connector-line.ps1`
 - **Sg3**
   - 检查：组合
   - 通过标准：✅ `groupShapes` 两个文本框后 COM Type=6

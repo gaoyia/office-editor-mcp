@@ -278,7 +278,7 @@ pub(crate) fn object_json(
         m.insert("prst".into(), json!(prst_of(el)));
     }
     if with_text {
-        m.insert("text".into(), json!(crate::pptx::shape::visible_text(el)));
+        m.insert("text".into(), json!(crate::drawing_text::visible_text(el)));
         crate::drawing_text::insert_inspect(&mut m, el.child_by_local("txBody"));
     }
     m.insert("stable".into(), stable_v);
@@ -763,7 +763,7 @@ pub fn set_shape_text(
             path,
         ));
     };
-    crate::pptx::shape::set_txbody_text(tx, &op.text);
+    crate::drawing_text::set_txbody_text(tx, &op.text);
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -788,7 +788,7 @@ pub fn set_shape_runs(
             path,
         ));
     };
-    crate::pptx::shape::set_txbody_runs(tx, &op.runs, op_index)?;
+    crate::drawing_text::set_txbody_runs(tx, &op.runs, op_index)?;
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     Ok(())
 }

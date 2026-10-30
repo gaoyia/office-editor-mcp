@@ -1629,3 +1629,541 @@ fn opt_json_bool(v: Option<bool>) -> Value {
         None => Value::Null,
     }
 }
+
+pub fn visible_text(sp: &Element) -> String {
+    let Some(tx) = sp.child_by_local("txBody") else {
+        return String::new();
+    };
+    txbody_visible_text(tx)
+}
+
+pub fn txbody_visible_text(tx: &Element) -> String {
+    let mut out = String::new();
+    collect_visible_text(tx, &mut out);
+    out
+}
+
+/// 只收 `a:r` 里的 `a:t` 和段落级 `a:br`。
+/// `a:fld` 是生成文本（§21.1.2.2.4），缓存的 `a:t` 不进 inspect 的 `text`。
+fn collect_visible_text(el: &Element, out: &mut String) {
+    if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                collect_visible_text(child, out);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "fld" {
+        return;
+    }
+    match el.local_name() {
+        "t" => out.push_str(&el.text_content()),
+        "br" => out.push('\n'),
+        _ => {}
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            collect_visible_text(e, out);
+        }
+    }
+}
+/// 按 `docs/json-contract.md` 的替换规则原地改：第一个有文本 run 的段落收下全部新文本，
+/// 其余段落清掉可见内容；清完后只剩 `a:pPr` / `a:endParaRPr` 的段删掉。
+///
+/// 换行必须在段落这一级处理。`a:br` 与 `a:r` 平级（`EG_TextRun`，ECMA-376 §A.4），
+/// 而 `CT_RegularTextRun` 只允许一个可选 `a:rPr` 加恰好一个 `a:t`，
+/// 所以既不能把 `a:br` 塞进 run 里，也不能让一个 run 带多个 `a:t`。
+pub fn set_txbody_text(tx: &mut Element, text: &str) {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut filled = false;
+    rewrite_paras(tx, &mut filled, &lines);
+    if !filled {
+        append_text_para(tx, &lines);
+    }
+    prune_empty_paras(tx);
+}
+
+fn rewrite_paras(el: &mut Element, filled: &mut bool, lines: &[&str]) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                rewrite_paras(child, filled, lines);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "p" {
+        if !*filled && el.element_children().any(is_text_run) {
+            fill_para(el, lines);
+            *filled = true;
+        } else {
+            strip_para(el);
+        }
+        return;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            rewrite_paras(e, filled, lines);
+        }
+    }
+}
+
+fn is_text_run(e: &Element) -> bool {
+    e.local_name() == "r" && e.element_children().any(|c| c.local_name() == "t")
+}
+
+/// 清掉本段的可见内容：`a:t` 和 `a:br` 都删，因此变空的 `a:r` 删。
+/// `a:br` 一并删是因为 inspect 把它读成 `\n`，留一个下来读回值就和写入值差一个换行。
+/// `a:pPr`、`a:endParaRPr`、`a:fld` 留着；随后由 `prune_empty_paras` 决定空段是否删除。
+fn strip_para(p: &mut Element) {
+    let mut i = p.children.len();
+    while i > 0 {
+        i -= 1;
+        let Node::Element(e) = &mut p.children[i] else {
+            continue;
+        };
+        match e.local_name() {
+            "br" => {
+                p.children.remove(i);
+            }
+            "r" => {
+                remove_all_t(e);
+                if is_empty_run(e) {
+                    p.children.remove(i);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 清完之后只剩 `a:pPr` / `a:endParaRPr` 的段删掉。
+/// 含 `a:r`、`a:br`、`a:fld` 或其它不认识的子元素的段留下（未点名的域不清）。
+/// `CT_TextBody` 至少留一段（§A.4，`minOccurs="1"`）；从后往前删，优先保住前面的写入段。
+fn prune_empty_paras(el: &mut Element) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                prune_empty_paras(child);
+            }
+        }
+        return;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if e.local_name() != "p" {
+                prune_empty_paras(e);
+            }
+        }
+    }
+    let mut remaining = el
+        .children
+        .iter()
+        .filter(|n| matches!(n, Node::Element(e) if e.local_name() == "p"))
+        .count();
+    if remaining <= 1 {
+        return;
+    }
+    let mut i = el.children.len();
+    while i > 0 {
+        i -= 1;
+        let Node::Element(e) = &el.children[i] else {
+            continue;
+        };
+        if e.local_name() != "p" {
+            continue;
+        }
+        if remaining <= 1 {
+            break;
+        }
+        if is_prunable_para(e) {
+            el.children.remove(i);
+            remaining -= 1;
+        }
+    }
+}
+
+fn is_prunable_para(p: &Element) -> bool {
+    !p.element_children()
+        .any(|e| !matches!(e.local_name(), "pPr" | "endParaRPr"))
+}
+
+/// 第一行写进第一个文本 run 的 `a:t`，余下每行在段落里插一个 `a:br` 加一个新 `a:r`。
+fn fill_para(p: &mut Element, lines: &[&str]) {
+    // 先把除第一个文本 run 以外的可见内容清干净，免得回填时和旧内容混在一起。
+    let mut seen = false;
+    let mut i = 0;
+    while i < p.children.len() {
+        let Node::Element(e) = &mut p.children[i] else {
+            i += 1;
+            continue;
+        };
+        match e.local_name() {
+            "r" if is_text_run(e) && !seen => {
+                seen = true;
+                i += 1;
+            }
+            "br" => {
+                p.children.remove(i);
+            }
+            "r" => {
+                remove_all_t(e);
+                if is_empty_run(e) {
+                    p.children.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+            _ => i += 1,
+        }
+    }
+
+    let Some(at) = p
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if is_text_run(e)))
+    else {
+        return;
+    };
+    let (rpr, t_name) = {
+        let Node::Element(run) = &mut p.children[at] else {
+            return;
+        };
+        let t_name = match run.element_children().find(|c| c.local_name() == "t") {
+            Some(t) => t.name.clone(),
+            None => return,
+        };
+        (fill_single_line(run, lines[0]), t_name)
+    };
+
+    let proto = Element::new(t_name.clone());
+    let mut ins = at + 1;
+    for line in &lines[1..] {
+        p.children
+            .insert(ins, Node::Element(Element::new(proto.prefixed("br"))));
+        ins += 1;
+        let mut run = Element::new(proto.prefixed("r"));
+        if let Some(pr) = &rpr {
+            run.push_element(pr.clone());
+        }
+        let mut t = Element::new(t_name.clone());
+        apply_t_text(&mut t, line);
+        run.push_element(t);
+        p.children.insert(ins, Node::Element(run));
+        ins += 1;
+    }
+}
+
+/// 文本写进第一个 `a:t`，多余的 `a:t` 删掉。返回 `a:rPr` 的副本，给后续行的新 run 用。
+fn fill_single_line(run: &mut Element, line: &str) -> Option<Element> {
+    let mut seen = false;
+    let mut drop = Vec::new();
+    for (i, child) in run.children.iter_mut().enumerate() {
+        if let Node::Element(e) = child {
+            if e.local_name() == "t" {
+                if seen {
+                    drop.push(i);
+                } else {
+                    apply_t_text(e, line);
+                    seen = true;
+                }
+            }
+        }
+    }
+    for i in drop.into_iter().rev() {
+        run.children.remove(i);
+    }
+    run.element_children()
+        .find(|e| e.local_name() == "rPr")
+        .cloned()
+}
+
+fn remove_all_t(r: &mut Element) {
+    r.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "t",
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+}
+
+fn is_empty_run(r: &Element) -> bool {
+    !r.element_children().any(|e| e.local_name() != "rPr")
+}
+
+/// 一个文本 run 都没有时才走这里。已有段落就挂在第一段末尾，没有段落才新建一段，
+/// 免得凭空多出一段。
+fn append_text_para(tx: &mut Element, lines: &[&str]) {
+    // txBody 自己是 `p:` 前缀，段落和 run 是 `a:` 前缀，前缀只能从里面的元素借。
+    let sample = tx
+        .element_children()
+        .find(|e| e.local_name() == "p")
+        .or_else(|| tx.element_children().next())
+        .map(|e| e.name.clone())
+        .unwrap_or_else(|| "a:bodyPr".to_string());
+    let proto = Element::new(sample);
+    let mut built: Vec<Element> = Vec::new();
+    for (n, line) in lines.iter().enumerate() {
+        if n > 0 {
+            built.push(Element::new(proto.prefixed("br")));
+        }
+        let mut run = Element::new(proto.prefixed("r"));
+        let mut t = Element::new(proto.prefixed("t"));
+        apply_t_text(&mut t, line);
+        run.push_element(t);
+        built.push(run);
+    }
+    let existing = tx.children.iter_mut().find_map(|n| match n {
+        Node::Element(e) if e.local_name() == "p" => Some(e),
+        _ => None,
+    });
+    match existing {
+        Some(p) => {
+            // `a:endParaRPr` 必须在段末。空段常只有这一项，往后面塞 run 会被 PowerPoint 当成没字。
+            let insert_at = p
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "endParaRPr"))
+                .unwrap_or(p.children.len());
+            for (k, el) in built.into_iter().enumerate() {
+                p.children.insert(insert_at + k, Node::Element(el));
+            }
+        }
+        None => {
+            let mut p = Element::new(proto.prefixed("p"));
+            for el in built {
+                p.push_element(el);
+            }
+            tx.push_element(p);
+        }
+    }
+}
+
+fn apply_t_text(t: &mut Element, text: &str) {
+    t.set_text(text.to_string());
+    if needs_xml_space(text) {
+        t.set_attr("xml:space", "preserve");
+    } else {
+        // `xml` 是 XML 规范的保留前缀，不能重新映射，所以精确名就够了。
+        t.remove_attr("xml:space");
+    }
+}
+
+fn needs_xml_space(text: &str) -> bool {
+    text.starts_with(' ') || text.starts_with('\t') || text.ends_with(' ') || text.ends_with('\t')
+}
+
+/// 按可见文字把 `a:r` / `a:br` 切开。不改字，不删 `a:fld`，不合并段落。
+pub fn set_txbody_runs(
+    tx: &mut Element,
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+    op_index: usize,
+) -> Result<(), crate::error::Error> {
+    let visible = txbody_visible_text(tx);
+    let spans = crate::shape_runs::plan(&visible, pieces, op_index)?;
+    let chars: Vec<char> = visible.chars().collect();
+    let mut cursor = 0usize;
+    rewrite_run_tree(tx, &mut cursor, &chars, &spans, pieces);
+    Ok(())
+}
+
+fn rewrite_run_tree(
+    el: &mut Element,
+    cursor: &mut usize,
+    chars: &[char],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+) {
+    if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                rewrite_run_tree(child, cursor, chars, spans, pieces);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "fld" {
+        return;
+    }
+    if el.local_name() == "p" {
+        rewrite_para_runs(el, cursor, chars, spans, pieces);
+        return;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            rewrite_run_tree(e, cursor, chars, spans, pieces);
+        }
+    }
+}
+
+fn rewrite_para_runs(
+    p: &mut Element,
+    cursor: &mut usize,
+    chars: &[char],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+) {
+    let mut i = 0usize;
+    while i < p.children.len() {
+        if !is_visible_text_node(&p.children[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < p.children.len() && is_visible_text_node(&p.children[i]) {
+            i += 1;
+        }
+        let end = i;
+        let group_chars = p.children[start..end].iter().map(node_chars).sum::<usize>();
+        let group_abs = *cursor;
+        let segs = char_segs(&p.children[start..end]);
+        let proto = match &p.children[start] {
+            Node::Element(e) => Element::new(e.name.clone()),
+            Node::Text(_) | Node::Raw(_) => Element::new("a:r"),
+        };
+        let nodes = emit_group(chars, group_abs, group_chars, &segs, spans, pieces, &proto);
+        let new_len = nodes.len();
+        for _ in start..end {
+            p.children.remove(start);
+        }
+        for (k, node) in nodes.into_iter().enumerate() {
+            p.children.insert(start + k, node);
+        }
+        *cursor += group_chars;
+        i = start + new_len;
+    }
+}
+
+fn is_visible_text_node(n: &Node) -> bool {
+    let Node::Element(e) = n else {
+        return false;
+    };
+    e.local_name() == "br" || is_text_run(e)
+}
+
+fn node_chars(n: &Node) -> usize {
+    let Node::Element(e) = n else {
+        return 0;
+    };
+    if e.local_name() == "br" {
+        return 1;
+    }
+    e.element_children()
+        .filter(|c| c.local_name() == "t")
+        .map(|t| t.text_content().chars().count())
+        .sum()
+}
+
+fn char_segs(nodes: &[Node]) -> Vec<(usize, Option<Element>)> {
+    let mut acc = 0usize;
+    let mut segs = Vec::new();
+    for n in nodes {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        acc += node_chars(n);
+        segs.push((acc, e.child_by_local("rPr").cloned()));
+    }
+    segs
+}
+
+fn emit_group(
+    chars: &[char],
+    group_abs: usize,
+    group_chars: usize,
+    segs: &[(usize, Option<Element>)],
+    spans: &[crate::shape_runs::CharSpan],
+    pieces: &[crate::shape_runs::ShapeRunPiece],
+    proto: &Element,
+) -> Vec<Node> {
+    let group_end = group_abs + group_chars;
+    let mut out = Vec::new();
+    for span in spans {
+        let start = span.start.max(group_abs);
+        let end = span.end.min(group_end);
+        if start >= end {
+            continue;
+        }
+        let format = span
+            .piece
+            .and_then(|idx| pieces.get(idx))
+            .and_then(|piece| piece.format.as_ref());
+        emit_chars(&mut out, chars, group_abs, start, end, segs, format, proto);
+    }
+    out
+}
+
+fn emit_chars(
+    out: &mut Vec<Node>,
+    chars: &[char],
+    group_abs: usize,
+    start: usize,
+    end: usize,
+    segs: &[(usize, Option<Element>)],
+    format: Option<&crate::drawing_text::TextFormat>,
+    proto: &Element,
+) {
+    let mut i = start;
+    while i < end {
+        let seg_i = seg_index(segs, i - group_abs);
+        if chars[i] == '\n' {
+            out.push(Node::Element(styled_br(
+                proto,
+                segs.get(seg_i).and_then(|seg| seg.1.clone()),
+                format,
+            )));
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        while j < end && chars[j] != '\n' && seg_index(segs, j - group_abs) == seg_i {
+            j += 1;
+        }
+        let text: String = chars[i..j].iter().collect();
+        let mut run = Element::new(proto.prefixed("r"));
+        if let Some(rpr) = styled_rpr(proto, segs.get(seg_i).and_then(|s| s.1.clone()), format) {
+            run.push_element(rpr);
+        }
+        let mut t = Element::new(proto.prefixed("t"));
+        apply_t_text(&mut t, &text);
+        run.push_element(t);
+        out.push(Node::Element(run));
+        i = j;
+    }
+}
+
+fn seg_index(segs: &[(usize, Option<Element>)], local: usize) -> usize {
+    segs.iter()
+        .position(|(end, _)| local < *end)
+        .unwrap_or(segs.len().saturating_sub(1))
+}
+
+fn styled_br(
+    proto: &Element,
+    base: Option<Element>,
+    format: Option<&crate::drawing_text::TextFormat>,
+) -> Element {
+    let mut br = Element::new(proto.prefixed("br"));
+    if let Some(rpr) = styled_rpr(proto, base, format) {
+        br.children.insert(0, Node::Element(rpr));
+    }
+    br
+}
+
+fn styled_rpr(
+    proto: &Element,
+    base: Option<Element>,
+    format: Option<&crate::drawing_text::TextFormat>,
+) -> Option<Element> {
+    let Some(fmt) = format.filter(|fmt| fmt.has_run_patch()) else {
+        return base;
+    };
+    let mut rpr = base.unwrap_or_else(|| Element::new(proto.prefixed("rPr")));
+    crate::drawing_text::patch_rpr(&mut rpr, fmt);
+    Some(rpr)
+}

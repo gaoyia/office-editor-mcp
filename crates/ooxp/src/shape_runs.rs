@@ -1,4 +1,4 @@
-//! 形状 / 文本框可见文字的切分计划。写入仍在 `pptx::shape::set_txbody_runs`。
+//! 形状 / 文本框可见文字的切分计划。写入在 `drawing_text::set_txbody_runs`。
 
 use serde_json::{Map, Value};
 

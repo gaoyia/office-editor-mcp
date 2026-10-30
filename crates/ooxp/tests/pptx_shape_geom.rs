@@ -467,3 +467,28 @@ fn xlsx_and_docx_reject_pptx_connector_ids() {
     assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!dest.exists());
 }
+
+#[test]
+fn insert_connector_line_is_listed() {
+    let src = create_deck("line");
+    let out = tmp("line-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertConnector",
+            "id": "slide:1",
+            "prst": "line",
+            "x": 200000,
+            "y": 300000,
+            "cx": 1000000,
+            "cy": 400000
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "connectors": true, "slide": 1 }));
+    let cxn = &tree["slides"][0]["connectors"][0];
+    assert_eq!(cxn["prst"], "line");
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("prst=\"line\""));
+}

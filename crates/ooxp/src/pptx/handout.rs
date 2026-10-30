@@ -85,7 +85,7 @@ pub fn set_text(
         })?;
         // 契约：日期 / 页码原先若是 a:fld，改完变成普通文字。
         strip_fields(tx);
-        shape::set_txbody_text(tx, text);
+        crate::drawing_text::set_txbody_text(tx, text);
         enable_hf(&mut doc.root, ph);
     }
     pkg.set(&part, doc.to_bytes()?)?;

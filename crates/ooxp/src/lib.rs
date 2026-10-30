@@ -5,6 +5,7 @@
 mod chart;
 mod dispatch;
 mod docx;
+mod drawing_geom;
 mod drawing_math;
 mod drawing_text;
 mod error;

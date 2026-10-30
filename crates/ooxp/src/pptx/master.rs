@@ -466,7 +466,7 @@ pub fn set_text(
                 format!("ops[{op_index}].id"),
             )
         })?;
-        shape::set_txbody_text(tx, text);
+        crate::drawing_text::set_txbody_text(tx, text);
         Ok(())
     })
 }
@@ -488,7 +488,7 @@ pub fn set_runs(
                 format!("ops[{op_index}].id"),
             )
         })?;
-        shape::set_txbody_runs(tx, runs, op_index)?;
+        crate::drawing_text::set_txbody_runs(tx, runs, op_index)?;
         Ok(())
     })
 }
@@ -943,7 +943,7 @@ fn placeholder_json(sp: &Element, host: &str, index: usize) -> Value {
     obj.insert("y".into(), y);
     obj.insert("cx".into(), cx);
     obj.insert("cy".into(), cy);
-    obj.insert("text".into(), json!(shape::visible_text(sp)));
+    obj.insert("text".into(), json!(crate::drawing_text::visible_text(sp)));
     crate::drawing_text::insert_inspect(&mut obj, sp.child_by_local("txBody"));
     obj.insert("stable".into(), json!(stable));
     Value::Object(obj)
@@ -1346,7 +1346,7 @@ pub(crate) fn write_placeholder_into(
     let name = placeholder_name(type_name, cnv);
     let mut sp = build_placeholder(cnv, &name, type_name, idx, x, y, cx, cy);
     if let Some(tx) = sp.child_by_local_mut("txBody") {
-        shape::set_txbody_text(tx, text);
+        crate::drawing_text::set_txbody_text(tx, text);
     }
     picture::insert_into_sp_tree(&mut doc.root, sp)?;
     pkg.set(part, doc.to_bytes()?)?;

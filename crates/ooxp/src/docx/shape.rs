@@ -31,7 +31,7 @@ pub struct ShapeInfo {
 }
 
 pub fn is_writable_prst(s: &str) -> bool {
-    crate::pptx::shape::is_writable_shape_prst(s) && !super::connector::is_connector_geom(s)
+    crate::drawing_geom::is_writable_shape_prst(s) && !super::connector::is_connector_geom(s)
 }
 
 /// `wps:wsp` 且没有文本框内容，也不是连接线。

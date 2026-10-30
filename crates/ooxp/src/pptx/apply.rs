@@ -92,7 +92,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                shape::set_txbody_text(tx, &op.text);
+                crate::drawing_text::set_txbody_text(tx, &op.text);
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetShapeRuns(op) => {
@@ -144,7 +144,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                shape::set_txbody_runs(tx, &op.runs, i)?;
+                crate::drawing_text::set_txbody_runs(tx, &op.runs, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetShapeFormat(op) => {

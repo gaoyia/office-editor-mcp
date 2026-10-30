@@ -69,6 +69,7 @@ crates/ooxp/                 库
   svg.rs                     SVG 扩展
   drawing_text.rs            DrawingML 文本格式
   drawing_math.rs            a14 公式框
+  drawing_geom.rs            预设几何名单
   shape_runs.rs              形状可见文字的切分
   text_span.rs               在可见文字里定位
   xlsx/                      工作簿
@@ -98,6 +99,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `svg` 管 Office 2016 的 SVG 扩展。xlsx 和 pptx 调用它。docx 保持自己的写入路径，不经这里。
 - `drawing_text` 读写 `a:rPr`、`a:pPr`、`a:bodyPr`。xlsx、pptx 的形状和表，以及 `shape_runs` 调用它。
 - `drawing_math` 判定 `a14:m`，并拼接公式可见文字。xlsx 和 pptx 的公式框调用它。docx 公式走自己的 OMML。
+- `drawing_geom` 只放三种格式都认的预设几何名单。形状名单不含连接线。连接线名单含 `line`。三种格式的形状和连接线解析调用它。
 - `shape_runs` 计划形状可见文字怎么切。它调用 `drawing_text` 和 `text_span`。pptx 的形状写入调用它。
 - `text_span` 在一段可见文字里按原文定位。`shape_runs` 和 docx 段落调用它。
 - `xlsx`、`docx`、`pptx` 做各自的 inspect、apply、create。它们调用 `opc`、`json`、`xml`、`props`，以及上面这些共享模块。

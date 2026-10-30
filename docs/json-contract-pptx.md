@@ -2589,7 +2589,8 @@ docx 见 [docx 分册](json-contract-docx.md#setthemeoverride)。xlsx 见 [xlsx 
   - `a:prstGeom/@prst`
   - 省略为 `rect`
   - 必须是可写预设名
-  - 连接线几何名（`straightConnector1` 等）报 `InvalidField`，请用 `insertConnector`
+  - 连接线几何名报 `InvalidField`，请用 `insertConnector`
+  - 含 `line`、`straightConnector1`，以及 `bentConnector2`–`5`、`curvedConnector2`–`5`
   - 与 `geom` 同时出现报 `InvalidField`
 - **`geom`**
   - 可选
@@ -2665,6 +2666,7 @@ xlsx 的 `insertShape` 出现 `geom` 报 `InvalidField`。
   - 可选
   - 缺省 `straightConnector1`
   - 允许
+    - `line`
     - `straightConnector1`
     - `bentConnector2`
     - `bentConnector3`
@@ -2674,7 +2676,6 @@ xlsx 的 `insertShape` 出现 `geom` 报 `InvalidField`。
     - `curvedConnector3`
     - `curvedConnector4`
     - `curvedConnector5`
-  - xlsx 另允许 `line`
 - **`x` / `y`**
   - 可选
   - 画布坐标，EMU，非负整数

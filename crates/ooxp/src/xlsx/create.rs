@@ -1247,7 +1247,7 @@ fn parse_shape_prst(obj: &Map<String, Value>, prefix: &str) -> Result<String, Er
     match obj.get("prst") {
         None => Ok("rect".to_string()),
         Some(Value::String(s)) => {
-            if crate::pptx::shape::is_writable_shape_prst(s) {
+            if crate::drawing_geom::is_writable_shape_prst(s) {
                 Ok(s.clone())
             } else {
                 Err(Error::with_path(
@@ -1270,7 +1270,7 @@ fn parse_connector_prst(obj: &Map<String, Value>, prefix: &str) -> Result<String
     match obj.get("prst") {
         None => Ok("straightConnector1".to_string()),
         Some(Value::String(s)) => {
-            if s == "line" || crate::pptx::connector::is_writable_prst(s) {
+            if crate::drawing_geom::is_writable_connector_prst(s) {
                 Ok(s.clone())
             } else {
                 Err(Error::with_path(

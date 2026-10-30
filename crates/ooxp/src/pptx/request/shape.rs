@@ -120,7 +120,7 @@ pub(super) fn parse_insert_shape(
         match obj.get("prst") {
             None => "rect".to_string(),
             Some(Value::String(s)) => {
-                if super::super::shape::is_writable_shape_prst(s) {
+                if crate::drawing_geom::is_writable_shape_prst(s) {
                     s.clone()
                 } else {
                     return Err(Error::with_path(
@@ -223,7 +223,7 @@ pub(super) fn parse_insert_connector(
     let prst = match obj.get("prst") {
         None => "straightConnector1".to_string(),
         Some(Value::String(s)) => {
-            if connector::is_writable_prst(s) {
+            if crate::drawing_geom::is_writable_connector_prst(s) {
                 s.clone()
             } else {
                 return Err(Error::with_path(
@@ -926,7 +926,7 @@ pub(crate) fn parse_create_connector(v: &Value, prefix: &str) -> Result<CreateCo
     let prst = match obj.get("prst") {
         None => "straightConnector1".to_string(),
         Some(Value::String(s)) => {
-            if connector::is_writable_prst(s) {
+            if crate::drawing_geom::is_writable_connector_prst(s) {
                 s.clone()
             } else {
                 return Err(Error::with_path(

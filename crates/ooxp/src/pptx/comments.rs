@@ -12,7 +12,7 @@ use super::request::{
     DeleteCommentOp, DeletePictureOp, InsertCommentOp, InsertPictureOp, ReplacePictureOp,
     ReplyCommentOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
 };
-use super::shape::{self, SlideMeta};
+use super::shape::SlideMeta;
 use super::{ExportedMedia, DML_NS, REL_NS};
 
 pub const REL_MODERN_COMMENTS: &str =
@@ -218,7 +218,7 @@ fn comment_json(
     let (x, y) = pos_xy(cm);
     let text = cm
         .child_by_local("txBody")
-        .map(shape::txbody_visible_text)
+        .map(crate::drawing_text::txbody_visible_text)
         .unwrap_or_default();
     let pics = comment_pictures(&host, cm, true, rels);
     let mut replies = Vec::new();
@@ -229,7 +229,7 @@ fn comment_json(
                 let (rn, ri) = author_by_id(authors, ra);
                 let rt = reply
                     .child_by_local("txBody")
-                    .map(shape::txbody_visible_text)
+                    .map(crate::drawing_text::txbody_visible_text)
                     .unwrap_or_default();
                 let reply_id = format!("{host}/reply:{rg}");
                 let reply_pics = comment_pictures(&reply_id, reply, false, rels);
@@ -897,7 +897,7 @@ pub fn apply_set_text(
             format!("ops[{op_index}].id"),
         )
     })?;
-    shape::set_txbody_text(tx, &op.text);
+    crate::drawing_text::set_txbody_text(tx, &op.text);
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }

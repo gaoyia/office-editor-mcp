@@ -119,21 +119,6 @@ pub(crate) fn parse_slide_only(
     Ok(slide)
 }
 
-pub fn is_writable_prst(s: &str) -> bool {
-    matches!(
-        s,
-        "straightConnector1"
-            | "bentConnector2"
-            | "bentConnector3"
-            | "bentConnector4"
-            | "bentConnector5"
-            | "curvedConnector2"
-            | "curvedConnector3"
-            | "curvedConnector4"
-            | "curvedConnector5"
-    )
-}
-
 pub fn looks_like_cxn_id(id: &str) -> bool {
     (id.starts_with("slide:") || id.starts_with("master:")) && id.contains("/cxn:")
 }

@@ -641,7 +641,7 @@ fn table_json(frame: &Element, host: &str, index: usize, pkg: Option<(&Package, 
             let v_merge = is_on(tc, "vMerge");
             let text = tc
                 .child_by_local("txBody")
-                .map(shape::txbody_visible_text)
+                .map(crate::drawing_text::txbody_visible_text)
                 .unwrap_or_default();
             let mut cell = Map::new();
             cell.insert("id".into(), json!(format!("{id}/r:{row_n}/c:{col}")));
@@ -1233,7 +1233,7 @@ fn build_tc(
     let mut tc = Element::new("a:tc");
     let mut tx = empty_tx_body();
     if !text.is_empty() {
-        shape::set_txbody_text(&mut tx, text);
+        crate::drawing_text::set_txbody_text(&mut tx, text);
     }
     tc.push_element(tx);
     tc.push_element(Element::new("a:tcPr"));
@@ -1751,7 +1751,7 @@ pub fn set_cell_text(
     let tx = tc
         .child_by_local_mut("txBody")
         .ok_or_else(|| missing_table(&op.id, i))?;
-    shape::set_txbody_text(tx, &op.text);
+    crate::drawing_text::set_txbody_text(tx, &op.text);
     Ok(())
 }
 
