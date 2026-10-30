@@ -592,7 +592,7 @@ fn fill_single_line(run: &mut Element, line: &str) -> Option<Element> {
 fn remove_all_t(r: &mut Element) {
     r.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != "t",
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 
@@ -731,7 +731,7 @@ fn rewrite_para_runs(
         let segs = char_segs(&p.children[start..end]);
         let proto = match &p.children[start] {
             Node::Element(e) => Element::new(e.name.clone()),
-            Node::Text(_) => Element::new("a:r"),
+            Node::Text(_) | Node::Raw(_) => Element::new("a:r"),
         };
         let nodes = emit_group(chars, group_abs, group_chars, &segs, spans, pieces, &proto);
         let new_len = nodes.len();

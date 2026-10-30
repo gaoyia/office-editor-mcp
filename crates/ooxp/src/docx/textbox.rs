@@ -1364,7 +1364,7 @@ fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bo
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -1407,7 +1407,7 @@ fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bo
                         false
                     }
                 }
-                Node::Text(_) => false,
+                Node::Text(_) | Node::Raw(_) => false,
             };
             if hit {
                 el.children.remove(i);
@@ -1502,7 +1502,7 @@ fn remove_group_wsp(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool 
                     let (doc_pr_id, _) = cnv_pr(c);
                     para::matches_txbx_key(&doc_pr_id, *index, key)
                 }
-                Node::Text(_) => false,
+                Node::Text(_) | Node::Raw(_) => false,
             };
             if hit {
                 el.children.remove(i);
@@ -1728,7 +1728,7 @@ fn ensure_body_pr(wsp: &mut Element) -> &mut Element {
 fn remove_named(el: &mut Element, names: &[&str]) {
     el.children.retain(|n| match n {
         Node::Element(e) => !names.contains(&e.local_name()),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 

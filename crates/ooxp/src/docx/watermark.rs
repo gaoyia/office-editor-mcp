@@ -125,7 +125,7 @@ fn visible_text(el: &Element, out: &mut String) {
         match n {
             Node::Element(e) => visible_text(e, out),
             Node::Text(t) if el.local_name() == "t" => out.push_str(t),
-            Node::Text(_) => {}
+            Node::Text(_) | Node::Raw(_) => {}
         }
     }
 }
@@ -784,7 +784,7 @@ fn remove_watermark_walk(el: &mut Element, index: &mut usize, key: Option<&WmKey
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }

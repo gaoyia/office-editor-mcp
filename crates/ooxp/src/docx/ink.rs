@@ -558,7 +558,7 @@ fn remove_walk(el: &mut Element, ctx: &HostCtx<'_>, key: &TxbxKey, index: &mut u
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -640,7 +640,7 @@ fn strip_from_element(
                     let token = cnv_pr(e).0.or(drawing_pr.clone());
                     matches_key(&token, *index, key)
                 }
-                Node::Text(_) => false,
+                Node::Text(_) | Node::Raw(_) => false,
             };
             if hit {
                 el.children.remove(i);

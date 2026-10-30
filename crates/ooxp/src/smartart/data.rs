@@ -347,7 +347,7 @@ fn strip_para(p: &mut Element) {
             "r" => {
                 e.children.retain(|n| match n {
                     Node::Element(c) => c.local_name() != "t",
-                    Node::Text(_) => true,
+                    Node::Text(_) | Node::Raw(_) => true,
                 });
                 if !e.element_children().any(|c| c.local_name() != "rPr") {
                     p.children.remove(i);
@@ -415,7 +415,7 @@ fn fill_para(p: &mut Element, lines: &[&str]) {
             "r" => {
                 e.children.retain(|n| match n {
                     Node::Element(c) => c.local_name() != "t",
-                    Node::Text(_) => true,
+                    Node::Text(_) | Node::Raw(_) => true,
                 });
                 if !e.element_children().any(|c| c.local_name() != "rPr") {
                     p.children.remove(i);

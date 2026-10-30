@@ -539,7 +539,7 @@ fn ensure_child<'a>(
     if let Some(after) = after {
         if let Some(i) = parent.children.iter().position(|n| match n {
             Node::Element(e) => e.local_name() == after,
-            Node::Text(_) => false,
+            Node::Text(_) | Node::Raw(_) => false,
         }) {
             parent.children.insert(i + 1, Node::Element(el));
             return parent.child_by_local_mut(local).unwrap();
@@ -560,7 +560,7 @@ fn set_named(el: &mut Element, pairs: &[(&str, Option<i64>)]) {
 fn remove_children_local(el: &mut Element, local: &str) {
     el.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != local,
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 

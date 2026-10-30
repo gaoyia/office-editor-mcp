@@ -1932,7 +1932,7 @@ fn remove_chart_walk(el: &mut Element, idx: &mut usize, key: &ChartKey) -> bool 
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -1951,7 +1951,7 @@ fn remove_chart_walk(el: &mut Element, idx: &mut usize, key: &ChartKey) -> bool 
                 *idx += 1;
                 let hit = match &el.children[i] {
                     Node::Element(c) => matches_key(c, key, *idx),
-                    Node::Text(_) => false,
+                    Node::Text(_) | Node::Raw(_) => false,
                 };
                 if hit {
                     el.children.remove(i);
@@ -2679,7 +2679,8 @@ fn set_chart_title(space: &mut Element, title: &str) {
     );
     if let Ok(doc) = xml::parse(xml.as_bytes()) {
         let mut nodes = Vec::new();
-        for n in doc.take_root().children {
+        let mut root = doc.take_root();
+        for n in root.take_children() {
             nodes.push(n);
         }
         for n in nodes.into_iter().rev() {
@@ -2738,7 +2739,8 @@ fn set_axis_title(space: &mut Element, axis: &str, title: &str, i: usize) -> Res
             crate::chart::title_el(title)
         );
         if let Ok(doc) = xml::parse(xml.as_bytes()) {
-            if let Some(Node::Element(t)) = doc.take_root().children.into_iter().next() {
+            let mut root = doc.take_root();
+            if let Some(Node::Element(t)) = root.take_children().into_iter().next() {
                 ax.children
                     .insert(1.min(ax.children.len()), Node::Element(t));
             }
@@ -3138,9 +3140,9 @@ fn add_series(
     );
     let wrapped = format!(r#"<c:root xmlns:c="{CHART_NS}">{xml}</c:root>"#);
     let doc = xml::parse(wrapped.as_bytes())?;
-    let ser_el = doc
-        .take_root()
-        .children
+    let mut root = doc.take_root();
+    let ser_el = root
+        .take_children()
         .into_iter()
         .find_map(|n| match n {
             Node::Element(e) if e.local_name() == "ser" => Some(e),

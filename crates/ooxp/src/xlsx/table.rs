@@ -612,7 +612,7 @@ fn write_header(worksheet: &mut Element, cell: CellRef, text: &str) {
     let c = apply::ensure_cell(sheet_data, cell);
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
     c.set_attr("t", "inlineStr");
     let mut t = Element::new("t");

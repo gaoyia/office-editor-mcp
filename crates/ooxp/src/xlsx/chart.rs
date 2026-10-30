@@ -1647,7 +1647,7 @@ fn remove_chart_anchor_in(el: &mut Element, key: &ChartKey, index: &mut usize) -
                 .unwrap_or(None)
                 .and_then(|index| match &child.children[index] {
                     Node::Element(branch) => Some(branch),
-                    Node::Text(_) => None,
+                    Node::Text(_) | Node::Raw(_) => None,
                 });
             if let Some(branch) = branch {
                 if charts_match_in(branch, key, index) {

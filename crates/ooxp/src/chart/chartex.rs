@@ -88,7 +88,7 @@ fn escape(s: &str) -> String {
     xml::escape_text(s)
 }
 
-fn pts(vals: &[Value], numeric: bool) -> String {
+fn pts(vals: &[Value]) -> String {
     let mut body = String::new();
     for (i, v) in vals.iter().enumerate() {
         let t = match v {
@@ -103,11 +103,7 @@ fn pts(vals: &[Value], numeric: bool) -> String {
             }
             _ => v.to_string(),
         };
-        if numeric {
-            body.push_str(&format!(r#"<cx:pt idx="{i}">{t}</cx:pt>"#));
-        } else {
-            body.push_str(&format!(r#"<cx:pt idx="{i}">{}</cx:pt>"#, escape(&t)));
-        }
+        body.push_str(&format!(r#"<cx:pt idx="{i}">{}</cx:pt>"#, escape(&t)));
     }
     body
 }
@@ -247,9 +243,9 @@ pub fn build(
         data.push_str(&format!(
             r#"<cx:data id="{di}"><cx:strDim type="cat">{cat_f}<cx:lvl ptCount="{}">{}</cx:lvl></cx:strDim><cx:numDim type="{nd}">{val_f}<cx:lvl ptCount="{}" formatCode="General">{}</cx:lvl></cx:numDim></cx:data>"#,
             cats.len(),
-            pts(cats, false),
+            pts(cats),
             vals.len(),
-            pts(vals, true)
+            pts(vals)
         ));
     }
     let ext = if external {

@@ -131,7 +131,7 @@ pub fn strip_svg_blip(el: &mut Element) {
         };
         lst.children.retain(|n| match n {
             Node::Element(e) => !(e.local_name() == "ext" && e.attr("uri") == Some(EXT_URI)),
-            Node::Text(_) => true,
+            Node::Text(_) | Node::Raw(_) => true,
         });
         lst.element_children().next().is_none()
     };

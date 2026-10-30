@@ -171,8 +171,9 @@ pub fn ungroup(
             format!("ops[{op_index}].id"),
         ));
     };
+    let mut grp = grp;
     let children: Vec<Element> = grp
-        .children
+        .take_children()
         .into_iter()
         .filter_map(|n| match n {
             Node::Element(e) if !is_group_chrome(e.local_name()) => Some(e),

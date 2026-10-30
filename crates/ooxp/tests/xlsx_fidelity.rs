@@ -257,9 +257,9 @@ fn style_index_and_unknown_attributes_survive() {
     assert!(text.contains("<pageMargins"));
 }
 
-/// 契约「改动范围」：被改工作表整份重序列化，注释丢掉。
+/// 契约「改动范围」：被改工作表整份重序列化，注释仍在。
 #[test]
-fn dirty_sheet_drops_comments() {
+fn dirty_sheet_keeps_comments() {
     let sheet = SHEET1.replacen("<dimension", "<!-- DIRTY-DROP --><dimension", 1);
     let src = write_with_sheet1("dirty-comment", &sheet);
     assert!(part(&src, "xl/worksheets/sheet1.xml").contains("<!-- DIRTY-DROP -->"));
@@ -271,7 +271,7 @@ fn dirty_sheet_drops_comments() {
     )
     .unwrap();
     let text = part(&out, "xl/worksheets/sheet1.xml");
-    assert!(!text.contains("<!--"), "脏表注释应丢掉：{text}");
+    assert!(text.contains("<!-- DIRTY-DROP -->"), "脏表注释应留下：{text}");
     assert!(
         sheet_data_of(&text).contains(r#"<c r="A1" s="3"><v>42</v></c>"#),
         "{text}"

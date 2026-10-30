@@ -517,7 +517,7 @@ fn collect_col_pieces(worksheet: &Element) -> Vec<ColPiece> {
 fn write_cols(worksheet: &mut Element, pieces: Vec<ColPiece>) {
     worksheet.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != "cols",
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
     if pieces.is_empty() {
         return;

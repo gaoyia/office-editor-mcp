@@ -1368,7 +1368,7 @@ fn remove_group_pic(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
             *idx += 1;
             let hit = match &el.children[i] {
                 Node::Element(c) => matches_grouped(c, key, *idx),
-                Node::Text(_) => false,
+                Node::Text(_) | Node::Raw(_) => false,
             };
             if hit {
                 el.children.remove(i);
@@ -1545,7 +1545,7 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
         };
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -1554,12 +1554,12 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
             if ac_is_group(&el.children[i]) {
                 let hit = match &mut el.children[i] {
                     Node::Element(ac) => remove_group_pic(ac, idx, key),
-                    Node::Text(_) => false,
+                    Node::Text(_) | Node::Raw(_) => false,
                 };
                 if hit {
                     let empty = match &el.children[i] {
                         Node::Element(ac) => !group_has_remaining(ac),
-                        Node::Text(_) => false,
+                        Node::Text(_) | Node::Raw(_) => false,
                     };
                     if empty {
                         el.children.remove(i);
@@ -1581,12 +1581,12 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
             if is_group {
                 let hit = match &mut el.children[i] {
                     Node::Element(c) => remove_group_pic(c, idx, key),
-                    Node::Text(_) => false,
+                    Node::Text(_) | Node::Raw(_) => false,
                 };
                 if hit {
                     let empty = match &el.children[i] {
                         Node::Element(c) => !group_has_remaining(c),
-                        Node::Text(_) => false,
+                        Node::Text(_) | Node::Raw(_) => false,
                     };
                     if empty {
                         el.children.remove(i);
@@ -1601,7 +1601,7 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
                 *idx += 1;
                 let hit = match &el.children[i] {
                     Node::Element(c) => matches_key(c, key, *idx),
-                    Node::Text(_) => false,
+                    Node::Text(_) | Node::Raw(_) => false,
                 };
                 if hit {
                     el.children.remove(i);
@@ -1849,11 +1849,11 @@ fn convert_to_anchor(drawing: &mut Element, wrap: WrapKind, pos: &WrapPos) {
 fn take_frame(drawing: &mut Element) -> Option<Element> {
     let pos = drawing.children.iter().position(|n| match n {
         Node::Element(e) => e.local_name() == "inline" || e.local_name() == "anchor",
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     })?;
     match drawing.children.remove(pos) {
         Node::Element(e) => Some(e),
-        Node::Text(_) => None,
+        Node::Text(_) | Node::Raw(_) => None,
     }
 }
 
@@ -2223,7 +2223,7 @@ pub fn strip_svg_blip(drawing: &mut Element) {
         };
         lst.children.retain(|n| match n {
             Node::Element(e) => !(e.local_name() == "ext" && e.attr("uri") == Some(SVG_EXT_URI)),
-            Node::Text(_) => true,
+            Node::Text(_) | Node::Raw(_) => true,
         });
         lst.element_children().next().is_none()
     };

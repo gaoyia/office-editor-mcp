@@ -177,8 +177,9 @@ pub fn ungroup(doc: &mut Document, op: &UngroupOp, op_index: usize) -> Result<()
     let Node::Element(grp) = parent.children.remove(grp_index) else {
         return Err(member_not_found(&op.id, op_index));
     };
+    let mut grp = grp;
     let members: Vec<Node> = grp
-        .children
+        .take_children()
         .into_iter()
         .filter(|n| match n {
             Node::Element(e) => !matches!(e.local_name(), "nvGrpSpPr" | "grpSpPr"),

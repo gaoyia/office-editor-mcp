@@ -1683,7 +1683,7 @@ fn append_sld_layout_id(root: &mut Element, id: u32, rid: &str) {
     {
         match &mut root.children[i] {
             Node::Element(e) => e,
-            Node::Text(_) => unreachable!(),
+            Node::Text(_) | Node::Raw(_) => unreachable!(),
         }
     } else {
         let lst = Element::new("p:sldLayoutIdLst");

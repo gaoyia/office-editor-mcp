@@ -527,14 +527,14 @@ fn find_sheet_child_index(sheets: &Element, name: &str) -> Option<usize> {
             e.local_name() == "sheet"
                 && e.attr("name").is_some_and(|n| n.eq_ignore_ascii_case(name))
         }
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     })
 }
 
 fn first_sheet_child_index(sheets: &Element) -> Option<usize> {
     sheets.children.iter().position(|n| match n {
         Node::Element(e) => e.local_name() == "sheet",
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     })
 }
 

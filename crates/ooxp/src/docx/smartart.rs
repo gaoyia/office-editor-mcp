@@ -1316,7 +1316,7 @@ fn remove_walk(el: &mut Element, idx: &mut usize, key: &DiagramKey) -> bool {
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -1335,7 +1335,7 @@ fn remove_walk(el: &mut Element, idx: &mut usize, key: &DiagramKey) -> bool {
                 *idx += 1;
                 let hit = match &el.children[i] {
                     Node::Element(c) => matches_key(c, key, *idx),
-                    Node::Text(_) => false,
+                    Node::Text(_) | Node::Raw(_) => false,
                 };
                 if hit {
                     el.children.remove(i);

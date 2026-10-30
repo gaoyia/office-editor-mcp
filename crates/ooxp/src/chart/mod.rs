@@ -1340,7 +1340,8 @@ pub fn set_chart_title(space: &mut Element, title: &str) {
         title_el(title)
     );
     if let Ok(doc) = xml::parse(xml.as_bytes()) {
-        let nodes: Vec<_> = doc.take_root().children;
+        let mut root = doc.take_root();
+        let nodes = std::mem::take(&mut root.children);
         for n in nodes.into_iter().rev() {
             chart.children.insert(0, n);
         }
@@ -1397,7 +1398,8 @@ pub fn set_axis_title(space: &mut Element, axis: &str, title: &str, i: usize) ->
             title_el(title)
         );
         if let Ok(doc) = xml::parse(xml.as_bytes()) {
-            if let Some(Node::Element(t)) = doc.take_root().children.into_iter().next() {
+            let mut root = doc.take_root();
+            if let Some(Node::Element(t)) = root.take_children().into_iter().next() {
                 ax.children
                     .insert(1.min(ax.children.len()), Node::Element(t));
             }
@@ -1816,8 +1818,8 @@ pub fn insert_ser(space: &mut Element, ser_el: Element, series_type: Option<Char
 pub fn parse_ser_xml(xml: &str) -> Result<Element, Error> {
     let wrapped = format!(r#"<c:root xmlns:c="{CHART_NS}">{xml}</c:root>"#);
     let doc = xml::parse(wrapped.as_bytes())?;
-    doc.take_root()
-        .children
+    let mut root = doc.take_root();
+    root.take_children()
         .into_iter()
         .find_map(|n| match n {
             Node::Element(e) if e.local_name() == "ser" => Some(e),
@@ -2584,8 +2586,8 @@ fn extract_wrapper_sers(plot: &mut Element) -> (Option<usize>, Vec<Element>, Vec
         if first.is_none() {
             first = Some(i);
         }
-        if let Node::Element(w) = plot.children.remove(i) {
-            for n in w.children {
+        if let Node::Element(mut w) = plot.children.remove(i) {
+            for n in w.take_children() {
                 if let Node::Element(c) = n {
                     if c.local_name() == "ser" {
                         sers.push(c);
@@ -2863,7 +2865,8 @@ fn ensure_surface_walls(space: &mut Element) {
             .iter()
             .position(|n| matches!(n, Node::Element(e) if e.local_name() == "legend"))
             .unwrap_or(chart.children.len());
-        for (shift, n) in doc.take_root().children.into_iter().enumerate() {
+        let mut root = doc.take_root();
+        for (shift, n) in root.take_children().into_iter().enumerate() {
             chart.children.insert(at + shift, n);
         }
     }
@@ -2876,7 +2879,8 @@ fn ser_ax_xml() -> String {
 fn append_axes(plot: &mut Element, xml: &str) {
     let wrapped = format!(r#"<c:plotArea xmlns:c="{CHART_NS}">{xml}</c:plotArea>"#);
     if let Ok(doc) = xml::parse(wrapped.as_bytes()) {
-        for n in doc.take_root().children {
+        let mut root = doc.take_root();
+        for n in root.take_children() {
             plot.children.push(n);
         }
     }

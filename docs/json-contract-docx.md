@@ -4742,7 +4742,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 只改批注文本、元数据或完成标记时，未出现范围标记的宿主部件（常见是主文档）原字节写回。只改图表 cache / 标题 / 图例、且宿主 drawing 未动时，未点名的正文段落字节按「drawing 未动」验收。
 只改 SmartArt 点文字或增删点、且宿主 drawing 未动时，同样按「drawing 未动」验收。
 
-被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
+被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间、注释和处理指令保留；`DOCTYPE` 返回 `XmlBroken`。
 
 ### insertOle
 

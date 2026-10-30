@@ -1102,10 +1102,10 @@ fn unwrap_at(root: &mut Element, path: &[usize]) -> Result<(), Error> {
     if idx >= parent.children.len() {
         return Err(xml_broken("field"));
     }
-    let Node::Element(el) = parent.children.remove(idx) else {
+    let Node::Element(mut el) = parent.children.remove(idx) else {
         return Err(xml_broken("field"));
     };
-    parent.children.splice(idx..idx, el.children);
+    parent.children.splice(idx..idx, el.take_children());
     Ok(())
 }
 

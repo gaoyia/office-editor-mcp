@@ -1469,7 +1469,7 @@ fn element_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
     for &index in path {
         cur = match &mut cur.children[index] {
             Node::Element(child) => child,
-            Node::Text(_) => unreachable!("锚点路径只指向元素"),
+            Node::Text(_) | Node::Raw(_) => unreachable!("锚点路径只指向元素"),
         };
     }
     cur
@@ -1899,7 +1899,7 @@ fn remove_anchor_in(el: &mut Element, search: &PicSearch<'_>, index: &mut usize)
                 .unwrap_or(None)
                 .and_then(|index| match &child.children[index] {
                     Node::Element(branch) => Some(branch),
-                    Node::Text(_) => None,
+                    Node::Text(_) | Node::Raw(_) => None,
                 });
             if let Some(branch) = branch {
                 if pics_match_in(branch, search, index) {

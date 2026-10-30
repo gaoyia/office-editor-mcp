@@ -486,7 +486,7 @@ fn ungroup_walk(el: &mut Element, member: &GroupMember) -> bool {
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -526,7 +526,7 @@ fn slot_is_group_with_member(node: &Node, member: &GroupMember) -> bool {
                 || picture::find_drawing(
                     match node {
                         Node::Element(e) => e,
-                        Node::Text(_) => return false,
+                        Node::Text(_) | Node::Raw(_) => return false,
                     },
                     key,
                 )

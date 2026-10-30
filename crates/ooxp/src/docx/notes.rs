@@ -545,7 +545,7 @@ fn set_val_child(parent: &mut Element, local: &str, val: &str) {
 fn child_index(parent: &Element, local: &str) -> Option<usize> {
     parent.children.iter().position(|n| match n {
         Node::Element(e) => e.local_name() == local,
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     })
 }
 

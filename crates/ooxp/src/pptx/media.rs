@@ -1304,7 +1304,7 @@ fn find_media_path(
         for &i in rel {
             cur = match cur.children.get(i)? {
                 Node::Element(child) => child,
-                Node::Text(_) => return None,
+                Node::Text(_) | Node::Raw(_) => return None,
             };
         }
         Some(cur)
@@ -1350,7 +1350,7 @@ fn find_media_path(
                     None
                 }
             }
-            Node::Text(_) => None,
+            Node::Text(_) | Node::Raw(_) => None,
         };
         stack.last_mut().unwrap().next += 1;
         match step {

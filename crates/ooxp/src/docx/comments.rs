@@ -1733,7 +1733,7 @@ pub(crate) fn apply_delete_comment(
         let comments_doc = super::apply::load_part(pkg, docs, &comments_part)?;
         let ids = super::comments::cascade_ids(
             &comments_doc.root,
-            extended_root.as_deref(),
+            extended_root.as_ref(),
             &op.comment_id,
         );
         let mut last_paras = Vec::new();

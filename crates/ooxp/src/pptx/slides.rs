@@ -340,7 +340,7 @@ fn ensure_sld_id_lst(root: &mut Element) {
     let lst = Element::new("p:sldIdLst");
     if let Some(i) = root.children.iter().position(|n| match n {
         Node::Element(e) => e.local_name() == "sldMasterIdLst",
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     }) {
         root.children.insert(i + 1, Node::Element(lst));
     } else {

@@ -1449,6 +1449,7 @@ fn clone_row_layout(src: &Element) -> Element {
             }
             Node::Element(e) => tr.push_element(e.clone()),
             Node::Text(t) => tr.children.push(Node::Text(t.clone())),
+            Node::Raw(raw) => tr.children.push(Node::Raw(raw.clone())),
         }
     }
     tr

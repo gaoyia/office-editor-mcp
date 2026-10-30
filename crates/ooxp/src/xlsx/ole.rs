@@ -956,7 +956,7 @@ fn ole_object_mut(el: &mut Element) -> Option<&mut Element> {
     let i = crate::xml::alternate_child(el).unwrap_or(None)?;
     match &mut el.children[i] {
         Node::Element(host) => host.child_by_local_mut("oleObject"),
-        Node::Text(_) => None,
+        Node::Text(_) | Node::Raw(_) => None,
     }
 }
 
@@ -1243,7 +1243,7 @@ fn remove_ole_entry(sheet: &mut Element, key: &OleKey) -> bool {
                         .unwrap_or(None)
                         .and_then(|index| match &e.children[index] {
                             Node::Element(branch) => find_ole_el(branch),
-                            Node::Text(_) => None,
+                            Node::Text(_) | Node::Raw(_) => None,
                         })
                 } else if e.local_name() == "oleObject" {
                     Some(e)

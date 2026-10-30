@@ -89,7 +89,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 元素树不设层数上限。解析、遍历、写回和按子元素查找都用堆上的栈。
 
-释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 不能靠给类型本身加一层会挡住字段移出的 `Drop`：那样现有代码就不能把 `children` 或根移走。根放在 `ManuallyDrop` 里，`Document` 离开作用域时取出来，在堆上拆掉子节点。
+释放也走堆上的栈，不靠 Rust 默认的递归析构。`Element` 和 `Document` 的 `Drop` 都把子节点收到堆上的栈再拆。要拿走 `children`，用 `take_children`，不能直接移出字段。`Document` 的 `Drop` 和 `take_root` 用 `mem::replace` 换出根，没有 `unsafe`。
+
+注释和处理指令收成原样节点，写回时按解析到的字节拼回去。`text_content` 不收它们。
+
+`DOCTYPE` 不保留。ECMA-376 Part 2 的 M1.18（§8.1.4）要求把它当成错误。解析时返回 `XmlBroken`。
 
 写回时由本库转义，再以已转义的字节交给 quick-xml 0.37.5，避免它再转一遍：
 

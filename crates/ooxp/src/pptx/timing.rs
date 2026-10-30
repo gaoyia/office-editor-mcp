@@ -1367,7 +1367,7 @@ fn find_ctn_path(el: &Element, node_type: &str) -> Option<Vec<usize>> {
     while let Some(path) = stack.pop() {
         let node = path.iter().fold(el, |cur, i| match &cur.children[*i] {
             Node::Element(child) => child,
-            Node::Text(_) => unreachable!("路径只指向元素"),
+            Node::Text(_) | Node::Raw(_) => unreachable!("路径只指向元素"),
         });
         if node.local_name() == "AlternateContent" {
             if let Some(i) = shape::first_alt_child_index(node) {

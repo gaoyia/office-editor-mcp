@@ -1258,3 +1258,37 @@ fn insert_ohlc_contour_chartex_and_cust_error_bars() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
+
+#[test]
+fn chartex_numeric_point_escapes_text() {
+    let src = create_deck("cx-esc");
+    let out = tmp("cx-esc").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "layoutId": "funnel",
+            "series": [{ "name": "阶段", "categories": ["A"], "values": ["a&b"] }]
+        }]),
+    )
+    .unwrap();
+    let bytes = std::fs::read(&out).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut xml = String::new();
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+        let Ok(data) = String::from_utf8(data) else {
+            continue;
+        };
+        if data.contains("cx:pt") {
+            xml = data;
+            break;
+        }
+    }
+    assert!(xml.contains("a&amp;b"), "{xml}");
+}

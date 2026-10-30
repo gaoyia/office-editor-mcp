@@ -660,7 +660,7 @@ fn unwrap_at(root: &mut Element, path: &[usize], restore_del: bool) -> Result<()
     }
     // Word 会把同一条修订再写进 rPr 的 ins/del；拆外壳后必须去掉，否则仍显示为修订。
     strip_prop_ins_del(&mut el);
-    parent.children.splice(idx..idx, el.children);
+    parent.children.splice(idx..idx, el.take_children());
     Ok(())
 }
 

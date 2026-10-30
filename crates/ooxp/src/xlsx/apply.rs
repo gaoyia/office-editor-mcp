@@ -2184,7 +2184,7 @@ enum FormulaWrite<'a> {
 fn strip_formula_and_value(c: &mut Element) {
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
     c.remove_attr("t");
 }
@@ -2192,7 +2192,7 @@ fn strip_formula_and_value(c: &mut Element) {
 fn strip_value_only(c: &mut Element) {
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "v" | "is"),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 
@@ -2378,7 +2378,7 @@ pub(crate) fn clear_cell(sheet_data: &mut Element, cell: a1::CellRef) {
     };
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     });
     c.remove_attr("t");
     let only_r = c
@@ -2411,7 +2411,7 @@ impl FoundThen for (usize, bool) {
 fn fill_cell(c: &mut Element, op: &SetCellOp) {
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
     if let Some(formula) = &op.formula {
         c.remove_attr("t");

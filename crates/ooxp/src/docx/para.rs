@@ -1262,7 +1262,7 @@ fn rewrite_runs(el: &mut Element, first: &mut bool, text: &str) {
 fn fill_first_run(r: &mut Element, text: &str) {
     r.children.retain(|n| match n {
         Node::Element(e) => !is_visible_text_el(e),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
     let insert_at = r
         .children
@@ -1367,7 +1367,7 @@ fn apply_t_text(t: &mut Element, text: &str) {
 fn remove_visible_text(r: &mut Element) {
     r.children.retain(|n| match n {
         Node::Element(e) => !is_visible_text_el(e),
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 

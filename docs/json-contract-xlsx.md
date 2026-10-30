@@ -2475,7 +2475,7 @@ SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` �
 根 `.rels` 与 `[Content_Types].xml`。
 只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
 
-被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容都保留；注释、处理指令和 DOCTYPE 会丢，CDATA 会变成等价的转义文本。Office 的工作表部件不带这些东西，所以第一期接受这个代价。
+被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容、注释和处理指令都保留。`DOCTYPE` 按 ECMA-376 Part 2 M1.18（§8.1.4）返回 `XmlBroken`，不写回。CDATA 会变成等价的转义文本。
 
 ### setHeaderFooterText
 

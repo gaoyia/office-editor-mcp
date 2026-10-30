@@ -780,7 +780,7 @@ fn clear_showing_plchdr(sdt: &mut Element) {
     };
     pr.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != "showingPlcHdr",
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 
@@ -809,7 +809,7 @@ fn set_or_remove_val(pr: &mut Element, local: &str, val: &str) {
     if val.is_empty() {
         pr.children.retain(|n| match n {
             Node::Element(e) => e.local_name() != local,
-            Node::Text(_) => true,
+            Node::Text(_) | Node::Raw(_) => true,
         });
         return;
     }
@@ -828,7 +828,7 @@ fn replace_items(sdt: &mut Element, kind: SdtKind, items: &[String]) {
     if let Some(list) = pr.child_by_local_mut(local) {
         list.children.retain(|n| match n {
             Node::Element(e) => e.local_name() != "listItem",
-            Node::Text(_) => true,
+            Node::Text(_) | Node::Raw(_) => true,
         });
         for it in items {
             let item = list_item_el(list, it);
@@ -895,7 +895,7 @@ fn first_content_para_index(sdt: &Element) -> Option<usize> {
     let content = sdt.child_by_local("sdtContent")?;
     content.children.iter().position(|n| match n {
         Node::Element(e) => e.local_name() == "p",
-        Node::Text(_) => false,
+        Node::Text(_) | Node::Raw(_) => false,
     })
 }
 

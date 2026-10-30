@@ -1369,7 +1369,7 @@ fn normalize_rgb(s: &str) -> String {
 fn remove_children(el: &mut Element, local: &str) {
     el.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != local,
-        Node::Text(_) => true,
+        Node::Text(_) | Node::Raw(_) => true,
     });
 }
 

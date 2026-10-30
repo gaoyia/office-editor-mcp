@@ -386,7 +386,7 @@ fn remove_shape_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool
     while i < el.children.len() {
         let local = match &el.children[i] {
             Node::Element(c) => c.local_name().to_string(),
-            Node::Text(_) => {
+            Node::Text(_) | Node::Raw(_) => {
                 i += 1;
                 continue;
             }
@@ -474,7 +474,7 @@ fn remove_group_shape(el: &mut Element, key: &TxbxKey, index: &mut usize) -> boo
                     }
                     matches_key(&id, *index, key)
                 }
-                Node::Text(_) => false,
+                Node::Text(_) | Node::Raw(_) => false,
             };
             if hit {
                 el.children.remove(i);

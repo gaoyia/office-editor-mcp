@@ -1,7 +1,6 @@
 //! 小型 XML 树：给 OPC 关系文件和 SpreadsheetML 部件做手术刀式改写。
 
 use std::io::Cursor;
-use std::mem::ManuallyDrop;
 
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
@@ -12,31 +11,32 @@ use crate::error::{Error, ErrorKind, XmlIssue};
 #[derive(Clone, Debug)]
 pub struct Document {
     pub decl: Option<String>,
-    /// 离开作用域时由 `Drop` 在堆上拆掉，避免深层树的递归析构。
-    pub root: ManuallyDrop<Element>,
+    /// 根元素之前的注释和处理指令，写回时原样接在声明后面。
+    pub prefix: Vec<String>,
+    pub root: Element,
+    /// 根元素之后的注释和处理指令。
+    pub suffix: Vec<String>,
 }
 
 impl Document {
     pub fn new(decl: Option<String>, root: Element) -> Self {
         Self {
             decl,
-            root: ManuallyDrop::new(root),
+            prefix: Vec::new(),
+            root,
+            suffix: Vec::new(),
         }
     }
 
-    /// 把根交出去。空壳留给 `Drop`，避免再拆一次。
+    /// 把根交出去。空壳留给 `Drop`，由 `dismantle` 在堆上拆掉。
     pub fn take_root(mut self) -> Element {
-        let root = unsafe { ManuallyDrop::take(&mut self.root) };
-        unsafe {
-            std::ptr::write(&mut self.root, ManuallyDrop::new(Element::new("empty")));
-        }
-        root
+        std::mem::replace(&mut self.root, Element::new("empty"))
     }
 }
 
 impl Drop for Document {
     fn drop(&mut self) {
-        let root = unsafe { ManuallyDrop::take(&mut self.root) };
+        let root = std::mem::replace(&mut self.root, Element::new("empty"));
         dismantle(root);
     }
 }
@@ -57,6 +57,8 @@ pub(crate) fn dismantle(mut el: Element) {
 pub enum Node {
     Element(Element),
     Text(String),
+    /// 注释或处理指令的完整标记，例如 `<!--note-->`、`<?mso-info ?>`。
+    Raw(String),
 }
 
 #[derive(Clone, Debug)]
@@ -67,7 +69,29 @@ pub struct Element {
     pub children: Vec<Node>,
 }
 
+impl Drop for Element {
+    fn drop(&mut self) {
+        if self.children.is_empty() {
+            return;
+        }
+        let mut stack = vec![std::mem::take(&mut self.children)];
+        while let Some(children) = stack.pop() {
+            for node in children {
+                if let Node::Element(mut child) = node {
+                    if !child.children.is_empty() {
+                        stack.push(std::mem::take(&mut child.children));
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl Element {
+    pub fn take_children(&mut self) -> Vec<Node> {
+        std::mem::take(&mut self.children)
+    }
+
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -124,14 +148,14 @@ impl Element {
     pub fn element_children(&self) -> impl Iterator<Item = &Element> {
         self.children.iter().filter_map(|n| match n {
             Node::Element(e) => Some(e),
-            Node::Text(_) => None,
+            Node::Text(_) | Node::Raw(_) => None,
         })
     }
 
     pub fn element_children_mut(&mut self) -> impl Iterator<Item = &mut Element> {
         self.children.iter_mut().filter_map(|n| match n {
             Node::Element(e) => Some(e),
-            Node::Text(_) => None,
+            Node::Text(_) | Node::Raw(_) => None,
         })
     }
 
@@ -183,6 +207,7 @@ fn collect_text(el: &Element, out: &mut String) {
     while let Some(node) = stack.pop() {
         match node {
             Node::Text(text) => out.push_str(text),
+            Node::Raw(_) => {}
             Node::Element(child) => {
                 for inner in child.children.iter().rev() {
                     stack.push(inner);
@@ -343,7 +368,7 @@ pub(crate) fn element_at_ref<'a>(root: &'a Element, path: &[usize]) -> &'a Eleme
     for &index in path {
         cur = match &cur.children[index] {
             Node::Element(child) => child,
-            Node::Text(_) => unreachable!("路径只指向元素"),
+            Node::Text(_) | Node::Raw(_) => unreachable!("路径只指向元素"),
         };
     }
     cur
@@ -368,7 +393,7 @@ pub(crate) fn element_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> &'a m
     for &index in path {
         cur = match &mut cur.children[index] {
             Node::Element(child) => child,
-            Node::Text(_) => unreachable!("路径只指向元素"),
+            Node::Text(_) | Node::Raw(_) => unreachable!("路径只指向元素"),
         };
     }
     cur
@@ -381,6 +406,8 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
     let mut stack: Vec<Element> = Vec::new();
     let mut root: Option<Element> = None;
     let mut decl: Option<String> = None;
+    let mut prefix = Vec::new();
+    let mut suffix = Vec::new();
 
     loop {
         match reader.read_event_into(&mut buf) {
@@ -427,7 +454,17 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
                     parent.children.push(Node::Text(text));
                 }
             }
-            Ok(Event::Comment(_)) | Ok(Event::PI(_)) | Ok(Event::DocType(_)) => {}
+            Ok(Event::Comment(body)) => {
+                let markup = format!("<!--{}-->", String::from_utf8_lossy(&body));
+                push_raw(&mut stack, root.is_some(), &mut prefix, &mut suffix, markup);
+            }
+            Ok(Event::PI(body)) => {
+                let markup = format!("<?{}?>", String::from_utf8_lossy(&body));
+                push_raw(&mut stack, root.is_some(), &mut prefix, &mut suffix, markup);
+            }
+            Ok(Event::DocType(_)) => {
+                return Err(Error::xml_detail(XmlIssue::Parse, "DOCTYPE"));
+            }
             Ok(Event::Eof) => break,
             Err(e) => {
                 return Err(Error::xml_detail(XmlIssue::Parse, e));
@@ -437,7 +474,26 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
     }
 
     let root = root.ok_or_else(|| Error::xml(XmlIssue::NoRoot))?;
-    Ok(Document::new(decl, root))
+    let mut doc = Document::new(decl, root);
+    doc.prefix = prefix;
+    doc.suffix = suffix;
+    Ok(doc)
+}
+
+fn push_raw(
+    stack: &mut [Element],
+    have_root: bool,
+    prefix: &mut Vec<String>,
+    suffix: &mut Vec<String>,
+    markup: String,
+) {
+    if let Some(parent) = stack.last_mut() {
+        parent.children.push(Node::Raw(markup));
+    } else if have_root {
+        suffix.push(markup);
+    } else {
+        prefix.push(markup);
+    }
 }
 
 fn start_to_element(e: &BytesStart<'_>, reader: &Reader<&[u8]>) -> Result<Element, Error> {
@@ -485,9 +541,15 @@ impl Document {
         // 声明单独拼在前面：写进 Writer 内部的 Cursor 会被后续 write_event 从头覆盖。
         let mut out = Vec::new();
         out.extend_from_slice(self.decl.as_deref().unwrap_or(DEFAULT_DECL).as_bytes());
+        for raw in &self.prefix {
+            out.extend_from_slice(raw.as_bytes());
+        }
         let mut writer = Writer::new(Cursor::new(Vec::new()));
         write_element(&mut writer, &self.root)?;
         out.extend_from_slice(&writer.into_inner().into_inner());
+        for raw in &self.suffix {
+            out.extend_from_slice(raw.as_bytes());
+        }
         Ok(out)
     }
 }
@@ -497,10 +559,17 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
         Start(&'a Element),
         End(&'a Element),
         Text(&'a str),
+        Raw(&'a str),
     }
     let mut stack = vec![Frame::Start(el)];
     while let Some(frame) = stack.pop() {
         match frame {
+            Frame::Raw(raw) => {
+                let cursor = writer.get_mut();
+                cursor.get_mut().extend_from_slice(raw.as_bytes());
+                let len = cursor.get_ref().len() as u64;
+                cursor.set_position(len);
+            }
             Frame::Text(text) => {
                 let escaped = escape_text_node(text);
                 writer
@@ -540,6 +609,7 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
                 for child in node.children.iter().rev() {
                     match child {
                         Node::Text(text) => stack.push(Frame::Text(text)),
+                        Node::Raw(raw) => stack.push(Frame::Raw(raw)),
                         Node::Element(inner) => stack.push(Frame::Start(inner)),
                     }
                 }
@@ -866,7 +936,7 @@ mod tests {
         let index = alternate_child(el).unwrap().unwrap();
         match &el.children[index] {
             Node::Element(child) => child.local_name(),
-            Node::Text(_) => "",
+            Node::Text(_) | Node::Raw(_) => "",
         }
     }
 
@@ -891,7 +961,7 @@ mod tests {
                 assert_eq!(child.local_name(), "Choice");
                 assert_eq!(child.attr_local("Requires"), Some("a14 wps"));
             }
-            Node::Text(_) => panic!("text"),
+            Node::Text(_) | Node::Raw(_) => panic!("text"),
         }
     }
 
@@ -930,5 +1000,40 @@ mod tests {
         ac.push_element(choice);
         let err = alternate_child(&ac).unwrap_err();
         assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
+    }
+
+    #[test]
+    fn comment_and_pi_survive_a_rewrite() {
+        let src = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><!--keep--><?mso-info yes?><a x="1"><b>t</b><!--in--></a>"#;
+        let mut doc = parse(src).unwrap();
+        doc.root.set_attr("x", "2");
+        let out = String::from_utf8(doc.to_bytes().unwrap()).unwrap();
+        assert!(out.contains("<!--keep-->"), "{out}");
+        assert!(out.contains("<?mso-info yes?>"), "{out}");
+        assert!(out.contains("<!--in-->"), "{out}");
+        assert!(out.contains(r#"x="2""#), "{out}");
+        assert!(
+            !out.contains("<!--keep-->")
+                || out.find("<!--keep-->").unwrap() < out.find("<a").unwrap()
+        );
+    }
+
+    #[test]
+    fn doctype_is_rejected() {
+        let err = parse(br#"<?xml version="1.0"?><!DOCTYPE a [<!ENTITY x "y">]><a/>"#).unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::XmlBroken);
+    }
+
+    #[test]
+    fn deep_take_root_does_not_overflow() {
+        let mut el = Element::new("a");
+        for _ in 0..8_000 {
+            let mut parent = Element::new("a");
+            parent.push_element(el);
+            el = parent;
+        }
+        let doc = Document::new(None, el);
+        let root = doc.take_root();
+        drop(root);
     }
 }
