@@ -418,7 +418,7 @@ create 可写连接。不向数据源发请求，不把查询结果写进 `sheet
 `{n}` 从 1 起，按该元素的文档顺序。内置名（如 `Normal`）同样列出。增删之后旧的 `cellStyle:{n}` 会变，只够同一次 inspect 之后立刻 apply。
 不要用 `@name` 或 `cellStyleXfs` 下标编树 id。`insertCellStyle` 的 `id` 必须是 `xlsx:workbook`。
 `deleteCellStyle` 的 `id` 必须是命名单元格样式 id。`setCellNamedStyle` 的 `id` 必须是单元格 id，`style` 必须是命名单元格样式 id。
-对不上的 id 形态报 `InvalidId`。create 本期不写命名样式。不把 `cellStyleXfs` 里的字体 / 填充摊进名单。
+对不上的 id 形态报 `InvalidId`。create 可写 `workbook.cellStyles`，见下文 create。不把 `cellStyleXfs` 里的字体 / 填充摊进名单。
 
 ## inspect
 

@@ -423,7 +423,7 @@ apply 插入嵌入字体时，可能新建 `/word/fontTable.xml`（CT
 `application/vnd.openxmlformats-officedocument.obfuscatedFont`）。
 主文档关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable`。
 fontTable 上每条嵌入字体关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/font`，Target 常见 `fonts/fontN.odttf`。
-删掉某嵌入面时去掉对应 odttf 与 font 关系；fontTable 本身不因删光而拆掉。create 本期不写嵌入字体。
+删掉某嵌入面时去掉对应 odttf 与 font 关系；fontTable 本身不因删光而拆掉。create 给了 `document.embeddedFonts` 时按 `insertEmbeddedFont` 新建这些部件。
 apply 写页面背景时只改主文档 `w:background` 与 `settings.xml` 的 `w:displayBackgroundShape`，
 不新建 footnotes / theme / webSettings / fontTable。
 apply 写页面边框时只改本节 `w:pgBorders`。apply 接受或拒绝修订只改已有主文档或页眉页脚 XML，不新建部件。
@@ -431,7 +431,7 @@ apply 插入构建基块时，可能新建 `/word/glossary/document.xml`（CT
 `application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml`）、
 卫星 `styles.xml` / `settings.xml` / `webSettings.xml` / `fontTable.xml`（CT 与主文档同类部件相同）以及 glossary `.rels`。
 主文档关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument`，Target 常见 `glossary/document.xml`。
-删光最后一条 `w:docPart` 时去掉这些部件、关系与 Override。create 本期不写 glossary。
+删光最后一条 `w:docPart` 时去掉这些部件、关系与 Override。create 给了 `document.docParts` 时按 `insertDocPart` 新建这些部件。
 
 Main Document 的 Content Type：
 

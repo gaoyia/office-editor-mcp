@@ -1179,7 +1179,8 @@ id 必须是文本形状、图、表、图表、SmartArt 或表单元格 id。
 给了 `slide`：必须是已有页的 `slide:{n}`，不能是本页；目标页不存在报 `IdNotFound`；跳到自己报 `InvalidField`。
 写入 Type 以 `/slide` 结尾的内部关系，`Target` 为相对目标页部件，并写 `action="ppaction://hlinksldjump"`。幻灯片根上补 `xmlns:r`（若还没有）。不写放映宏动作。
 create 给了 `shapes[].url` / `file` / `slide` 时按同一套规则写链，可 `on=run`，可 `event=hover`。
-create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-pptx.md#create)。create 本期不写图 / 表 / 图表 / SmartArt 上的链。
+create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-pptx.md#create)。
+create 给了 `pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 时按同一套规则写到对应对象上。表单元格上的 `url` / `file` / `slide` 同样写入。
 
 ### setHyperlink
 

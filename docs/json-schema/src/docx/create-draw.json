@@ -330,8 +330,8 @@
     "docxDrawingHyperlink": {
       "description": "inspect 图 / 文本框上的 DrawingML 链。",
       "descriptionEn": "Inspect DrawingML links on pictures and text boxes.",
-      "limits": "没有链则为 null。create 本期不写。",
-      "limitsEn": "Null when there is no link. create does not write one in this phase.",
+      "limits": "没有链则为 null。这是 inspect 读回的形状。create 用自己的 hyperlink 对象写入。",
+      "limitsEn": "Null when there is no link. This is the shape inspect returns. create writes links with its own hyperlink object.",
       "oneOf": [
         {
           "type": "null"
