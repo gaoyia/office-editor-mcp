@@ -1,7 +1,7 @@
 # 架构
 
 状态：xlsx、docx、pptx 第一期已实现，并已通过 Microsoft Office 16.0 人工打开。验收只认官方 Office，不再要求 WPS。
-日期：2026-10-29
+日期：2026-10-30
 
 ## 产品形态
 
@@ -51,26 +51,72 @@ xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作�
 crates/ooxp/                 库
   error/                     错误身份、错误码、按语言渲染
     messages/                en.rs、zh_cn.rs；每种语言一个穷尽 match
-  opc/                       ZIP、[Content_Types].xml、各级 .rels、按路径读写部件
-  json/                      领域 JSON 信封
-  dispatch/                  按 format 分发给 xlsx / docx / pptx
-  props/                     core / app / custom 文件属性；三格式共用
-  xlsx/                      工作簿 inspect / apply / create
-  docx/                      文档 inspect / apply / create
-  chart/                     c:chart 部件；embedding 经本模块读写 xlsx
-  ole/                       嵌入对象分类与 Package 包装；docx / pptx / xlsx 共用
-  pptx/                      演示文稿 inspect / apply / create
-crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
+  opc/                       ZIP、内容类型、关系、按路径读写部件
+  xml.rs                     元素树
+  json.rs                    领域 JSON 信封
+  dispatch.rs                按 format 分发
+  help.rs                    help 动作
+  host_env.rs                时间、进程号、随机数
+  host_files.rs              用户文件字节
+  props/                     core / app / custom
+  password.rs                保护口令哈希
+  theme.rs                   DrawingML theme
+  chart/                     c:chart 与 chartex
+  smartart/                  图示数据与四件套
+  ole.rs                     嵌入对象分类与包装
+  model3d.rs                 GLB 与 am3d
+  image.rs                   EMF / WMF / TIFF
+  svg.rs                     SVG 扩展
+  drawing_text.rs            DrawingML 文本格式
+  drawing_math.rs            a14 公式框
+  shape_runs.rs              形状可见文字的切分
+  text_span.rs               在可见文字里定位
+  xlsx/                      工作簿
+  docx/                      文档
+  pptx/                      演示文稿
+crates/ooxp-cli/             命令行，只依赖 ooxp
 ```
 
-依赖方向只能是：`cli` → 库的门面；`dispatch` → `json` 与各格式模块；`xlsx` / `docx` / `pptx` → `opc`、`json` 与 `props`。
+每个名字都是 `crates/ooxp/src` 下的文件或目录。`json` 与 `dispatch` 是单文件，不是目录。
 
-库门口是 `run_bytes`：调用方交出领域 JSON、已经读好的包字节（`help` 和 `create` 不需要包），以及 JSON 里 `file`、`sound` 指向的那些文件的字节。库返回树，或返回要落盘的字节。它不打开 Office 文件，也不按路径去读图片、音视频、OLE、墨迹、3D 模型或嵌入字体。随机数、当前时间和进程号也由调用方传入；本机的 `run` 每次仍问系统，所以拼出来的 id 和以前一样。没有传入时，本机编译会自己用系统的这三项，`wasm32` 上则没有系统来源。本机命令行和测试走 `run`。`run` 先把包和这些用户文件读进内存，再调用 `run_bytes`，最后把结果写回磁盘。`run` 不编进 `wasm32`。领域 JSON 的字段不变，路径仍由本机这一层解释。
+- `error` 管错误身份、错误码和中英文文案。各模块可以调用它。它不反向依赖 `json`、`opc` 或任何格式模块。
+- `opc` 管 ZIP、`[Content_Types].xml` 和各级 `.rels`。格式模块、`props`、`ole` 通过它读写部件。
+- `xml` 管元素树的解析、遍历、写回和堆上释放。改 XML 的模块调用它。它不依赖格式模块。
+- `json` 管领域信封。`dispatch`、`help` 和各格式的 `request/` 调用它。它不依赖格式模块。
+- `dispatch` 是库门口。命令行调用 `run` / `run_bytes`。它调用 `json`、`help`、`host_env`、`host_files` 和各格式模块。
+- `help` 从拼好的 schema 里查动作和操作，一次一层。只有 `dispatch` 的 help 动作调用它。
+- `host_env` 提供时间、进程号和随机数。`dispatch` 在本机 `run` 里装入系统实现。需要这些值的模块调用它。
+- `host_files` 按路径提供用户文件字节。`dispatch` 装入读取回调。插图、OLE、媒体等模块调用它。
+- `props` 管 core / app / custom。三种格式调用它。它可以调用 `opc` 与 `json`，不依赖格式模块。
+- `password` 算保护口令哈希，不破解密码。xlsx、docx、pptx 的保护模块调用它。
+- `theme` 读写 DrawingML theme 部件，不把 `phClr` 展开成 RGB。三种格式的主题模块调用它。
+- `chart` 管 `c:chart` 与 chartex。它可以调用 `xlsx` 读写 embedding。xlsx、docx、pptx 调用它。pptx 不直接引用 `xlsx` 或 `docx`。
+- `smartart` 管图示数据和四件套，不含宿主 graphicFrame。三种格式的 SmartArt 模块调用它。
+- `ole` 做嵌入对象分类和 Package 包装，不执行 OLE 服务器。它可以调用 `opc`。三种格式调用它，彼此不引用。
+- `model3d` 认 GLB，并读写 `am3d` 的相机、旋转和光源。三种格式的 3D 模块调用它。
+- `image` 认 EMF、WMF、TIFF 的文件头。认图的格式模块调用它。PNG、JPEG、GIF、BMP、SVG 仍由各格式自己认。
+- `svg` 管 Office 2016 的 SVG 扩展。xlsx 和 pptx 调用它。docx 保持自己的写入路径，不经这里。
+- `drawing_text` 读写 `a:rPr`、`a:pPr`、`a:bodyPr`。xlsx、pptx 的形状和表，以及 `shape_runs` 调用它。
+- `drawing_math` 判定 `a14:m`，并拼接公式可见文字。xlsx 和 pptx 的公式框调用它。docx 公式走自己的 OMML。
+- `shape_runs` 计划形状可见文字怎么切。它调用 `drawing_text` 和 `text_span`。pptx 的形状写入调用它。
+- `text_span` 在一段可见文字里按原文定位。`shape_runs` 和 docx 段落调用它。
+- `xlsx`、`docx`、`pptx` 做各自的 inspect、apply、create。它们调用 `opc`、`json`、`xml`、`props`，以及上面这些共享模块。
+- 命令行只依赖库的门面。禁止格式模块绕过 `opc` 直接改 ZIP。`SetCellOp`、工作表 `scope`、`setParaText` 放在对应格式模块里。
 
-这些装入是线程局部的。同一线程嵌套另一次调用时，内层压在外层上面，结束时只弹自己的一层。栈空时与没有装入相同：没有读取回调就读不到用户文件，时间和随机数走系统。`wasm32` 上库不自己读磁盘。
-`props` 可调用 `opc` 与 `json`；不依赖格式模块。`chart` 可调用 `xlsx` 读写 embedding；pptx 不直接引用 `xlsx` 或 `docx`。
-`ole` 可调用 `opc`；xlsx / docx / pptx 调用 `ole`，彼此不引用。`json` 不依赖格式模块。各模块只依赖 `error`，`error` 不反向依赖 `json`、`opc` 或任何格式模块。
-禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。
+库门口是 `run_bytes`。
+
+- 调用方交出领域 JSON、已经读好的包字节，以及 JSON 里 `file`、`sound` 指向的文件字节。`help` 和 `create` 不需要包。
+- 库返回树，或返回要落盘的字节。它不打开 Office 文件，也不按路径去读图片、音视频、OLE、墨迹、3D 模型或嵌入字体。
+- 随机数、当前时间和进程号由调用方传入。本机的 `run` 每次仍问系统，所以拼出来的 id 和以前一样。
+- 没有传入时，本机编译用系统的这三项。`wasm32` 上没有系统来源。
+- 本机命令行和测试走 `run`。`run` 先把包和用户文件读进内存，再调用 `run_bytes`，最后把结果写回磁盘。`run` 不编进 `wasm32`。
+- 领域 JSON 的字段不变。路径仍由本机这一层解释。
+
+这些装入是线程局部的。
+
+- 同一线程嵌套另一次调用时，内层压在外层上面，结束时只弹自己的一层。
+- 栈空时与没有装入相同：没有读取回调就读不到用户文件，时间和随机数走系统。
+- `wasm32` 上库不自己读磁盘。
 
 每种格式的 `scope` 与 `ops` 解析放在该格式的 `request/` 目录。
 `parse_scope` 与 `parse_ops` 仍是入口；类型和解析函数按领域拆到子文件。
@@ -226,7 +272,9 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 页眉页脚容器始终带前两项与 `connectorCount`、`shapeCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
 `scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.shapes` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、无框形状、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
-组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.tables` 为 true 时框节点带框内表名单。对应 `scope` 为 true 时框节点还带框内 `w:hyperlink`、书签、域、公式、拼音与内容控件名单。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
+- 组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.tables` 为 true 时框节点带框内表名单。对应 `scope` 为 true 时框节点还带框内 `w:hyperlink`、书签、域、公式、拼音与内容控件名单。
+- `scope.notes` 为 true 时列出用户脚注、尾注与分隔符；
+- 注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
 `scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文与页眉页脚里的 run 级插入、删除与属性修订。
@@ -239,7 +287,9 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 `scope.contentControls` 为 true 时列出正文、页眉页脚与文本框里被收入的 `w:sdt`。`scope.numbering` 为 true 时列出 `numbering.xml` 里的编号实例。
 `scope.styles` 为 true 时列出 `styles.xml` 里的样式定义。`scope.runs` 为 true 时已列出的段落带 run 名单。
 apply 可改被点名段落的可见文本（主文档、页眉页脚、框内、注内或批注内），可在主文档、页眉页脚与表格单元格插删 `w:p`，可插删 `w:tbl` 以及行与列（含文本框里的表，不含注内 / 批注内），并可按 `gridSpan` / `vMerge` 合并与拆分，
-可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本（含文本框里的 `w:hyperlink`），也可给图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布与 3D 写 DrawingML `a:hlinkClick`（含框内图、注内 / 批注内的图或框；OLE 除外；不写 `a:hlinkHover`），可插、删、改书签名（含框内），可插、改指令、删域（不求值，含框内），可写入编号定义并把段落套上或去掉编号，
+- 可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本（含文本框里的 `w:hyperlink`），也可给图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布与 3D 写 DrawingML `a:hlinkClick`（含框内图、注内 / 批注内的图或框；OLE 除外；不写 `a:hlinkHover`），可插、删、改书签名（含框内），
+- 可插、改指令、删域（不求值，含框内），
+- 可写入编号定义并把段落套上或去掉编号，
 可增删自定义样式，可给段落换 `pStyle`，可给 run 套字符样式，并可改被点名段落、字符或表格样式的字体、字号、加粗、颜色与段前段后（字符样式不能写段距），
 可改表的 `tblStyle`、`tblLook`、浮动 `tblpPr`、表级 `tblCellMar`，以及单元格底纹、格边距、斜线、格级 `vAlign`、不换行、文字方向、适应文字、隐藏标记与表头引用，
 可改段上直接对齐、缩进与间距，可改被点名 run 的加粗、斜体、下划线、字号、颜色与字体，
@@ -253,7 +303,9 @@ apply 可改被点名段落的可见文本（主文档、页眉页脚、框内�
 墨迹画布可插、换、删，并可改尺寸与绕排（不含注内、批注内与框内），并可按 id 导出 InkML。
 浮动图 / 框 / 连接线 / 无框形状可组合或解开。脚注、尾注可插、删，可改编号格式（整篇同时写 `settings.xml` 与各节 `sectPr`，Word 读节属性）。批注可插、删、回复、改字、改作者与完成标记。
 嵌入图表可插、删、改标题、改系列数据、改类型与图例，并可改宿主 drawing 的尺寸与绕排；宿主可以是正文、页眉页脚、框内、注内或批注内段落。圆环、雷达、气泡与组合图走同一套 op；透视图表只改标题、图例、标签、删除与尺寸绕排，不改数。
-股价（含 OHLC）、曲面（含线框与俯视）、复合饼可插、改类型；带成交量的股价按组合图写入。chartex 可 insert / create（须带 `layoutId`），已写入的 chartex 除删除与尺寸绕排外仍锁数据 op。次轴、趋势线、误差线（含 `cust`）可写。SmartArt 可插、删、改各点文字、增删点、改配色与快速样式，并可改宿主 drawing 的尺寸与绕排；宿主范围与图表相同。
+- 股价（含 OHLC）、曲面（含线框与俯视）、复合饼可插、改类型；带成交量的股价按组合图写入。chartex 可 insert / create（须带 `layoutId`），已写入的 chartex 除删除与尺寸绕排外仍锁数据 op。次轴、趋势线、误差线（含 `cust`）可写。SmartArt 可插、删、改各点文字、增删点、改配色与快速样式，
+- 并可改宿主 drawing 的尺寸与绕排；
+- 宿主范围与图表相同。
 三种格式都可改文件属性。docx 还可开关无密码的限制编辑与只读推荐。`exportMedia` 按图 id 写出 `/word/media/…` 原字节，按 OLE id 写出 embeddings 原字节，
 按墨迹画布 id 写出 `/word/ink/…` 原字节，按 3D 模型 id 写出 GLB 原字节。
 `exportChartData` 按图表 id 写出 embedding xlsx 原字节。不整篇从 JSON 重建。
@@ -292,7 +344,8 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
 带 `p:ph` 的占位符与整份母版（不算母版排版引擎；`insertPlaceholder` 还可写备注母版与讲义）；
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形（不抄进各页）；
-也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setNotesSize` 只改 `p:notesSz`（不重排备注形状）；也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme（不把 `schemeClr` 展开成 RGB）；
+- 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setNotesSize` 只改 `p:notesSz`（不重排备注形状）；
+- 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme（不把 `schemeClr` 展开成 RGB）；
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 读写 `p:clrMap`、页 / 版式 / 备注页 `p:clrMapOvr` 与页级 themeOverride 部件；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 讲义与备注母版占位符也可绑同一套预设动画；
@@ -300,8 +353,11 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片、备注页与幻灯片母版 / 版式插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing），
 也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade），也可用 `setPicturePos` / `setPictureSize` 改已有视频 / 音频的画布坐标与尺寸；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
-也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，也可插、换、删幻灯片、备注页与幻灯片母版 / 版式上的墨迹（一笔一个 `p:contentPart`，不进 `pictures`），并可改已有墨迹的画布坐标与尺寸，
-也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸；`setMath` 仍只改字。也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转），并可改已有 Zoom 的画布坐标与尺寸；也可改文件属性。
+- 也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，
+- 也可插、换、删幻灯片、备注页与幻灯片母版 / 版式上的墨迹（一笔一个 `p:contentPart`，
+- 不进 `pictures`），并可改已有墨迹的画布坐标与尺寸，
+- 也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸；`setMath` 仍只改字。也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转），并可改已有 Zoom 的画布坐标与尺寸；
+- 也可改文件属性。
 插删重排不重写未点名页。`exportMedia` 按幻灯片、备注页、批注、母版 / 版式上的图 id、视频 id、音频 id、OLE id、3D 模型 id 或墨迹 id 写出 `/ppt/media/…`、`/ppt/embeddings/…` 或 `/ppt/ink/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
@@ -315,8 +371,9 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段；第一条 `with` / `after` 进片自动播）。
 母版与版式进树（`scope.masters`），含占位符与装饰形。`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` / `insertShape` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。备注页尺寸始终进树，写入用 `setNotesSize`。
-主题配色、字体、`fmtScheme` 常用槽、补充色板与 `objectDefaults` 挂在 `scope.masters`、`scope.notesMaster` 与 `scope.handout` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults`。
-母版 `clrMap`、页 / 版式 `clrMapOvr` 与页级 `themeOverride` 进树，写入用 `setClrMap` / `setClrMapOvr` / `setThemeOverride`。`mc:AlternateContent` 只走第一个 `Choice`。
+- 主题配色、字体、`fmtScheme` 常用槽、补充色板与 `objectDefaults` 挂在 `scope.masters`、`scope.notesMaster` 与 `scope.handout` 的 `theme` 上，
+- 写入用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults`。
+母版 `clrMap`、页 / 版式 `clrMapOvr` 与页级 `themeOverride` 进树，写入用 `setClrMap` / `setClrMapOvr` / `setThemeOverride`。`mc:AlternateContent` 取哪一支，见上文「标记兼容性」。
 
 ### cli
 
@@ -369,7 +426,8 @@ xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.r
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
 xlsx 也可插、删、换工作表 3D 模型，并改已有 3D 的尺寸、锚点与相机 / 旋转 / 光源，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
 xlsx 也可插改删工作表 drawing 公式框，并可改已有公式框的锚点与尺寸，脏 worksheet drawing，写 `a14:m` AlternateContent，不标重算。`setMath` 仍只改字。
-xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸、锚点、视图属性与勾选，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
+- xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸、锚点、视图属性与勾选，
+- 脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
 workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与内容类型；
 表格切片器的勾选还脏该表 `autoFilter`，不隐藏行。
 透视源的插入还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`（`x14:pivotCacheDefinition/@pivotCacheId`）。
@@ -398,17 +456,21 @@ docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 t
 也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式；也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
 pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
-也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表（含格网列宽与行高、格填充（实心/渐变/图案/图片）与六边、格边距、格 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers`、表样式 GUID 与 `tblLook`），也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
+- 也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表（含格网列宽与行高、格填充（实心/渐变/图案/图片）与六边、格边距、格 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers`、表样式 GUID 与 `tblLook`），也可插删回复并改现代批注，
+- 也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），
+- 也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页、母版或版式上的 `<p:transition>`（含自动进片、方向、切换声音、`split` 的 `orient`、`wheel` 的 `spokes` 与 `p15:prstTrans`），
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
-也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setNotesSize` 只改 `p:notesSz`，也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme，
+- 也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setNotesSize` 只改 `p:notesSz`，
+- 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme，
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 改配色映射与页级覆盖，也可用 `setHandoutText` 改或新建讲义母版，
 也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片、备注页与母版 / 版式文本形状里的 `a:fld`（不求值），
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
 把页划进某节时可重排 `sldIdLst`），也可用 `insertCustomShow` / `setCustomShow`
  / `deleteCustomShow` 读写 `p:custShowLst`（删页时按 `r:id` 清引用），
-也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸，也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
+- 也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），
+- 并可改已有公式框的画布坐标与尺寸，也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
 也可用 `setShowPr` 改 `presProps` 的 `p:showPr`，也可用 `setProtection` 写出或删掉 `p:modifyVerifier`（给了 `password` 时写 PowerPoint 16.0 的 SHA-512 哈希），
 脏 `presentation.xml` 的 `sldIdLst`、presentation 关系、新页或被删页及其备注 / 现代批注、内容类型，以及若有则同步 `p14:sectionLst` 与 `p:custShowLst`。
 未点名页原字节写回。插删改图、图表、SmartArt、备注与批注时仍脏该页 XML、该页 `.rels`、notesSlide 及其 `.rels`、必要时 notesMaster 与 presentation、
@@ -418,7 +480,8 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 超链接 op 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）与该宿主 `.rels`。域 op（`insertField` / `setField` / `deleteField`）只脏该宿主 XML。`setSlideLayout` 只脏该页 `.rels`。
 `insertLayout` / `deleteLayout` / `insertMaster` / `deleteMaster` 还可脏母版 / 版式 / theme 部件、presentation 与内容类型；
 `insertPlaceholder` / `deletePlaceholder` 只脏目标母版或版式 XML。
-`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 只脏该母版指向的 theme 部件。
+- `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 只脏该母版指向的 theme 部件。
 `setClrMap` 只脏被点名母版 XML。`setClrMapOvr` 只脏被点名页 / 版式 / 备注页 XML。
 `setThemeOverride` 脏该宿主 `.rels` 与 `/ppt/theme/themeOverrideN.xml`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改 core / app / custom，脏对应 `docProps` 部件与必要时的根关系、内容类型。保存时只重写脏部件。
@@ -439,8 +502,10 @@ docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，
 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 复用对应 insert。
 `document.numberings` 复用 `insertNumbering`，`paragraphs[].num` 复用 `setParaNumbering`。`document.tocs` 复用 `insertToc`。
-docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹。
-docx create 第五轮复用已有 apply：框内表与框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段 `borders` / `shd` / `tabs`、`runs[]` 的 `setRunFormat`、`groups[]` 的 `groupShapes`，以及 `protection.writePassword`。不写修订痕迹。限制编辑口令 `password` 仍报 `NotImplemented`。
+- docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，
+- 以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹。
+- docx create 第五轮复用已有 apply：框内表与框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段 `borders` / `shd` / `tabs`、`runs[]` 的 `setRunFormat`、`groups[]` 的 `groupShapes`，以及 `protection.writePassword`。不写修订痕迹。
+- 限制编辑口令 `password` 仍报 `NotImplemented`。
 create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`，
 `slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，`slides[].inks` 复用 `insertInk`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，
