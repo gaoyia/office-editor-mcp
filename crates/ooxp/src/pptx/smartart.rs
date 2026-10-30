@@ -5,8 +5,8 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{rels_part_name, Package, Relationships};
 use crate::smartart::{
-    self, colors_xml, style_xml, Role, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX, DEFAULT_CY,
-    DGM_NS, REL_CS, REL_LO, REL_QS,
+    self, collect_blip_rids, colors_xml, missing_data, style_xml, Role, CT_COLORS, CT_LAYOUT,
+    CT_STYLE, DEFAULT_CX, DEFAULT_CY, DGM_NS, REL_CS, REL_LO, REL_QS,
 };
 use crate::xml::{self, Document, Element, Node};
 
@@ -476,25 +476,6 @@ fn find_removal_in<'a>(el: &'a Element, idx: &mut usize, key: &SmartArtKey) -> O
     None
 }
 
-fn collect_blip_rids(el: &Element) -> Vec<String> {
-    let mut out = Vec::new();
-    collect_blip_rids_walk(el, &mut out);
-    out
-}
-
-fn collect_blip_rids_walk(el: &Element, out: &mut Vec<String>) {
-    if el.local_name() == "blip" {
-        if let Some(id) = el.attr_local("embed") {
-            out.push(id.to_string());
-        }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            collect_blip_rids_walk(e, out);
-        }
-    }
-}
-
 fn rid_still_on_slide(root: &Element, rid: &str) -> bool {
     let mut used = false;
     shape::walk_choice(root, &mut |e| {
@@ -516,15 +497,6 @@ fn rid_still_on_slide(root: &Element, rid: &str) -> bool {
 
 fn not_found(id: &str, path: String) -> Error {
     Error::with_path(ErrorKind::SmartArtNotFound { id: id.to_string() }, path)
-}
-
-fn missing_data(id: &str, i: usize) -> Error {
-    Error::with_path(
-        ErrorKind::PartMissing {
-            name: format!("{id} data"),
-        },
-        format!("ops[{i}].id"),
-    )
 }
 
 fn data_part_of(

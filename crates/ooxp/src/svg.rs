@@ -1,5 +1,4 @@
-//! Office 2016 SVG 扩展：xlsx / pptx 共用。
-//! docx 44 已过，保持自己的写入路径，不经这里。
+//! Office 2016 SVG 扩展。xlsx、docx、pptx 共用。
 
 use crate::xml::{Element, Node};
 

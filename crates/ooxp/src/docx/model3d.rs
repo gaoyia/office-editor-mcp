@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
-use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
+use crate::opc::{resolve_id, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::drawing_hlink;
@@ -206,24 +206,7 @@ pub fn collect(
 }
 
 fn collect_frames<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
-    if el.local_name() == "txbxContent" {
-        return;
-    }
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el.child_by_local("Choice") {
-            if crate::model3d::choice_requires_am3d(choice) {
-                collect_frames(choice, out);
-            }
-        }
-        return;
-    }
-    if matches!(el.local_name(), "inline" | "anchor") && crate::model3d::is_model3d_graphic(el) {
-        out.push(el);
-        return;
-    }
-    for c in el.element_children() {
-        collect_frames(c, out);
-    }
+    crate::model3d::collect_frames(el, out, &["inline", "anchor"], true);
 }
 
 fn info_of(
@@ -699,33 +682,16 @@ fn each_host_drawing_mut(
 }
 
 fn write_media(pkg: &mut Package, host: &str, glb: Vec<u8>) -> Result<(String, String), Error> {
-    let glb_part = crate::ole::next_numbered(pkg, "/word/media", "model3d", "glb");
-    pkg.set(&glb_part, glb)?;
     let png_part = picture::next_media_part(pkg, "png");
-    pkg.set(&png_part, crate::ole::PREVIEW_PNG.to_vec())?;
-    let mut rels = Relationships::from_package(pkg, host)?;
-    let glb_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: glb_rid.clone(),
-        rel_type: crate::model3d::REL_MODEL3D.into(),
-        target: picture::rel_target_from(host, &glb_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    let png_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: png_rid.clone(),
-        rel_type: REL_IMAGE.into(),
-        target: picture::rel_target_from(host, &png_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    rels.write_to(pkg, host)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default("glb", crate::model3d::CT_GLB);
-    cts.ensure_default("png", "image/png");
-    cts.write_to(pkg)?;
-    Ok((glb_rid, png_rid))
+    crate::model3d::write_glb_media(
+        pkg,
+        host,
+        "/word/media",
+        glb,
+        png_part,
+        picture::rel_target_from,
+        REL_IMAGE,
+    )
 }
 
 fn build_docx_ac(doc_pr: u32, glb_rid: &str, png_rid: &str, cx: i64, cy: i64) -> Element {

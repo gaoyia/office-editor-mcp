@@ -47,6 +47,8 @@ OPC 指 Open Packaging Conventions：文件是一个 ZIP，里面有部件、内
 
 读关系时保留每条 `Id`、`Type`、`Target`、可选的 `TargetMode`，以及不认识的属性。apply 若删除某个部件，必须同时删掉指向它的关系。create 只写自己生成的那几条关系，不伪造 Office 专有扩展关系。
 
+编号部件用 `Package::first_free`：调用方给出 `1`、`2`… 对应的部件名，取包里还没有的第一个。相对 Target 用 `rel_target`。xlsx 和 pptx 共享目录前缀；docx 在对不上同一目录时按源目录层数往上跳。关系文件还原源部件用 `source_part_of_rels`。docx 把 `/_rels/.rels` 看成包根。
+
 ## 读与改
 
 按规范化路径取出未压缩字节。调用方（xlsx / docx 模块）改完后把新字节交还给 opc，并标记该路径为脏。同一路径多次标记，以最后一次字节为准。

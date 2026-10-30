@@ -5,9 +5,7 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
-use crate::opc::{
-    resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship, Relationships,
-};
+use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{Document, Element, Node};
 
 use super::request::{
@@ -1240,38 +1238,11 @@ fn build_pic(cnv: u32, name: &str, rid: &str, x: i64, y: i64, cx: i64, cy: i64) 
 }
 
 pub(crate) fn next_media_part(pkg: &Package, ext: &str) -> String {
-    let mut n = 1u32;
-    loop {
-        let name = format!("/ppt/media/image{n}.{ext}");
-        if !pkg.contains(&name) {
-            return name;
-        }
-        n += 1;
-    }
+    pkg.first_free(|n| format!("/ppt/media/image{n}.{ext}"))
 }
 
 pub(crate) fn rel_target_from(source_part: &str, target_opc: &str) -> String {
-    let src_dir = split_dir_file(source_part).0;
-    let tgt = target_opc.trim_start_matches('/');
-    let src = src_dir.trim_start_matches('/');
-    if src.is_empty() || src == "/" {
-        return tgt.to_string();
-    }
-    if let Some(rest) = tgt.strip_prefix(&format!("{src}/")) {
-        return rest.to_string();
-    }
-    let src_parts: Vec<&str> = src.split('/').filter(|s| !s.is_empty()).collect();
-    let tgt_parts: Vec<&str> = tgt.split('/').filter(|s| !s.is_empty()).collect();
-    let mut common = 0usize;
-    while common < src_parts.len()
-        && common < tgt_parts.len()
-        && src_parts[common] == tgt_parts[common]
-    {
-        common += 1;
-    }
-    let up = src_parts.len() - common;
-    let rest = tgt_parts[common..].join("/");
-    format!("{}{rest}", "../".repeat(up))
+    crate::opc::rel_target(source_part, target_opc, true)
 }
 
 pub(crate) fn add_image_rel(
@@ -1469,37 +1440,12 @@ pub(crate) fn update_rel_target(
 }
 
 pub(crate) fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
-    for name in pkg.part_names() {
-        if !name.ends_with(".rels") {
-            continue;
-        }
-        let Some(source) = source_from_rels(&name) else {
-            continue;
-        };
-        let rels = Relationships::parse(pkg.get(&name)?)?;
-        for r in &rels.rels {
-            if r.is_external() {
-                continue;
-            }
-            if let Ok(p) = resolve_rel_target(&source, &r.target) {
-                if p == media_opc {
-                    return Ok(true);
-                }
-            }
-        }
-    }
-    Ok(false)
-}
-
-fn source_from_rels(rels_part: &str) -> Option<String> {
-    let trimmed = rels_part.strip_suffix(".rels")?;
-    let (dir, file) = split_dir_file(trimmed);
-    let parent = dir.trim_end_matches("/_rels").trim_end_matches("_rels");
-    if parent.is_empty() || parent == "/" {
-        Some(format!("/{file}"))
-    } else {
-        Some(format!("{parent}/{file}"))
-    }
+    crate::opc::part_still_referenced(
+        pkg,
+        media_opc,
+        |name| crate::opc::source_part_of_rels(name, false),
+        |a, b| a == b,
+    )
 }
 
 pub(crate) fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
@@ -1529,57 +1475,13 @@ pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
 }
 
 fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
-    if bytes.len() >= 8 && bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
-        let (cx, cy) = png_size(&bytes).unwrap_or((914400, 914400));
+    if let Some(r) = crate::image::raster(&bytes) {
         return Ok(ImageFile {
             bytes,
-            ext: "png".into(),
-            content_type: "image/png".into(),
-            cx,
-            cy,
-            svg: None,
-        });
-    }
-    if bytes.len() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
-        let (cx, cy) = jpeg_size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes,
-            ext: "jpeg".into(),
-            content_type: "image/jpeg".into(),
-            cx,
-            cy,
-            svg: None,
-        });
-    }
-    if bytes.len() >= 6 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
-        let (cx, cy) = gif_size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes,
-            ext: "gif".into(),
-            content_type: "image/gif".into(),
-            cx,
-            cy,
-            svg: None,
-        });
-    }
-    if bytes.len() >= 26 && bytes.starts_with(b"BM") {
-        let (cx, cy) = bmp_size(&bytes).unwrap_or((914400, 914400));
-        return Ok(ImageFile {
-            bytes,
-            ext: "bmp".into(),
-            content_type: "image/bmp".into(),
-            cx,
-            cy,
-            svg: None,
-        });
-    }
-    if let Some(m) = crate::image::classify(&bytes) {
-        return Ok(ImageFile {
-            bytes,
-            ext: m.ext.into(),
-            content_type: m.content_type.into(),
-            cx: m.cx,
-            cy: m.cy,
+            ext: r.ext.into(),
+            content_type: r.content_type.into(),
+            cx: r.cx,
+            cy: r.cy,
             svg: None,
         });
     }
@@ -1596,61 +1498,4 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
     }
     let _ = path;
     Err(Error::new(ErrorKind::InvalidImageFile))
-}
-
-fn px_to_emu(px: u32) -> i64 {
-    (px as i64).saturating_mul(914400) / 96
-}
-
-fn png_size(bytes: &[u8]) -> Option<(i64, i64)> {
-    if bytes.len() < 24 {
-        return None;
-    }
-    let w = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
-    let h = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
-    Some((px_to_emu(w), px_to_emu(h)))
-}
-
-fn gif_size(bytes: &[u8]) -> Option<(i64, i64)> {
-    if bytes.len() < 10 {
-        return None;
-    }
-    let w = u16::from_le_bytes(bytes[6..8].try_into().ok()?) as u32;
-    let h = u16::from_le_bytes(bytes[8..10].try_into().ok()?) as u32;
-    Some((px_to_emu(w), px_to_emu(h)))
-}
-
-fn bmp_size(bytes: &[u8]) -> Option<(i64, i64)> {
-    if bytes.len() < 26 {
-        return None;
-    }
-    let w = i32::from_le_bytes(bytes[18..22].try_into().ok()?).unsigned_abs();
-    let h = i32::from_le_bytes(bytes[22..26].try_into().ok()?).unsigned_abs();
-    Some((px_to_emu(w), px_to_emu(h)))
-}
-
-fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
-    let mut i = 2usize;
-    while i + 9 < bytes.len() {
-        if bytes[i] != 0xFF {
-            i += 1;
-            continue;
-        }
-        let marker = bytes[i + 1];
-        if marker == 0xD8 || marker == 0xD9 || (0xD0..=0xD7).contains(&marker) {
-            i += 2;
-            continue;
-        }
-        if i + 3 >= bytes.len() {
-            break;
-        }
-        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if matches!(marker, 0xC0..=0xC2) && i + 8 < bytes.len() {
-            let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
-            let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
-            return Some((px_to_emu(w), px_to_emu(h)));
-        }
-        i += 2 + len;
-    }
-    None
 }

@@ -27,6 +27,21 @@ pub const PREVIEW_PNG: &[u8] = &[
     0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
     0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
+
+pub fn format_pt(emu: i64) -> String {
+    if emu % 12_700 == 0 {
+        return format!("{}pt", emu / 12_700);
+    }
+    let pt = emu as f64 / 12_700.0;
+    let mut s = format!("{pt:.4}");
+    while s.contains('.') && s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    format!("{s}pt")
+}
 /// 嵌入文件该怎么进包：Office 文件原样 + package 关系；其余打成 Ole10Native。
 pub enum FileSpec {
     Office {
@@ -136,14 +151,7 @@ pub fn classify(path: &str) -> FileSpec {
 }
 
 pub fn next_numbered(pkg: &Package, dir: &str, stem: &str, ext: &str) -> String {
-    let mut n = 1u32;
-    loop {
-        let name = format!("{dir}/{stem}{n}.{ext}");
-        if !pkg.contains(&name) {
-            return name;
-        }
-        n += 1;
-    }
+    pkg.first_free(|n| format!("{dir}/{stem}{n}.{ext}"))
 }
 
 /// 把普通文件打成 OLE Package 复合文档（Ole10Native）。

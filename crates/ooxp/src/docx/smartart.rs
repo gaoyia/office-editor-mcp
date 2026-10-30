@@ -7,8 +7,8 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{rels_part_name, Package, Relationships};
 use crate::smartart::{
-    self, colors_xml, style_xml, RelIds, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX, DEFAULT_CY,
-    DGM_NS, REL_CS, REL_LO, REL_QS,
+    self, collect_blip_rids, colors_xml, missing_data, style_xml, RelIds, CT_COLORS, CT_LAYOUT,
+    CT_STYLE, DEFAULT_CX, DEFAULT_CY, DGM_NS, REL_CS, REL_LO, REL_QS,
 };
 use crate::xml::{self, Document, Element, Node};
 
@@ -1661,15 +1661,6 @@ fn nth_story_para_mut(root: &mut Element, index: usize) -> Option<&mut Element> 
     None
 }
 
-fn missing_data(id: &str, i: usize) -> Error {
-    Error::with_path(
-        ErrorKind::PartMissing {
-            name: format!("{id} data"),
-        },
-        format!("ops[{i}].id"),
-    )
-}
-
 fn data_part_of(
     pkg: &Package,
     docs: &mut HashMap<String, Document>,
@@ -1718,25 +1709,6 @@ fn layout_unique_id(
             format!("ops[{i}].id"),
         )
     })
-}
-
-fn collect_blip_rids(el: &Element) -> Vec<String> {
-    let mut out = Vec::new();
-    collect_blip_rids_walk(el, &mut out);
-    out
-}
-
-fn collect_blip_rids_walk(el: &Element, out: &mut Vec<String>) {
-    if el.local_name() == "blip" {
-        if let Some(id) = el.attr_local("embed") {
-            out.push(id.to_string());
-        }
-    }
-    for n in &el.children {
-        if let Node::Element(e) = n {
-            collect_blip_rids_walk(e, out);
-        }
-    }
 }
 
 fn remove_rel_if_unused(

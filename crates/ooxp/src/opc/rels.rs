@@ -177,6 +177,36 @@ pub fn office_document_part(pkg: &Package) -> Result<String, Error> {
     resolve_rel_target("/", &rel.target)
 }
 
+/// 包里是否还有关系指向 `target`。`source_of` 和比较函数保持各格式原来的规则。
+pub fn part_still_referenced(
+    pkg: &Package,
+    target: &str,
+    source_of: fn(&str) -> Option<String>,
+    same: fn(&str, &str) -> bool,
+) -> Result<bool, Error> {
+    for name in pkg.part_names() {
+        if !name.ends_with(".rels") {
+            continue;
+        }
+        let Some(source) = source_of(&name) else {
+            continue;
+        };
+        let rels = Relationships::parse(pkg.get(&name)?)?;
+        for r in &rels.rels {
+            if r.is_external() {
+                continue;
+            }
+            if resolve_rel_target(&source, &r.target)
+                .ok()
+                .is_some_and(|part| same(&part, target))
+            {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
 /// 规范化源部件名，供 write 使用。
 #[allow(dead_code)]
 pub fn normalize_source(name: &str) -> Result<String, Error> {

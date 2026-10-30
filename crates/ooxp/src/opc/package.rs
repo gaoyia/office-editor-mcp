@@ -148,6 +148,18 @@ impl Package {
             .is_some_and(|part| !part.deleted)
     }
 
+    /// 从 1 起取调用方拼出的部件名，直到包里还没有这一份。
+    pub fn first_free(&self, name_of: impl Fn(u32) -> String) -> String {
+        let mut n = 1u32;
+        loop {
+            let name = name_of(n);
+            if !self.contains(&name) {
+                return name;
+            }
+            n += 1;
+        }
+    }
+
     pub fn get(&self, name: &str) -> Result<&[u8], Error> {
         let missing = || {
             Error::new(ErrorKind::PartMissing {

@@ -96,14 +96,7 @@ fn push_rel(rels: &mut Relationships, host: &str, rel_type: &str, part: &str) ->
 }
 
 fn next_numbered(pkg: &Package, dir: &str, stem: &str, ext: &str) -> String {
-    let mut n = 1u32;
-    loop {
-        let name = format!("{dir}/{stem}{n}{ext}");
-        if !pkg.contains(&name) {
-            return name;
-        }
-        n += 1;
-    }
+    pkg.first_free(|n| format!("{dir}/{stem}{n}{ext}"))
 }
 
 pub fn family_of(uid: &str) -> Option<LayoutKind> {

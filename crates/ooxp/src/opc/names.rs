@@ -111,6 +111,60 @@ pub fn resolve_rel_target(source_part: &str, target: &str) -> Result<String, Err
     normalize_part_name(&segs.join("/"))
 }
 
+/// 关系文件对应的源部件。`word_root` 为真时，`/_rels/.rels` 对应包根 `/`。
+pub fn source_part_of_rels(rels_part: &str, word_root: bool) -> Option<String> {
+    if word_root && rels_part == "/_rels/.rels" {
+        return Some("/".into());
+    }
+    if word_root {
+        let (dir, file) = split_dir_file(rels_part);
+        let parent = dir.strip_suffix("/_rels")?;
+        let stem = file.strip_suffix(".rels")?;
+        if parent.is_empty() || parent == "/" {
+            return Some(format!("/{stem}"));
+        }
+        return Some(format!("{parent}/{stem}"));
+    }
+    let trimmed = rels_part.strip_suffix(".rels")?;
+    let (dir, file) = split_dir_file(trimmed);
+    let parent = dir.trim_end_matches("/_rels").trim_end_matches("_rels");
+    if parent.is_empty() || parent == "/" {
+        Some(format!("/{file}"))
+    } else {
+        Some(format!("{parent}/{file}"))
+    }
+}
+
+/// 从源部件到目标部件的相对关系 Target。
+/// `share_dir` 为真时，两边共同的目录不重复往上跳。
+pub fn rel_target(source_part: &str, target_opc: &str, share_dir: bool) -> String {
+    let src_dir = split_dir_file(source_part).0;
+    let tgt = target_opc.trim_start_matches('/');
+    let src = src_dir.trim_start_matches('/');
+    if src.is_empty() || src == "/" {
+        return tgt.to_string();
+    }
+    if let Some(rest) = tgt.strip_prefix(&format!("{src}/")) {
+        return rest.to_string();
+    }
+    if !share_dir {
+        let up = src.split('/').filter(|s| !s.is_empty()).count();
+        return format!("{}{tgt}", "../".repeat(up));
+    }
+    let src_parts: Vec<&str> = src.split('/').filter(|s| !s.is_empty()).collect();
+    let tgt_parts: Vec<&str> = tgt.split('/').filter(|s| !s.is_empty()).collect();
+    let mut common = 0usize;
+    while common < src_parts.len()
+        && common < tgt_parts.len()
+        && src_parts[common] == tgt_parts[common]
+    {
+        common += 1;
+    }
+    let up = src_parts.len() - common;
+    let rest = tgt_parts[common..].join("/");
+    format!("{}{rest}", "../".repeat(up))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

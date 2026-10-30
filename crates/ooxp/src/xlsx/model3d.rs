@@ -4,7 +4,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
-use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
+use crate::opc::{resolve_id, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
@@ -14,11 +14,7 @@ use super::{ExportedMedia, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
-#[derive(Debug, Clone)]
-pub enum Model3dKey {
-    Id(String),
-    Index(usize),
-}
+pub use crate::model3d::{key_matches, Model3dKey};
 
 #[derive(Debug, Clone)]
 pub struct Model3dTarget {
@@ -217,21 +213,7 @@ pub fn collect(
 }
 
 fn collect_frames<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
-    if el.local_name() == "AlternateContent" {
-        if let Some(choice) = el.child_by_local("Choice") {
-            if crate::model3d::choice_requires_am3d(choice) {
-                collect_frames(choice, out);
-            }
-        }
-        return;
-    }
-    if el.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(el) {
-        out.push(el);
-        return;
-    }
-    for c in el.element_children() {
-        collect_frames(c, out);
-    }
+    crate::model3d::collect_frames(el, out, &["graphicFrame"], false);
 }
 
 fn info_of(
@@ -406,22 +388,6 @@ fn find_frame<'a>(root: &'a Element, key: &Model3dKey) -> Option<&'a Element> {
     None
 }
 
-fn key_matches(key: &Model3dKey, raw: &Option<String>, index: usize) -> bool {
-    match key {
-        Model3dKey::Index(n) => index == *n,
-        Model3dKey::Id(want) => {
-            let Some(got) = raw else {
-                return false;
-            };
-            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
-                a == b
-            } else {
-                want == got
-            }
-        }
-    }
-}
-
 pub fn insert(
     pkg: &mut Package,
     sheet_doc: &mut Document,
@@ -503,33 +469,16 @@ fn write_media(
     drawing_part: &str,
     glb: Vec<u8>,
 ) -> Result<(String, String), Error> {
-    let glb_part = crate::ole::next_numbered(pkg, "/xl/media", "model3d", "glb");
-    pkg.set(&glb_part, glb)?;
     let png_part = picture::next_media_part(pkg, "png");
-    pkg.set(&png_part, crate::ole::PREVIEW_PNG.to_vec())?;
-    let mut rels = Relationships::from_package(pkg, drawing_part)?;
-    let glb_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: glb_rid.clone(),
-        rel_type: crate::model3d::REL_MODEL3D.into(),
-        target: picture::rel_target_from(drawing_part, &glb_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    let png_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: png_rid.clone(),
-        rel_type: picture::REL_IMAGE.into(),
-        target: picture::rel_target_from(drawing_part, &png_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    rels.write_to(pkg, drawing_part)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default("glb", crate::model3d::CT_GLB);
-    cts.ensure_default("png", "image/png");
-    cts.write_to(pkg)?;
-    Ok((glb_rid, png_rid))
+    crate::model3d::write_glb_media(
+        pkg,
+        drawing_part,
+        "/xl/media",
+        glb,
+        png_part,
+        picture::rel_target_from,
+        picture::REL_IMAGE,
+    )
 }
 
 fn build_xlsx_ac(

@@ -13,6 +13,7 @@ mod help;
 mod host_env;
 mod host_files;
 mod image;
+mod ink;
 mod json;
 mod model3d;
 mod ole;

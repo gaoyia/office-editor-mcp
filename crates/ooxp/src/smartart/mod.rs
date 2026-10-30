@@ -8,6 +8,35 @@ use std::collections::HashSet;
 use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, TypeName};
+use crate::xml::{Element, Node};
+
+pub fn missing_data(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::PartMissing {
+            name: format!("{id} data"),
+        },
+        format!("ops[{i}].id"),
+    )
+}
+
+pub fn collect_blip_rids(el: &Element) -> Vec<String> {
+    let mut out = Vec::new();
+    collect_blip_rids_walk(el, &mut out);
+    out
+}
+
+fn collect_blip_rids_walk(el: &Element, out: &mut Vec<String>) {
+    if el.local_name() == "blip" {
+        if let Some(id) = el.attr_local("embed") {
+            out.push(id.to_string());
+        }
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            collect_blip_rids_walk(e, out);
+        }
+    }
+}
 
 pub use data::{
     append_par_of, append_visible_pt, delete_points_and_cxns, demote_asst, descendants_of,

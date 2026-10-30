@@ -12,11 +12,7 @@ use super::picture::{self, AnchorKind, EditAs};
 use super::shape;
 use super::REL_NS;
 
-#[derive(Debug, Clone)]
-pub enum MathKey {
-    Id(String),
-    Index(usize),
-}
+pub use crate::drawing_math::{collect_acs, key_matches, set_in_index, MathKey};
 
 #[derive(Debug, Clone)]
 pub struct MathTarget {
@@ -202,18 +198,6 @@ pub fn collect(
     Ok(out)
 }
 
-fn collect_acs<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
-    if el.local_name() == "AlternateContent" {
-        if crate::drawing_math::is_math_ac(el) {
-            out.push(el);
-        }
-        return;
-    }
-    for c in el.element_children() {
-        collect_acs(c, out);
-    }
-}
-
 fn info_of(
     anchor: &Element,
     kind: AnchorKind,
@@ -345,22 +329,6 @@ fn find_ac<'a>(root: &'a Element, key: &MathKey) -> Option<&'a Element> {
         }
     }
     None
-}
-
-fn key_matches(key: &MathKey, raw: &Option<String>, index: usize) -> bool {
-    match key {
-        MathKey::Index(n) => index == *n,
-        MathKey::Id(want) => {
-            let Some(got) = raw else {
-                return false;
-            };
-            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
-                a == b
-            } else {
-                want == got
-            }
-        }
-    }
 }
 
 pub fn insert(
@@ -596,24 +564,6 @@ pub fn set_anchor(
 
 fn set_in(el: &mut Element, key: &MathKey, text: &str) -> bool {
     set_in_index(el, key, text, &mut 0)
-}
-
-fn set_in_index(el: &mut Element, key: &MathKey, text: &str, index: &mut usize) -> bool {
-    if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
-        *index += 1;
-        if key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, *index) {
-            return crate::drawing_math::set_ac_text(el, text);
-        }
-        return false;
-    }
-    for n in el.children.iter_mut() {
-        if let Node::Element(child) = n {
-            if set_in_index(child, key, text, index) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 pub fn delete(

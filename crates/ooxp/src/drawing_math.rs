@@ -13,6 +13,58 @@ pub const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/
 pub const DEFAULT_CX: i64 = 914_400;
 pub const DEFAULT_CY: i64 = 914_400;
 
+#[derive(Debug, Clone)]
+pub enum MathKey {
+    Id(String),
+    Index(usize),
+}
+
+pub fn collect_acs<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
+    if el.local_name() == "AlternateContent" {
+        if is_math_ac(el) {
+            out.push(el);
+        }
+        return;
+    }
+    for c in el.element_children() {
+        collect_acs(c, out);
+    }
+}
+
+pub fn key_matches(key: &MathKey, raw: &Option<String>, index: usize) -> bool {
+    match key {
+        MathKey::Index(n) => index == *n,
+        MathKey::Id(want) => {
+            let Some(got) = raw else {
+                return false;
+            };
+            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
+                a == b
+            } else {
+                want == got
+            }
+        }
+    }
+}
+
+pub fn set_in_index(el: &mut Element, key: &MathKey, text: &str, index: &mut usize) -> bool {
+    if el.local_name() == "AlternateContent" && is_math_ac(el) {
+        *index += 1;
+        if key_matches(key, &cnv_of_ac(el).0, *index) {
+            return set_ac_text(el, text);
+        }
+        return false;
+    }
+    for n in el.children.iter_mut() {
+        if let Node::Element(child) = n {
+            if set_in_index(child, key, text, index) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 pub fn choice_requires_a14(choice: &Element) -> bool {
     let Some(req) = choice.attr_local("Requires") else {
         return false;

@@ -11,8 +11,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::picture;
 
-pub const REL_CUSTOM_XML: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
+pub use crate::ink::REL_CUSTOM_XML;
 pub const REL_CUSTOM_XML_PROPS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps";
 pub const CT_CUSTOM_XML_PROPS: &str =

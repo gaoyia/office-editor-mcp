@@ -1,5 +1,5 @@
-//! 图文件头：EMF / WMF / TIFF。不认 SVGZ / WebP。
-//! PNG / JPEG / GIF / BMP / SVG 仍由各格式自己的 `classify_image` 认。
+//! 图文件头：EMF / WMF / TIFF，以及 PNG / JPEG / GIF / BMP 的尺寸。
+//! 不认 SVGZ / WebP。SVG 由 `svg` 认。
 
 use crate::opc::Relationships;
 
@@ -180,8 +180,114 @@ fn himetric_to_emu(h: i64) -> i64 {
     h.saturating_mul(360).max(1)
 }
 
-fn px_to_emu(px: u32) -> i64 {
+pub(crate) fn px_to_emu(px: u32) -> i64 {
     (px as i64).saturating_mul(914400) / 96
+}
+
+/// 栅格图或 EMF / WMF / TIFF。认不出则 `None`，调用方再试 SVG。
+pub(crate) struct Raster {
+    pub ext: &'static str,
+    pub content_type: &'static str,
+    pub cx: i64,
+    pub cy: i64,
+}
+
+pub(crate) fn raster(bytes: &[u8]) -> Option<Raster> {
+    if bytes.len() >= 8 && bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+        let (cx, cy) = png_size(bytes).unwrap_or((914400, 914400));
+        return Some(Raster {
+            ext: "png",
+            content_type: "image/png",
+            cx,
+            cy,
+        });
+    }
+    if bytes.len() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
+        let (cx, cy) = jpeg_size(bytes).unwrap_or((914400, 914400));
+        return Some(Raster {
+            ext: "jpeg",
+            content_type: "image/jpeg",
+            cx,
+            cy,
+        });
+    }
+    if bytes.len() >= 6 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
+        let (cx, cy) = gif_size(bytes).unwrap_or((914400, 914400));
+        return Some(Raster {
+            ext: "gif",
+            content_type: "image/gif",
+            cx,
+            cy,
+        });
+    }
+    if bytes.len() >= 26 && bytes.starts_with(b"BM") {
+        let (cx, cy) = bmp_size(bytes).unwrap_or((914400, 914400));
+        return Some(Raster {
+            ext: "bmp",
+            content_type: "image/bmp",
+            cx,
+            cy,
+        });
+    }
+    classify(bytes).map(|m| Raster {
+        ext: m.ext,
+        content_type: m.content_type,
+        cx: m.cx,
+        cy: m.cy,
+    })
+}
+
+pub(crate) fn png_size(bytes: &[u8]) -> Option<(i64, i64)> {
+    if bytes.len() < 24 {
+        return None;
+    }
+    let w = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+    let h = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+    Some((px_to_emu(w), px_to_emu(h)))
+}
+
+pub(crate) fn gif_size(bytes: &[u8]) -> Option<(i64, i64)> {
+    if bytes.len() < 10 {
+        return None;
+    }
+    let w = u16::from_le_bytes(bytes[6..8].try_into().ok()?) as u32;
+    let h = u16::from_le_bytes(bytes[8..10].try_into().ok()?) as u32;
+    Some((px_to_emu(w), px_to_emu(h)))
+}
+
+pub(crate) fn bmp_size(bytes: &[u8]) -> Option<(i64, i64)> {
+    if bytes.len() < 26 {
+        return None;
+    }
+    let w = i32::from_le_bytes(bytes[18..22].try_into().ok()?).unsigned_abs();
+    let h = i32::from_le_bytes(bytes[22..26].try_into().ok()?).unsigned_abs();
+    Some((px_to_emu(w), px_to_emu(h)))
+}
+
+pub(crate) fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
+    let mut i = 2usize;
+    while i + 9 < bytes.len() {
+        if bytes[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+        let marker = bytes[i + 1];
+        if marker == 0xD8 || marker == 0xD9 || (0xD0..=0xD7).contains(&marker) {
+            i += 2;
+            continue;
+        }
+        if i + 3 >= bytes.len() {
+            break;
+        }
+        let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
+        if matches!(marker, 0xC0..=0xC2) && i + 8 < bytes.len() {
+            let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
+            let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
+            return Some((px_to_emu(w), px_to_emu(h)));
+        }
+        i += 2 + len;
+    }
+    None
 }
 
 fn u16_le(bytes: &[u8], off: usize) -> Option<u16> {

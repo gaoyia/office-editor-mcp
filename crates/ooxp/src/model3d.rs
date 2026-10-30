@@ -5,6 +5,8 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, TypeName};
+use crate::ole;
+use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{Element, Node};
 
 /// `[Content_Types].xml` 的 Default `glb`。
@@ -16,6 +18,55 @@ pub const REL_MODEL3D: &str = "http://schemas.microsoft.com/office/2017/06/relat
 const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 /// 缺省 1 英寸见方。
 pub const DEFAULT_CX: i64 = 914_400;
+
+#[derive(Debug, Clone)]
+pub enum Model3dKey {
+    Id(String),
+    Index(usize),
+}
+
+pub fn key_matches(key: &Model3dKey, raw: &Option<String>, index: usize) -> bool {
+    match key {
+        Model3dKey::Index(n) => index == *n,
+        Model3dKey::Id(want) => {
+            let Some(got) = raw else {
+                return false;
+            };
+            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
+                a == b
+            } else {
+                want == got
+            }
+        }
+    }
+}
+
+/// 收集 3D 图。`hosts` 是宿主标签名。Word 还要跳过文本框。
+pub fn collect_frames<'a>(
+    el: &'a Element,
+    out: &mut Vec<&'a Element>,
+    hosts: &[&str],
+    skip_txbx: bool,
+) {
+    if skip_txbx && el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(choice) = el.child_by_local("Choice") {
+            if choice_requires_am3d(choice) {
+                collect_frames(choice, out, hosts, skip_txbx);
+            }
+        }
+        return;
+    }
+    if hosts.contains(&el.local_name()) && is_model3d_graphic(el) {
+        out.push(el);
+        return;
+    }
+    for c in el.element_children() {
+        collect_frames(c, out, hosts, skip_txbx);
+    }
+}
 pub const DEFAULT_CY: i64 = 914_400;
 /// Excel 16.0 另存 914400×457200 时的 viewportSz。
 const VIEWPORT_SZ: &str = "699851";
@@ -720,6 +771,44 @@ fn pt_light(r: &str, g: &str, b: &str, intensity: &str, x: &str, y: &str, z: &st
 }
 
 /// 库测试与手测用的最小合法 GLB（一个三角形）。
+/// 写出 GLB 和后备 PNG，并在宿主上挂关系。媒体目录由调用方传入。
+pub fn write_glb_media(
+    pkg: &mut Package,
+    host_part: &str,
+    media_dir: &str,
+    glb: Vec<u8>,
+    png_part: String,
+    rel_target: fn(&str, &str) -> String,
+    image_rel: &str,
+) -> Result<(String, String), Error> {
+    let glb_part = ole::next_numbered(pkg, media_dir, "model3d", "glb");
+    pkg.set(&glb_part, glb)?;
+    pkg.set(&png_part, ole::PREVIEW_PNG.to_vec())?;
+    let mut rels = Relationships::from_package(pkg, host_part)?;
+    let glb_rid = rels.next_rid();
+    rels.push(Relationship {
+        id: glb_rid.clone(),
+        rel_type: REL_MODEL3D.into(),
+        target: rel_target(host_part, &glb_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    let png_rid = rels.next_rid();
+    rels.push(Relationship {
+        id: png_rid.clone(),
+        rel_type: image_rel.into(),
+        target: rel_target(host_part, &png_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, host_part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default("glb", CT_GLB);
+    cts.ensure_default("png", "image/png");
+    cts.write_to(pkg)?;
+    Ok((glb_rid, png_rid))
+}
+
 pub fn sample_glb() -> Vec<u8> {
     let mut json = br#"{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","max":[1.0,1.0,0.0],"min":[0.0,0.0,0.0]}],"bufferViews":[{"buffer":0,"byteLength":36}],"buffers":[{"byteLength":36}]}"#.to_vec();
     while !json.len().is_multiple_of(4) {

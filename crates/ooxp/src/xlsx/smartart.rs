@@ -5,8 +5,8 @@ use serde_json::{json, Value};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::Package;
 use crate::smartart::{
-    self, colors_xml, style_xml, Role, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX, DEFAULT_CY,
-    DGM_NS, REL_CS, REL_LO, REL_QS,
+    self, colors_xml, missing_data, style_xml, Role, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX,
+    DEFAULT_CY, DGM_NS, REL_CS, REL_LO, REL_QS,
 };
 use crate::xml::{self, Document, Element};
 
@@ -360,15 +360,6 @@ fn rid_still_on_drawing(root: &Element, rid: &str) -> bool {
 
 fn not_found(id: &str, path: String) -> Error {
     Error::with_path(ErrorKind::SmartArtNotFound { id: id.to_string() }, path)
-}
-
-fn missing_data(id: &str, i: usize) -> Error {
-    Error::with_path(
-        ErrorKind::PartMissing {
-            name: format!("{id} data"),
-        },
-        format!("ops[{i}].id"),
-    )
 }
 
 fn load_drawing(

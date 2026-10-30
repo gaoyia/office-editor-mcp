@@ -1202,31 +1202,16 @@ fn rewrite_vml_style(style: &str, cx: Option<i64>, cy: Option<i64>) -> String {
         let lower = p.to_ascii_lowercase();
         if let Some(v) = cx {
             if lower.starts_with("width:") {
-                *p = format!("width:{}", format_pt(v));
+                *p = format!("width:{}", crate::ole::format_pt(v));
             }
         }
         if let Some(v) = cy {
             if lower.starts_with("height:") {
-                *p = format!("height:{}", format_pt(v));
+                *p = format!("height:{}", crate::ole::format_pt(v));
             }
         }
     }
     parts.join(";")
-}
-
-fn format_pt(emu: i64) -> String {
-    if emu % 12_700 == 0 {
-        return format!("{}pt", emu / 12_700);
-    }
-    let pt = emu as f64 / 12_700.0;
-    let mut s = format!("{pt:.4}");
-    while s.contains('.') && s.ends_with('0') {
-        s.pop();
-    }
-    if s.ends_with('.') {
-        s.pop();
-    }
-    format!("{s}pt")
 }
 
 fn remove_ole_entry(sheet: &mut Element, key: &OleKey) -> bool {

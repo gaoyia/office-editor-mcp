@@ -4,7 +4,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
-use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
+use crate::opc::{resolve_id, ContentTypes, Package};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
@@ -14,19 +14,10 @@ use super::{ExportedMedia, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const XDR14_NS: &str = "http://schemas.microsoft.com/office/excel/2010/spreadsheetDrawing";
-const INKML_NS: &str = "http://www.w3.org/2003/InkML";
-pub const CT_INKML: &str = "application/inkml+xml";
-const REL_CUSTOM_XML: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
+use crate::ink::{self, key_matches, read_inkml, InkKey, CT_INKML};
 
 const DEFAULT_CX: i64 = 914_400;
 const DEFAULT_CY: i64 = 914_400;
-
-#[derive(Debug, Clone)]
-pub enum InkKey {
-    Id(String),
-    Index(usize),
-}
 
 #[derive(Debug, Clone)]
 pub struct InkTarget {
@@ -410,22 +401,6 @@ fn find_part<'a>(root: &'a Element, key: &InkKey) -> Option<&'a Element> {
     None
 }
 
-fn key_matches(key: &InkKey, raw: &Option<String>, index: usize) -> bool {
-    match key {
-        InkKey::Index(n) => index == *n,
-        InkKey::Id(want) => {
-            let Some(got) = raw else {
-                return false;
-            };
-            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
-                a == b
-            } else {
-                want == got
-            }
-        }
-    }
-}
-
 pub fn insert(
     pkg: &mut Package,
     sheet_doc: &mut Document,
@@ -506,33 +481,17 @@ fn write_media(
     drawing_part: &str,
     inkml: Vec<u8>,
 ) -> Result<(String, String), Error> {
-    let ink_part = crate::ole::next_numbered(pkg, "/xl/ink", "ink", "xml");
-    pkg.set(&ink_part, inkml)?;
     let png_part = picture::next_media_part(pkg, "png");
-    pkg.set(&png_part, crate::ole::PREVIEW_PNG.to_vec())?;
-    let mut rels = Relationships::from_package(pkg, drawing_part)?;
-    let ink_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: ink_rid.clone(),
-        rel_type: REL_CUSTOM_XML.into(),
-        target: picture::rel_target_from(drawing_part, &ink_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    let png_rid = rels.next_rid();
-    rels.push(Relationship {
-        id: png_rid.clone(),
-        rel_type: picture::REL_IMAGE.into(),
-        target: picture::rel_target_from(drawing_part, &png_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    rels.write_to(pkg, drawing_part)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&ink_part, CT_INKML)?;
-    cts.ensure_default("png", "image/png");
-    cts.write_to(pkg)?;
-    Ok((ink_rid, png_rid))
+    let (ink_rid, png_rid) = ink::write_media(
+        pkg,
+        drawing_part,
+        "/xl/ink",
+        inkml,
+        Some(png_part),
+        picture::rel_target_from,
+        picture::REL_IMAGE,
+    )?;
+    Ok((ink_rid, png_rid.expect("ink preview")))
 }
 
 fn build_ac(
@@ -863,75 +822,7 @@ fn anchor_empty(el: &Element) -> bool {
 }
 
 fn drop_rids(pkg: &mut Package, part: &str, root: &Element, rids: &[String]) -> Result<(), Error> {
-    let mut rels = Relationships::from_package(pkg, part)?;
-    let mut dirty = false;
-    let mut media_parts = Vec::new();
-    for rid in rids {
-        if rid_still_used(root, rid) {
-            continue;
-        }
-        if let Ok(m) = resolve_id(pkg, part, rid) {
-            if !media_parts.iter().any(|x| x == &m) {
-                media_parts.push(m);
-            }
-        }
-        rels.remove_by_id(rid);
-        dirty = true;
-    }
-    if dirty {
-        if rels.rels.is_empty() {
-            pkg.remove(&crate::opc::rels_part_name(part));
-        } else {
-            rels.write_to(pkg, part)?;
-        }
-    }
-    let mut cts = ContentTypes::from_package(pkg)?;
-    let mut cts_dirty = false;
-    for m in media_parts {
-        if !picture::media_still_used(pkg, &m)? {
-            pkg.remove(&m);
-            if m.contains("/ink/") {
-                cts.remove_override(&m);
-                cts_dirty = true;
-            }
-        }
-    }
-    if cts_dirty {
-        cts.write_to(pkg)?;
-    }
-    Ok(())
-}
-
-fn rid_still_used(root: &Element, rid: &str) -> bool {
-    let mut used = false;
-    walk(root, &mut |e| {
-        if e.local_name() == "contentPart" && e.attr_local("id") == Some(rid) {
-            used = true;
-        }
-        if e.local_name() == "blip" && e.attr_local("embed") == Some(rid) {
-            used = true;
-        }
-    });
-    used
-}
-
-fn walk(el: &Element, f: &mut dyn FnMut(&Element)) {
-    crate::xml::walk_elements(el, &mut |node| f(node));
-}
-
-fn read_inkml(path: &str, json_path: &str) -> Result<Vec<u8>, Error> {
-    let bytes = crate::host_files::read_user_file(path)?;
-    validate_inkml(&bytes, json_path)?;
-    Ok(bytes)
-}
-
-fn validate_inkml(bytes: &[u8], json_path: &str) -> Result<(), Error> {
-    let err = || Error::with_path(ErrorKind::InvalidInkMl, json_path.to_string());
-    let doc = xml::parse(bytes).map_err(|_| err())?;
-    if !is_inkml_root(&doc.root) {
-        return Err(err());
-    }
-    Ok(())
+    ink::drop_rids(pkg, part, root, rids, picture::media_still_used)
 }
 
 pub fn parse_create(v: &Value, prefix: &str, sheet: &str) -> Result<InsertInkOp, Error> {
@@ -1093,13 +984,4 @@ fn parse_off(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>
         )
     })?;
     Ok(Some(n))
-}
-
-fn is_inkml_root(el: &Element) -> bool {
-    if el.local_name() != "ink" {
-        return false;
-    }
-    el.attrs
-        .iter()
-        .any(|(k, v)| (k == "xmlns" || k.starts_with("xmlns:")) && v == INKML_NS)
 }

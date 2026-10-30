@@ -21,10 +21,7 @@ use super::{A_NS, MC_NS, REL_NS, W14_NS, WP_NS};
 pub const WPC_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas";
 /// Word 另存会声明，写入 Choice 不走这条 URI。
 pub const WPI_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingInk";
-pub const INKML_NS: &str = "http://www.w3.org/2003/InkML";
-pub const CT_INKML: &str = "application/inkml+xml";
-pub const REL_CUSTOM_XML: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml";
+pub use crate::ink::{CT_INKML, REL_CUSTOM_XML};
 
 /// Word 16.0 另存 144×72 磅。
 pub const DEFAULT_CX: i64 = 1_828_800;
@@ -118,7 +115,7 @@ impl<'a> HostCtx<'a> {
         };
         xml::parse(bytes)
             .ok()
-            .is_some_and(|d| is_inkml_root(&d.root))
+            .is_some_and(|d| crate::ink::is_inkml_root(&d.root))
     }
 }
 
@@ -264,7 +261,7 @@ pub fn apply_insert(
         ));
     }
     let host = part_for_host(catalog, doc_part, &op.host, &op.id, i)?;
-    let bytes = read_inkml(&op.file, i)?;
+    let bytes = crate::ink::read_inkml(&op.file, &format!("ops[{i}].file"))?;
     let ink_part = crate::ole::next_numbered(pkg, "/word/ink", "ink", "xml");
     pkg.set(&ink_part, bytes)?;
 
@@ -323,7 +320,7 @@ pub fn apply_replace(
         find_rid(&ctx, &doc.root, &op.target.key).ok_or_else(|| ink_missing(&op.id, i))?
     };
     let part = resolve_id(pkg, &host, &rid)?;
-    let bytes = read_inkml(&op.file, i)?;
+    let bytes = crate::ink::read_inkml(&op.file, &format!("ops[{i}].file"))?;
     pkg.set(&part, bytes)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&part, CT_INKML)?;
@@ -780,30 +777,6 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
     if el.attr(&key).is_none() {
         el.set_attr(&key, uri);
     }
-}
-
-fn read_inkml(path: &str, i: usize) -> Result<Vec<u8>, Error> {
-    let bytes = crate::host_files::read_user_file(path)?;
-    validate_inkml(&bytes, i)?;
-    Ok(bytes)
-}
-
-fn validate_inkml(bytes: &[u8], i: usize) -> Result<(), Error> {
-    let err = || Error::with_path(ErrorKind::InvalidInkMl, format!("ops[{i}].file"));
-    let doc = xml::parse(bytes).map_err(|_| err())?;
-    if !is_inkml_root(&doc.root) {
-        return Err(err());
-    }
-    Ok(())
-}
-
-fn is_inkml_root(el: &Element) -> bool {
-    if el.local_name() != "ink" {
-        return false;
-    }
-    el.attrs
-        .iter()
-        .any(|(k, v)| (k == "xmlns" || k.starts_with("xmlns:")) && v == INKML_NS)
 }
 
 fn parse_ink_key<'a>(s: &'a str, path: &str) -> Result<(TxbxKey, Option<&'a str>), Error> {

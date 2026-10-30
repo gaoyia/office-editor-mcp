@@ -66,7 +66,8 @@ crates/ooxp/                 库
   smartart/                  图示数据与四件套
   ole.rs                     嵌入对象分类与包装
   model3d.rs                 GLB 与 am3d
-  image.rs                   EMF / WMF / TIFF
+  image.rs                   EMF / WMF / TIFF，以及 PNG / JPEG / GIF / BMP 尺寸
+  ink.rs                     InkML 校验、常量和写媒体
   svg.rs                     SVG 扩展
   drawing_text.rs            DrawingML 文本格式
   drawing_math.rs            a14 公式框
@@ -99,11 +100,12 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `chart` 管 `c:chart` 与 chartex，图表 op 的字段体也在这里。它可以调用 `xlsx` 读写 embedding。xlsx、docx、pptx 调用它。pptx 不直接引用 `xlsx` 或 `docx`。
 - `smartart` 管图示数据和四件套，不含宿主 graphicFrame。三种格式的 SmartArt 模块调用它。
 - `ole` 做嵌入对象分类和 Package 包装，不执行 OLE 服务器。它可以调用 `opc`。三种格式调用它，彼此不引用。
-- `model3d` 认 GLB，并读写 `am3d` 的相机、旋转和光源。三种格式的 3D 模块调用它。
-- `image` 认 EMF、WMF、TIFF 的文件头。认图的格式模块调用它。PNG、JPEG、GIF、BMP、SVG 仍由各格式自己认。
-- `svg` 管 Office 2016 的 SVG 扩展。xlsx 和 pptx 调用它。docx 保持自己的写入路径，不经这里。
+- `model3d` 认 GLB，读写 `am3d` 的相机、旋转和光源，并写出 GLB 与后备图。三种格式的 3D 模块调用它。媒体目录由调用方传入。
+- `image` 认 EMF、WMF、TIFF，以及 PNG、JPEG、GIF、BMP 的尺寸。认图的格式模块调用它。SVG 由 `svg` 认。
+- `ink` 放 InkML 常量、校验和写媒体。AlternateContent 外壳留在各格式。三种格式的墨迹模块调用它。
+- `svg` 管 Office 2016 的 SVG 扩展。xlsx、docx、pptx 调用它。
 - `drawing_text` 读写 `a:rPr`、`a:pPr`、`a:bodyPr`。xlsx、pptx 的形状和表，以及 `shape_runs` 调用它。
-- `drawing_math` 判定 `a14:m`，并拼接公式可见文字。xlsx 和 pptx 的公式框调用它。docx 公式走自己的 OMML。
+- `drawing_math` 判定 `a14:m`，拼接公式可见文字，并按 id 找到公式框。xlsx 和 pptx 的公式框调用它。docx 公式走自己的 OMML。
 - `drawing_geom` 只放三种格式都认的预设几何名单。形状名单不含连接线。连接线名单含 `line`。三种格式的形状和连接线解析调用它。
 - `shape_runs` 计划形状可见文字怎么切。它调用 `drawing_text` 和 `text_span`。pptx 的形状写入调用它。
 - `text_span` 在一段可见文字里按原文定位。`shape_runs` 和 docx 段落调用它。
