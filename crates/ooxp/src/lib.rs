@@ -16,6 +16,7 @@ mod image;
 mod json;
 mod model3d;
 mod ole;
+mod op_fields;
 mod opc;
 mod password;
 mod pptx;

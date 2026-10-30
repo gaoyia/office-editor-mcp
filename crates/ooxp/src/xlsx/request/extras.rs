@@ -1932,7 +1932,11 @@ fn parse_slicer_timeline_filter(
             format!("ops[{i}].filter"),
         ));
     };
-    deny_keys_at(obj, i, "filter", &["filterType", "startDate", "endDate"])?;
+    deny_keys_at(
+        obj,
+        &format!("ops[{i}].filter"),
+        &["filterType", "startDate", "endDate"],
+    )?;
     let filter_type = require_filter_text(obj, i, "filterType")?;
     if !filter_type.starts_with("date") {
         return Err(Error::with_path(

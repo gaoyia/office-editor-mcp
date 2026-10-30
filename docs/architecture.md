@@ -54,6 +54,7 @@ crates/ooxp/                 库
   opc/                       ZIP、内容类型、关系、按路径读写部件
   xml.rs                     元素树
   json.rs                    领域 JSON 信封
+  op_fields.rs               各格式 request 共用的字段读取
   dispatch.rs                按 format 分发
   help.rs                    help 动作
   host_env.rs                时间、进程号、随机数
@@ -84,6 +85,8 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `opc` 管 ZIP、`[Content_Types].xml` 和各级 `.rels`。格式模块、`props`、`ole` 通过它读写部件。
 - `xml` 管元素树的解析、遍历、写回和堆上释放。改 XML 的模块调用它。它不依赖格式模块。
 - `json` 管领域信封。`dispatch`、`help` 和各格式的 `request/` 调用它。它不依赖格式模块。
+- `op_fields` 读取各格式 request 里相同的字段：布尔、id、文件名、EMU、颜色和未知字段。
+格式的 `request/` 调用它。它只依赖 `error`，不依赖任何格式模块。
 - `dispatch` 是库门口。命令行调用 `run` / `run_bytes`。它调用 `json`、`help`、`host_env`、`host_files` 和各格式模块。
 - `help` 从拼好的 schema 里查动作和操作，一次一层。只有 `dispatch` 的 help 动作调用它。
 - `host_env` 提供时间、进程号和随机数。`dispatch` 在本机 `run` 里装入系统实现。需要这些值的模块调用它。
@@ -93,7 +96,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - `theme` 负责主题 op 的字段解析、inspect 与 XML 补丁。
 格式模块只交给它 theme 部件名、themeOverride 部件名和宿主 id 的写法。
 三种格式的主题模块调用它。它不把 `phClr` 或 `schemeClr` 展开成 RGB。
-- `chart` 管 `c:chart` 与 chartex。它可以调用 `xlsx` 读写 embedding。xlsx、docx、pptx 调用它。pptx 不直接引用 `xlsx` 或 `docx`。
+- `chart` 管 `c:chart` 与 chartex，图表 op 的字段体也在这里。它可以调用 `xlsx` 读写 embedding。xlsx、docx、pptx 调用它。pptx 不直接引用 `xlsx` 或 `docx`。
 - `smartart` 管图示数据和四件套，不含宿主 graphicFrame。三种格式的 SmartArt 模块调用它。
 - `ole` 做嵌入对象分类和 Package 包装，不执行 OLE 服务器。它可以调用 `opc`。三种格式调用它，彼此不引用。
 - `model3d` 认 GLB，并读写 `am3d` 的相机、旋转和光源。三种格式的 3D 模块调用它。

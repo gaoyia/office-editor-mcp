@@ -192,7 +192,7 @@ pub(super) fn parse_set_table_cell_fill(
         ));
     }
     let fill = if has_color {
-        parse_color_field(obj, i, "setTableCellFill")?.map(CellFillSpec::Solid)
+        parse_color_field(obj, i, true, "setTableCellFill")?.map(CellFillSpec::Solid)
     } else {
         parse_fill_at(obj.get("fill"), &format!("ops[{i}].fill"))?.ok_or_else(|| {
             Error::with_path(

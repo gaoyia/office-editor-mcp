@@ -457,8 +457,7 @@ pub(super) fn parse_set_sort_state(
         })?;
         deny_keys_at(
             item_obj,
-            i,
-            &format!("columns[{j}]"),
+            &format!("ops[{i}].columns[{j}]"),
             &[
                 "ref",
                 "descending",

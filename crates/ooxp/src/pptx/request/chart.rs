@@ -36,7 +36,8 @@ pub(super) fn parse_insert_chart(
     )?;
     let id = require_id(obj, i)?;
     let (slide, on_notes, master) = chart::parse_insert_slide_id(&id, i)?.parts();
-    let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
+    let chart_type =
+        crate::chart::fields::parse_chart_type(obj.get("type"), &format!("ops[{i}].type"), None)?;
     let of_pie_type =
         crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
     crate::chart::reject_of_pie_on_other(
@@ -91,9 +92,9 @@ pub(super) fn parse_delete_chart(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<DeleteChartOp, Error> {
-    deny_keys(obj, i, &["op", "id"])?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
+    let (id, target) = crate::chart::fields::bind_chart_id(obj, i, &["op", "id"], |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(DeleteChartOp { id, target })
 }
 
@@ -101,30 +102,9 @@ pub(super) fn parse_set_chart_title(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartTitleOp, Error> {
-    deny_keys(obj, i, &["op", "id", "title"])?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let title = match obj.get("title") {
-        Some(Value::String(s)) => s.clone(),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "title".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].title"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartTitle".into(),
-                    field: "title".into(),
-                },
-                format!("ops[{i}].title"),
-            ));
-        }
-    };
+    let (id, target, title) = crate::chart::fields::bind_title(obj, i, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartTitleOp { id, target, title })
 }
 
@@ -132,43 +112,17 @@ pub(super) fn parse_set_chart_series(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartSeriesOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &["op", "id", "name", "categories", "values", "sizes"],
-    )?;
-    let id = require_id(obj, i)?;
-    let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
-    let name = match obj.get("name") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(s.clone()),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "name".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].name"),
-            ));
-        }
-    };
-    let categories = parse_datum_list(obj.get("categories"), &format!("ops[{i}].categories"))?;
-    let values = parse_datum_list(obj.get("values"), &format!("ops[{i}].values"))?;
-    let sizes = parse_datum_list(obj.get("sizes"), &format!("ops[{i}].sizes"))?;
-    if name.is_none() && categories.is_none() && values.is_none() && sizes.is_none() {
-        return Err(Error::with_path(
-            ErrorKind::NeedChartSeriesField,
-            format!("ops[{i}]"),
-        ));
-    }
+    let (id, (target, index), fields) = crate::chart::fields::bind_set_series(obj, i, |id| {
+        chart::parse_series_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartSeriesOp {
         id,
         target,
         index,
-        name,
-        categories,
-        values,
-        sizes,
+        name: fields.name,
+        categories: fields.categories,
+        values: fields.values,
+        sizes: fields.sizes,
     })
 }
 
@@ -176,48 +130,17 @@ pub(super) fn parse_add_chart_series(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<AddChartSeriesOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &["op", "id", "name", "categories", "values", "sizes", "type"],
-    )?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let name = match obj.get("name") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(s.clone()),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "name".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].name"),
-            ));
-        }
-    };
-    let categories = parse_datum_list(obj.get("categories"), &format!("ops[{i}].categories"))?;
-    let values = parse_datum_list(obj.get("values"), &format!("ops[{i}].values"))?
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "addChartSeries".into(),
-                    field: "values".into(),
-                },
-                format!("ops[{i}].values"),
-            )
-        })?;
-    let sizes = parse_datum_list(obj.get("sizes"), &format!("ops[{i}].sizes"))?;
-    let series_type = parse_optional_combo_series_type(obj.get("type"), &format!("ops[{i}].type"))?;
+    let (id, target, fields) = crate::chart::fields::bind_add_series(obj, i, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(AddChartSeriesOp {
         id,
         target,
-        name,
-        categories,
-        values,
-        sizes,
-        series_type,
+        name: fields.name,
+        categories: fields.categories,
+        values: fields.values,
+        sizes: fields.sizes,
+        series_type: fields.series_type,
     })
 }
 
@@ -225,9 +148,9 @@ pub(super) fn parse_delete_chart_series(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<DeleteChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id"])?;
-    let id = require_id(obj, i)?;
-    let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
+    let (id, (target, index)) = crate::chart::fields::bind_chart_id(obj, i, &["op", "id"], |id| {
+        chart::parse_series_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(DeleteChartSeriesOp { id, target, index })
 }
 
@@ -235,42 +158,15 @@ pub(super) fn parse_set_chart_type(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartTypeOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &[
-            "op",
-            "id",
-            "type",
-            "ofPieType",
-            "stockKind",
-            "surfaceKind",
-            "layoutId",
-        ],
-    )?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
-    if chart_type == ChartType::Combo {
-        return Err(Error::with_path(
-            ErrorKind::InvalidChartType,
-            format!("ops[{i}].type"),
-        ));
-    }
-    let of_pie_type =
-        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
-    crate::chart::reject_of_pie_on_other(
-        chart_type,
-        of_pie_type.as_deref(),
-        &format!("ops[{i}].ofPieType"),
-    )?;
-    let extra = crate::chart::parse_chart_extra(obj, chart_type, 0, &format!("ops[{i}]"), false)?;
+    let (id, target, fields) = crate::chart::fields::bind_set_type(obj, i, None, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartTypeOp {
         id,
         target,
-        chart_type,
-        of_pie_type,
-        extra,
+        chart_type: fields.chart_type,
+        of_pie_type: fields.of_pie_type,
+        extra: fields.extra,
     })
 }
 
@@ -278,62 +174,14 @@ pub(super) fn parse_set_chart_axis_title(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartAxisTitleOp, Error> {
-    deny_keys(obj, i, &["op", "id", "axis", "title"])?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let axis = match obj.get("axis") {
-        Some(Value::String(s)) if s == "cat" || s == "val" => s.clone(),
-        Some(Value::String(_)) => {
-            return Err(Error::with_path(
-                ErrorKind::InvalidChartAxis,
-                format!("ops[{i}].axis"),
-            ));
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "axis".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].axis"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartAxisTitle".into(),
-                    field: "axis".into(),
-                },
-                format!("ops[{i}].axis"),
-            ));
-        }
-    };
-    let title = match obj.get("title") {
-        Some(Value::String(s)) => s.clone(),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "title".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].title"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartAxisTitle".into(),
-                    field: "title".into(),
-                },
-                format!("ops[{i}].title"),
-            ));
-        }
-    };
+    let (id, target, fields) = crate::chart::fields::bind_axis_title(obj, i, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartAxisTitleOp {
         id,
         target,
-        axis,
-        title,
+        axis: fields.axis,
+        title: fields.title,
     })
 }
 
@@ -341,36 +189,14 @@ pub(super) fn parse_set_chart_legend(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartLegendOp, Error> {
-    deny_keys(obj, i, &["op", "id", "show", "pos"])?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let show = parse_required_bool(obj.get("show"), i, "setChartLegend", "show")?;
-    let pos = match obj.get("pos") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) if matches!(s.as_str(), "b" | "t" | "l" | "r" | "tr") => {
-            Some(s.clone())
-        }
-        Some(Value::String(_)) => {
-            return Err(Error::with_path(
-                ErrorKind::InvalidLegendPos,
-                format!("ops[{i}].pos"),
-            ));
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "pos".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].pos"),
-            ));
-        }
-    };
+    let (id, target, fields) = crate::chart::fields::bind_legend(obj, i, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartLegendOp {
         id,
         target,
-        show,
-        pos,
+        show: fields.show,
+        pos: fields.pos,
     })
 }
 
@@ -378,10 +204,9 @@ pub(super) fn parse_set_chart_data_labels(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartDataLabelsOp, Error> {
-    deny_keys(obj, i, &["op", "id", "show"])?;
-    let id = require_id(obj, i)?;
-    let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let show = parse_required_bool(obj.get("show"), i, "setChartDataLabels", "show")?;
+    let (id, target, show) = crate::chart::fields::bind_data_labels(obj, i, |id| {
+        chart::parse_chart_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartDataLabelsOp { id, target, show })
 }
 
@@ -431,23 +256,9 @@ pub(super) fn parse_insert_trendline(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<InsertTrendlineOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &[
-            "op",
-            "id",
-            "type",
-            "order",
-            "period",
-            "displayRSquared",
-            "displayEquation",
-            "name",
-        ],
-    )?;
-    let id = require_id(obj, i)?;
-    let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
-    let spec = crate::chart::remain::parse_trendline_write(obj, i, true)?;
+    let (id, (target, index), spec) = crate::chart::fields::bind_trendline(obj, i, true, |id| {
+        chart::parse_series_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(InsertTrendlineOp {
         id,
         target,
@@ -460,23 +271,10 @@ pub(super) fn parse_set_trendline(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetTrendlineOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &[
-            "op",
-            "id",
-            "type",
-            "order",
-            "period",
-            "displayRSquared",
-            "displayEquation",
-            "name",
-        ],
-    )?;
-    let id = require_id(obj, i)?;
-    let (target, index, tl_index) = chart::parse_trendline_id(&id, &format!("ops[{i}].id"))?;
-    let spec = crate::chart::remain::parse_trendline_write(obj, i, false)?;
+    let (id, (target, index, tl_index), spec) =
+        crate::chart::fields::bind_trendline(obj, i, false, |id| {
+            chart::parse_trendline_id(id, &format!("ops[{i}].id"))
+        })?;
     Ok(SetTrendlineOp {
         id,
         target,
@@ -490,9 +288,10 @@ pub(super) fn parse_delete_trendline(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<DeleteTrendlineOp, Error> {
-    deny_keys(obj, i, &["op", "id"])?;
-    let id = require_id(obj, i)?;
-    let (target, index, tl_index) = chart::parse_trendline_id(&id, &format!("ops[{i}].id"))?;
+    let (id, (target, index, tl_index)) =
+        crate::chart::fields::bind_chart_id(obj, i, &["op", "id"], |id| {
+            chart::parse_trendline_id(id, &format!("ops[{i}].id"))
+        })?;
     Ok(DeleteTrendlineOp {
         id,
         target,
@@ -505,16 +304,9 @@ pub(super) fn parse_insert_error_bars(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<InsertErrorBarsOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &[
-            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
-        ],
-    )?;
-    let id = require_id(obj, i)?;
-    let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
-    let spec = crate::chart::remain::parse_error_bars_write(obj, i, true)?;
+    let (id, (target, index), spec) = crate::chart::fields::bind_error_bars(obj, i, true, |id| {
+        chart::parse_series_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(InsertErrorBarsOp {
         id,
         target,
@@ -527,16 +319,10 @@ pub(super) fn parse_set_error_bars(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetErrorBarsOp, Error> {
-    deny_keys(
-        obj,
-        i,
-        &[
-            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
-        ],
-    )?;
-    let id = require_id(obj, i)?;
-    let (target, index, eb_index) = chart::parse_error_bars_id(&id, &format!("ops[{i}].id"))?;
-    let spec = crate::chart::remain::parse_error_bars_write(obj, i, false)?;
+    let (id, (target, index, eb_index), spec) =
+        crate::chart::fields::bind_error_bars(obj, i, false, |id| {
+            chart::parse_error_bars_id(id, &format!("ops[{i}].id"))
+        })?;
     Ok(SetErrorBarsOp {
         id,
         target,
@@ -550,9 +336,10 @@ pub(super) fn parse_delete_error_bars(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<DeleteErrorBarsOp, Error> {
-    deny_keys(obj, i, &["op", "id"])?;
-    let id = require_id(obj, i)?;
-    let (target, index, eb_index) = chart::parse_error_bars_id(&id, &format!("ops[{i}].id"))?;
+    let (id, (target, index, eb_index)) =
+        crate::chart::fields::bind_chart_id(obj, i, &["op", "id"], |id| {
+            chart::parse_error_bars_id(id, &format!("ops[{i}].id"))
+        })?;
     Ok(DeleteErrorBarsOp {
         id,
         target,
@@ -565,36 +352,15 @@ pub(super) fn parse_set_series_axis(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetChartSeriesAxisOp, Error> {
-    deny_keys(obj, i, &["op", "id", "axis"])?;
-    let id = require_id(obj, i)?;
-    let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
-    let secondary = crate::chart::remain::parse_series_axis(obj, i)?;
+    let (id, (target, index), secondary) = crate::chart::fields::bind_series_axis(obj, i, |id| {
+        chart::parse_series_id(id, &format!("ops[{i}].id"))
+    })?;
     Ok(SetChartSeriesAxisOp {
         id,
         target,
         index,
         secondary,
     })
-}
-
-pub(super) fn parse_chart_type_field(v: Option<&Value>, path: &str) -> Result<ChartType, Error> {
-    match v {
-        Some(Value::String(s)) => ChartType::parse(s)
-            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, path.to_string())),
-        Some(_) => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: "type".into(),
-                expected: TypeName::String,
-            },
-            path,
-        )),
-        None => Err(Error::with_path(
-            ErrorKind::MissingField {
-                field: "type".into(),
-            },
-            path,
-        )),
-    }
 }
 
 pub(super) fn parse_chart_title_field(
@@ -696,24 +462,35 @@ pub(super) fn parse_insert_series(
                 ));
             }
         };
-        let categories = parse_datum_list(
+        let categories = crate::chart::fields::parse_datum_list_at(
             obj.get("categories"),
             &format!("{base}.series[{j}].categories"),
+            &format!("series[{j}].categories"),
         )?;
-        let values = parse_datum_list(obj.get("values"), &format!("{base}.series[{j}].values"))?
-            .filter(|v| !v.is_empty())
-            .ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::OpRequiresField {
-                        op: op.into(),
-                        field: "series[].values".into(),
-                    },
-                    format!("{base}.series[{j}].values"),
-                )
-            })?;
-        let sizes = parse_datum_list(obj.get("sizes"), &format!("{base}.series[{j}].sizes"))?;
-        let series_type =
-            parse_optional_combo_series_type(obj.get("type"), &format!("{base}.series[{j}].type"))?;
+        let values = crate::chart::fields::parse_datum_list_at(
+            obj.get("values"),
+            &format!("{base}.series[{j}].values"),
+            &format!("series[{j}].values"),
+        )?
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: op.into(),
+                    field: "series[].values".into(),
+                },
+                format!("{base}.series[{j}].values"),
+            )
+        })?;
+        let sizes = crate::chart::fields::parse_datum_list_at(
+            obj.get("sizes"),
+            &format!("{base}.series[{j}].sizes"),
+            &format!("series[{j}].sizes"),
+        )?;
+        let series_type = crate::chart::fields::parse_combo_type(
+            obj.get("type"),
+            &format!("{base}.series[{j}].type"),
+        )?;
         out.push(NewSeries {
             name,
             categories,
@@ -723,52 +500,6 @@ pub(super) fn parse_insert_series(
         });
     }
     Ok(out)
-}
-
-pub(super) fn parse_optional_combo_series_type(
-    v: Option<&Value>,
-    path: &str,
-) -> Result<Option<ChartType>, Error> {
-    match v {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) => Ok(Some(ChartType::parse_combo_series(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidComboSeriesType, path.to_string())
-        })?)),
-        Some(_) => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: "type".into(),
-                expected: TypeName::String,
-            },
-            path,
-        )),
-    }
-}
-
-pub(super) fn parse_datum_list(v: Option<&Value>, path: &str) -> Result<Option<Vec<Value>>, Error> {
-    match v {
-        None | Some(Value::Null) => Ok(None),
-        Some(Value::Array(a)) => {
-            for (j, item) in a.iter().enumerate() {
-                if !matches!(
-                    item,
-                    Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_)
-                ) {
-                    return Err(Error::with_path(
-                        ErrorKind::InvalidCellValue,
-                        format!("{path}[{j}]"),
-                    ));
-                }
-            }
-            Ok(Some(a.clone()))
-        }
-        Some(_) => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: "array".into(),
-                expected: TypeName::Array,
-            },
-            path,
-        )),
-    }
 }
 
 pub(crate) fn parse_create_chart(
@@ -803,7 +534,8 @@ pub(crate) fn parse_create_chart(
             "hyperlink",
         ],
     )?;
-    let chart_type = parse_chart_type_field(obj.get("type"), &format!("{prefix}.type"))?;
+    let chart_type =
+        crate::chart::fields::parse_chart_type(obj.get("type"), &format!("{prefix}.type"), None)?;
     let of_pie_type =
         crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("{prefix}.ofPieType"))?;
     crate::chart::reject_of_pie_on_other(

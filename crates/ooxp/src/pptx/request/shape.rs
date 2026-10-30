@@ -442,7 +442,7 @@ pub(super) fn parse_set_shape_fill(
     deny_keys(obj, i, &["op", "id", "color"])?;
     let id = require_id(obj, i)?;
     let (target, placeholder) = parse_slide_or_master_shape(&id, i)?;
-    let color = parse_color_field(obj, i, "setShapeFill")?;
+    let color = parse_color_field(obj, i, true, "setShapeFill")?;
     Ok(SetShapeFillOp {
         id,
         target,
@@ -484,7 +484,7 @@ pub(super) fn parse_set_shape_line(
             format!("ops[{i}].color"),
         ));
     }
-    let color = parse_color_field(obj, i, "setShapeLine")?;
+    let color = parse_color_field(obj, i, true, "setShapeLine")?;
     let width = parse_emu_field(obj.get("width"), i, "width")?;
     if color.is_none() && width.is_some() {
         return Err(Error::with_path(

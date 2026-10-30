@@ -2,6 +2,7 @@
 
 pub mod chartex;
 pub mod embed;
+pub mod fields;
 pub mod remain;
 
 use serde_json::{json, Map, Number, Value};

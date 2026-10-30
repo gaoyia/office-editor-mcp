@@ -512,7 +512,7 @@ pub(super) fn parse_pivot_source(
             format!("ops[{i}].source"),
         )),
         Some(Value::Object(obj)) => {
-            deny_keys_at(obj, i, "source", &["sheet", "ref"])?;
+            deny_keys_at(obj, &format!("ops[{i}].source"), &["sheet", "ref"])?;
             let sheet = match obj.get("sheet") {
                 None => None,
                 Some(Value::Null) => {
