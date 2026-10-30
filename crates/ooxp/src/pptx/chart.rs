@@ -109,10 +109,10 @@ pub fn parse_series_id(id: &str, json_path: &str) -> Result<(ChartTarget, usize)
 }
 
 pub fn parse_trendline_id(id: &str, json_path: &str) -> Result<(ChartTarget, usize, usize), Error> {
-    let (left, k) = crate::chart::remain::parse_member_id(
+    let (left, k) = crate::chart::series_decor::parse_member_id(
         id,
         "trendline",
-        crate::chart::remain::IdFromOne::Trendline,
+        crate::chart::series_decor::IdFromOne::Trendline,
     )
     .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, json_path.to_string()))?;
     let (target, index) = parse_series_id(left, json_path)?;
@@ -123,10 +123,10 @@ pub fn parse_error_bars_id(
     id: &str,
     json_path: &str,
 ) -> Result<(ChartTarget, usize, usize), Error> {
-    let (left, k) = crate::chart::remain::parse_member_id(
+    let (left, k) = crate::chart::series_decor::parse_member_id(
         id,
         "errorBars",
-        crate::chart::remain::IdFromOne::ErrorBars,
+        crate::chart::series_decor::IdFromOne::ErrorBars,
     )
     .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, json_path.to_string()))?;
     let (target, index) = parse_series_id(left, json_path)?;
@@ -866,7 +866,7 @@ pub fn apply_add_series(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
-    crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
+    crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let ty = chart::inspect_type(&space.root, false);
     if ty == "pie" || ty == "doughnut" {
         return Err(Error::with_path(
@@ -1029,7 +1029,7 @@ pub fn apply_delete_series(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
-    crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
+    crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let n = chart::series_count(&space.root);
     if op.index >= n {
         return Err(Error::with_path(
@@ -1130,7 +1130,7 @@ pub fn apply_insert_trendline(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::insert_trendline(&mut space.root, &op.id, op.index, &op.spec, i)?;
+    crate::chart::series_decor::insert_trendline(&mut space.root, &op.id, op.index, &op.spec, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1145,7 +1145,7 @@ pub fn apply_set_trendline(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::set_trendline(
+    crate::chart::series_decor::set_trendline(
         &mut space.root,
         &op.id,
         op.index,
@@ -1167,7 +1167,13 @@ pub fn apply_delete_trendline(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::delete_trendline(&mut space.root, &op.id, op.index, op.tl_index, i)?;
+    crate::chart::series_decor::delete_trendline(
+        &mut space.root,
+        &op.id,
+        op.index,
+        op.tl_index,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1182,7 +1188,7 @@ pub fn apply_insert_error_bars(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::insert_error_bars(&mut space.root, &op.id, op.index, &op.spec, i)?;
+    crate::chart::series_decor::insert_error_bars(&mut space.root, &op.id, op.index, &op.spec, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1197,7 +1203,7 @@ pub fn apply_set_error_bars(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::set_error_bars(
+    crate::chart::series_decor::set_error_bars(
         &mut space.root,
         &op.id,
         op.index,
@@ -1219,7 +1225,13 @@ pub fn apply_delete_error_bars(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::delete_error_bars(&mut space.root, &op.id, op.index, op.eb_index, i)?;
+    crate::chart::series_decor::delete_error_bars(
+        &mut space.root,
+        &op.id,
+        op.index,
+        op.eb_index,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1234,7 +1246,13 @@ pub fn apply_series_axis(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
-    crate::chart::remain::set_series_axis(&mut space.root, &op.id, op.index, op.secondary, i)?;
+    crate::chart::series_decor::set_series_axis(
+        &mut space.root,
+        &op.id,
+        op.index,
+        op.secondary,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }

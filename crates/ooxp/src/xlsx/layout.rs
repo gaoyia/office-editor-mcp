@@ -658,10 +658,7 @@ fn col_span(col: &Element) -> Option<(u32, u32)> {
 }
 
 fn attr_true(el: &Element, name: &str) -> bool {
-    matches!(
-        el.attr(name).map(str::trim),
-        Some("1" | "true" | "TRUE" | "on")
-    )
+    crate::xml::attr_is_true_trimmed(el, name)
 }
 
 fn parse_xml_f64(s: &str) -> Option<f64> {

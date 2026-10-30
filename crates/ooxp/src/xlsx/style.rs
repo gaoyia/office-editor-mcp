@@ -71,8 +71,6 @@ pub struct InsertCellStyleOp {
 
 #[derive(Debug, Clone)]
 pub struct DeleteCellStyleOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub index: usize,
 }
 

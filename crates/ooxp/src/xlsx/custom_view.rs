@@ -31,15 +31,11 @@ pub struct InsertCustomViewOp {
 
 #[derive(Debug, Clone)]
 pub struct DeleteCustomViewOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub index: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct ShowCustomViewOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub index: usize,
 }
 

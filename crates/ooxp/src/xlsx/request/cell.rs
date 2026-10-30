@@ -632,7 +632,7 @@ pub(super) fn parse_delete_cell_style(
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let index = style::parse_cell_style_id(&id, &format!("ops[{i}].id"))?;
-    Ok(style::DeleteCellStyleOp { id, index })
+    Ok(style::DeleteCellStyleOp { index })
 }
 
 pub(super) fn parse_set_cell_named_style(

@@ -469,8 +469,5 @@ fn patch_attr(el: &mut Element, name: &str, p: &Patch<String>) {
 }
 
 fn attr_true(el: &Element, name: &str) -> bool {
-    matches!(
-        el.attr(name).map(str::trim),
-        Some("1" | "true" | "TRUE" | "on")
-    )
+    crate::xml::attr_is_true_trimmed(el, name)
 }

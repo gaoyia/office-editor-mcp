@@ -30,8 +30,6 @@ const SPIN_COUNT: u32 = 100_000;
 
 #[derive(Debug, Clone)]
 pub struct SetProtectionOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub enforced: Option<bool>,
     pub edit: Option<String>,
     pub formatting: Option<bool>,
@@ -510,10 +508,7 @@ pub fn parse_op(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetPro
             format!("ops[{i}].id"),
         ));
     }
-    parse_fields(obj, &format!("ops[{i}]")).map(|mut op| {
-        op.id = id;
-        op
-    })
+    parse_fields(obj, &format!("ops[{i}]"))
 }
 
 fn parse_fields(
@@ -557,7 +552,6 @@ fn parse_fields(
         return Err(Error::with_path(ErrorKind::NeedProtectionField, path));
     }
     Ok(SetProtectionOp {
-        id: String::new(),
         enforced,
         edit,
         formatting,

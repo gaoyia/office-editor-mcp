@@ -45,7 +45,6 @@ impl ContentTypes {
         Self::parse(pkg.get(CONTENT_TYPES_PART)?)
     }
 
-    #[allow(dead_code)]
     pub fn content_type_of(&self, opc_name: &str) -> Option<&str> {
         let name = if opc_name.starts_with('/') {
             opc_name
@@ -85,7 +84,6 @@ impl ContentTypes {
             .retain(|(p, _)| !same_part_name(p, part_name));
     }
 
-    #[allow(dead_code)]
     pub fn ensure_default(&mut self, ext: &str, content_type: &str) {
         if !self.defaults.iter().any(|(e, _)| e == ext) {
             self.defaults

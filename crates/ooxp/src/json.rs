@@ -34,6 +34,57 @@ pub enum Action {
     Help,
 }
 
+/// 这个动作的信封允许哪些字段。领域 JSON 的字段名以这里为准。
+pub fn envelope_fields(action: Action) -> &'static [&'static str] {
+    match action {
+        Action::Help => &[
+            "schemaVersion",
+            "action",
+            "format",
+            "q",
+            "op",
+            "name",
+            "locale",
+        ],
+        Action::Inspect => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "scope",
+            "locale",
+        ],
+        Action::Create => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "workbook",
+            "document",
+            "presentation",
+            "locale",
+        ],
+        Action::Apply => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "output",
+            "ops",
+            "locale",
+        ],
+        Action::ExportMedia | Action::ExportChartData => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "id",
+            "output",
+            "locale",
+        ],
+    }
+}
+
 pub struct Request {
     pub action: Action,
     pub obj: Map<String, Value>,

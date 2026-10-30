@@ -1704,7 +1704,7 @@ use std::collections::HashMap;
 type RunSlice<'a> = (
     String,
     Option<Element>,
-    Option<&'a super::create_round5::RunFormatOwned>,
+    Option<&'a super::create_para::RunFormatOwned>,
 );
 use super::comments;
 use super::format;
@@ -2085,7 +2085,7 @@ pub(crate) fn slice_at<'a>(
     chars: &[char],
     start: usize,
     end: usize,
-    format: Option<&'a super::create_round5::RunFormatOwned>,
+    format: Option<&'a super::create_para::RunFormatOwned>,
 ) -> RunSlice<'a> {
     let text: String = chars[start..end].iter().collect();
     let rpr = if start < chars.len() {

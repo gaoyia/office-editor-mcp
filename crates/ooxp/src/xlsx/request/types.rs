@@ -978,9 +978,6 @@ pub struct InsertCommentOp {
     pub a1: String,
     pub text: String,
     pub author: String,
-    /// xlsx 接受但不写入 XML，树上恒为 null。
-    #[allow(dead_code)]
-    pub initials: String,
     pub date: Option<String>,
 }
 
@@ -989,9 +986,6 @@ pub struct ReplyCommentOp {
     pub id: String,
     pub text: String,
     pub author: String,
-    /// xlsx 接受但不写入 XML，树上恒为 null。
-    #[allow(dead_code)]
-    pub initials: String,
     pub date: Option<String>,
 }
 
@@ -1010,9 +1004,6 @@ pub struct SetCommentTextOp {
 pub struct SetCommentMetaOp {
     pub id: String,
     pub author: Option<String>,
-    /// xlsx 接受但不写入 XML。
-    #[allow(dead_code)]
-    pub initials: Option<String>,
     pub date: Option<String>,
 }
 
@@ -1296,8 +1287,6 @@ pub struct DeleteProtectedRangeOp {
 
 #[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub sheet: String,
     pub slot: HfSlot,
     pub text: String,
@@ -1555,7 +1544,7 @@ pub struct InsertTrendlineOp {
     pub id: String,
     pub target: SheetChartId,
     pub index: usize,
-    pub spec: crate::chart::remain::TrendlineWrite,
+    pub spec: crate::chart::series_decor::TrendlineWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -1564,7 +1553,7 @@ pub struct SetTrendlineOp {
     pub target: SheetChartId,
     pub index: usize,
     pub tl_index: usize,
-    pub spec: crate::chart::remain::TrendlineWrite,
+    pub spec: crate::chart::series_decor::TrendlineWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -1580,7 +1569,7 @@ pub struct InsertErrorBarsOp {
     pub id: String,
     pub target: SheetChartId,
     pub index: usize,
-    pub spec: crate::chart::remain::ErrorBarsWrite,
+    pub spec: crate::chart::series_decor::ErrorBarsWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -1589,7 +1578,7 @@ pub struct SetErrorBarsOp {
     pub target: SheetChartId,
     pub index: usize,
     pub eb_index: usize,
-    pub spec: crate::chart::remain::ErrorBarsWrite,
+    pub spec: crate::chart::series_decor::ErrorBarsWrite,
 }
 
 #[derive(Debug, Clone)]

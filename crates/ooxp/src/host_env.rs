@@ -1,6 +1,8 @@
 //! 调用方提供的时间、进程号和随机数。本机没有另行传入时，仍用系统的这三项。
+//! 批注的 GUID 和时间字符串也在这里生成。
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 struct Env {
     now_nanos: fn() -> u128,
@@ -69,6 +71,84 @@ pub fn pid() -> u128 {
         return v;
     }
     native_pid()
+}
+
+static COMMENT_GUID_SEQ: AtomicU64 = AtomicU64::new(1);
+
+pub fn new_comment_guid() -> String {
+    let t = now_nanos();
+    let n = COMMENT_GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
+    let proc = pid();
+    let mix = t ^ (n << 48) ^ (proc << 16);
+    let mut b = [0u8; 16];
+    for (i, byte) in b.iter_mut().enumerate() {
+        *byte = (mix >> ((i % 16) * 8)) as u8 ^ (i as u8).wrapping_mul(31);
+    }
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    format!(
+        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
+        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13],
+        b[14], b[15]
+    )
+}
+
+pub fn utc_now_millis() -> String {
+    let (secs, millis) = unix_secs_millis();
+    unix_to_dt(secs, millis)
+}
+
+pub fn looks_like_guid(s: &str) -> bool {
+    let inner = s
+        .strip_prefix('{')
+        .and_then(|t| t.strip_suffix('}'))
+        .unwrap_or("");
+    inner.len() == 36 && inner.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+}
+
+fn unix_to_dt(secs: u64, millis: u32) -> String {
+    let mut days = secs / 86_400;
+    let rem = secs % 86_400;
+    let hour = rem / 3600;
+    let min = (rem % 3600) / 60;
+    let sec = rem % 60;
+    let mut year = 1970u64;
+    loop {
+        let len = if is_leap(year) { 366 } else { 365 };
+        if days < len {
+            break;
+        }
+        days -= len;
+        year += 1;
+    }
+    let dim = [
+        31u64,
+        if is_leap(year) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
+    let mut month = 1u64;
+    for (i, d) in dim.iter().enumerate() {
+        if days < *d {
+            month = i as u64 + 1;
+            break;
+        }
+        days -= *d;
+    }
+    let day = days + 1;
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{millis:03}")
+}
+
+fn is_leap(y: u64) -> bool {
+    y.is_multiple_of(4) && !y.is_multiple_of(100) || y.is_multiple_of(400)
 }
 
 pub fn fill_random(buf: &mut [u8]) {

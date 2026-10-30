@@ -38,9 +38,6 @@ pub enum OleTarget {
         kind: super::hf::HfKind,
         hf_type: super::hf::HfType,
         n: u32,
-        /// 解析自 id 左侧段落，查找按整部件计。
-        #[allow(dead_code)]
-        para: para::BodyPara,
         key: OleKey,
     },
 }
@@ -139,12 +136,11 @@ pub fn parse_ole_id_at(id: &str, path: &str) -> Result<OleTarget, Error> {
             kind,
             hf_type,
             n,
-            para,
+            para: _,
         } => Ok(OleTarget::HeaderFooter {
             kind,
             hf_type,
             n,
-            para,
             key,
         }),
         ParaTarget::InTextBox { .. } | ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {

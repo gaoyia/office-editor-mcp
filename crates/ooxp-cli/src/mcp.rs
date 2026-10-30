@@ -3,7 +3,7 @@
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
-use ooxp::{peek_lang, run, written_json, Lang, RunOutput};
+use ooxp::{envelope_fields, peek_lang, run, written_json, Action, Lang, RunOutput};
 use serde_json::{json, Map, Value};
 
 pub fn parse_lang(args: &[std::ffi::OsString]) -> Result<Option<String>, String> {
@@ -201,100 +201,154 @@ fn tools(lang: Lang) -> Value {
             tool(
                 "inspect",
                 say(lang, "按 scope 看文件的一部分。范围不要一次覆盖整份文件。要改内容，改用 apply，并只用这次返回的 id。", "Read part of a file by scope. Do not cover the whole file at once. To change content, use apply, and use only ids from this result."),
-                json!({
-                    "path": { "type": "string", "minLength": 1, "description": say(lang, "本机上的 Office 文件路径", "Path of the Office file on this machine") },
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "scope": { "type": "object", "description": say(lang, "查看范围。字段名用 help 打开 inspectScope。", "What to read. Open inspectScope with help for the field names.") },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "inspect" }
-                }),
+                domain_properties(Action::Inspect, lang),
                 &["path"],
                 lang,
             ),
             tool(
                 "create",
                 say(lang, "只用于新建文件。已经存在的文件用 apply。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。", "Only for a new file. An existing file uses apply. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation."),
-                json!({
-                    "path": { "type": "string", "minLength": 1, "description": say(lang, "新建文件要写到的本机路径", "Local path for the new file") },
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "workbook": { "type": "object" },
-                    "document": { "type": "object" },
-                    "presentation": { "type": "object" },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "create" }
-                }),
+                domain_properties(Action::Create, lang),
                 &["path"],
                 lang,
             ),
             tool(
                 "apply",
                 say(lang, "按 id 和 op 修改文件里点名的内容。请求里放 ops，不要放整棵 inspect 树。某一条 op 的字段先用 help 查。", "Change named content by id and op. Put ops in the request, not the whole inspect tree. Look up one op's fields with help first."),
-                json!({
-                    "path": { "type": "string", "minLength": 1, "description": say(lang, "要修改的 Office 文件路径", "Path of the Office file to change") },
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "output": { "type": "string", "minLength": 1, "description": say(lang, "另存路径。省略时写回 path", "Save-as path. Omit it to write back to path") },
-                    "ops": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": { "type": "object" },
-                        "description": say(lang, "操作列表。每条的字段用 help 按 format 和 op 查。", "Operation list. Look up each item's fields with help, using format and op.")
-                    },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "apply" }
-                }),
+                domain_properties(Action::Apply, lang),
                 &["path", "ops"],
                 lang,
             ),
             tool(
                 "exportMedia",
                 say(lang, "按 id 把图、音视频、OLE、墨迹、3D 模型或嵌入字体的原字节写到 output。源文件保持不变。这些字节不进入 inspect 树。", "Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to output by id. The source file stays unchanged. Those bytes do not enter the inspect tree."),
-                json!({
-                    "path": { "type": "string", "minLength": 1, "description": say(lang, "源 Office 文件的本机路径", "Local path of the source Office file") },
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "id": { "type": "string", "minLength": 1, "description": say(lang, "inspect 树上的图、音视频、OLE、墨迹、3D 或嵌入字体 id", "Id of a picture, audio, video, OLE object, ink, 3D model, or embedded font on the inspect tree") },
-                    "output": { "type": "string", "minLength": 1, "description": say(lang, "字节要写到的本机路径", "Local path where the bytes are written") },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "exportMedia" }
-                }),
+                domain_properties(Action::ExportMedia, lang),
                 &["path", "id", "output"],
                 lang,
             ),
             tool(
                 "exportChartData",
                 say(lang, "按图表 id 把 docx 或 pptx 图表背后的工作簿写到 output。源文件保持不变，公式不计算。xlsx 没有这个动作。", "Write the workbook behind a docx or pptx chart to output by chart id. The source file stays unchanged, and formulas are not calculated. xlsx does not have this action."),
-                json!({
-                    "path": { "type": "string", "minLength": 1, "description": say(lang, "源 docx 或 pptx 的本机路径", "Local path of the source docx or pptx") },
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "id": { "type": "string", "minLength": 1, "description": say(lang, "inspect 树上的图表 id", "Chart id on the inspect tree") },
-                    "output": { "type": "string", "minLength": 1, "description": say(lang, "工作簿要写到的本机路径", "Local path where the workbook is written") },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "exportChartData" }
-                }),
+                domain_properties(Action::ExportChartData, lang),
                 &["path", "id", "output"],
                 lang,
             ),
             tool(
                 "help",
                 say(lang, "查动作、操作和字段怎么填。一次只打开一层。format、q、op、name 的用法见返回里的 ask。这三项不要同时出现。", "Look up how to fill an action, operation, or field. Open one layer at a time. The result's ask explains format, q, op, and name. Do not send q, op, and name together."),
-                json!({
-                    "format": { "enum": ["xlsx", "xlsm", "docx", "pptx"] },
-                    "q": { "type": "string", "minLength": 1 },
-                    "op": { "type": "string", "minLength": 1 },
-                    "name": { "type": "string", "minLength": 1 },
-                    "locale": { "type": "string" },
-                    "schemaVersion": { "const": 1 },
-                    "action": { "const": "help" }
-                }),
+                domain_properties(Action::Help, lang),
                 &[],
                 lang,
             ),
         ]
     })
+}
+
+fn domain_properties(action: Action, lang: Lang) -> Value {
+    let name = action_name(action);
+    let mut properties = Map::new();
+    for field in envelope_fields(action) {
+        properties.insert((*field).to_string(), field_schema(name, field, lang));
+    }
+    Value::Object(properties)
+}
+
+fn action_name(action: Action) -> &'static str {
+    match action {
+        Action::Inspect => "inspect",
+        Action::Create => "create",
+        Action::Apply => "apply",
+        Action::ExportMedia => "exportMedia",
+        Action::ExportChartData => "exportChartData",
+        Action::Help => "help",
+    }
+}
+
+fn field_schema(action: &str, field: &str, lang: Lang) -> Value {
+    match field {
+        "schemaVersion" => json!({ "const": 1 }),
+        "action" => json!({ "const": action }),
+        "format" => json!({ "enum": ["xlsx", "xlsm", "docx", "pptx"] }),
+        "locale" => json!({ "type": "string" }),
+        "path" => json!({
+            "type": "string",
+            "minLength": 1,
+            "description": say(lang, path_zh(action), path_en(action))
+        }),
+        "scope" => json!({
+            "type": "object",
+            "description": say(lang, "查看范围。字段名用 help 打开 inspectScope。", "What to read. Open inspectScope with help for the field names.")
+        }),
+        "workbook" | "document" | "presentation" => json!({ "type": "object" }),
+        "output" => json!({
+            "type": "string",
+            "minLength": 1,
+            "description": say(lang, output_zh(action), output_en(action))
+        }),
+        "ops" => json!({
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "object" },
+            "description": say(lang, "操作列表。每条的字段用 help 按 format 和 op 查。", "Operation list. Look up each item's fields with help, using format and op.")
+        }),
+        "id" => json!({
+            "type": "string",
+            "minLength": 1,
+            "description": say(lang, id_zh(action), id_en(action))
+        }),
+        "q" | "op" | "name" => json!({ "type": "string", "minLength": 1 }),
+        other => panic!("mcp 没有 {other} 的形状"),
+    }
+}
+
+fn path_zh(action: &str) -> &'static str {
+    match action {
+        "create" => "新建文件要写到的本机路径",
+        "apply" => "要修改的 Office 文件路径",
+        "exportMedia" => "源 Office 文件的本机路径",
+        "exportChartData" => "源 docx 或 pptx 的本机路径",
+        _ => "本机上的 Office 文件路径",
+    }
+}
+
+fn path_en(action: &str) -> &'static str {
+    match action {
+        "create" => "Local path for the new file",
+        "apply" => "Path of the Office file to change",
+        "exportMedia" => "Local path of the source Office file",
+        "exportChartData" => "Local path of the source docx or pptx",
+        _ => "Path of the Office file on this machine",
+    }
+}
+
+fn output_zh(action: &str) -> &'static str {
+    match action {
+        "exportMedia" => "字节要写到的本机路径",
+        "exportChartData" => "工作簿要写到的本机路径",
+        _ => "另存路径。省略时写回 path",
+    }
+}
+
+fn output_en(action: &str) -> &'static str {
+    match action {
+        "exportMedia" => "Local path where the bytes are written",
+        "exportChartData" => "Local path where the workbook is written",
+        _ => "Save-as path. Omit it to write back to path",
+    }
+}
+
+fn id_zh(action: &str) -> &'static str {
+    match action {
+        "exportChartData" => "inspect 树上的图表 id",
+        _ => "inspect 树上的图、音视频、OLE、墨迹、3D 或嵌入字体 id",
+    }
+}
+
+fn id_en(action: &str) -> &'static str {
+    match action {
+        "exportChartData" => "Chart id on the inspect tree",
+        _ => "Id of a picture, audio, video, OLE object, ink, 3D model, or embedded font on the inspect tree",
+    }
 }
 
 fn tool(

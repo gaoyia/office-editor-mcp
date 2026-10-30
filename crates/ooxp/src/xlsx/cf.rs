@@ -859,10 +859,7 @@ fn format_sqref(ranges: &[(CellRef, CellRef)]) -> String {
 }
 
 fn attr_true(el: &Element, name: &str) -> bool {
-    matches!(
-        el.attr(name),
-        Some("1") | Some("true") | Some("TRUE") | Some("on")
-    )
+    crate::xml::attr_is_true(el, name)
 }
 
 fn attr_false(el: &Element, name: &str) -> bool {

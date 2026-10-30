@@ -1981,22 +1981,6 @@ fn replace_blip_bytes(
     Ok(())
 }
 
-#[allow(dead_code)]
-pub fn container_id(kind: HfKind, hf_type: HfType, n: u32) -> String {
-    format!("{}:{}:{n}", kind.as_str(), hf_type.as_str())
-}
-
-#[allow(dead_code)]
-pub fn body_para_of(target: &ParaTarget) -> Option<&BodyPara> {
-    match target {
-        ParaTarget::HeaderFooter { para, .. } => Some(para),
-        ParaTarget::Body(p) => Some(p),
-        ParaTarget::InTextBox { para, .. } => Some(para),
-        ParaTarget::InNote { para, .. } => Some(para),
-        ParaTarget::InComment { para, .. } => Some(para),
-    }
-}
-
 use super::comments;
 use super::request::DeletePictureOp;
 use super::request::InsertPictureOp;

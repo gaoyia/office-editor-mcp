@@ -798,6 +798,22 @@ pub fn escape_text(s: &str) -> String {
     )
 }
 
+/// `1` / `true` / `TRUE` / `on`。不裁空白。
+pub fn attr_is_true(el: &Element, name: &str) -> bool {
+    matches!(
+        el.attr(name),
+        Some("1") | Some("true") | Some("TRUE") | Some("on")
+    )
+}
+
+/// 先裁空白，再按 `attr_is_true` 认。
+pub fn attr_is_true_trimmed(el: &Element, name: &str) -> bool {
+    matches!(
+        el.attr(name).map(str::trim),
+        Some("1" | "true" | "TRUE" | "on")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

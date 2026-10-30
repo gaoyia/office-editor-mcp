@@ -3,7 +3,7 @@
 use crate::error::{Error, ErrorCode, ErrorKind, OpcReason, RelSource};
 use crate::xml;
 
-use super::names::{normalize_part_name, rels_part_name, resolve_rel_target, same_part_name};
+use super::names::{rels_part_name, resolve_rel_target, same_part_name};
 use super::Package;
 
 pub const RELS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
@@ -92,7 +92,6 @@ impl Relationships {
             .collect()
     }
 
-    #[allow(dead_code)]
     pub fn remove_by_id(&mut self, id: &str) {
         self.rels.retain(|r| r.id != id);
     }
@@ -205,14 +204,4 @@ pub fn part_still_referenced(
         }
     }
     Ok(false)
-}
-
-/// 规范化源部件名，供 write 使用。
-#[allow(dead_code)]
-pub fn normalize_source(name: &str) -> Result<String, Error> {
-    if name == "/" {
-        Ok("/".into())
-    } else {
-        normalize_part_name(name)
-    }
 }

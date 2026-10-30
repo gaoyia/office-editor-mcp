@@ -84,13 +84,13 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 
 - `error` 管错误身份、错误码和中英文文案。各模块可以调用它。它不反向依赖 `json`、`opc` 或任何格式模块。
 - `opc` 管 ZIP、`[Content_Types].xml` 和各级 `.rels`。格式模块、`props`、`ole` 通过它读写部件。
-- `xml` 管元素树的解析、遍历、写回和堆上释放。改 XML 的模块调用它。它不依赖格式模块。
-- `json` 管领域信封。`dispatch`、`help` 和各格式的 `request/` 调用它。它不依赖格式模块。
+- `xml` 管元素树的解析、遍历、写回和堆上释放，以及真假属性的两种读法。改 XML 的模块调用它。它不依赖格式模块。
+- `json` 管领域信封，并记下每个动作允许哪些字段。`dispatch`、`help` 和各格式的 `request/` 调用它。它不依赖格式模块。
 - `op_fields` 读取各格式 request 里相同的字段：布尔、id、文件名、EMU、颜色和未知字段。
 格式的 `request/` 调用它。它只依赖 `error`，不依赖任何格式模块。
-- `dispatch` 是库门口。命令行调用 `run` / `run_bytes`。它调用 `json`、`help`、`host_env`、`host_files` 和各格式模块。
+- `dispatch` 是库门口。命令行调用 `run` / `run_bytes`。它按信封字段表拒绝未知字段，再按格式分发。它调用 `json`、`help`、`host_env`、`host_files` 和各格式模块。
 - `help` 从拼好的 schema 里查动作和操作，一次一层。只有 `dispatch` 的 help 动作调用它。
-- `host_env` 提供时间、进程号和随机数。`dispatch` 在本机 `run` 里装入系统实现。需要这些值的模块调用它。
+- `host_env` 提供时间、进程号和随机数，并生成批注的 GUID 和时间字符串。`dispatch` 在本机 `run` 里装入系统实现。需要这些值的模块调用它。
 - `host_files` 按路径提供用户文件字节。`dispatch` 装入读取回调。插图、OLE、媒体等模块调用它。
 - `props` 管 core / app / custom。三种格式调用它。它可以调用 `opc` 与 `json`，不依赖格式模块。
 - `password` 算保护口令哈希，不破解密码。xlsx、docx、pptx 的保护模块调用它。
@@ -194,7 +194,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 
 ### json
 
-只处理领域信封：`schemaVersion`、`action`、各动作的必填字段。不认识的字段在第一期直接报错，避免默默丢数据。
+只处理领域信封：`schemaVersion`、`action`、各动作的必填字段。每个动作允许哪些字段记在 `envelope_fields`。`dispatch` 按这张表拒绝未知字段。`ooxp mcp` 按这张表列出工具参数名，字段说明仍写在命令行。不认识的字段直接报错，避免默默丢数据。
 契约见 [json-contract.md](json-contract.md)，xlsx / docx / pptx 分册见同目录 `json-contract-xlsx.md` 等。
 
 ### xlsx

@@ -298,7 +298,7 @@ pub fn bind_series_axis<T>(
     host: impl FnOnce(&str) -> Result<T, Error>,
 ) -> Result<(String, T, bool), Error> {
     let (id, host_val) = bind_chart_id(obj, i, &["op", "id", "axis"], host)?;
-    let secondary = super::remain::parse_series_axis(obj, i)?;
+    let secondary = super::series_decor::parse_series_axis(obj, i)?;
     Ok((id, host_val, secondary))
 }
 
@@ -307,7 +307,7 @@ pub fn bind_trendline<T>(
     i: usize,
     insert: bool,
     host: impl FnOnce(&str) -> Result<T, Error>,
-) -> Result<(String, T, super::remain::TrendlineWrite), Error> {
+) -> Result<(String, T, super::series_decor::TrendlineWrite), Error> {
     let (id, host_val) = bind_chart_id(
         obj,
         i,
@@ -323,7 +323,7 @@ pub fn bind_trendline<T>(
         ],
         host,
     )?;
-    let spec = super::remain::parse_trendline_write(obj, i, insert)?;
+    let spec = super::series_decor::parse_trendline_write(obj, i, insert)?;
     Ok((id, host_val, spec))
 }
 
@@ -332,7 +332,7 @@ pub fn bind_error_bars<T>(
     i: usize,
     insert: bool,
     host: impl FnOnce(&str) -> Result<T, Error>,
-) -> Result<(String, T, super::remain::ErrorBarsWrite), Error> {
+) -> Result<(String, T, super::series_decor::ErrorBarsWrite), Error> {
     let (id, host_val) = bind_chart_id(
         obj,
         i,
@@ -341,7 +341,7 @@ pub fn bind_error_bars<T>(
         ],
         host,
     )?;
-    let spec = super::remain::parse_error_bars_write(obj, i, insert)?;
+    let spec = super::series_decor::parse_error_bars_write(obj, i, insert)?;
     Ok((id, host_val, spec))
 }
 

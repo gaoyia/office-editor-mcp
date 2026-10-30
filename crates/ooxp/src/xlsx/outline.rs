@@ -462,10 +462,7 @@ fn parse_level(raw: Option<&str>) -> u32 {
 }
 
 fn attr_true(el: &Element, name: &str) -> bool {
-    matches!(
-        el.attr(name).map(str::trim),
-        Some("1" | "true" | "TRUE" | "on")
-    )
+    crate::xml::attr_is_true_trimmed(el, name)
 }
 
 fn attr_default_true(el: Option<&Element>, name: &str) -> bool {

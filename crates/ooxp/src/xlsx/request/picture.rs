@@ -37,12 +37,7 @@ pub(super) fn parse_set_hf_text(
             ));
         }
     };
-    Ok(SetHeaderFooterTextOp {
-        id,
-        sheet,
-        slot,
-        text,
-    })
+    Ok(SetHeaderFooterTextOp { sheet, slot, text })
 }
 
 pub(super) fn parse_replace_pic(

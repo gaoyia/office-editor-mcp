@@ -949,7 +949,7 @@ pub struct InsertTrendlineOp {
     pub id: String,
     pub target: chart::ChartTarget,
     pub index: usize,
-    pub spec: crate::chart::remain::TrendlineWrite,
+    pub spec: crate::chart::series_decor::TrendlineWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -958,7 +958,7 @@ pub struct SetTrendlineOp {
     pub target: chart::ChartTarget,
     pub index: usize,
     pub tl_index: usize,
-    pub spec: crate::chart::remain::TrendlineWrite,
+    pub spec: crate::chart::series_decor::TrendlineWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -974,7 +974,7 @@ pub struct InsertErrorBarsOp {
     pub id: String,
     pub target: chart::ChartTarget,
     pub index: usize,
-    pub spec: crate::chart::remain::ErrorBarsWrite,
+    pub spec: crate::chart::series_decor::ErrorBarsWrite,
 }
 
 #[derive(Debug, Clone)]
@@ -983,7 +983,7 @@ pub struct SetErrorBarsOp {
     pub target: chart::ChartTarget,
     pub index: usize,
     pub eb_index: usize,
-    pub spec: crate::chart::remain::ErrorBarsWrite,
+    pub spec: crate::chart::series_decor::ErrorBarsWrite,
 }
 
 #[derive(Debug, Clone)]

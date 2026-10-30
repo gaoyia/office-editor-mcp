@@ -76,7 +76,7 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
         )
     })?;
     for k in obj.keys() {
-        if !super::create_remain::is_workbook_key(k) {
+        if !super::create_extra::is_workbook_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.{k}"),
@@ -289,7 +289,7 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
         super::theme::write_create(&mut pkg, &super::theme::parse_create(v)?)?;
     }
     let bytes = pkg.save_to_vec()?;
-    super::create_remain::apply_remain(bytes, obj)
+    super::create_extra::apply_remain(bytes, obj)
 }
 
 fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
@@ -317,7 +317,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         return parse_chartsheet_sheet(obj, i, name);
     }
     for k in obj.keys() {
-        if !super::create_remain::is_sheet_key(k) {
+        if !super::create_extra::is_sheet_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -401,7 +401,7 @@ fn parse_chartsheet_sheet(
 ) -> Result<NewSheet, Error> {
     let prefix = format!("workbook.sheets[{i}]");
     for k in obj.keys() {
-        if !super::create_remain::is_chartsheet_key(k) {
+        if !super::create_extra::is_chartsheet_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -625,7 +625,6 @@ fn attach_header_footers(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), E
                     hf::set_text(
                         &mut doc.root,
                         &SetHeaderFooterTextOp {
-                            id: slot.slot.id(&sh.name),
                             sheet: sh.name.clone(),
                             slot: slot.slot,
                             text: text.clone(),
@@ -904,7 +903,7 @@ fn parse_comment(v: &Value, prefix: &str, sheet: &str) -> Result<InsertCommentOp
         }
     };
     let author = parse_comment_str(obj, prefix, "author", "ooxp")?;
-    let initials = parse_comment_str(obj, prefix, "initials", "oo")?;
+    let _initials = parse_comment_str(obj, prefix, "initials", "oo")?;
     let date = match obj.get("date") {
         None => None,
         Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
@@ -932,7 +931,6 @@ fn parse_comment(v: &Value, prefix: &str, sheet: &str) -> Result<InsertCommentOp
         a1: a1::format_cell(cell.col, cell.row),
         text,
         author,
-        initials,
         date,
     })
 }
@@ -2444,7 +2442,7 @@ fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Erro
         )
     })?;
     for k in obj.keys() {
-        if !super::create_remain::is_cell_key(k) {
+        if !super::create_extra::is_cell_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].cells[{j}].{k}"),

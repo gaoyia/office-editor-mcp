@@ -166,71 +166,29 @@ fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
 }
 
 fn screen(req: &Request) -> Result<(), Error> {
-    match req.action {
-        Action::Help => deny_unknown(
-            &req.obj,
-            &[
-                "schemaVersion",
-                "action",
-                "format",
-                "q",
-                "op",
-                "name",
-                "locale",
-            ],
-        ),
-        Action::Inspect => deny_unknown(
-            &req.obj,
-            &[
-                "schemaVersion",
-                "action",
-                "path",
-                "format",
-                "scope",
-                "locale",
-            ],
-        ),
-        Action::Create => deny_unknown(
-            &req.obj,
-            &[
-                "schemaVersion",
-                "action",
-                "path",
-                "format",
-                "workbook",
-                "document",
-                "presentation",
-                "locale",
-            ],
-        ),
-        Action::Apply => deny_unknown(
-            &req.obj,
-            &[
-                "schemaVersion",
-                "action",
-                "path",
-                "format",
-                "output",
-                "ops",
-                "locale",
-            ],
-        ),
-        Action::ExportMedia | Action::ExportChartData => {
-            deny_unknown(
-                &req.obj,
-                &[
-                    "schemaVersion",
-                    "action",
-                    "path",
-                    "format",
-                    "id",
-                    "output",
-                    "locale",
-                ],
-            )?;
-            str_field(&req.obj, "output")?;
-            Ok(())
-        }
+    deny_unknown(&req.obj, json::envelope_fields(req.action))?;
+    if matches!(req.action, Action::ExportMedia | Action::ExportChartData) {
+        str_field(&req.obj, "output")?;
+    }
+    Ok(())
+}
+
+fn format_of(req: &Request) -> Result<Format, Error> {
+    let path = str_field(&req.obj, "path")?;
+    let format = req.obj.get("format").and_then(Value::as_str);
+    infer_format(path, format)
+}
+
+fn for_format<T>(
+    fmt: Format,
+    xlsx: impl FnOnce() -> Result<T, Error>,
+    docx: impl FnOnce() -> Result<T, Error>,
+    pptx: impl FnOnce() -> Result<T, Error>,
+) -> Result<T, Error> {
+    match fmt {
+        Format::Xlsx => xlsx(),
+        Format::Docx => docx(),
+        Format::Pptx => pptx(),
     }
 }
 
@@ -239,70 +197,31 @@ fn require_package(package: Option<&[u8]>) -> Result<&[u8], Error> {
 }
 
 fn help_value(req: &Request) -> Result<Value, Error> {
-    json::deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "format",
-            "q",
-            "op",
-            "name",
-            "locale",
-        ],
-    )?;
     crate::help::help(&req.obj)
 }
 
 fn inspect_bytes(req: &Request, bytes: &[u8]) -> Result<Value, Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "scope",
-            "locale",
-        ],
-    )?;
-    let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(Value::as_str);
-    let fmt = infer_format(path, format)?;
-    let tree = match fmt {
-        Format::Xlsx => {
+    let fmt = format_of(req)?;
+    for_format(
+        fmt,
+        || {
             let scope = xlsx::parse_scope(req.obj.get("scope"))?;
-            xlsx::inspect(bytes, scope)?
-        }
-        Format::Docx => {
+            xlsx::inspect(bytes, scope)
+        },
+        || {
             let scope = docx::parse_scope(req.obj.get("scope"))?;
-            docx::inspect(bytes, scope)?
-        }
-        Format::Pptx => {
+            docx::inspect(bytes, scope)
+        },
+        || {
             let scope = pptx::parse_scope(req.obj.get("scope"))?;
-            pptx::inspect(bytes, scope)?
-        }
-    };
-    Ok(tree)
+            pptx::inspect(bytes, scope)
+        },
+    )
 }
 
 fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "workbook",
-            "document",
-            "presentation",
-            "locale",
-        ],
-    )?;
     let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(Value::as_str);
-    let fmt = infer_format(path, format)?;
+    let fmt = format_of(req)?;
     let has_wb = req.obj.contains_key("workbook");
     let has_doc = req.obj.contains_key("document");
     let has_pres = req.obj.contains_key("presentation");
@@ -316,8 +235,9 @@ fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
             "presentation",
         ));
     }
-    let bytes = match fmt {
-        Format::Xlsx => {
+    let bytes = for_format(
+        fmt,
+        || {
             if has_doc || has_pres {
                 return Err(Error::with_path(
                     ErrorKind::CreateNeedsObject {
@@ -340,12 +260,12 @@ fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
                 .and_then(|e| e.to_str())
                 .is_some_and(|e| e.eq_ignore_ascii_case("xlsm"));
             if xlsm {
-                xlsx::create_with_workbook_ct(workbook, xlsx::CT_WORKBOOK_MACRO)?
+                xlsx::create_with_workbook_ct(workbook, xlsx::CT_WORKBOOK_MACRO)
             } else {
-                xlsx::create(workbook)?
+                xlsx::create(workbook)
             }
-        }
-        Format::Docx => {
+        },
+        || {
             if has_wb || has_pres {
                 return Err(Error::with_path(
                     ErrorKind::CreateNeedsObject {
@@ -363,9 +283,9 @@ fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
                     "document",
                 )
             })?;
-            docx::create(document)?
-        }
-        Format::Pptx => {
+            docx::create(document)
+        },
+        || {
             if has_wb || has_doc {
                 return Err(Error::with_path(
                     ErrorKind::CreateNeedsObject {
@@ -383,47 +303,30 @@ fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
                     "presentation",
                 )
             })?;
-            pptx::create(presentation)?
-        }
-    };
+            pptx::create(presentation)
+        },
+    )?;
     Ok(bytes)
 }
 
 fn apply_bytes(req: &Request, bytes: &[u8]) -> Result<(Vec<u8>, usize), Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "output",
-            "ops",
-            "locale",
-        ],
-    )?;
-    let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(Value::as_str);
-    let fmt = infer_format(path, format)?;
+    let fmt = format_of(req)?;
     let ops = require_ops(&req.obj)?;
-    let (out_bytes, n) = match fmt {
-        Format::Xlsx => {
+    for_format(
+        fmt,
+        || {
             let parsed = xlsx::parse_ops(ops)?;
-            let n = parsed.len();
-            (xlsx::apply(bytes, &parsed)?, n)
-        }
-        Format::Docx => {
+            Ok((xlsx::apply(bytes, &parsed)?, parsed.len()))
+        },
+        || {
             let parsed = docx::parse_ops(ops)?;
-            let n = parsed.len();
-            (docx::apply(bytes, &parsed)?, n)
-        }
-        Format::Pptx => {
+            Ok((docx::apply(bytes, &parsed)?, parsed.len()))
+        },
+        || {
             let parsed = pptx::parse_ops(ops)?;
-            let n = parsed.len();
-            (pptx::apply(bytes, &parsed)?, n)
-        }
-    };
-    Ok((out_bytes, n))
+            Ok((pptx::apply(bytes, &parsed)?, parsed.len()))
+        },
+    )
 }
 
 struct Exported {
@@ -432,82 +335,63 @@ struct Exported {
 }
 
 fn export_media_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "id",
-            "output",
-            "locale",
-        ],
-    )?;
-    let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(Value::as_str);
-    let fmt = infer_format(path, format)?;
+    let fmt = format_of(req)?;
     let id = str_field(&req.obj, "id")?;
-    let (raw, content_type) = match fmt {
-        Format::Docx => {
-            let exported = docx::export_media(bytes, id)?;
-            (exported.bytes, exported.content_type)
-        }
-        Format::Xlsx => {
+    for_format(
+        fmt,
+        || {
             let exported = xlsx::export_media(bytes, id)?;
-            (exported.bytes, exported.content_type)
-        }
-        Format::Pptx => {
+            Ok(Exported {
+                bytes: exported.bytes,
+                content_type: exported.content_type,
+            })
+        },
+        || {
+            let exported = docx::export_media(bytes, id)?;
+            Ok(Exported {
+                bytes: exported.bytes,
+                content_type: exported.content_type,
+            })
+        },
+        || {
             let exported = pptx::export_media(bytes, id)?;
-            (exported.bytes, exported.content_type)
-        }
-    };
-    Ok(Exported {
-        bytes: raw,
-        content_type,
-    })
+            Ok(Exported {
+                bytes: exported.bytes,
+                content_type: exported.content_type,
+            })
+        },
+    )
 }
 
 fn export_chart_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
-    deny_unknown(
-        &req.obj,
-        &[
-            "schemaVersion",
-            "action",
-            "path",
-            "format",
-            "id",
-            "output",
-            "locale",
-        ],
-    )?;
-    let path = str_field(&req.obj, "path")?;
-    let format = req.obj.get("format").and_then(Value::as_str);
-    let fmt = infer_format(path, format)?;
+    let fmt = format_of(req)?;
     let id = str_field(&req.obj, "id")?;
-    match fmt {
-        Format::Docx => {
+    for_format(
+        fmt,
+        || {
+            Err(Error::with_path(
+                ErrorKind::ActionNotForFormat {
+                    format: "xlsx".into(),
+                    action: "exportChartData".into(),
+                },
+                "action",
+            ))
+        },
+        || {
             let exported = docx::export_chart_data(bytes, id)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
             })
-        }
-        Format::Xlsx => Err(Error::with_path(
-            ErrorKind::ActionNotForFormat {
-                format: "xlsx".into(),
-                action: "exportChartData".into(),
-            },
-            "action",
-        )),
-        Format::Pptx => {
+        },
+        || {
             let exported = pptx::export_chart_data(bytes, id)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
             })
-        }
-    }
+        },
+    )
 }
 
 #[cfg(test)]

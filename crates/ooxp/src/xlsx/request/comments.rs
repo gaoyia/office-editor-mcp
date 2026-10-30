@@ -16,12 +16,12 @@ pub(super) fn parse_insert_comment(
     deny_keys(obj, i, &["op", "id", "text", "author", "initials", "date"])?;
     let id = require_id(obj, i)?;
     let (sheet, a1) = comments::parse_insert_cell(&id, i)?;
+    let _initials = parse_comment_str(obj, i, "initials", "oo")?;
     Ok(InsertCommentOp {
         sheet,
         a1,
         text: parse_optional_text(obj, i)?,
         author: parse_comment_str(obj, i, "author", "ooxp")?,
-        initials: parse_comment_str(obj, i, "initials", "oo")?,
         date: parse_optional_date(obj, i)?,
     })
 }
@@ -41,11 +41,11 @@ pub(super) fn parse_reply_comment(
             format!("ops[{i}].id"),
         ));
     }
+    let _initials = parse_comment_str(obj, i, "initials", "oo")?;
     Ok(ReplyCommentOp {
         id,
         text: parse_optional_text(obj, i)?,
         author: parse_comment_str(obj, i, "author", "ooxp")?,
-        initials: parse_comment_str(obj, i, "initials", "oo")?,
         date: parse_optional_date(obj, i)?,
     })
 }
@@ -134,12 +134,7 @@ pub(super) fn parse_set_comment_meta(
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetCommentMetaOp {
-        id,
-        author,
-        initials,
-        date,
-    })
+    Ok(SetCommentMetaOp { id, author, date })
 }
 
 pub(super) fn parse_set_comment_done(

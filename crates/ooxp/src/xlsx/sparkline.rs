@@ -515,10 +515,7 @@ fn not_found(id: &str, i: usize) -> Error {
 }
 
 fn attr_true(el: &Element, name: &str) -> bool {
-    matches!(
-        el.attr(name),
-        Some("1") | Some("true") | Some("TRUE") | Some("on")
-    )
+    crate::xml::attr_is_true(el, name)
 }
 
 fn set_flag(el: &mut Element, name: &str, on: bool) {

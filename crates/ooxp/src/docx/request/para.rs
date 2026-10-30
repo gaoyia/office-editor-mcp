@@ -250,7 +250,7 @@ pub(super) fn parse_set_para_runs(
             }
             ParaRunSource::Range { start, end }
         };
-        let format = super::super::create_round5::parse_run_format(item, &item_path)?;
+        let format = super::super::create_para::parse_run_format(item, &item_path)?;
         runs.push(ParaRunPiece { source, format });
     }
     Ok(SetParaRunsOp {

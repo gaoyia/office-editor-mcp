@@ -1,7 +1,6 @@
 //! 幻灯片现代批注（MS-PPTX 2018/8）。不读 ECMA §19.4 旧式 commentN.xml。
 
 use serde_json::{json, Map, Value};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
@@ -24,8 +23,6 @@ pub const P188_NS: &str = "http://schemas.microsoft.com/office/powerpoint/2018/8
 pub const PC_NS: &str = "http://schemas.microsoft.com/office/powerpoint/2013/main/command";
 const COMMENT_EXT_URI: &str = "{6950BFC3-D8DA-4A85-94F7-54DA5524770B}";
 const AUTHORS_PART: &str = "/ppt/authors.xml";
-
-static GUID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone)]
 pub enum CommentKey {
@@ -89,7 +86,7 @@ pub fn parse_comment_id(id: &str, json_path: &str) -> Result<CommentTarget, Erro
         ));
     }
     if let Some((parent, reply)) = after.split_once("/reply:") {
-        if !looks_like_guid(parent) || !looks_like_guid(reply) {
+        if !crate::host_env::looks_like_guid(parent) || !crate::host_env::looks_like_guid(reply) {
             return Err(Error::with_path(
                 ErrorKind::InvalidId {
                     reason: IdReason::PptxCommentForm,
@@ -105,7 +102,7 @@ pub fn parse_comment_id(id: &str, json_path: &str) -> Result<CommentTarget, Erro
             },
         });
     }
-    if after.contains('/') || !looks_like_guid(after) {
+    if after.contains('/') || !crate::host_env::looks_like_guid(after) {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::PptxCommentForm,
@@ -131,14 +128,6 @@ pub fn parse_insert_slide(id: &str, op_index: usize) -> Result<usize, Error> {
         ));
     }
     Ok(slide)
-}
-
-fn looks_like_guid(s: &str) -> bool {
-    let inner = s
-        .strip_prefix('{')
-        .and_then(|t| t.strip_suffix('}'))
-        .unwrap_or("");
-    inner.len() == 36 && inner.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 pub fn count_on_slide(pkg: &Package, slide_part: &str) -> Result<usize, Error> {
@@ -759,8 +748,11 @@ pub fn apply_insert(
         }
     };
     let author_id = ensure_author(pkg, pres_part, &op.author, &op.initials)?;
-    let created = op.date.clone().unwrap_or_else(utc_now);
-    let guid = new_guid();
+    let created = op
+        .date
+        .clone()
+        .unwrap_or_else(crate::host_env::utc_now_millis);
+    let guid = crate::host_env::new_comment_guid();
     let mut slide_doc = xml::parse(pkg.get(&meta.part)?)?;
     let part = ensure_comments_part(pkg, &meta.part, &mut slide_doc, sld_id)?;
     pkg.set(&meta.part, slide_doc.to_bytes()?)?;
@@ -804,8 +796,11 @@ pub fn apply_reply(
         reject_ink(cm, &op.id, op_index)?;
     }
     let author_id = ensure_author(pkg, pres_part, &op.author, &op.initials)?;
-    let created = op.date.clone().unwrap_or_else(utc_now);
-    let reply_id = new_guid();
+    let created = op
+        .date
+        .clone()
+        .unwrap_or_else(crate::host_env::utc_now_millis);
+    let reply_id = crate::host_env::new_comment_guid();
     let reply = build_reply(&reply_id, &author_id, &created, &op.text);
     let mut doc = xml::parse(pkg.get(&part)?)?;
     let cm = find_cm_mut(&mut doc.root, parent).ok_or_else(|| {
@@ -1143,7 +1138,7 @@ fn ensure_author(
     }) {
         return Ok(existing.attr("id").unwrap_or("").to_string());
     }
-    let id = new_guid();
+    let id = crate::host_env::new_comment_guid();
     let user_id: String = id
         .chars()
         .filter(|c| c.is_ascii_hexdigit())
@@ -1213,72 +1208,4 @@ fn xml_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-fn new_guid() -> String {
-    let t = crate::host_env::now_nanos();
-    let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = crate::host_env::pid();
-    let mix = t ^ (n << 48) ^ (pid << 16);
-    let mut b = [0u8; 16];
-    for (i, byte) in b.iter_mut().enumerate() {
-        *byte = (mix >> ((i % 16) * 8)) as u8 ^ (i as u8).wrapping_mul(31);
-    }
-    b[6] = (b[6] & 0x0f) | 0x40;
-    b[8] = (b[8] & 0x3f) | 0x80;
-    format!(
-        "{{{:02X}{:02X}{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}}}",
-        b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]
-    )
-}
-
-fn utc_now() -> String {
-    let (secs, millis) = crate::host_env::unix_secs_millis();
-    unix_to_dt(secs, millis)
-}
-
-fn unix_to_dt(secs: u64, millis: u32) -> String {
-    let mut days = secs / 86_400;
-    let rem = secs % 86_400;
-    let hour = rem / 3600;
-    let min = (rem % 3600) / 60;
-    let sec = rem % 60;
-    let mut year = 1970u64;
-    loop {
-        let len = if is_leap(year) { 366 } else { 365 };
-        if days < len {
-            break;
-        }
-        days -= len;
-        year += 1;
-    }
-    let dim = [
-        31u64,
-        if is_leap(year) { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut month = 1u64;
-    for (i, d) in dim.iter().enumerate() {
-        if days < *d {
-            month = i as u64 + 1;
-            break;
-        }
-        days -= *d;
-        month = i as u64 + 2;
-    }
-    let day = days + 1;
-    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{millis:03}")
-}
-
-fn is_leap(year: u64) -> bool {
-    year.is_multiple_of(4) && !year.is_multiple_of(100) || year.is_multiple_of(400)
 }

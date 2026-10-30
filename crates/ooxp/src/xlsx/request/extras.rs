@@ -2150,7 +2150,7 @@ pub(super) fn parse_delete_custom_view(
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let index = custom_view::parse_custom_view_id(&id, &format!("ops[{i}].id"))?;
-    Ok(custom_view::DeleteCustomViewOp { id, index })
+    Ok(custom_view::DeleteCustomViewOp { index })
 }
 
 pub(super) fn parse_show_custom_view(
@@ -2160,7 +2160,7 @@ pub(super) fn parse_show_custom_view(
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let index = custom_view::parse_custom_view_id(&id, &format!("ops[{i}].id"))?;
-    Ok(custom_view::ShowCustomViewOp { id, index })
+    Ok(custom_view::ShowCustomViewOp { index })
 }
 
 pub(super) fn parse_insert_connection(

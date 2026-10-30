@@ -57,28 +57,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             XlsxOp::SetCell(op) => {
                 touched_cells = true;
                 let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
-                let meta = sheet_index
-                    .iter()
-                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
-                    .ok_or_else(|| {
-                        if sheet_index
-                            .iter()
-                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
-                        {
-                            Error::with_path(
-                                ErrorKind::SetCellWorksheetOnly,
-                                format!("ops[{i}].id"),
-                            )
-                        } else {
-                            Error::with_path(
-                                ErrorKind::SheetNotFound {
-                                    name: sheet_name.clone(),
-                                },
-                                format!("ops[{i}].id"),
-                            )
-                        }
-                    })?;
-                let part = meta.1.clone();
+                let part = worksheet_part(&sheet_index, &sheet_name, i)?;
                 let cell = a1::parse_cell(&a1)?;
                 let reuse = hot.as_ref().is_some_and(|h| h.part == part);
                 load_dirty(&pkg, &mut dirty_sheets, &part, !reuse)?;
@@ -107,28 +86,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             }
             XlsxOp::SetCellStyle(op) => {
                 let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
-                let meta = sheet_index
-                    .iter()
-                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
-                    .ok_or_else(|| {
-                        if sheet_index
-                            .iter()
-                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
-                        {
-                            Error::with_path(
-                                ErrorKind::SetCellWorksheetOnly,
-                                format!("ops[{i}].id"),
-                            )
-                        } else {
-                            Error::with_path(
-                                ErrorKind::SheetNotFound {
-                                    name: sheet_name.clone(),
-                                },
-                                format!("ops[{i}].id"),
-                            )
-                        }
-                    })?;
-                let part = meta.1.clone();
+                let part = worksheet_part(&sheet_index, &sheet_name, i)?;
                 let cell = a1::parse_cell(&a1)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
@@ -145,28 +103,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             }
             XlsxOp::SetCellNamedStyle(op) => {
                 let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
-                let meta = sheet_index
-                    .iter()
-                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
-                    .ok_or_else(|| {
-                        if sheet_index
-                            .iter()
-                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
-                        {
-                            Error::with_path(
-                                ErrorKind::SetCellWorksheetOnly,
-                                format!("ops[{i}].id"),
-                            )
-                        } else {
-                            Error::with_path(
-                                ErrorKind::SheetNotFound {
-                                    name: sheet_name.clone(),
-                                },
-                                format!("ops[{i}].id"),
-                            )
-                        }
-                    })?;
-                let part = meta.1.clone();
+                let part = worksheet_part(&sheet_index, &sheet_name, i)?;
                 let cell = a1::parse_cell(&a1)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
@@ -1654,6 +1591,32 @@ pub(crate) fn load_dirty(
 
 pub(crate) fn dirty_of<'a>(dirty: &'a mut [(String, Document)], part: &str) -> &'a mut Document {
     &mut dirty.iter_mut().find(|(p, _)| p == part).unwrap().1
+}
+
+fn worksheet_part(
+    sheet_index: &[(String, String, &str)],
+    sheet_name: &str,
+    i: usize,
+) -> Result<String, Error> {
+    sheet_index
+        .iter()
+        .find(|(n, _, k)| n.eq_ignore_ascii_case(sheet_name) && *k == "worksheet")
+        .map(|(_, part, _)| part.clone())
+        .ok_or_else(|| {
+            if sheet_index
+                .iter()
+                .any(|(n, _, _)| n.eq_ignore_ascii_case(sheet_name))
+            {
+                Error::with_path(ErrorKind::SetCellWorksheetOnly, format!("ops[{i}].id"))
+            } else {
+                Error::with_path(
+                    ErrorKind::SheetNotFound {
+                        name: sheet_name.to_string(),
+                    },
+                    format!("ops[{i}].id"),
+                )
+            }
+        })
 }
 
 fn sheet_index(

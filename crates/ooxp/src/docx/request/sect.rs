@@ -274,7 +274,7 @@ pub(super) fn parse_set_even_and_odd(
         "setEvenAndOddHeaders",
         "evenAndOdd",
     )?;
-    Ok(SetEvenAndOddHeadersOp { id, even_and_odd })
+    Ok(SetEvenAndOddHeadersOp { even_and_odd })
 }
 
 pub(super) fn parse_enabled_false(
@@ -658,7 +658,7 @@ pub(super) fn parse_set_mirror_margins(
         "setMirrorMargins",
         "mirrorMargins",
     )?;
-    Ok(SetMirrorMarginsOp { id, mirror_margins })
+    Ok(SetMirrorMarginsOp { mirror_margins })
 }
 
 pub(super) fn parse_set_gutter_at_top(
@@ -670,7 +670,7 @@ pub(super) fn parse_set_gutter_at_top(
     require_document_id(&id, i, IdReason::SettingsNeedDocument)?;
     let gutter_at_top =
         parse_required_bool(obj.get("gutterAtTop"), i, "setGutterAtTop", "gutterAtTop")?;
-    Ok(SetGutterAtTopOp { id, gutter_at_top })
+    Ok(SetGutterAtTopOp { gutter_at_top })
 }
 
 pub(super) fn parse_hf_kind(

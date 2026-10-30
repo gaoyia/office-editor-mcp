@@ -3,7 +3,7 @@
 pub mod chartex;
 pub mod embed;
 pub mod fields;
-pub mod remain;
+pub mod series_decor;
 
 use serde_json::{json, Map, Number, Value};
 
@@ -852,7 +852,7 @@ where
                 }
                 stale |= size_stale;
             }
-            remain::attach_series_extras(&mut node, space, ser, chart_id, index);
+            series_decor::attach_series_extras(&mut node, space, ser, chart_id, index);
             if stale {
                 node.insert("cacheStale".into(), json!(true));
             }

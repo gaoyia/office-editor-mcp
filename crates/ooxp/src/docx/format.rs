@@ -1254,7 +1254,7 @@ pub(crate) fn apply_set_run_format(
     Ok(())
 }
 pub(crate) fn run_patch(
-    fmt: &super::create_round5::RunFormatOwned,
+    fmt: &super::create_para::RunFormatOwned,
 ) -> super::format::RunFormatPatch<'_> {
     super::format::RunFormatPatch {
         bold: fmt.bold,

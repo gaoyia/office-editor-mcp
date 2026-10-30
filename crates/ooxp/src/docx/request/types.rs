@@ -111,7 +111,7 @@ pub enum ParaRunSource {
 #[derive(Debug, Clone)]
 pub struct ParaRunPiece {
     pub source: ParaRunSource,
-    pub format: Option<super::super::create_round5::RunFormatOwned>,
+    pub format: Option<super::super::create_para::RunFormatOwned>,
 }
 
 #[derive(Debug, Clone)]
@@ -154,8 +154,6 @@ pub struct SetTitlePageOp {
 
 #[derive(Debug, Clone)]
 pub struct SetEvenAndOddHeadersOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub even_and_odd: bool,
 }
 
@@ -235,15 +233,11 @@ pub struct SetRtlGutterOp {
 
 #[derive(Debug, Clone)]
 pub struct SetMirrorMarginsOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub mirror_margins: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetGutterAtTopOp {
-    #[allow(dead_code)]
-    pub id: String,
     pub gutter_at_top: bool,
 }
 

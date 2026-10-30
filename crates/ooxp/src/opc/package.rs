@@ -177,7 +177,6 @@ impl Package {
     }
 
     /// 列出未删除部件，顺序为原顺序再加新建。
-    #[allow(dead_code)]
     pub fn part_names(&self) -> Vec<String> {
         let mut names = Vec::new();
         for n in &self.original_order {
