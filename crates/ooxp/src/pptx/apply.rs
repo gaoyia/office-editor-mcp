@@ -53,7 +53,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     continue;
                 }
                 let target = shape::parse_shape_id(&op.id, i)?;
-                let meta = frozen.get(&slides, target.slide).ok_or_else(|| {
+                let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::SlideNotFound {
                             n: target.slide as u32,
@@ -105,7 +105,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     continue;
                 }
                 let target = shape::parse_shape_id(&op.id, i)?;
-                let meta = frozen.get(&slides, target.slide).ok_or_else(|| {
+                let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::SlideNotFound {
                             n: target.slide as u32,
@@ -157,7 +157,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )?;
                 }
                 InsertShapeHost::Slide { slide, on_notes } => {
-                    let meta = frozen.get(&slides, *slide).ok_or_else(|| {
+                    let meta = shape::slide_at_start(&slides, *slide).ok_or_else(|| {
                         Error::with_path(
                             ErrorKind::SlideNotFound { n: *slide as u32 },
                             format!("ops[{i}].id"),
@@ -223,7 +223,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::GroupShapes(op) => {
-                let meta = frozen.get(&slides, op.slide).ok_or_else(|| {
+                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::SlideNotFound { n: op.slide as u32 },
                         format!("ops[{i}].id"),
@@ -433,7 +433,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetNotesText(op) => {
-                let meta = frozen.get(&slides, op.slide).ok_or_else(|| {
+                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::SlideNotFound { n: op.slide as u32 },
                         format!("ops[{i}].id"),
@@ -442,7 +442,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 notes::apply_set_notes_text(&mut pkg, &pres_part, &mut pres, &meta.part, op, i)?;
             }
             PptxOp::InsertComment(op) => {
-                let meta = frozen.get(&slides, op.slide).ok_or_else(|| {
+                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::SlideNotFound { n: op.slide as u32 },
                         format!("ops[{i}].id"),
@@ -472,14 +472,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::ReplacePicture(op) => {
                 if op.target.comment.is_some() {
-                    let meta = frozen.get(&slides, op.target.slide).ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::SlideNotFound {
-                                n: op.target.slide as u32,
-                            },
-                            format!("ops[{i}].id"),
-                        )
-                    })?;
+                    let meta =
+                        shape::slide_at_start(&slides, op.target.slide).ok_or_else(|| {
+                            Error::with_path(
+                                ErrorKind::SlideNotFound {
+                                    n: op.target.slide as u32,
+                                },
+                                format!("ops[{i}].id"),
+                            )
+                        })?;
                     comments::replace_picture(&mut pkg, meta, op, i)?;
                     continue;
                 }
@@ -502,7 +503,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::InsertPicture(op) => {
                 if op.comment.is_some() {
-                    let meta = frozen.get(&slides, op.slide).ok_or_else(|| {
+                    let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
                         Error::with_path(
                             ErrorKind::SlideNotFound { n: op.slide as u32 },
                             format!("ops[{i}].id"),
@@ -534,14 +535,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::DeletePicture(op) => {
                 if op.target.comment.is_some() {
-                    let meta = frozen.get(&slides, op.target.slide).ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::SlideNotFound {
-                                n: op.target.slide as u32,
-                            },
-                            format!("ops[{i}].id"),
-                        )
-                    })?;
+                    let meta =
+                        shape::slide_at_start(&slides, op.target.slide).ok_or_else(|| {
+                            Error::with_path(
+                                ErrorKind::SlideNotFound {
+                                    n: op.target.slide as u32,
+                                },
+                                format!("ops[{i}].id"),
+                            )
+                        })?;
                     comments::delete_picture(&mut pkg, meta, op, i)?;
                     continue;
                 }
@@ -681,7 +683,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             PptxOp::InsertSlideSection(op) => {
                 let mut op = op.clone();
                 if let Some(n) = op.start {
-                    op.start = Some(slide_now(&frozen, &slides, n, format!("ops[{i}].start"))?);
+                    op.start = Some(slide_now(&slides, n, format!("ops[{i}].start"))?);
                 }
                 section::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
@@ -693,20 +695,20 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::SetSlideSection(op) => {
                 let mut op = op.clone();
-                op.slide = slide_now(&frozen, &slides, op.slide, format!("ops[{i}].id"))?;
+                op.slide = slide_now(&slides, op.slide, format!("ops[{i}].id"))?;
                 section::set_slide(&mut pkg, &pres_part, &mut pres, &op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.restore_indexes(&mut slides);
+                frozen.mark_start(&mut slides);
             }
             PptxOp::InsertCustomShow(op) => {
                 let mut op = op.clone();
-                op.slides = slides_now(&frozen, &slides, &op.slides, i)?;
+                op.slides = slides_now(&slides, &op.slides, i)?;
                 custom_show::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
             PptxOp::SetCustomShow(op) => {
                 let mut op = op.clone();
                 if let Some(list) = &op.slides {
-                    op.slides = Some(slides_now(&frozen, &slides, list, i)?);
+                    op.slides = Some(slides_now(&slides, list, i)?);
                 }
                 custom_show::set(&mut pkg, &pres_part, &mut pres, &op, i)?;
             }
@@ -1776,24 +1778,24 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertSlide(op) => {
-                slides::insert(&mut pkg, &pres_part, &mut pres, &slides, &frozen, op, i)?;
+                slides::insert(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.restore_indexes(&mut slides);
+                frozen.mark_start(&mut slides);
             }
             PptxOp::DeleteSlide(op) => {
-                slides::delete(&mut pkg, &pres_part, &mut pres, &slides, &frozen, op, i)?;
+                slides::delete(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.restore_indexes(&mut slides);
+                frozen.mark_start(&mut slides);
             }
             PptxOp::MoveSlide(op) => {
-                slides::move_slide(&pres_part, &mut pres, &mut pkg, &slides, &frozen, op, i)?;
+                slides::move_slide(&pres_part, &mut pres, &mut pkg, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.restore_indexes(&mut slides);
+                frozen.mark_start(&mut slides);
             }
             PptxOp::SetSlideHidden(op) => {
-                slides::set_hidden(&mut pkg, &slides, &frozen, op, i)?;
+                slides::set_hidden(&mut pkg, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.restore_indexes(&mut slides);
+                frozen.mark_start(&mut slides);
             }
             PptxOp::SetTransition(op) => {
                 transition::apply(
@@ -2269,7 +2271,7 @@ fn comment_slide_meta<'a>(
     i: usize,
 ) -> Result<&'a shape::SlideMeta, Error> {
     let target = comments::parse_comment_id(id, &format!("ops[{i}].id"))?;
-    shape::SlideFreeze::slide_at_start(slides, target.slide).ok_or_else(|| {
+    shape::slide_at_start(slides, target.slide).ok_or_else(|| {
         Error::with_path(
             ErrorKind::SlideNotFound {
                 n: target.slide as u32,
@@ -2280,27 +2282,16 @@ fn comment_slide_meta<'a>(
 }
 
 /// 只认 `sldIdLst` 当前顺序的模块（节、自定义放映）用：apply 开始时的页号换成当前位置。
-fn slide_now(
-    frozen: &shape::SlideFreeze,
-    slides: &[shape::SlideMeta],
-    n: usize,
-    json_path: String,
-) -> Result<usize, Error> {
-    frozen
-        .pos(slides, n)
+fn slide_now(slides: &[shape::SlideMeta], n: usize, json_path: String) -> Result<usize, Error> {
+    shape::pos_at_start(slides, n)
         .map(|pos| pos + 1)
         .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, json_path))
 }
 
-fn slides_now(
-    frozen: &shape::SlideFreeze,
-    slides: &[shape::SlideMeta],
-    list: &[usize],
-    i: usize,
-) -> Result<Vec<usize>, Error> {
+fn slides_now(slides: &[shape::SlideMeta], list: &[usize], i: usize) -> Result<Vec<usize>, Error> {
     list.iter()
         .enumerate()
-        .map(|(j, &n)| slide_now(frozen, slides, n, format!("ops[{i}].slides[{j}]")))
+        .map(|(j, &n)| slide_now(slides, n, format!("ops[{i}].slides[{j}]")))
         .collect()
 }
 
@@ -2380,7 +2371,7 @@ fn ensure_host_part(
             json_path,
         );
     }
-    let meta = shape::SlideFreeze::slide_at_start(slides, slide)
+    let meta = shape::slide_at_start(slides, slide)
         .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: slide as u32 }, json_path))?;
     if on_notes {
         notes::ensure_notes_slide(pkg, pres_part, pres, &meta.part)

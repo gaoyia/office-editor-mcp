@@ -57,16 +57,24 @@ pub(crate) fn deny_keys_at(
 }
 
 pub(crate) fn require_id(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
-    obj.get("id")
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField { field: "id".into() },
-                format!("ops[{i}].id"),
-            )
-        })
+    let wrong = |expected| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "id".into(),
+                expected,
+            },
+            format!("ops[{i}].id"),
+        )
+    };
+    match obj.get("id") {
+        Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),
+        Some(Value::String(_)) => Err(wrong(TypeName::NonEmptyString)),
+        Some(_) => Err(wrong(TypeName::String)),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField { field: "id".into() },
+            format!("ops[{i}].id"),
+        )),
+    }
 }
 
 pub(crate) fn require_file(obj: &Map<String, Value>, i: usize, op: &str) -> Result<String, Error> {

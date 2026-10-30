@@ -1110,6 +1110,7 @@ fn attach_comments(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> 
         let n = i + 1;
         let meta = SlideMeta {
             index: n,
+            start: Some(n),
             part: format!("/ppt/slides/slide{n}.xml"),
             name: None,
             hidden: false,

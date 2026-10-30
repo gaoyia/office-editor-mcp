@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
+use crate::op_fields::require_id;
 use crate::opc::{office_document_part, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -390,30 +391,6 @@ pub fn parse_delete(
         return Ok(DeleteWatermarkOp::All);
     }
     parse_watermark_id(&id, i)
-}
-
-fn require_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
-    match obj.get("id") {
-        Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),
-        Some(Value::String(_)) => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: "id".into(),
-                expected: TypeName::NonEmptyString,
-            },
-            format!("ops[{i}].id"),
-        )),
-        Some(_) => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: "id".into(),
-                expected: TypeName::String,
-            },
-            format!("ops[{i}].id"),
-        )),
-        None => Err(Error::with_path(
-            ErrorKind::MissingField { field: "id".into() },
-            format!("ops[{i}].id"),
-        )),
-    }
 }
 
 fn parse_text_or_file(

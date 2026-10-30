@@ -2,15 +2,12 @@
 
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::Error;
 use crate::opc::Package;
 use crate::xml::{self, Element, Node};
 
 use super::{find_local, find_local_mut, LayoutKind, NewPoint, Role, A_NS, DGM_NS, REL_NS};
-
-static GUID_SEQ: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Default)]
 pub struct RelIds {
@@ -634,23 +631,8 @@ pub fn next_model_ids(root: &Element) -> (String, String) {
         }
         (a.to_string(), b.to_string())
     } else {
-        (new_guid(), new_guid())
+        (crate::host_env::new_guid(), crate::host_env::new_guid())
     }
-}
-
-fn new_guid() -> String {
-    let n = GUID_SEQ.fetch_add(1, Ordering::Relaxed);
-    let (secs, nanos) = crate::host_env::unix_secs_nanos();
-    let a = (secs as u32).wrapping_mul(0x9E37_79B9) ^ (n as u32);
-    let b = nanos;
-    format!(
-        "{{{:08X}-{:04X}-4{:03X}-A{:03X}-{:012X}}}",
-        a,
-        (b >> 16) as u16,
-        ((b as u16) & 0x0fff),
-        ((n as u16) & 0x0fff),
-        n.wrapping_shl(16) | (b as u64 & 0xffff)
-    )
 }
 
 pub fn append_visible_pt(root: &mut Element, model_id: &str, role: Role, text: &str) {

@@ -13,7 +13,10 @@ use super::request::{
 use super::DML_NS;
 
 pub struct SlideMeta {
+    /// 当前在 `sldIdLst` 里的位置，从 1 起。
     pub index: usize,
+    /// apply 开始时的页号。本批新建的页为 `None`。请求里的 `slide:{n}` 按它找页。
+    pub start: Option<usize>,
     pub part: String,
     pub name: Option<String>,
     pub hidden: bool,
@@ -126,7 +129,7 @@ pub fn rid_attr(el: &Element) -> Option<&str> {
     })
 }
 
-/// apply 开始时各页的 `p:sldId/@id`。之后按这个编号找页，不按当时的位置。
+/// apply 开始时各页的 `p:sldId/@id`。增删重排后重新列页，用它把 `start` 标回去。
 #[derive(Clone, Debug)]
 pub struct SlideFreeze {
     ids: Vec<Option<u32>>,
@@ -139,36 +142,26 @@ impl SlideFreeze {
         }
     }
 
-    /// 按 apply 开始时的页号取页。`index` 在 `list_slides` 刚返回时等于当时的位置；
-    /// 增删重排之后要先 `restore_indexes`，新页的 `index` 是 0，旧页号点不中。
-    pub fn slide_at_start(slides: &[SlideMeta], n: usize) -> Option<&SlideMeta> {
-        slides.iter().find(|slide| slide.index == n)
-    }
-
-    pub fn get<'a>(&self, slides: &'a [SlideMeta], n: usize) -> Option<&'a SlideMeta> {
-        let sid = self.ids.get(n.wrapping_sub(1)).copied().flatten()?;
-        slides.iter().find(|slide| slide.sld_id == Some(sid))
-    }
-
-    pub fn pos(&self, slides: &[SlideMeta], n: usize) -> Option<usize> {
-        let sid = self.ids.get(n.wrapping_sub(1)).copied().flatten()?;
-        slides.iter().position(|slide| slide.sld_id == Some(sid))
-    }
-
-    /// 重新列出之后，把 `index` 改回 apply 开始时的页号。新页记 0，不能被旧页号点中。
-    pub fn restore_indexes(&self, slides: &mut [SlideMeta]) {
+    pub fn mark_start(&self, slides: &mut [SlideMeta]) {
         for slide in slides.iter_mut() {
-            slide.index = slide
-                .sld_id
-                .and_then(|id| {
-                    self.ids
-                        .iter()
-                        .position(|saved| *saved == Some(id))
-                        .map(|pos| pos + 1)
-                })
-                .unwrap_or(0);
+            slide.start = slide.sld_id.and_then(|id| {
+                self.ids
+                    .iter()
+                    .position(|saved| *saved == Some(id))
+                    .map(|pos| pos + 1)
+            });
         }
     }
+}
+
+/// 按 apply 开始时的页号取页。
+pub fn slide_at_start(slides: &[SlideMeta], n: usize) -> Option<&SlideMeta> {
+    slides.iter().find(|slide| slide.start == Some(n))
+}
+
+/// apply 开始时第 `n` 页现在排在第几位，从 0 起。
+pub fn pos_at_start(slides: &[SlideMeta], n: usize) -> Option<usize> {
+    slides.iter().position(|slide| slide.start == Some(n))
 }
 
 pub fn list_slides(
@@ -202,6 +195,7 @@ pub fn list_slides(
         let numeric_id = sld_id.attr("id").and_then(|s| s.parse().ok());
         out.push(SlideMeta {
             index: i + 1,
+            start: Some(i + 1),
             part,
             name,
             hidden,

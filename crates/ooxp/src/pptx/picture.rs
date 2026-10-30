@@ -476,7 +476,7 @@ pub fn resolve_tree_part(
 ) -> Result<String, Error> {
     match host {
         TreeHost::Slide { n, on_notes } => {
-            let meta = super::shape::SlideFreeze::slide_at_start(slides, *n).ok_or_else(|| {
+            let meta = super::shape::slide_at_start(slides, *n).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::SlideNotFound { n: *n as u32 },
                     json_path.to_string(),
@@ -919,7 +919,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         ));
     }
     let part = if target.comment.is_some() {
-        let meta = shape::SlideFreeze::slide_at_start(&slides, target.slide).ok_or_else(|| {
+        let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::SlideNotFound {
                     n: target.slide as u32,
@@ -940,7 +940,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         )?
     };
     if let Some(cm) = &target.comment {
-        let meta = shape::SlideFreeze::slide_at_start(&slides, target.slide).ok_or_else(|| {
+        let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::SlideNotFound {
                     n: target.slide as u32,

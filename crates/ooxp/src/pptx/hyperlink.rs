@@ -933,7 +933,7 @@ fn make_rel(rid: &str, part: &str, slides: &[SlideMeta], target: &PptxLinkKind) 
         PptxLinkKind::Slide(n) => {
             let dest = slides
                 .iter()
-                .find(|s| s.index == *n)
+                .find(|s| s.start == Some(*n))
                 .map(|s| s.part.as_str())
                 .unwrap_or("");
             Relationship {
@@ -985,7 +985,7 @@ fn reject_self_jump(host: usize, target: &PptxLinkKind, i: usize) -> Result<(), 
 
 fn ensure_jump_exists(slides: &[SlideMeta], target: &PptxLinkKind, i: usize) -> Result<(), Error> {
     if let PptxLinkKind::Slide(n) = target {
-        if !slides.iter().any(|s| s.index == *n) {
+        if !slides.iter().any(|s| s.start == Some(*n)) {
             return Err(Error::with_path(
                 ErrorKind::SlideNotFound { n: *n as u32 },
                 format!("ops[{i}].slide"),

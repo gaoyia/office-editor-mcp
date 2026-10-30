@@ -1101,7 +1101,7 @@ fn build_tile(
 }
 
 fn slide_meta(slides: &[SlideMeta], n: usize, path: &str) -> Result<SlideRef, Error> {
-    let meta = super::shape::SlideFreeze::slide_at_start(slides, n).ok_or_else(|| {
+    let meta = super::shape::slide_at_start(slides, n).ok_or_else(|| {
         Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
     })?;
     let sld_id = meta.sld_id.ok_or_else(|| {

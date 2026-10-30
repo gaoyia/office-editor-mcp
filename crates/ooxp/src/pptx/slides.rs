@@ -18,13 +18,12 @@ pub fn insert(
     pres_part: &str,
     pres: &mut Document,
     slides: &[SlideMeta],
-    frozen: &shape::SlideFreeze,
     op: &InsertSlideOp,
     op_index: usize,
 ) -> Result<(), Error> {
     let insert_at = match op.after {
         None => slides.len(),
-        Some(after) => slide_pos(slides, frozen, after, op_index, "after")? + 1,
+        Some(after) => slide_pos(slides, after, op_index, "after")? + 1,
     };
     let neighbor = if insert_at == 0 {
         slides.first()
@@ -86,11 +85,10 @@ pub fn delete(
     pres_part: &str,
     pres: &mut Document,
     slides: &[SlideMeta],
-    frozen: &shape::SlideFreeze,
     op: &DeleteSlideOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let pos = slide_pos(slides, frozen, op.slide, op_index, "id")?;
+    let pos = slide_pos(slides, op.slide, op_index, "id")?;
     if slides.len() <= 1 {
         return Err(Error::with_path(
             ErrorKind::LastSlide,
@@ -133,11 +131,10 @@ pub fn move_slide(
     pres: &mut Document,
     pkg: &mut Package,
     slides: &[SlideMeta],
-    frozen: &shape::SlideFreeze,
     op: &MoveSlideOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let from = slide_pos(slides, frozen, op.slide, op_index, "id")?;
+    let from = slide_pos(slides, op.slide, op_index, "id")?;
     let dest = match op.after {
         None => 0,
         Some(after) => {
@@ -147,7 +144,7 @@ pub fn move_slide(
                     format!("ops[{op_index}].after"),
                 ));
             }
-            slide_pos(slides, frozen, after, op_index, "after")? + 1
+            slide_pos(slides, after, op_index, "after")? + 1
         }
     };
     if from + 1 == dest || (op.after.is_none() && from == 0) {
@@ -161,7 +158,7 @@ pub fn move_slide(
     })?;
     let after_sid = op
         .after
-        .and_then(|n| frozen.get(slides, n).and_then(|meta| meta.sld_id));
+        .and_then(|n| shape::slide_at_start(slides, n).and_then(|meta| meta.sld_id));
     let lst = sld_id_lst_mut(&mut pres.root)?;
     let from_node = sld_id_child_index(lst, from).ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
@@ -203,11 +200,10 @@ pub fn move_slide(
 pub fn set_hidden(
     pkg: &mut Package,
     slides: &[SlideMeta],
-    frozen: &shape::SlideFreeze,
     op: &SetSlideHiddenOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let pos = slide_pos(slides, frozen, op.slide, op_index, "id")?;
+    let pos = slide_pos(slides, op.slide, op_index, "id")?;
     let part = slides[pos].part.clone();
     let mut doc = xml::parse(pkg.get(&part)?)?;
     let currently = is_hidden(&doc.root);
@@ -223,14 +219,8 @@ pub fn set_hidden(
     Ok(())
 }
 
-fn slide_pos(
-    slides: &[SlideMeta],
-    frozen: &shape::SlideFreeze,
-    n: usize,
-    op_index: usize,
-    field: &str,
-) -> Result<usize, Error> {
-    frozen.pos(slides, n).ok_or_else(|| {
+fn slide_pos(slides: &[SlideMeta], n: usize, op_index: usize, field: &str) -> Result<usize, Error> {
+    shape::pos_at_start(slides, n).ok_or_else(|| {
         Error::with_path(
             ErrorKind::SlideNotFound { n: n as u32 },
             format!("ops[{op_index}].{field}"),
