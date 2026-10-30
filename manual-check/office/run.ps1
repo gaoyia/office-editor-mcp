@@ -246,6 +246,7 @@ $order = @(
     'xml-attr-newline'
     'id-pin'
     'pptx-id-pin-refs'
+    'strict-docx'
     'docx-tab-br'
     'xlsx-xml-comment'
     'xlsx-implicit-cell'

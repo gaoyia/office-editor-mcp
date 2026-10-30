@@ -37,6 +37,7 @@ use super::REL_CALC_CHAIN;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
+    opc::reject_strict(&pkg)?;
     let wb_part = opc::office_document_part(&pkg)?;
     let mut wb_doc = xml::parse(pkg.get(&wb_part)?)?;
     let wb_rels = Relationships::from_package(&pkg, &wb_part)?;

@@ -1398,6 +1398,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionPassword => {
             "setProtection does not write password hashes".into()
         }
+        ErrorKind::StrictPackage => {
+            "This file is Strict Open XML. This program only writes Transitional. Save it as Transitional in Office first.".into()
+        }
         ErrorKind::ProtectionHasPassword => {
             "this document has a password hash; protection fields cannot be changed".into()
         }

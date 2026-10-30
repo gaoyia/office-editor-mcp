@@ -28,6 +28,7 @@ use super::watermark;
 
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
+    opc::reject_strict(&pkg)?;
     let doc_part = opc::office_document_part(&pkg)?;
     let mut doc_xml = xml::parse(pkg.get(&doc_part)?)?;
     super::para::pin_paragraph_indexes(&mut doc_xml.root);

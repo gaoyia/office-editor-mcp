@@ -13,6 +13,10 @@
 
 对齐 Transitional OOXML，也就是 Office 默认存出来的那种包。
 ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/...`）只作对照，create 不按 Strict 生成。
+根关系里 `officeDocument` 的类型，或主部件根元素的命名空间，以 `http://purl.oclc.org/ooxml/` 开头，就是 Strict 包。
+inspect、exportMedia、exportChartData 只读，照常执行。
+apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件。
+请先用 Office 另存为 Transitional。本程序不实现 Strict 写入。
 
 ## 三个动作
 

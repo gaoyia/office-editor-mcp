@@ -8,6 +8,9 @@ use super::Package;
 
 pub const RELS_NS: &str = "http://schemas.openxmlformats.org/package/2006/relationships";
 
+/// ECMA-376 Part 1 的 Strict 命名空间前缀。Transitional 不用这一套。
+pub const STRICT_NS_PREFIX: &str = "http://purl.oclc.org/ooxml/";
+
 #[derive(Clone, Debug)]
 pub struct Relationship {
     pub id: String,
@@ -164,6 +167,37 @@ pub fn resolve_id(pkg: &Package, source_part: &str, rid: &str) -> Result<String,
         }));
     }
     resolve_rel_target(source_part, &rel.target)
+}
+
+/// 根关系的 `officeDocument` 类型，或主部件根元素的命名空间，以 Strict 前缀开头。
+pub fn is_strict_package(pkg: &Package) -> Result<bool, Error> {
+    let rels = Relationships::from_package(pkg, "/")?;
+    if rels
+        .find_office_document()
+        .is_some_and(|rel| rel.rel_type.starts_with(STRICT_NS_PREFIX))
+    {
+        return Ok(true);
+    }
+    let part = office_document_part(pkg)?;
+    let doc = xml::parse(pkg.get(&part)?)?;
+    Ok(root_namespace_is_strict(&doc.root))
+}
+
+pub fn reject_strict(pkg: &Package) -> Result<(), Error> {
+    if is_strict_package(pkg)? {
+        Err(Error::new(ErrorKind::StrictPackage))
+    } else {
+        Ok(())
+    }
+}
+
+fn root_namespace_is_strict(el: &xml::Element) -> bool {
+    let ns = if let Some((prefix, _)) = el.name.split_once(':') {
+        el.attr(&format!("xmlns:{prefix}"))
+    } else {
+        el.attr("xmlns")
+    };
+    ns.is_some_and(|uri| uri.starts_with(STRICT_NS_PREFIX))
 }
 
 pub fn office_document_part(pkg: &Package) -> Result<String, Error> {

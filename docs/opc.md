@@ -67,6 +67,21 @@ OPC 指 Open Packaging Conventions：文件是一个 ZIP，里面有部件、内
 
 不要对未改 XML 做重新缩进、重排属性、改 XML 声明、改换行符。Office 生成的 XML 常带特定声明和空元素写法，重排容易造成「没改的区域看起来不一样」。
 
+## Strict 包
+
+ECMA-376 Part 1 §9 把 Strict 和 Transitional 分成两套命名空间。
+Strict 的关系类型和主标记语言以 `http://purl.oclc.org/ooxml/` 开头。
+Transitional 用 `http://schemas.openxmlformats.org/` 下面的 2006 那套。
+
+判定在打开包之后、apply 第一条 op 之前，三种格式共用：
+
+- 根关系里 `officeDocument` 的关系类型以 `http://purl.oclc.org/ooxml/` 开头
+- 或者主部件根元素自己声明的命名空间以这个前缀开头
+
+命中任一条就是 Strict 包。inspect、exportMedia、exportChartData 照常读。
+页边距、纸张、栏距若写成 `72pt` 这类通用长度，读的时候折成 twip，见 [docx 分册](json-contract-docx.md)。
+apply 报 `NotImplemented`，不写文件。create 仍只生成 Transitional。
+
 ## 未知部件与未知关系
 
 ECMA-376 §9.1.4 与 §9.1.7：未知部件和未知关系在消费时不得导致失败。本库打开时保留它们，保存时若未标记删除就原样写回。这是「手术刀」策略在包这一层的体现。

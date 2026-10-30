@@ -135,6 +135,7 @@
 - **`Io`**（退出码 4）
   - 读盘、写盘、创建目录失败
 - **`NotImplemented`**（退出码 2）
+  - Strict 包（`http://purl.oclc.org/ooxml/`）上的 apply。只读动作照常。请先用 Office 另存为 Transitional
   - 第一期明确不做的动作
   - 目前：对数据表公式范围内非主格发 `setCell`，或对主格写 `value` / 清空 / `shared` / `array`
   - 对数组公式范围内非主格发 `setCell`

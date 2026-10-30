@@ -12,7 +12,8 @@ pub use names::{
 };
 pub use package::Package;
 pub use rels::{
-    office_document_part, part_still_referenced, resolve_id, Relationship, Relationships,
+    office_document_part, part_still_referenced, reject_strict, resolve_id, Relationship,
+    Relationships,
 };
 
 pub const ROOT_RELS_PART: &str = "/_rels/.rels";

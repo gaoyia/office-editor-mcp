@@ -799,6 +799,7 @@ define_error_kinds! {
     },
     ProtectionPassword => vec![Self::ProtectionPassword],
     ProtectionHasPassword => vec![Self::ProtectionHasPassword],
+    StrictPackage => vec![Self::StrictPackage],
     ProtectionPasswordBlank => vec![Self::ProtectionPasswordBlank],
     ProtectionPasswordWrong => vec![Self::ProtectionPasswordWrong],
     ProtectionPasswordNeedsDoc => vec![Self::ProtectionPasswordNeedsDoc],
@@ -2305,7 +2306,8 @@ impl ErrorKind {
             | Self::ContentControlGroup
             | Self::ContentControlHasTable
             | Self::ProtectionPassword
-            | Self::ProtectionHasPassword => NotImplemented,
+            | Self::ProtectionHasPassword
+            | Self::StrictPackage => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

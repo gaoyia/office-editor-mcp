@@ -684,12 +684,12 @@ pub fn measure_attr(
         return Ok(None);
     };
     let t = raw.trim();
-    let n: i64 = t.parse().map_err(|_| {
-        Error::xml_detail(
+    let Some(n) = parse_twips(t) else {
+        return Err(Error::xml_detail(
             XmlIssue::Parse,
             format!("{elem}/@{local} not an integer: {raw}"),
-        )
-    })?;
+        ));
+    };
     if !signed && n < 0 {
         return Err(Error::xml_detail(
             XmlIssue::Parse,
@@ -697,6 +697,36 @@ pub fn measure_attr(
         ));
     }
     Ok(Some(n))
+}
+
+/// 纯整数是 twip。`pt` / `pc` / `pi` / `in` / `cm` / `mm` 是 Strict 的通用长度，折成 twip。
+fn parse_twips(raw: &str) -> Option<i64> {
+    if let Ok(n) = raw.parse::<i64>() {
+        return Some(n);
+    }
+    let units: &[(&str, f64)] = &[
+        ("mm", 1440.0 / 25.4),
+        ("cm", 1440.0 / 2.54),
+        ("in", 1440.0),
+        ("pt", 20.0),
+        ("pc", 240.0),
+        ("pi", 240.0),
+    ];
+    for (suffix, per) in units {
+        let Some(num) = raw.strip_suffix(suffix) else {
+            continue;
+        };
+        let num = num.trim();
+        if num.is_empty() {
+            continue;
+        }
+        let value: f64 = num.parse().ok()?;
+        if !value.is_finite() {
+            return None;
+        }
+        return Some((value * per).round() as i64);
+    }
+    None
 }
 
 /// 读 `w:pgMar` 上的非负 twip 属性；缺则为 `None`。

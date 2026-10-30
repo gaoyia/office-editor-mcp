@@ -1204,6 +1204,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `right`、`gutter`、`pageWidth`、`pageHeight`、`orient`、`columns`、`vAlign`、`lineNumbering`、`docGrid`、`rtlGutter`、
   `headerLink`、`footerLink`、`pageBorders`、`formProt`。
 - `headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 非负整数。
+- Strict 包里页边距、纸张和栏距可以写成带单位的通用长度，例如 `72pt`。inspect 折成 twip。`pt` 乘 20，`pc` / `pi` 乘 240，`in` 乘 1440，`cm` 乘 1440/2.54，`mm` 乘 1440/25.4，四舍五入成整数。apply 仍拒绝整份 Strict 包。
   `left` / `right` / `gutter` 同属 `w:pgMar`，同样非负。`top` / `bottom` 是 `ST_SignedTwipsMeasure`，可为负整数。
   缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是整数，或本该非负却为负，报 `XmlBroken`。
 - `pageWidth` / `pageHeight` 取该节 `w:pgSz` 的 `w` / `h`（§17.6.13），单位 twip，非负整数。

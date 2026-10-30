@@ -1257,6 +1257,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionHasPassword => {
             "这份文件带密码哈希，不能改保护字段".into()
         }
+        ErrorKind::StrictPackage => {
+            "这份文件是 Strict Open XML。本程序只写 Transitional，请先用 Office 另存。".into()
+        }
         ErrorKind::ProtectionPasswordBlank => {
             "password 与 writePassword 必须是非空字符串".into()
         }

@@ -36,6 +36,7 @@ use super::zoom;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
+    opc::reject_strict(&pkg)?;
     let pres_part = opc::office_document_part(&pkg)?;
     let mut pres = xml::parse(pkg.get(&pres_part)?)?;
     let mut slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
