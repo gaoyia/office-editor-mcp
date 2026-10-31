@@ -13,6 +13,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-01 补跑 `xlsx-sheet-refs.ps1`。改名后公式和定义名换成 `New Name`，字符串里的表名不动。删表后公式和定义名变成 `#REF!`。Excel 16.0 没有 Repair。
 2026-11-01 补跑 `xlsx-break-link.ps1`。断开第一条外部链接后，编辑链接只剩原来的第二条，单元格公式仍指向那个文件。没有缓存的格子是 0。Excel 16.0 没有 Repair。
 2026-11-01 补跑 `xlsx-legacy-password.ps1`。遗留 XOR 口令 `secret` 改写成 SHA-512 后，Excel 16.0 用同一口令解开工作表保护。没有 Repair。
+2026-11-01 补跑 `chartex-edit.ps1`。瀑布图改数据后 Excel 读到 42 和 7，加的第二条系列在 C2。漏斗和树状图 Word、PowerPoint 打开没有 Repair。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。

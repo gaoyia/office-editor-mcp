@@ -1019,3 +1019,110 @@ fn insert_ohlc_contour_chartex_and_cust_error_bars() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn chartex_series_title_and_legend() {
+    let src = create_book("cx-edit");
+    let made = tmp("cx-made");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "chartex",
+            "layoutId": "waterfall",
+            "from": "E2",
+            "dataFrom": "A1",
+            "title": "旧标题",
+            "series": [{
+                "name": "值",
+                "categories": ["甲", "乙"],
+                "values": [10, 4]
+            }]
+        }]),
+    )
+    .unwrap();
+    let edited = tmp("cx-edited");
+    apply(
+        &made,
+        &edited,
+        json!([
+            {
+                "op": "setChartSeries",
+                "id": "sheet:Sheet1/chart:1/series:0",
+                "values": [42, 7]
+            },
+            {
+                "op": "setChartTitle",
+                "id": "sheet:Sheet1/chart:1",
+                "title": "新标题"
+            },
+            {
+                "op": "setChartLegend",
+                "id": "sheet:Sheet1/chart:1",
+                "show": true,
+                "pos": "b"
+            }
+        ]),
+    )
+    .unwrap();
+    let chart = part_text(&edited, "xl/charts/chartEx1.xml");
+    assert!(chart.contains(">42</cx:pt>"), "{chart}");
+    assert!(chart.contains(">7</cx:pt>"), "{chart}");
+    assert!(chart.contains("新标题"), "{chart}");
+    assert!(chart.contains(r#"pos="b""#), "{chart}");
+    let sheet = part_text(&edited, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains(">42<"), "{sheet}");
+    assert!(sheet.contains(">7<"), "{sheet}");
+    let err = apply(
+        &edited,
+        &tmp("cx-trend"),
+        json!([{
+            "op": "insertTrendline",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "type": "linear"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let added = tmp("cx-added");
+    apply(
+        &edited,
+        &added,
+        json!([{
+            "op": "addChartSeries",
+            "id": "sheet:Sheet1/chart:1",
+            "name": "第二",
+            "values": [1, 2]
+        }]),
+    )
+    .unwrap();
+    let chart = part_text(&added, "xl/charts/chartEx1.xml");
+    assert!(chart.matches("<cx:series ").count() >= 2, "{chart}");
+    assert!(chart.contains(">1</cx:pt>"), "{chart}");
+    let sheet = part_text(&added, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains(">1<"), "{sheet}");
+    let trimmed = tmp("cx-trimmed");
+    apply(
+        &added,
+        &trimmed,
+        json!([{
+            "op": "deleteChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:1"
+        }]),
+    )
+    .unwrap();
+    let chart = part_text(&trimmed, "xl/charts/chartEx1.xml");
+    assert_eq!(chart.matches("<cx:series ").count(), 1, "{chart}");
+    let last = apply(
+        &trimmed,
+        &tmp("cx-last"),
+        json!([{
+            "op": "deleteChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(last.code(), ErrorCode::InvalidField);
+}

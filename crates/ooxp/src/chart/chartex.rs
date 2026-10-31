@@ -3,10 +3,12 @@
 use serde_json::{json, Map, Value};
 
 use super::embed;
-use crate::chart::{format_a1_cell, format_a1_formula, NewSeries, CHARTEX_NS, REL_NS};
+use crate::chart::{
+    format_a1_cell, format_a1_formula, parse_a1_formula, resize_a1, NewSeries, CHARTEX_NS, REL_NS,
+};
 use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::xlsx::a1::CellRef;
-use crate::xml::{self, Element};
+use crate::xml::{self, Element, Node};
 
 pub const REL_CHARTEX: &str = "http://schemas.microsoft.com/office/2014/relationships/chartEx";
 pub const CT_CHARTEX: &str = "application/vnd.ms-office.chartex+xml";
@@ -58,7 +60,7 @@ pub fn attach_style(
     Ok(())
 }
 
-/// 本期可写的 `cx:series/@layoutId`。`regionMap` 需要 geoCache，不写。
+/// 可写的 `cx:series/@layoutId`。`regionMap` 不写：Excel 16.0 不另存地理缓存。
 pub fn parse_layout_id(s: &str) -> Option<&'static str> {
     match s {
         "waterfall" => Some("waterfall"),
@@ -401,4 +403,535 @@ pub fn series_json(chart_id: &str, space: &Element) -> Vec<Value> {
         index += 1;
     }
     out
+}
+
+pub fn is_space(space: &Element) -> bool {
+    space.child_by_local("chartData").is_some()
+}
+
+pub struct FormulaWrite {
+    pub formula: String,
+    pub values: Vec<Value>,
+}
+
+pub fn set_title(space: &mut Element, title: &str) {
+    let Some(chart) = space.child_by_local_mut("chart") else {
+        return;
+    };
+    if title.is_empty() {
+        chart.children.retain(|n| match n {
+            Node::Element(e) => e.local_name() != "title",
+            _ => true,
+        });
+        return;
+    }
+    if chart.child_by_local("title").is_none() {
+        let el = Element::new(chart.prefixed("title"))
+            .with_attr("pos", "t")
+            .with_attr("align", "ctr")
+            .with_attr("overlay", "0");
+        chart.children.insert(0, Node::Element(el));
+    }
+    let Some(title_el) = chart.child_by_local_mut("title") else {
+        return;
+    };
+    let tx_name = title_el.prefixed("tx");
+    let data_name = title_el.prefixed("txData");
+    let v_name = title_el.prefixed("v");
+    title_el.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "tx",
+        _ => true,
+    });
+    let mut data = Element::new(data_name);
+    data.push_element(Element::new(v_name).with_text(title));
+    let mut tx = Element::new(tx_name);
+    tx.push_element(data);
+    title_el.push_element(tx);
+}
+
+pub fn set_legend(space: &mut Element, show: bool, pos: Option<&str>) {
+    let Some(chart) = space.child_by_local_mut("chart") else {
+        return;
+    };
+    let kept = chart
+        .child_by_local("legend")
+        .and_then(|l| l.attr("pos"))
+        .unwrap_or("t")
+        .to_string();
+    chart.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "legend",
+        _ => true,
+    });
+    if !show {
+        return;
+    }
+    let pos = pos.unwrap_or(&kept);
+    chart.push_element(
+        Element::new(chart.prefixed("legend"))
+            .with_attr("pos", pos)
+            .with_attr("align", "ctr")
+            .with_attr("overlay", "0"),
+    );
+}
+
+pub fn edit_series(
+    space: &mut Element,
+    index: usize,
+    name: Option<&str>,
+    cats: Option<&[Value]>,
+    vals: Option<&[Value]>,
+) -> Option<Vec<FormulaWrite>> {
+    let did = {
+        let region = region_mut(space)?;
+        let ser = nth_series_mut(region, index)?;
+        if let Some(n) = name {
+            set_tx_v(ser, n);
+        }
+        ser.child_by_local("dataId")
+            .and_then(|e| e.attr_local("val"))
+            .unwrap_or("0")
+            .to_string()
+    };
+    let mut writes = Vec::new();
+    if let Some(n) = name {
+        if let Some(f) = series_name_formula(space, index) {
+            writes.push(FormulaWrite {
+                formula: f,
+                values: vec![json!(n)],
+            });
+        }
+    }
+    let data = data_mut(space, &did)?;
+    if let Some(c) = cats {
+        if let Some(f) = set_dim_pts(data, "strDim", c) {
+            writes.push(FormulaWrite {
+                formula: f,
+                values: c.to_vec(),
+            });
+        }
+    }
+    if let Some(v) = vals {
+        if let Some(f) = set_dim_pts(data, "numDim", v) {
+            writes.push(FormulaWrite {
+                formula: f,
+                values: v.to_vec(),
+            });
+        }
+    }
+    Some(writes)
+}
+
+fn region_mut(space: &mut Element) -> Option<&mut Element> {
+    space
+        .child_by_local_mut("chart")?
+        .child_by_local_mut("plotArea")?
+        .child_by_local_mut("plotAreaRegion")
+}
+
+fn nth_series_mut(region: &mut Element, index: usize) -> Option<&mut Element> {
+    region
+        .element_children_mut()
+        .filter(|e| e.local_name() == "series")
+        .nth(index)
+}
+
+fn data_mut<'a>(space: &'a mut Element, id: &str) -> Option<&'a mut Element> {
+    space
+        .child_by_local_mut("chartData")?
+        .element_children_mut()
+        .find(|e| e.local_name() == "data" && e.attr_local("id").unwrap_or("0") == id)
+}
+
+fn set_tx_v(ser: &mut Element, name: &str) {
+    let Some(tx) = ser.child_by_local_mut("tx") else {
+        return;
+    };
+    let Some(data) = tx.child_by_local_mut("txData") else {
+        return;
+    };
+    if let Some(v) = data.child_by_local_mut("v") {
+        v.set_text(name);
+        return;
+    }
+    data.push_element(Element::new(data.prefixed("v")).with_text(name));
+}
+
+fn series_name_formula(space: &Element, index: usize) -> Option<String> {
+    let region = space
+        .child_by_local("chart")?
+        .child_by_local("plotArea")?
+        .child_by_local("plotAreaRegion")?;
+    let ser = region
+        .element_children()
+        .filter(|e| e.local_name() == "series")
+        .nth(index)?;
+    ser.child_by_local("tx")
+        .and_then(|tx| tx.child_by_local("txData"))
+        .and_then(|d| d.child_by_local("f"))
+        .map(|f| f.text_content())
+        .filter(|s| !s.is_empty())
+}
+
+fn set_dim_pts(data: &mut Element, local: &str, values: &[Value]) -> Option<String> {
+    let dim = data
+        .element_children_mut()
+        .find(|e| e.local_name() == local)?;
+    let formula = resize_dim_formula(dim, values.len());
+    let Some(lvl) = dim.child_by_local_mut("lvl") else {
+        return formula;
+    };
+    lvl.set_attr("ptCount", values.len().to_string());
+    lvl.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "pt",
+        _ => true,
+    });
+    let pt_name = lvl.prefixed("pt");
+    for (i, v) in values.iter().enumerate() {
+        lvl.push_element(
+            Element::new(&pt_name)
+                .with_attr("idx", i.to_string())
+                .with_text(value_text(v)),
+        );
+    }
+    formula
+}
+
+fn resize_dim_formula(dim: &mut Element, n: usize) -> Option<String> {
+    let f = dim.child_by_local_mut("f")?;
+    let text = f.text_content();
+    if text.is_empty() {
+        return None;
+    }
+    if let Some(refer) = parse_a1_formula(&text) {
+        if n == 0 {
+            return Some(text);
+        }
+        let resized = resize_a1(&refer, n);
+        let sheet = resized.sheet.clone().unwrap_or_else(|| "Sheet1".into());
+        let next = format_a1_formula(&sheet, resized.start, resized.end);
+        f.set_text(&next);
+        return Some(next);
+    }
+    Some(text)
+}
+
+pub fn append_series(
+    space: &mut Element,
+    chart_id: &str,
+    name: &str,
+    cats: Option<&[Value]>,
+    vals: &[Value],
+    op_index: usize,
+) -> Result<Vec<FormulaWrite>, crate::error::Error> {
+    use crate::error::{Error, ErrorKind};
+    if layout_is_fixed(space) {
+        return Err(Error::with_path(
+            ErrorKind::RestrictedChart {
+                id: chart_id.to_string(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let count = series_count(space);
+    let Some(refer) = first_val_ref(space) else {
+        return Err(Error::with_path(
+            ErrorKind::ChartFormulaNotA1,
+            format!("ops[{op_index}]"),
+        ));
+    };
+    let cat_len = first_cat_len(space);
+    if let Some(c) = cats {
+        if cat_len.is_some_and(|n| n != c.len()) {
+            return Err(Error::with_path(
+                ErrorKind::ChartFormulaNotA1,
+                format!("ops[{op_index}].categories"),
+            ));
+        }
+    }
+    let sheet = refer.sheet.clone().unwrap_or_else(|| "Sheet1".into());
+    let col = refer.start.col + count as u32;
+    let start = CellRef {
+        col,
+        row: refer.start.row,
+    };
+    let end = CellRef {
+        col,
+        row: refer.start.row + vals.len().saturating_sub(1) as u32,
+    };
+    let val_f = format_a1_formula(&sheet, start, end);
+    let name_f = if refer.start.row > 1 {
+        Some(format_a1_cell(
+            &sheet,
+            CellRef {
+                col,
+                row: refer.start.row - 1,
+            },
+        ))
+    } else {
+        None
+    };
+    let data_id = next_data_id(space);
+    let layout = first_layout(space).unwrap_or_else(|| "funnel".into());
+    let cat_f = first_cat_formula(space);
+    let cat_vals = cats
+        .map(|c| c.to_vec())
+        .unwrap_or_else(|| first_cat_values(space));
+    push_data(
+        space,
+        &data_id,
+        &layout,
+        cat_f.as_deref(),
+        &cat_vals,
+        &val_f,
+        vals,
+    );
+    push_series(space, &layout, count, name, name_f.as_deref(), &data_id);
+    let mut writes = vec![FormulaWrite {
+        formula: val_f,
+        values: vals.to_vec(),
+    }];
+    if let Some(f) = name_f {
+        writes.push(FormulaWrite {
+            formula: f,
+            values: vec![json!(name)],
+        });
+    }
+    Ok(writes)
+}
+
+pub fn remove_series(
+    space: &mut Element,
+    index: usize,
+    id: &str,
+    op_index: usize,
+) -> Result<(), crate::error::Error> {
+    use crate::error::{Error, ErrorKind};
+    if layout_is_fixed(space) {
+        return Err(Error::with_path(
+            ErrorKind::RestrictedChart { id: id.to_string() },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n = series_count(space);
+    if n <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastChartSeries,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let did = {
+        let region = region_mut(space).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ChartSeriesNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        let ser = nth_series_mut(region, index).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ChartSeriesNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        ser.child_by_local("dataId")
+            .and_then(|e| e.attr_local("val"))
+            .unwrap_or("0")
+            .to_string()
+    };
+    if let Some(region) = region_mut(space) {
+        let mut seen = 0usize;
+        region.children.retain(|n| match n {
+            Node::Element(e) if e.local_name() == "series" => {
+                let keep = seen != index;
+                seen += 1;
+                keep
+            }
+            _ => true,
+        });
+    }
+    if let Some(parent) = space.child_by_local_mut("chartData") {
+        parent.children.retain(|n| match n {
+            Node::Element(e) if e.local_name() == "data" => {
+                e.attr_local("id").unwrap_or("0") != did
+            }
+            _ => true,
+        });
+    }
+    Ok(())
+}
+
+fn layout_is_fixed(space: &Element) -> bool {
+    let Some(region) = space
+        .child_by_local("chart")
+        .and_then(|c| c.child_by_local("plotArea"))
+        .and_then(|p| p.child_by_local("plotAreaRegion"))
+    else {
+        return false;
+    };
+    region.element_children().any(|e| {
+        e.local_name() == "series"
+            && matches!(e.attr("layoutId"), Some("paretoLine" | "boxWhisker"))
+    })
+}
+
+fn series_count(space: &Element) -> usize {
+    space
+        .child_by_local("chart")
+        .and_then(|c| c.child_by_local("plotArea"))
+        .and_then(|p| p.child_by_local("plotAreaRegion"))
+        .map(|r| {
+            r.element_children()
+                .filter(|e| e.local_name() == "series")
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn first_layout(space: &Element) -> Option<String> {
+    space
+        .child_by_local("chart")
+        .and_then(|c| c.child_by_local("plotArea"))
+        .and_then(|p| p.child_by_local("plotAreaRegion"))
+        .and_then(|r| {
+            r.element_children()
+                .find(|e| e.local_name() == "series")
+                .and_then(|s| s.attr("layoutId").map(str::to_string))
+        })
+}
+
+fn next_data_id(space: &Element) -> String {
+    let max = space
+        .child_by_local("chartData")
+        .map(|d| {
+            d.element_children()
+                .filter(|e| e.local_name() == "data")
+                .filter_map(|e| e.attr_local("id").and_then(|s| s.parse::<u32>().ok()))
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    (max + 1).to_string()
+}
+
+fn first_val_ref(space: &Element) -> Option<crate::chart::A1Ref> {
+    let data = space.child_by_local("chartData")?;
+    let first = data.element_children().find(|e| e.local_name() == "data")?;
+    let f = first
+        .element_children()
+        .find(|e| e.local_name() == "numDim")?
+        .child_by_local("f")?
+        .text_content();
+    parse_a1_formula(&f)
+}
+
+fn first_cat_formula(space: &Element) -> Option<String> {
+    let data = space.child_by_local("chartData")?;
+    let first = data.element_children().find(|e| e.local_name() == "data")?;
+    Some(
+        first
+            .element_children()
+            .find(|e| e.local_name() == "strDim")?
+            .child_by_local("f")?
+            .text_content(),
+    )
+    .filter(|s| !s.is_empty())
+}
+
+fn first_cat_len(space: &Element) -> Option<usize> {
+    Some(first_cat_values(space).len()).filter(|n| *n > 0)
+}
+
+fn first_cat_values(space: &Element) -> Vec<Value> {
+    let Some(data) = space.child_by_local("chartData") else {
+        return Vec::new();
+    };
+    let Some(first) = data.element_children().find(|e| e.local_name() == "data") else {
+        return Vec::new();
+    };
+    first
+        .element_children()
+        .find(|e| e.local_name() == "strDim")
+        .and_then(|s| s.child_by_local("lvl"))
+        .map(lvl_pts)
+        .unwrap_or_default()
+}
+
+fn push_data(
+    space: &mut Element,
+    id: &str,
+    layout: &str,
+    cat_f: Option<&str>,
+    cats: &[Value],
+    val_f: &str,
+    vals: &[Value],
+) {
+    let Some(parent) = space.child_by_local_mut("chartData") else {
+        return;
+    };
+    let nd = num_dim_type(layout);
+    let mut str_dim = Element::new(parent.prefixed("strDim")).with_attr("type", "cat");
+    if let Some(f) = cat_f {
+        str_dim.push_element(Element::new(str_dim.prefixed("f")).with_text(f));
+    }
+    let mut cat_lvl =
+        Element::new(str_dim.prefixed("lvl")).with_attr("ptCount", cats.len().to_string());
+    fill_pts(&mut cat_lvl, cats);
+    str_dim.push_element(cat_lvl);
+    let mut num_dim = Element::new(parent.prefixed("numDim")).with_attr("type", nd);
+    num_dim.push_element(Element::new(num_dim.prefixed("f")).with_text(val_f));
+    let mut val_lvl = Element::new(num_dim.prefixed("lvl"))
+        .with_attr("ptCount", vals.len().to_string())
+        .with_attr("formatCode", "General");
+    fill_pts(&mut val_lvl, vals);
+    num_dim.push_element(val_lvl);
+    let mut data = Element::new(parent.prefixed("data")).with_attr("id", id);
+    data.push_element(str_dim);
+    data.push_element(num_dim);
+    parent.push_element(data);
+}
+
+fn push_series(
+    space: &mut Element,
+    layout: &str,
+    index: usize,
+    name: &str,
+    name_f: Option<&str>,
+    data_id: &str,
+) {
+    let Some(region) = region_mut(space) else {
+        return;
+    };
+    let xml = series_xml(
+        layout,
+        index,
+        name,
+        name_f,
+        data_id.parse().unwrap_or(index),
+    );
+    let wrapped = format!(r#"<cx:region xmlns:cx="{CHARTEX_NS}">{xml}</cx:region>"#);
+    if let Ok(doc) = xml::parse(wrapped.as_bytes()) {
+        if let Some(ser) = doc.root.element_children().next().cloned() {
+            region.push_element(ser);
+        }
+    }
+}
+
+fn fill_pts(lvl: &mut Element, values: &[Value]) {
+    let pt_name = lvl.prefixed("pt");
+    for (i, v) in values.iter().enumerate() {
+        lvl.push_element(
+            Element::new(&pt_name)
+                .with_attr("idx", i.to_string())
+                .with_text(value_text(v)),
+        );
+    }
+}
+
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(true) => "TRUE".into(),
+        Value::Bool(false) => "FALSE".into(),
+        other => other.to_string(),
+    }
 }

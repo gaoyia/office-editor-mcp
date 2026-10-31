@@ -1397,7 +1397,16 @@ pptx 的 `id` 可以是批注容器 id 或回复 id。`done: true` 写 `status="
 
 ### 图表 op 的共同限制
 
-`type` 为 `other` 或 `chartex` 时，除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 外一律报 `NotImplemented`，不写文件。
+`type` 为 `other` 时，除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 外一律报 `NotImplemented`，不写文件。
+`type` 为 `chartex` 时，可以改标题、图例和系列，也可以增删系列：
+
+- `setChartSeries` 改 `cx:pt`，并按 `cx:f` 写 xlsx 单元格或 docx / pptx 的 embedding
+- `addChartSeries` 再写一条同样 `layoutId` 的系列，数值落到下一列
+- 帕累托和箱线的条数固定，增删报 `NotImplemented`
+- 删到只剩一条报 `LastChartSeries`
+- 瀑布图汇总点、树状图层级留在同一条系列里
+- 趋势线、误差线、换类型、轴标题、数据标签仍报 `NotImplemented`
+- `regionMap` 不插入。Excel 16.0 的图表类型接口不接受地图图表，没有另存出地理缓存
 xlsx 没有 `setChartWrap` / `setChartPos`，对应例外是 `deleteChart`、`setChartSize`、`setChartAnchor`。
 pptx 没有 `setChartWrap` / `setChartAnchor`，对应例外是 `deleteChart`、`setChartSize`、`setChartPos`。
 `flags` 含 `secondaryAxis`、`trendline`、`errorBars` 不再整张锁死。
@@ -1406,7 +1415,7 @@ pptx 没有 `setChartWrap` / `setChartAnchor`，对应例外是 `deleteChart`、
 `type` 为 `combo` 不再整张锁死，系列留在原来的包裹里改。`type` 为 `stock`、`surface` 或 `ofPie` 时：`setChartSeries` 与装饰 op 可以。
 `addChartSeries`、`deleteChartSeries` 仍报 `NotImplemented`（股价必须保持与 `stockKind` 一致的条数，曲面必须保持三条，复合饼必须保持一条）。
 `setChartType` 可以在系列条数对得上时转入或转出这三种（见该 op）。`insertChart` / create 接受 `stock`、`surface`、`ofPie` 与带 `layoutId` 的 `chartex`。
-已写入的 `chartex` 仍除删除与尺寸 / 位置 / 绕排 / 锚点外锁死。xlsx 上发 `setChartWrap` / `setChartPos` 报 `InvalidField`。
+已写入的 `chartex` 可以改标题、图例和系列数据。xlsx 上发 `setChartWrap` / `setChartPos` 报 `InvalidField`。
 docx 上发 `setChartAnchor` / `setChartPos` 报 `InvalidField`。pptx 上发 `setChartWrap` / `setChartAnchor` 报 `InvalidField`。`insertChart` 不能插入透视图表。
 
 docx 改系列数据时必须同时改 chart 部件里的 cache（`c:numCache` / `c:strCache` / `c:numLit` / `c:strLit`）以及 embedding 工作簿里公式指向的单元格。

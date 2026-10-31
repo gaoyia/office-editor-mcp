@@ -126,6 +126,14 @@ pub fn patch_series(
     apply_ops(bytes, ops)
 }
 
+pub fn patch_formulas(bytes: &[u8], items: &[(&str, &[Value])]) -> Result<Vec<u8>, Error> {
+    let mut ops = Vec::new();
+    for (formula, values) in items {
+        push_formula_ops(&mut ops, formula, values);
+    }
+    apply_ops(bytes, ops)
+}
+
 pub fn apply_ops(bytes: &[u8], ops: Vec<Value>) -> Result<Vec<u8>, Error> {
     if ops.is_empty() {
         return Ok(bytes.to_vec());

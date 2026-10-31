@@ -637,6 +637,11 @@ pub fn set_chart_title(
     op_index: usize,
 ) -> Result<(), Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::set_title(&mut space.root, &op.title);
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_chart_title(&mut space.root, &op.title);
     super::list_pin::write_part(pkg, &chart_part, &space)?;
@@ -653,6 +658,18 @@ pub fn set_chart_series(
     op_index: usize,
 ) -> Result<bool, Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    if chart::chartex::is_space(&space.root) {
+        return set_chartex_series(
+            pkg,
+            &mut space,
+            &chart_part,
+            sheet_name,
+            sheet_index,
+            dirty_sheets,
+            op,
+            op_index,
+        );
+    }
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
     let Some(snapshot) = chart::with_ser_mut(&mut space.root, op.index, |ser| ser.clone()) else {
         return Err(Error::with_path(
@@ -753,6 +770,44 @@ pub fn add_chart_series(
     op_index: usize,
 ) -> Result<bool, Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    if chart::chartex::is_space(&space.root) {
+        if op.series_type.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{op_index}].type"),
+            ));
+        }
+        if op.sizes.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::SizesOnNonBubble,
+                format!("ops[{op_index}].sizes"),
+            ));
+        }
+        let name = op.name.as_deref().unwrap_or("");
+        let writes = chart::chartex::append_series(
+            &mut space.root,
+            &op.id,
+            name,
+            op.categories.as_deref(),
+            &op.values,
+            op_index,
+        )?;
+        let mut wrote_cells = false;
+        for item in &writes {
+            write_or_resize(
+                pkg,
+                sheet_name,
+                sheet_index,
+                dirty_sheets,
+                Some(&item.formula),
+                &item.values,
+                op_index,
+                &mut wrote_cells,
+            )?;
+        }
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(wrote_cells);
+    }
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
     chart::series_decor::reject_structure_edit(&space.root, &op.id, op_index)?;
     let col = chart::next_val_col_from_formulas(&space.root).ok_or_else(|| {
@@ -890,6 +945,11 @@ pub fn delete_chart_series(
     op_index: usize,
 ) -> Result<(), Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::remove_series(&mut space.root, op.index, &op.id, op_index)?;
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
     chart::series_decor::reject_structure_edit(&space.root, &op.id, op_index)?;
     let n = chart::series_count(&space.root);
@@ -949,6 +1009,11 @@ pub fn set_chart_legend(
     op_index: usize,
 ) -> Result<(), Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::set_legend(&mut space.root, op.show, op.pos.as_deref());
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_legend(&mut space.root, op.show, op.pos.as_deref());
     super::list_pin::write_part(pkg, &chart_part, &space)?;
@@ -1205,6 +1270,51 @@ pub fn set_chart_anchor(
     );
     super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
+}
+
+fn set_chartex_series(
+    pkg: &mut Package,
+    space: &mut Document,
+    chart_part: &str,
+    sheet_name: &str,
+    sheet_index: &[(String, String, &'static str)],
+    dirty_sheets: &mut Vec<(String, Document)>,
+    op: &SetChartSeriesOp,
+    op_index: usize,
+) -> Result<bool, Error> {
+    if op.sizes.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{op_index}].sizes"),
+        ));
+    }
+    let Some(writes) = chart::chartex::edit_series(
+        &mut space.root,
+        op.index,
+        op.name.as_deref(),
+        op.categories.as_deref(),
+        op.values.as_deref(),
+    ) else {
+        return Err(Error::with_path(
+            ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let mut wrote_cells = false;
+    for w in &writes {
+        let _ = write_or_resize(
+            pkg,
+            sheet_name,
+            sheet_index,
+            dirty_sheets,
+            Some(&w.formula),
+            &w.values,
+            op_index,
+            &mut wrote_cells,
+        )?;
+    }
+    super::list_pin::write_part(pkg, chart_part, space)?;
+    Ok(wrote_cells)
 }
 
 fn write_or_resize(

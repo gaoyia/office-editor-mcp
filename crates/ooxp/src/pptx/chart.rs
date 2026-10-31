@@ -754,6 +754,11 @@ pub fn apply_title(
 ) -> Result<(), Error> {
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::set_title(&mut space.root, &op.title);
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_chart_title(&mut space.root, &op.title);
     super::list_pin::write_part(pkg, &chart_part, &space)?;
@@ -769,6 +774,9 @@ pub fn apply_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
+    if chart::chartex::is_space(&space.root) {
+        return write_chartex_series(pkg, &mut space, &chart_part, op, i);
+    }
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     if chart::with_ser_mut(&mut space.root, op.index, |_| ()).is_none() {
         return Err(Error::with_path(
@@ -804,6 +812,45 @@ fn series_is_bubble(space: &Element, index: usize) -> bool {
         }
     }
     false
+}
+
+fn write_chartex_series(
+    pkg: &mut Package,
+    space: &mut Document,
+    chart_part: &str,
+    op: &SetChartSeriesOp,
+    i: usize,
+) -> Result<(), Error> {
+    if op.sizes.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{i}].sizes"),
+        ));
+    }
+    let Some(writes) = chart::chartex::edit_series(
+        &mut space.root,
+        op.index,
+        op.name.as_deref(),
+        op.categories.as_deref(),
+        op.values.as_deref(),
+    ) else {
+        return Err(Error::with_path(
+            ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    };
+    if let Some(embed_rid) = chart::external_data_rid(&space.root) {
+        let embed_part = crate::opc::resolve_id(pkg, chart_part, &embed_rid)?;
+        let bytes = pkg.get(&embed_part)?.to_vec();
+        let items: Vec<(&str, &[Value])> = writes
+            .iter()
+            .map(|w| (w.formula.as_str(), w.values.as_slice()))
+            .collect();
+        let updated = chart::embed::patch_formulas(&bytes, &items)?;
+        pkg.set(&embed_part, updated)?;
+    }
+    super::list_pin::write_part(pkg, chart_part, space)?;
+    Ok(())
 }
 
 fn write_series(
@@ -874,6 +921,41 @@ pub fn apply_add_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
+    if chart::chartex::is_space(&space.root) {
+        if op.series_type.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        if op.sizes.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::SizesOnNonBubble,
+                format!("ops[{i}].sizes"),
+            ));
+        }
+        let name = op.name.as_deref().unwrap_or("");
+        let writes = chart::chartex::append_series(
+            &mut space.root,
+            &op.id,
+            name,
+            op.categories.as_deref(),
+            &op.values,
+            i,
+        )?;
+        if let Some(embed_rid) = chart::external_data_rid(&space.root) {
+            let embed_part = crate::opc::resolve_id(pkg, &chart_part, &embed_rid)?;
+            let bytes = pkg.get(&embed_part)?.to_vec();
+            let items: Vec<(&str, &[Value])> = writes
+                .iter()
+                .map(|w| (w.formula.as_str(), w.values.as_slice()))
+                .collect();
+            let updated = chart::embed::patch_formulas(&bytes, &items)?;
+            pkg.set(&embed_part, updated)?;
+        }
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let ty = chart::inspect_type(&space.root, false);
@@ -1037,6 +1119,11 @@ pub fn apply_delete_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::remove_series(&mut space.root, op.index, &op.id, i)?;
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let n = chart::series_count(&space.root);
@@ -1108,6 +1195,11 @@ pub fn apply_legend(
 ) -> Result<(), Error> {
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
+    if chart::chartex::is_space(&space.root) {
+        chart::chartex::set_legend(&mut space.root, op.show, op.pos.as_deref());
+        super::list_pin::write_part(pkg, &chart_part, &space)?;
+        return Ok(());
+    }
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_legend(&mut space.root, op.show, op.pos.as_deref());
     super::list_pin::write_part(pkg, &chart_part, &space)?;

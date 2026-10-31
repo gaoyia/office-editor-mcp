@@ -1560,3 +1560,88 @@ fn insert_ohlc_contour_chartex_and_cust_error_bars() {
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn chartex_series_updates_cache_and_embedding() {
+    let src = write_sample("cx-src", false);
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let made = tmp_dir().join(format!("cx-made-{n}.docx"));
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "chartex",
+            "layoutId": "funnel",
+            "title": "旧",
+            "series": [{
+                "name": "值",
+                "categories": ["甲", "乙"],
+                "values": [3, 1]
+            }]
+        }]),
+    );
+    let tree = inspect(&made, json!({ "charts": true, "from": 1, "maxParas": 5 }));
+    let id = tree["charts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "chartex")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let edited = tmp_dir().join(format!("cx-edit-{n}.docx"));
+    apply(
+        &made,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{id}/series:0"),
+            "values": [9, 8]
+        }]),
+    );
+    let bytes = std::fs::read(&edited).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut saw_chart = false;
+    let mut saw_embed = false;
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        let name = file.name().to_string();
+        if !name.ends_with(".xml") {
+            continue;
+        }
+        let mut text = String::new();
+        file.read_to_string(&mut text).unwrap();
+        if name.contains("chartEx") {
+            assert!(text.contains(">9</cx:pt>"), "{text}");
+            saw_chart = true;
+        }
+    }
+    assert!(saw_chart);
+    let bytes = std::fs::read(&edited).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        if !file.name().ends_with(".xlsx") {
+            continue;
+        }
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+        let mut inner = ZipArchive::new(Cursor::new(data)).unwrap();
+        for j in 0..inner.len() {
+            let mut part = inner.by_index(j).unwrap();
+            if !part.name().ends_with(".xml") {
+                continue;
+            }
+            let mut xml = String::new();
+            part.read_to_string(&mut xml).unwrap();
+            if xml.contains(">9<") && xml.contains(">8<") {
+                saw_embed = true;
+            }
+        }
+    }
+    assert!(saw_embed);
+}

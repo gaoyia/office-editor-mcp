@@ -1037,7 +1037,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidLayoutId => {
             "layoutId 必须是 waterfall、treemap、sunburst、funnel、clusteredColumn、boxWhisker 或 pareto，且只对 type 为 chartex 有意义".into()
         }
-        ErrorKind::RegionMapChart => "regionMap 地图图本期不做".into(),
+        ErrorKind::RegionMapChart => "regionMap 地图图不写：Excel 16.0 不另存地理缓存".into(),
         ErrorKind::SizesOnNonBubble => "sizes 只对气泡系列有意义".into(),
         ErrorKind::InvalidComboSeriesType => {
             "系列 type 必须是 bar、col、line、area 或 scatter，且只有组合图才能带".into()

@@ -54,6 +54,7 @@ $order = @(
     'xlsx-omml'
     'xlsx-math-geom'
     'xlsx-charts'
+    'chartex-edit'
     'xlsx-charts-remain'
     'xlsx-charts-rare'
     'xlsx-charts-rare-remain'

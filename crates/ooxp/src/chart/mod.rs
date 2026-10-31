@@ -916,8 +916,12 @@ pub fn formula_of(el: &Element) -> Option<String> {
 }
 
 pub fn external_data_rid(space: &Element) -> Option<String> {
-    space
-        .child_by_local("externalData")
+    let direct = space.child_by_local("externalData");
+    let nested = space
+        .child_by_local("chartData")
+        .and_then(|d| d.child_by_local("externalData"));
+    direct
+        .or(nested)
         .and_then(|e| e.attr_local("id"))
         .map(str::to_string)
 }

@@ -705,6 +705,11 @@ pub fn apply_title(
     i: usize,
 ) -> Result<(), Error> {
     let mut space = load_chart_space(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
+    if crate::chart::chartex::is_space(&space.0.root) {
+        crate::chart::chartex::set_title(&mut space.0.root, &op.title);
+        save_chart(pkg, docs, &space.1, &space.0)?;
+        return Ok(());
+    }
     crate::chart::reject_restricted(&space.0.root, &op.id, i, ChartRestrict::Decorate)?;
     set_chart_title(&mut space.0.root, &op.title);
     save_chart(pkg, docs, &space.1, &space.0)?;
@@ -721,6 +726,9 @@ pub fn apply_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, host) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    if crate::chart::chartex::is_space(&space.root) {
+        return write_chartex_series(pkg, docs, &mut space, &chart_part, op, i);
+    }
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     if crate::chart::with_ser_mut(&mut space.root, op.target.index, |_| ()).is_none() {
         return Err(Error::with_path(
@@ -760,6 +768,41 @@ pub fn apply_add_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
+    if crate::chart::chartex::is_space(&space.root) {
+        if op.series_type.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        if op.sizes.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::SizesOnNonBubble,
+                format!("ops[{i}].sizes"),
+            ));
+        }
+        let name = op.name.as_deref().unwrap_or("");
+        let writes = crate::chart::chartex::append_series(
+            &mut space.root,
+            &op.id,
+            name,
+            op.categories.as_deref(),
+            &op.values,
+            i,
+        )?;
+        if let Some(embed_rid) = crate::chart::external_data_rid(&space.root) {
+            let embed_part = crate::opc::resolve_id(pkg, &chart_part, &embed_rid)?;
+            let bytes = pkg.get(&embed_part)?.to_vec();
+            let items: Vec<(&str, &[Value])> = writes
+                .iter()
+                .map(|w| (w.formula.as_str(), w.values.as_slice()))
+                .collect();
+            let updated = crate::chart::embed::patch_formulas(&bytes, &items)?;
+            pkg.set(&embed_part, updated)?;
+        }
+        save_chart(pkg, docs, &chart_part, &space)?;
+        return Ok(());
+    }
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let ty = inspect_type(&space.root, false);
@@ -806,6 +849,11 @@ pub fn apply_delete_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    if crate::chart::chartex::is_space(&space.root) {
+        crate::chart::chartex::remove_series(&mut space.root, op.target.index, &op.id, i)?;
+        save_chart(pkg, docs, &chart_part, &space)?;
+        return Ok(());
+    }
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let n = series_count(&space.root);
@@ -880,6 +928,11 @@ pub fn apply_legend(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
+    if crate::chart::chartex::is_space(&space.root) {
+        crate::chart::chartex::set_legend(&mut space.root, op.show, op.pos.as_deref());
+        save_chart(pkg, docs, &chart_part, &space)?;
+        return Ok(());
+    }
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_legend(&mut space.root, op.show, op.pos.as_deref());
     save_chart(pkg, docs, &chart_part, &space)?;
@@ -2488,6 +2541,46 @@ fn strip_dlbls(el: &mut Element) {
     for c in el.element_children_mut() {
         strip_dlbls(c);
     }
+}
+
+fn write_chartex_series(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    space: &mut Document,
+    chart_part: &str,
+    op: &SetChartSeriesOp,
+    i: usize,
+) -> Result<(), Error> {
+    if op.sizes.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{i}].sizes"),
+        ));
+    }
+    let Some(writes) = crate::chart::chartex::edit_series(
+        &mut space.root,
+        op.target.index,
+        op.name.as_deref(),
+        op.categories.as_deref(),
+        op.values.as_deref(),
+    ) else {
+        return Err(Error::with_path(
+            ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    };
+    if let Some(embed_rid) = crate::chart::external_data_rid(&space.root) {
+        let embed_part = crate::opc::resolve_id(pkg, chart_part, &embed_rid)?;
+        let bytes = pkg.get(&embed_part)?.to_vec();
+        let items: Vec<(&str, &[Value])> = writes
+            .iter()
+            .map(|w| (w.formula.as_str(), w.values.as_slice()))
+            .collect();
+        let updated = crate::chart::embed::patch_formulas(&bytes, &items)?;
+        pkg.set(&embed_part, updated)?;
+    }
+    save_chart(pkg, docs, chart_part, space)?;
+    Ok(())
 }
 
 fn write_series(

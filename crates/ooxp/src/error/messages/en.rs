@@ -1137,7 +1137,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidLayoutId => {
             "layoutId must be waterfall, treemap, sunburst, funnel, clusteredColumn, boxWhisker, or pareto, and is only valid when type is chartex".into()
         }
-        ErrorKind::RegionMapChart => "regionMap charts are not implemented".into(),
+        ErrorKind::RegionMapChart => "regionMap is not written; Excel 16.0 does not save a geography cache".into(),
         ErrorKind::SizesOnNonBubble => "sizes is only valid on a bubble series".into(),
         ErrorKind::InvalidComboSeriesType => {
             "series type must be bar, col, line, area, or scatter, and only combo charts may use it".into()

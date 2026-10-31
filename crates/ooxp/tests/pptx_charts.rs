@@ -1189,17 +1189,20 @@ fn insert_ohlc_contour_chartex_and_cust_error_bars() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = apply(
+    let edited = tmp("cx-data").with_extension("pptx");
+    apply(
         &out,
-        &tmp("cx-data").with_extension("pptx"),
+        &edited,
         json!([{
             "op": "setChartSeries",
             "id": format!("{}/series:0", cx["id"].as_str().unwrap()),
             "values": [1, 2, 3]
         }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    .unwrap();
+    let cxml = String::from_utf8(part_bytes(&edited, "ppt/charts/chartEx1.xml")).unwrap();
+    assert!(cxml.contains(">1</cx:pt>"), "{cxml}");
+    assert!(cxml.contains(">3</cx:pt>"), "{cxml}");
 }
 
 #[test]
@@ -1234,4 +1237,73 @@ fn chartex_numeric_point_escapes_text() {
         }
     }
     assert!(xml.contains("a&amp;b"), "{xml}");
+}
+
+#[test]
+fn chartex_series_updates_cache_and_embedding() {
+    let src = create_deck("cx-edit");
+    let made = tmp("cx-made").with_extension("pptx");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "layoutId": "treemap",
+            "series": [{
+                "name": "值",
+                "categories": ["甲", "乙"],
+                "values": [3, 1]
+            }]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&made);
+    let id = tree["slides"][0]["charts"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let edited = tmp("cx-edited").with_extension("pptx");
+    apply(
+        &made,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{id}/series:0"),
+            "values": [9, 8]
+        }]),
+    )
+    .unwrap();
+    let bytes = std::fs::read(&edited).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut saw_chart = false;
+    let mut saw_embed = false;
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        let name = file.name().to_string();
+        if name.contains("chartEx") && name.ends_with(".xml") {
+            let mut text = String::new();
+            file.read_to_string(&mut text).unwrap();
+            assert!(text.contains(">9</cx:pt>"), "{text}");
+            saw_chart = true;
+        }
+        if name.ends_with(".xlsx") {
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            let mut inner = ZipArchive::new(Cursor::new(data)).unwrap();
+            for j in 0..inner.len() {
+                let mut part = inner.by_index(j).unwrap();
+                if !part.name().ends_with(".xml") {
+                    continue;
+                }
+                let mut xml = String::new();
+                part.read_to_string(&mut xml).unwrap();
+                if xml.contains(">9<") && xml.contains(">8<") {
+                    saw_embed = true;
+                }
+            }
+        }
+    }
+    assert!(saw_chart && saw_embed);
 }
