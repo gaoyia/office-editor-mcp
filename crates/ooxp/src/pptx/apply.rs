@@ -163,23 +163,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::InsertCustomShow(op) => {
                 custom_show::op_insert_custom_show(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op,
-                    i,
+                    &mut pkg, &pres_part, &mut pres, &slides, op, i,
                 )?;
             }
             PptxOp::SetCustomShow(op) => {
-                custom_show::op_set_custom_show(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op,
-                    i,
-                )?;
+                custom_show::op_set_custom_show(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteCustomShow(op) => {
                 custom_show::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
