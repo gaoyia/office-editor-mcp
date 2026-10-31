@@ -182,19 +182,22 @@ pub(crate) fn delete(
     wb: &mut Document,
     wb_part: &str,
     sheet_index: &[(String, String, &'static str)],
-    dirty_sheets: &[(String, Document)],
+    dirty_sheets: &mut Vec<(String, Document)>,
     op: &DeleteExternalLinkOp,
     op_index: usize,
 ) -> Result<(), Error> {
     if op.index == 0 {
         return Err(not_found(&op.id, op_index));
     }
-    if in_use(pkg, &wb.root, sheet_index, dirty_sheets, op.index as u32)? {
-        return Err(Error::with_path(
-            ErrorKind::ExternalLinkInUse,
-            format!("ops[{op_index}].id"),
-        ));
-    }
+    break_link_refs(
+        pkg,
+        &mut wb.root,
+        wb_part,
+        sheet_index,
+        dirty_sheets,
+        op.index as u32,
+        op_index,
+    )?;
     let parent = wb
         .root
         .child_by_local("externalReferences")
@@ -425,78 +428,247 @@ pub(crate) fn target_from_path(path: &str) -> String {
     p.to_string()
 }
 
-fn in_use(
-    pkg: &Package,
-    wb: &Element,
+fn break_link_refs(
+    pkg: &mut Package,
+    wb: &mut Element,
+    wb_part: &str,
     sheet_index: &[(String, String, &'static str)],
-    dirty_sheets: &[(String, Document)],
-    min: u32,
-) -> Result<bool, Error> {
-    if let Some(parent) = wb.child_by_local("definedNames") {
-        for el in parent.children_by_local("definedName") {
-            if text_has_ext_index_at_least(&el.text_content(), min) {
-                return Ok(true);
-            }
-        }
-    }
-    for (_, part, _) in sheet_index {
-        if let Some((_, doc)) = dirty_sheets.iter().find(|(p, _)| p == part) {
-            if formulas_use(&doc.root, min) {
-                return Ok(true);
-            }
+    dirty: &mut Vec<(String, Document)>,
+    index: u32,
+    op_index: usize,
+) -> Result<(), Error> {
+    let mut changed = false;
+    for (_, part, kind) in sheet_index {
+        if *kind != "worksheet" {
             continue;
         }
-        let bytes = pkg.get(part)?;
-        let doc = xml::parse(bytes)?;
-        if formulas_use(&doc.root, min) {
-            return Ok(true);
+        if break_sheet(pkg, dirty, part, index, op_index)? {
+            changed = true;
         }
     }
-    Ok(false)
+    if break_defined_names(wb, index, op_index)? {
+        changed = true;
+    }
+    if break_charts(pkg, index, op_index)? {
+        changed = true;
+    }
+    if changed {
+        super::cell::mark_full_calc(wb);
+        super::cell::remove_calc_chain(pkg, wb_part)?;
+    }
+    Ok(())
 }
 
-fn formulas_use(root: &Element, min: u32) -> bool {
-    let mut found = false;
-    walk_formulas(root, &mut |text| {
-        if text_has_ext_index_at_least(text, min) {
-            found = true;
+fn break_sheet(
+    pkg: &mut Package,
+    dirty: &mut Vec<(String, Document)>,
+    part: &str,
+    index: u32,
+    op_index: usize,
+) -> Result<bool, Error> {
+    let rewrite = |root: &mut Element| break_sheet_root(root, index, op_index);
+    if let Some(pos) = dirty.iter().position(|(name, _)| name == part) {
+        return rewrite(&mut dirty[pos].1.root);
+    }
+    if !pkg.contains(part) {
+        return Ok(false);
+    }
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    let changed = rewrite(&mut doc.root)?;
+    if changed {
+        super::list_pin::pin_sheet(&mut doc.root);
+        let _ = super::ole::pin_objects(pkg, part, &mut doc.root);
+        dirty.push((part.to_string(), doc));
+    }
+    Ok(changed)
+}
+
+fn break_sheet_root(root: &mut Element, index: u32, op_index: usize) -> Result<bool, Error> {
+    let mut changed = false;
+    let mut drop_si = std::collections::HashSet::new();
+    crate::xml::walk_elements(root, &mut |el| {
+        if el.local_name() != "f" || el.attr("t") != Some("shared") {
+            return;
         }
-    });
-    found
-}
-
-fn walk_formulas(el: &Element, visit: &mut impl FnMut(&str)) {
-    crate::xml::walk_elements(el, &mut |node| {
-        if node.local_name() == "f" {
-            visit(&node.text_content());
+        let text = el.text_content();
+        if text.is_empty() {
+            return;
         }
-    });
-}
-
-/// `[10]` 解析成 10，不会当成 `[1]` 的前缀。
-pub(crate) fn text_has_ext_index_at_least(text: &str, min: u32) -> bool {
-    let b = text.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'[' {
-            let start = i + 1;
-            let mut j = start;
-            while j < b.len() && b[j].is_ascii_digit() {
-                j += 1;
+        if formula_uses(&text, index, op_index).unwrap_or(false) {
+            if let Some(si) = el.attr("si") {
+                drop_si.insert(si.to_string());
             }
-            if j > start && j < b.len() && b[j] == b']' {
-                if let Ok(n) = text[start..j].parse::<u32>() {
-                    if n >= min && n >= 1 {
-                        return true;
+        }
+    });
+    changed |= break_cells(root, index, &drop_si, op_index)?;
+    changed |= rewrite_named_formulas(root, index, op_index)?;
+    Ok(changed)
+}
+
+fn break_cells(
+    el: &mut Element,
+    index: u32,
+    drop_si: &std::collections::HashSet<String>,
+    op_index: usize,
+) -> Result<bool, Error> {
+    let mut changed = false;
+    if el.local_name() == "c" {
+        let drop = cell_should_drop_formula(el, index, drop_si, op_index)?;
+        if drop {
+            el.children.retain(|node| match node {
+                Node::Element(child) => child.local_name() != "f",
+                _ => true,
+            });
+            if el.child_by_local("v").is_none() {
+                el.push_element(Element::new("v").with_text("0"));
+            }
+            changed = true;
+        } else if let Some(f) = el.child_by_local_mut("f") {
+            let text = f.text_content();
+            if !text.is_empty() {
+                let next = rewrite_formula(&text, index, op_index)?;
+                if next != text {
+                    f.set_text(next);
+                    changed = true;
+                }
+            }
+        }
+    }
+    for child in el.element_children_mut() {
+        if break_cells(child, index, drop_si, op_index)? {
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn cell_should_drop_formula(
+    cell: &Element,
+    index: u32,
+    drop_si: &std::collections::HashSet<String>,
+    op_index: usize,
+) -> Result<bool, Error> {
+    let Some(f) = cell.child_by_local("f") else {
+        return Ok(false);
+    };
+    if f.attr("t") == Some("shared") {
+        if let Some(si) = f.attr("si") {
+            if drop_si.contains(si) {
+                return Ok(true);
+            }
+        }
+    }
+    let text = f.text_content();
+    if text.is_empty() {
+        return Ok(false);
+    }
+    formula_uses(&text, index, op_index)
+}
+
+fn rewrite_named_formulas(el: &mut Element, index: u32, op_index: usize) -> Result<bool, Error> {
+    let mut changed = false;
+    if matches!(el.local_name(), "formula" | "formula1" | "formula2")
+        && el.element_children().next().is_none()
+    {
+        let text = el.text_content();
+        if !text.is_empty() {
+            let next = rewrite_formula(&text, index, op_index)?;
+            if next != text {
+                el.set_text(next);
+                changed = true;
+            }
+        }
+    }
+    for child in el.element_children_mut() {
+        if rewrite_named_formulas(child, index, op_index)? {
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn break_defined_names(wb: &mut Element, index: u32, op_index: usize) -> Result<bool, Error> {
+    let Some(parent) = wb.child_by_local_mut("definedNames") else {
+        return Ok(false);
+    };
+    let mut changed = false;
+    for el in parent.element_children_mut() {
+        if el.local_name() != "definedName" {
+            continue;
+        }
+        let text = el.text_content();
+        let next = rewrite_formula(&text, index, op_index)?;
+        if next != text {
+            el.set_text(next);
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn break_charts(pkg: &mut Package, index: u32, op_index: usize) -> Result<bool, Error> {
+    let mut changed = false;
+    for part in pkg.part_names() {
+        if !part.contains("/charts/")
+            || !part.ends_with(".xml")
+            || part.contains("/_rels/")
+            || part.contains("colors")
+            || part.contains("style")
+        {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        if break_chart_tree(&mut doc.root, index, op_index)? {
+            pkg.set(&part, doc.to_bytes()?)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn break_chart_tree(el: &mut Element, index: u32, op_index: usize) -> Result<bool, Error> {
+    let mut changed = false;
+    let mut kept = Vec::new();
+    for node in el.take_children() {
+        match node {
+            Node::Element(mut child) if child.local_name() == "f" => {
+                let text = child.text_content();
+                if formula_uses(&text, index, op_index)? {
+                    changed = true;
+                    continue;
+                }
+                if !text.is_empty() {
+                    let next = rewrite_formula(&text, index, op_index)?;
+                    if next != text {
+                        child.set_text(next);
+                        changed = true;
                     }
                 }
-                i = j + 1;
-                continue;
+                kept.push(Node::Element(child));
             }
+            Node::Element(mut child) => {
+                if break_chart_tree(&mut child, index, op_index)? {
+                    changed = true;
+                }
+                kept.push(Node::Element(child));
+            }
+            other => kept.push(other),
         }
-        i += 1;
     }
-    false
+    el.children = kept;
+    Ok(changed)
+}
+
+fn formula_uses(text: &str, index: u32, op_index: usize) -> Result<bool, Error> {
+    super::formula::formula_uses_external_index(text, index).map_err(|_| bad_formula(op_index))
+}
+
+fn rewrite_formula(text: &str, index: u32, op_index: usize) -> Result<String, Error> {
+    super::formula::rewrite_external_link_formula(text, index).map_err(|_| bad_formula(op_index))
+}
+
+fn bad_formula(op_index: usize) -> Error {
+    Error::with_path(ErrorKind::UnreadableFormula, format!("ops[{op_index}].id"))
 }
 
 fn not_found(id: &str, op_index: usize) -> Error {

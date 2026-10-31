@@ -328,8 +328,8 @@
     "deleteExternalLinkOp": {
       "description": "删掉一个外部引用。",
       "descriptionEn": "Delete an external reference.",
-      "limits": "找不到报 IdNotFound。id 不是外部引用 id 报 InvalidId。若任一工作表 <f> 或定义名文本含 [k]（k 为该条下标或更大）报 NotImplemented，不写文件。 否则摘该条 <externalReference>、对应 externalLink 部件及其 .rels、workbook 关系与 Override。删光则去掉 <externalReferences>。 不重写其余公式的 [n]。docx / pptx 上发此 op 报 InvalidField。",
-      "limitsEn": "A missing id returns IdNotFound. An id that is not an external-reference id returns InvalidId. If any worksheet <f> or defined-name text contains [k] (k is this entry's index or greater), NotImplemented is returned and nothing is written. Otherwise remove that <externalReference>, the matching externalLink part and its .rels, the workbook relationship, and the Override. When none remain, remove <externalReferences>. Do not rewrite [n] in the remaining formulas. This op on docx / pptx returns InvalidField.",
+      "limits": "找不到报 IdNotFound。id 不是外部引用 id 报 InvalidId。引用这条链接的单元格和图表公式换成已有缓存值，没有缓存则写 0。定义名里的对应引用换成 #REF!。更大的 [n] 依次减一。字符串不改。引号不配对报 InvalidField，不写文件。",
+      "limitsEn": "A missing id returns IdNotFound. An id that is not an external-reference id returns InvalidId. Cell and chart formulas that use this link become their cached value, or 0 when there is no cache. The matching reference in a defined name becomes #REF!. Larger [n] indexes decrease by one. Text inside strings stays. An unmatched quote returns InvalidField and nothing is written.",
       "type": "object",
       "required": [
         "op",

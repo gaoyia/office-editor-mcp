@@ -1073,7 +1073,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidExternalLink { field } => {
             format!("外部引用的 {field} 不合法")
         }
-        ErrorKind::ExternalLinkInUse => "公式或定义名仍在使用该外部引用".into(),
         ErrorKind::CustomViewNotFound { id } => format!("找不到自定义视图：{id}"),
         ErrorKind::InvalidCustomView { field } => {
             format!("自定义视图的 {field} 不合法")

@@ -983,7 +983,6 @@ define_error_kinds! {
     InvalidExternalLink { field: String } => {
         vec![Self::InvalidExternalLink { field: "path".into() }]
     },
-    ExternalLinkInUse => vec![Self::ExternalLinkInUse],
     CustomViewNotFound { id: String } => vec![Self::CustomViewNotFound { id: "customView:1".into() }],
     CellStyleNotFound { id: String } => vec![Self::CellStyleNotFound { id: "cellStyle:1".into() }],
     NeedInsertCellStyleField => vec![Self::NeedInsertCellStyleField],
@@ -2278,7 +2277,6 @@ impl ErrorKind {
             | Self::ArrayFormulaPart { .. }
             | Self::FormulaGroupOverlap { .. }
             | Self::InkComment { .. }
-            | Self::ExternalLinkInUse
             | Self::DialogOrMacroSheet
             | Self::CrossParaMarker
             | Self::ParaHasRevision

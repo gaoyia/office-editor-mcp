@@ -3751,9 +3751,17 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写外部引用。不标
 | `op` | 必须是 `"deleteExternalLink"` |
 | `id` | 必须是 `extlink:{n}` |
 
-找不到报 `IdNotFound`。id 不是外部引用 id 报 `InvalidId`。若任一工作表 `<f>` 或定义名文本含 `[k]`（k 为该条下标或更大）报 `NotImplemented`，不写文件。
-否则摘该条 `<externalReference>`、对应 `externalLink` 部件及其 `.rels`、workbook 关系与 Override。删光则去掉 `<externalReferences>`。
-不重写其余公式的 `[n]`。docx / pptx 上发此 op 报 `InvalidField`。
+找不到报 `IdNotFound`。id 不是外部引用 id 报 `InvalidId`。
+照 Excel 16.0「断开链接」，不打开目标工作簿，不求值：
+
+- 单元格 `<f>` 或图表 `c:f` 引用了这条 `[k]`：去掉公式，留下已有缓存值。没有 `<v>` 的格子写成 `0`。共享公式整组一起变成值。数组公式去掉 `t` 和 `ref`。
+- 定义名、数据验证和条件格式里的 `[k]表!引用` 换成 `#REF!`，格子地址一并去掉。
+- 字符串里的 `[n]` 不改。
+- 其余公式里大于 `k` 的 `[n]` 依次减一。`[10]` 不会被当成 `[1]`。
+
+公式引号不配对报 `InvalidField`，不写文件。
+然后摘该条 `<externalReference>`、对应 `externalLink` 部件及其 `.rels`、workbook 关系与 Override。删光则去掉 `<externalReferences>`。
+不改 `xxl21:alternateUrls`。docx / pptx 上发此 op 报 `InvalidField`。
 
 ### setExternalLink
 

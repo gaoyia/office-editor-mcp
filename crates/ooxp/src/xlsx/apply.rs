@@ -1064,7 +1064,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     &mut wb_doc,
                     &wb_part,
                     &sheet_index,
-                    &dirty_sheets,
+                    &mut dirty_sheets,
                     op,
                     i,
                 )?;

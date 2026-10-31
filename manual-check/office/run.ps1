@@ -175,6 +175,7 @@ $order = @(
     'xlsx-theme-defaults'
     'xlsx-connections'
     'xlsx-external-link'
+    'xlsx-break-link'
     'xlsx-extpath-datatable'
     'xlsx-outline'
     'xlsx-custom-view'

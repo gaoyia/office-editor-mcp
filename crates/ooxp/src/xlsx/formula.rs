@@ -950,6 +950,181 @@ fn table_ref_end(s: &str, i: usize, table: &str) -> Option<usize> {
     Some(consume_balanced_brackets(s, end))
 }
 
+/// 删掉第 `deleted` 条外部引用（1 基）时改写公式。
+/// 命中的 `[k]表!引用` 换成 `#REF!`，更大的下标减一。字符串里的 `[n]` 不动。
+pub(crate) fn rewrite_external_link_formula(formula: &str, deleted: u32) -> Result<String, ()> {
+    let bytes = formula.as_bytes();
+    let mut i = 0;
+    let mut out = String::with_capacity(formula.len());
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            copy_string_checked(&mut out, formula, &mut i)?;
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            if rewrite_quoted_external(&mut out, formula, &mut i, deleted)? {
+                continue;
+            }
+            out.push('\'');
+            i += 1;
+            continue;
+        }
+        if bytes[i] == b'[' && rewrite_bracket_external(&mut out, formula, &mut i, deleted)? {
+            continue;
+        }
+        let ch = formula[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Ok(out)
+}
+
+pub(crate) fn formula_uses_external_index(formula: &str, index: u32) -> Result<bool, ()> {
+    let bytes = formula.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            let start = i;
+            let mut ignored = String::new();
+            copy_string_checked(&mut ignored, formula, &mut i)?;
+            if i <= start {
+                return Err(());
+            }
+            continue;
+        }
+        if let Some(n) = external_index_at_here(formula, i)? {
+            if n == index {
+                return Ok(true);
+            }
+        }
+        let ch = formula[i..].chars().next().unwrap();
+        i += ch.len_utf8();
+    }
+    Ok(false)
+}
+
+fn rewrite_quoted_external(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    deleted: u32,
+) -> Result<bool, ()> {
+    let bytes = formula.as_bytes();
+    if *i + 1 >= bytes.len() || bytes[*i + 1] != b'[' {
+        return Ok(false);
+    }
+    let Some((index, digits_end, bang)) = quoted_external_span(formula, *i)? else {
+        return Ok(false);
+    };
+    apply_external_edit(out, formula, i, deleted, index, *i + 2, digits_end, bang)
+}
+
+fn rewrite_bracket_external(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    deleted: u32,
+) -> Result<bool, ()> {
+    let Some((index, digits_end, bang)) = bracket_external_span(formula, *i)? else {
+        return Ok(false);
+    };
+    apply_external_edit(out, formula, i, deleted, index, *i + 1, digits_end, bang)
+}
+
+fn apply_external_edit(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    deleted: u32,
+    index: u32,
+    digits_start: usize,
+    digits_end: usize,
+    bang: usize,
+) -> Result<bool, ()> {
+    if index == deleted {
+        out.push_str("#REF!");
+        *i = consume_ref_tail(formula, bang);
+        return Ok(true);
+    }
+    if index > deleted {
+        out.push_str(&formula[*i..digits_start]);
+        out.push_str(&(index - 1).to_string());
+        *i = digits_end;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+fn quoted_external_span(formula: &str, i: usize) -> Result<Option<(u32, usize, usize)>, ()> {
+    let bytes = formula.as_bytes();
+    if i + 1 >= bytes.len() || bytes[i] != b'\'' || bytes[i + 1] != b'[' {
+        return Ok(None);
+    }
+    let Some((index, digits_end)) = read_bracket_index(formula, i + 1) else {
+        return Ok(None);
+    };
+    let mut j = digits_end + 1;
+    let mut closed = false;
+    while j < bytes.len() {
+        if bytes[j] == b'\'' {
+            if j + 1 < bytes.len() && bytes[j + 1] == b'\'' {
+                j += 2;
+                continue;
+            }
+            j += 1;
+            closed = true;
+            break;
+        }
+        j += 1;
+    }
+    if !closed || j >= bytes.len() || bytes[j] != b'!' {
+        return Ok(None);
+    }
+    Ok(Some((index, digits_end, j + 1)))
+}
+
+fn bracket_external_span(formula: &str, i: usize) -> Result<Option<(u32, usize, usize)>, ()> {
+    let Some((index, digits_end)) = read_bracket_index(formula, i) else {
+        return Ok(None);
+    };
+    let after = digits_end + 1;
+    let Some(bang) = unquoted_prefix_end(formula, after) else {
+        return Ok(None);
+    };
+    Ok(Some((index, digits_end, bang)))
+}
+
+fn read_bracket_index(formula: &str, i: usize) -> Option<(u32, usize)> {
+    let bytes = formula.as_bytes();
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return None;
+    }
+    let start = i + 1;
+    let mut j = start;
+    while j < bytes.len() && bytes[j].is_ascii_digit() {
+        j += 1;
+    }
+    if j == start || j >= bytes.len() || bytes[j] != b']' {
+        return None;
+    }
+    let index = formula[start..j].parse::<u32>().ok()?;
+    (index >= 1).then_some((index, j))
+}
+
+fn external_index_at_here(formula: &str, i: usize) -> Result<Option<u32>, ()> {
+    let bytes = formula.as_bytes();
+    if i >= bytes.len() {
+        return Ok(None);
+    }
+    if bytes[i] == b'\'' {
+        return Ok(quoted_external_span(formula, i)?.map(|(n, _, _)| n));
+    }
+    if bytes[i] == b'[' {
+        return Ok(bracket_external_span(formula, i)?.map(|(n, _, _)| n));
+    }
+    Ok(None)
+}
+
 fn sheet_prefix_end(s: &str, i: usize) -> Option<usize> {
     let bytes = s.as_bytes();
     if i >= bytes.len() {
@@ -1132,6 +1307,26 @@ mod tests {
             "\"Tbl[Col]\""
         );
         assert!(rewrite_sheet_formula("'Src!A1", "Src", SheetRefEdit::Delete).is_err());
+    }
+
+    #[test]
+    fn break_external_link_matches_excel() {
+        let rw = |f: &str, n: u32| rewrite_external_link_formula(f, n).unwrap();
+        assert_eq!(rw("[1]Sheet1!A1", 1), "#REF!");
+        assert_eq!(
+            rw("SUM([1]Sheet1!A1,[2]Sheet1!A1)", 1),
+            "SUM(#REF!,[1]Sheet1!A1)"
+        );
+        assert_eq!(rw("[2]Sheet1!A1", 1), "[1]Sheet1!A1");
+        assert_eq!(rw("[10]Sheet1!A1", 1), "[9]Sheet1!A1");
+        assert_eq!(rw("[10]Sheet1!A1", 2), "[9]Sheet1!A1");
+        assert_eq!(rw("\"[1]Sheet1!A1\"", 1), "\"[1]Sheet1!A1\"");
+        assert_eq!(rw("'[1]My Sheet'!A1", 1), "#REF!");
+        assert_eq!(rw("'[2]My Sheet'!$A$1", 1), "'[1]My Sheet'!$A$1");
+        assert!(!formula_uses_external_index("\"[1]Sheet1!A1\"", 1).unwrap());
+        assert!(formula_uses_external_index("[1]Sheet1!A1", 1).unwrap());
+        assert!(!formula_uses_external_index("[10]Sheet1!A1", 1).unwrap());
+        assert!(rewrite_external_link_formula("\"[1]", 1).is_err());
     }
 
     #[test]

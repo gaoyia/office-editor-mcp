@@ -1176,9 +1176,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidExternalLink { field } => {
             format!("{field} is not a valid external link value")
         }
-        ErrorKind::ExternalLinkInUse => {
-            "A formula or defined name still uses this external link".into()
-        }
         ErrorKind::CustomViewNotFound { id } => format!("Custom view not found: {id}"),
         ErrorKind::InvalidCustomView { field } => {
             format!("{field} is not a valid custom view value")

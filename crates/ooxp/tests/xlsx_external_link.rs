@@ -1,6 +1,6 @@
 //! 工作簿外部引用：计数、名单、插删；不打开目标文件。
 
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -73,11 +73,37 @@ fn part_text(path: &Path, name: &str) -> String {
     s
 }
 
-fn part_exists(path: &Path, name: &str) -> bool {
-    let f = std::fs::File::open(path).unwrap();
-    let mut zip = zip::ZipArchive::new(f).unwrap();
-    let ok = zip.by_name(name).is_ok();
-    ok
+fn inject_break_fixture(path: &Path) {
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipArchive, ZipWriter};
+    let bytes = std::fs::read(path).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/worksheets/sheet1.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                let xml = xml.replace(
+                    r#"<c r="A1"><f>[1]Sheet1!A1</f></c>"#,
+                    r#"<c r="A1"><f>[1]Sheet1!A1</f><v>11</v></c>"#,
+                );
+                data = xml.into_bytes();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        let chart = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:lineChart><c:ser><c:val><c:numRef><c:f>[1]Sheet1!A1:A2</c:f><c:numCache><c:pt idx="0"><c:v>11</c:v></c:pt></c:numCache></c:numRef></c:val><c:cat><c:numRef><c:f>[2]Sheet1!B1</c:f></c:numRef></c:cat></c:ser></c:lineChart></c:plotArea></c:chart></c:chartSpace>"#;
+        zout.start_file("xl/charts/chart1.xml", opt).unwrap();
+        zout.write_all(chart).unwrap();
+        zout.finish().unwrap();
+    }
+    std::fs::write(path, buf.into_inner()).unwrap();
 }
 
 #[test]
@@ -156,57 +182,58 @@ fn insert_relative_path_kept() {
 }
 
 #[test]
-fn delete_empty_ok_and_in_use_refuses() {
+fn delete_breaks_formulas_and_renumbers() {
     let src = create_book("del");
     let linked = tmp("linked");
     apply(
         &src,
         &linked,
-        json!([{
-            "op": "insertExternalLink",
-            "id": "xlsx:workbook",
-            "path": "source.xlsx"
-        }]),
+        json!([
+            { "op": "insertExternalLink", "id": "xlsx:workbook", "path": "a.xlsx" },
+            { "op": "insertExternalLink", "id": "xlsx:workbook", "path": "b.xlsx" },
+            { "op": "setCell", "id": "cell:Sheet1!A1", "formula": "=[1]Sheet1!A1" },
+            { "op": "setCell", "id": "cell:Sheet1!A2", "formula": "=\"[1]Sheet1!A1\"" },
+            { "op": "setCell", "id": "cell:Sheet1!A3", "formula": "=[2]Sheet1!A1" },
+            { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=[1]Sheet1!A1", "sharedRef": "B1:B2" },
+            { "op": "setCell", "id": "cell:Sheet1!C1", "formula": "=[1]Sheet1!A1:A2", "arrayRef": "C1:C2" },
+            { "op": "insertDefinedName", "id": "xlsx:workbook", "name": "ExtMix", "formula": "SUM([1]Sheet1!A1,[2]Sheet1!A1)" }
+        ]),
     )
     .unwrap();
-
-    let with_f = tmp("with-f");
+    inject_break_fixture(&linked);
+    let out = tmp("broken");
     apply(
         &linked,
-        &with_f,
-        json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=[1]Sheet1!A1" }]),
-    )
-    .unwrap();
-    let blocked = tmp("blocked");
-    let err = apply(
-        &with_f,
-        &blocked,
-        json!([{ "op": "deleteExternalLink", "id": "extlink:1" }]),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert!(!blocked.exists());
-
-    let cleared = tmp("cleared");
-    apply(
-        &with_f,
-        &cleared,
-        json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "value": null }]),
-    )
-    .unwrap();
-    let out = tmp("del-out");
-    apply(
-        &cleared,
         &out,
         json!([{ "op": "deleteExternalLink", "id": "extlink:1" }]),
     )
     .unwrap();
-    let after = inspect(&out, json!({ "externalLinks": true }));
-    assert_eq!(after["externalLinkCount"], 0);
-    assert_eq!(after["externalLinks"], json!([]));
-    assert!(!part_exists(&out, "xl/externalLinks/externalLink1.xml"));
+    let sheet = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains(r#"<c r="A1"><v>11</v></c>"#), "{sheet}");
+    assert!(sheet.contains("&quot;[1]Sheet1!A1&quot;"), "{sheet}");
+    assert!(sheet.contains(">[1]Sheet1!A1</f>"), "{sheet}");
+    assert!(!sheet.contains(">[2]Sheet1!A1</f>"), "{sheet}");
+    assert!(!sheet.contains("t=\"shared\""), "{sheet}");
+    assert!(!sheet.contains("t=\"array\""), "{sheet}");
+    assert!(
+        sheet.contains(r#"<c r="B2"><v>0</v></c>"#) || sheet.contains(r#"<c r="B2"><v>0</v>"#),
+        "{sheet}"
+    );
     let wb = part_text(&out, "xl/workbook.xml");
-    assert!(!wb.contains("externalReferences"), "{wb}");
+    assert!(
+        wb.contains(">#REF!</definedName>") || wb.contains("#REF!"),
+        "{wb}"
+    );
+    assert!(wb.contains("[1]Sheet1!A1"), "{wb}");
+    assert!(!wb.contains("[2]"), "{wb}");
+    let tree = inspect(&out, json!({ "externalLinks": true }));
+    assert_eq!(tree["externalLinkCount"], 1);
+    assert_eq!(tree["externalLinks"][0]["path"], "b.xlsx");
+    let chart = part_text(&out, "xl/charts/chart1.xml");
+    assert!(!chart.contains("[1]Sheet1!A1:A2"), "{chart}");
+    assert!(chart.contains("<c:v>11</c:v>"), "{chart}");
+    assert!(chart.contains("[1]Sheet1!B1"), "{chart}");
+    assert!(!chart.contains("[2]Sheet1!B1"), "{chart}");
 }
 
 #[test]
@@ -229,15 +256,16 @@ fn bracket_ten_is_not_one() {
         json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=[10]Sheet1!A1" }]),
     )
     .unwrap();
-    let blocked = tmp("ten-block");
-    let err = apply(
+    let out = tmp("ten-out");
+    apply(
         &with_f,
-        &blocked,
+        &out,
         json!([{ "op": "deleteExternalLink", "id": "extlink:2" }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert!(!blocked.exists());
+    .unwrap();
+    let sheet = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains(">[9]Sheet1!A1</f>"), "{sheet}");
+    assert!(!sheet.contains(">[1]Sheet1!A1</f>"), "{sheet}");
 }
 
 #[test]
