@@ -49,6 +49,7 @@ pub(crate) fn pin_walk(
 
 pub(crate) fn pin_inline_indexes(pkg: &Package, part: &str, root: &mut Element) {
     pin_stories(root);
+    pin_sections(root);
     pin_runs(root);
     if matches!(root.local_name(), "hdr" | "ftr") {
         super::picture::pin_scope(root);
@@ -86,6 +87,11 @@ fn pin_one_story(root: &mut Element) {
     super::sdt::pin_sdts(root);
     super::perm::pin_perms(root);
     super::revision::pin_revs(root);
+    super::field::pin_doc_lists(root);
+}
+
+pub(crate) fn pin_sections(root: &mut Element) {
+    super::hf::pin_sections(root);
 }
 
 fn pin_runs(root: &mut Element) {

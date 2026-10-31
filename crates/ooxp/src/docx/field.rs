@@ -1249,6 +1249,43 @@ pub fn instr_is_toc_or_toa(instr: &str) -> bool {
     toc_kind_of(&field_code(instr), instr).is_some()
 }
 
+pub(crate) fn pin_doc_lists(root: &mut Element) {
+    pin_rec_family(root, toc_recs(root), "toc");
+    pin_rec_family(root, caption_recs(root), "caption");
+    pin_rec_family(root, xref_recs(root), "xref");
+    pin_rec_family(root, index_recs(root), "index");
+    pin_rec_family(root, xe_recs(root), "xe");
+    pin_rec_family(root, citation_recs(root), "cite");
+    pin_rec_family(root, bibliography_recs(root), "biblio");
+}
+
+fn pin_rec_family(root: &mut Element, recs: Vec<FieldRec>, family: &str) {
+    let paths: Vec<_> = recs.into_iter().map(|rec| rec.start).collect();
+    para::pin_collected(root, &paths, family);
+}
+
+fn pick_rec(root: &Element, recs: Vec<FieldRec>, n: usize, family: &str) -> Option<FieldRec> {
+    para::pick_collected(root, recs, n, family, |rec| rec.start.as_slice())
+}
+
+fn stamp_last_field(p: &mut Element, family: &str) {
+    for node in p.children.iter_mut().rev() {
+        let Node::Element(el) = node else {
+            continue;
+        };
+        if el.local_name() == "fldSimple" {
+            crate::xml::mark_new(el, family);
+            return;
+        }
+        if let Some(ch) = el.child_by_local_mut("fldChar") {
+            if ch.attr_local("fldCharType") == Some("begin") {
+                crate::xml::mark_new(ch, family);
+                return;
+            }
+        }
+    }
+}
+
 fn toc_recs(root: &Element) -> Vec<FieldRec> {
     collect_fields(root)
         .into_iter()
@@ -1322,6 +1359,7 @@ pub fn insert_toc(
             }
             let mut p = para::new_paragraph(parent, &new_id, "");
             insert_field(&mut p, instr, None);
+            stamp_last_field(&mut p, "toc");
             p
         };
         let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
@@ -1345,6 +1383,7 @@ pub fn insert_toc(
         })?;
         let mut new_p = para::new_paragraph(body, &new_id, "");
         insert_field(&mut new_p, instr, None);
+        stamp_last_field(&mut new_p, "toc");
         para::append_before_body_sect_pr(body, new_p);
     }
     Ok(())
@@ -1517,15 +1556,14 @@ fn drop_empty_body_paras(
 
 pub fn delete_toc(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> Result<(), Error> {
     let recs = toc_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "toc") else {
         return Err(Error::with_path(
             ErrorKind::TocNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     if let Some(sdt_path) = innermost_toc_sdt(root, &rec.start) {
         let parent = para::element_at(root, &sdt_path[..sdt_path.len() - 1]);
         if parent.is_some_and(|p| p.local_name() == "body") {
@@ -1716,6 +1754,7 @@ fn fill_caption_para(
     link::insert_bookmark_start(&mut p, xml_id, name);
     p.push_element(para::new_text_run(&p, &format!("{label} ")));
     insert_field(&mut p, &format!(" SEQ {label} \\* ARABIC "), None);
+    stamp_last_field(&mut p, "caption");
     link::insert_bookmark_end(&mut p, xml_id);
     if let Some(t) = title {
         if !t.is_empty() {
@@ -1909,15 +1948,14 @@ pub fn delete_caption(
     op_i: usize,
 ) -> Result<(), Error> {
     let recs = caption_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "caption") else {
         return Err(Error::with_path(
             ErrorKind::CaptionNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     let start_p = para_prefix_of(root, &rec.start);
     let end_p = para_prefix_of(root, &rec.end);
     if let (Some(sp), Some(ep)) = (start_p.as_ref(), end_p.as_ref()) {
@@ -1952,6 +1990,7 @@ pub fn insert_cross_ref(p: &mut Element, bookmark: &str, kind: CrossRefKind) {
         CrossRefKind::Note => format!(" NOTEREF {bookmark} \\h "),
     };
     insert_field(p, &instr, None);
+    stamp_last_field(p, "xref");
 }
 
 pub fn delete_cross_ref(
@@ -1961,15 +2000,14 @@ pub fn delete_cross_ref(
     op_i: usize,
 ) -> Result<(), Error> {
     let recs = xref_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "xref") else {
         return Err(Error::with_path(
             ErrorKind::CrossRefNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
     remove_paths(root, blocks)
 }
@@ -2080,6 +2118,7 @@ pub fn insert_index(
         err_id,
         op_i,
         IdReason::InsertIndexNeedsBodyPara,
+        "index",
     )
 }
 
@@ -2090,6 +2129,7 @@ fn insert_body_field(
     err_id: &str,
     op_i: usize,
     reason: IdReason,
+    family: &str,
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
@@ -2119,6 +2159,7 @@ fn insert_body_field(
             }
             let mut p = para::new_paragraph(parent, &new_id, "");
             insert_field(&mut p, instr, None);
+            stamp_last_field(&mut p, family);
             p
         };
         let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
@@ -2142,6 +2183,7 @@ fn insert_body_field(
         })?;
         let mut new_p = para::new_paragraph(body, &new_id, "");
         insert_field(&mut new_p, instr, None);
+        stamp_last_field(&mut new_p, family);
         para::append_before_body_sect_pr(body, new_p);
     }
     Ok(())
@@ -2149,15 +2191,14 @@ fn insert_body_field(
 
 pub fn delete_index(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> Result<(), Error> {
     let recs = index_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "index") else {
         return Err(Error::with_path(
             ErrorKind::IndexNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     if toc_blocked_by_sect_pr(root, &rec) {
         return Err(Error::with_path(
             ErrorKind::SectionBreakPara,
@@ -2179,6 +2220,7 @@ fn insert_xe_field(p: &mut Element, instr: &str) {
     p.push_element(fld_char_run(p, "begin", false, None));
     p.push_element(instr_run(p, instr));
     p.push_element(fld_char_run(p, "end", false, None));
+    stamp_last_field(p, "xe");
 }
 
 pub fn insert_index_entry(p: &mut Element, entry: &str) {
@@ -2192,15 +2234,14 @@ pub fn delete_index_entry(
     op_i: usize,
 ) -> Result<(), Error> {
     let recs = xe_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "xe") else {
         return Err(Error::with_path(
             ErrorKind::IndexEntryNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
     remove_paths(root, blocks)
 }
@@ -2300,6 +2341,7 @@ pub fn insert_citation(p: &mut Element, tag: &str, xml_id: i64) {
     sdt.push_element(pr);
     let mut content = Element::new(sdt.prefixed("sdtContent"));
     insert_field(&mut content, &format!(" CITATION {tag} "), None);
+    stamp_last_field(&mut content, "cite");
     sdt.push_element(content);
     p.push_element(sdt);
 }
@@ -2332,15 +2374,14 @@ pub fn delete_citation(
     op_i: usize,
 ) -> Result<(), Error> {
     let recs = citation_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "cite") else {
         return Err(Error::with_path(
             ErrorKind::CitationNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     if let Some(sdt) = citation_sdt_path(root, &rec) {
         return remove_at(root, &sdt);
     }
@@ -2362,6 +2403,7 @@ pub fn insert_bibliography(
         err_id,
         op_i,
         IdReason::InsertBibliographyNeedsBodyPara,
+        "biblio",
     )
 }
 
@@ -2372,15 +2414,14 @@ pub fn delete_bibliography(
     op_i: usize,
 ) -> Result<(), Error> {
     let recs = bibliography_recs(root);
-    if n < 1 || n > recs.len() {
+    let Some(rec) = pick_rec(root, recs, n, "biblio") else {
         return Err(Error::with_path(
             ErrorKind::BibliographyNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    };
     if toc_blocked_by_sect_pr(root, &rec) {
         return Err(Error::with_path(
             ErrorKind::SectionBreakPara,

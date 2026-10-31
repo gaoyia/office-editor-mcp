@@ -184,7 +184,8 @@ pub fn delete_part(
         return Err(missing_part(err_id, op_i));
     };
     if !docs.contains_key(&part) {
-        let parsed = xml::parse(pkg.get(&part)?)?;
+        let mut parsed = xml::parse(pkg.get(&part)?)?;
+        pin_doc_parts(&mut parsed.root);
         docs.insert(part.clone(), parsed);
     }
     let total = {
@@ -227,7 +228,8 @@ pub fn insert_content(
         return Err(missing_part_at(err_id, op_i, "docPart"));
     };
     if !docs.contains_key(&g_part) {
-        let parsed = xml::parse(pkg.get(&g_part)?)?;
+        let mut parsed = xml::parse(pkg.get(&g_part)?)?;
+        pin_doc_parts(&mut parsed.root);
         docs.insert(g_part.clone(), parsed);
     }
     let (mut blocks, behavior) = {
@@ -309,13 +311,15 @@ fn ensure_glossary_part(
 ) -> Result<String, Error> {
     if let Some(existing) = find_glossary_part(pkg, doc_part)? {
         if !docs.contains_key(&existing) {
-            let parsed = xml::parse(pkg.get(&existing)?)?;
+            let mut parsed = xml::parse(pkg.get(&existing)?)?;
+            pin_doc_parts(&mut parsed.root);
             docs.insert(existing.clone(), parsed);
         }
         return Ok(existing);
     }
     pkg.set(GLOSSARY_PART, empty_glossary_xml().into_bytes())?;
-    let parsed = xml::parse(pkg.get(GLOSSARY_PART)?)?;
+    let mut parsed = xml::parse(pkg.get(GLOSSARY_PART)?)?;
+    pin_doc_parts(&mut parsed.root);
     docs.insert(GLOSSARY_PART.to_string(), parsed);
     dirty.insert(GLOSSARY_PART.to_string(), ());
 
@@ -569,18 +573,35 @@ fn doc_part_elements(root: &Element) -> Vec<&Element> {
 
 fn doc_part_child_index(root: &Element, n: usize) -> Option<usize> {
     let parts = root.child_by_local("docParts")?;
-    let mut seen = 0usize;
+    let mut live = 0usize;
     for (i, child) in parts.children.iter().enumerate() {
         if let Node::Element(e) = child {
             if e.local_name() == "docPart" {
-                seen += 1;
-                if seen == n {
+                live += 1;
+                if crate::xml::pin_matches(e, &crate::xml::pin_attr("docPart"), n, live) {
                     return Some(i);
                 }
             }
         }
     }
     None
+}
+
+fn pin_doc_parts(root: &mut Element) {
+    let Some(parts) = root.child_by_local_mut("docParts") else {
+        return;
+    };
+    let attr = crate::xml::pin_attr("docPart");
+    let mut live = 0usize;
+    for child in parts.element_children_mut() {
+        if child.local_name() != "docPart" {
+            continue;
+        }
+        live += 1;
+        if child.attr(&attr).is_none() {
+            child.set_attr(&attr, live.to_string());
+        }
+    }
 }
 
 fn append_doc_part(root: &mut Element, write: &DocPartWrite<'_>) {
@@ -595,6 +616,7 @@ fn append_doc_part(root: &mut Element, write: &DocPartWrite<'_>) {
 
 fn build_doc_part(host: &Element, write: &DocPartWrite<'_>) -> Element {
     let mut part = Element::new(host.prefixed("docPart"));
+    crate::xml::mark_new(&mut part, "docPart");
     let mut pr = Element::new(part.prefixed("docPartPr"));
     pr.push_element(val_el(&pr, "name", write.name));
     let mut cat = Element::new(pr.prefixed("category"));

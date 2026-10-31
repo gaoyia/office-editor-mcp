@@ -69,6 +69,46 @@ pub struct HfPart {
     pub id: String,
 }
 
+/// apply 开始时每个页眉页脚部件的编号。新建部件不占这些编号。
+#[derive(Debug, Clone)]
+pub struct HfFreeze {
+    by_part: HashMap<(HfKind, HfType, String), u32>,
+}
+
+impl HfFreeze {
+    pub fn capture(items: &[HfPart]) -> Self {
+        let mut by_part = HashMap::new();
+        for item in items {
+            if let Some(n) = item.id.rsplit(':').next().and_then(|s| s.parse().ok()) {
+                by_part.insert((item.kind, item.hf_type, item.part.clone()), n);
+            }
+        }
+        Self { by_part }
+    }
+
+    pub fn rebind(&self, mut fresh: Vec<HfPart>) -> Vec<HfPart> {
+        let mut max: HashMap<(HfKind, HfType), u32> = HashMap::new();
+        for ((kind, hf_type, _), n) in &self.by_part {
+            max.entry((*kind, *hf_type))
+                .and_modify(|m| *m = (*m).max(*n))
+                .or_insert(*n);
+        }
+        let mut extra: HashMap<(HfKind, HfType), u32> = HashMap::new();
+        for item in &mut fresh {
+            let key = (item.kind, item.hf_type, item.part.clone());
+            let n = if let Some(n) = self.by_part.get(&key) {
+                *n
+            } else {
+                let added = extra.entry((item.kind, item.hf_type)).or_insert(0);
+                *added += 1;
+                max.get(&(item.kind, item.hf_type)).copied().unwrap_or(0) + *added
+            };
+            item.id = format!("{}:{}:{n}", item.kind.as_str(), item.hf_type.as_str());
+        }
+        fresh
+    }
+}
+
 /// 按文档顺序收集唯一页眉、页脚部件，并赋稳定 id。
 pub fn catalog(pkg: &Package, doc_part: &str, doc_root: &Element) -> Result<Vec<HfPart>, Error> {
     let rels = Relationships::from_package(pkg, doc_part)?;
@@ -260,10 +300,9 @@ pub fn inherited_part_path(
     hf_type: HfType,
 ) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, doc_part)?;
-    let sects = collect_sect_prs(root);
     let local = ref_local(kind);
     let mut prev: Option<String> = None;
-    for sect in sects.iter().take(section_n.saturating_sub(1)) {
+    for sect in sects_before(root, section_n) {
         let map = explicit_refs(sect, local, kind, doc_part, &rels)?;
         if let Some(p) = map.get(&hf_type) {
             prev = Some(p.clone());
@@ -282,8 +321,7 @@ pub fn explicit_part_path(
     hf_type: HfType,
 ) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, doc_part)?;
-    let sects = collect_sect_prs(root);
-    let Some(sect) = sects.get(section_n.saturating_sub(1)) else {
+    let Some(sect) = sect_pr_at(root, section_n) else {
         return Ok(None);
     };
     let map = explicit_refs(sect, ref_local(kind), kind, doc_part, &rels)?;
@@ -640,6 +678,37 @@ fn walk_sect<'a>(root: &'a Element, f: &mut impl FnMut(&'a Element)) {
     }
 }
 
+/// 按 apply 开始时的节号找 `w:sectPr`。
+pub fn sect_pr_at(root: &Element, n: usize) -> Option<&Element> {
+    let mut live = 0usize;
+    for sect in collect_sect_prs(root) {
+        live += 1;
+        if crate::xml::pin_matches(sect, &crate::xml::pin_attr("section"), n, live) {
+            return Some(sect);
+        }
+    }
+    None
+}
+
+/// 物理上排在第 `n` 节前面的 `w:sectPr`。
+pub fn sects_before(root: &Element, n: usize) -> Vec<&Element> {
+    let mut live = 0usize;
+    let mut out = Vec::new();
+    for sect in collect_sect_prs(root) {
+        live += 1;
+        if crate::xml::pin_matches(sect, &crate::xml::pin_attr("section"), n, live) {
+            break;
+        }
+        out.push(sect);
+    }
+    out
+}
+
+pub(crate) fn pin_sections(root: &mut Element) {
+    let paths = collect_sect_pr_paths(root);
+    super::para::pin_collected(root, &paths, "section");
+}
+
 /// 从 1 起找第 `n` 个 `w:sectPr`。
 pub fn find_sect_pr_mut(root: &mut Element, n: usize) -> Option<&mut Element> {
     let mut idx = 0usize;
@@ -661,7 +730,7 @@ fn find_sect_mut<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&
         }
         if el.local_name() == "sectPr" {
             *idx += 1;
-            if *idx == n {
+            if crate::xml::pin_matches(el, &crate::xml::pin_attr("section"), n, *idx) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -987,8 +1056,14 @@ pub(crate) fn apply_hf_link(
 
     let even_and_odd = super::hf::even_and_odd_cached(pkg, docs, doc_part)?;
     let title_pg = {
-        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
-        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+        let root = &docs.get(doc_part).unwrap().root;
+        let Some(sect) = super::hf::sect_pr_at(root, op.n) else {
+            return Err(Error::with_path(
+                ErrorKind::SectionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        };
+        super::hf::bool_prop(sect, "titlePg")
     };
     if !super::hf::type_is_active(op.hf_type, title_pg, even_and_odd) {
         return Err(Error::with_path(
@@ -1008,8 +1083,14 @@ pub(crate) fn apply_hf_link(
     }
 
     let has_explicit = {
-        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
-        super::hf::has_explicit_ref(sects[op.n - 1], op.kind, op.hf_type)
+        let root = &docs.get(doc_part).unwrap().root;
+        let Some(sect) = super::hf::sect_pr_at(root, op.n) else {
+            return Err(Error::with_path(
+                ErrorKind::SectionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        };
+        super::hf::has_explicit_ref(sect, op.kind, op.hf_type)
     };
     if (op.linked && !has_explicit) || (!op.linked && has_explicit) {
         return Ok(());
@@ -1026,9 +1107,11 @@ pub(crate) fn refresh_hf_catalog(
     pkg: &Package,
     docs: &HashMap<String, Document>,
     doc_part: &str,
+    freeze: &super::hf::HfFreeze,
     catalog: &mut Vec<super::hf::HfPart>,
 ) -> Result<(), Error> {
-    *catalog = super::hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    let fresh = super::hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    *catalog = freeze.rebind(fresh);
     Ok(())
 }
 pub(crate) fn apply_insert_hf(
@@ -1049,8 +1132,14 @@ pub(crate) fn apply_insert_hf(
 
     let even_and_odd = super::hf::even_and_odd_cached(pkg, docs, doc_part)?;
     let title_pg = {
-        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
-        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+        let root = &docs.get(doc_part).unwrap().root;
+        let Some(sect) = super::hf::sect_pr_at(root, op.n) else {
+            return Err(Error::with_path(
+                ErrorKind::SectionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        };
+        super::hf::bool_prop(sect, "titlePg")
     };
     if !super::hf::type_is_active(op.hf_type, title_pg, even_and_odd) {
         return Err(Error::with_path(
@@ -1063,8 +1152,14 @@ pub(crate) fn apply_insert_hf(
     }
 
     let has_explicit = {
-        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
-        super::hf::has_explicit_ref(sects[op.n - 1], op.kind, op.hf_type)
+        let root = &docs.get(doc_part).unwrap().root;
+        let Some(sect) = super::hf::sect_pr_at(root, op.n) else {
+            return Err(Error::with_path(
+                ErrorKind::SectionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        };
+        super::hf::has_explicit_ref(sect, op.kind, op.hf_type)
     };
     if has_explicit {
         return Ok(());
@@ -1124,8 +1219,14 @@ pub(crate) fn apply_title_page(
         ));
     }
     let current = {
-        let sects = super::hf::collect_sect_prs(&docs.get(doc_part).unwrap().root);
-        super::hf::bool_prop(sects[op.n - 1], "titlePg")
+        let root = &docs.get(doc_part).unwrap().root;
+        let Some(sect) = super::hf::sect_pr_at(root, op.n) else {
+            return Err(Error::with_path(
+                ErrorKind::SectionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        };
+        super::hf::bool_prop(sect, "titlePg")
     };
     if current == op.title_page {
         return Ok(());

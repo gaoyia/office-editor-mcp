@@ -926,7 +926,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteBibliography",
         family: "biblio:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_citation_and_bibliography",
     },
     Row {
         format: "docx",
@@ -938,7 +938,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteCaption",
         family: "caption:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_caption",
     },
     Row {
         format: "docx",
@@ -956,7 +956,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteCitation",
         family: "cite:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_citation_and_bibliography",
     },
     Row {
         format: "docx",
@@ -986,7 +986,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteCrossRef",
         family: "xref:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_xref",
     },
     Row {
         format: "docx",
@@ -998,7 +998,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteDocPart",
         family: "docPart:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_doc_part",
     },
     Row {
         format: "docx",
@@ -1010,7 +1010,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteEmbeddedFont",
         family: "font:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_font",
     },
     Row {
         format: "docx",
@@ -1046,13 +1046,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteIndex",
         family: "index:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_index",
     },
     Row {
         format: "docx",
         op: "deleteIndexEntry",
         family: "xe:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_index_entry",
     },
     Row {
         format: "docx",
@@ -1106,7 +1106,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteSection",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1130,7 +1130,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteSource",
         family: "source:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_source",
     },
     Row {
         format: "docx",
@@ -1154,7 +1154,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteToc",
         family: "toc:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_toc",
     },
     Row {
         format: "docx",
@@ -1244,7 +1244,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertDocPartContent",
         family: "docPart:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "delete_then_original_doc_part",
     },
     Row {
         format: "docx",
@@ -1286,7 +1286,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertHeaderFooter",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1538,7 +1538,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setColumns",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1574,7 +1574,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setDocGrid",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1610,7 +1610,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setFormProt",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1622,13 +1622,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setHeaderFooterDistance",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
         op: "setHeaderFooterLink",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1652,7 +1652,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setLineNumbering",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1688,7 +1688,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setNoteNumbering",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1712,19 +1712,19 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setPageBorders",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
         op: "setPageMargin",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
         op: "setPageSize",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1784,7 +1784,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setRtlGutter",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -1994,7 +1994,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setTitlePage",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",
@@ -2006,7 +2006,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setVerticalAlign",
         family: "section:{n}",
-        test: "待第二期：位置id第二期-docx文档级名单",
+        test: "insert_section_then_original_margin",
     },
     Row {
         format: "docx",

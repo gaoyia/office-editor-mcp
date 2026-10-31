@@ -35,6 +35,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     super::tbl::pin_table_indexes(&mut doc_xml.root);
     super::inline_pin::pin_inline_indexes(&pkg, &doc_part, &mut doc_xml.root);
     let mut catalog = hf::catalog(&pkg, &doc_part, &doc_xml.root)?;
+    let hf_freeze = hf::HfFreeze::capture(&catalog);
 
     // 按部件缓存已解析的文档；最后一并写回脏部件。
     let mut docs: HashMap<String, Document> = HashMap::new();
@@ -69,15 +70,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     op,
                     i,
                 )?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::InsertHeaderFooter(op) => {
                 super::hf::apply_insert_hf(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::InsertSection(op) => {
                 super::sect::apply_insert_section(&mut docs, &mut dirty, &doc_part, op, i)?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::DeleteSection(op) => {
                 super::sect::apply_delete_section(
@@ -89,7 +90,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     op,
                     i,
                 )?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::InsertToc(op) => {
                 super::field::apply_insert_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
@@ -277,11 +278,11 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTitlePage(op) => {
                 super::hf::apply_title_page(&mut docs, &mut dirty, &doc_part, op, i)?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::SetEvenAndOddHeaders(op) => {
                 super::hf::apply_even_and_odd(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::SetPageMargin(op) => {
                 super::sect::apply_page_margin(&mut docs, &mut dirty, &doc_part, op, i)?;
@@ -662,7 +663,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::InsertWatermark(op) => {
                 watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
-                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+                super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::DeleteWatermark(op) => {
                 watermark::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;

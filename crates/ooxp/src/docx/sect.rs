@@ -101,12 +101,14 @@ fn insert_after_para(
     if dest_on_this {
         let dest = para::element_at(root, &dest_path).expect("dest path");
         let mut clone = dest.clone();
+        crate::xml::mark_new(&mut clone, "section");
         hf::strip_hf_refs(&mut clone);
         set_section_type(&mut clone, ty);
         insert_empty_after(root, &path, clone, err_id, op_i)?;
     } else {
         let dest = para::element_at(root, &dest_path).expect("dest path");
         let mut clone = dest.clone();
+        crate::xml::mark_new(&mut clone, "section");
         set_section_type(&mut clone, ty);
         let p = para::element_at_mut(root, &path).expect("para path");
         para::put_ppr_sect_pr(p, clone);
@@ -151,6 +153,7 @@ fn insert_at_end(
             );
         (sect_idx, dest, prev_plain)
     };
+    crate::xml::mark_new(&mut clone, "section");
     set_section_type(&mut clone, ty);
 
     let empty_id = para::next_para_hex(root);
@@ -291,21 +294,30 @@ pub fn delete_section_break(
             format!("ops[{op_i}].id"),
         ));
     }
-    if n < 1 || n > paths.len() {
+    let Some(dest_path) = para::pick_collected(root, paths.clone(), n, "section", |p| p.as_slice())
+    else {
         return Err(Error::with_path(
             ErrorKind::SectionNotFound {
                 id: err_id.to_string(),
             },
             format!("ops[{op_i}].id"),
         ));
-    }
-    if n == paths.len() {
+    };
+    let Some(pos) = paths.iter().position(|p| p == &dest_path) else {
+        return Err(Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    };
+    if pos + 1 >= paths.len() {
         return Err(Error::with_path(
             ErrorKind::CannotDeleteLastSection,
             format!("ops[{op_i}].id"),
         ));
     }
-    let dest_path = &paths[n - 1];
+    let dest_path = &paths[pos];
     if is_body_level_sect(root, dest_path) {
         return Err(Error::with_path(
             ErrorKind::CannotDeleteLastSection,
@@ -323,7 +335,7 @@ pub fn delete_section_break(
         })?;
         dest.clone()
     };
-    let next_path = paths[n].clone();
+    let next_path = paths[pos + 1].clone();
     let next = para::element_at_mut(root, &next_path).ok_or_else(|| {
         Error::with_path(
             ErrorKind::SectionNotFound {

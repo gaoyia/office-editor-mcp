@@ -66,6 +66,7 @@ $order = @(
     'docx-table'
     'docx-table-pin'
     'docx-inline-pin'
+    'docx-doc-pin'
     'docx-revision'
     'docx-revision-remain'
     'docx-hyperlink'

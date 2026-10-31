@@ -208,7 +208,8 @@ pub fn delete_source(
         return Err(missing_source(err_id, op_i));
     };
     if !docs.contains_key(&part) {
-        let parsed = xml::parse(pkg.get(&part)?)?;
+        let mut parsed = xml::parse(pkg.get(&part)?)?;
+        pin_sources(&mut parsed.root);
         docs.insert(part.clone(), parsed);
     }
     let doc = docs.get_mut(&part).expect("已载入书目部件");
@@ -281,7 +282,8 @@ fn ensure_biblio_part(
 ) -> Result<String, Error> {
     if let Some(existing) = find_biblio_part(pkg, doc_part)? {
         if !docs.contains_key(&existing) {
-            let parsed = xml::parse(pkg.get(&existing)?)?;
+            let mut parsed = xml::parse(pkg.get(&existing)?)?;
+            pin_sources(&mut parsed.root);
             docs.insert(existing.clone(), parsed);
         }
         return Ok(existing);
@@ -382,21 +384,32 @@ fn source_elements(root: &Element) -> Vec<&Element> {
 }
 
 fn source_child_index(root: &Element, n: usize) -> Option<usize> {
-    if n < 1 {
-        return None;
-    }
-    let mut seen = 0usize;
+    let mut live = 0usize;
     for (i, child) in root.children.iter().enumerate() {
         if let Node::Element(e) = child {
             if e.local_name() == "Source" {
-                seen += 1;
-                if seen == n {
+                live += 1;
+                if crate::xml::pin_matches(e, &crate::xml::pin_attr("source"), n, live) {
                     return Some(i);
                 }
             }
         }
     }
     None
+}
+
+fn pin_sources(root: &mut Element) {
+    let attr = crate::xml::pin_attr("source");
+    let mut live = 0usize;
+    for child in root.element_children_mut() {
+        if child.local_name() != "Source" {
+            continue;
+        }
+        live += 1;
+        if child.attr(&attr).is_none() {
+            child.set_attr(&attr, live.to_string());
+        }
+    }
 }
 
 fn rewrite_ref_order(root: &mut Element) {
@@ -416,6 +429,7 @@ fn rewrite_ref_order(root: &mut Element) {
 
 fn append_source(root: &mut Element, write: &SourceWrite<'_>, order: usize) {
     let mut src = Element::new(root.prefixed("Source"));
+    crate::xml::mark_new(&mut src, "source");
     push_text_child(&mut src, "Tag", write.tag);
     push_text_child(&mut src, "SourceType", write.source_type);
     push_text_child(&mut src, "Guid", &crate::host_env::random_guid());

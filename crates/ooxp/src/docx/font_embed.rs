@@ -213,27 +213,21 @@ pub fn delete(
         return Err(missing(err_id, op_i));
     };
     if !docs.contains_key(&part) {
-        let parsed = xml::parse(pkg.get(&part)?)?;
+        let mut parsed = xml::parse(pkg.get(&part)?)?;
+        pin_embeds(&mut parsed.root);
         docs.insert(part.clone(), parsed);
-    }
-    let total = {
-        let doc = docs.get(&part).expect("已载入 fontTable");
-        collect_from_root(&doc.root).len()
-    };
-    if n < 1 || n > total {
-        return Err(missing(err_id, op_i));
     }
     let rid = {
         let doc = docs.get(&part).expect("已载入 fontTable");
-        collect_from_root(&doc.root)[n - 1].rid.clone()
+        match embed_at(&doc.root, n) {
+            Some(e) => e.rid,
+            None => return Err(missing(err_id, op_i)),
+        }
     };
     if let Some(rid) = rid.as_deref() {
         let still_used = {
             let doc = docs.get(&part).expect("已载入 fontTable");
-            collect_from_root(&doc.root)
-                .iter()
-                .enumerate()
-                .any(|(i, e)| i != n - 1 && e.rid.as_deref() == Some(rid))
+            embed_rid_used_by_other(&doc.root, n, rid)
         };
         if !still_used {
             if let Ok(target) = opc::resolve_id(pkg, &part, rid) {
@@ -332,10 +326,78 @@ fn find_embed(root: &Element, name: &str, style: FontStyle) -> Option<usize> {
         .position(|e| e.font_name == name && e.style == style)
 }
 
+fn embed_at(root: &Element, n: usize) -> Option<EmbedRef> {
+    let mut live = 0usize;
+    for font in root.element_children() {
+        if font.local_name() != "font" {
+            continue;
+        }
+        let name = font.attr_local("name").unwrap_or("").to_string();
+        for child in font.element_children() {
+            let Some(style) = FontStyle::from_local(child.local_name()) else {
+                continue;
+            };
+            live += 1;
+            if crate::xml::pin_matches(child, &crate::xml::pin_attr("font"), n, live) {
+                return Some(EmbedRef {
+                    font_name: name,
+                    style,
+                    subsetted: attr_on_off(child, "subsetted"),
+                    font_key: child.attr_local("fontKey").map(str::to_string),
+                    rid: child.attr_local("id").map(str::to_string),
+                });
+            }
+        }
+    }
+    None
+}
+
+fn embed_rid_used_by_other(root: &Element, n: usize, rid: &str) -> bool {
+    let mut live = 0usize;
+    for font in root.element_children() {
+        if font.local_name() != "font" {
+            continue;
+        }
+        for child in font.element_children() {
+            if FontStyle::from_local(child.local_name()).is_none() {
+                continue;
+            }
+            live += 1;
+            if crate::xml::pin_matches(child, &crate::xml::pin_attr("font"), n, live) {
+                continue;
+            }
+            if child.attr_local("id") == Some(rid) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn pin_embeds(root: &mut Element) {
+    let attr = crate::xml::pin_attr("font");
+    let mut live = 0usize;
+    for font in root.element_children_mut() {
+        if font.local_name() != "font" {
+            continue;
+        }
+        for child in font.element_children_mut() {
+            if FontStyle::from_local(child.local_name()).is_none() {
+                continue;
+            }
+            live += 1;
+            if child.attr(&attr).is_none() {
+                child.set_attr(&attr, live.to_string());
+            }
+        }
+    }
+}
+
 fn append_embed(root: &mut Element, name: &str, style: FontStyle, rid: &str, font_key: &str) {
-    let embed = Element::new(root.prefixed(style.local()))
+    let mut embed = Element::new(root.prefixed(style.local()))
         .with_attr("r:id", rid)
         .with_attr("w:fontKey", font_key);
+    crate::xml::mark_new(&mut embed, "font");
     if let Some(font) = root
         .element_children_mut()
         .find(|e| e.local_name() == "font" && e.attr_local("name") == Some(name))
@@ -349,7 +411,7 @@ fn append_embed(root: &mut Element, name: &str, style: FontStyle, rid: &str, fon
 }
 
 fn remove_embed_at(root: &mut Element, n: usize) {
-    let mut seen = 0usize;
+    let mut live = 0usize;
     for font in root.element_children_mut() {
         if font.local_name() != "font" {
             continue;
@@ -362,8 +424,8 @@ fn remove_embed_at(root: &mut Element, n: usize) {
             if FontStyle::from_local(el.local_name()).is_none() {
                 continue;
             }
-            seen += 1;
-            if seen == n {
+            live += 1;
+            if crate::xml::pin_matches(el, &crate::xml::pin_attr("font"), n, live) {
                 drop_at = Some(i);
                 break;
             }
