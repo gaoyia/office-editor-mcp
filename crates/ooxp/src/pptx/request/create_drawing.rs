@@ -5,10 +5,7 @@ use crate::error::{Error, ErrorKind, TypeName};
 use super::super::ole;
 use super::super::zoom;
 use super::create_types::*;
-use super::{
-    CreateConnector,
-    CreateSmartArt, CreateTable,
-};
+use super::{CreateConnector, CreateSmartArt, CreateTable};
 
 pub(crate) fn parse_smartarts(
     v: Option<&Value>,

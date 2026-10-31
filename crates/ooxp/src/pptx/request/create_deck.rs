@@ -2,9 +2,7 @@ use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, TypeName};
 
-use super::{
-    CreateSection, InsertCustomShowOp,
-};
+use super::{CreateSection, InsertCustomShowOp};
 
 pub(crate) fn parse_sections(
     v: Option<&Value>,

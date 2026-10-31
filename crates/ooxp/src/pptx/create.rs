@@ -13,17 +13,15 @@ use super::{
     chart, comments, connector, custom_show, field, handout, hyperlink, media, notes, ole, picture,
     protect,
     request::{
-        self, AnimTarget, CreateAnimHost, CreateCxnBind,
-        CreateHyperlink, CreateSection, InsertConnectorOp, InsertCustomShowOp, InsertHyperlinkOp,
-        InsertSlideSectionOp, LinkInsertHost, LinkOn, PptxLinkKind, SetHandoutTextOp,
-        SetNotesTextOp, SetShapeGeomOp,
+        self, AnimTarget, CreateAnimHost, CreateCxnBind, CreateHyperlink, CreateSection,
+        InsertConnectorOp, InsertCustomShowOp, InsertHyperlinkOp, InsertSlideSectionOp,
+        LinkInsertHost, LinkOn, PptxLinkKind, SetHandoutTextOp, SetNotesTextOp, SetShapeGeomOp,
     },
     section,
     shape::{self, ShapeKey, ShapeTarget, SlideMeta},
     show, smartart, table, timing, transition, zoom, CT_APP, CT_CORE, CT_PRESENTATION,
-    CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT, CT_SLIDE_MASTER, CT_THEME, REL_APP,
-    REL_CORE, REL_OFFICE_DOCUMENT, REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT,
-    REL_SLIDE_MASTER, REL_THEME,
+    CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT, CT_SLIDE_MASTER, CT_THEME, REL_APP, REL_CORE,
+    REL_OFFICE_DOCUMENT, REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT, REL_SLIDE_MASTER, REL_THEME,
 };
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {

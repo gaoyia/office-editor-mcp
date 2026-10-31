@@ -3,9 +3,7 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, TypeName};
 
 use super::create_types::*;
-use super::{
-    CreateAnim, CreateAnimHost, SetTransitionOp,
-};
+use super::{CreateAnim, CreateAnimHost, SetTransitionOp};
 
 pub(crate) fn parse_transition(
     v: Option<&Value>,
