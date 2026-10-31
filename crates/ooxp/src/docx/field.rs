@@ -1616,6 +1616,7 @@ impl CrossRefKind {
         match s {
             "ref" => Some(Self::Ref),
             "page" => Some(Self::Page),
+            "note" => Some(Self::Note),
             _ => None,
         }
     }

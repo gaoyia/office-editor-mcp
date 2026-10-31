@@ -14,6 +14,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-10-31 补跑 `docx-table-pin.ps1`。先插行再给原第 3 行上色，字仍在原来那一行。先删第一列再合并原来的第 2、3 列，两格合成一格。Word 16.0 没有 Repair。
 2026-10-31 补跑 `docx-inline-pin.ps1`。先删第一个书签再改原来第三个，先删第一个公式再改原来第二个。Word 16.0 没有 Repair。
 2026-10-31 补跑 `docx-doc-pin.ps1`。先插节再改原来第 2 节的页边距，改在最后一节上。Word 16.0 没有 Repair。
+2026-11-01 补跑 `docx-noteref.ps1`。脚注和尾注的引用标记套上书签后，`kind: note` 写成 `NOTEREF`。Word 16.0 更新域后显示对应编号，没有 Repair。
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 

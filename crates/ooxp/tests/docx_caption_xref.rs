@@ -1,6 +1,6 @@
 //! docx 题注与交叉引用：insertCaption / insertCrossRef、inspect 计数、xlsx/pptx 拒绝。
 
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -8,7 +8,7 @@ use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
-use zip::ZipWriter;
+use zip::{ZipArchive, ZipWriter};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -234,7 +234,7 @@ fn insert_caption_rejects_bad_id_and_label() {
 
     let err_kind = apply_err(
         &src,
-        json!([{ "op": "insertCrossRef", "id": first_body_para_id(&tree), "bookmark": "x", "kind": "note" }]),
+        json!([{ "op": "insertCrossRef", "id": first_body_para_id(&tree), "bookmark": "x", "kind": "nope" }]),
     );
     assert_eq!(err_kind.code(), ErrorCode::InvalidField);
 
@@ -355,4 +355,92 @@ fn delete_caption_rejects_sect_pr_para() {
     );
     let err = apply_err(&src, json!([{ "op": "deleteCaption", "id": "caption:1" }]));
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+fn wrap_note_mark(src: &Path, dest: &Path, local: &str, bookmark: &str) {
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "word/document.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                let needle = format!("<w:{local}");
+                let at = xml.find(&needle).expect("引用标记");
+                let head = &xml[..at];
+                let run_at = ["<w:r>", "<w:r "]
+                    .iter()
+                    .filter_map(|pat| head.rfind(pat))
+                    .max()
+                    .expect("引用所在 run");
+                let rel = xml[at..].find("</w:r>").expect("run 结束");
+                let run_end = at + rel + "</w:r>".len();
+                let wrapped = format!(
+                    r#"<w:bookmarkStart w:id="90" w:name="{bookmark}"/>{}<w:bookmarkEnd w:id="90"/>"#,
+                    &xml[run_at..run_end]
+                );
+                data = format!("{}{wrapped}{}", &xml[..run_at], &xml[run_end..]).into_bytes();
+            }
+            zout.start_file(&name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
+}
+
+fn note_cross_ref(tag: &str, op: &str, local: &str, bookmark: &str) {
+    let src = create_docx(tag, json!({ "paragraphs": [{ "text": "甲" }] }));
+    let tree = inspect(&src, false, false, false);
+    let para = first_body_para_id(&tree);
+    let noted = seq_path(&format!("{tag}-note"), "docx");
+    apply(
+        &src,
+        &noted,
+        json!([{ "op": op, "id": para, "text": "注一" }]),
+    );
+    let marked = seq_path(&format!("{tag}-mark"), "docx");
+    wrap_note_mark(&noted, &marked, local, bookmark);
+    let out = seq_path(&format!("{tag}-xref"), "docx");
+    apply(
+        &marked,
+        &out,
+        json!([{
+            "op": "insertCrossRef",
+            "id": para,
+            "bookmark": bookmark,
+            "kind": "note"
+        }]),
+    );
+    let xml = std::fs::read(&out).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(xml)).unwrap();
+    let mut doc = String::new();
+    zin.by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut doc)
+        .unwrap();
+    let instr = format!(" NOTEREF {bookmark} \\h ");
+    assert!(doc.contains(&instr), "{doc}");
+    let start = format!(r#"<w:bookmarkStart w:id="90" w:name="{bookmark}"/>"#);
+    let mark = format!("<w:{local}");
+    let start_at = doc.find(&start).unwrap();
+    let mark_at = doc.find(&mark).unwrap();
+    let end_at = doc.find(r#"<w:bookmarkEnd w:id="90"/>"#).unwrap();
+    assert!(start_at < mark_at && mark_at < end_at);
+    let tree = inspect(&out, false, true, false);
+    assert_eq!(tree["crossRefCount"], 1);
+    assert_eq!(tree["crossRefs"][0]["kind"], "note");
+    assert_eq!(tree["crossRefs"][0]["bookmark"], bookmark);
+}
+
+#[test]
+fn noteref_footnote_and_endnote() {
+    note_cross_ref("fn", "insertFootnote", "footnoteReference", "_RefFn1");
+    note_cross_ref("en", "insertEndnote", "endnoteReference", "_RefEn1");
 }

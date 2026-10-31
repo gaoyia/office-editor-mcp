@@ -172,8 +172,8 @@
     "insertCrossRefOp": {
       "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
       "descriptionEn": "After the paragraph's existing content, insert one complex field: fldChar begin (w:dirty=\"true\"), one instrText, fldChar separate, and fldChar end.",
-      "limits": "不写结果 run，不在库里解析书签内容。本期不写 NOTEREF。bookmark 缺、空串或含空白报 InvalidField。主文档里没有该名报 IdNotFound。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
-      "limitsEn": "Does not write a result run, and this library does not resolve bookmark contents. NOTEREF is not written in this phase. A missing bookmark, an empty string, or a bookmark that contains whitespace returns InvalidField. A name that is not in the main document returns IdNotFound. A missing paragraph returns IdNotFound. An id that is not a paragraph id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
+      "limits": "不写结果 run，不在库里解析书签内容。kind 为 note 时写 NOTEREF，并带 \\h。bookmark 缺、空串或含空白报 InvalidField。主文档里没有该名报 IdNotFound。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Does not write a result run, and this library does not resolve bookmark contents. kind note writes NOTEREF with \\h. A missing bookmark, an empty string, or a bookmark that contains whitespace returns InvalidField. A name that is not in the main document returns IdNotFound. A missing paragraph returns IdNotFound. An id that is not a paragraph id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
@@ -196,7 +196,8 @@
         "kind": {
           "enum": [
             "ref",
-            "page"
+            "page",
+            "note"
           ]
         }
       }

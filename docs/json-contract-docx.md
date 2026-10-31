@@ -3320,10 +3320,12 @@ id 不是 `caption:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidF
 | `op` | 必须是 `"insertCrossRef"` |
 | `id` | 段落 id（正文或页眉页脚） |
 | `bookmark` | 必填。目标书签名，可以以下划线开头（题注的 `_Ref*`）。必须在主文档里已有对应 `w:bookmarkStart` |
-| `kind` | 可选。`ref`（缺省）写入 ` REF {bookmark} \h `；`page` 写入 ` PAGEREF {bookmark} \h `。其它值报 `InvalidField` |
+| `kind` | 可选。`ref`（缺省）写入 ` REF {bookmark} \h `；`page` 写入 ` PAGEREF {bookmark} \h `；`note` 写入 ` NOTEREF {bookmark} \h `。其它值报 `InvalidField` |
 
 在该段已有内容之后插入一组复杂域：`fldChar begin`（`w:dirty="true"`）、一条 `instrText`、`fldChar separate`、`fldChar end`。不写结果 run，不在库里解析书签内容。
-本期不写 `NOTEREF`。`bookmark` 缺、空串或含空白报 `InvalidField`。主文档里没有该名报 `IdNotFound`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。
+`note` 引用脚注或尾注的编号。Word 16.0 把 `_Ref` 书签套在正文里的 `w:footnoteReference` 或 `w:endnoteReference` 上；本 op 不新建这本书签，调用方要事先放好。
+Word 的开关是 `\h`（超链接）、`\p`（相对位置，和 `\h` 一起时写成 `\p \h`）、`\f`（带格式的引用标记）。这里和 `ref` / `page` 一样只写 `\h`。
+`bookmark` 缺、空串或含空白报 `InvalidField`。主文档里没有该名报 `IdNotFound`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。
 xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteCrossRef

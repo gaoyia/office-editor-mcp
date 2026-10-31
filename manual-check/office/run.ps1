@@ -110,6 +110,7 @@ $order = @(
     'docx-textbox'
     'docx-textbox-anchor'
     'docx-notes'
+    'docx-noteref'
     'docx-comments'
     'docx-charts'
     'docx-charts-ext'

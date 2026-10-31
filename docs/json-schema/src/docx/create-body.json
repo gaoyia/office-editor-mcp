@@ -1271,7 +1271,8 @@
         "kind": {
           "enum": [
             "ref",
-            "page"
+            "page",
+            "note"
           ]
         }
       }

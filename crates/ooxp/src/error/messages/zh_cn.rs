@@ -897,7 +897,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidSeqIdentifier => {
             "label 必须是 SEQ 序列名：拉丁字母开头，其后最多 39 个拉丁字母、数字或下划线".into()
         }
-        ErrorKind::InvalidCrossRefKind => "kind 只能是 ref 或 page".into(),
+        ErrorKind::InvalidCrossRefKind => "kind 只能是 ref、page 或 note".into(),
         ErrorKind::InvalidIndexInstr => "instr 必须以 INDEX 开头".into(),
         ErrorKind::InvalidIndexEntry => {
             "entry 不能为空、不能只含空白、也不能含英文双引号".into()

@@ -962,7 +962,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidSeqIdentifier => {
             "label must be a SEQ identifier: a Latin letter followed by up to 39 Latin letters, digits, or underscores".into()
         }
-        ErrorKind::InvalidCrossRefKind => "kind must be ref or page".into(),
+        ErrorKind::InvalidCrossRefKind => "kind must be ref, page, or note".into(),
         ErrorKind::InvalidIndexInstr => "instr must start with INDEX".into(),
         ErrorKind::InvalidIndexEntry => {
             "entry must be non-empty, must not be only whitespace, and must not contain a double quote"
