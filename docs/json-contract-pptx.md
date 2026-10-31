@@ -19,7 +19,7 @@
 - 页、备注页、母版和版式上没有 `cNvPr/@id` 的对象，以及链接、域、表的行列：第一次读到该部件时的顺序
 - 批注里的图：该批注部件里的顺序
 
-`series:{idx}`、`trendline:{k}`、`errorBars:{k}` 仍随本批重排。
+`series:{idx}` 从 0 起，`trendline:{k}` 和 `errorBars:{k}` 在该系列里从 1 起。一次 apply 里按开始时的顺序解释。
 
 - **页**
   - id：`slide:{n}`

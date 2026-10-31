@@ -5,10 +5,7 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::xml::{Element, Node};
 
-use super::{
-    bool_val, collect_sers, inspect_type, plot_area, plot_area_mut, series_count, with_ser_mut,
-    WRAPPERS,
-};
+use super::{bool_val, inspect_type, plot_area, plot_area_mut, with_ser_mut, WRAPPERS};
 
 const TREND_TYPES: &[&str] = &["linear", "exp", "log", "poly", "power", "movingAvg"];
 
@@ -274,14 +271,13 @@ pub fn insert_trendline(
         Error::with_path(ErrorKind::InvalidTrendlineType, format!("ops[{i}].type"))
     })?;
     check_trendline_fields(kind, spec.order, spec.period, i)?;
-    let n = series_count(space);
-    if ser_index >= n {
+    let el = build_trendline(spec, kind);
+    if with_ser_mut(space, ser_index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
     }
-    let el = build_trendline(spec, kind);
     with_ser_mut(space, ser_index, |ser| {
         insert_before_data(
             ser,
@@ -308,30 +304,20 @@ pub fn set_trendline(
     spec: &TrendlineWrite,
     i: usize,
 ) -> Result<(), Error> {
-    let sers = collect_sers(space);
-    let Some(ser) = sers.get(ser_index) else {
+    let Some(existing) = with_ser_mut(space, ser_index, |ser| {
+        nth_child_local_mut(ser, "trendline", tl_index)
+            .and_then(|el| {
+                el.child_by_local("trendlineType")
+                    .and_then(|e| e.attr_local("val"))
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| "linear".into())
+    }) else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
     };
-    let tls: Vec<&Element> = ser
-        .element_children()
-        .filter(|c| c.local_name() == "trendline")
-        .collect();
-    let Some(el) = tls.get(tl_index.saturating_sub(1)).copied() else {
-        return Err(Error::with_path(
-            ErrorKind::TrendlineNotFound { id: id.to_string() },
-            format!("ops[{i}].id"),
-        ));
-    };
-    let existing = el
-        .child_by_local("trendlineType")
-        .and_then(|e| e.attr_local("val"))
-        .unwrap_or("linear")
-        .to_string();
-    drop(tls);
-    drop(sers);
     let kind = spec.kind.as_deref().unwrap_or(existing.as_str());
     check_trendline_fields(kind, spec.order, spec.period, i)?;
     let found = with_ser_mut(space, ser_index, |ser| {
@@ -387,16 +373,14 @@ pub fn delete_trendline(
     tl_index: usize,
     i: usize,
 ) -> Result<(), Error> {
-    if ser_index >= series_count(space) {
+    let Some(found) = with_ser_mut(space, ser_index, |ser| {
+        remove_nth_local(ser, "trendline", tl_index)
+    }) else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
-    }
-    let found = with_ser_mut(space, ser_index, |ser| {
-        remove_nth_local(ser, "trendline", tl_index)
-    })
-    .unwrap_or(false);
+    };
     if !found {
         return Err(Error::with_path(
             ErrorKind::TrendlineNotFound { id: id.to_string() },
@@ -420,7 +404,7 @@ pub fn insert_error_bars(
             format!("ops[{i}].id"),
         ));
     }
-    if ser_index >= series_count(space) {
+    if with_ser_mut(space, ser_index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
@@ -481,48 +465,42 @@ pub fn set_error_bars(
     spec: &ErrorBarsWrite,
     i: usize,
 ) -> Result<(), Error> {
-    let sers = collect_sers(space);
-    let Some(ser) = sers.get(ser_index) else {
+    let Some(snapshot) = with_ser_mut(space, ser_index, |ser| {
+        nth_child_local_mut(ser, "errBars", eb_index).map(|el| {
+            (
+                el.child_by_local("errDir")
+                    .and_then(|e| e.attr_local("val"))
+                    .unwrap_or("y")
+                    .to_string(),
+                el.child_by_local("errBarType")
+                    .and_then(|e| e.attr_local("val"))
+                    .unwrap_or("both")
+                    .to_string(),
+                el.child_by_local("errValType")
+                    .and_then(|e| e.attr_local("val"))
+                    .unwrap_or("stdErr")
+                    .to_string(),
+                el.child_by_local("val")
+                    .and_then(|e| e.attr_local("val"))
+                    .and_then(|s| s.parse().ok()),
+            )
+        })
+    }) else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
     };
-    let bars: Vec<&Element> = ser
-        .element_children()
-        .filter(|c| c.local_name() == "errBars")
-        .collect();
-    let Some(el) = bars.get(eb_index.saturating_sub(1)).copied() else {
+    let Some((snap_dir, snap_type, snap_val, snap_value)) = snapshot else {
         return Err(Error::with_path(
             ErrorKind::ErrorBarsNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
     };
-    let dir = spec.dir.clone().unwrap_or_else(|| {
-        el.child_by_local("errDir")
-            .and_then(|e| e.attr_local("val"))
-            .unwrap_or("y")
-            .to_string()
-    });
-    let bar_type = spec.bar_type.clone().unwrap_or_else(|| {
-        el.child_by_local("errBarType")
-            .and_then(|e| e.attr_local("val"))
-            .unwrap_or("both")
-            .to_string()
-    });
-    let val_type = spec.val_type.clone().unwrap_or_else(|| {
-        el.child_by_local("errValType")
-            .and_then(|e| e.attr_local("val"))
-            .unwrap_or("stdErr")
-            .to_string()
-    });
-    let value = spec.value.or_else(|| {
-        el.child_by_local("val")
-            .and_then(|e| e.attr_local("val"))
-            .and_then(|s| s.parse().ok())
-    });
-    drop(bars);
-    drop(sers);
+    let dir = spec.dir.clone().unwrap_or(snap_dir);
+    let bar_type = spec.bar_type.clone().unwrap_or(snap_type);
+    let val_type = spec.val_type.clone().unwrap_or(snap_val);
+    let value = spec.value.or(snap_value);
     let require_value_rules = spec.val_type.is_some()
         || spec.value.is_some()
         || spec.plus.is_some()
@@ -595,16 +573,14 @@ pub fn delete_error_bars(
     eb_index: usize,
     i: usize,
 ) -> Result<(), Error> {
-    if ser_index >= series_count(space) {
+    let Some(found) = with_ser_mut(space, ser_index, |ser| {
+        remove_nth_local(ser, "errBars", eb_index)
+    }) else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
-    }
-    let found = with_ser_mut(space, ser_index, |ser| {
-        remove_nth_local(ser, "errBars", eb_index)
-    })
-    .unwrap_or(false);
+    };
     if !found {
         return Err(Error::with_path(
             ErrorKind::ErrorBarsNotFound { id: id.to_string() },
@@ -628,7 +604,7 @@ pub fn set_series_axis(
             format!("ops[{i}].id"),
         ));
     }
-    if series_count(space) <= ser_index {
+    if with_ser_mut(space, ser_index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
@@ -1106,7 +1082,12 @@ fn nth_child_local_mut<'a>(
     for c in ser.element_children_mut() {
         if c.local_name() == local {
             k += 1;
-            if k == index_from_one {
+            let family = if local == "errBars" {
+                "errBars"
+            } else {
+                "trendline"
+            };
+            if crate::xml::pin_matches(c, &crate::xml::pin_attr(family), index_from_one, k) {
                 return Some(c);
             }
         }
@@ -1121,7 +1102,12 @@ fn remove_nth_local(ser: &mut Element, local: &str, index_from_one: usize) -> bo
         if let Node::Element(e) = n {
             if e.local_name() == local {
                 k += 1;
-                if k == index_from_one {
+                let family = if local == "errBars" {
+                    "errBars"
+                } else {
+                    "trendline"
+                };
+                if crate::xml::pin_matches(e, &crate::xml::pin_attr(family), index_from_one, k) {
                     idx = Some(i);
                     break;
                 }
@@ -1188,7 +1174,7 @@ fn wrap_of_series(plot: &Element, index: usize) -> Option<&Element> {
         }
         for c in w.element_children() {
             if c.local_name() == "ser" {
-                if seen == index {
+                if crate::xml::pin_matches(c, &crate::xml::pin_attr("ser"), index, seen) {
                     return Some(w);
                 }
                 seen += 1;
@@ -1275,7 +1261,7 @@ fn ser_location(plot: &Element, index: usize) -> Option<(usize, usize)> {
         let mut local = 0usize;
         for c in w.element_children() {
             if c.local_name() == "ser" {
-                if seen == index {
+                if crate::xml::pin_matches(c, &crate::xml::pin_attr("ser"), index, seen) {
                     return Some((wi, local));
                 }
                 seen += 1;

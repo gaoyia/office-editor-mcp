@@ -100,6 +100,7 @@ fn cacheable(part: &str) -> bool {
         || p.contains("/slideMasters/")
         || p.contains("/slideLayouts/")
         || p.contains("/comments/")
+        || (p.contains("/charts/") && p.ends_with(".xml") && !p.contains("/_rels/"))
 }
 
 pub(crate) fn parse_part(pkg: &Package, part: &str) -> Result<Document, Error> {
@@ -110,7 +111,12 @@ pub(crate) fn parse_part(pkg: &Package, part: &str) -> Result<Document, Error> {
     }
     let mut doc = xml::parse(pkg.get(part)?)?;
     if active() && cacheable(part) {
-        pin_part(&mut doc);
+        let p = part.replace('\\', "/");
+        if p.contains("/charts/") && p.ends_with(".xml") && !p.contains("/_rels/") {
+            crate::chart::pin_space(&mut doc.root);
+        } else {
+            pin_part(&mut doc);
+        }
         CACHE.with(|c| {
             c.borrow_mut().insert(part.to_string(), doc.clone());
         });

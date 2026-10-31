@@ -770,7 +770,7 @@ pub fn apply_series(
     let (mut space, chart_part) =
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
-    if op.index >= chart::series_count(&space.root) {
+    if chart::with_ser_mut(&mut space.root, op.index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
@@ -798,9 +798,12 @@ pub fn apply_series(
 }
 
 fn series_is_bubble(space: &Element, index: usize) -> bool {
-    chart::collect_sers(space)
-        .get(index)
-        .is_some_and(|s| s.child_by_local("bubbleSize").is_some())
+    for (seen, ser) in chart::collect_sers(space).into_iter().enumerate() {
+        if crate::xml::pin_matches(ser, &crate::xml::pin_attr("ser"), index, seen) {
+            return ser.child_by_local("bubbleSize").is_some();
+        }
+    }
+    false
 }
 
 fn write_series(
@@ -1037,7 +1040,7 @@ pub fn apply_delete_series(
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let n = chart::series_count(&space.root);
-    if op.index >= n {
+    if chart::with_ser_mut(&mut space.root, op.index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),

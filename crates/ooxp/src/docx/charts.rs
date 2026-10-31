@@ -707,7 +707,7 @@ pub fn apply_title(
     let mut space = load_chart_space(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     crate::chart::reject_restricted(&space.0.root, &op.id, i, ChartRestrict::Decorate)?;
     set_chart_title(&mut space.0.root, &op.title);
-    pkg.set(&space.1, space.0.to_bytes()?)?;
+    save_chart(pkg, docs, &space.1, &space.0)?;
     Ok(())
 }
 
@@ -722,8 +722,7 @@ pub fn apply_series(
     let (mut space, chart_part, host) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
-    let n = series_count(&space.root);
-    if op.target.index >= n {
+    if crate::chart::with_ser_mut(&mut space.root, op.target.index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
@@ -746,7 +745,7 @@ pub fn apply_series(
         op.sizes.as_deref(),
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     let _ = host;
     Ok(())
 }
@@ -793,7 +792,7 @@ pub fn apply_add_series(
         op.series_type,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -810,7 +809,7 @@ pub fn apply_delete_series(
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     crate::chart::series_decor::reject_structure_edit(&space.root, &op.id, i)?;
     let n = series_count(&space.root);
-    if op.target.index >= n {
+    if crate::chart::with_ser_mut(&mut space.root, op.target.index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
@@ -823,7 +822,7 @@ pub fn apply_delete_series(
         ));
     }
     remove_series_at(&mut space.root, op.target.index);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -851,7 +850,7 @@ pub fn apply_type(
         &op.extra,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -867,7 +866,7 @@ pub fn apply_axis_title(
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_axis_title(&mut space.root, &op.axis, &op.title, i)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -883,7 +882,7 @@ pub fn apply_legend(
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_legend(&mut space.root, op.show, op.pos.as_deref());
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -899,7 +898,7 @@ pub fn apply_data_labels(
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     crate::chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_data_labels(&mut space.root, op.show);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -921,7 +920,7 @@ pub fn apply_insert_trendline(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -944,7 +943,7 @@ pub fn apply_set_trendline(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -966,7 +965,7 @@ pub fn apply_delete_trendline(
         op.tl_index,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -988,7 +987,7 @@ pub fn apply_insert_error_bars(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1011,7 +1010,7 @@ pub fn apply_set_error_bars(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1033,7 +1032,7 @@ pub fn apply_delete_error_bars(
         op.eb_index,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1055,7 +1054,7 @@ pub fn apply_series_axis(
         op.secondary,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    save_chart(pkg, docs, &chart_part, &space)?;
     Ok(())
 }
 
@@ -2099,8 +2098,25 @@ fn load_chart_space_host(
         )
     })?;
     let chart_part = crate::opc::resolve_id(pkg, &host, &rid)?;
-    let space = xml::parse(pkg.get(&chart_part)?)?;
+    let space = if let Some(doc) = docs.get(&chart_part) {
+        doc.clone()
+    } else {
+        let mut space = xml::parse(pkg.get(&chart_part)?)?;
+        crate::chart::pin_space(&mut space.root);
+        docs.insert(chart_part.clone(), space.clone());
+        space
+    };
     Ok((space, chart_part, host))
+}
+
+fn save_chart(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    part: &str,
+    doc: &Document,
+) -> Result<(), Error> {
+    docs.insert(part.to_string(), doc.clone());
+    pkg.set(part, doc.to_bytes()?)
 }
 
 fn uses_xy_axes(ty: &str) -> bool {
@@ -2118,7 +2134,7 @@ fn series_is_bubble(space: &Element, index: usize) -> bool {
         }
         for c in wrap.element_children() {
             if c.local_name() == "ser" {
-                if seen == index {
+                if crate::xml::pin_matches(c, &crate::xml::pin_attr("ser"), index, seen) {
                     return wrap.local_name() == "bubbleChart";
                 }
                 seen += 1;
@@ -2794,7 +2810,8 @@ fn remove_series_at(space: &mut Element, index: usize) {
             let mut i = 0;
             while i < w.children.len() {
                 if matches!(&w.children[i], Node::Element(e) if e.local_name() == "ser") {
-                    if seen == index {
+                    let hit = matches!(&w.children[i], Node::Element(e) if crate::xml::pin_matches(e, &crate::xml::pin_attr("ser"), index, seen));
+                    if hit {
                         w.children.remove(i);
                         return;
                     }

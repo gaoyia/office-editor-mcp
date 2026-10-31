@@ -1217,6 +1217,44 @@ pub fn plot_area_mut(space: &mut Element) -> Option<&mut Element> {
     inner_chart_mut(space)?.child_by_local_mut("plotArea")
 }
 
+pub fn pin_space(root: &mut Element) {
+    let Some(plot) = plot_area_mut(root) else {
+        return;
+    };
+    let ser_attr = crate::xml::pin_attr("ser");
+    let mut si = 0usize;
+    for wrap in plot.element_children_mut() {
+        if !WRAPPERS.contains(&wrap.local_name()) {
+            continue;
+        }
+        for ser in wrap.element_children_mut() {
+            if ser.local_name() != "ser" {
+                continue;
+            }
+            if ser.attr(&ser_attr).is_none() {
+                ser.set_attr(&ser_attr, si.to_string());
+            }
+            si += 1;
+            pin_named(ser, "trendline", "trendline");
+            pin_named(ser, "errBars", "errBars");
+        }
+    }
+}
+
+fn pin_named(parent: &mut Element, local: &str, family: &str) {
+    let attr = crate::xml::pin_attr(family);
+    let mut n = 0usize;
+    for child in parent.element_children_mut() {
+        if child.local_name() != local {
+            continue;
+        }
+        n += 1;
+        if child.attr(&attr).is_none() {
+            child.set_attr(&attr, n.to_string());
+        }
+    }
+}
+
 pub fn series_count(space: &Element) -> usize {
     collect_sers(space).len()
 }
@@ -1250,7 +1288,7 @@ pub fn with_ser_mut<R>(
         }
         for c in w.element_children_mut() {
             if c.local_name() == "ser" {
-                if seen == index {
+                if crate::xml::pin_matches(c, &crate::xml::pin_attr("ser"), index, seen) {
                     return Some(f(c));
                 }
                 seen += 1;
@@ -1318,7 +1356,8 @@ pub fn remove_series_at(space: &mut Element, index: usize) {
             let mut i = 0;
             while i < w.children.len() {
                 if matches!(&w.children[i], Node::Element(e) if e.local_name() == "ser") {
-                    if seen == index {
+                    let hit = matches!(&w.children[i], Node::Element(e) if crate::xml::pin_matches(e, &crate::xml::pin_attr("ser"), index, seen));
+                    if hit {
                         w.children.remove(i);
                         return;
                     }

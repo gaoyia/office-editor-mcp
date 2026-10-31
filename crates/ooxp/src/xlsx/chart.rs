@@ -653,14 +653,13 @@ pub fn set_chart_series(
 ) -> Result<bool, Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
-    if op.index >= chart::series_count(&space.root) {
+    let Some(snapshot) = chart::with_ser_mut(&mut space.root, op.index, |ser| ser.clone()) else {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         ));
-    }
+    };
     let mut wrote_cells = false;
-    let snapshot = chart::with_ser_mut(&mut space.root, op.index, |ser| ser.clone()).unwrap();
     if let Some(name) = &op.name {
         wrote_cells |= write_formula_values(
             pkg,
@@ -893,7 +892,7 @@ pub fn delete_chart_series(
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
     chart::series_decor::reject_structure_edit(&space.root, &op.id, op_index)?;
     let n = chart::series_count(&space.root);
-    if op.index >= n {
+    if chart::with_ser_mut(&mut space.root, op.index, |_| ()).is_none() {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),

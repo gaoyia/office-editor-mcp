@@ -591,7 +591,7 @@ fn add_and_delete_series_and_title_legend_labels() {
         &del,
         json!([
             { "op": "deleteChartSeries", "id": "para:AAAA0001/chart:7/series:0" },
-            { "op": "deleteChartSeries", "id": "para:AAAA0001/chart:7/series:0" }
+            { "op": "deleteChartSeries", "id": "para:AAAA0001/chart:7/series:1" }
         ]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);

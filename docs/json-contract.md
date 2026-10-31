@@ -174,14 +174,11 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 - pptx 的 `slide:{n}`，以及挂在它下面、按内容编号的形状、图、图表、表、备注、批注等 id
 - xlsx 表内名单、工作簿名单，以及 drawing 对象的 `:index:{k}`。计数范围见 [xlsx 分册](json-contract-xlsx.md#稳定-id)
 - pptx 的母版、版式、节、自定义放映，以及页上对象的 `:index:{k}`、链接、域、表的行列。计数范围见 [pptx 分册](json-contract-pptx.md#稳定-id)
+- 三种格式共用的 `series:{idx}`、`trendline:{k}`、`errorBars:{k}`。系列按图表里 `c:ser` 的顺序从 0 起，趋势线和误差线在各自系列里从 1 起
 
 被前面的 op 删掉后再点名，报 `IdNotFound`，不落到旁边的对象上。同一批里新建的对象不能用这些位置 id 点名，要等下一次 inspect。
 
 `after`、`start`、`end` 这类字段如果点的是已经固定的位置 id，同样按 apply 开始时解释。
-
-还没有固定、本批增删后仍会重排的族，按后续切片接上。每接上一族，就从下面删掉：
-
-- 三种格式共用的 `trendline:{k}`、`errorBars:{k}`
 
 ## inspect
 

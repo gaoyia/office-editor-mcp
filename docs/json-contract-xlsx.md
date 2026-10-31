@@ -20,7 +20,7 @@
 - 连接部件：没有 `id` 属性时的 `connection:index:{k}`
 - drawing 没有 `cNvPr/@id` 时的 `:index:{k}`，含页眉页脚图
 
-`series:{idx}`、`trendline:{k}`、`errorBars:{k}` 仍随本批重排。
+`series:{idx}` 从 0 起，`trendline:{k}` 和 `errorBars:{k}` 在该系列里从 1 起。一次 apply 里按开始时的顺序解释。
 
 - **工作簿**
   - id：`xlsx:workbook`

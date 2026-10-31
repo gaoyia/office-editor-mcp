@@ -206,6 +206,7 @@ inspect 读到回复自己的标记就用；没有标记时沿用线程根。`co
 图表的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文，匹配规则与图相同。没有该属性时用 `chart:index:{k}`，`stable` 为 `false`。
 正文的 `{k}` 只在该段内从 1 计；页眉页脚的 `{k}` 只在该部件内从 1 计。系列 `{idx}` 从 0 起，按 chart 部件里 `c:ser` 的文档顺序，不跟 `c:idx/@val`。
 趋势线 id 为 `{系列 id}/trendline:{k}`，误差线 id 为 `{系列 id}/errorBars:{k}`，`{k}` 从 1 起。
+一次 apply 里，系列、趋势线和误差线按开始时的顺序解释。
 只认 `a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/drawingml/2006/chart`（可带尾斜杠）的 drawing（ECMA-376 §21.2）。
 Office 2016 以后的 chartex URI（`http://schemas.microsoft.com/office/drawing/2014/chartex`）也列入，`type` 为 `chartex`。VML 图表不编。
 `w:drawing` 里同时有 `pic:pic` 和图表的，各走各的名单。正文图表只收主文档段落的子孙，遇 `w:txbxContent` 停住；表格单元格里的段落与正文段落同一套规则。

@@ -313,7 +313,11 @@ pub(crate) fn pivots_frozen(sheet_part: &str) -> bool {
 
 fn cacheable(part: &str) -> bool {
     let p = part.replace('\\', "/");
-    is_drawing_part(&p) || p.rsplit('/').next() == Some("connections.xml")
+    is_drawing_part(&p) || is_chart_part(&p) || p.rsplit('/').next() == Some("connections.xml")
+}
+
+fn is_chart_part(part: &str) -> bool {
+    part.contains("/charts/") && part.ends_with(".xml") && !part.contains("/_rels/")
 }
 
 fn is_drawing_part(part: &str) -> bool {
@@ -339,6 +343,9 @@ pub(crate) fn parse_part(pkg: &Package, part: &str) -> Result<Document, Error> {
         }
     }
     let mut doc = xml::parse(pkg.get(part)?)?;
+    if active() && is_chart_part(&part.replace('\\', "/")) {
+        crate::chart::pin_space(&mut doc.root);
+    }
     if active() && part.replace('\\', "/").rsplit('/').next() == Some("connections.xml") {
         pin_connections(&mut doc.root);
     }

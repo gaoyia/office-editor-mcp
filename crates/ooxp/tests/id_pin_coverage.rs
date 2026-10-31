@@ -44,7 +44,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "deleteChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "xlsx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "xlsx",
@@ -104,7 +104,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "deleteErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 xlsx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "xlsx",
@@ -212,7 +212,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "deleteTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "xlsx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "xlsx",
@@ -296,7 +296,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "insertErrorBars",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 xlsx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "xlsx",
@@ -398,7 +398,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "insertTrendline",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "xlsx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "xlsx",
@@ -494,13 +494,13 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "setChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 xlsx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "xlsx",
         op: "setChartSeriesAxis",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 xlsx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "xlsx",
@@ -578,7 +578,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "setErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 xlsx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "xlsx",
@@ -872,7 +872,7 @@ const ROWS: &[Row] = &[
         format: "xlsx",
         op: "setTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "xlsx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "xlsx",
@@ -950,7 +950,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "docx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "docx",
@@ -1022,7 +1022,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 docx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "docx",
@@ -1160,7 +1160,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "deleteTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "docx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "docx",
@@ -1268,7 +1268,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertErrorBars",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 docx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "docx",
@@ -1412,7 +1412,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertTrendline",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "docx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "docx",
@@ -1502,13 +1502,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 docx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "docx",
         op: "setChartSeriesAxis",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 docx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "docx",
@@ -1586,7 +1586,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 docx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "docx",
@@ -2000,7 +2000,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "docx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "docx",
@@ -2048,7 +2048,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "deleteChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "pptx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "pptx",
@@ -2084,7 +2084,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "deleteErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 pptx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "pptx",
@@ -2198,7 +2198,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "deleteTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "pptx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "pptx",
@@ -2258,7 +2258,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "insertErrorBars",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 pptx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "pptx",
@@ -2360,7 +2360,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "insertTrendline",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "pptx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "pptx",
@@ -2444,13 +2444,13 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setChartSeries",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 pptx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "pptx",
         op: "setChartSeriesAxis",
         family: "series:{idx}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 pptx_delete_series_then_trendline_on_original_second",
     },
     Row {
         format: "pptx",
@@ -2522,7 +2522,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setErrorBars",
         family: "errorBars:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "入口同 pptx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "pptx",
@@ -2864,7 +2864,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setTrendline",
         family: "trendline:{k}",
-        test: "待第二期：位置id第二期-图表趋势线误差线",
+        test: "pptx_delete_trendline_then_set_original_second",
     },
     Row {
         format: "pptx",

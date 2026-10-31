@@ -147,6 +147,7 @@ $order = @(
     'xlsx-validation'
     'xlsx-conditional-format'
     'xlsx-id-pin'
+    'xlsx-chart-id-pin'
     'xlsx-cf-spark-style'
     'xlsx-table'
     'xlsx-pivot'
