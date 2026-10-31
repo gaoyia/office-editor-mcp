@@ -2,6 +2,7 @@
 
 pub(crate) mod a1;
 mod apply;
+mod cell;
 mod cf;
 mod chart;
 mod chart_drawing;

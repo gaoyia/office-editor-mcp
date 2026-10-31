@@ -7,7 +7,7 @@ use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
-use super::apply;
+use super::cell;
 use super::picture;
 use super::request::{
     AlignPatch, BorderPatch, BorderSidePatch, ColorSpec, DxfPatch, FillPatch, FontPatch, Patch,
@@ -218,18 +218,18 @@ pub fn apply_set_cell_style(
     op: &SetCellStyleOp,
     _op_index: usize,
 ) -> Result<(), Error> {
-    let sheet_data = apply::ensure_sheet_data(worksheet);
-    let current_s = apply::find_cell(sheet_data, cell)
+    let sheet_data = cell::ensure_sheet_data(worksheet);
+    let current_s = cell::find_cell(sheet_data, cell)
         .and_then(|c| c.attr("s"))
         .and_then(|s| s.parse::<usize>().ok());
     let xf_idx = intern_xf(styles, current_s, op)?;
-    let c = apply::ensure_cell(sheet_data, cell);
+    let c = cell::ensure_cell(sheet_data, cell);
     if xf_idx == 0 {
         c.remove_attr("s");
     } else {
         c.set_attr("s", xf_idx.to_string());
     }
-    apply::expand_dimension(worksheet, cell);
+    cell::expand_dimension(worksheet, cell);
     Ok(())
 }
 
@@ -362,14 +362,14 @@ pub fn apply_set_cell_named_style(
     xf.remove_attr("applyProtection");
     xf.set_attr("xfId", xf_id.to_string());
     let xf_idx = intern_child(styles, "cellXfs", "xf", &xf);
-    let sheet_data = apply::ensure_sheet_data(worksheet);
-    let c = apply::ensure_cell(sheet_data, cell);
+    let sheet_data = cell::ensure_sheet_data(worksheet);
+    let c = cell::ensure_cell(sheet_data, cell);
     if xf_idx == 0 {
         c.remove_attr("s");
     } else {
         c.set_attr("s", xf_idx.to_string());
     }
-    apply::expand_dimension(worksheet, cell);
+    cell::expand_dimension(worksheet, cell);
     Ok(())
 }
 

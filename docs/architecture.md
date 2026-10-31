@@ -132,6 +132,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 `apply.rs` 只打开包、按 op 分发、写回脏部件。
 某个对象已经有模块时，这个 op 的函数体放在那个模块。
 多个对象都要用的部件装载留在 `apply.rs`，不在每个模块各抄一份。docx 已按此拆开。
+xlsx 的单元格、公式和 `sheetData` 读写在 `xlsx/cell.rs`。排序颜色编进样式表的那段在 `xlsx/view.rs`。
 
 ### opc
 

@@ -11,7 +11,8 @@ use crate::opc::{
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1::{self, CellRef};
-use super::apply::{self, write_json_cell};
+use super::apply;
+use super::cell::{self, write_json_cell};
 use super::inspect;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{
@@ -471,7 +472,7 @@ fn formula_ctx(pkg: &Package) -> (Vec<chart::DefinedName>, Vec<String>) {
 }
 
 fn cell_cached(sheet_data: &Element, cell: CellRef, sheet: &str, sst: &[String]) -> Option<Value> {
-    let c = apply::find_cell(sheet_data, cell)?;
+    let c = cell::find_cell(sheet_data, cell)?;
     let t = c.attr("t").unwrap_or("");
     let (ty, value) = inspect::classify(
         t,
@@ -796,7 +797,7 @@ pub fn add_chart_series(
                 row: start_row + i as u32,
             };
             if let Some(sd) = sheet_data {
-                if apply::find_cell(sd, cell).is_some() {
+                if cell::find_cell(sd, cell).is_some() {
                     return Err(Error::with_path(
                         ErrorKind::ChartFormulaNotA1,
                         format!("ops[{op_index}]"),

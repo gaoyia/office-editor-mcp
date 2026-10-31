@@ -3,11 +3,14 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
-use crate::xml::{Element, Node};
+use crate::opc::Package;
+use crate::xml::{Document, Element, Node};
 
 use super::a1::{self, CellRef};
 use super::layout;
-use super::request::{SetAutoFilterOp, SetSheetViewOp, SetSortStateOp};
+use super::request::{
+    DxfPatch, FillPatch, FontPatch, SetAutoFilterOp, SetSheetViewOp, SetSortStateOp,
+};
 use super::style;
 
 const DEF_ZOOM: u32 = 100;
@@ -206,6 +209,51 @@ pub(crate) fn apply_filter(
                     "autoFilter",
                 );
             }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn intern_sort_dxfs(
+    pkg: &mut Package,
+    wb_part: &str,
+    styles_doc: &mut Option<(String, Document)>,
+    op: &mut SetSortStateOp,
+) -> Result<(), Error> {
+    if !op.columns.iter().any(|c| c.color.is_some()) {
+        return Ok(());
+    }
+    for cond in &mut op.columns {
+        let Some(color) = cond.color.take() else {
+            continue;
+        };
+        let patch = if cond.sort_by.as_deref() == Some("fontColor") {
+            DxfPatch {
+                font: Some(FontPatch {
+                    name: None,
+                    sz: None,
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    color: Some(color),
+                }),
+                fill: None,
+                border: None,
+            }
+        } else {
+            DxfPatch {
+                font: None,
+                fill: Some(FillPatch {
+                    pattern: Some("solid".into()),
+                    fg: Some(color),
+                    bg: None,
+                }),
+                border: None,
+            }
+        };
+        let styles_root = style::ensure_styles(pkg, wb_part, styles_doc)?;
+        if let Some(id) = style::intern_dxf(styles_root, &patch) {
+            cond.dxf_id = Some(id as u32);
         }
     }
     Ok(())

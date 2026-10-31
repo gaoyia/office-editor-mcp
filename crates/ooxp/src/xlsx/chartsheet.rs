@@ -8,7 +8,8 @@ use crate::opc::{
 use crate::xml::{Document, Element, DEFAULT_DECL};
 
 use super::a1;
-use super::apply::{self, write_json_cell};
+use super::apply;
+use super::cell::write_json_cell;
 use super::chart as xlsx_chart;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{DeleteChartSheetOp, InsertChartSheetOp};

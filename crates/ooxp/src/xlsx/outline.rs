@@ -3,7 +3,7 @@
 use serde_json::{json, Map, Value};
 
 use super::a1;
-use super::apply;
+use super::cell;
 use super::layout;
 use super::request::{
     GroupColsOp, GroupRowsOp, SetColHiddenOp, SetOutlineOp, SetRowHiddenOp, UngroupColsOp,
@@ -141,7 +141,7 @@ pub(crate) fn apply_ungroup_cols(
 }
 
 pub(crate) fn apply_set_row_hidden(sheet: &mut Element, op: &SetRowHiddenOp) {
-    let sheet_data = apply::ensure_sheet_data(sheet);
+    let sheet_data = cell::ensure_sheet_data(sheet);
     for r in op.row..=op.to_row {
         set_row_flag(sheet_data, r, "hidden", op.hidden);
     }
@@ -180,7 +180,7 @@ fn bump_rows(
     delta: i32,
     op_index: usize,
 ) -> Result<(), Error> {
-    let sheet_data = apply::ensure_sheet_data(sheet);
+    let sheet_data = cell::ensure_sheet_data(sheet);
     if delta > 0 {
         for r in from..=to {
             let lvl = row_outline_level(sheet_data, r);
@@ -225,7 +225,7 @@ fn apply_collapse_rows(
             format!("ops[{op_index}].collapseRows"),
         ));
     };
-    let sheet_data = apply::ensure_sheet_data(sheet);
+    let sheet_data = cell::ensure_sheet_data(sheet);
     for r in from..=to {
         set_row_flag(sheet_data, r, "hidden", collapsed);
     }
@@ -343,7 +343,7 @@ fn drop_empty_outline_pr(sheet: &mut Element) {
 }
 
 fn row_outline_level(sheet_data: &Element, r: u32) -> u32 {
-    let Some(idx) = apply::find_row_index(sheet_data, r) else {
+    let Some(idx) = cell::find_row_index(sheet_data, r) else {
         return 0;
     };
     let Node::Element(row) = &sheet_data.children[idx] else {
@@ -357,7 +357,7 @@ fn set_row_outline(sheet_data: &mut Element, r: u32, level: u32) {
         return;
     }
     if level == 0 {
-        let Some(idx) = apply::find_row_index(sheet_data, r) else {
+        let Some(idx) = cell::find_row_index(sheet_data, r) else {
             return;
         };
         let Node::Element(row) = &mut sheet_data.children[idx] else {
@@ -367,21 +367,21 @@ fn set_row_outline(sheet_data: &mut Element, r: u32, level: u32) {
         drop_row_if_shell(sheet_data, r);
         return;
     }
-    let row = apply::ensure_row(sheet_data, r);
+    let row = cell::ensure_row(sheet_data, r);
     row.set_attr("outlineLevel", level.to_string());
 }
 
 fn level_is_zero_and_missing(sheet_data: &Element, r: u32, level: u32) -> bool {
-    level == 0 && apply::find_row_index(sheet_data, r).is_none()
+    level == 0 && cell::find_row_index(sheet_data, r).is_none()
 }
 
 fn set_row_flag(sheet_data: &mut Element, r: u32, name: &str, on: bool) {
     if on {
-        let row = apply::ensure_row(sheet_data, r);
+        let row = cell::ensure_row(sheet_data, r);
         row.set_attr(name, "1");
         return;
     }
-    let Some(idx) = apply::find_row_index(sheet_data, r) else {
+    let Some(idx) = cell::find_row_index(sheet_data, r) else {
         return;
     };
     let Node::Element(row) = &mut sheet_data.children[idx] else {
@@ -392,7 +392,7 @@ fn set_row_flag(sheet_data: &mut Element, r: u32, name: &str, on: bool) {
 }
 
 fn drop_row_if_shell(sheet_data: &mut Element, r: u32) {
-    let Some(idx) = apply::find_row_index(sheet_data, r) else {
+    let Some(idx) = cell::find_row_index(sheet_data, r) else {
         return;
     };
     let Node::Element(row) = &sheet_data.children[idx] else {

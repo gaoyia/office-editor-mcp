@@ -8,6 +8,7 @@ use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
 
 use super::a1::{self, CellRef};
 use super::apply;
+use super::cell;
 use super::layout;
 use super::picture;
 use super::request::{DeleteSheetTableOp, InsertSheetTableOp, SetSheetTableOp};
@@ -612,8 +613,8 @@ fn cell_text(root: &Element, cell: CellRef, sst: &[String]) -> String {
 }
 
 fn write_header(worksheet: &mut Element, cell: CellRef, text: &str) {
-    let sheet_data = apply::ensure_sheet_data(worksheet);
-    let c = apply::ensure_cell(sheet_data, cell);
+    let sheet_data = cell::ensure_sheet_data(worksheet);
+    let c = cell::ensure_cell(sheet_data, cell);
     c.children.retain(|n| match n {
         Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
         Node::Text(_) | Node::Raw(_) => true,
@@ -627,7 +628,7 @@ fn write_header(worksheet: &mut Element, cell: CellRef, text: &str) {
     let mut is = Element::new("is");
     is.push_element(t);
     c.push_element(is);
-    apply::expand_dimension(worksheet, cell);
+    cell::expand_dimension(worksheet, cell);
 }
 
 fn build_table_xml(id: u32, name: &str, refer: &str, columns: &[String]) -> Document {

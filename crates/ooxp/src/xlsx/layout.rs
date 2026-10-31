@@ -3,7 +3,7 @@
 use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
-use super::apply;
+use super::cell;
 use super::request::{MergeRangeOp, SetColWidthOp, SetRowHeightOp, UnmergeRangeOp};
 use crate::error::{Error, ErrorKind};
 use crate::xml::{Element, Node};
@@ -386,11 +386,11 @@ pub(crate) fn apply_set_row_height(
     worksheet: &mut Element,
     op: &SetRowHeightOp,
 ) -> Result<(), Error> {
-    let sheet_data = apply::ensure_sheet_data(worksheet);
+    let sheet_data = cell::ensure_sheet_data(worksheet);
     for r in op.row..=op.to_row {
         match &op.height {
             Patch::Set(ht) => {
-                let row = apply::ensure_row(sheet_data, r);
+                let row = cell::ensure_row(sheet_data, r);
                 row.set_attr("ht", fmt_num(*ht));
                 row.set_attr("customHeight", "1");
             }
@@ -416,20 +416,20 @@ pub(crate) fn apply_merge_range(
             format!("ops[{op_index}].range"),
         ));
     }
-    apply::reject_merge_formula_conflicts(worksheet, start, end, op_index)?;
+    cell::reject_merge_formula_conflicts(worksheet, start, end, op_index)?;
     {
-        let sheet_data = apply::ensure_sheet_data(worksheet);
+        let sheet_data = cell::ensure_sheet_data(worksheet);
         for row in start.row..=end.row {
             for col in start.col..=end.col {
                 if col == start.col && row == start.row {
                     continue;
                 }
-                apply::clear_cell(sheet_data, CellRef { col, row });
+                cell::clear_cell(sheet_data, CellRef { col, row });
             }
         }
     }
-    apply::expand_dimension(worksheet, start);
-    apply::expand_dimension(worksheet, end);
+    cell::expand_dimension(worksheet, start);
+    cell::expand_dimension(worksheet, end);
     remove_intersecting_merges(worksheet, start, end);
     let ref_s = format!(
         "{}:{}",
@@ -549,7 +549,7 @@ fn uncovered_spans(a: u32, b: u32, covered: &[(u32, u32)]) -> Vec<(u32, u32)> {
 }
 
 fn clear_row_height(sheet_data: &mut Element, r: u32) {
-    let Some(idx) = apply::find_row_index(sheet_data, r) else {
+    let Some(idx) = cell::find_row_index(sheet_data, r) else {
         return;
     };
     let Node::Element(row) = &mut sheet_data.children[idx] else {
