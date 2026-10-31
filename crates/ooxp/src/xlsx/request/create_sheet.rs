@@ -4,9 +4,7 @@ use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 
 use super::super::a1::{self};
 use super::create_types::*;
-use super::{
-    parse_cell_value, InsertChartSheetOp, SetCellValue,
-};
+use super::{parse_cell_value, InsertChartSheetOp, SetCellValue};
 
 pub(crate) fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let obj = v.as_object().ok_or_else(|| {

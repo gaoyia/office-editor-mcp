@@ -2,9 +2,7 @@ use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, TypeName};
 
-use super::{
-    InsertConnectorOp, InsertShapeOp, InsertSmartArtOp, InsertTextBoxOp,
-};
+use super::{InsertConnectorOp, InsertShapeOp, InsertSmartArtOp, InsertTextBoxOp};
 
 pub(crate) fn parse_textboxes(
     v: Option<&Value>,

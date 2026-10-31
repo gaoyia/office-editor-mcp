@@ -5,9 +5,7 @@ use crate::error::{Error, ErrorKind, TypeName};
 use super::super::a1::CellRef;
 use super::super::picture::AnchorKind;
 use super::create_types::*;
-use super::{
-    HfSlot, InsertPictureOp,
-};
+use super::{HfSlot, InsertPictureOp};
 
 pub(crate) fn parse_header_footers(
     v: Option<&Value>,

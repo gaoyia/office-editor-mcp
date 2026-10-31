@@ -1,6 +1,5 @@
 //! 从领域 JSON 生成 Transitional 工作簿。
 
-
 use serde_json::Value;
 
 use super::chart;
@@ -10,9 +9,7 @@ use super::hf;
 use super::hyperlink;
 use super::picture::{self};
 use super::request::create_types::*;
-use super::request::{
-    SetCellValue, SetHeaderFooterTextOp,
-};
+use super::request::{SetCellValue, SetHeaderFooterTextOp};
 use super::shape;
 use super::smartart;
 use crate::error::{Error, ErrorKind, TypeName};
@@ -23,7 +20,8 @@ use crate::xml;
 
 use super::a1::{self};
 use super::{
-    CT_APP, CT_CORE, CT_SHARED_STRINGS, CT_STYLES, CT_WORKBOOK, CT_WORKSHEET, REL_APP, REL_CORE, REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_WORKSHEET,
+    CT_APP, CT_CORE, CT_SHARED_STRINGS, CT_STYLES, CT_WORKBOOK, CT_WORKSHEET, REL_APP, REL_CORE,
+    REL_OFFICE_DOCUMENT, REL_SHARED_STRINGS, REL_STYLES, REL_WORKSHEET,
 };
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
