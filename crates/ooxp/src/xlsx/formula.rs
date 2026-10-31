@@ -465,6 +465,491 @@ fn shift_token(cell: AbsCellRef, dcol: i64, drow: i64) -> String {
     }
 }
 
+/// 改表名或删表时改写公式里的本地表引用。
+/// 字符串和外部工作簿引用原样留下。引号不配对时返回错误。
+#[derive(Clone, Copy)]
+pub(crate) enum SheetRefEdit<'a> {
+    Rename(&'a str),
+    Delete,
+}
+
+pub(crate) fn rewrite_sheet_formula(
+    formula: &str,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+) -> Result<String, ()> {
+    let bytes = formula.as_bytes();
+    let mut i = 0;
+    let mut out = String::with_capacity(formula.len());
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            copy_string_checked(&mut out, formula, &mut i)?;
+            continue;
+        }
+        if bytes[i] == b'\'' {
+            rewrite_quoted_prefix(&mut out, formula, &mut i, old, edit)?;
+            continue;
+        }
+        if bytes[i] == b'[' && external_index_at(formula, i) {
+            let start = i;
+            let mut j = i;
+            let mut skipped = String::new();
+            copy_brackets(&mut skipped, formula, &mut j);
+            if let Some(end) = sheet_prefix_span(formula, j) {
+                j = end;
+            }
+            out.push_str(&formula[start..j]);
+            i = j;
+            continue;
+        }
+        if rewrite_unquoted_prefix(&mut out, formula, &mut i, old, edit)? {
+            continue;
+        }
+        let ch = formula[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Ok(out)
+}
+
+/// 删表时，把指向该表上表格的结构化引用换成 `#REF!`。
+pub(crate) fn rewrite_table_formula(formula: &str, table: &str) -> Result<String, ()> {
+    let bytes = formula.as_bytes();
+    let mut i = 0;
+    let mut out = String::with_capacity(formula.len());
+    while i < bytes.len() {
+        if bytes[i] == b'"' {
+            copy_string_checked(&mut out, formula, &mut i)?;
+            continue;
+        }
+        if let Some(end) = table_ref_end(formula, i, table) {
+            out.push_str("#REF!");
+            i = end;
+            continue;
+        }
+        let ch = formula[i..].chars().next().unwrap();
+        out.push(ch);
+        i += ch.len_utf8();
+    }
+    Ok(out)
+}
+
+fn copy_string_checked(out: &mut String, s: &str, i: &mut usize) -> Result<(), ()> {
+    let start = *i;
+    copy_quoted(out, s, i);
+    if *i <= start + 1 || !out.ends_with('"') {
+        return Err(());
+    }
+    Ok(())
+}
+
+fn external_index_at(s: &str, i: usize) -> bool {
+    let bytes = s.as_bytes();
+    if i >= bytes.len() || bytes[i] != b'[' {
+        return false;
+    }
+    let mut j = i + 1;
+    if j >= bytes.len() || !bytes[j].is_ascii_digit() {
+        return false;
+    }
+    while j < bytes.len() && bytes[j].is_ascii_digit() {
+        j += 1;
+    }
+    j < bytes.len() && bytes[j] == b']'
+}
+
+fn sheet_prefix_span(s: &str, i: usize) -> Option<usize> {
+    if i >= s.len() {
+        return None;
+    }
+    if s.as_bytes()[i] == b'\'' {
+        return quoted_prefix_end(s, i);
+    }
+    unquoted_prefix_end(s, i)
+}
+
+fn quoted_prefix_end(s: &str, i: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    if i >= bytes.len() || bytes[i] != b'\'' {
+        return None;
+    }
+    let mut j = i + 1;
+    while j < bytes.len() {
+        if bytes[j] == b'\'' {
+            j += 1;
+            if j < bytes.len() && bytes[j] == b'\'' {
+                j += 1;
+                continue;
+            }
+            if j < bytes.len() && bytes[j] == b'!' {
+                return Some(j + 1);
+            }
+            return None;
+        }
+        j += 1;
+    }
+    None
+}
+
+fn unquoted_prefix_end(s: &str, i: usize) -> Option<usize> {
+    let name1 = unquoted_name_end(s, i)?;
+    let bytes = s.as_bytes();
+    if name1 < bytes.len() && bytes[name1] == b'!' {
+        return Some(name1 + 1);
+    }
+    if name1 < bytes.len() && bytes[name1] == b':' {
+        let name2 = unquoted_name_end(s, name1 + 1)?;
+        if name2 < bytes.len() && bytes[name2] == b'!' {
+            return Some(name2 + 1);
+        }
+    }
+    None
+}
+
+fn unquoted_name_end(s: &str, i: usize) -> Option<usize> {
+    let mut j = i;
+    let mut saw = false;
+    for ch in s[i..].chars() {
+        if is_unquoted_sheet_char(ch) {
+            saw = true;
+            j += ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    saw.then_some(j)
+}
+
+fn is_unquoted_sheet_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '.'
+}
+
+fn rewrite_quoted_prefix(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+) -> Result<(), ()> {
+    let Some(end) = quoted_prefix_end(formula, *i) else {
+        return Err(());
+    };
+    let raw = &formula[*i..end];
+    let inside = decode_quoted_sheet(&raw[1..raw.len() - 2])?;
+    if inside.contains(']') {
+        out.push_str(raw);
+        *i = end;
+        return Ok(());
+    }
+    let prefix = parse_local_names(&inside)?;
+    emit_prefix(out, formula, i, end, &prefix, old, edit)
+}
+
+fn rewrite_unquoted_prefix(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+) -> Result<bool, ()> {
+    let Some(end) = unquoted_prefix_end(formula, *i) else {
+        return Ok(false);
+    };
+    let raw = &formula[*i..end];
+    let inside = &raw[..raw.len() - 1];
+    let prefix = parse_local_names(inside)?;
+    emit_prefix(out, formula, i, end, &prefix, old, edit)?;
+    Ok(true)
+}
+
+fn decode_quoted_sheet(inside: &str) -> Result<String, ()> {
+    let mut out = String::new();
+    let mut chars = inside.chars();
+    while let Some(c) = chars.next() {
+        if c == '\'' {
+            if chars.next() != Some('\'') {
+                return Err(());
+            }
+            out.push('\'');
+        } else {
+            out.push(c);
+        }
+    }
+    Ok(out)
+}
+
+fn parse_local_names(inside: &str) -> Result<SheetPrefix, ()> {
+    match inside.split_once(':') {
+        None => Ok(SheetPrefix::One(inside.to_string())),
+        Some((a, b)) => {
+            if a.is_empty() || b.is_empty() || b.contains(':') {
+                return Err(());
+            }
+            Ok(SheetPrefix::Three(a.to_string(), b.to_string()))
+        }
+    }
+}
+
+enum SheetPrefix {
+    One(String),
+    Three(String, String),
+}
+
+fn emit_prefix(
+    out: &mut String,
+    formula: &str,
+    i: &mut usize,
+    end: usize,
+    prefix: &SheetPrefix,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+) -> Result<(), ()> {
+    let raw = &formula[*i..end];
+    match prefix {
+        SheetPrefix::One(name) if name.eq_ignore_ascii_case(old) => match edit {
+            SheetRefEdit::Rename(new_name) => out.push_str(&format_sheet_prefix(new_name)),
+            SheetRefEdit::Delete => {
+                out.push_str("#REF!");
+                *i = consume_ref_tail(formula, end);
+                return Ok(());
+            }
+        },
+        SheetPrefix::Three(a, b) => {
+            let hit_a = a.eq_ignore_ascii_case(old);
+            let hit_b = b.eq_ignore_ascii_case(old);
+            if hit_a || hit_b {
+                match edit {
+                    SheetRefEdit::Rename(new_name) => {
+                        let left = if hit_a { new_name } else { a.as_str() };
+                        let right = if hit_b { new_name } else { b.as_str() };
+                        out.push_str(&format_sheet_3d(left, right));
+                    }
+                    SheetRefEdit::Delete => {
+                        if hit_a && hit_b {
+                            out.push_str("#REF!");
+                            *i = consume_ref_tail(formula, end);
+                            return Ok(());
+                        }
+                        let keep = if hit_a { b.as_str() } else { a.as_str() };
+                        out.push_str(&format_sheet_prefix(keep));
+                    }
+                }
+                *i = end;
+                return Ok(());
+            }
+            out.push_str(raw);
+        }
+        _ => out.push_str(raw),
+    }
+    *i = end;
+    Ok(())
+}
+
+fn format_sheet_prefix(name: &str) -> String {
+    if sheet_name_needs_quotes(name) {
+        format!("'{}'!", name.replace('\'', "''"))
+    } else {
+        format!("{name}!")
+    }
+}
+
+fn format_sheet_3d(a: &str, b: &str) -> String {
+    if sheet_name_needs_quotes(a) || sheet_name_needs_quotes(b) {
+        format!("'{}:{}'!", a.replace('\'', "''"), b.replace('\'', "''"))
+    } else {
+        format!("{a}:{b}!")
+    }
+}
+
+fn sheet_name_needs_quotes(name: &str) -> bool {
+    if name.is_empty()
+        || name.eq_ignore_ascii_case("true")
+        || name.eq_ignore_ascii_case("false")
+        || is_r1c1_sheet_name(name)
+        || a1::parse_cell(name).is_ok()
+    {
+        return true;
+    }
+    let mut chars = name.chars();
+    let Some(first) = chars.next() else {
+        return true;
+    };
+    if !first.is_alphabetic() && first != '_' {
+        return true;
+    }
+    !name.chars().all(is_unquoted_sheet_char)
+}
+
+fn is_r1c1_sheet_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    if bytes.len() < 2 || !bytes[0].eq_ignore_ascii_case(&b'R') {
+        return false;
+    }
+    let mut i = 1;
+    i = skip_r1c1_index(bytes, i);
+    if i >= bytes.len() || !bytes[i].eq_ignore_ascii_case(&b'C') {
+        return false;
+    }
+    i = skip_r1c1_index(bytes, i + 1);
+    i == bytes.len()
+}
+
+fn skip_r1c1_index(bytes: &[u8], mut i: usize) -> usize {
+    if i < bytes.len() && bytes[i] == b'[' {
+        i += 1;
+        if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
+            i += 1;
+        }
+        let start = i;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i > start && i < bytes.len() && bytes[i] == b']' {
+            return i + 1;
+        }
+        return start.saturating_sub(1);
+    }
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    i
+}
+
+fn consume_ref_tail(s: &str, i: usize) -> usize {
+    let Some(end) = consume_ref_atom(s, i) else {
+        return i;
+    };
+    if s[end..].starts_with(':') {
+        if let Some(end2) = consume_ref_atom(s, end + 1) {
+            return end2;
+        }
+    }
+    end
+}
+
+fn consume_ref_atom(s: &str, i: usize) -> Option<usize> {
+    if let Some((_, end)) = a1::parse_abs_prefix(s, i) {
+        return Some(end);
+    }
+    if let Some(end) = consume_column(s, i) {
+        let next = s[end..].chars().next();
+        if !matches!(next, Some('(' | '[')) {
+            return Some(end);
+        }
+    }
+    if let Some(end) = consume_row_atom(s, i) {
+        return Some(end);
+    }
+    consume_struct_name(s, i)
+}
+
+fn consume_column(s: &str, i: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut j = i;
+    if j < bytes.len() && bytes[j] == b'$' {
+        j += 1;
+    }
+    let start = j;
+    while j < bytes.len() && bytes[j].is_ascii_alphabetic() {
+        j += 1;
+    }
+    if j == start || j - start > 3 {
+        return None;
+    }
+    let col = a1::letters_to_col(&s[start..j]).ok()?;
+    (col > 0 && col <= 16_384).then_some(j)
+}
+
+fn consume_row_atom(s: &str, i: usize) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut j = i;
+    if j < bytes.len() && bytes[j] == b'$' {
+        j += 1;
+    }
+    let start = j;
+    while j < bytes.len() && bytes[j].is_ascii_digit() {
+        j += 1;
+    }
+    if j == start {
+        return None;
+    }
+    let row: u32 = s[start..j].parse().ok()?;
+    (row > 0 && row <= 1_048_576).then_some(j)
+}
+
+fn consume_struct_name(s: &str, i: usize) -> Option<usize> {
+    let end = unquoted_name_end(s, i)?;
+    let bytes = s.as_bytes();
+    if end < bytes.len() && bytes[end] == b'[' {
+        return Some(consume_balanced_brackets(s, end));
+    }
+    if end < bytes.len() && bytes[end] == b'(' {
+        return None;
+    }
+    Some(end)
+}
+
+fn consume_balanced_brackets(s: &str, i: usize) -> usize {
+    let bytes = s.as_bytes();
+    let mut j = i;
+    let mut depth = 0i32;
+    while j < bytes.len() {
+        match bytes[j] {
+            b'[' => {
+                depth += 1;
+                j += 1;
+            }
+            b']' => {
+                depth -= 1;
+                j += 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            b'"' => {
+                j += 1;
+                while j < bytes.len() {
+                    if bytes[j] == b'"' {
+                        j += 1;
+                        if j < bytes.len() && bytes[j] == b'"' {
+                            j += 1;
+                            continue;
+                        }
+                        break;
+                    }
+                    j += 1;
+                }
+            }
+            _ => {
+                let ch = s[j..].chars().next().unwrap();
+                j += ch.len_utf8();
+            }
+        }
+    }
+    j
+}
+
+fn table_ref_end(s: &str, i: usize, table: &str) -> Option<usize> {
+    if i > 0 {
+        let prev = s[..i].chars().next_back()?;
+        if is_unquoted_sheet_char(prev) {
+            return None;
+        }
+    }
+    let end = i + table.len();
+    if !s.is_char_boundary(end) {
+        return None;
+    }
+    let rest = s.get(i..end)?;
+    if !rest.eq_ignore_ascii_case(table) {
+        return None;
+    }
+    if !s[end..].starts_with('[') {
+        return None;
+    }
+    Some(consume_balanced_brackets(s, end))
+}
+
 fn sheet_prefix_end(s: &str, i: usize) -> Option<usize> {
     let bytes = s.as_bytes();
     if i >= bytes.len() {
@@ -580,6 +1065,73 @@ mod tests {
         );
         assert!(parse_table_formula("=A1").is_none());
         assert!(parse_table_formula("=TABLE(C1)").is_none());
+    }
+
+    #[test]
+    fn rename_and_delete_match_excel_sheet_refs() {
+        let ren =
+            |f: &str| rewrite_sheet_formula(f, "Src", SheetRefEdit::Rename("New Name")).unwrap();
+        let del = |f: &str| rewrite_sheet_formula(f, "Src", SheetRefEdit::Delete).unwrap();
+        assert_eq!(ren("Src!$B$1"), "'New Name'!$B$1");
+        assert_eq!(
+            ren("SUM(Src!B1,Src!B2)"),
+            "SUM('New Name'!B1,'New Name'!B2)"
+        );
+        assert_eq!(ren("Src!B1:B2"), "'New Name'!B1:B2");
+        assert_eq!(ren("\"Src!B1\""), "\"Src!B1\"");
+        assert_eq!(ren("SUM(Src:Host!B1)"), "SUM('New Name:Host'!B1)");
+        assert_eq!(ren("[1]Src!A1"), "[1]Src!A1");
+        assert_eq!(ren("数据!$B$1"), "数据!$B$1");
+        assert_eq!(ren("'Data 1'!$B$1"), "'Data 1'!$B$1");
+        assert_eq!(
+            rewrite_sheet_formula("'Data 1'!$B$1", "Data 1", SheetRefEdit::Rename("Data2"))
+                .unwrap(),
+            "Data2!$B$1"
+        );
+        assert_eq!(
+            rewrite_sheet_formula("'1Data'!A1", "1Data", SheetRefEdit::Rename("2 Data")).unwrap(),
+            "'2 Data'!A1"
+        );
+        assert_eq!(
+            rewrite_sheet_formula("'O''Brien'!A1", "O'Brien", SheetRefEdit::Rename("O'Neil"))
+                .unwrap(),
+            "'O''Neil'!A1"
+        );
+        assert_eq!(
+            rewrite_sheet_formula("'A1'!B1", "A1", SheetRefEdit::Rename("B2")).unwrap(),
+            "'B2'!B1"
+        );
+        assert_eq!(
+            rewrite_sheet_formula("数据!A1", "数据", SheetRefEdit::Rename("销售 表")).unwrap(),
+            "'销售 表'!A1"
+        );
+        assert_eq!(
+            rewrite_sheet_formula("'true'!A1", "true", SheetRefEdit::Rename("Src")).unwrap(),
+            "Src!A1"
+        );
+        assert_eq!(del("Src!$B$1"), "#REF!");
+        assert_eq!(del("SUM(Src!B1,Src!B2)"), "SUM(#REF!,#REF!)");
+        assert_eq!(del("Src!B1:B2"), "#REF!");
+        assert_eq!(del("Src!B1>0"), "#REF!>0");
+        assert_eq!(del("\"Src!B1\""), "\"Src!B1\"");
+        assert_eq!(del("SUM(Src:Host!B1)"), "SUM(Host!B1)");
+        assert_eq!(del("SUM(Host:Src!B1)"), "SUM(Host!B1)");
+        assert_eq!(del("[1]Src!A1"), "[1]Src!A1");
+        assert_eq!(del("Src!A:A"), "#REF!");
+        assert_eq!(del("Src!1:1"), "#REF!");
+        assert_eq!(
+            rewrite_table_formula("SUM(Tbl[Col])", "Tbl").unwrap(),
+            "SUM(#REF!)"
+        );
+        assert_eq!(
+            rewrite_table_formula("SUM(Tbl[[#This Row],[Col]])", "Tbl").unwrap(),
+            "SUM(#REF!)"
+        );
+        assert_eq!(
+            rewrite_table_formula("\"Tbl[Col]\"", "Tbl").unwrap(),
+            "\"Tbl[Col]\""
+        );
+        assert!(rewrite_sheet_formula("'Src!A1", "Src", SheetRefEdit::Delete).is_err());
     }
 
     #[test]

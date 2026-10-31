@@ -1,4 +1,4 @@
-//! 工作表管理：插、删、改名、重排、隐藏，以及引用拒绝。
+//! 工作表管理：插、删、改名、重排、隐藏，以及改写引用。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -369,31 +369,164 @@ fn refuse_last_visible_and_last_sheet() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
+fn part_text(path: &Path, name: &str) -> String {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name(name).unwrap();
+    let mut text = String::new();
+    file.read_to_string(&mut text).unwrap();
+    text
+}
+
+fn first_part_text(path: &Path, needle: &str) -> String {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).unwrap();
+        let name = file.name().replace('\\', "/");
+        if name.contains(needle) {
+            let mut text = String::new();
+            file.read_to_string(&mut text).unwrap();
+            return text;
+        }
+    }
+    panic!("没有 {needle}");
+}
+
 #[test]
-fn refuse_delete_when_formula_refers() {
+fn rename_and_delete_rewrite_sheet_refs() {
     let src = create_book(
-        "fref",
+        "rw",
         json!([
-            { "name": "Sheet1", "cells": [{ "ref": "A1", "formula": "=Sheet2!A1" }] },
-            { "name": "Sheet2", "cells": [{ "ref": "A1", "value": 1 }] }
+            {
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "formula": "=Sheet2!A1" },
+                    { "ref": "A2", "formula": "=\"Sheet2!A1\"" },
+                    { "ref": "A3", "formula": "=SUM(Sheet2:Sheet1!A1)" },
+                    { "ref": "A4", "formula": "=SUM(Sales[金额])" },
+                    { "ref": "A5", "value": 1 }
+                ]
+            },
+            {
+                "name": "Sheet2",
+                "cells": [
+                    { "ref": "A1", "value": "产品" },
+                    { "ref": "B1", "value": "数量" },
+                    { "ref": "C1", "value": "金额" },
+                    { "ref": "A2", "value": "甲" },
+                    { "ref": "B2", "value": 1 },
+                    { "ref": "C2", "value": 10 }
+                ]
+            }
         ]),
     );
-    let err = apply(
+    let prepped = tmp("prep");
+    apply(
         &src,
-        &tmp("del-ref"),
+        &prepped,
+        json!([
+            {
+                "op": "insertDefinedName",
+                "id": "xlsx:workbook",
+                "name": "SrcCells",
+                "formula": "Sheet2!$A$1"
+            },
+            {
+                "op": "insertDataValidation",
+                "id": "sheet:Sheet1",
+                "sqref": "B2",
+                "type": "custom",
+                "formula1": "Sheet2!A1>0"
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "B3",
+                "type": "expression",
+                "formulas": ["Sheet2!A1>0"],
+                "dxf": { "font": { "bold": true } }
+            },
+            {
+                "op": "insertHyperlink",
+                "id": "sheet:Sheet1",
+                "ref": "B4",
+                "location": "Sheet2!A1"
+            },
+            {
+                "op": "insertSheetTable",
+                "id": "sheet:Sheet2",
+                "ref": "A1:C2",
+                "name": "Sales",
+                "columns": ["产品", "数量", "金额"]
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "col",
+                "from": "E2",
+                "dataFrom": "A5",
+                "series": [{ "name": "Q", "values": [1] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let pivot = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cacheSource type="worksheet"><worksheetSource ref="A1:B2" sheet="Sheet2"/></cacheSource></pivotCacheDefinition>"#;
+    rewrite_package(
+        &prepped,
+        |name, data| Some((name.to_string(), data)),
+        &[("xl/pivotCache/pivotCacheDefinition1.xml", pivot.to_vec())],
+    );
+
+    let renamed = tmp("ren");
+    apply(
+        &prepped,
+        &renamed,
+        json!([{ "op": "renameSheet", "id": "sheet:Sheet2", "name": "New Name" }]),
+    )
+    .unwrap();
+    let sheet = part_text(&renamed, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains("&apos;New Name&apos;!A1"), "{sheet}");
+    assert!(sheet.contains("&quot;Sheet2!A1&quot;"));
+    assert!(sheet.contains("&apos;New Name:Sheet1&apos;!A1"));
+    assert!(sheet.contains("SUM(Sales[金额])"));
+    assert!(sheet.contains("location=\"Sheet2!A1\""));
+    assert!(sheet.contains("&apos;New Name&apos;!A1&gt;0"));
+    let wb = part_text(&renamed, "xl/workbook.xml");
+    assert!(wb.contains("&apos;New Name&apos;!$A$1"), "{wb}");
+    let pivot_xml = part_text(&renamed, "xl/pivotCache/pivotCacheDefinition1.xml");
+    assert!(pivot_xml.contains("sheet=\"New Name\""));
+
+    let deleted = tmp("del");
+    apply(
+        &prepped,
+        &deleted,
         json!([{ "op": "deleteSheet", "id": "sheet:Sheet2" }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert_eq!(inspect(&src)["sheets"].as_array().unwrap().len(), 2);
+    .unwrap();
+    let sheet = part_text(&deleted, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains("#REF!"), "{sheet}");
+    assert!(sheet.contains("SUM(Sheet1!A1)"), "{sheet}");
+    assert!(sheet.contains("SUM(#REF!)"));
+    assert!(sheet.contains("&quot;Sheet2!A1&quot;"));
+    assert!(sheet.contains("location=\"Sheet2!A1\""));
+    assert!(sheet.contains("#REF!&gt;0"), "{sheet}");
+    let wb = part_text(&deleted, "xl/workbook.xml");
+    assert!(wb.contains("#REF!"), "{wb}");
+    let pivot_xml = part_text(&deleted, "xl/pivotCache/pivotCacheDefinition1.xml");
+    assert!(pivot_xml.contains("sheet=\"Sheet2\""));
+    assert_eq!(names(&inspect(&deleted)), ["Sheet1"]);
 
-    let err = apply(
-        &src,
-        &tmp("ren-ref"),
-        json!([{ "op": "renameSheet", "id": "sheet:Sheet2", "name": "数据" }]),
+    let chart_src = tmp("chart-src");
+    apply(
+        &prepped,
+        &chart_src,
+        json!([{ "op": "renameSheet", "id": "sheet:Sheet1", "name": "New Name" }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    .unwrap();
+    let chart = first_part_text(&chart_src, "xl/charts/chart");
+    assert!(chart.contains("&apos;New Name&apos;"), "{chart}");
 }
 
 #[test]

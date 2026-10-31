@@ -185,7 +185,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 workbook_dirty = true;
             }
             XlsxOp::RenameSheet(op) => {
-                sheets::rename(&pkg, &mut wb_doc, &mut sheet_index, &dirty_sheets, op, i)?;
+                sheets::rename(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &mut sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )?;
                 workbook_dirty = true;
             }
             XlsxOp::MoveSheet(op) => {

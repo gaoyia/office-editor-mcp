@@ -3943,7 +3943,15 @@ xlsx：`id` 不是 `xlsx:workbook` 报 `InvalidId`。`name` 非法报 `InvalidSh
 
 找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidId`（请用 `deleteChartSheet`）。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。删掉工作簿里最后一张表，或删掉最后一张可见表，报 `InvalidField`。
-`definedNames` 或其它表的 `<f>`、图表 `c:f` 仍含该表名时报 `NotImplemented`，不写文件。
+删表不求值。引用这张表的地方按 Excel 16.0 另存的结果改写，然后把工作簿标成打开时重算：
+
+- 单元格、数据验证、条件格式和图表里的 `<f>`：`表!引用` 整段换成 `#REF!`。三维引用只去掉被删的那一端，剩下的一端留下，例如 `Src:Host!B1` 删 `Src` 后是 `Host!B1`。
+- `definedNames` 的文本同样改写。挂在被删表上的定义名删掉。后面各表的 `localSheetId` 减一。
+- 被删表上的表格，结构化引用 `表名[...]` 换成 `#REF!`。
+- 字符串里的表名、外部工作簿引用（`[n]表!`）不改。
+- 超链接 `location` 不改。透视缓存 `worksheetSource/@sheet` 不改。切片器缓存按表格 id 记录，不写表名。
+
+公式引号不配对时报 `InvalidField`，不写文件。
 去掉 workbook 表项、worksheet 部件及其 drawing / drawingHF（无人引用的媒体一并删），以及对应关系与内容类型。docx / pptx 上发此 op 报 `InvalidField`。
 
 ### renameSheet
@@ -3956,7 +3964,16 @@ xlsx：`id` 不是 `xlsx:workbook` 报 `InvalidId`。`name` 非法报 `InvalidSh
 
 找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 `name` 非法报 `InvalidSheetName`。与另一张表重名（不分大小写）报 `DuplicateSheetName`。已经是目标名（大小写相同）则空操作，仍计入 `opsApplied`。
-只改大小写时仍改 `sheet/@name`。`definedNames` 或其它表 `<f>` / 图表 `c:f` 仍含旧表名时报 `NotImplemented`，不写文件。不改写公式。改名后旧 `sheet:{旧名}` 失效。
+只改大小写时仍改 `sheet/@name`，并改写引用。改名后旧 `sheet:{旧名}` 失效。
+改名不求值。单元格、数据验证、条件格式、图表 `<f>` 和 `definedNames` 里的旧表名改成新表名。带不带引号按 Excel 16.0 另存：
+
+- 有空格、以数字开头、含单引号、像 A1 单元格、像 R1C1、或是 `true` / `false` 时加引号。单引号写成两个单引号。
+- 汉字、下划线和点号可以不加引号，例如 `数据!A1`、`Sheet_2!A1`、`Sheet.2!A1`。
+- 三维引用只要有一端需要引号，整段加引号，例如 `'New Name:Host'!B1`。
+- 字符串里的表名、外部工作簿引用不改。超链接 `location` 不改。
+- 透视缓存 `worksheetSource/@sheet` 改成新表名，不加引号。
+
+改写之后把工作簿标成打开时重算。公式引号不配对时报 `InvalidField`，不写文件。
 docx / pptx 上发此 op 报 `InvalidField`。
 
 ### moveSheet

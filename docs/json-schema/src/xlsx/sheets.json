@@ -158,8 +158,8 @@
     "deleteSheetOp": {
       "description": "删掉一个工作表。",
       "descriptionEn": "Delete a worksheet.",
-      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 chartsheet 发此 op 报 InvalidId（请用 deleteChartSheet）。 对 dialogsheet / macrosheet 报 NotImplemented。删掉工作簿里最后一张表，或删掉最后一张可见表，报 InvalidField。 definedNames 或其它表的 <f>、图表 c:f 仍含该表名时报 NotImplemented，不写文件。",
-      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. This op on a chartsheet returns InvalidId (use deleteChartSheet). dialogsheet / macrosheet returns NotImplemented. Deleting the last sheet in the workbook, or the last visible sheet, returns InvalidField. If definedNames, another sheet's <f>, or a chart c:f still contains that sheet name, NotImplemented is returned and nothing is written.",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 chartsheet 发此 op 报 InvalidId（请用 deleteChartSheet）。 对 dialogsheet / macrosheet 报 NotImplemented。删掉工作簿里最后一张表，或删掉最后一张可见表，报 InvalidField。 引用该表的公式、定义名和图表改成 #REF!；三维引用只去掉被删的一端。字符串和外部工作簿引用不改。引号不配对报 InvalidField，不写文件。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. This op on a chartsheet returns InvalidId (use deleteChartSheet). dialogsheet / macrosheet returns NotImplemented. Deleting the last sheet in the workbook, or the last visible sheet, returns InvalidField. Formulas, defined names, and charts that refer to the sheet become #REF!; a 3D reference only drops the deleted end. Strings and external workbook references stay. An unmatched quote returns InvalidField and nothing is written.",
       "type": "object",
       "required": [
         "op",
@@ -179,8 +179,8 @@
     "renameSheetOp": {
       "description": "给工作表改名。",
       "descriptionEn": "Rename a sheet.",
-      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 name 非法报 InvalidSheetName。与另一张表重名（不分大小写）报 DuplicateSheetName。已经是目标名（大小写相同）则空操作，仍计入 opsApplied。 只改大小写时仍改 sheet/@name。definedNames 或其它表 <f> / 图表 c:f 仍含旧表名时报 NotImplemented，不写文件。不改写公式。",
-      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. dialogsheet / macrosheet returns NotImplemented. An illegal name returns InvalidSheetName. A name that duplicates another sheet (case-insensitive) returns DuplicateSheetName. If the name is already the target (same case), this is a no-op and still counts toward opsApplied. A case-only change still updates sheet/@name. If definedNames, another sheet's <f>, or a chart c:f still contains the old sheet name, NotImplemented is returned and nothing is written. Do not rewrite formulas.",
+      "limits": "找不到该表报 IdNotFound。id 不是工作表 id 报 InvalidId。对 dialogsheet / macrosheet 报 NotImplemented。 name 非法报 InvalidSheetName。与另一张表重名（不分大小写）报 DuplicateSheetName。已经是目标名（大小写相同）则空操作，仍计入 opsApplied。 只改大小写时仍改 sheet/@name。公式、定义名、图表和透视缓存里的旧表名改成新表名，引号按 Excel 的规则重算。字符串和外部工作簿引用不改。引号不配对报 InvalidField，不写文件。",
+      "limitsEn": "A missing sheet returns IdNotFound. An id that is not a sheet id returns InvalidId. dialogsheet / macrosheet returns NotImplemented. An illegal name returns InvalidSheetName. A name that duplicates another sheet (case-insensitive) returns DuplicateSheetName. If the name is already the target (same case), this is a no-op and still counts toward opsApplied. A case-only change still updates sheet/@name. Formulas, defined names, charts, and pivot caches replace the old sheet name with the new one, and quotes follow Excel's rule. Strings and external workbook references stay. An unmatched quote returns InvalidField and nothing is written.",
       "type": "object",
       "required": [
         "op",

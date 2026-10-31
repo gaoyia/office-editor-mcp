@@ -56,6 +56,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SetCellNeedsValueOrFormula => "setCell requires value or formula".into(),
         ErrorKind::FormulaMustStartWithEquals => "formula must start with =".into(),
+        ErrorKind::UnreadableFormula => {
+            "a formula has an unmatched quote, so sheet references cannot be rewritten".into()
+        }
         ErrorKind::InvalidCellValue => {
             "Cell value must be a number, string, boolean, or null".into()
         }
@@ -1464,9 +1467,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "moveSlide after cannot be the same slide as id".into()
         }
         ErrorKind::SlideLayoutMissing => "No slide layout is available".into(),
-        ErrorKind::SheetStillReferenced { name } => {
-            format!("Defined names or formulas still refer to sheet {name}")
-        }
         ErrorKind::DialogOrMacroSheet => {
             "dialogsheet and macrosheet cannot be deleted, renamed, moved, or hidden".into()
         }

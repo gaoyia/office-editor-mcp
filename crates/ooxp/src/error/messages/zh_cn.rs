@@ -52,6 +52,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SetCellNeedsValueOrFormula => "setCell 必须有 value 或 formula".into(),
         ErrorKind::FormulaMustStartWithEquals => "formula 必须以 = 开头".into(),
+        ErrorKind::UnreadableFormula => "公式引号不配对，不能改写工作表引用".into(),
         ErrorKind::InvalidCellValue => "单元格值必须是数字、字符串、布尔或 null".into(),
         ErrorKind::OpRequiresField { op, field } => format!("{op} 必须有 {field}"),
         ErrorKind::InvalidRange { reason } => match reason {
@@ -1311,9 +1312,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),
         ErrorKind::MoveSlideAfterSelf => "moveSlide 的 after 不能是自己".into(),
         ErrorKind::SlideLayoutMissing => "找不到可用的幻灯片版式".into(),
-        ErrorKind::SheetStillReferenced { name } => {
-            format!("定义名或公式仍引用工作表 {name}")
-        }
         ErrorKind::DialogOrMacroSheet => {
             "对话表和宏表不能删除、改名、重排或隐藏".into()
         }

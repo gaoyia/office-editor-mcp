@@ -736,6 +736,7 @@ define_error_kinds! {
     }],
     SetCellNeedsValueOrFormula => vec![Self::SetCellNeedsValueOrFormula],
     FormulaMustStartWithEquals => vec![Self::FormulaMustStartWithEquals],
+    UnreadableFormula => vec![Self::UnreadableFormula],
     InvalidCellValue => vec![Self::InvalidCellValue],
     OpRequiresField { op: String, field: String } => vec![Self::OpRequiresField { op: "setParaText".into(), field: "text".into() }],
     InvalidRange { reason: RangeReason } => RangeReason::all_samples()
@@ -833,9 +834,6 @@ define_error_kinds! {
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
     MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
     SlideLayoutMissing => vec![Self::SlideLayoutMissing],
-    SheetStillReferenced { name: String } => {
-        vec![Self::SheetStillReferenced { name: "Sheet1".into() }]
-    },
     DialogOrMacroSheet => vec![Self::DialogOrMacroSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
     InvalidSheetName { reason: SheetNameReason } => SheetNameReason::all_samples()
@@ -1817,6 +1815,7 @@ impl ErrorKind {
             | Self::FormulaRangeNotTopLeft
             | Self::SharedNeedsRef
             | Self::FormulaMustStartWithEquals
+            | Self::UnreadableFormula
             | Self::InvalidDataTableFormula
             | Self::InvalidCellValue
             | Self::OpRequiresField { .. }
@@ -2279,7 +2278,6 @@ impl ErrorKind {
             | Self::ArrayFormulaPart { .. }
             | Self::FormulaGroupOverlap { .. }
             | Self::InkComment { .. }
-            | Self::SheetStillReferenced { .. }
             | Self::ExternalLinkInUse
             | Self::DialogOrMacroSheet
             | Self::CrossParaMarker

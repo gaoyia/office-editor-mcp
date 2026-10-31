@@ -9,6 +9,7 @@ use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
 
 use super::apply;
 use super::chart as xlsx_chart;
+use super::formula::{self, SheetRefEdit};
 use super::inspect;
 use super::picture;
 use super::request::{DeleteSheetOp, InsertSheetOp, MoveSheetOp, RenameSheetOp, SetSheetHiddenOp};
@@ -117,23 +118,24 @@ pub fn delete(
     }
     reject_if_last_sheet(sheet_index.len(), op_index)?;
     reject_if_last_visible(&wb_doc.root, &exact, op_index)?;
-    let skip_charts = chart_parts_on_sheet(pkg, dirty_sheets, &ws_part)?;
-    if sheet_name_still_referenced(
+    let deleted_at = sheet_index
+        .iter()
+        .position(|(n, _, _)| n.eq_ignore_ascii_case(&exact))
+        .unwrap_or(0);
+    let tables = table_names_on_sheet(pkg, dirty_sheets, &ws_part)?;
+    rewrite_sheet_mentions(
         pkg,
-        &wb_doc.root,
+        &mut wb_doc.root,
+        wb_part,
         sheet_index,
         dirty_sheets,
         &exact,
+        SheetRefEdit::Delete,
         Some(&ws_part),
-        &skip_charts,
-    )? {
-        return Err(Error::with_path(
-            ErrorKind::SheetStillReferenced {
-                name: exact.clone(),
-            },
-            format!("ops[{op_index}].id"),
-        ));
-    }
+        Some(deleted_at),
+        &tables,
+        op_index,
+    )?;
     apply::load_dirty(pkg, dirty_sheets, &ws_part, false)?;
     let drawing_parts = {
         let doc = apply::dirty_of(dirty_sheets, &ws_part);
@@ -194,10 +196,11 @@ pub fn delete(
 }
 
 pub fn rename(
-    pkg: &Package,
+    pkg: &mut Package,
     wb_doc: &mut Document,
+    wb_part: &str,
     sheet_index: &mut Vec<(String, String, &'static str)>,
-    dirty_sheets: &[(String, Document)],
+    dirty_sheets: &mut Vec<(String, Document)>,
     op: &RenameSheetOp,
     op_index: usize,
 ) -> Result<(), Error> {
@@ -205,7 +208,7 @@ pub fn rename(
         .iter()
         .find(|(n, _, _)| n.eq_ignore_ascii_case(&op.sheet))
         .cloned();
-    let Some((exact, part, kind)) = meta else {
+    let Some((exact, _part, kind)) = meta else {
         return Err(Error::with_path(
             ErrorKind::SheetNotFound {
                 name: op.sheet.clone(),
@@ -228,22 +231,19 @@ pub fn rename(
             format!("ops[{op_index}].name"),
         ));
     }
-    if sheet_name_still_referenced(
+    rewrite_sheet_mentions(
         pkg,
-        &wb_doc.root,
+        &mut wb_doc.root,
+        wb_part,
         sheet_index,
         dirty_sheets,
         &exact,
-        Some(&part),
+        SheetRefEdit::Rename(&op.name),
+        None,
+        None,
         &[],
-    )? {
-        return Err(Error::with_path(
-            ErrorKind::SheetStillReferenced {
-                name: exact.clone(),
-            },
-            format!("ops[{op_index}].id"),
-        ));
-    }
+        op_index,
+    )?;
     let sheets = workbook_sheets_mut(&mut wb_doc.root)?;
     let el = find_sheet_el_mut(sheets, &exact).ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
@@ -575,97 +575,271 @@ fn empty_worksheet() -> Document {
     Document::new(Some(DEFAULT_DECL.to_string()), root)
 }
 
-fn sheet_name_still_referenced(
-    pkg: &Package,
-    wb: &Element,
+fn rewrite_sheet_mentions(
+    pkg: &mut Package,
+    wb: &mut Element,
+    wb_part: &str,
     sheet_index: &[(String, String, &'static str)],
-    dirty_sheets: &[(String, Document)],
-    name: &str,
+    dirty: &mut Vec<(String, Document)>,
+    old: &str,
+    edit: SheetRefEdit<'_>,
     skip_part: Option<&str>,
-    skip_charts: &[String],
+    deleted_at: Option<usize>,
+    tables: &[String],
+    op_index: usize,
+) -> Result<(), Error> {
+    let mut changed = false;
+    for (_, part, kind) in sheet_index {
+        if *kind != "worksheet" || skip_part.is_some_and(|skip| skip == part) {
+            continue;
+        }
+        if rewrite_sheet_part(pkg, dirty, part, old, edit, tables, op_index)? {
+            changed = true;
+        }
+    }
+    if rewrite_defined_names(wb, old, edit, deleted_at, tables, op_index)? {
+        changed = true;
+    }
+    if rewrite_chart_formulas(pkg, old, edit, tables, op_index)? {
+        changed = true;
+    }
+    if let SheetRefEdit::Rename(new_name) = edit {
+        if rewrite_pivot_sheets(pkg, old, new_name)? {
+            changed = true;
+        }
+    }
+    if changed {
+        super::cell::mark_full_calc(wb);
+        super::cell::remove_calc_chain(pkg, wb_part)?;
+    }
+    Ok(())
+}
+
+fn rewrite_sheet_part(
+    pkg: &mut Package,
+    dirty: &mut Vec<(String, Document)>,
+    part: &str,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+    tables: &[String],
+    op_index: usize,
 ) -> Result<bool, Error> {
-    if let Some(dns) = wb.child_by_local("definedNames") {
-        for dn in dns.children_by_local("definedName") {
-            if formula_refers_to_sheet(&dn.text_content(), name) {
-                return Ok(true);
+    if let Some(pos) = dirty.iter().position(|(name, _)| name == part) {
+        return rewrite_formula_tree(&mut dirty[pos].1.root, old, edit, tables, op_index);
+    }
+    if !pkg.contains(part) {
+        return Ok(false);
+    }
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    let changed = rewrite_formula_tree(&mut doc.root, old, edit, tables, op_index)?;
+    if changed {
+        super::list_pin::pin_sheet(&mut doc.root);
+        let _ = super::ole::pin_objects(pkg, part, &mut doc.root);
+        dirty.push((part.to_string(), doc));
+    }
+    Ok(changed)
+}
+
+fn rewrite_formula_tree(
+    el: &mut Element,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+    tables: &[String],
+    op_index: usize,
+) -> Result<bool, Error> {
+    let mut changed = false;
+    let formula_text = matches!(el.local_name(), "f" | "formula" | "formula1" | "formula2")
+        && el.element_children().next().is_none();
+    if formula_text {
+        let text = el.text_content();
+        if !text.is_empty() {
+            let mut next = formula::rewrite_sheet_formula(&text, old, edit)
+                .map_err(|_| bad_formula(op_index))?;
+            for table in tables {
+                next = formula::rewrite_table_formula(&next, table)
+                    .map_err(|_| bad_formula(op_index))?;
+            }
+            if next != text {
+                el.set_text(next);
+                changed = true;
             }
         }
     }
-    for (sheet_name, part, _) in sheet_index {
-        if skip_part.is_some_and(|p| p == part) {
-            continue;
-        }
-        if sheet_name.eq_ignore_ascii_case(name) {
-            continue;
-        }
-        let texts = formula_texts_of_part(pkg, dirty_sheets, part)?;
-        if texts.iter().any(|t| formula_refers_to_sheet(t, name)) {
-            return Ok(true);
+    for child in el.element_children_mut() {
+        if rewrite_formula_tree(child, old, edit, tables, op_index)? {
+            changed = true;
         }
     }
-    for chart_part in chart_parts_in_package(pkg) {
-        if skip_charts.iter().any(|p| p == &chart_part) {
-            continue;
-        }
-        let Ok(bytes) = pkg.get(&chart_part) else {
-            continue;
-        };
-        let Ok(doc) = xml::parse(bytes) else {
-            continue;
-        };
-        if collect_local_texts(&doc.root, "f")
-            .iter()
-            .any(|t| formula_refers_to_sheet(t, name))
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    Ok(changed)
 }
 
-fn formula_texts_of_part(
+fn rewrite_defined_names(
+    wb: &mut Element,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+    deleted_at: Option<usize>,
+    tables: &[String],
+    op_index: usize,
+) -> Result<bool, Error> {
+    let (changed, empty) = {
+        let Some(parent) = wb.child_by_local_mut("definedNames") else {
+            return Ok(false);
+        };
+        let mut changed = false;
+        if let Some(idx) = deleted_at {
+            let before = parent
+                .element_children()
+                .filter(|el| el.local_name() == "definedName")
+                .count();
+            parent.children.retain(|node| match node {
+                Node::Element(el) if el.local_name() == "definedName" => {
+                    el.attr("localSheetId")
+                        .and_then(|s| s.parse::<usize>().ok())
+                        != Some(idx)
+                }
+                _ => true,
+            });
+            let after = parent
+                .element_children()
+                .filter(|el| el.local_name() == "definedName")
+                .count();
+            if after != before {
+                changed = true;
+            }
+            for el in parent.element_children_mut() {
+                if el.local_name() != "definedName" {
+                    continue;
+                }
+                let Some(id) = el
+                    .attr("localSheetId")
+                    .and_then(|s| s.parse::<usize>().ok())
+                else {
+                    continue;
+                };
+                if id > idx {
+                    el.set_attr("localSheetId", (id - 1).to_string());
+                    changed = true;
+                }
+            }
+        }
+        for el in parent.element_children_mut() {
+            if el.local_name() != "definedName" {
+                continue;
+            }
+            let text = el.text_content();
+            let mut next = formula::rewrite_sheet_formula(&text, old, edit)
+                .map_err(|_| bad_formula(op_index))?;
+            for table in tables {
+                next = formula::rewrite_table_formula(&next, table)
+                    .map_err(|_| bad_formula(op_index))?;
+            }
+            if next != text {
+                el.set_text(next);
+                changed = true;
+            }
+        }
+        let empty = !parent
+            .element_children()
+            .any(|el| el.local_name() == "definedName");
+        (changed, empty)
+    };
+    if empty {
+        wb.children
+            .retain(|node| !matches!(node, Node::Element(el) if el.local_name() == "definedNames"));
+    }
+    Ok(changed)
+}
+
+fn rewrite_chart_formulas(
+    pkg: &mut Package,
+    old: &str,
+    edit: SheetRefEdit<'_>,
+    tables: &[String],
+    op_index: usize,
+) -> Result<bool, Error> {
+    let mut changed = false;
+    for part in chart_parts_in_package(pkg) {
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        if rewrite_formula_tree(&mut doc.root, old, edit, tables, op_index)? {
+            pkg.set(&part, doc.to_bytes()?)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn rewrite_pivot_sheets(pkg: &mut Package, old: &str, new_name: &str) -> Result<bool, Error> {
+    let mut changed = false;
+    for part in pkg.part_names() {
+        if !part.contains("/pivotCache/") || !part.ends_with(".xml") {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        if rewrite_pivot_attr(&mut doc.root, old, new_name) {
+            pkg.set(&part, doc.to_bytes()?)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn rewrite_pivot_attr(el: &mut Element, old: &str, new_name: &str) -> bool {
+    let mut changed = false;
+    if el.local_name() == "worksheetSource"
+        && el
+            .attr("sheet")
+            .is_some_and(|name| name.eq_ignore_ascii_case(old))
+    {
+        el.set_attr("sheet", new_name);
+        changed = true;
+    }
+    for child in el.element_children_mut() {
+        if rewrite_pivot_attr(child, old, new_name) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn table_names_on_sheet(
     pkg: &Package,
     dirty: &[(String, Document)],
     part: &str,
 ) -> Result<Vec<String>, Error> {
-    if let Some((_, doc)) = dirty.iter().find(|(p, _)| p == part) {
-        return Ok(collect_local_texts(&doc.root, "f"));
+    if let Some((_, doc)) = dirty.iter().find(|(name, _)| name == part) {
+        return table_names_from(pkg, part, &doc.root);
     }
-    let Ok(bytes) = pkg.get(part) else {
+    if !pkg.contains(part) {
+        return Ok(Vec::new());
+    }
+    let doc = xml::parse(pkg.get(part)?)?;
+    table_names_from(pkg, part, &doc.root)
+}
+
+fn table_names_from(pkg: &Package, part: &str, root: &Element) -> Result<Vec<String>, Error> {
+    let Some(parts) = root.child_by_local("tableParts") else {
         return Ok(Vec::new());
     };
-    let doc = xml::parse(bytes)?;
-    Ok(collect_local_texts(&doc.root, "f"))
+    let rels = Relationships::from_package(pkg, part)?;
+    let mut names = Vec::new();
+    for el in parts.children_by_local("tablePart") {
+        let Some(rid) = el.attr_local("id") else {
+            continue;
+        };
+        let Some(rel) = rels.find_by_id(rid) else {
+            continue;
+        };
+        let table_part = resolve_rel_target(part, &rel.target)?;
+        let doc = xml::parse(pkg.get(&table_part)?)?;
+        if let Some(name) = doc.root.attr("name").filter(|name| !name.is_empty()) {
+            names.push(name.to_string());
+        }
+    }
+    Ok(names)
 }
 
-fn collect_local_texts(el: &Element, local: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    collect_local_texts_into(el, local, &mut out);
-    out
-}
-
-fn collect_local_texts_into(el: &Element, local: &str, out: &mut Vec<String>) {
-    if el.local_name() == local {
-        out.push(el.text_content());
-    }
-    for c in el.element_children() {
-        collect_local_texts_into(c, local, out);
-    }
-}
-
-fn chart_parts_on_sheet(
-    pkg: &Package,
-    dirty: &mut Vec<(String, Document)>,
-    sheet_part: &str,
-) -> Result<Vec<String>, Error> {
-    apply::load_dirty(pkg, dirty, sheet_part, false)?;
-    let doc = apply::dirty_of(dirty, sheet_part);
-    let drawings = picture::drawing_parts_from(pkg, sheet_part, &doc.root)?;
-    let mut out = Vec::new();
-    for d in drawings {
-        out.extend(chart_parts_of_drawing(pkg, &d)?);
-    }
-    Ok(out)
+fn bad_formula(op_index: usize) -> Error {
+    Error::with_path(ErrorKind::UnreadableFormula, format!("ops[{op_index}].id"))
 }
 
 fn chart_parts_in_package(pkg: &Package) -> Vec<String> {
@@ -758,136 +932,5 @@ fn source_from_rels(rels_part: &str) -> Option<String> {
         Some(format!("/{file}"))
     } else {
         Some(format!("{parent}/{file}"))
-    }
-}
-
-/// 公式或定义名是否引用指定工作表（大小写不敏感）。
-fn formula_refers_to_sheet(text: &str, sheet: &str) -> bool {
-    let stripped = strip_excel_strings(text);
-    quoted_sheet_ref(&stripped, sheet) || unquoted_sheet_ref(&stripped, sheet)
-}
-
-fn strip_excel_strings(s: &str) -> String {
-    let chars: Vec<char> = s.chars().collect();
-    let mut out = String::with_capacity(s.len());
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] == '"' {
-            out.push(' ');
-            i += 1;
-            while i < chars.len() {
-                if chars[i] == '"' {
-                    if i + 1 < chars.len() && chars[i + 1] == '"' {
-                        i += 2;
-                        continue;
-                    }
-                    out.push(' ');
-                    i += 1;
-                    break;
-                }
-                i += 1;
-            }
-        } else {
-            out.push(chars[i]);
-            i += 1;
-        }
-    }
-    out
-}
-
-fn quoted_sheet_ref(text: &str, sheet: &str) -> bool {
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] == '\'' {
-            i += 1;
-            let mut name = String::new();
-            while i < chars.len() {
-                if chars[i] == '\'' {
-                    if i + 1 < chars.len() && chars[i + 1] == '\'' {
-                        name.push('\'');
-                        i += 2;
-                        continue;
-                    }
-                    i += 1;
-                    break;
-                }
-                name.push(chars[i]);
-                i += 1;
-            }
-            if i < chars.len() && chars[i] == '!' && name_token_matches(&name, sheet) {
-                return true;
-            }
-        } else {
-            i += 1;
-        }
-    }
-    false
-}
-
-fn unquoted_sheet_ref(text: &str, sheet: &str) -> bool {
-    if needs_quote(sheet) {
-        return false;
-    }
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        if chars[i] == '!' && i > 0 {
-            let mut j = i;
-            while j > 0 {
-                let c = chars[j - 1];
-                if is_unquoted_name_char(c) || c == ':' || c == ']' {
-                    j -= 1;
-                } else {
-                    break;
-                }
-            }
-            let token: String = chars[j..i].iter().collect();
-            if name_token_matches(&token, sheet) {
-                return true;
-            }
-        }
-        i += 1;
-    }
-    false
-}
-
-fn name_token_matches(token: &str, sheet: &str) -> bool {
-    let rest = if let Some(idx) = token.rfind(']') {
-        &token[idx + 1..]
-    } else {
-        token
-    };
-    rest.split(':').any(|p| p.eq_ignore_ascii_case(sheet))
-}
-
-fn needs_quote(name: &str) -> bool {
-    let mut chars = name.chars();
-    let Some(first) = chars.next() else {
-        return true;
-    };
-    if first.is_ascii_digit() {
-        return true;
-    }
-    !name.chars().all(is_unquoted_name_char)
-}
-
-fn is_unquoted_name_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '_' || c == '.'
-}
-
-#[cfg(test)]
-mod formula_tests {
-    use super::formula_refers_to_sheet;
-
-    #[test]
-    fn unquoted_and_quoted_refs() {
-        assert!(formula_refers_to_sheet("Sheet1!A1", "Sheet1"));
-        assert!(formula_refers_to_sheet("sheet1!$A$1", "Sheet1"));
-        assert!(!formula_refers_to_sheet("Sheet10!A1", "Sheet1"));
-        assert!(formula_refers_to_sheet("'销售 2026'!A1", "销售 2026"));
-        assert!(formula_refers_to_sheet("Sheet1:Sheet3!A1", "Sheet3"));
-        assert!(!formula_refers_to_sheet("\"Sheet1!A1\"", "Sheet1"));
-        assert!(formula_refers_to_sheet("'O''Brien'!A1", "O'Brien"));
     }
 }

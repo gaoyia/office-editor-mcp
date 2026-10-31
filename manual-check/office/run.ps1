@@ -140,6 +140,7 @@ $order = @(
     'docx-drawing-shape'
     'xlsx-docprops'
     'xlsx-sheets'
+    'xlsx-sheet-refs'
     'xlsx-cellstyle'
     'xlsx-named-style'
     'xlsx-layout'
