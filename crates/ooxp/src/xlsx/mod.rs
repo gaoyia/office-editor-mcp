@@ -10,7 +10,7 @@ mod chartsheet;
 mod comments;
 mod connection;
 mod create;
-mod create_extra;
+mod create_xml;
 mod custom_view;
 mod draw_pin;
 mod extlink;

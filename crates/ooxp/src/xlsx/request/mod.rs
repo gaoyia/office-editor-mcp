@@ -33,6 +33,18 @@ use hyperlink::*;
 mod extras;
 use extras::*;
 
+pub(crate) mod create_chart;
+pub(crate) mod create_comment;
+pub(crate) mod create_drawing;
+pub(crate) mod create_hf;
+pub(crate) mod create_link;
+pub(crate) mod create_media;
+pub(crate) mod create_picture;
+pub(crate) mod create_remain;
+pub(crate) mod create_sheet;
+pub(crate) mod create_types;
+pub(crate) mod create_util;
+
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let Some(v) = v else {
         return Ok(None);

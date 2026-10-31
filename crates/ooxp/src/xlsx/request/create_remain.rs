@@ -4,10 +4,10 @@ use std::collections::HashMap;
 
 use serde_json::{json, Map, Value};
 
-use super::a1;
-use super::apply;
-use super::inspect;
-use super::request::{self, XlsxOp};
+use super::super::a1;
+use super::super::apply;
+use super::super::inspect;
+use super::XlsxOp;
 use crate::error::{Error, ErrorKind, TypeName};
 
 pub(crate) const WORKBOOK_REMAIN_KEYS: &[&str] = &[
@@ -665,7 +665,7 @@ fn append_reply_ops(
     paths: &mut Vec<String>,
 ) -> Result<(), Error> {
     let scope =
-        request::parse_scope(Some(&json!({ "comments": true })))?.expect("批注 inspect 范围非空");
+        super::parse_scope(Some(&json!({ "comments": true })))?.expect("批注 inspect 范围非空");
     let tree = inspect::inspect(bytes, Some(scope))?;
     let sheets = workbook["sheets"].as_array().expect("create 已校验 sheets");
     for (i, sheet) in sheets.iter().enumerate() {
@@ -746,7 +746,7 @@ fn append_group_ops(
     ops: &mut Vec<XlsxOp>,
     paths: &mut Vec<String>,
 ) -> Result<(), Error> {
-    let scope = request::parse_scope(Some(&json!({
+    let scope = super::parse_scope(Some(&json!({
         "shapes": true,
         "textBoxes": true,
         "connectors": true
@@ -873,7 +873,7 @@ fn push_op(
     item.insert("op".into(), json!(op));
     item.insert("id".into(), json!(id));
     let prefix_s = prefix.to_string();
-    let parsed = request::parse_ops(&[Value::Object(item)])
+    let parsed = super::parse_ops(&[Value::Object(item)])
         .map_err(|e| remap_ops_error(e, std::slice::from_ref(&prefix_s)))?;
     ops.push(parsed.into_iter().next().expect("parse_ops 非空"));
     paths.push(prefix_s);

@@ -1,6 +1,6 @@
 # create 解析与写出分开：xlsx
 
-状态：❌ 未开始。
+状态：✅ 已完成。
 日期：2026-10-31
 
 不在三种格式的待做表里，不占待做序号。这是 `.plan/2026年-10月-30日-✅-大文件按领域拆开.md` 文末「后续」表里的 `xlsx/create.rs`。领域 JSON 不变，写出的包不变。
@@ -33,10 +33,24 @@
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 1 | 文档：`docs/architecture.md` 写明 create 的解析位置（三份里第一份做） | ❌ |
-| 2 | 列出解析函数与写出函数的去向，写回本节 | ❌ |
-| 3 | 搬移 | ❌ |
-| 4 | 测试 | ❌ |
+| 1 | 文档：`docs/architecture.md` 写明 create 的解析位置（三份里第一份做） | ✅ |
+| 2 | 列出解析函数与写出函数的去向，写回本节 | ✅ |
+| 3 | 搬移 | ✅ |
+| 4 | 测试 | ✅ |
+
+### 2. 去向
+
+字段解析进 `xlsx/request/`，和 apply 的解析放在一起：
+
+- 工作表和格子：`create_sheet.rs`
+- 批注：`create_comment.rs`。超链接：`create_link.rs`
+- 文本框、形状、连接线、SmartArt：`create_drawing.rs`
+- 页眉页脚：`create_hf.rs`。图：`create_picture.rs`
+- 三维、墨迹、公式：`create_media.rs`。图表：`create_chart.rs`
+- 共用的锚点和数组：`create_util.rs`。中间结构：`create_types.rs`
+- 骨架之外的字段收成已有 apply：`create_remain.rs`（原 `create_extra.rs`）
+
+骨架 XML 在 `create_xml.rs`。`create.rs` 只拼骨架，再按顺序复用已有 apply。
 
 ### 4. 验收
 
