@@ -290,6 +290,23 @@ fn blank_password_and_other_hash_are_rejected() {
             "enforced": false,
             "password": "secret"
         }]),
+        ErrorCode::InvalidField,
+    );
+    let unknown = tmp("md5").with_extension("pptx");
+    rewrite_part(&src, &unknown, "ppt/presentation.xml", |xml| {
+        xml.replace(
+            "</p:presentation>",
+            r#"<p:modifyVerifier algorithmName="MD5" hashValue="YWJj" saltValue="ZGVm" spinCount="100000"/></p:presentation>"#,
+        )
+    });
+    assert_fail(
+        &unknown,
+        json!([{
+            "op": "setProtection",
+            "id": "pptx:presentation",
+            "enforced": false,
+            "password": "secret"
+        }]),
         ErrorCode::NotImplemented,
     );
 }

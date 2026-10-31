@@ -280,3 +280,69 @@ fn other_hash_stays_not_implemented_even_with_password() {
         ErrorCode::NotImplemented,
     );
 }
+
+#[test]
+fn legacy_xor_password_rewrites_to_sha512() {
+    let src = create_book("xor2");
+    let prot = tmp("xor2-plain");
+    apply(
+        &src,
+        &prot,
+        json!([{ "op": "setProtection", "id": "sheet:Sheet1", "enforced": true }]),
+    )
+    .unwrap();
+    let hashed = tmp("xor2-hash");
+    {
+        use std::io::{Cursor, Write};
+        use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipArchive, ZipWriter};
+        let bytes = std::fs::read(&prot).unwrap();
+        let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut out = Cursor::new(Vec::new());
+        {
+            let mut zip_out = ZipWriter::new(&mut out);
+            let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            for i in 0..zip_in.len() {
+                let mut file = zip_in.by_index(i).unwrap();
+                let n = file.name().to_string();
+                let mut data = Vec::new();
+                file.read_to_end(&mut data).unwrap();
+                if n == "xl/worksheets/sheet1.xml" {
+                    let xml = String::from_utf8(data).unwrap();
+                    data = xml
+                        .replace("<sheetProtection ", r#"<sheetProtection password="DAA7" "#)
+                        .into_bytes();
+                }
+                zip_out.start_file(&n, opt).unwrap();
+                zip_out.write_all(&data).unwrap();
+            }
+            zip_out.finish().unwrap();
+        }
+        std::fs::write(&hashed, out.into_inner()).unwrap();
+    }
+    assert_fail(
+        &hashed,
+        json!([{
+            "op": "setProtection",
+            "id": "sheet:Sheet1",
+            "enforced": false,
+            "password": "wrong"
+        }]),
+        ErrorCode::InvalidField,
+    );
+    let opened = tmp("xor2-open");
+    apply(
+        &hashed,
+        &opened,
+        json!([{
+            "op": "setProtection",
+            "id": "sheet:Sheet1",
+            "enforced": true,
+            "password": "secret"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&opened, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"algorithmName="SHA-512""#), "{xml}");
+    assert!(!xml.contains("password="), "{xml}");
+}

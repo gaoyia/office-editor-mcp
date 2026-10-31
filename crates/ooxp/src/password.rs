@@ -1,7 +1,8 @@
 //! 保护口令哈希：Excel 工作表/工作簿与 PowerPoint 修改密码的 ISO SHA-512，
 //! 以及 Word 限制编辑的遗留预处理加 SHA-512。不破解密码。
 
-use sha2::{Digest, Sha512};
+use sha1::Sha1;
+use sha2::{Digest, Sha256, Sha384, Sha512};
 
 /// 核对已有哈希时最多跑这么多圈。再大就不跑，交给调用方按「有密码但不能核」拒绝。
 pub(crate) const MAX_CHECK_SPIN: u32 = 10_000_000;
@@ -11,23 +12,134 @@ pub(crate) const MAX_CHECK_SPIN: u32 = 10_000_000;
 /// `password` 按 UTF-16LE 编码（不要 BOM）。
 /// `H0 = SHA-512(salt || password)`；`i = 0 .. spin-1` 时 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
 pub(crate) fn sha512_spin(password: &str, salt: &[u8], spin: u32) -> Vec<u8> {
+    spin_alg(SpinAlg::Sha512, &utf16_le(password), salt, spin)
+}
+
+/// 保护哈希用的算法。编号来自 MS-OFFCRYPTO 的 `cryptAlgorithmSid`。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SpinAlg {
+    Sha1,
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+/// 送进哈希的口令字节从哪来。
+#[derive(Clone, Copy)]
+pub(crate) enum SpinInput {
+    /// UTF-16LE 原文。Excel、PowerPoint 和 Word 修改密码。
+    Raw,
+    /// 先做 Word 遗留预处理，再把十六进制当 UTF-16LE。Word 限制编辑。
+    WordLegacy,
+    /// 先试原文。对不上再试 16 位 XOR 校验值当成一个 UTF-16 字符。Excel 的 ISO 哈希。
+    Excel,
+}
+
+pub(crate) fn alg_from_sid(sid: &str) -> Option<SpinAlg> {
+    match sid {
+        "4" => Some(SpinAlg::Sha1),
+        "12" => Some(SpinAlg::Sha256),
+        "13" => Some(SpinAlg::Sha384),
+        "14" => Some(SpinAlg::Sha512),
+        _ => None,
+    }
+}
+
+pub(crate) fn alg_from_name(name: &str) -> Option<SpinAlg> {
+    let folded = name.replace('-', "");
+    match folded.to_ascii_uppercase().as_str() {
+        "SHA1" => Some(SpinAlg::Sha1),
+        "SHA256" => Some(SpinAlg::Sha256),
+        "SHA384" => Some(SpinAlg::Sha384),
+        "SHA512" => Some(SpinAlg::Sha512),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn spin_raw(alg: SpinAlg, password: &str, salt: &[u8], spin: u32) -> Vec<u8> {
+    spin_alg(alg, &utf16_le(password), salt, spin)
+}
+
+pub(crate) fn spin_matches(
+    alg: SpinAlg,
+    input: SpinInput,
+    password: &str,
+    salt: &[u8],
+    spin: u32,
+    hash: &[u8],
+) -> bool {
+    let candidates: Vec<Vec<u8>> = match input {
+        SpinInput::Raw => vec![utf16_le(password)],
+        SpinInput::WordLegacy => vec![utf16_le(&word_legacy_hex(password))],
+        SpinInput::Excel => vec![
+            utf16_le(password),
+            excel_xor_verifier(password).to_le_bytes().to_vec(),
+        ],
+    };
+    candidates
+        .into_iter()
+        .any(|material| spin_alg(alg, &material, salt, spin) == hash)
+}
+
+/// Excel 工作表 / 工作簿 / 允许编辑区域的 16 位遗留口令。空口令是 0。
+pub(crate) fn excel_xor_verifier(password: &str) -> u16 {
+    let pw: Vec<u8> = password.as_bytes().iter().copied().take(15).collect();
+    let n = pw.len();
+    if n == 0 {
+        return 0;
+    }
+    let mut low: u16 = 0;
+    for &b in pw.iter().rev() {
+        low = (((low >> 14) & 1) | ((low << 1) & 0x7fff)) ^ u16::from(b);
+    }
+    (((low >> 14) & 1) | ((low << 1) & 0x7fff)) ^ (n as u16) ^ 0xce4b
+}
+
+pub(crate) fn legacy_xor_matches(password: &str, stored_hex: &str) -> bool {
+    let Ok(stored) = u16::from_str_radix(stored_hex.trim(), 16) else {
+        return false;
+    };
+    stored == excel_xor_verifier(password)
+}
+
+pub(crate) fn word_reservation_matches(password: &str, stored: &str) -> bool {
+    stored
+        .trim()
+        .eq_ignore_ascii_case(&word_legacy_hex(password))
+}
+
+fn utf16_le(password: &str) -> Vec<u8> {
     let mut pwd = Vec::with_capacity(password.len() * 2);
     for u in password.encode_utf16() {
         pwd.extend_from_slice(&u.to_le_bytes());
     }
-    let mut digest: [u8; 64] = {
-        let mut h = Sha512::new();
+    pwd
+}
+
+fn spin_alg(alg: SpinAlg, material: &[u8], salt: &[u8], spin: u32) -> Vec<u8> {
+    match alg {
+        SpinAlg::Sha1 => spin_digest::<Sha1>(material, salt, spin),
+        SpinAlg::Sha256 => spin_digest::<Sha256>(material, salt, spin),
+        SpinAlg::Sha384 => spin_digest::<Sha384>(material, salt, spin),
+        SpinAlg::Sha512 => spin_digest::<Sha512>(material, salt, spin),
+    }
+}
+
+fn spin_digest<D: Digest>(material: &[u8], salt: &[u8], spin: u32) -> Vec<u8> {
+    let mut out = {
+        let mut h = D::new();
         h.update(salt);
-        h.update(&pwd);
-        h.finalize().into()
+        h.update(material);
+        h.finalize().to_vec()
     };
     for i in 0..spin {
-        let mut h = Sha512::new();
-        h.update(digest);
+        let mut h = D::new();
+        h.update(&out);
         h.update(i.to_le_bytes());
-        digest = h.finalize().into();
+        out = h.finalize().to_vec();
     }
-    digest.to_vec()
+    out
 }
 
 /// Word 97 遗留口令哈希的 4 字节结果，写成大写两位十六进制。
@@ -247,6 +359,35 @@ mod tests {
             .decode("lHSWYm7xlRXHKBrKtEnTcCOB+r3ZxNvnQ1cBeaumnBx1qdAlEOFT39EcTLOHK+pj3SNVZzx2T9mtHG/epYA+kw==")
             .unwrap();
         assert_eq!(word_sha512_spin("secret", &salt, 100_000), want);
+    }
+
+    #[test]
+    fn excel_xor_and_sha1_round_trip() {
+        let hex = format!("{:04X}", excel_xor_verifier("secret"));
+        assert!(legacy_xor_matches("secret", &hex));
+        assert!(!legacy_xor_matches("nope", &hex));
+        assert!(word_reservation_matches("Example", "7EEDCE64"));
+        let salt = [9u8; 16];
+        let hash = spin_alg(SpinAlg::Sha1, &utf16_le("secret"), &salt, 2);
+        assert!(spin_matches(
+            SpinAlg::Sha1,
+            SpinInput::Raw,
+            "secret",
+            &salt,
+            2,
+            &hash
+        ));
+        assert!(!spin_matches(
+            SpinAlg::Sha1,
+            SpinInput::Raw,
+            "nope",
+            &salt,
+            2,
+            &hash
+        ));
+        assert_eq!(alg_from_sid("4"), Some(SpinAlg::Sha1));
+        assert_eq!(alg_from_name("SHA-256"), Some(SpinAlg::Sha256));
+        assert!(alg_from_sid("1").is_none());
     }
 
     #[test]

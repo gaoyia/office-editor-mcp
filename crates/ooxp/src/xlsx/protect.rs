@@ -13,7 +13,9 @@ use super::request::{
     SetWorkbookProtectionOp,
 };
 use crate::error::{Error, ErrorKind};
-use crate::password::sha512_spin;
+use crate::password::{
+    self, alg_from_name, legacy_xor_matches, sha512_spin, spin_matches, SpinInput,
+};
 use crate::xml::{Element, Node};
 
 const HASH_ATTRS: &[&str] = &[
@@ -50,12 +52,6 @@ const SHEET_FLAGS: &[(&str, &str, bool)] = &[
     ("pivotTables", "pivotTables", true),
     ("selectUnlockedCells", "selectUnlockedCells", false),
 ];
-
-struct Sha512Spec {
-    salt: Vec<u8>,
-    hash: Vec<u8>,
-    spin: u32,
-}
 
 pub(crate) fn inspect_sheet(root: &Element, kind: &str) -> Value {
     if kind == "chartsheet" {
@@ -287,47 +283,109 @@ fn gate_existing_hash(
             format!("ops[{i}]"),
         ));
     };
-    let Some(spec) = sha512_spec(el, workbook) else {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionHasPassword,
-            format!("ops[{i}]"),
-        ));
-    };
-    if !password_matches(pw, &spec) {
-        return Err(Error::with_path(
+    match password_verdict(el, workbook, pw) {
+        Verdict::Match => Ok(()),
+        Verdict::Wrong => Err(Error::with_path(
             ErrorKind::ProtectionPasswordWrong,
             format!("ops[{i}].password"),
-        ));
+        )),
+        Verdict::Unknown => Err(Error::with_path(
+            ErrorKind::ProtectionHasPassword,
+            format!("ops[{i}]"),
+        )),
     }
-    Ok(())
 }
 
-fn sha512_spec(el: &Element, workbook: bool) -> Option<Sha512Spec> {
-    let (algo_n, hash_n, salt_n, spin_n) = if workbook {
-        (
-            "workbookAlgorithmName",
-            "workbookHashValue",
-            "workbookSaltValue",
-            "workbookSpinCount",
-        )
+enum Verdict {
+    Match,
+    Wrong,
+    Unknown,
+}
+
+fn password_verdict(el: &Element, workbook: bool, password: &str) -> Verdict {
+    let pairs: &[(&str, &str, &str, &str, &str)] = if workbook {
+        &[
+            (
+                "workbookAlgorithmName",
+                "workbookHashValue",
+                "workbookSaltValue",
+                "workbookSpinCount",
+                "workbookPassword",
+            ),
+            (
+                "revisionsAlgorithmName",
+                "revisionsHashValue",
+                "revisionsSaltValue",
+                "revisionsSpinCount",
+                "revisionsPassword",
+            ),
+        ]
     } else {
-        ("algorithmName", "hashValue", "saltValue", "spinCount")
+        &[(
+            "algorithmName",
+            "hashValue",
+            "saltValue",
+            "spinCount",
+            "password",
+        )]
     };
-    let algo = el.attr(algo_n)?;
-    if !algo.eq_ignore_ascii_case("SHA-512") {
-        return None;
+    let mut saw = false;
+    let mut unknown = false;
+    for (algo_n, hash_n, salt_n, spin_n, xor_n) in pairs {
+        if let Some(stored) = el.attr(xor_n).filter(|s| xor_is_set(s)) {
+            saw = true;
+            if !legacy_xor_matches(password, stored) {
+                return Verdict::Wrong;
+            }
+        }
+        if el.attr(algo_n).is_some() {
+            saw = true;
+            match iso_verdict(el, algo_n, hash_n, salt_n, spin_n, password) {
+                Verdict::Match => {}
+                Verdict::Wrong => return Verdict::Wrong,
+                Verdict::Unknown => unknown = true,
+            }
+        }
     }
-    let hash = STANDARD.decode(el.attr(hash_n)?).ok()?;
-    let salt = STANDARD.decode(el.attr(salt_n)?).ok()?;
-    let spin: u32 = el.attr(spin_n)?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
-        return None;
+    if unknown || !saw {
+        Verdict::Unknown
+    } else {
+        Verdict::Match
     }
-    Some(Sha512Spec { salt, hash, spin })
 }
 
-fn password_matches(password: &str, spec: &Sha512Spec) -> bool {
-    sha512_spin(password, &spec.salt, spec.spin) == spec.hash
+fn xor_is_set(value: &str) -> bool {
+    !value.is_empty() && value != "0" && !value.chars().all(|c| c == '0')
+}
+
+fn iso_verdict(
+    el: &Element,
+    algo_n: &str,
+    hash_n: &str,
+    salt_n: &str,
+    spin_n: &str,
+    password: &str,
+) -> Verdict {
+    let Some(algo) = el.attr(algo_n).and_then(alg_from_name) else {
+        return Verdict::Unknown;
+    };
+    let Some(hash) = el.attr(hash_n).and_then(|s| STANDARD.decode(s).ok()) else {
+        return Verdict::Unknown;
+    };
+    let Some(salt) = el.attr(salt_n).and_then(|s| STANDARD.decode(s).ok()) else {
+        return Verdict::Unknown;
+    };
+    let Some(spin) = el.attr(spin_n).and_then(|s| s.parse::<u32>().ok()) else {
+        return Verdict::Unknown;
+    };
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > password::MAX_CHECK_SPIN {
+        return Verdict::Unknown;
+    }
+    if spin_matches(algo, SpinInput::Excel, password, &salt, spin, &hash) {
+        Verdict::Match
+    } else {
+        Verdict::Wrong
+    }
 }
 
 fn write_sha512(el: &mut Element, password: &str, workbook: bool) {
@@ -634,7 +692,6 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("hashValue", STANDARD.encode([1u8; 64]))
         .with_attr("saltValue", STANDARD.encode([2u8; 16]))
         .with_attr("spinCount", "10000001");
-    assert!(sha512_spec(&el, false).is_none());
     let err = gate_existing_hash(Some(&el), false, Some("secret"), 0).unwrap_err();
     assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     let ok = Element::new("sheetProtection")
@@ -642,5 +699,6 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("hashValue", STANDARD.encode([1u8; 64]))
         .with_attr("saltValue", STANDARD.encode([2u8; 16]))
         .with_attr("spinCount", "100000");
-    assert!(sha512_spec(&ok, false).is_some());
+    let err = gate_existing_hash(Some(&ok), false, Some("secret"), 0).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::InvalidField);
 }

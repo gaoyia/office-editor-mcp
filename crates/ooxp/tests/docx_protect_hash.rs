@@ -328,6 +328,36 @@ fn other_hash_stays_not_implemented_even_with_password() {
 }
 
 #[test]
+fn reservation_password_unlocks_and_rejects_the_wrong_one() {
+    let settings = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:documentProtection w:edit="readOnly" w:enforcement="1" w:reservationPassword="A7DA4D01"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"#;
+    let src = write_zip("reserv", settings);
+    assert_fail(
+        &src,
+        json!([{
+            "op": "setProtection",
+            "id": "docx:document",
+            "enforced": false,
+            "password": "wrong"
+        }]),
+        ErrorCode::InvalidField,
+    );
+    let opened = tmp("reserv-open");
+    apply(
+        &src,
+        &opened,
+        json!([{
+            "op": "setProtection",
+            "id": "docx:document",
+            "enforced": false,
+            "password": "secret"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&opened, "word/settings.xml");
+    assert!(!xml.contains("documentProtection"), "{xml}");
+}
+
+#[test]
 fn pptx_rejects_word_edit_field() {
     let pptx = tmp_dir().join(format!("rej-{}.pptx", SEQ.fetch_add(1, Ordering::Relaxed)));
     run_json(&json!({

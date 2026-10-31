@@ -530,15 +530,16 @@ docx：
 口令按 UTF-8 取前 15 字节做 ECMA-376 Part 4 §14.8.1 遗留预处理，把 4 字节结果写成大写两位十六进制再按 UTF-16LE；
 `H0 = SHA-512(salt || 该 UTF-16LE)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
 不写 ISO 的 `algorithmName` / `hashValue` / `saltValue` / `spinCount`，不写 `reservationPassword`。
-已有 `cryptAlgorithmSid=14` 且 `hash` / `salt` / `cryptSpinCount` 齐时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
-对得上则可改种类，或 `enforced: false` 解开（删掉元素）。改写时换新盐重算。
-其它哈希（缺 sid、sid 不是 14、只有 ISO `hashValue`、`reservationPassword` 等）即使给了 `password` 也报 `NotImplemented`。
+已有哈希时必须给 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+能核的算法：`cryptAlgorithmSid` 4 / 12 / 13 / 14（SHA-1 / SHA-256 / SHA-384 / SHA-512，限制编辑先做遗留预处理）、ISO `algorithmName` + `hashValue`、以及 `reservationPassword`（ECMA-376 Part 4 §14.8.1）。
+对得上则可改种类，或 `enforced: false` 解开（删掉元素）。改写时换成上面的 SHA-512，换新盐。认不出的算法仍报 `NotImplemented`。
 无哈希时 `enforced: false` 直接删掉元素。
 给了 `writePassword` 时写 `writeProtection`：`crypt*` 属性组与限制编辑相同（`sid=14`、`spin=100000`、`hash`/`salt` 标准 Base64）。
 口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 SHA-512 迭代。不要做限制编辑那套遗留预处理。
-已有 `cryptAlgorithmSid=14` 且 `hash` / `salt` / `cryptSpinCount` 齐时，改或删 `writeProtection` 必须给对得上的 `writePassword`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
-`writePassword` 且 `readOnlyRecommended: false`：校验后删掉该元素。只给 `writePassword`：换新盐重写哈希。有哈希时规范要求忽略 `recommended`，树上 `readOnlyRecommended` 仍为 `false`。
-其它算法即使给了 `writePassword` 也报 `NotImplemented`。只改限制编辑时不要动已有 `writeProtection` 哈希。
+已有哈希时，改或删 `writeProtection` 必须给对得上的 `writePassword`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+修改密码不做遗留预处理。能核 SHA-1 / SHA-256 / SHA-384 / SHA-512（`cryptAlgorithmSid` 或 ISO `hashValue`）和 `reservationPassword`。
+`writePassword` 且 `readOnlyRecommended: false`：校验后删掉该元素。只给 `writePassword`：换成 SHA-512 并换新盐。有哈希时规范要求忽略 `recommended`，树上 `readOnlyRecommended` 仍为 `false`。
+认不出的算法仍报 `NotImplemented`。只改限制编辑时不要动已有 `writeProtection` 哈希。
 `edit` 为 `trackedChanges` 时同时写出空的 `w:trackRevisions`；关掉保护时不要删已有的 `trackRevisions`。
 `edit` 为 `forms` 时给主文档每一个 `w:sectPr` 写 `w:formProt`；关掉窗体保护或关掉强制时删掉各节 `w:formProt`。
 某节例外见 [docx 分册](json-contract-docx.md#setformprot) 的 `setFormProt`。`w:permStart` / `w:permEnd` 见该分册例外编辑区。
@@ -569,8 +570,9 @@ id 不是工作表 id 报 `InvalidId`。找不到工作表报 `IdNotFound`。对
 随后把本次点名的权限键写上：与缺省相同则省略该属性，与缺省不同则写 `"1"` 或 `"0"`。`enforced: true` 时 `@sheet` 为 `"1"`。
 给了 `password` 时按 Excel 16.0 写 `algorithmName="SHA-512"`、`hashValue`、`saltValue`（16 字节随机盐的标准 Base64）、`spinCount="100000"`。
 口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
-不写遗留 `@password`。已有 SHA-512 哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
-对得上则可改权限，或 `enforced: false` 解开（删掉元素）。改写时换新盐重算。遗留 XOR 或其它算法即使给了 `password` 也报 `NotImplemented`。
+不写遗留 `@password`。已有哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+能核 SHA-512，以及 SHA-1 / SHA-256 / SHA-384。Excel 的 ISO 哈希还会再试一次：把口令先做成 16 位 XOR 校验值，当作一个 UTF-16 字符再哈希。遗留 `@password` 用 MS-OFFCRYPTO 的 16 位 XOR。
+对得上则可改权限，或 `enforced: false` 解开（删掉元素）。改写时换成 SHA-512，换新盐。认不出的算法仍报 `NotImplemented`。
 无哈希时 `enforced: false` 删掉整个元素。已经是目标状态则空操作，仍计入 `opsApplied`。不标重算，不新建部件。不把哈希放进树。
 
 图表工作表只认 `enforced` 与 `objects`。`enforced` 写入 `@content`（`CT_ChartsheetProtection`）。出现工作表专用权限键报 `InvalidField`。打开时缺省写出 `content="1" objects="1"`。
@@ -589,8 +591,8 @@ xlsx 工作簿（id 为 `xlsx:workbook`）：
 这三个至少给一个。出现工作表权限键或 docx 字段报 `InvalidField`。`password` 可选，规则与工作表相同。三项都为假时删掉 `<workbookProtection>`。
 为真的项写 `"1"`，为假的省略（schema 缺省即假）。给了 `password` 时写 `workbookAlgorithmName="SHA-512"`、`workbookHashValue`、
 `workbookSaltValue`、`workbookSpinCount="100000"`，算法与工作表相同。
-不写遗留 `@workbookPassword`。已有 SHA-512 哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
-遗留 XOR 或其它算法即使给了 `password` 也报 `NotImplemented`。按 `CT_Workbook` 插在 `workbookPr` 之后、`bookViews` 之前。不新建部件。
+不写遗留 `@workbookPassword`。已有哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+算法与工作表相同，包括遗留 `@workbookPassword` 的 16 位 XOR。对得上则换成 SHA-512。认不出的算法仍报 `NotImplemented`。按 `CT_Workbook` 插在 `workbookPr` 之后、`bookViews` 之前。不新建部件。
 
 示例见 `docs/examples/xlsx-apply-protect.json`。带密码见 `docs/examples/xlsx-apply-protect-password.json`。
 
@@ -611,9 +613,9 @@ pptx（id 为 `pptx:presentation`）：
 `cryptAlgorithmSid="14"`、`spinCount="100000"`、`hashData`、`saltData`（16 字节随机盐的标准 Base64）。
 口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
 不写 ISO 的 `algorithmName` / `hashValue` / `saltValue` / `spinValue`，不写 Word 的 `hash` / `salt` / `cryptSpinCount`。
-已有 `cryptAlgorithmSid=14` 且 `hashData` / `saltData` / `spinCount` 齐时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
-对得上则可 `enforced: false` 解开（删掉元素），或 `enforced: true` 换新盐重算。
-其它哈希（ISO `hashValue`、Word `hash` / `salt`、缺 sid、sid 不是 14 等）即使给了 `password` 也报 `NotImplemented`。
+已有哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+能核 `cryptAlgorithmSid` 4 / 12 / 13 / 14 的 `hashData`，ISO `hashValue`，以及 Word 风格的 `hash` / `salt`（先按原文，再按遗留预处理）。
+对得上则可 `enforced: false` 解开（删掉元素），或 `enforced: true` 换成 SHA-512 并换新盐。认不出的算法仍报 `NotImplemented`。
 无哈希时 `enforced: false` 直接删掉元素。没有该元素且 `enforced: false` 则空操作，仍计入 `opsApplied`。
 不把哈希放进树。按 `CT_Presentation` 该元素在 `defaultTextStyle` 之后、`extLst` 之前。不新建部件。xlsx / docx 上对本 id 发此 op 仍报 `InvalidId`。
 

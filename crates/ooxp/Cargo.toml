@@ -10,6 +10,7 @@ zip = { workspace = true, default-features = false, features = ["deflate", "defl
 quick-xml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha1 = { workspace = true }
 sha2 = { workspace = true }
 base64 = { workspace = true }
 

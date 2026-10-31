@@ -6,19 +6,13 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::Package;
-use crate::password::sha512_spin;
+use crate::password::{self, alg_from_name, alg_from_sid, sha512_spin, spin_matches, SpinInput};
 use crate::xml::{Document, Element, Node};
 
 #[derive(Debug, Clone)]
 pub struct SetProtectionOp {
     pub enforced: bool,
     pub password: Option<String>,
-}
-
-struct Sha512Spec {
-    salt: Vec<u8>,
-    hash: Vec<u8>,
-    spin: u32,
 }
 
 const SPIN_COUNT: u32 = 100_000;
@@ -117,33 +111,112 @@ fn gate_existing_hash(el: Option<&Element>, password: Option<&str>, i: usize) ->
             format!("ops[{i}]"),
         ));
     };
-    let Some(spec) = sha512_spec(el) else {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionHasPassword,
-            format!("ops[{i}]"),
-        ));
-    };
-    if sha512_spin(pw, &spec.salt, spec.spin) != spec.hash {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionPasswordWrong,
-            format!("ops[{i}].password"),
-        ));
+    if !pptx_password_ok(el, pw) {
+        return Err(match pptx_spin_known(el) {
+            true => Error::with_path(
+                ErrorKind::ProtectionPasswordWrong,
+                format!("ops[{i}].password"),
+            ),
+            false => Error::with_path(ErrorKind::ProtectionHasPassword, format!("ops[{i}]")),
+        });
     }
     Ok(())
 }
 
-fn sha512_spec(el: &Element) -> Option<Sha512Spec> {
-    let sid = el.attr_local("cryptAlgorithmSid")?;
-    if sid != "14" {
+struct PptxSpin {
+    alg: password::SpinAlg,
+    hash: Vec<u8>,
+    salt: Vec<u8>,
+    spin: u32,
+    word_style: bool,
+}
+
+fn pptx_password_ok(el: &Element, password: &str) -> bool {
+    let Some(spec) = pptx_spin(el) else {
+        return false;
+    };
+    if spin_matches(
+        spec.alg,
+        SpinInput::Raw,
+        password,
+        &spec.salt,
+        spec.spin,
+        &spec.hash,
+    ) {
+        return true;
+    }
+    spec.word_style
+        && spin_matches(
+            spec.alg,
+            SpinInput::WordLegacy,
+            password,
+            &spec.salt,
+            spec.spin,
+            &spec.hash,
+        )
+}
+
+fn pptx_spin_known(el: &Element) -> bool {
+    pptx_spin(el).is_some()
+}
+
+fn pptx_spin(el: &Element) -> Option<PptxSpin> {
+    if let Some(sid) = el.attr_local("cryptAlgorithmSid") {
+        let alg = alg_from_sid(sid)?;
+        return decode_spin(
+            alg,
+            el.attr_local("hashData")?,
+            el.attr_local("saltData")?,
+            el.attr_local("spinCount")?,
+            false,
+        );
+    }
+    if let Some(name) = el.attr_local("algorithmName") {
+        let alg = alg_from_name(name)?;
+        return decode_spin(
+            alg,
+            el.attr_local("hashValue")?,
+            el.attr_local("saltValue")?,
+            el.attr_local("spinCount")
+                .or_else(|| el.attr_local("spinValue"))?,
+            false,
+        );
+    }
+    if el.attr_local("hash").is_some() && el.attr_local("salt").is_some() {
+        let spin = el
+            .attr_local("cryptSpinCount")
+            .or_else(|| el.attr_local("spinCount"))?;
+        return decode_spin(
+            password::SpinAlg::Sha512,
+            el.attr_local("hash")?,
+            el.attr_local("salt")?,
+            spin,
+            true,
+        );
+    }
+    None
+}
+
+fn decode_spin(
+    alg: password::SpinAlg,
+    hash: &str,
+    salt: &str,
+    spin: &str,
+    word_style: bool,
+) -> Option<PptxSpin> {
+    let hash = STANDARD.decode(hash).ok()?;
+    let salt = STANDARD.decode(salt).ok()?;
+    let spin: u32 = spin.parse().ok()?;
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > password::MAX_CHECK_SPIN {
         return None;
     }
-    let hash = STANDARD.decode(el.attr_local("hashData")?).ok()?;
-    let salt = STANDARD.decode(el.attr_local("saltData")?).ok()?;
-    let spin: u32 = el.attr_local("spinCount")?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
-        return None;
-    }
-    Some(Sha512Spec { salt, hash, spin })
+    Some(PptxSpin {
+        alg,
+        hash,
+        salt,
+        spin,
+        word_style,
+    })
 }
 
 fn write_sha512(el: &mut Element, password: &str) {
@@ -227,7 +300,6 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("hashData", STANDARD.encode([1u8; 64]))
         .with_attr("saltData", STANDARD.encode([2u8; 16]))
         .with_attr("spinCount", "10000001");
-    assert!(sha512_spec(&el).is_none());
     let err = gate_existing_hash(Some(&el), Some("secret"), 0).unwrap_err();
     assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     let ok = Element::new("p:modifyVerifier")
@@ -235,5 +307,21 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("hashData", STANDARD.encode([1u8; 64]))
         .with_attr("saltData", STANDARD.encode([2u8; 16]))
         .with_attr("spinCount", "100000");
-    assert!(sha512_spec(&ok).is_some());
+    let err = gate_existing_hash(Some(&ok), Some("secret"), 0).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::InvalidField);
+}
+
+#[cfg(test)]
+#[test]
+fn sha1_sid_accepts_the_matching_password() {
+    let salt = [4u8; 16];
+    let hash = password::spin_raw(password::SpinAlg::Sha1, "secret", &salt, 1);
+    let el = Element::new("p:modifyVerifier")
+        .with_attr("cryptAlgorithmSid", "4")
+        .with_attr("hashData", STANDARD.encode(&hash))
+        .with_attr("saltData", STANDARD.encode(salt))
+        .with_attr("spinCount", "1");
+    gate_existing_hash(Some(&el), Some("secret"), 0).unwrap();
+    let err = gate_existing_hash(Some(&el), Some("nope"), 0).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::InvalidField);
 }

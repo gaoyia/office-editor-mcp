@@ -144,7 +144,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 ## 跨格式（本类型要跟）
 
 会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11、C12、C16、C15 见已过表。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
-第七轮跨格式待做：C17 `.plan/2026年-10月-31日-❌-三家-chartex改数据与地图图表.md`，C18 `.plan/2026年-10月-31日-❌-三家-旧版口令哈希.md`，C19 `.plan/2026年-10月-31日-❌-docx-pptx-墨迹批注回复与改字.md`（xlsx 没有墨迹批注，不套）。
+第七轮跨格式待做：C17 `.plan/2026年-10月-31日-❌-三家-chartex改数据与地图图表.md`，C19 `.plan/2026年-10月-31日-❌-docx-pptx-墨迹批注回复与改字.md`（xlsx 没有墨迹批注，不套）。C18 `.plan/2026年-10月-31日-✅-三家-旧版口令哈希.md` 已过。
 
 ## 怎么算 Word 全量做完
 

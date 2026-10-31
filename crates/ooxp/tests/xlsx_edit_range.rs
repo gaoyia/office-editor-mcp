@@ -432,7 +432,7 @@ fn duplicate_name_and_chartsheet_and_missing_fields() {
 }
 
 #[test]
-fn legacy_xor_is_not_implemented() {
+fn legacy_xor_password_deletes_the_range() {
     let src = create_book("xor-src");
     let inserted = tmp("ins");
     apply(
@@ -448,7 +448,7 @@ fn legacy_xor_is_not_implemented() {
     .unwrap();
     let hashed = tmp("xor");
     rewrite_part(&inserted, &hashed, "xl/worksheets/sheet1.xml", |xml| {
-        xml.replace("<protectedRange ", r#"<protectedRange password="CA2E" "#)
+        xml.replace("<protectedRange ", r#"<protectedRange password="DAA7" "#)
     });
     let tree = inspect_with(&hashed, json!({ "protectedRanges": true }));
     assert_eq!(tree["sheets"][0]["protectedRanges"][0]["hasPassword"], true);
@@ -457,10 +457,23 @@ fn legacy_xor_is_not_implemented() {
         json!([{
             "op": "deleteProtectedRange",
             "id": "sheet:Sheet1/editRange:1",
+            "password": "wrong"
+        }]),
+        ErrorCode::InvalidField,
+    );
+    let gone = tmp("xor-gone");
+    apply(
+        &hashed,
+        &gone,
+        json!([{
+            "op": "deleteProtectedRange",
+            "id": "sheet:Sheet1/editRange:1",
             "password": "secret"
         }]),
-        ErrorCode::NotImplemented,
-    );
+    )
+    .unwrap();
+    let after = inspect_with(&gone, json!({ "protectedRanges": true }));
+    assert_eq!(after["sheets"][0]["protectedRanges"], json!([]));
 }
 
 #[test]

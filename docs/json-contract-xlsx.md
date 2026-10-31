@@ -2415,8 +2415,8 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 | `password` | 可选。非空字符串。给了则校验已有哈希并换新盐重写 SHA-512 |
 
 除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。`password` 算可写字段。改 `name` 时按该表做唯一性检查。
-已有 SHA-512 哈希：不给 `password` 报 `NotImplemented`，不删哈希。给了则校验；对不上报 `InvalidField`；对得上则可改名 / 区域，并换新盐重写哈希。
-已有遗留 XOR 或其它算法：即使给了 `password` 也报 `NotImplemented`。未点名的属性与 `securityDescriptor` 原样留。
+已有哈希：不给 `password` 报 `NotImplemented`，不删哈希。给了则校验；对不上报 `InvalidField`；对得上则可改名 / 区域，并换成 SHA-512、换新盐。
+能核 SHA-1 / SHA-256 / SHA-384 / SHA-512，以及遗留 XOR `@password`。认不出的算法仍报 `NotImplemented`。未点名的属性与 `securityDescriptor` 原样留。
 找不到该序号报 `IdNotFound`。id 不是允许编辑区域 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteProtectedRange
@@ -2427,7 +2427,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 | --- | --- |
 | `op` | 必须是 `"deleteProtectedRange"` |
 | `id` | 允许编辑区域 id |
-| `password` | 已有 SHA-512 时必须，且须对得上 |
+| `password` | 已有哈希时必须，且须对得上 |
 
 去掉该 `<protectedRange>`。删光则去掉 `<protectedRanges>`。已有哈希却不给或给错 `password` 的规则与 `setProtectedRange` 相同。
 找不到该序号报 `IdNotFound`。id 不是允许编辑区域 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。

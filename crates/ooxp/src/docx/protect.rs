@@ -9,7 +9,10 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::Package;
-use crate::password::{sha512_spin, word_sha512_spin};
+use crate::password::{
+    self, alg_from_name, alg_from_sid, sha512_spin, spin_matches, word_reservation_matches,
+    word_sha512_spin, SpinInput,
+};
 use crate::xml::{self, Document, Element, Node};
 
 use super::hf;
@@ -275,12 +278,16 @@ fn write_sha512_attrs(root: &Element, el: &mut Element, password: &str, word_leg
     el.set_attr(&root.prefixed("cryptSpinCount"), SPIN_COUNT.to_string());
     el.set_attr(&root.prefixed("hash"), STANDARD.encode(&hash));
     el.set_attr(&root.prefixed("salt"), STANDARD.encode(salt));
-}
-
-struct WordHashSpec {
-    salt: Vec<u8>,
-    hash: Vec<u8>,
-    spin: u32,
+    for local in [
+        "reservationPassword",
+        "hashValue",
+        "saltValue",
+        "algorithmName",
+        "spinCount",
+    ] {
+        el.attrs
+            .retain(|(k, _)| k.rsplit(':').next().unwrap_or(k) != local);
+    }
 }
 
 fn gate_existing_hash(
@@ -296,18 +303,32 @@ fn gate_existing_hash(
             format!("ops[{i}]"),
         ));
     };
-    let Some(spec) = word_hash_spec(el) else {
+    let input = if word_legacy {
+        SpinInput::WordLegacy
+    } else {
+        SpinInput::Raw
+    };
+    if let Some(stored) = el.attr_local("reservationPassword") {
+        if word_reservation_matches(pw, stored) && word_spin_spec(el).is_none() {
+            return Ok(());
+        }
+    }
+    let Some(spec) = word_spin_spec(el) else {
+        if el
+            .attr_local("reservationPassword")
+            .is_some_and(|s| !word_reservation_matches(pw, s))
+        {
+            return Err(Error::with_path(
+                ErrorKind::ProtectionPasswordWrong,
+                format!("ops[{i}].{field}"),
+            ));
+        }
         return Err(Error::with_path(
             ErrorKind::ProtectionHasPassword,
             format!("ops[{i}]"),
         ));
     };
-    let got = if word_legacy {
-        word_sha512_spin(pw, &spec.salt, spec.spin)
-    } else {
-        sha512_spin(pw, &spec.salt, spec.spin)
-    };
-    if got != spec.hash {
+    if !spin_matches(spec.alg, input, pw, &spec.salt, spec.spin, &spec.hash) {
         return Err(Error::with_path(
             ErrorKind::ProtectionPasswordWrong,
             format!("ops[{i}].{field}"),
@@ -316,18 +337,46 @@ fn gate_existing_hash(
     Ok(())
 }
 
-fn word_hash_spec(el: &Element) -> Option<WordHashSpec> {
-    let sid = el.attr_local("cryptAlgorithmSid")?;
-    if sid != "14" {
+struct WordSpinSpec {
+    alg: password::SpinAlg,
+    salt: Vec<u8>,
+    hash: Vec<u8>,
+    spin: u32,
+}
+
+fn word_spin_spec(el: &Element) -> Option<WordSpinSpec> {
+    if let Some(sid) = el.attr_local("cryptAlgorithmSid") {
+        let alg = alg_from_sid(sid)?;
+        let hash = STANDARD.decode(el.attr_local("hash")?).ok()?;
+        let salt = STANDARD.decode(el.attr_local("salt")?).ok()?;
+        let spin: u32 = el.attr_local("cryptSpinCount")?.parse().ok()?;
+        return spin_ok(alg, hash, salt, spin);
+    }
+    if let Some(name) = el.attr_local("algorithmName") {
+        let alg = alg_from_name(name)?;
+        let hash = STANDARD.decode(el.attr_local("hashValue")?).ok()?;
+        let salt = STANDARD.decode(el.attr_local("saltValue")?).ok()?;
+        let spin: u32 = el.attr_local("spinCount")?.parse().ok()?;
+        return spin_ok(alg, hash, salt, spin);
+    }
+    None
+}
+
+fn spin_ok(
+    alg: password::SpinAlg,
+    hash: Vec<u8>,
+    salt: Vec<u8>,
+    spin: u32,
+) -> Option<WordSpinSpec> {
+    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > password::MAX_CHECK_SPIN {
         return None;
     }
-    let hash = STANDARD.decode(el.attr_local("hash")?).ok()?;
-    let salt = STANDARD.decode(el.attr_local("salt")?).ok()?;
-    let spin: u32 = el.attr_local("cryptSpinCount")?.parse().ok()?;
-    if hash.is_empty() || salt.is_empty() || spin == 0 || spin > crate::password::MAX_CHECK_SPIN {
-        return None;
-    }
-    Some(WordHashSpec { salt, hash, spin })
+    Some(WordSpinSpec {
+        alg,
+        salt,
+        hash,
+        spin,
+    })
 }
 
 fn write_read_only_recommended(root: &mut Element, on: bool) {
@@ -614,7 +663,6 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("w:hash", STANDARD.encode([1u8; 64]))
         .with_attr("w:salt", STANDARD.encode([2u8; 16]))
         .with_attr("w:cryptSpinCount", "10000001");
-    assert!(word_hash_spec(&el).is_none());
     let err = gate_existing_hash(&el, Some("secret"), 0, "password", false).unwrap_err();
     assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     let ok = Element::new("w:writeProtection")
@@ -622,5 +670,6 @@ fn huge_spin_is_not_a_hash_spec() {
         .with_attr("w:hash", STANDARD.encode([1u8; 64]))
         .with_attr("w:salt", STANDARD.encode([2u8; 16]))
         .with_attr("w:cryptSpinCount", "100000");
-    assert!(word_hash_spec(&ok).is_some());
+    let err = gate_existing_hash(&ok, Some("secret"), 0, "password", false).unwrap_err();
+    assert_eq!(err.code(), crate::error::ErrorCode::InvalidField);
 }
