@@ -21,7 +21,7 @@ use super::ole;
 use super::omml;
 use super::picture;
 use super::protect;
-use super::request::{InsertShapeHost, PicGeomTarget, PptxOp, SetShapeFormatOp};
+use super::request::PptxOp;
 use super::section;
 use super::shape;
 use super::show;
@@ -49,648 +49,100 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     for (i, op) in ops.iter().enumerate() {
         match op {
             PptxOp::SetShapeText(op) => {
-                if op.id.starts_with("master:")
-                    || op.id.starts_with("notesMaster/")
-                    || op.id.starts_with("handout/")
-                {
-                    let ph = master::parse_placeholder_id(&op.id, i)?;
-                    master::set_text(&mut pkg, &pres_part, &pres.root, &ph, &op.id, &op.text, i)?;
-                    continue;
-                }
-                let target = shape::parse_shape_id(&op.id, i)?;
-                let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let part = if target.on_notes {
-                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::ShapeNotFound { id: op.id.clone() },
-                            format!("ops[{i}].id"),
-                        )
-                    })?
-                } else {
-                    meta.part.clone()
-                };
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                if target.on_notes {
-                    if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
-                        notes::reject_slide_image(sp, i)?;
-                    }
-                }
-                let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::ShapeNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                if target.on_notes {
-                    notes::reject_slide_image(sp, i)?;
-                }
-                let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::ShapeHasNoText { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                crate::drawing_text::set_txbody_text(tx, &op.text);
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                shape::op_set_shape_text(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeRuns(op) => {
-                if op.id.starts_with("master:")
-                    || op.id.starts_with("notesMaster/")
-                    || op.id.starts_with("handout/")
-                {
-                    let ph = master::parse_placeholder_id(&op.id, i)?;
-                    master::set_runs(&mut pkg, &pres_part, &pres.root, &ph, &op.id, &op.runs, i)?;
-                    continue;
-                }
-                let target = shape::parse_shape_id(&op.id, i)?;
-                let meta = shape::slide_at_start(&slides, target.slide).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let part = if target.on_notes {
-                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::ShapeNotFound { id: op.id.clone() },
-                            format!("ops[{i}].id"),
-                        )
-                    })?
-                } else {
-                    meta.part.clone()
-                };
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                if target.on_notes {
-                    if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
-                        notes::reject_slide_image(sp, i)?;
-                    }
-                }
-                let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::ShapeNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                if target.on_notes {
-                    notes::reject_slide_image(sp, i)?;
-                }
-                let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::ShapeHasNoText { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                crate::drawing_text::set_txbody_runs(tx, &op.runs, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                shape::op_set_shape_runs(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeFormat(op) => {
-                apply_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
+                shape::op_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
             }
-            PptxOp::InsertShape(op) => match &op.host {
-                InsertShapeHost::Master { master, layout } => {
-                    master::insert_deco_shape(
-                        &mut pkg, &pres_part, &pres.root, *master, *layout, op, i,
-                    )?;
-                }
-                InsertShapeHost::Slide { slide, on_notes } => {
-                    let meta = shape::slide_at_start(&slides, *slide).ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::SlideNotFound { n: *slide as u32 },
-                            format!("ops[{i}].id"),
-                        )
-                    })?;
-                    let part = if *on_notes {
-                        notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
-                    } else {
-                        meta.part.clone()
-                    };
-                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                    let canvas = if *on_notes {
-                        notes::notes_size(&pres.root)
-                    } else {
-                        picture::canvas_size(&pres.root)
-                    };
-                    shape::insert_shape(&mut doc, canvas, op)?;
-                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
-                }
-            },
+            PptxOp::InsertShape(op) => {
+                shape::op_insert_shape(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
+            }
             PptxOp::InsertConnector(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                let canvas = if op.on_notes {
-                    notes::notes_size(&pres.root)
-                } else {
-                    picture::canvas_size(&pres.root)
-                };
-                connector::insert(&mut doc, canvas, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                connector::op_insert_connector(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteConnector(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                let Some(spid) = connector::try_remove(&mut doc.root, &op.target.key) else {
-                    return Err(Error::with_path(
-                        ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    ));
-                };
-                if let Some(id) = spid {
-                    shape::strip_timing_for_spid(&mut doc.root, &id);
-                }
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                connector::op_delete_connector(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::GroupShapes(op) => {
-                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let part = meta.part.clone();
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                group::group(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                group::op_group_shapes(&mut pkg, &slides, op, i)?;
             }
             PptxOp::Ungroup(op) => {
-                let (slide, on_notes, master) = match &op.member {
-                    group::MemberId::Shape(t) => (t.slide, t.on_notes, t.master),
-                    group::MemberId::Cxn(t) => (t.slide, t.on_notes, t.master),
-                };
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    slide,
-                    on_notes,
-                    master,
-                    ErrorKind::SlideNotFound { n: slide as u32 },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                group::ungroup(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                group::op_ungroup(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteShape(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::delete_deco(&mut pkg, &pres_part, &pres.root, ph, &op.id, i)?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("幻灯片形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                let Some(spid) = shape::try_remove_shape(&mut doc.root, &target.key) else {
-                    return Err(Error::with_path(
-                        ErrorKind::ShapeNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    ));
-                };
-                if let Some(id) = spid {
-                    shape::strip_timing_for_spid(&mut doc.root, &id);
-                }
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_delete_shape(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapePos(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::set_pos(&mut pkg, &pres_part, &pres.root, ph, &op.id, op.x, op.y, i)?;
-                    continue;
-                }
-                if let Some(cxn) = &op.cxn {
-                    let part = host_xml_part(
-                        &pkg,
-                        &pres_part,
-                        &pres.root,
-                        &slides,
-                        cxn.slide,
-                        cxn.on_notes,
-                        cxn.master,
-                        ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )?;
-                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                    connector::set_pos(&mut doc, op, i)?;
-                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("幻灯片形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                shape::set_shape_pos(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_set_shape_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeSize(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::set_size(
-                        &mut pkg, &pres_part, &pres.root, ph, &op.id, op.cx, op.cy, i,
-                    )?;
-                    continue;
-                }
-                if let Some(cxn) = &op.cxn {
-                    let part = host_xml_part(
-                        &pkg,
-                        &pres_part,
-                        &pres.root,
-                        &slides,
-                        cxn.slide,
-                        cxn.on_notes,
-                        cxn.master,
-                        ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )?;
-                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                    connector::set_size(&mut doc, op, i)?;
-                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("幻灯片形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                shape::set_shape_size(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_set_shape_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeFill(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::set_fill(
-                        &mut pkg,
-                        &pres_part,
-                        &pres.root,
-                        ph,
-                        &op.id,
-                        op.color.as_deref(),
-                        i,
-                    )?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("幻灯片形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                shape::set_shape_fill(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_set_shape_fill(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeLine(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::set_line(
-                        &mut pkg,
-                        &pres_part,
-                        &pres.root,
-                        ph,
-                        &op.id,
-                        op.color.as_deref(),
-                        op.width,
-                        i,
-                    )?;
-                    continue;
-                }
-                if let Some(cxn) = &op.cxn {
-                    let part = host_xml_part(
-                        &pkg,
-                        &pres_part,
-                        &pres.root,
-                        &slides,
-                        cxn.slide,
-                        cxn.on_notes,
-                        cxn.master,
-                        ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                        format!("ops[{i}].id"),
-                    )?;
-                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                    connector::set_line(&mut doc, op, i)?;
-                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                shape::set_shape_line(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_set_shape_line(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShapeGeom(op) => {
-                if let Some(ph) = &op.placeholder {
-                    master::set_geom(&mut pkg, &pres_part, &pres.root, ph, &op.id, &op.paths, i)?;
-                    continue;
-                }
-                let target = op.target.as_ref().expect("幻灯片形状");
-                let mut doc =
-                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
-                if target.on_notes {
-                    reject_notes_image(&doc.root, &target.key, i)?;
-                }
-                shape::set_shape_geom(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+                shape::op_set_shape_geom(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetConnector(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ConnectorNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                connector::set_binds(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                connector::op_set_connector(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetNotesText(op) => {
-                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                notes::apply_set_notes_text(&mut pkg, &pres_part, &mut pres, &meta.part, op, i)?;
+                notes::op_set_notes_text(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::InsertComment(op) => {
-                let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                comments::apply_insert(&mut pkg, &pres_part, &pres, meta, op, i)?;
+                comments::op_insert_comment(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::ReplyComment(op) => {
-                let meta = comment_slide_meta(&slides, &op.id, i)?;
-                comments::apply_reply(&mut pkg, &pres_part, meta, op, i)?;
+                comments::op_reply_comment(&mut pkg, &pres_part, &slides, op, i)?;
             }
             PptxOp::DeleteComment(op) => {
-                let meta = comment_slide_meta(&slides, &op.id, i)?;
-                comments::apply_delete(&mut pkg, meta, op, i)?;
+                comments::op_delete_comment(&mut pkg, &slides, op, i)?;
             }
             PptxOp::SetCommentText(op) => {
-                let meta = comment_slide_meta(&slides, &op.id, i)?;
-                comments::apply_set_text(&mut pkg, meta, op, i)?;
+                comments::op_set_comment_text(&mut pkg, &slides, op, i)?;
             }
             PptxOp::SetCommentMeta(op) => {
-                let meta = comment_slide_meta(&slides, &op.id, i)?;
-                comments::apply_set_meta(&mut pkg, &pres_part, meta, op, i)?;
+                comments::op_set_comment_meta(&mut pkg, &pres_part, &slides, op, i)?;
             }
             PptxOp::SetCommentDone(op) => {
-                let meta = comment_slide_meta(&slides, &op.id, i)?;
-                comments::apply_set_done(&mut pkg, meta, op, i)?;
+                comments::op_set_comment_done(&mut pkg, &slides, op, i)?;
             }
             PptxOp::ReplacePicture(op) => {
-                if op.target.comment.is_some() {
-                    let meta =
-                        shape::slide_at_start(&slides, op.target.slide).ok_or_else(|| {
-                            Error::with_path(
-                                ErrorKind::SlideNotFound {
-                                    n: op.target.slide as u32,
-                                },
-                                format!("ops[{i}].id"),
-                            )
-                        })?;
-                    comments::replace_picture(&mut pkg, meta, op, i)?;
-                    continue;
-                }
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::PictureNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                let dirty = picture::replace_picture(&mut pkg, &part, &mut doc.root, op, i)?;
-                if dirty {
-                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
-                }
+                picture::op_replace_picture(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertPicture(op) => {
-                if op.comment.is_some() {
-                    let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
-                        Error::with_path(
-                            ErrorKind::SlideNotFound { n: op.slide as u32 },
-                            format!("ops[{i}].id"),
-                        )
-                    })?;
-                    comments::insert_picture(&mut pkg, meta, op, i)?;
-                    continue;
-                }
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                picture::insert_picture(
-                    &mut pkg,
-                    &mut doc,
-                    &part,
-                    &pres.root,
-                    op,
-                    &format!("ops[{i}].file"),
-                )?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                picture::op_insert_picture(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeletePicture(op) => {
-                if op.target.comment.is_some() {
-                    let meta =
-                        shape::slide_at_start(&slides, op.target.slide).ok_or_else(|| {
-                            Error::with_path(
-                                ErrorKind::SlideNotFound {
-                                    n: op.target.slide as u32,
-                                },
-                                format!("ops[{i}].id"),
-                            )
-                        })?;
-                    comments::delete_picture(&mut pkg, meta, op, i)?;
-                    continue;
-                }
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::PictureNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                picture::delete_picture(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                picture::op_delete_picture(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetPictureSize(op) => {
-                let missing = match &op.target {
-                    PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
-                    PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
-                };
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide(),
-                    op.target.on_notes(),
-                    op.target.master(),
-                    missing,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                picture::set_picture_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                picture::op_set_picture_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetPicturePos(op) => {
-                let missing = match &op.target {
-                    PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
-                    PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
-                };
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide(),
-                    op.target.on_notes(),
-                    op.target.master(),
-                    missing,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                picture::set_picture_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                picture::op_set_picture_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertVideo(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                media::insert(
-                    &mut pkg,
-                    &mut doc,
-                    &part,
-                    &pres.root,
-                    op,
-                    &format!("ops[{i}].file"),
-                    media::MediaKind::Video,
-                )?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                media::op_insert_video(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::InsertAudio(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                media::insert(
-                    &mut pkg,
-                    &mut doc,
-                    &part,
-                    &pres.root,
-                    op,
-                    &format!("ops[{i}].file"),
-                    media::MediaKind::Audio,
-                )?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                media::op_insert_audio(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteMedia(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MediaNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                media::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                media::op_delete_media(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetMedia(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MediaNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                media::set(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                media::op_set_media(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertSlideSection(op) => {
-                let mut op = op.clone();
-                if let Some(n) = op.start {
-                    op.start = Some(slide_now(&slides, n, format!("ops[{i}].start"))?);
-                }
-                section::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
+                section::op_insert_slide_section(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::SetSlideSectionName(op) => {
                 section::set_name(&mut pkg, &pres_part, &mut pres, op, i)?;
@@ -699,371 +151,104 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 section::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::SetSlideSection(op) => {
-                let mut op = op.clone();
-                op.slide = slide_now(&slides, op.slide, format!("ops[{i}].id"))?;
-                section::set_slide(&mut pkg, &pres_part, &mut pres, &op, i)?;
-                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.mark_start(&mut slides);
+                section::op_set_slide_section(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &mut slides,
+                    &frozen,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::InsertCustomShow(op) => {
-                let mut op = op.clone();
-                op.slides = slides_now(&slides, &op.slides, i)?;
-                custom_show::insert(&mut pkg, &pres_part, &mut pres, &op, i)?;
+                custom_show::op_insert_custom_show(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &slides,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::SetCustomShow(op) => {
-                let mut op = op.clone();
-                if let Some(list) = &op.slides {
-                    op.slides = Some(slides_now(&slides, list, i)?);
-                }
-                custom_show::set(&mut pkg, &pres_part, &mut pres, &op, i)?;
+                custom_show::op_set_custom_show(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &slides,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::DeleteCustomShow(op) => {
                 custom_show::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertOle(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ole::insert(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ole::op_insert_ole(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteOle(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::OleNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ole::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ole::op_delete_ole(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetOleSize(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::OleNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ole::set_size(&mut doc, &part, &pkg, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ole::op_set_ole_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertModel3d(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                model3d::op_insert_model3d(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::ReplaceModel3d(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::Model3dNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::replace(&mut pkg, &part, &doc.root, op, i)?;
+                model3d::op_replace_model3d(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteModel3d(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::Model3dNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                model3d::op_delete_model3d(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetModel3dSize(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::Model3dNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::apply_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                model3d::op_set_model3d_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetModel3dPos(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::Model3dNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::apply_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                model3d::op_set_model3d_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertInk(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ink::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ink::op_insert_ink(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::ReplaceInk(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::InkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                ink::replace(&mut pkg, &part, &doc.root, op, i)?;
+                ink::op_replace_ink(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteInk(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::InkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ink::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ink::op_delete_ink(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetInkSize(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::InkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ink::apply_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ink::op_set_ink_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetInkPos(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::InkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                ink::apply_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                ink::op_set_ink_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetModel3dCamera(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::Model3dNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                model3d::apply_camera(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                model3d::op_set_model3d_camera(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertMath(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                omml::insert(&mut pkg, &mut doc, &part, op)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                omml::op_insert_math(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::SetMath(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                omml::set(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                omml::op_set_math(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteMath(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                omml::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                omml::op_delete_math(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetMathSize(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                omml::set_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                omml::op_set_math_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetMathPos(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                omml::set_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                omml::op_set_math_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertZoom(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                zoom::insert(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                zoom::op_insert_zoom(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteZoom(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ZoomNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                zoom::delete(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                zoom::op_delete_zoom(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetZoom(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ZoomNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                zoom::set(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                zoom::op_set_zoom(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetShowPr(op) => {
                 show::apply(&mut pkg, &pres_part, op, i)?;
@@ -1072,735 +257,183 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 protect::apply(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertChart(op) => {
-                let part = ensure_notes_or_slide(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::insert_chart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                chart::op_insert_chart(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteChart(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::delete_chart(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                chart::op_delete_chart(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartTitle(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_title(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_title(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartSeries(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_series(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_series(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::AddChartSeries(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_add_series(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_add_chart_series(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteChartSeries(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_delete_series(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_delete_chart_series(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartType(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_type(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_type(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartAxisTitle(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_axis_title(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_axis_title(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartLegend(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_legend(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_legend(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartDataLabels(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_data_labels(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_data_labels(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartSize(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                chart::op_set_chart_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartPos(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                chart::op_set_chart_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertTrendline(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_insert_trendline(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_insert_trendline(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetTrendline(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_set_trendline(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_trendline(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteTrendline(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_delete_trendline(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_delete_trendline(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertErrorBars(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_insert_error_bars(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_insert_error_bars(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetErrorBars(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_set_error_bars(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_error_bars(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteErrorBars(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_delete_error_bars(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_delete_error_bars(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetChartSeriesAxis(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::ChartNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                chart::apply_series_axis(&mut pkg, &doc.root, &part, op, i)?;
+                chart::op_set_chart_series_axis(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertSmartArt(op) => {
-                let part = ensure_notes_or_slide(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::insert_smartart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_insert_smart_art(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::DeleteSmartArt(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::delete_smartart(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_delete_smart_art(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtText(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.diagram.slide,
-                    op.target.diagram.on_notes,
-                    op.target.diagram.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_text(&mut pkg, &doc.root, &part, op, i)?;
+                smartart::op_set_smart_art_text(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::AddSmartArtPoint(op) => {
-                let (slide, on_notes, master) = match &op.parent {
-                    smartart::AddParent::Diagram(t) => (t.slide, t.on_notes, t.master),
-                    smartart::AddParent::Point(p) => {
-                        (p.diagram.slide, p.diagram.on_notes, p.diagram.master)
-                    }
-                };
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    slide,
-                    on_notes,
-                    master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_add_point(&mut pkg, &doc.root, &part, op, i)?;
+                smartart::op_add_smart_art_point(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteSmartArtPoint(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.diagram.slide,
-                    op.target.diagram.on_notes,
-                    op.target.diagram.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_delete_point(&mut pkg, &doc.root, &part, op, i)?;
+                smartart::op_delete_smart_art_point(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtSize(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_set_smart_art_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtPos(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_set_smart_art_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtColors(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_colors(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_set_smart_art_colors(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtStyle(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_style(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_set_smart_art_style(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetSmartArtLayout(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                smartart::apply_layout(&mut pkg, &mut doc, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                smartart::op_set_smart_art_layout(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertTable(op) => {
-                let part = ensure_notes_or_slide(
+                table::op_insert_table(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
+            }
+            PptxOp::DeleteTable(op) => {
+                table::op_delete_table(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::InsertRow(op) => {
+                table::op_insert_row(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::DeleteRow(op) => {
+                table::op_delete_row(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::InsertCol(op) => {
+                table::op_insert_col(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::DeleteCol(op) => {
+                table::op_delete_col(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableCellText(op) => {
+                table::op_set_table_cell_text(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableCellFill(op) => {
+                table::op_set_table_cell_fill(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableCellBorders(op) => {
+                table::op_set_table_cell_borders(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableCellInset(op) => {
+                table::op_set_table_cell_inset(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableCellPr(op) => {
+                table::op_set_table_cell_pr(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableStyleRef(op) => {
+                table::op_set_table_style_ref(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTablePos(op) => {
+                table::op_set_table_pos(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableSize(op) => {
+                table::op_set_table_size(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableColWidths(op) => {
+                table::op_set_table_col_widths(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::SetTableTrHeight(op) => {
+                table::op_set_table_tr_height(&mut pkg, &pres_part, &pres, &slides, op, i)?;
+            }
+            PptxOp::InsertSlide(op) => {
+                slides::op_insert_slide(
                     &mut pkg,
                     &pres_part,
                     &mut pres,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    format!("ops[{i}].id"),
+                    &mut slides,
+                    &frozen,
+                    op,
+                    i,
                 )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::insert_table(&mut pkg, &part, &mut doc, &pres.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::DeleteTable(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::delete_table(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::InsertRow(op) => {
-                let (slide, on_notes, master) = match &op.target {
-                    table::TableOrRow::Table(t) => (t.slide, t.on_notes, t.master),
-                    table::TableOrRow::Row { table, .. } => {
-                        (table.slide, table.on_notes, table.master)
-                    }
-                };
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    slide,
-                    on_notes,
-                    master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::insert_row(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::DeleteRow(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.table.slide,
-                    op.table.on_notes,
-                    op.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::delete_row(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::InsertCol(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::insert_col(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::DeleteCol(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::delete_col(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableCellText(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.table.slide,
-                    op.target.table.on_notes,
-                    op.target.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_cell_text(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableCellFill(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.table.slide,
-                    op.target.table.on_notes,
-                    op.target.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_cell_fill(&mut pkg, &part, &mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableCellBorders(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.table.slide,
-                    op.target.table.on_notes,
-                    op.target.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_cell_borders(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableCellInset(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.table.slide,
-                    op.target.table.on_notes,
-                    op.target.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_cell_inset(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableCellPr(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.table.slide,
-                    op.target.table.on_notes,
-                    op.target.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_cell_pr(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableStyleRef(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::set_table_style_ref(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTablePos(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::apply_pos(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableSize(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::apply_size(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableColWidths(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::apply_col_widths(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::SetTableTrHeight(op) => {
-                let part = notes_or_slide_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.table.slide,
-                    op.table.on_notes,
-                    op.table.master,
-                    ErrorKind::TableNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                table::apply_tr_height(&mut doc, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
-            }
-            PptxOp::InsertSlide(op) => {
-                slides::insert(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
-                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.mark_start(&mut slides);
             }
             PptxOp::DeleteSlide(op) => {
-                slides::delete(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
-                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.mark_start(&mut slides);
+                slides::op_delete_slide(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &mut slides,
+                    &frozen,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::MoveSlide(op) => {
-                slides::move_slide(&pres_part, &mut pres, &mut pkg, &slides, op, i)?;
-                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.mark_start(&mut slides);
+                slides::op_move_slide(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &mut slides,
+                    &frozen,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::SetSlideHidden(op) => {
-                slides::set_hidden(&mut pkg, &slides, op, i)?;
-                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-                frozen.mark_start(&mut slides);
+                slides::op_set_slide_hidden(
+                    &mut pkg,
+                    &pres_part,
+                    &pres,
+                    &mut slides,
+                    &frozen,
+                    op,
+                    i,
+                )?;
             }
             PptxOp::SetTransition(op) => {
                 transition::apply(
@@ -1890,52 +523,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &slides, &pres_part, &pres.root, op.master, op.layout, i,
                 )?;
             }
-            PptxOp::InsertPlaceholder(op) => match &op.host {
-                master::PlaceholderHost::Master { master, layout } => {
-                    master::insert_placeholder(
-                        &mut pkg,
-                        &pres_part,
-                        &pres.root,
-                        *master,
-                        *layout,
-                        &op.type_name,
-                        &op.text,
-                        op.x,
-                        op.y,
-                        op.cx,
-                        op.cy,
-                        i,
-                    )?;
-                }
-                master::PlaceholderHost::NotesMaster => {
-                    let part = notes::ensure_notes_master(&mut pkg, &pres_part, &mut pres)?;
-                    master::write_placeholder_into(
-                        &mut pkg,
-                        &part,
-                        notes::notes_size(&pres.root),
-                        &op.type_name,
-                        &op.text,
-                        op.x,
-                        op.y,
-                        op.cx,
-                        op.cy,
-                    )?;
-                }
-                master::PlaceholderHost::Handout => {
-                    let part = handout::ensure_handout_master(&mut pkg, &pres_part, &mut pres)?;
-                    master::write_placeholder_into(
-                        &mut pkg,
-                        &part,
-                        master::canvas_sz(&pres.root),
-                        &op.type_name,
-                        &op.text,
-                        op.x,
-                        op.y,
-                        op.cx,
-                        op.cy,
-                    )?;
-                }
-            },
+            PptxOp::InsertPlaceholder(op) => {
+                master::op_insert_placeholder(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
             PptxOp::DeletePlaceholder(op) => {
                 master::delete_placeholder(
                     &mut pkg,
@@ -1953,12 +543,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 master::delete_master(&mut pkg, &slides, &pres_part, &mut pres, op.master, i)?;
             }
             PptxOp::SetSlideSize(op) => {
-                theme::set_slide_size(&mut pres, op.cx, op.cy, op.type_name.as_deref(), i)?;
-                super::list_pin::write_part(&mut pkg, &pres_part, &pres)?;
+                theme::op_set_slide_size(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::SetNotesSize(op) => {
-                theme::set_notes_size(&mut pres, op.cx, op.cy, i)?;
-                super::list_pin::write_part(&mut pkg, &pres_part, &pres)?;
+                theme::op_set_notes_size(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::SetThemeColors(op) => {
                 theme::set_theme_colors(
@@ -2031,99 +619,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertHyperlink(op) => {
-                let (slide, on_notes, master) = op.host.parts();
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    slide,
-                    on_notes,
-                    master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                hyperlink::apply_insert(&mut pkg, &mut doc, &part, &slides, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                hyperlink::op_insert_hyperlink(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::SetHyperlink(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    ErrorKind::HyperlinkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                hyperlink::apply_set(&mut pkg, &mut doc, &part, &slides, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                hyperlink::op_set_hyperlink(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteHyperlink(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    ErrorKind::HyperlinkNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                hyperlink::op_delete_hyperlink(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::InsertField(op) => {
-                let part = ensure_host_part(
-                    &mut pkg,
-                    &pres_part,
-                    &mut pres,
-                    &slides,
-                    op.shape.slide,
-                    op.shape.on_notes,
-                    op.shape.master,
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                field::apply_insert(&mut doc.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                field::op_insert_field(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
             }
             PptxOp::SetField(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    ErrorKind::FieldNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                field::apply_set(&mut doc.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                field::op_set_field(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::DeleteField(op) => {
-                let part = host_xml_part(
-                    &pkg,
-                    &pres_part,
-                    &pres.root,
-                    &slides,
-                    op.slide,
-                    op.on_notes,
-                    op.master,
-                    ErrorKind::FieldNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )?;
-                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
-                field::apply_delete(&mut doc.root, op, i)?;
-                super::list_pin::write_part(&mut pkg, &part, &doc)?;
+                field::op_delete_field(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;
@@ -2140,89 +651,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     pkg.save_to_vec()
 }
 
-fn reject_notes_image(
-    root: &crate::xml::Element,
-    key: &shape::ShapeKey,
-    i: usize,
-) -> Result<(), Error> {
-    if let Some(sp) = notes::find_any_sp_by_key(root, key) {
-        notes::reject_slide_image(sp, i)?;
-    }
-    Ok(())
-}
-
-fn apply_set_shape_format(
-    pkg: &mut Package,
-    pres_part: &str,
-    pres_root: &crate::xml::Element,
-    slides: &[shape::SlideMeta],
-    op: &SetShapeFormatOp,
-    i: usize,
-) -> Result<(), Error> {
-    if op.id.starts_with("master:")
-        || op.id.starts_with("notesMaster/")
-        || op.id.starts_with("handout/")
-    {
-        let ph = master::parse_placeholder_id(&op.id, i)?;
-        return master::set_format(pkg, pres_part, pres_root, &ph, &op.id, &op.format, i);
-    }
-    if op.id.contains("/table:") {
-        let target = table::parse_cell_id(&op.id, &format!("ops[{i}].id"))?;
-        let part = notes_or_slide_part(
-            pkg,
-            pres_part,
-            pres_root,
-            slides,
-            target.table.slide,
-            target.table.on_notes,
-            target.table.master,
-            ErrorKind::TableNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )?;
-        let mut doc = super::list_pin::parse_part(pkg, &part)?;
-        table::set_cell_format(&mut doc, &op.id, &target, &op.format, i)?;
-        super::list_pin::write_part(pkg, &part, &doc)?;
-        return Ok(());
-    }
-    let target = shape::parse_shape_id(&op.id, i)?;
-    let part = host_xml_part(
-        pkg,
-        pres_part,
-        pres_root,
-        slides,
-        target.slide,
-        target.on_notes,
-        target.master,
-        ErrorKind::ShapeNotFound { id: op.id.clone() },
-        format!("ops[{i}].id"),
-    )?;
-    let mut doc = super::list_pin::parse_part(pkg, &part)?;
-    if target.on_notes {
-        if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
-            notes::reject_slide_image(sp, i)?;
-        }
-    }
-    let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ShapeNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    if target.on_notes {
-        notes::reject_slide_image(sp, i)?;
-    }
-    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ShapeHasNoText { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    crate::drawing_text::apply(tx, &op.format);
-    super::list_pin::write_part(pkg, &part, &doc)?;
-    Ok(())
-}
-
-fn open_shape_host(
+pub(crate) fn open_shape_host(
     pkg: &Package,
     pres_part: &str,
     pres_root: &xml::Element,
@@ -2245,7 +674,7 @@ fn open_shape_host(
     xml::parse(pkg.get(&part)?)
 }
 
-fn write_shape_host(
+pub(crate) fn write_shape_host(
     pkg: &mut Package,
     pres_part: &str,
     pres_root: &xml::Element,
@@ -2270,7 +699,7 @@ fn write_shape_host(
     Ok(())
 }
 
-fn comment_slide_meta<'a>(
+pub(crate) fn comment_slide_meta<'a>(
     slides: &'a [shape::SlideMeta],
     id: &str,
     i: usize,
@@ -2287,20 +716,28 @@ fn comment_slide_meta<'a>(
 }
 
 /// 只认 `sldIdLst` 当前顺序的模块（节、自定义放映）用：apply 开始时的页号换成当前位置。
-fn slide_now(slides: &[shape::SlideMeta], n: usize, json_path: String) -> Result<usize, Error> {
+pub(crate) fn slide_now(
+    slides: &[shape::SlideMeta],
+    n: usize,
+    json_path: String,
+) -> Result<usize, Error> {
     shape::pos_at_start(slides, n)
         .map(|pos| pos + 1)
         .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, json_path))
 }
 
-fn slides_now(slides: &[shape::SlideMeta], list: &[usize], i: usize) -> Result<Vec<usize>, Error> {
+pub(crate) fn slides_now(
+    slides: &[shape::SlideMeta],
+    list: &[usize],
+    i: usize,
+) -> Result<Vec<usize>, Error> {
     list.iter()
         .enumerate()
         .map(|(j, &n)| slide_now(slides, n, format!("ops[{i}].slides[{j}]")))
         .collect()
 }
 
-fn notes_or_slide_part(
+pub(crate) fn notes_or_slide_part(
     pkg: &Package,
     pres_part: &str,
     pres_root: &xml::Element,
@@ -2316,7 +753,7 @@ fn notes_or_slide_part(
     )
 }
 
-fn host_xml_part(
+pub(crate) fn host_xml_part(
     pkg: &Package,
     pres_part: &str,
     pres_root: &xml::Element,
@@ -2338,7 +775,7 @@ fn host_xml_part(
     )
 }
 
-fn ensure_notes_or_slide(
+pub(crate) fn ensure_notes_or_slide(
     pkg: &mut Package,
     pres_part: &str,
     pres: &mut xml::Document,
@@ -2353,7 +790,7 @@ fn ensure_notes_or_slide(
     )
 }
 
-fn ensure_host_part(
+pub(crate) fn ensure_host_part(
     pkg: &mut Package,
     pres_part: &str,
     pres: &mut xml::Document,

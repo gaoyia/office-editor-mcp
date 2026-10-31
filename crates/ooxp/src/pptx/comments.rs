@@ -1209,3 +1209,78 @@ fn xml_escape(s: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
 }
+
+pub(crate) fn op_insert_comment(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertCommentOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::shape::slide_at_start(slides, op.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound { n: op.slide as u32 },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    apply_insert(pkg, pres_part, pres, meta, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_reply_comment(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::ReplyCommentOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::apply::comment_slide_meta(slides, &op.id, i)?;
+    apply_reply(pkg, pres_part, meta, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_comment(
+    pkg: &mut crate::opc::Package,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteCommentOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::apply::comment_slide_meta(slides, &op.id, i)?;
+    apply_delete(pkg, meta, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_comment_text(
+    pkg: &mut crate::opc::Package,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetCommentTextOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::apply::comment_slide_meta(slides, &op.id, i)?;
+    apply_set_text(pkg, meta, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_comment_meta(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetCommentMetaOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::apply::comment_slide_meta(slides, &op.id, i)?;
+    apply_set_meta(pkg, pres_part, meta, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_comment_done(
+    pkg: &mut crate::opc::Package,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetCommentDoneOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::apply::comment_slide_meta(slides, &op.id, i)?;
+    apply_set_done(pkg, meta, op, i)?;
+    Ok(())
+}

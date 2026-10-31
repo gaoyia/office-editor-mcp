@@ -1144,3 +1144,78 @@ fn is_zoom_frame(el: &Element) -> bool {
 fn is_media_action(el: &Element) -> bool {
     el.attr_local("action").unwrap_or("").contains("media")
 }
+
+pub(crate) fn op_insert_hyperlink(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertHyperlinkOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let (slide, on_notes, master) = op.host.parts();
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        slide,
+        on_notes,
+        master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_insert(pkg, &mut doc, &part, slides, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_hyperlink(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetHyperlinkOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        ErrorKind::HyperlinkNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_set(pkg, &mut doc, &part, slides, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_hyperlink(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteHyperlinkOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        ErrorKind::HyperlinkNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_delete(pkg, &mut doc.root, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

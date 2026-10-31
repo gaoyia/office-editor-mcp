@@ -801,3 +801,77 @@ fn build_preview_pic(img_rid: &str, x: i64, y: i64, cx: i64, cy: i64) -> Element
     pic.push_element(sp_pr);
     pic
 }
+
+pub(crate) fn op_insert_ole(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &InsertOleOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert(pkg, &mut doc, &part, &pres.root, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_ole(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &DeleteOleOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::OleNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_ole_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &SetOleSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::OleNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_size(&mut doc, &part, pkg, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

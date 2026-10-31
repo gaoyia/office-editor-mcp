@@ -633,3 +633,90 @@ pub fn set_line(doc: &mut Document, op: &SetShapeLineOp, op_index: usize) -> Res
     shape::apply_line(el, op.color.as_deref(), op.width);
     Ok(())
 }
+
+pub(crate) fn op_insert_connector(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertConnectorOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    let canvas = if op.on_notes {
+        super::notes::notes_size(&pres.root)
+    } else {
+        super::picture::canvas_size(&pres.root)
+    };
+    insert(&mut doc, canvas, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_connector(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteConnectorOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ConnectorNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    let Some(spid) = try_remove(&mut doc.root, &op.target.key) else {
+        return Err(Error::with_path(
+            ErrorKind::ConnectorNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    };
+    if let Some(id) = spid {
+        super::shape::strip_timing_for_spid(&mut doc.root, &id);
+    }
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_connector(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetConnectorOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ConnectorNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_binds(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

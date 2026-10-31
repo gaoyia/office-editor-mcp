@@ -1451,3 +1451,117 @@ fn existing_media_rel(pic: &Element, rels: &Relationships) -> Option<String> {
     }
     None
 }
+
+pub(crate) fn op_insert_video(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertMediaOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert(
+        pkg,
+        &mut doc,
+        &part,
+        &pres.root,
+        op,
+        &format!("ops[{i}].file"),
+        MediaKind::Video,
+    )?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_audio(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertMediaOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert(
+        pkg,
+        &mut doc,
+        &part,
+        &pres.root,
+        op,
+        &format!("ops[{i}].file"),
+        MediaKind::Audio,
+    )?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_media(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteMediaOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MediaNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_media(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetMediaOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MediaNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

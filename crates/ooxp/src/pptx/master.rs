@@ -2125,3 +2125,59 @@ fn remove_deco_in(el: &mut Element, idx: &mut usize, key: &ShapeKey) -> bool {
     }
     false
 }
+
+pub(crate) fn op_insert_placeholder(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    op: &super::request::InsertPlaceholderOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    match &op.host {
+        PlaceholderHost::Master { master, layout } => {
+            insert_placeholder(
+                pkg,
+                pres_part,
+                &pres.root,
+                *master,
+                *layout,
+                &op.type_name,
+                &op.text,
+                op.x,
+                op.y,
+                op.cx,
+                op.cy,
+                i,
+            )?;
+        }
+        PlaceholderHost::NotesMaster => {
+            let part = super::notes::ensure_notes_master(pkg, pres_part, pres)?;
+            write_placeholder_into(
+                pkg,
+                &part,
+                super::notes::notes_size(&pres.root),
+                &op.type_name,
+                &op.text,
+                op.x,
+                op.y,
+                op.cx,
+                op.cy,
+            )?;
+        }
+        PlaceholderHost::Handout => {
+            let part = super::handout::ensure_handout_master(pkg, pres_part, pres)?;
+            write_placeholder_into(
+                pkg,
+                &part,
+                canvas_sz(&pres.root),
+                &op.type_name,
+                &op.text,
+                op.x,
+                op.y,
+                op.cx,
+                op.cy,
+            )?;
+        }
+    };
+    Ok(())
+}

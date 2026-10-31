@@ -583,3 +583,127 @@ fn parse_emu(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>
         )),
     }
 }
+
+pub(crate) fn op_insert_math(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &InsertMathOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert(pkg, &mut doc, &part, op)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_math(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &SetMathOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_math(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &DeleteMathOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_math_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &SetMathSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_size(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_math_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &SetMathPosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_pos(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

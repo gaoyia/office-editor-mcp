@@ -494,3 +494,33 @@ fn remove_show_at(lst: &mut Element, nth: usize) {
         lst.children.remove(i);
     }
 }
+
+pub(crate) fn op_insert_custom_show(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertCustomShowOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let mut op = op.clone();
+    op.slides = super::apply::slides_now(slides, &op.slides, i)?;
+    insert(pkg, pres_part, pres, &op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_custom_show(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetCustomShowOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let mut op = op.clone();
+    if let Some(list) = &op.slides {
+        op.slides = Some(super::apply::slides_now(slides, list, i)?);
+    }
+    set(pkg, pres_part, pres, &op, i)?;
+    Ok(())
+}

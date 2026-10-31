@@ -553,3 +553,21 @@ fn ids_match(file: &str, req: &str) -> bool {
         _ => file == req,
     }
 }
+
+pub(crate) fn op_set_notes_text(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetNotesTextOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::shape::slide_at_start(slides, op.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound { n: op.slide as u32 },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    apply_set_notes_text(pkg, pres_part, pres, &meta.part, op, i)?;
+    Ok(())
+}

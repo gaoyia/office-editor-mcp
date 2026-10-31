@@ -2391,3 +2391,406 @@ fn ensure_a<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
     }
     parent.child_by_local_mut(local).expect("刚插入的 a 子元素")
 }
+
+pub(crate) fn op_insert_table(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertTableOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_notes_or_slide(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_table(pkg, &part, &mut doc, &pres.root, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_table(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteTableOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_table(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_row(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertRowOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let (slide, on_notes, master) = match &op.target {
+        TableOrRow::Table(t) => (t.slide, t.on_notes, t.master),
+        TableOrRow::Row { table, .. } => (table.slide, table.on_notes, table.master),
+    };
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        slide,
+        on_notes,
+        master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_row(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_row(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteRowOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.table.slide,
+        op.table.on_notes,
+        op.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_row(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_col(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertColOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_col(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_col(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteColOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_col(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_cell_text(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableCellTextOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.table.slide,
+        op.target.table.on_notes,
+        op.target.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_cell_text(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_cell_fill(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableCellFillOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.table.slide,
+        op.target.table.on_notes,
+        op.target.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_cell_fill(pkg, &part, &mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_cell_borders(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableCellBordersOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.table.slide,
+        op.target.table.on_notes,
+        op.target.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_cell_borders(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_cell_inset(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableCellInsetOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.table.slide,
+        op.target.table.on_notes,
+        op.target.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_cell_inset(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_cell_pr(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableCellPrOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.table.slide,
+        op.target.table.on_notes,
+        op.target.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_cell_pr(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_style_ref(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableStyleRefOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_table_style_ref(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTablePosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_pos(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_size(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_col_widths(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableColWidthsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_col_widths(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_table_tr_height(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTableTrHeightOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.table.slide,
+        op.table.on_notes,
+        op.table.master,
+        ErrorKind::TableNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_tr_height(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

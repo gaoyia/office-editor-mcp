@@ -1455,3 +1455,178 @@ pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
     }
     el.set_attr(local, value);
 }
+
+pub(crate) fn op_replace_picture(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::ReplacePictureOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if op.target.comment.is_some() {
+        let meta = super::shape::slide_at_start(slides, op.target.slide).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: op.target.slide as u32,
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::comments::replace_picture(pkg, meta, op, i)?;
+        return Ok(());
+    }
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::PictureNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    let dirty = replace_picture(pkg, &part, &mut doc.root, op, i)?;
+    if dirty {
+        super::list_pin::write_part(pkg, &part, &doc)?;
+    };
+    Ok(())
+}
+
+pub(crate) fn op_insert_picture(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertPictureOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if op.comment.is_some() {
+        let meta = super::shape::slide_at_start(slides, op.slide).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound { n: op.slide as u32 },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::comments::insert_picture(pkg, meta, op, i)?;
+        return Ok(());
+    }
+    let part = super::apply::ensure_host_part(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_picture(
+        pkg,
+        &mut doc,
+        &part,
+        &pres.root,
+        op,
+        &format!("ops[{i}].file"),
+    )?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_picture(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeletePictureOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if op.target.comment.is_some() {
+        let meta = super::shape::slide_at_start(slides, op.target.slide).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: op.target.slide as u32,
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        super::comments::delete_picture(pkg, meta, op, i)?;
+        return Ok(());
+    }
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::PictureNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_picture(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_picture_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetPictureSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let missing = match &op.target {
+        PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
+        PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
+    };
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide(),
+        op.target.on_notes(),
+        op.target.master(),
+        missing,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_picture_size(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_picture_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetPicturePosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let missing = match &op.target {
+        PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
+        PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
+    };
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide(),
+        op.target.on_notes(),
+        op.target.master(),
+        missing,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    set_picture_pos(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

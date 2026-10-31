@@ -352,3 +352,27 @@ pub(crate) fn check_size(v: i64, field: &str, op_index: usize) -> Result<(), Err
         format!("ops[{op_index}].{field}"),
     ))
 }
+
+pub(crate) fn op_set_slide_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    op: &super::request::SetSlideSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    set_slide_size(pres, op.cx, op.cy, op.type_name.as_deref(), i)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_notes_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    op: &super::request::SetNotesSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    set_notes_size(pres, op.cx, op.cy, i)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
+    Ok(())
+}

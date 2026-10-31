@@ -8,7 +8,8 @@ use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    InsertShapeOp, SetShapeFillOp, SetShapeGeomOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
+    InsertShapeOp, SetShapeFillOp, SetShapeFormatOp, SetShapeGeomOp, SetShapeLineOp, SetShapePosOp,
+    SetShapeSizeOp,
 };
 use super::DML_NS;
 
@@ -843,4 +844,456 @@ fn prune_anim_pass(el: &mut Element) {
             _ => true,
         }
     });
+}
+
+use super::request::InsertShapeHost;
+pub(crate) fn op_set_shape_text(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeTextOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if op.id.starts_with("master:")
+        || op.id.starts_with("notesMaster/")
+        || op.id.starts_with("handout/")
+    {
+        let ph = super::master::parse_placeholder_id(&op.id, i)?;
+        super::master::set_text(pkg, pres_part, &pres.root, &ph, &op.id, &op.text, i)?;
+        return Ok(());
+    }
+    let target = parse_shape_id(&op.id, i)?;
+    let meta = slide_at_start(slides, target.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part = if target.on_notes {
+        super::notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    } else {
+        meta.part.clone()
+    };
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    if target.on_notes {
+        if let Some(sp) = super::notes::find_any_sp_by_key(&doc.root, &target.key) {
+            super::notes::reject_slide_image(sp, i)?;
+        }
+    }
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if target.on_notes {
+        super::notes::reject_slide_image(sp, i)?;
+    }
+    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeHasNoText { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    crate::drawing_text::set_txbody_text(tx, &op.text);
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_runs(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeRunsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if op.id.starts_with("master:")
+        || op.id.starts_with("notesMaster/")
+        || op.id.starts_with("handout/")
+    {
+        let ph = super::master::parse_placeholder_id(&op.id, i)?;
+        super::master::set_runs(pkg, pres_part, &pres.root, &ph, &op.id, &op.runs, i)?;
+        return Ok(());
+    }
+    let target = parse_shape_id(&op.id, i)?;
+    let meta = slide_at_start(slides, target.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part = if target.on_notes {
+        super::notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    } else {
+        meta.part.clone()
+    };
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    if target.on_notes {
+        if let Some(sp) = super::notes::find_any_sp_by_key(&doc.root, &target.key) {
+            super::notes::reject_slide_image(sp, i)?;
+        }
+    }
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if target.on_notes {
+        super::notes::reject_slide_image(sp, i)?;
+    }
+    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeHasNoText { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    crate::drawing_text::set_txbody_runs(tx, &op.runs, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_shape(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertShapeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    match &op.host {
+        InsertShapeHost::Master { master, layout } => {
+            super::master::insert_deco_shape(pkg, pres_part, &pres.root, *master, *layout, op, i)?;
+        }
+        InsertShapeHost::Slide { slide, on_notes } => {
+            let meta = slide_at_start(slides, *slide).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::SlideNotFound { n: *slide as u32 },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let part = if *on_notes {
+                super::notes::ensure_notes_slide(pkg, pres_part, pres, &meta.part)?
+            } else {
+                meta.part.clone()
+            };
+            let mut doc = super::list_pin::parse_part(pkg, &part)?;
+            let canvas = if *on_notes {
+                super::notes::notes_size(&pres.root)
+            } else {
+                super::picture::canvas_size(&pres.root)
+            };
+            insert_shape(&mut doc, canvas, op)?;
+            super::list_pin::write_part(pkg, &part, &doc)?;
+        }
+    };
+    Ok(())
+}
+
+pub(crate) fn op_delete_shape(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteShapeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::delete_deco(pkg, pres_part, &pres.root, ph, &op.id, i)?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    let Some(spid) = try_remove_shape(&mut doc.root, &target.key) else {
+        return Err(Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    };
+    if let Some(id) = spid {
+        strip_timing_for_spid(&mut doc.root, &id);
+    }
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapePosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::set_pos(pkg, pres_part, &pres.root, ph, &op.id, op.x, op.y, i)?;
+        return Ok(());
+    }
+    if let Some(cxn) = &op.cxn {
+        let part = super::apply::host_xml_part(
+            pkg,
+            pres_part,
+            &pres.root,
+            slides,
+            cxn.slide,
+            cxn.on_notes,
+            cxn.master,
+            ErrorKind::ConnectorNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
+        super::connector::set_pos(&mut doc, op, i)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    set_shape_pos(&mut doc, op, i)?;
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::set_size(pkg, pres_part, &pres.root, ph, &op.id, op.cx, op.cy, i)?;
+        return Ok(());
+    }
+    if let Some(cxn) = &op.cxn {
+        let part = super::apply::host_xml_part(
+            pkg,
+            pres_part,
+            &pres.root,
+            slides,
+            cxn.slide,
+            cxn.on_notes,
+            cxn.master,
+            ErrorKind::ConnectorNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
+        super::connector::set_size(&mut doc, op, i)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    set_shape_size(&mut doc, op, i)?;
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_fill(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeFillOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::set_fill(
+            pkg,
+            pres_part,
+            &pres.root,
+            ph,
+            &op.id,
+            op.color.as_deref(),
+            i,
+        )?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    set_shape_fill(&mut doc, op, i)?;
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_line(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeLineOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::set_line(
+            pkg,
+            pres_part,
+            &pres.root,
+            ph,
+            &op.id,
+            op.color.as_deref(),
+            op.width,
+            i,
+        )?;
+        return Ok(());
+    }
+    if let Some(cxn) = &op.cxn {
+        let part = super::apply::host_xml_part(
+            pkg,
+            pres_part,
+            &pres.root,
+            slides,
+            cxn.slide,
+            cxn.on_notes,
+            cxn.master,
+            ErrorKind::ConnectorNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
+        super::connector::set_line(&mut doc, op, i)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    set_shape_line(&mut doc, op, i)?;
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_geom(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetShapeGeomOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    if let Some(ph) = &op.placeholder {
+        super::master::set_geom(pkg, pres_part, &pres.root, ph, &op.id, &op.paths, i)?;
+        return Ok(());
+    }
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let mut doc =
+        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    if target.on_notes {
+        reject_notes_image(&doc.root, &target.key, i)?;
+    }
+    set_shape_geom(&mut doc, op, i)?;
+    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    Ok(())
+}
+
+fn reject_notes_image(root: &crate::xml::Element, key: &ShapeKey, i: usize) -> Result<(), Error> {
+    if let Some(sp) = super::notes::find_any_sp_by_key(root, key) {
+        super::notes::reject_slide_image(sp, i)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn op_set_shape_format(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &crate::xml::Element,
+    slides: &[SlideMeta],
+    op: &SetShapeFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    if op.id.starts_with("master:")
+        || op.id.starts_with("notesMaster/")
+        || op.id.starts_with("handout/")
+    {
+        let ph = super::master::parse_placeholder_id(&op.id, i)?;
+        return super::master::set_format(pkg, pres_part, pres_root, &ph, &op.id, &op.format, i);
+    }
+    if op.id.contains("/table:") {
+        let target = super::table::parse_cell_id(&op.id, &format!("ops[{i}].id"))?;
+        let part = super::apply::notes_or_slide_part(
+            pkg,
+            pres_part,
+            pres_root,
+            slides,
+            target.table.slide,
+            target.table.on_notes,
+            target.table.master,
+            ErrorKind::TableNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
+        super::table::set_cell_format(&mut doc, &op.id, &target, &op.format, i)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
+        return Ok(());
+    }
+    let target = parse_shape_id(&op.id, i)?;
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        pres_root,
+        slides,
+        target.slide,
+        target.on_notes,
+        target.master,
+        ErrorKind::ShapeNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    if target.on_notes {
+        if let Some(sp) = super::notes::find_any_sp_by_key(&doc.root, &target.key) {
+            super::notes::reject_slide_image(sp, i)?;
+        }
+    }
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if target.on_notes {
+        super::notes::reject_slide_image(sp, i)?;
+    }
+    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeHasNoText { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    crate::drawing_text::apply(tx, &op.format);
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
 }

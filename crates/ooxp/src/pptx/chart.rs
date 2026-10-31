@@ -1309,3 +1309,462 @@ fn ensure_a<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
     }
     parent.child_by_local_mut(local).expect("刚插入的 a 子元素")
 }
+
+pub(crate) fn op_insert_chart(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertChartOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_notes_or_slide(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_chart(pkg, &mut doc, &part, &pres.root, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_chart(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteChartOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_chart(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_title(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartTitleOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_title(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_series(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartSeriesOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_series(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_add_chart_series(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::AddChartSeriesOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_add_series(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_chart_series(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteChartSeriesOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_delete_series(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_type(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartTypeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_type(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_axis_title(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartAxisTitleOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_axis_title(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_legend(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartLegendOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_legend(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_data_labels(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartDataLabelsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_data_labels(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_size(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartPosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_pos(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_trendline(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertTrendlineOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_insert_trendline(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_trendline(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetTrendlineOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_set_trendline(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_trendline(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteTrendlineOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_delete_trendline(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_insert_error_bars(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertErrorBarsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_insert_error_bars(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_error_bars(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetErrorBarsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_set_error_bars(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_error_bars(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteErrorBarsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_delete_error_bars(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_chart_series_axis(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetChartSeriesAxisOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::ChartNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_series_axis(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}

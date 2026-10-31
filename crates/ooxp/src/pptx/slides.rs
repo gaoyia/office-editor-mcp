@@ -453,3 +453,63 @@ fn drop_if_unused(
     }
     Ok(())
 }
+
+pub(crate) fn op_insert_slide(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &mut Vec<super::shape::SlideMeta>,
+    frozen: &super::shape::SlideFreeze,
+    op: &super::request::InsertSlideOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    insert(pkg, pres_part, pres, slides, op, i)?;
+    *slides = super::shape::list_slides(pkg, pres_part, &pres.root)?;
+    frozen.mark_start(slides);
+    Ok(())
+}
+
+pub(crate) fn op_delete_slide(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &mut Vec<super::shape::SlideMeta>,
+    frozen: &super::shape::SlideFreeze,
+    op: &super::request::DeleteSlideOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    delete(pkg, pres_part, pres, slides, op, i)?;
+    *slides = super::shape::list_slides(pkg, pres_part, &pres.root)?;
+    frozen.mark_start(slides);
+    Ok(())
+}
+
+pub(crate) fn op_move_slide(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &mut Vec<super::shape::SlideMeta>,
+    frozen: &super::shape::SlideFreeze,
+    op: &super::request::MoveSlideOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    move_slide(pres_part, pres, pkg, slides, op, i)?;
+    *slides = super::shape::list_slides(pkg, pres_part, &pres.root)?;
+    frozen.mark_start(slides);
+    Ok(())
+}
+
+pub(crate) fn op_set_slide_hidden(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &mut Vec<super::shape::SlideMeta>,
+    frozen: &super::shape::SlideFreeze,
+    op: &super::request::SetSlideHiddenOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    set_hidden(pkg, slides, op, i)?;
+    *slides = super::shape::list_slides(pkg, pres_part, &pres.root)?;
+    frozen.mark_start(slides);
+    Ok(())
+}

@@ -742,3 +742,40 @@ fn remove_sid_from_section_lst(lst: &mut Element, sid: u32) {
         }
     }
 }
+
+pub(crate) fn op_insert_slide_section(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertSlideSectionOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let mut op = op.clone();
+    if let Some(n) = op.start {
+        op.start = Some(super::apply::slide_now(
+            slides,
+            n,
+            format!("ops[{i}].start"),
+        )?);
+    }
+    insert(pkg, pres_part, pres, &op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_slide_section(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &mut Vec<super::shape::SlideMeta>,
+    frozen: &super::shape::SlideFreeze,
+    op: &super::request::SetSlideSectionOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let mut op = op.clone();
+    op.slide = super::apply::slide_now(slides, op.slide, format!("ops[{i}].id"))?;
+    set_slide(pkg, pres_part, pres, &op, i)?;
+    *slides = super::shape::list_slides(pkg, pres_part, &pres.root)?;
+    frozen.mark_start(slides);
+    Ok(())
+}

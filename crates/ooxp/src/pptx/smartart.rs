@@ -1016,3 +1016,253 @@ fn retarget(
     }
     Ok(())
 }
+
+pub(crate) fn op_insert_smart_art(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &mut crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::InsertSmartArtOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::ensure_notes_or_slide(
+        pkg,
+        pres_part,
+        pres,
+        slides,
+        op.slide,
+        op.on_notes,
+        op.master,
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    insert_smartart(pkg, &mut doc, &part, &pres.root, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_smart_art(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteSmartArtOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    delete_smartart(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_text(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtTextOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.diagram.slide,
+        op.target.diagram.on_notes,
+        op.target.diagram.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_text(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_add_smart_art_point(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::AddSmartArtPointOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let (slide, on_notes, master) = match &op.parent {
+        AddParent::Diagram(t) => (t.slide, t.on_notes, t.master),
+        AddParent::Point(p) => (p.diagram.slide, p.diagram.on_notes, p.diagram.master),
+    };
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        slide,
+        on_notes,
+        master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_add_point(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_delete_smart_art_point(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::DeleteSmartArtPointOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.diagram.slide,
+        op.target.diagram.on_notes,
+        op.target.diagram.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_delete_point(pkg, &doc.root, &part, op, i)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_size(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtSizeOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_size(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_pos(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtPosOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_pos(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_colors(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtColorsOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_colors(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_style(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtStyleOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_style(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_set_smart_art_layout(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::SetSmartArtLayoutOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let part = super::apply::notes_or_slide_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        op.target.slide,
+        op.target.on_notes,
+        op.target.master,
+        ErrorKind::SmartArtNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    apply_layout(pkg, &mut doc, &part, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}

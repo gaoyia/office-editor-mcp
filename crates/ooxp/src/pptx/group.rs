@@ -401,3 +401,51 @@ fn at_mut<'a>(el: &'a mut Element, path: &[usize]) -> Option<&'a mut Element> {
     };
     at_mut(child, rest)
 }
+
+pub(crate) fn op_group_shapes(
+    pkg: &mut crate::opc::Package,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::GroupShapesOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let meta = super::shape::slide_at_start(slides, op.slide).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound { n: op.slide as u32 },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part = meta.part.clone();
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    group(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
+
+pub(crate) fn op_ungroup(
+    pkg: &mut crate::opc::Package,
+    pres_part: &str,
+    pres: &crate::xml::Document,
+    slides: &[super::shape::SlideMeta],
+    op: &super::request::UngroupOp,
+    i: usize,
+) -> Result<(), crate::error::Error> {
+    let (slide, on_notes, master) = match &op.member {
+        MemberId::Shape(t) => (t.slide, t.on_notes, t.master),
+        MemberId::Cxn(t) => (t.slide, t.on_notes, t.master),
+    };
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        slide,
+        on_notes,
+        master,
+        ErrorKind::SlideNotFound { n: slide as u32 },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    ungroup(&mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
+    Ok(())
+}
