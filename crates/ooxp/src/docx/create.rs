@@ -1,6 +1,5 @@
 //! 从领域 JSON 生成 Transitional 文档。
 
-
 use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
@@ -21,9 +20,7 @@ use super::ole::InsertOleOp;
 use super::para::{self, ParaTarget};
 use super::picture::{self, WrapPos};
 use super::request::create_types::*;
-use super::request::doc_extra::{
-    self, DocExtra, DrawingHlink, TableExtra,
-};
+use super::request::doc_extra::{self, DocExtra, DrawingHlink, TableExtra};
 use super::request::para_remain::{self, GroupSpec};
 use super::request::{
     DocxOp, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp,
@@ -40,8 +37,8 @@ use super::shape;
 use super::smartart::{self};
 use super::tbl::{self, TableRef, TableStory};
 use super::{
-    CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, REL_APP, REL_CORE, REL_FOOTER, REL_HEADER, REL_OFFICE_DOCUMENT, REL_SETTINGS,
-    REL_STYLES,
+    CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, REL_APP, REL_CORE,
+    REL_FOOTER, REL_HEADER, REL_OFFICE_DOCUMENT, REL_SETTINGS, REL_STYLES,
 };
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
