@@ -144,10 +144,9 @@ pub fn insert_edit_range(
 
 pub fn delete_edit_range(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(), Error> {
     let hits = collect_hits(root);
-    if n < 1 || n > hits.len() {
+    let Some(hit) = para::pick_collected(root, hits, n, "perm", |hit| hit.start.as_slice()) else {
         return Err(missing_perm_err(id, i));
-    }
-    let hit = &hits[n - 1];
+    };
     let mut paths = vec![hit.start.clone()];
     if let Some(end) = &hit.end {
         paths.push(end.clone());
@@ -176,6 +175,14 @@ fn collect_hits(root: &Element) -> Vec<PermHit> {
         });
     }
     out
+}
+
+pub(crate) fn pin_perms(root: &mut Element) {
+    let paths: Vec<_> = collect_hits(root)
+        .into_iter()
+        .map(|hit| hit.start)
+        .collect();
+    para::pin_collected(root, &paths, "perm");
 }
 
 fn walk_perm(
@@ -240,6 +247,7 @@ fn walk_xml_ids(el: &Element, max: &mut i64) {
 
 fn insert_perm_start(p: &mut Element, xml_id: &str, ed_grp: Option<&str>, ed: Option<&str>) {
     let mut start = Element::new(p.prefixed("permStart"));
+    crate::xml::mark_new(&mut start, "perm");
     let id_key = start.prefixed("id");
     start.set_attr(&id_key, xml_id);
     if let Some(g) = ed_grp {

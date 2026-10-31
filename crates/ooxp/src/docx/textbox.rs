@@ -310,7 +310,7 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
     let wrap = drawing_wrap(drawing, kind);
     let (cx, cy) = drawing_extent(drawing)?;
     let (doc_pr_id, name) = doc_pr(drawing);
-    let (id, stable) = box_id(host, &doc_pr_id, index);
+    let (id, stable) = box_id(host, &doc_pr_id, drawing, index);
     let content = find_txbx_content(drawing);
     let counts = content_counts(content, &id)?;
     let (story_id, seq) = story_of(drawing);
@@ -350,7 +350,7 @@ fn txbx_from_wsp(
     extent: (Option<i64>, Option<i64>),
 ) -> Result<TxbxInfo, Error> {
     let (doc_pr_id, name) = cnv_pr(wsp);
-    let (id, stable) = box_id(host, &doc_pr_id, index);
+    let (id, stable) = box_id(host, &doc_pr_id, wsp, index);
     let content = find_txbx_content(wsp);
     let counts = content_counts(content, &id)?;
     let (story_id, seq) = story_of(wsp);
@@ -381,10 +381,41 @@ fn txbx_from_wsp(
     })
 }
 
-fn box_id(host: &str, doc_pr_id: &Option<String>, index: usize) -> (String, bool) {
+fn index_label(el: &Element, live: usize) -> String {
+    match el.attr(&crate::xml::pin_attr("txbx")) {
+        Some(pin) if !pin.is_empty() => pin.to_string(),
+        Some(_) => "new".into(),
+        None => live.to_string(),
+    }
+}
+
+fn box_id(host: &str, doc_pr_id: &Option<String>, el: &Element, index: usize) -> (String, bool) {
     match doc_pr_id {
         Some(d) => (format!("{host}/txbx:{d}"), true),
-        None => (format!("{host}/txbx:index:{index}"), false),
+        None => (
+            format!("{host}/txbx:index:{}", index_label(el, index)),
+            false,
+        ),
+    }
+}
+
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "txbx", &txbx_step);
+}
+
+fn txbx_step(el: &Element) -> super::inline_pin::PinStep {
+    use super::inline_pin::PinStep;
+    if super::watermark::is_watermark_drawing(el) {
+        return PinStep::Skip;
+    }
+    match el.local_name() {
+        "txbxContent" | "object" => PinStep::Skip,
+        "drawing" if is_group(el) => PinStep::Descend,
+        "drawing" if is_textbox(el) => PinStep::Member,
+        "drawing" => PinStep::Skip,
+        "wsp" if has_txbx(el) => PinStep::Member,
+        _ => PinStep::Descend,
     }
 }
 
@@ -539,7 +570,7 @@ fn find_txbx_content_walk<'a>(
             if is_textbox(el) {
                 *index += 1;
                 let (doc_pr_id, _) = doc_pr(el);
-                let (id, _) = box_id(host_para_id, &doc_pr_id, *index);
+                let (id, _) = box_id(host_para_id, &doc_pr_id, el, *index);
                 if id == want_id {
                     if let Some(content) = find_txbx_content(el) {
                         return crate::xml::Search::Hit(content);
@@ -565,7 +596,7 @@ fn find_group_content<'a>(
         if el.local_name() == "wsp" && has_txbx(el) {
             *index += 1;
             let (doc_pr_id, _) = cnv_pr(el);
-            let (id, _) = box_id(host_para_id, &doc_pr_id, *index);
+            let (id, _) = box_id(host_para_id, &doc_pr_id, el, *index);
             if id == want_id {
                 if let Some(content) = find_txbx_content(el) {
                     return crate::xml::Search::Hit(content);
@@ -845,6 +876,7 @@ pub fn insert_textbox(p: &mut Element, doc_pr: u32, cx: i64, cy: i64, text: &str
 
 pub fn insert_ac(p: &mut Element, ac: Element) {
     let mut run = Element::new(p.prefixed("r"));
+    crate::xml::mark_new(&mut run, "run");
     run.push_element(ac);
     p.children.push(Node::Element(run));
 }
@@ -986,7 +1018,7 @@ fn find_content_by_key_walk<'a>(
             if is_textbox(el) {
                 *index += 1;
                 let (doc_pr_id, _) = doc_pr(el);
-                if para::matches_txbx_key(&doc_pr_id, *index, key) {
+                if para::matches_txbx_key(el, &doc_pr_id, *index, key) {
                     if let Some(content) = find_txbx_content(el) {
                         return crate::xml::Search::Hit(content);
                     }
@@ -1010,7 +1042,7 @@ fn find_group_content_by_key<'a>(
         if el.local_name() == "wsp" && has_txbx(el) {
             *index += 1;
             let (doc_pr_id, _) = cnv_pr(el);
-            if para::matches_txbx_key(&doc_pr_id, *index, key) {
+            if para::matches_txbx_key(el, &doc_pr_id, *index, key) {
                 if let Some(content) = find_txbx_content(el) {
                     return crate::xml::Search::Hit(content);
                 }
@@ -1065,7 +1097,12 @@ fn find_content_by_key_walk_mut<'a>(
             }
             if textbox {
                 *index += 1;
-                if para::matches_txbx_key(&doc_pr_id, *index, key) {
+                if para::matches_txbx_key(
+                    crate::xml::element_at_ref(el, &path),
+                    &doc_pr_id,
+                    *index,
+                    key,
+                ) {
                     if let Some(rel) =
                         rel_path_to_local(crate::xml::element_at_ref(el, &path), "txbxContent")
                     {
@@ -1097,7 +1134,7 @@ fn group_content_rel_path(el: &Element, key: &TxbxKey, index: &mut usize) -> Opt
         if node.local_name() == "wsp" && has_txbx(node) {
             *index += 1;
             let (doc_pr_id, _) = cnv_pr(node);
-            if para::matches_txbx_key(&doc_pr_id, *index, key) {
+            if para::matches_txbx_key(node, &doc_pr_id, *index, key) {
                 if let Some(rel) = rel_path_to_local(node, "txbxContent") {
                     let mut full = path;
                     full.extend(rel);
@@ -1200,7 +1237,7 @@ fn drawing_matches(drawing: &Element, key: &TxbxKey, index: &mut usize) -> bool 
             if e.local_name() == "wsp" && has_txbx(e) {
                 *index += 1;
                 let (doc_pr_id, _) = cnv_pr(e);
-                if para::matches_txbx_key(&doc_pr_id, *index, key) {
+                if para::matches_txbx_key(e, &doc_pr_id, *index, key) {
                     hit = true;
                 }
             }
@@ -1210,7 +1247,7 @@ fn drawing_matches(drawing: &Element, key: &TxbxKey, index: &mut usize) -> bool 
     if is_textbox(drawing) {
         *index += 1;
         let (doc_pr_id, _) = doc_pr(drawing);
-        return para::matches_txbx_key(&doc_pr_id, *index, key);
+        return para::matches_txbx_key(drawing, &doc_pr_id, *index, key);
     }
     false
 }
@@ -1248,7 +1285,7 @@ fn wsp_path_walk(el: &Element, key: &TxbxKey, index: &mut usize, path: &mut Vec<
         if is_textbox(el) {
             *index += 1;
             let (doc_pr_id, _) = doc_pr(el);
-            if para::matches_txbx_key(&doc_pr_id, *index, key) {
+            if para::matches_txbx_key(el, &doc_pr_id, *index, key) {
                 return wsp_path_first_wsp(el, path);
             }
         }
@@ -1278,7 +1315,7 @@ fn wsp_path_in_group(
     if el.local_name() == "wsp" && has_txbx(el) {
         *index += 1;
         let (doc_pr_id, _) = cnv_pr(el);
-        return para::matches_txbx_key(&doc_pr_id, *index, key);
+        return para::matches_txbx_key(el, &doc_pr_id, *index, key);
     }
     for (i, n) in el.children.iter().enumerate() {
         if let Node::Element(e) = n {
@@ -1402,7 +1439,7 @@ fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bo
                     } else if is_textbox(d) {
                         *index += 1;
                         let (doc_pr_id, _) = doc_pr(d);
-                        para::matches_txbx_key(&doc_pr_id, *index, key)
+                        para::matches_txbx_key(d, &doc_pr_id, *index, key)
                     } else {
                         false
                     }
@@ -1500,7 +1537,7 @@ fn remove_group_wsp(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool 
             let hit = match &el.children[i] {
                 Node::Element(c) => {
                     let (doc_pr_id, _) = cnv_pr(c);
-                    para::matches_txbx_key(&doc_pr_id, *index, key)
+                    para::matches_txbx_key(c, &doc_pr_id, *index, key)
                 }
                 Node::Text(_) | Node::Raw(_) => false,
             };

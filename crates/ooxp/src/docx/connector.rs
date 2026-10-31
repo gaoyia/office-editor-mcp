@@ -335,9 +335,37 @@ fn looks_like_host(id: &str) -> bool {
         || super::hf::HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
 }
 
-fn matches_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "cxn", &cxn_step);
+}
+
+fn cxn_step(el: &Element) -> super::inline_pin::PinStep {
+    use super::inline_pin::PinStep;
+    if super::watermark::is_watermark_drawing(el) {
+        return PinStep::Skip;
+    }
+    if el.local_name() == "txbxContent" {
+        return PinStep::Skip;
+    }
+    if el.local_name() == "drawing" {
+        if textbox::is_group(el) {
+            return PinStep::Descend;
+        }
+        if is_connector_drawing(el) {
+            return PinStep::Member;
+        }
+        return PinStep::Skip;
+    }
+    if is_connector_wsp(el) {
+        return PinStep::Member;
+    }
+    PinStep::Descend
+}
+
+fn matches_key(el: &Element, doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
     match key {
-        TxbxKey::Index(n) => *n == index,
+        TxbxKey::Index(n) => crate::xml::pin_matches(el, &crate::xml::pin_attr("cxn"), *n, index),
         TxbxKey::DocPr(want) => {
             let Some(got) = doc_pr_id.as_deref() else {
                 return false;
@@ -368,7 +396,7 @@ fn find_cxn_walk<'a>(el: &'a Element, key: &TxbxKey, index: &mut usize) -> Optio
                         } else {
                             doc_pr(el).0
                         };
-                        if hit.is_none() && matches_key(&id, *index, key) {
+                        if hit.is_none() && matches_key(e, &id, *index, key) {
                             hit = Some(());
                         }
                     }
@@ -381,7 +409,7 @@ fn find_cxn_walk<'a>(el: &'a Element, key: &TxbxKey, index: &mut usize) -> Optio
             if is_connector_drawing(el) {
                 *index += 1;
                 let (doc_pr_id, _) = doc_pr(el);
-                if matches_key(&doc_pr_id, *index, key) {
+                if matches_key(el, &doc_pr_id, *index, key) {
                     return crate::xml::Search::Hit(el);
                 }
             }
@@ -421,7 +449,7 @@ fn find_cxn_wsp_mut<'a>(
                 if is_connector_drawing(el) && !textbox::is_group(el) {
                     *index += 1;
                     let (doc_pr_id, _) = doc_pr(el);
-                    if !matches_key(&doc_pr_id, *index, key) {
+                    if !matches_key(el, &doc_pr_id, *index, key) {
                         return crate::xml::SearchMut::Skip;
                     }
                 }
@@ -457,7 +485,7 @@ fn find_group_cxn_wsp_in<'a>(
             } else {
                 outer_doc_pr.clone()
             };
-            if matches_key(&id, *index, key) {
+            if matches_key(el, &id, *index, key) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -533,7 +561,7 @@ fn remove_cxn_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {
                 Node::Element(d) if is_connector_drawing(d) => {
                     *index += 1;
                     let (doc_pr_id, _) = doc_pr(d);
-                    matches_key(&doc_pr_id, *index, key)
+                    matches_key(d, &doc_pr_id, *index, key)
                 }
                 _ => false,
             };
@@ -572,7 +600,7 @@ fn remove_group_cxn(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool 
                     if id.is_none() {
                         id = doc_pr(el).0;
                     }
-                    matches_key(&id, *index, key)
+                    matches_key(c, &id, *index, key)
                 }
                 Node::Text(_) | Node::Raw(_) => false,
             };

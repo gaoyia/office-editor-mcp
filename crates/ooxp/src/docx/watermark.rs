@@ -554,9 +554,26 @@ fn parse_wm_key(s: &str, path: &str) -> Result<WmKey, Error> {
     Ok(WmKey::DocPr(s.to_string()))
 }
 
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "watermark", &wm_step);
+}
+
+fn wm_step(el: &Element) -> super::inline_pin::PinStep {
+    use super::inline_pin::PinStep;
+    match el.local_name() {
+        "txbxContent" | "object" => PinStep::Skip,
+        "drawing" if is_watermark_drawing(el) => PinStep::Member,
+        "drawing" => PinStep::Skip,
+        _ => PinStep::Descend,
+    }
+}
+
 fn matches_key(drawing: &Element, key: &WmKey, index: usize) -> bool {
     match key {
-        WmKey::Index(n) => index == *n,
+        WmKey::Index(n) => {
+            crate::xml::pin_matches(drawing, &crate::xml::pin_attr("watermark"), *n, index)
+        }
         WmKey::DocPr(want) => match doc_pr_id(drawing) {
             Some(got) => {
                 if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
@@ -1082,9 +1099,5 @@ fn load_cached<'a>(
     docs: &'a mut HashMap<String, Document>,
     name: &str,
 ) -> Result<&'a mut Document, Error> {
-    if !docs.contains_key(name) {
-        let bytes = pkg.get(name)?;
-        docs.insert(name.to_string(), xml::parse(bytes)?);
-    }
-    Ok(docs.get_mut(name).unwrap())
+    super::apply::load_part(pkg, docs, name)
 }

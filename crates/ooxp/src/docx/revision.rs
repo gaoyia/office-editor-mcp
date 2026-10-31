@@ -180,10 +180,10 @@ pub fn apply_revision(
     i: usize,
 ) -> Result<(), Error> {
     let hits = collect_rev_hits(root);
-    if n < 1 || n > hits.len() {
+    let Some((path, kind)) = para::pick_collected(root, hits, n, "rev", |hit| hit.0.as_slice())
+    else {
         return Err(missing(id, i));
-    }
-    let (path, kind) = hits[n - 1].clone();
+    };
     match (kind, accept) {
         (RevKind::Ins, true) | (RevKind::Del, false) => {
             unwrap_at(root, &path, kind == RevKind::Del)?
@@ -219,6 +219,14 @@ fn collect_rev_hits(root: &Element) -> Vec<(Vec<usize>, RevKind)> {
     let mut out = Vec::new();
     walk_rev(root, &path, WalkCtx::root(), &mut out);
     out
+}
+
+pub(crate) fn pin_revs(root: &mut Element) {
+    let paths: Vec<_> = collect_rev_hits(root)
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect();
+    para::pin_collected(root, &paths, "rev");
 }
 
 impl WalkCtx {

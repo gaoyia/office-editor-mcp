@@ -177,7 +177,7 @@ pub fn expr_of_omath(om: &Element) -> Vec<Value> {
 
 impl MathBody {
     pub fn to_omath(&self) -> Element {
-        match self {
+        let mut om = match self {
             Self::Text(t) => math::new_omath(t),
             Self::Expr(nodes) => {
                 let mut om = Element::new("m:oMath");
@@ -186,7 +186,9 @@ impl MathBody {
                 }
                 om
             }
-        }
+        };
+        crate::xml::mark_new(&mut om, "math");
+        om
     }
 
     pub fn to_omath_para_jc(&self, jc: Option<&str>) -> Element {

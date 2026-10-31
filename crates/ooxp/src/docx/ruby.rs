@@ -232,6 +232,7 @@ fn insert_at_body_end(root: &mut Element, spec: &InsertSpec<'_>, op_i: usize) ->
 
 fn new_ruby_run(parent: &Element, spec: &InsertSpec<'_>) -> Element {
     let mut ruby = Element::new(parent.prefixed("ruby"));
+    crate::xml::mark_new(&mut ruby, "ruby");
     let mut pr = Element::new(parent.prefixed("rubyPr"));
     push_pr_val(&mut pr, "rubyAlign", spec.align);
     push_pr_val(&mut pr, "hps", &spec.hps.to_string());
@@ -246,6 +247,7 @@ fn new_ruby_run(parent: &Element, spec: &InsertSpec<'_>) -> Element {
     base.push_element(ruby_text_run(&base, spec.base, spec.hps_base_text));
     ruby.push_element(base);
     let mut r = Element::new(parent.prefixed("r"));
+    crate::xml::mark_new(&mut r, "run");
     r.push_element(ruby);
     r
 }
@@ -369,10 +371,16 @@ fn walk_rubies(root: &Element, path: &[usize], in_del: bool, out: &mut Vec<RubyR
 
 fn ruby_at(root: &Element, n: usize, id: &str, i: usize) -> Result<RubyRec, Error> {
     let recs = collect_rubies(root);
-    if n < 1 || n > recs.len() {
-        return Err(missing_ruby(id, i));
-    }
-    Ok(recs.into_iter().nth(n - 1).expect("n 已检查"))
+    para::pick_collected(root, recs, n, "ruby", |rec| rec.path.as_slice())
+        .ok_or_else(|| missing_ruby(id, i))
+}
+
+pub(crate) fn pin_rubies(root: &mut Element) {
+    let paths: Vec<_> = collect_rubies(root)
+        .into_iter()
+        .map(|rec| rec.path)
+        .collect();
+    para::pin_collected(root, &paths, "ruby");
 }
 
 fn drop_path(root: &Element, ruby_path: &[usize]) -> Vec<usize> {

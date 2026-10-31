@@ -18,6 +18,16 @@
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。
 一次 apply 里，`n` 按 apply 开始时的文件解释。见 [json-contract.md](json-contract.md#稳定-id)。
 
+段内位置 id 同样按 apply 开始时解释：
+
+- `bookmark:{n}`、`field:{n}`、`link:{n}`、`math:{n}`、`ruby:{n}`、`sdt:{n}`、`perm:{n}`、`rev:{n}` 在各自故事里从 1 起。正文、页眉、页脚、脚注、尾注、批注各算一个故事。文本框里再从 1 起。
+- `run:{n}` 在各段里从 1 起，不跟故事共用。
+- 没有 `docPr/@id` 或 `cNvPr/@id` 时，`pic:index:{k}`、`txbx:index:{k}`、`cxn:index:{k}`、`shape:index:{k}`、`ink:index:{k}`、`chart:index:{k}`、`model3d:index:{k}` 在各段里从 1 起。
+- 页眉页脚里的 `pic:index:{k}`、`smartdiagram:index:{k}`、`ole:index:{k}` 在整份部件里从 1 起。正文里的 SmartArt 和 OLE 仍在各段里从 1 起。
+- 页眉水印 `watermark:index:{k}` 在该页眉部件里从 1 起。
+- 有内容编号的 id（`pic:{docPrId}` 等）不靠位置，本批增删不改它指向谁。
+- 本批新建的对象不占这些旧编号，要等下一次 inspect。被删掉的、以及接受或拒绝之后收掉的 `rev:{n}`，再点名报 `IdNotFound`。
+
 标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。
 文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；
 节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧、页面边框，以及是否链接到前一节，都可以读写。

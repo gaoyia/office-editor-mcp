@@ -315,10 +315,16 @@ fn walk_maths(root: &Element, path: &[usize], parent: &str, out: &mut Vec<MathRe
 
 fn math_at(root: &Element, n: usize, id: &str, i: usize) -> Result<MathRec, Error> {
     let recs = collect_maths(root);
-    if n < 1 || n > recs.len() {
-        return Err(missing_math(id, i));
-    }
-    Ok(recs.into_iter().nth(n - 1).expect("n 已检查"))
+    para::pick_collected(root, recs, n, "math", |rec| rec.path.as_slice())
+        .ok_or_else(|| missing_math(id, i))
+}
+
+pub(crate) fn pin_maths(root: &mut Element) {
+    let paths: Vec<_> = collect_maths(root)
+        .into_iter()
+        .map(|rec| rec.path)
+        .collect();
+    para::pin_collected(root, &paths, "math");
 }
 
 fn drop_path(root: &Element, omath_path: &[usize]) -> Vec<usize> {

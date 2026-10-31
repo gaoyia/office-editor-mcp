@@ -472,6 +472,39 @@ pub fn find_run_mut(p: &mut Element, n: usize) -> Option<&mut Element> {
     find_run_in(p, &mut idx, n)
 }
 
+pub(crate) fn pin_runs_in_paragraph(p: &mut Element) {
+    let mut n = 0usize;
+    pin_runs_walk(p, &mut n);
+}
+
+fn pin_runs_walk(el: &mut Element, n: &mut usize) {
+    if el.local_name() == "txbxContent" || el.local_name() == "del" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = para::first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                pin_runs_walk(child, n);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "r" {
+        *n += 1;
+        let attr = crate::xml::pin_attr("run");
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, n.to_string());
+        }
+        return;
+    }
+    let len = el.children.len();
+    for i in 0..len {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_runs_walk(child, n);
+        }
+    }
+}
+
 fn stamp_ppr(node: &mut Map<String, Value>, p: &Element) {
     let ppr = p.child_by_local("pPr");
     let align = ppr
@@ -612,7 +645,7 @@ fn find_run_in<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&'a
         }
         if el.local_name() == "r" {
             *idx += 1;
-            if *idx == n {
+            if crate::xml::pin_matches(el, &crate::xml::pin_attr("run"), n, *idx) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;

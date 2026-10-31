@@ -1064,9 +1064,29 @@ fn parse_diagram_key(rest: &str, path: &str) -> Result<DiagramKey, Error> {
     Ok(DiagramKey::DocPr(rest.to_string()))
 }
 
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "smartdiagram", &diagram_step);
+}
+
+fn diagram_step(el: &Element) -> super::inline_pin::PinStep {
+    use super::inline_pin::PinStep;
+    if super::watermark::is_watermark_drawing(el) {
+        return PinStep::Skip;
+    }
+    match el.local_name() {
+        "txbxContent" | "object" => PinStep::Skip,
+        "drawing" if is_smartart(el) => PinStep::Member,
+        "drawing" => PinStep::Skip,
+        _ => PinStep::Descend,
+    }
+}
+
 fn matches_key(drawing: &Element, key: &DiagramKey, index: usize) -> bool {
     match key {
-        DiagramKey::Index(n) => index == *n,
+        DiagramKey::Index(n) => {
+            crate::xml::pin_matches(drawing, &crate::xml::pin_attr("smartdiagram"), *n, index)
+        }
         DiagramKey::DocPr(want) => {
             let Some(got) = frame(drawing)
                 .and_then(|f| f.child_by_local("docPr"))
@@ -1478,11 +1498,7 @@ fn load_part<'a>(
     docs: &'a mut HashMap<String, Document>,
     part: &str,
 ) -> Result<&'a mut Document, Error> {
-    if !docs.contains_key(part) {
-        let parsed = xml::parse(pkg.get(part)?)?;
-        docs.insert(part.to_string(), parsed);
-    }
-    Ok(docs.get_mut(part).unwrap())
+    super::apply::load_part(pkg, docs, part)
 }
 
 fn part_for_para(

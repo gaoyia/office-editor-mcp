@@ -211,6 +211,7 @@ pub fn insert_hyperlink_el(
     tooltip: Option<&str>,
 ) {
     let mut hl = Element::new(p.prefixed("hyperlink"));
+    crate::xml::mark_new(&mut hl, "link");
     if let Some(rid) = rid {
         hl.set_attr("r:id", rid);
     }
@@ -249,10 +250,9 @@ pub fn set_hyperlink_tooltip(el: &mut Element, tooltip: Option<&str>) {
 
 pub fn unwrap_hyperlink(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(), Error> {
     let paths = collect_hyperlink_paths(root);
-    if n < 1 || n > paths.len() {
+    let Some(path) = para::pick_collected(root, paths, n, "link", |p| p.as_slice()) else {
         return Err(missing_link(id, i));
-    }
-    let path = paths[n - 1].clone();
+    };
     unwrap_at(root, &path)
 }
 
@@ -263,10 +263,9 @@ pub fn hyperlink_at_mut<'a>(
     i: usize,
 ) -> Result<&'a mut Element, Error> {
     let paths = collect_hyperlink_paths(root);
-    if n < 1 || n > paths.len() {
+    let Some(path) = para::pick_collected(root, paths, n, "link", |p| p.as_slice()) else {
         return Err(missing_link(id, i));
-    }
-    let path = paths[n - 1].clone();
+    };
     para::element_at_mut(root, &path).ok_or_else(|| missing_link(id, i))
 }
 
@@ -326,10 +325,10 @@ pub fn set_bookmark_name(
 ) -> Result<Option<(String, String)>, Error> {
     check_bookmark_name(name, i, "name")?;
     let pairs = collect_bookmark_pairs(root);
-    if n < 1 || n > pairs.len() {
+    let Some(pair) = para::pick_collected(root, pairs, n, "bookmark", |p| p.start.as_slice())
+    else {
         return Err(missing_bookmark(id, i));
-    }
-    let pair = &pairs[n - 1];
+    };
     if pair.name == name {
         return Ok(None);
     }
@@ -352,10 +351,11 @@ pub fn set_bookmark_name(
 
 pub fn delete_bookmark(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(), Error> {
     let pairs = collect_bookmark_pairs(root);
-    if n < 1 || n > pairs.len() {
+    let Some(pair) = para::pick_collected(root, pairs, n, "bookmark", |p| p.start.as_slice())
+    else {
         return Err(missing_bookmark(id, i));
-    }
-    let mut paths = vec![pairs[n - 1].start.clone(), pairs[n - 1].end.clone()];
+    };
+    let mut paths = vec![pair.start.clone(), pair.end.clone()];
     paths.sort_by(|a, b| b.cmp(a));
     for path in paths {
         remove_at(root, &path)?;
@@ -441,6 +441,19 @@ fn collect_bookmark_pairs(root: &Element) -> Vec<BookmarkPair> {
         });
     }
     out
+}
+
+pub(crate) fn pin_bookmarks(root: &mut Element) {
+    let paths: Vec<_> = collect_bookmark_pairs(root)
+        .into_iter()
+        .map(|pair| pair.start)
+        .collect();
+    para::pin_collected(root, &paths, "bookmark");
+}
+
+pub(crate) fn pin_hyperlinks(root: &mut Element) {
+    let paths = collect_hyperlink_paths(root);
+    para::pin_collected(root, &paths, "link");
 }
 
 fn walk_bookmarks(
@@ -560,6 +573,7 @@ fn unused_ooxp_name(taken: &HashSet<String>) -> String {
 
 pub(crate) fn insert_bookmark_start(p: &mut Element, xml_id: &str, name: &str) {
     let mut start = Element::new(p.prefixed("bookmarkStart"));
+    crate::xml::mark_new(&mut start, "bookmark");
     let id_key = start.prefixed("id");
     let name_key = start.prefixed("name");
     start.set_attr(&id_key, xml_id);

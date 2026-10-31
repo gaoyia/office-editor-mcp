@@ -276,10 +276,16 @@ pub fn missing_field_err(id: &str, i: usize) -> Error {
 
 fn field_at(root: &Element, n: usize, id: &str, i: usize) -> Result<FieldRec, Error> {
     let recs = collect_fields(root);
-    if n < 1 || n > recs.len() {
-        return Err(missing_field(id, i));
-    }
-    Ok(recs.into_iter().nth(n - 1).expect("n 已检查"))
+    para::pick_collected(root, recs, n, "field", |rec| rec.start.as_slice())
+        .ok_or_else(|| missing_field(id, i))
+}
+
+pub(crate) fn pin_fields(root: &mut Element) {
+    let paths: Vec<_> = collect_fields(root)
+        .into_iter()
+        .map(|rec| rec.start)
+        .collect();
+    para::pin_collected(root, &paths, "field");
 }
 
 fn collect_fields(root: &Element) -> Vec<FieldRec> {
@@ -641,6 +647,9 @@ fn remove_paths(root: &mut Element, mut paths: Vec<Vec<usize>>) -> Result<(), Er
 
 fn fld_char_run(parent: &Element, kind: &str, dirty: bool, form: Option<&FormWrite>) -> Element {
     let mut ch = Element::new(parent.prefixed("fldChar"));
+    if kind == "begin" {
+        crate::xml::mark_new(&mut ch, "field");
+    }
     let ty = ch.prefixed("fldCharType");
     ch.set_attr(&ty, kind);
     if dirty {
@@ -653,6 +662,7 @@ fn fld_char_run(parent: &Element, kind: &str, dirty: bool, form: Option<&FormWri
         }
     }
     let mut r = Element::new(parent.prefixed("r"));
+    crate::xml::mark_new(&mut r, "run");
     r.push_element(ch);
     r
 }
@@ -662,6 +672,7 @@ fn instr_run(parent: &Element, instr: &str) -> Element {
     t.set_attr("xml:space", "preserve");
     t.set_text(instr.to_string());
     let mut r = Element::new(parent.prefixed("r"));
+    crate::xml::mark_new(&mut r, "run");
     r.push_element(t);
     r
 }

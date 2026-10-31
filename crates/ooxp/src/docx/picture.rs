@@ -970,6 +970,7 @@ pub fn parse_pic_kind(s: &str) -> Option<PicKind> {
 
 pub fn insert_drawing_into_para(p: &mut Element, drawing: Element) {
     let mut run = Element::new(p.prefixed("r"));
+    crate::xml::mark_new(&mut run, "run");
     run.push_element(drawing);
     p.children.push(Node::Element(run));
 }
@@ -1231,7 +1232,7 @@ fn xfrm_ext(el: &Element) -> Option<(Option<i64>, Option<i64>)> {
 
 fn matches_grouped(pic: &Element, key: &PicKey, index: usize) -> bool {
     match key {
-        PicKey::Index(n) => index == *n,
+        PicKey::Index(n) => crate::xml::pin_matches(pic, &crate::xml::pin_attr("pic"), *n, index),
         PicKey::DocPr(want) => {
             let Some(got) = cnv_pr_of(pic).0 else {
                 return false;
@@ -1246,6 +1247,9 @@ fn matches_grouped(pic: &Element, key: &PicKey, index: usize) -> bool {
 }
 
 fn drawing_has_pic_match(drawing: &Element, idx: &mut usize, key: &PicKey) -> bool {
+    if super::watermark::is_watermark_drawing(drawing) {
+        return false;
+    }
     if is_group_drawing(drawing) {
         let mut hit = false;
         walk_group_pics(drawing, &mut |pic| {
@@ -1375,9 +1379,31 @@ fn frame_mut(drawing: &mut Element) -> Option<&mut Element> {
         .find(|e| e.local_name() == "inline" || e.local_name() == "anchor")
 }
 
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "pic", &pic_step);
+}
+
+fn pic_step(el: &Element) -> super::inline_pin::PinStep {
+    use super::inline_pin::PinStep;
+    if super::watermark::is_watermark_drawing(el) {
+        return PinStep::Skip;
+    }
+    match el.local_name() {
+        "txbxContent" | "object" => PinStep::Skip,
+        "drawing" if is_group_drawing(el) => PinStep::Descend,
+        "drawing" if is_picture(el) => PinStep::Member,
+        "drawing" => PinStep::Skip,
+        "pic" if pic_has_blip(el) => PinStep::Member,
+        _ => PinStep::Descend,
+    }
+}
+
 fn matches_key(drawing: &Element, key: &PicKey, index: usize) -> bool {
     match key {
-        PicKey::Index(n) => index == *n,
+        PicKey::Index(n) => {
+            crate::xml::pin_matches(drawing, &crate::xml::pin_attr("pic"), *n, index)
+        }
         PicKey::DocPr(want) => {
             let Some(got) = frame(drawing)
                 .and_then(|f| f.child_by_local("docPr"))

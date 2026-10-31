@@ -508,7 +508,7 @@ fn drawing_has_ink_key(
         if e.local_name() == "contentPart" && ctx.is_ink(e) {
             *index += 1;
             let token = cnv_pr(e).0.or(drawing_pr.clone());
-            if matches_key(&token, *index, key) {
+            if matches_key(e, &token, *index, key) {
                 hit = true;
             }
         }
@@ -531,7 +531,7 @@ fn find_rid(ctx: &HostCtx<'_>, root: &Element, key: &TxbxKey) -> Option<String> 
             if e.local_name() == "contentPart" && ctx.is_ink(e) {
                 index += 1;
                 let token = cnv_pr(e).0.or(drawing_pr.clone());
-                if matches_key(&token, index, key) {
+                if matches_key(e, &token, index, key) {
                     rid = e.attr_local("id").map(str::to_string);
                 }
             }
@@ -635,7 +635,7 @@ fn strip_from_element(
             let hit = match &el.children[i] {
                 Node::Element(e) => {
                     let token = cnv_pr(e).0.or(drawing_pr.clone());
-                    matches_key(&token, *index, key)
+                    matches_key(e, &token, *index, key)
                 }
                 Node::Text(_) | Node::Raw(_) => false,
             };
@@ -827,9 +827,26 @@ fn looks_like_host(id: &str) -> bool {
         || super::hf::HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
 }
 
-fn matches_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
+pub(crate) fn pin_paragraphs(pkg: &Package, part: &str, root: &mut Element) {
+    let Ok(ctx) = HostCtx::load(pkg, part) else {
+        return;
+    };
+    super::inline_pin::for_each_paragraph(root, &mut |p| {
+        let mut n = 0usize;
+        super::inline_pin::pin_walk(p, &mut n, "ink", &|el| {
+            use super::inline_pin::PinStep;
+            match el.local_name() {
+                "txbxContent" => PinStep::Skip,
+                "contentPart" if ctx.is_ink(el) => PinStep::Member,
+                _ => PinStep::Descend,
+            }
+        });
+    });
+}
+
+fn matches_key(el: &Element, doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
     match key {
-        TxbxKey::Index(n) => *n == index,
+        TxbxKey::Index(n) => crate::xml::pin_matches(el, &crate::xml::pin_attr("ink"), *n, index),
         TxbxKey::DocPr(want) => {
             let Some(got) = doc_pr_id.as_deref() else {
                 return false;
@@ -1027,11 +1044,7 @@ fn load_part<'a>(
     docs: &'a mut HashMap<String, Document>,
     part_name: &str,
 ) -> Result<&'a mut Document, Error> {
-    if !docs.contains_key(part_name) {
-        let parsed = xml::parse(pkg.get(part_name)?)?;
-        docs.insert(part_name.to_string(), parsed);
-    }
-    Ok(docs.get_mut(part_name).unwrap())
+    super::apply::load_part(pkg, docs, part_name)
 }
 
 fn rid_still_in(root: &Element, rid: &str) -> bool {

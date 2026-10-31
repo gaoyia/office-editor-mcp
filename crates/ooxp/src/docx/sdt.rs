@@ -580,10 +580,13 @@ fn classify(sdt: &Element) -> Option<SdtKind> {
 
 fn sdt_at(root: &Element, n: usize, id: &str, i: usize) -> Result<SdtRec, Error> {
     let recs = collect_sdts(root);
-    if n < 1 || n > recs.len() {
-        return Err(missing_sdt(id, i));
-    }
-    Ok(recs.into_iter().nth(n - 1).expect("n 已检查"))
+    para::pick_collected(root, recs, n, "sdt", |rec| rec.path.as_slice())
+        .ok_or_else(|| missing_sdt(id, i))
+}
+
+pub(crate) fn pin_sdts(root: &mut Element) {
+    let paths: Vec<_> = collect_sdts(root).into_iter().map(|rec| rec.path).collect();
+    para::pin_collected(root, &paths, "sdt");
 }
 
 fn new_inline_sdt(
@@ -593,6 +596,7 @@ fn new_inline_sdt(
     drawing: Option<Element>,
 ) -> Element {
     let mut sdt = Element::new(parent.prefixed("sdt"));
+    crate::xml::mark_new(&mut sdt, "sdt");
     let mut pr = Element::new(sdt.prefixed("sdtPr"));
     if let Some(a) = write.alias.filter(|s| !s.is_empty()) {
         pr.push_element(val_el(&pr, "alias", a));
@@ -626,6 +630,7 @@ fn new_inline_sdt(
     let mut content = Element::new(sdt.prefixed("sdtContent"));
     if let Some(drawing) = drawing {
         let mut run = Element::new(content.prefixed("r"));
+        crate::xml::mark_new(&mut run, "run");
         let mut rpr = Element::new(run.prefixed("rPr"));
         rpr.push_element(Element::new(rpr.prefixed("noProof")));
         run.push_element(rpr);
@@ -1159,6 +1164,7 @@ fn checkbox_run(parent: &Element, checked: bool) -> Element {
         .into(),
     ));
     let mut r = Element::new(parent.prefixed("r"));
+    crate::xml::mark_new(&mut r, "run");
     r.push_element(rpr);
     r.push_element(t);
     r
@@ -1220,6 +1226,7 @@ fn replace_picture_content(sdt: &mut Element, level: SdtLevel, drawing: Element)
         return;
     };
     let mut run = Element::new(content.prefixed("r"));
+    crate::xml::mark_new(&mut run, "run");
     let mut rpr = Element::new(run.prefixed("rPr"));
     rpr.push_element(Element::new(rpr.prefixed("noProof")));
     run.push_element(rpr);

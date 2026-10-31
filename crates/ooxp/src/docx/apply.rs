@@ -33,6 +33,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     let mut doc_xml = xml::parse(pkg.get(&doc_part)?)?;
     super::para::pin_paragraph_indexes(&mut doc_xml.root);
     super::tbl::pin_table_indexes(&mut doc_xml.root);
+    super::inline_pin::pin_inline_indexes(&pkg, &doc_part, &mut doc_xml.root);
     let mut catalog = hf::catalog(&pkg, &doc_part, &doc_xml.root)?;
 
     // 按部件缓存已解析的文档；最后一并写回脏部件。
@@ -963,6 +964,7 @@ pub(crate) fn load_part<'a>(
         let mut parsed = xml::parse(pkg.get(part_name)?)?;
         super::para::pin_paragraph_indexes(&mut parsed.root);
         super::tbl::pin_table_indexes(&mut parsed.root);
+        super::inline_pin::pin_inline_indexes(pkg, part_name, &mut parsed.root);
         docs.insert(part_name.to_string(), parsed);
     }
     Ok(docs.get_mut(part_name).unwrap())

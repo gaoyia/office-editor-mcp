@@ -569,6 +569,11 @@ pub(crate) fn pin_matches(el: &Element, attr: &str, wanted: usize, live: usize) 
     }
 }
 
+/// 本批新建的元素记空编号，避免按当时数到的位置占掉旧序号。
+pub(crate) fn mark_new(el: &mut Element, family: &str) {
+    el.set_attr(&pin_attr(family), "");
+}
+
 /// 按 `classify` 的顺序给还没有编号的成员记下序号。已有编号的不再改。
 pub(crate) fn pin_tree(root: &mut Element, attr: &str, classify: &impl Fn(&Element) -> PinNode) {
     fn walk(

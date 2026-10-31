@@ -18,6 +18,7 @@ mod glossary;
 mod group;
 mod hf;
 mod ink;
+mod inline_pin;
 mod inspect;
 mod link;
 mod math;

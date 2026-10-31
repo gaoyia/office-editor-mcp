@@ -546,7 +546,7 @@ fn grouped_txbx(drawing: &Element, key: &TxbxKey) -> bool {
         if e.local_name() == "wsp" && has_txbx_el(e) {
             index += 1;
             let (id, _) = cnv_pr_of(e);
-            if para::matches_txbx_key(&id, index, key) {
+            if para::matches_txbx_key(e, &id, index, key) {
                 hit = true;
             }
         }
@@ -1006,7 +1006,7 @@ fn find_txbx_drawing<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element
             if has_txbx_el(el) && !connector_drawing(el) {
                 index += 1;
                 let (id, _) = doc_pr_of(el);
-                if para::matches_txbx_key(&id, index, key) {
+                if para::matches_txbx_key(el, &id, index, key) {
                     return crate::xml::Search::Hit(el);
                 }
             }

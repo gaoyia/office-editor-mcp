@@ -319,7 +319,7 @@ fn find_frame<'a>(root: &'a Element, key: &TxbxKey) -> Option<&'a Element> {
             .child_by_local("docPr")
             .and_then(|p| p.attr_local("id"))
             .map(str::to_string);
-        if matches_key(&token, index, key) {
+        if matches_key(frame, &token, index, key) {
             return Some(frame);
         }
     }
@@ -360,7 +360,7 @@ fn find_frame_walk_mut<'a>(
                 .child_by_local("docPr")
                 .and_then(|p| p.attr_local("id"))
                 .map(str::to_string);
-            if matches_key(&token, *index, key) {
+            if matches_key(el, &token, *index, key) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -369,9 +369,51 @@ fn find_frame_walk_mut<'a>(
     })
 }
 
-fn matches_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
+pub(crate) fn pin_scope(root: &mut Element) {
+    let mut n = 0usize;
+    pin_frames(root, &mut n);
+}
+
+fn pin_frames(el: &mut Element, n: &mut usize) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        let idx = el.children.iter().position(|node| {
+            matches!(
+                node,
+                Node::Element(c)
+                    if c.local_name() == "Choice" && crate::model3d::choice_requires_am3d(c)
+            )
+        });
+        if let Some(i) = idx {
+            if let Node::Element(choice) = &mut el.children[i] {
+                pin_frames(choice, n);
+            }
+        }
+        return;
+    }
+    if matches!(el.local_name(), "inline" | "anchor") && crate::model3d::is_model3d_graphic(el) {
+        *n += 1;
+        let attr = crate::xml::pin_attr("model3d");
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, n.to_string());
+        }
+        return;
+    }
+    let len = el.children.len();
+    for i in 0..len {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_frames(child, n);
+        }
+    }
+}
+
+fn matches_key(el: &Element, doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
     match key {
-        TxbxKey::Index(n) => *n == index,
+        TxbxKey::Index(n) => {
+            crate::xml::pin_matches(el, &crate::xml::pin_attr("model3d"), *n, index)
+        }
         TxbxKey::DocPr(want) => {
             let Some(got) = doc_pr_id.as_deref() else {
                 return false;
@@ -647,7 +689,7 @@ fn ac_matches(ac: &Element, key: &TxbxKey, index: &mut usize) -> bool {
             .child_by_local("docPr")
             .and_then(|p| p.attr_local("id"))
             .map(str::to_string);
-        if matches_key(&token, *index, key) {
+        if matches_key(frame, &token, *index, key) {
             hit = true;
         }
     }
@@ -840,7 +882,7 @@ fn remove_in(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {
                     .child_by_local("docPr")
                     .and_then(|p| p.attr_local("id"))
                     .map(str::to_string);
-                if matches_key(&token, *index, key) {
+                if matches_key(frame, &token, *index, key) {
                     hit = true;
                 }
             }
@@ -856,7 +898,7 @@ fn remove_in(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {
                 .child_by_local("docPr")
                 .and_then(|p| p.attr_local("id"))
                 .map(str::to_string);
-            if matches_key(&token, *index, key) {
+            if matches_key(child, &token, *index, key) {
                 drop = Some(i);
                 break;
             }
@@ -934,11 +976,7 @@ fn load_part<'a>(
     docs: &'a mut HashMap<String, Document>,
     part_name: &str,
 ) -> Result<&'a mut Document, Error> {
-    if !docs.contains_key(part_name) {
-        let parsed = xml::parse(pkg.get(part_name)?)?;
-        docs.insert(part_name.to_string(), parsed);
-    }
-    Ok(docs.get_mut(part_name).unwrap())
+    super::apply::load_part(pkg, docs, part_name)
 }
 
 fn rid_still_in(root: &Element, rid: &str) -> bool {

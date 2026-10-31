@@ -537,9 +537,35 @@ fn token_eq(a: &str, b: &str) -> bool {
     }
 }
 
+pub(crate) fn pin_scope(pkg: &Package, part: &str, root: &mut Element) {
+    if let Ok(ctx) = HostCtx::load(pkg, part) {
+        pin_with(root, &ctx);
+    }
+}
+
+pub(crate) fn pin_paragraphs(pkg: &Package, part: &str, root: &mut Element) {
+    let Ok(ctx) = HostCtx::load(pkg, part) else {
+        return;
+    };
+    super::inline_pin::for_each_paragraph(root, &mut |p| pin_with(p, &ctx));
+}
+
+fn pin_with(root: &mut Element, ctx: &HostCtx<'_>) {
+    let mut n = 0usize;
+    super::inline_pin::pin_walk(root, &mut n, "ole", &|el| {
+        use super::inline_pin::PinStep;
+        match el.local_name() {
+            "txbxContent" => PinStep::Skip,
+            "object" if ctx.accepts(el) => PinStep::Member,
+            "object" => PinStep::Skip,
+            _ => PinStep::Descend,
+        }
+    });
+}
+
 fn matches_key(obj: &Element, key: &OleKey, index: usize) -> bool {
     match key {
-        OleKey::Index(n) => index == *n,
+        OleKey::Index(n) => crate::xml::pin_matches(obj, &crate::xml::pin_attr("ole"), *n, index),
         OleKey::Token(want) => {
             let (got, _) = object_token(obj, index);
             token_eq(want, &got)
@@ -1073,11 +1099,7 @@ fn load_part<'a>(
     docs: &'a mut HashMap<String, Document>,
     part_name: &str,
 ) -> Result<&'a mut Document, Error> {
-    if !docs.contains_key(part_name) {
-        let parsed = xml::parse(pkg.get(part_name)?)?;
-        docs.insert(part_name.to_string(), parsed);
-    }
-    Ok(docs.get_mut(part_name).unwrap())
+    super::apply::load_part(pkg, docs, part_name)
 }
 
 fn ensure_ole_ns(root: &mut Element) {
@@ -1096,6 +1118,7 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
 
 fn insert_object_into_para(p: &mut Element, object: Element) {
     let mut run = Element::new(p.prefixed("r"));
+    crate::xml::mark_new(&mut run, "run");
     run.push_element(object);
     p.children.push(Node::Element(run));
 }

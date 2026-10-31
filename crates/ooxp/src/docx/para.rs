@@ -670,10 +670,18 @@ fn split_first_seg(s: &str) -> (&str, Option<&str>) {
     }
 }
 
-pub fn matches_txbx_key(doc_pr_id: &Option<String>, index: usize, key: &TxbxKey) -> bool {
+pub fn matches_txbx_key(
+    el: &Element,
+    doc_pr_id: &Option<String>,
+    index: usize,
+    key: &TxbxKey,
+) -> bool {
     match key {
         TxbxKey::DocPr(d) => doc_pr_id.as_deref() == Some(d.as_str()),
-        TxbxKey::Index(n) => doc_pr_id.is_none() && *n == index,
+        TxbxKey::Index(n) => {
+            doc_pr_id.is_none()
+                && crate::xml::pin_matches(el, &crate::xml::pin_attr("txbx"), *n, index)
+        }
     }
 }
 
@@ -1371,6 +1379,7 @@ pub fn new_paragraph(parent: &Element, para_id: &str, text: &str) -> Element {
 
 pub(crate) fn new_text_run(parent: &Element, text: &str) -> Element {
     let mut r = Element::new(parent.prefixed("r"));
+    crate::xml::mark_new(&mut r, "run");
     for piece in visible_children(&r, text) {
         r.push_element(piece);
     }
@@ -1515,6 +1524,40 @@ pub fn element_at<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> 
         };
     }
     Some(cur)
+}
+
+/// 按收集顺序给还没有编号的元素记下序号。编号相对 `root`。
+pub(crate) fn pin_collected(root: &mut Element, paths: &[Vec<usize>], family: &str) {
+    let attr = crate::xml::pin_attr(family);
+    for (i, path) in paths.iter().enumerate() {
+        if let Some(el) = element_at_mut(root, path) {
+            if el.attr(&attr).is_none() {
+                el.set_attr(&attr, (i + 1).to_string());
+            }
+        }
+    }
+}
+
+/// 在收集结果里按编号找出第 `n` 个。空编号是本批新建的，不占旧序号。
+pub(crate) fn pick_collected<T>(
+    root: &Element,
+    items: Vec<T>,
+    n: usize,
+    family: &str,
+    path_of: impl Fn(&T) -> &[usize],
+) -> Option<T> {
+    let attr = crate::xml::pin_attr(family);
+    let mut live = 0usize;
+    for item in items {
+        live += 1;
+        let Some(el) = element_at(root, path_of(&item)) else {
+            continue;
+        };
+        if crate::xml::pin_matches(el, &attr, n, live) {
+            return Some(item);
+        }
+    }
+    None
 }
 
 pub fn element_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> Option<&'a mut Element> {
