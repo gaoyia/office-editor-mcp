@@ -111,7 +111,7 @@ pub enum ParaRunSource {
 #[derive(Debug, Clone)]
 pub struct ParaRunPiece {
     pub source: ParaRunSource,
-    pub format: Option<super::super::create_para::RunFormatOwned>,
+    pub format: Option<super::para_remain::RunFormatOwned>,
 }
 
 #[derive(Debug, Clone)]

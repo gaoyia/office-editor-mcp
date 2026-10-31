@@ -4,11 +4,11 @@ use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, TypeName};
 
-use super::format::{self, EastAsianLayout, ParaBordersPatch, TabStop};
-use super::group;
-use super::page_bg;
-use super::para::ParaTarget;
-use super::request::{GroupShapesOp, SetParaFormatOp, SetRunFormatOp};
+use super::super::format::{self, EastAsianLayout, ParaBordersPatch, TabStop};
+use super::super::group;
+use super::super::page_bg;
+use super::super::para::ParaTarget;
+use super::{GroupShapesOp, SetParaFormatOp, SetRunFormatOp};
 
 pub struct ParaRemain {
     pub borders: Option<Option<ParaBordersPatch>>,

@@ -6,19 +6,19 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, TypeName};
 use crate::op_fields::deny_keys_at;
 
-use super::biblio;
-use super::east_asia::{self, KinsokuChars, ThemeFontLang};
-use super::field::{self, CrossRefKind};
-use super::font_embed::FontStyle;
-use super::glossary;
-use super::request::{
-    InsertDocPartOp, InsertEmbeddedFontOp, InsertSourceOp, InsertStyleOp, SetEastAsianSettingsOp,
-    SetFontEmbedOp,
-};
-use super::styles;
-use super::tbl::{
+use super::super::biblio;
+use super::super::east_asia::{self, KinsokuChars, ThemeFontLang};
+use super::super::field::{self, CrossRefKind};
+use super::super::font_embed::FontStyle;
+use super::super::glossary;
+use super::super::styles;
+use super::super::tbl::{
     self, DiagonalBorder, TableBordersPatch, TableFloat, TableLookPatch, TableRowHeightSpec,
     TableWidthPatch,
+};
+use super::{
+    InsertDocPartOp, InsertEmbeddedFontOp, InsertSourceOp, InsertStyleOp, SetEastAsianSettingsOp,
+    SetFontEmbedOp,
 };
 
 pub const ROOT_KEYS: &[&str] = &[
@@ -297,7 +297,7 @@ fn parse_captions(v: Option<&Value>, para_n: usize) -> Result<Vec<CaptionBlock>,
         let label = match obj.get("label") {
             None => "Figure".to_string(),
             Some(Value::String(s)) => {
-                super::field::parse_seq_identifier(s)
+                super::super::field::parse_seq_identifier(s)
                     .map_err(|kind| Error::with_path(kind, format!("{path}.label")))?;
                 s.clone()
             }
@@ -968,7 +968,7 @@ pub fn parse_shapes(v: Option<&Value>, prefix: &str) -> Result<Vec<ShapeSpec>, E
         v,
         &format!("{prefix}.shapes"),
         "rect",
-        super::shape::is_writable_prst,
+        super::super::shape::is_writable_prst,
         ErrorKind::InvalidShapePrst,
         "insertShape",
     )
@@ -979,7 +979,7 @@ pub fn parse_connectors(v: Option<&Value>, prefix: &str) -> Result<Vec<ShapeSpec
         v,
         &format!("{prefix}.connectors"),
         "straightConnector1",
-        super::connector::is_writable_prst,
+        super::super::connector::is_writable_prst,
         ErrorKind::InvalidConnectorPrst,
         "insertConnector",
     )
@@ -1065,7 +1065,9 @@ pub fn parse_rubies(v: Option<&Value>, prefix: &str) -> Result<Vec<RubySpec>, Er
         let rt = require_nonempty(obj, &item_path, "rt", ErrorKind::EmptyRubyRt)?;
         let align = match obj.get("align") {
             None => "distributeSpace".to_string(),
-            Some(Value::String(s)) if super::ruby::ALIGN_SET.contains(&s.as_str()) => s.clone(),
+            Some(Value::String(s)) if super::super::ruby::ALIGN_SET.contains(&s.as_str()) => {
+                s.clone()
+            }
             Some(Value::String(_)) => {
                 return Err(Error::with_path(
                     ErrorKind::InvalidRubyAlign,
@@ -1207,7 +1209,7 @@ pub fn parse_edit_range(v: Option<&Value>, prefix: &str) -> Result<Option<EditRa
             deny_keys_at(obj, &path, &["edGrp", "ed"])?;
             let ed_grp = match obj.get("edGrp") {
                 None => None,
-                Some(Value::String(s)) if super::perm::ed_grp_ok(s) => Some(s.clone()),
+                Some(Value::String(s)) if super::super::perm::ed_grp_ok(s) => Some(s.clone()),
                 Some(Value::String(_)) => {
                     return Err(Error::with_path(
                         ErrorKind::InvalidEdGrp,

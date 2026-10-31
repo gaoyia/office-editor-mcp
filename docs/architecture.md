@@ -134,6 +134,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 多个对象都要用的部件装载留在 `apply.rs`，不在每个模块各抄一份。docx 已按此拆开。
 xlsx 的单元格、公式和 `sheetData` 读写在 `xlsx/cell.rs`。排序颜色编进样式表的那段在 `xlsx/view.rs`。
 pptx 的每个 op 在对象模块里做完。`apply.rs` 只分发，并留下大家共用的宿主装载。
+docx 的 create 字段解析在 `request/` 里按领域拆开，和 apply 的解析放在一起。`create.rs` 只拼骨架并复用已有 apply。骨架 XML 在 `create_xml.rs`。
 
 ### opc
 

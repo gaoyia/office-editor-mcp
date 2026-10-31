@@ -45,6 +45,21 @@ use style_fmt::*;
 mod extras;
 use extras::*;
 
+pub(crate) mod create_chart;
+pub(crate) mod create_comment;
+pub(crate) mod create_drawing;
+pub(crate) mod create_field;
+pub(crate) mod create_link;
+pub(crate) mod create_math;
+pub(crate) mod create_picture;
+pub(crate) mod create_sdt;
+pub(crate) mod create_story;
+pub(crate) mod create_table;
+pub(crate) mod create_types;
+pub(crate) mod create_util;
+pub(crate) mod doc_extra;
+pub(crate) mod para_remain;
+
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let Some(v) = v else {
         return Ok(None);
