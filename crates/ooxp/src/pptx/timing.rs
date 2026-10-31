@@ -153,7 +153,7 @@ pub fn insert(
         Error::with_path(ErrorKind::InvalidAnimType, format!("ops[{op_index}].type"))
     })?;
     let (part, prefix) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
-    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let spid = spid_for_host(&doc.root, &prefix, host_id, target.placeholders_only()).ok_or_else(
         || {
             Error::with_path(
@@ -242,7 +242,7 @@ pub fn insert(
     if let Some(path) = args.sound {
         attach_sound(pkg, &mut doc.root, &part, path, op_index)?;
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -257,7 +257,7 @@ pub fn delete(
     op_index: usize,
 ) -> Result<(), Error> {
     let (part, _) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
-    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let Some(timing_idx) = first_timing_index(&doc.root) else {
         return Err(Error::with_path(
             ErrorKind::AnimNotFound { id: id.to_string() },
@@ -269,14 +269,12 @@ pub fn delete(
             Node::Element(e) => e,
             _ => unreachable!(),
         };
-        let paths = effect_paths(timing);
-        if index < 1 || index > paths.len() {
+        let Some(path) = path_of_pin(timing, index) else {
             return Err(Error::with_path(
                 ErrorKind::AnimNotFound { id: id.to_string() },
                 format!("ops[{op_index}].id"),
             ));
-        }
-        let path = paths[index - 1].clone();
+        };
         let mut rids = Vec::new();
         if let Some(effect) = get_at(timing, &path) {
             collect_snd_rids(effect, &mut rids);
@@ -299,7 +297,7 @@ pub fn delete(
         doc.root.children.remove(timing_idx);
     }
     drop_unused_audio(pkg, &doc.root, &part, &drop_timing.1)?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -322,7 +320,7 @@ pub fn set(
     op_index: usize,
 ) -> Result<(), Error> {
     let (part, prefix) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
-    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let path = {
         let Some(timing) = first_timing(&doc.root) else {
             return Err(Error::with_path(
@@ -330,14 +328,13 @@ pub fn set(
                 format!("ops[{op_index}].id"),
             ));
         };
-        let paths = effect_paths(timing);
-        if index < 1 || index > paths.len() {
+        let Some(path) = path_of_pin(timing, index) else {
             return Err(Error::with_path(
                 ErrorKind::AnimNotFound { id: id.to_string() },
                 format!("ops[{op_index}].id"),
             ));
-        }
-        paths[index - 1].clone()
+        };
+        path
     };
     if let Some(Some(n)) = para {
         let spid = first_timing(&doc.root)
@@ -444,7 +441,7 @@ pub fn set(
             }
         }
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -460,30 +457,30 @@ pub fn move_anim(
     op_index: usize,
 ) -> Result<(), Error> {
     let (part, _) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
-    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let Some(timing) = first_timing_mut(&mut doc.root) else {
         return Err(Error::with_path(
             ErrorKind::AnimNotFound { id: id.to_string() },
             format!("ops[{op_index}].id"),
         ));
     };
-    let n = effect_paths(timing).len();
-    if index < 1 || index > n {
+    let Some(from) = live_of_pin(timing, index) else {
         return Err(Error::with_path(
             ErrorKind::AnimNotFound { id: id.to_string() },
             format!("ops[{op_index}].id"),
         ));
-    }
+    };
+    let n = effect_paths(timing).len();
     if dest < 1 || dest > n {
         return Err(Error::with_path(
             ErrorKind::InvalidAnimMoveIndex,
             format!("ops[{op_index}].index"),
         ));
     }
-    if index != dest {
-        reorder_effect(timing, index - 1, dest - 1);
+    if from + 1 != dest {
+        reorder_effect(timing, from, dest - 1);
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -1406,6 +1403,67 @@ fn get_mut_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
         };
     }
     cur
+}
+
+pub(crate) fn pin_anims(root: &mut Element) {
+    let Some(idx) = first_timing_index(root) else {
+        return;
+    };
+    let paths = {
+        let Node::Element(timing) = &root.children[idx] else {
+            return;
+        };
+        effect_paths(timing)
+    };
+    let attr = crate::xml::pin_attr("anim");
+    let Node::Element(timing) = &mut root.children[idx] else {
+        return;
+    };
+    for (i, path) in paths.iter().enumerate() {
+        let Some(el) = get_at_mut(timing, path) else {
+            continue;
+        };
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, (i + 1).to_string());
+        }
+    }
+}
+
+fn path_of_pin(timing: &Element, wanted: usize) -> Option<Vec<usize>> {
+    let attr = crate::xml::pin_attr("anim");
+    let mut live = 0usize;
+    for path in effect_paths(timing) {
+        live += 1;
+        let el = get_at(timing, &path)?;
+        if crate::xml::pin_matches(el, &attr, wanted, live) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn live_of_pin(timing: &Element, wanted: usize) -> Option<usize> {
+    let attr = crate::xml::pin_attr("anim");
+    let mut live = 0usize;
+    for path in effect_paths(timing) {
+        live += 1;
+        let el = get_at(timing, &path)?;
+        if crate::xml::pin_matches(el, &attr, wanted, live) {
+            return Some(live - 1);
+        }
+    }
+    None
+}
+
+fn get_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> Option<&'a mut Element> {
+    let mut cur = root;
+    for &i in path {
+        cur = match cur.children.get_mut(i) {
+            Some(Node::Element(el)) => el,
+            _ => return None,
+        };
+    }
+    Some(cur)
 }
 
 fn get_at<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> {

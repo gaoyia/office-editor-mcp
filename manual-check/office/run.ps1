@@ -193,6 +193,7 @@ $order = @(
     'pptx-shape-geom'
     'pptx-custgeom'
     'pptx-tables'
+    'pptx-id-pin'
     'pptx-table-grid'
     'pptx-table-cell-fill'
     'pptx-table-cell-fill-ex'

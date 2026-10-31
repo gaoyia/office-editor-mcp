@@ -433,9 +433,31 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
+pub(crate) fn pin_media(root: &mut Element) {
+    crate::xml::pin_counted(
+        root,
+        "video",
+        |el| media_kind(el) == Some(MediaKind::Video),
+        |_| false,
+    );
+    crate::xml::pin_counted(
+        root,
+        "audio",
+        |el| media_kind(el) == Some(MediaKind::Audio),
+        |_| false,
+    );
+}
+
 fn pic_matches(pic: &Element, index: usize, key: &PicKey) -> bool {
     match key {
-        PicKey::Index(n) => index == *n,
+        PicKey::Index(n) => {
+            let family = match media_kind(pic) {
+                Some(MediaKind::Video) => "video",
+                Some(MediaKind::Audio) => "audio",
+                None => "video",
+            };
+            crate::xml::pin_matches(pic, &crate::xml::pin_attr(family), *n, index)
+        }
         PicKey::Id(req) => pic_cnv_pr(pic)
             .and_then(|c| c.attr("id"))
             .is_some_and(|id| ids_match(id, req)),
@@ -527,7 +549,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let target = parse_media_id(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
     let part = picture::resolve_tree_part(
@@ -539,7 +561,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         ErrorKind::MediaNotFound { id: id.to_string() },
         "id",
     )?;
-    let doc = crate::xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &part)?;
     let pic = find_media(&doc.root, target.kind, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::MediaNotFound { id: id.to_string() }, "id"))?;
     let rid = media_rel_id(pic)

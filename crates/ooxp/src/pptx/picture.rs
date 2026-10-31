@@ -523,7 +523,7 @@ fn master_or_layout_part(
     let Some(k) = layout else {
         return Ok(mpart.clone());
     };
-    let doc = crate::xml::parse(pkg.get(mpart)?)?;
+    let doc = super::list_pin::parse_part(pkg, mpart)?;
     let mut layouts = Vec::new();
     if let Some(lst) = doc.root.child_by_local("sldLayoutIdLst") {
         for el in lst
@@ -671,9 +671,15 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
+pub(crate) fn pin_pics(root: &mut Element) {
+    crate::xml::pin_counted(root, "pic", is_counted_pic, |el| {
+        el.local_name() == "oleObj"
+    });
+}
+
 fn pic_matches(pic: &Element, index: usize, key: &PicKey) -> bool {
     match key {
-        PicKey::Index(n) => index == *n,
+        PicKey::Index(n) => crate::xml::pin_matches(pic, &crate::xml::pin_attr("pic"), *n, index),
         PicKey::Id(req) => pic_cnv_pr(pic)
             .and_then(|c| c.attr("id"))
             .is_some_and(|id| ids_match(id, req)),
@@ -907,7 +913,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let target = parse_pic_id(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = TreeHost::from_parts(target.slide, target.on_notes, target.master);
     if target.comment.is_some() && target.master.is_some() {
@@ -950,7 +956,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
         })?;
         return super::comments::export_pic(&pkg, &meta.part, cm, &target.key, id);
     }
-    let doc = crate::xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &part)?;
     let pic = find_pic_in_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
     let rid = crate::svg::blip_rid(pic)

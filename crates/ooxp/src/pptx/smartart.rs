@@ -303,9 +303,15 @@ fn smartart_json(
     Ok(Value::Object(m))
 }
 
+pub(crate) fn pin_smart(root: &mut Element) {
+    crate::xml::pin_counted(root, "smartdiagram", is_diagram_frame, |_| false);
+}
+
 fn key_matches(frame: &Element, index: usize, key: &SmartArtKey) -> bool {
     match key {
-        SmartArtKey::Index(k) => index == *k,
+        SmartArtKey::Index(k) => {
+            crate::xml::pin_matches(frame, &crate::xml::pin_attr("smartdiagram"), *k, index)
+        }
         SmartArtKey::Id(id) => cnv_of_frame(frame).0.as_deref() == Some(id.as_str()),
     }
 }
@@ -742,7 +748,7 @@ pub fn apply_text(
         &op.id,
         i,
     )?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     let pt =
         smartart::find_visible_pt_mut(&mut data.root, &op.target.model_id).ok_or_else(|| {
             Error::with_path(
@@ -751,7 +757,7 @@ pub fn apply_text(
             )
         })?;
     smartart::set_point_text(pt, &op.text);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     if !smartart::sync_drawing_text(pkg, slide_part, &data_part, &op.target.model_id, &op.text)? {
         smartart::drop_drawing_caches(pkg, slide_part, &data_part)?;
     }
@@ -785,7 +791,7 @@ pub fn apply_add_point(
         }
     }
     let data_part = data_part_of(pkg, slide_root, slide_part, &diagram.key, &id, i)?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     let parent_id = match &parent_model {
         Some(mid) => {
             if smartart::find_visible_pt(&data.root, mid).is_none() {
@@ -801,7 +807,7 @@ pub fn apply_add_point(
     let (pt_id, cxn_id) = smartart::next_model_ids(&data.root);
     smartart::append_visible_pt(&mut data.root, &pt_id, op.role, &op.text);
     smartart::append_par_of(&mut data.root, &cxn_id, &parent_id, &pt_id);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     smartart::drop_drawing_caches(pkg, slide_part, &data_part)?;
     Ok(())
 }
@@ -821,7 +827,7 @@ pub fn apply_delete_point(
         &op.id,
         i,
     )?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     if smartart::find_visible_pt(&data.root, &op.target.model_id).is_none() {
         return Err(Error::with_path(
             ErrorKind::SmartArtPointNotFound { id: op.id.clone() },
@@ -837,7 +843,7 @@ pub fn apply_delete_point(
         ));
     }
     smartart::delete_points_and_cxns(&mut data.root, &doomed);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     smartart::drop_drawing_caches(pkg, slide_part, &data_part)?;
     Ok(())
 }
@@ -966,9 +972,9 @@ pub fn apply_layout(
     if let Ok(data_part) = data_part_of(pkg, &slide_doc.root, slide_part, &op.target.key, &op.id, i)
     {
         if op.layout.is_flat() {
-            let mut data = xml::parse(pkg.get(&data_part)?)?;
+            let mut data = super::list_pin::parse_part(pkg, &data_part)?;
             smartart::demote_asst(&mut data.root);
-            pkg.set(&data_part, data.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &data_part, &data)?;
         }
         smartart::drop_drawing_caches(pkg, slide_part, &data_part)?;
     }

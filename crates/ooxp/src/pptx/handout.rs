@@ -35,7 +35,7 @@ pub fn handout_json(pkg: &Package, pres_part: &str) -> Result<Value, Error> {
     let Some(part) = handout_part(pkg, pres_part)? else {
         return Ok(Value::Null);
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     let mut obj = Map::new();
     obj.insert("id".into(), json!("handout"));
     obj.insert("theme".into(), super::theme::theme_json(pkg, &part)?);
@@ -54,7 +54,7 @@ pub fn set_text(
     i: usize,
 ) -> Result<(), Error> {
     let part = ensure_handout_master(pkg, pres_part, pres)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     for (field, ph, text) in [
         ("header", "hdr", op.header.as_deref()),
         ("footer", "ftr", op.footer.as_deref()),
@@ -88,7 +88,7 @@ pub fn set_text(
         crate::drawing_text::set_txbody_text(tx, text);
         enable_hf(&mut doc.root, ph);
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -126,7 +126,7 @@ pub(crate) fn ensure_handout_master(
     });
     pres_rels.write_to(pkg, pres_part)?;
     insert_handout_master_id(&mut pres.root, &rid);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&master, CT_HANDOUT_MASTER)?;
     if let Some(theme) = cloned_theme.as_deref() {

@@ -76,7 +76,7 @@ pub fn insert(
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&slide_part, CT_SLIDE)?;
     cts.write_to(pkg)?;
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -122,7 +122,7 @@ pub fn delete(
         drop_if_unused(pkg, &mut cts, &part, &rel_type)?;
     }
     cts.write_to(pkg)?;
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -193,7 +193,7 @@ pub fn move_slide(
             .unwrap_or(section::Place::Front),
     };
     section::place_sid(&mut pres.root, sid, place);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -205,7 +205,7 @@ pub fn set_hidden(
 ) -> Result<(), Error> {
     let pos = slide_pos(slides, op.slide, op_index, "id")?;
     let part = slides[pos].part.clone();
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let currently = is_hidden(&doc.root);
     if currently == op.hidden {
         return Ok(());
@@ -215,7 +215,7 @@ pub fn set_hidden(
     } else {
         doc.root.remove_attr("show");
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

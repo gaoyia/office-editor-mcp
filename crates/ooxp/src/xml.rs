@@ -574,6 +574,55 @@ pub(crate) fn mark_new(el: &mut Element, family: &str) {
     el.set_attr(&pin_attr(family), "");
 }
 
+/// 按文档顺序给 `pred` 命中的元素编号，命中后不再走进去。
+/// `mc:AlternateContent` 只进 `alternate_child` 选出的那一支。`skip` 为真的元素整棵跳过。
+pub(crate) fn pin_counted(
+    root: &mut Element,
+    family: &str,
+    pred: fn(&Element) -> bool,
+    skip: fn(&Element) -> bool,
+) {
+    fn walk(
+        el: &mut Element,
+        family: &str,
+        pred: fn(&Element) -> bool,
+        skip: fn(&Element) -> bool,
+        n: &mut usize,
+    ) {
+        if skip(el) {
+            return;
+        }
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = alternate_child(el).unwrap_or(None) {
+                if let Node::Element(child) = &mut el.children[i] {
+                    walk(child, family, pred, skip, n);
+                }
+            }
+            return;
+        }
+        if pred(el) {
+            *n += 1;
+            let attr = pin_attr(family);
+            if el.attr(&attr).is_none() {
+                el.set_attr(&attr, n.to_string());
+            }
+            return;
+        }
+        let kids: Vec<usize> = el
+            .children
+            .iter()
+            .enumerate()
+            .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+            .collect();
+        for i in kids {
+            if let Node::Element(child) = &mut el.children[i] {
+                walk(child, family, pred, skip, n);
+            }
+        }
+    }
+    walk(root, family, pred, skip, &mut 0);
+}
+
 /// 按 `classify` 的顺序给还没有编号的成员记下序号。已有编号的不再改。
 pub(crate) fn pin_tree(root: &mut Element, attr: &str, classify: &impl Fn(&Element) -> PinNode) {
     fn walk(

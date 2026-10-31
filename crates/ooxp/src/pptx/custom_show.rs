@@ -19,6 +19,23 @@ pub struct ShowInfo {
     pub rids: Vec<String>,
 }
 
+pub(crate) fn pin(root: &mut Element) {
+    let Some(lst) = cust_show_lst_mut(root) else {
+        return;
+    };
+    let attr = crate::xml::pin_attr("show");
+    let mut n = 0usize;
+    for child in lst.element_children_mut() {
+        if child.local_name() != "custShow" {
+            continue;
+        }
+        n += 1;
+        if child.attr(&attr).is_none() {
+            child.set_attr(&attr, n.to_string());
+        }
+    }
+}
+
 pub fn count(root: &Element) -> usize {
     cust_show_lst(root)
         .map(|lst| {
@@ -136,7 +153,7 @@ pub fn insert(
     let insert_at = op.after.unwrap_or_else(|| count(&pres.root));
     let lst = ensure_cust_show_lst(&mut pres.root);
     insert_show_at(lst, insert_at, el);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -165,7 +182,7 @@ pub fn set(
     if let Some(rids) = rids {
         replace_sld_lst(show, &rids);
     }
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -182,7 +199,7 @@ pub fn delete(
     if count(&pres.root) == 0 {
         drop_cust_show_lst(&mut pres.root);
     }
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -252,16 +269,31 @@ fn ensure_show_index(
     op_index: usize,
     field: &str,
 ) -> Result<usize, Error> {
-    let total = count(root);
-    if n < 1 || n > total {
+    let Some(lst) = cust_show_lst(root) else {
         return Err(Error::with_path(
             ErrorKind::CustomShowNotFound {
                 id: format!("show:{n}"),
             },
             format!("ops[{op_index}].{field}"),
         ));
+    };
+    let attr = crate::xml::pin_attr("show");
+    let mut live = 0usize;
+    for el in lst
+        .element_children()
+        .filter(|e| e.local_name() == "custShow")
+    {
+        live += 1;
+        if crate::xml::pin_matches(el, &attr, n, live) {
+            return Ok(live - 1);
+        }
     }
-    Ok(n - 1)
+    Err(Error::with_path(
+        ErrorKind::CustomShowNotFound {
+            id: format!("show:{n}"),
+        },
+        format!("ops[{op_index}].{field}"),
+    ))
 }
 
 fn next_xml_id(root: &Element) -> u32 {

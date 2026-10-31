@@ -135,7 +135,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let target = parse_ole_id(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
     let host_part = picture::resolve_tree_part(
@@ -147,7 +147,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
         ErrorKind::OleNotFound { id: id.to_string() },
         "id",
     )?;
-    let doc = crate::xml::parse(pkg.get(&host_part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &host_part)?;
     let frame = find_frame(&pkg, &host_part, &doc.root, &target.key)?
         .ok_or_else(|| Error::with_path(ErrorKind::OleNotFound { id: id.to_string() }, "id"))?;
     let obj = find_ole_obj(frame)
@@ -486,9 +486,14 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
+pub(crate) fn pin_oles(root: &mut Element) {
+    // 是否计入还要看关系，不能只按元素编号，否则会和查找的序号错开。
+    let _ = root;
+}
+
 fn frame_matches(frame: &Element, index: usize, key: &OleKey) -> bool {
     match key {
-        OleKey::Index(n) => index == *n,
+        OleKey::Index(n) => crate::xml::pin_matches(frame, &crate::xml::pin_attr("ole"), *n, index),
         OleKey::Id(req) => cnv_of_frame(frame).0.is_some_and(|id| ids_match(&id, req)),
     }
 }

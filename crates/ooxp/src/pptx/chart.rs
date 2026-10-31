@@ -346,10 +346,16 @@ fn load_embed(pkg: &Package, chart_part: &str, space: &Element) -> Option<Vec<u8
     pkg.get(&part).ok().map(|b| b.to_vec())
 }
 
+pub(crate) fn pin_charts(root: &mut Element) {
+    crate::xml::pin_counted(root, "chart", is_counted_chart, |_| false);
+}
+
 fn key_matches(frame: &Element, index: usize, key: &ChartKey) -> bool {
     match key {
         ChartKey::Id(want) => cnv_of_frame(frame).0.as_deref() == Some(want.as_str()),
-        ChartKey::Index(k) => index == *k,
+        ChartKey::Index(k) => {
+            crate::xml::pin_matches(frame, &crate::xml::pin_attr("chart"), *k, index)
+        }
     }
 }
 
@@ -484,7 +490,7 @@ fn load_chart_space(
         )
     })?;
     let chart_part = crate::opc::resolve_id(pkg, slide_part, &rid)?;
-    let doc = xml::parse(pkg.get(&chart_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &chart_part)?;
     Ok((doc, chart_part))
 }
 
@@ -492,7 +498,7 @@ pub fn export_chart_data(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_chart_id(id, "id")?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = super::picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
     let part = super::picture::resolve_tree_part(
@@ -504,13 +510,13 @@ pub fn export_chart_data(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
         ErrorKind::ChartNotFound { id: id.to_string() },
         "id",
     )?;
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &part)?;
     let frame = find_frame_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let rid = chart_rid(frame)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &part, &rid)?;
-    let chart_doc = xml::parse(pkg.get(&chart_part)?)?;
+    let chart_doc = super::list_pin::parse_part(&pkg, &chart_part)?;
     let embed_rid = chart::external_data_rid(&chart_doc.root).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PartMissing {
@@ -750,7 +756,7 @@ pub fn apply_title(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_chart_title(&mut space.root, &op.title);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -787,7 +793,7 @@ pub fn apply_series(
         op.sizes.as_deref(),
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -897,7 +903,7 @@ pub fn apply_add_series(
         op.series_type,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1044,7 +1050,7 @@ pub fn apply_delete_series(
         ));
     }
     chart::remove_series_at(&mut space.root, op.index);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1071,7 +1077,7 @@ pub fn apply_type(
         &op.extra,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1086,7 +1092,7 @@ pub fn apply_axis_title(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_axis_title(&mut space.root, &op.axis, &op.title, i)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1101,7 +1107,7 @@ pub fn apply_legend(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_legend(&mut space.root, op.show, op.pos.as_deref());
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1116,7 +1122,7 @@ pub fn apply_data_labels(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     chart::set_data_labels(&mut space.root, op.show);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1131,7 +1137,7 @@ pub fn apply_insert_trendline(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::series_decor::insert_trendline(&mut space.root, &op.id, op.index, &op.spec, i)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1153,7 +1159,7 @@ pub fn apply_set_trendline(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1174,7 +1180,7 @@ pub fn apply_delete_trendline(
         op.tl_index,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1189,7 +1195,7 @@ pub fn apply_insert_error_bars(
         load_chart_space(pkg, slide_root, slide_part, &op.target, &op.id, i)?;
     chart::reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     crate::chart::series_decor::insert_error_bars(&mut space.root, &op.id, op.index, &op.spec, i)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1211,7 +1217,7 @@ pub fn apply_set_error_bars(
         &op.spec,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1232,7 +1238,7 @@ pub fn apply_delete_error_bars(
         op.eb_index,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1253,7 +1259,7 @@ pub fn apply_series_axis(
         op.secondary,
         i,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 

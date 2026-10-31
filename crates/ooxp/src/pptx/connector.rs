@@ -243,7 +243,9 @@ fn find_in<'a>(el: &'a mut Element, idx: &mut usize, key: &ShapeKey) -> Option<&
         if el.local_name() == "cxnSp" {
             *idx += 1;
             if match key {
-                ShapeKey::Index(n) => *idx == *n,
+                ShapeKey::Index(n) => {
+                    crate::xml::pin_matches(el, &crate::xml::pin_attr("cxn"), *n, *idx)
+                }
                 ShapeKey::Id(req) => cnv_pr(el)
                     .and_then(|c| c.attr("id"))
                     .is_some_and(|id| shape::ids_match(id, req)),
@@ -583,9 +585,13 @@ fn scan_alt_for_hit(ac: &Element, idx: &mut usize, key: &ShapeKey) -> Option<Opt
     hit
 }
 
+pub(crate) fn pin_connectors(root: &mut Element) {
+    crate::xml::pin_counted(root, "cxn", |el| el.local_name() == "cxnSp", |_| false);
+}
+
 fn matches_key(el: &Element, index: usize, key: &ShapeKey) -> bool {
     match key {
-        ShapeKey::Index(n) => index == *n,
+        ShapeKey::Index(n) => crate::xml::pin_matches(el, &crate::xml::pin_attr("cxn"), *n, index),
         ShapeKey::Id(req) => cnv_pr(el)
             .and_then(|c| c.attr("id"))
             .is_some_and(|id| shape::ids_match(id, req)),

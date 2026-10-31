@@ -13,7 +13,21 @@ use super::{DML_NS, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
-pub use crate::model3d::{key_matches, Model3dKey};
+pub use crate::model3d::Model3dKey;
+
+pub(crate) fn pin_models(root: &mut Element) {
+    crate::xml::pin_counted(root, "model3d", crate::model3d::is_model3d_graphic, |_| {
+        false
+    });
+}
+
+fn model_hit(el: &Element, key: &Model3dKey, index: usize) -> bool {
+    if let Model3dKey::Index(n) = key {
+        return crate::xml::pin_matches(el, &crate::xml::pin_attr("model3d"), *n, index);
+    }
+    let raw = cnv_of(el).0;
+    crate::model3d::key_matches(key, &raw, index)
+}
 
 #[derive(Debug, Clone)]
 pub struct Model3dTarget {
@@ -241,7 +255,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_id(id, "id")?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = super::picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
     let part = super::picture::resolve_tree_part(
@@ -253,7 +267,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
         ErrorKind::Model3dNotFound { id: id.to_string() },
         "id",
     )?;
-    let doc = crate::xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &part)?;
     let frame = find_frame(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: id.to_string() }, "id"))?;
     let rid = crate::model3d::glb_embed_rid(frame)
@@ -274,7 +288,7 @@ fn find_frame<'a>(root: &'a Element, key: &Model3dKey) -> Option<&'a Element> {
     let mut index = 0usize;
     for frame in frames {
         index += 1;
-        if key_matches(key, &cnv_of(frame).0, index) {
+        if model_hit(frame, key, index) {
             return Some(frame);
         }
     }
@@ -584,7 +598,7 @@ fn ac_matches(ac: &Element, key: &Model3dKey, index: &mut usize) -> bool {
     let mut hit = false;
     for frame in frames {
         *index += 1;
-        if key_matches(key, &cnv_of(frame).0, *index) {
+        if model_hit(frame, key, *index) {
             hit = true;
         }
     }
@@ -716,7 +730,7 @@ fn remove_in(el: &mut Element, key: &Model3dKey, index: &mut usize) -> bool {
             let mut hit = false;
             for frame in frames {
                 *index += 1;
-                if key_matches(key, &cnv_of(frame).0, *index) {
+                if model_hit(frame, key, *index) {
                     hit = true;
                 }
             }
@@ -727,7 +741,7 @@ fn remove_in(el: &mut Element, key: &Model3dKey, index: &mut usize) -> bool {
         } else if child.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(child)
         {
             *index += 1;
-            if key_matches(key, &cnv_of(child).0, *index) {
+            if model_hit(child, key, *index) {
                 drop = Some(i);
                 break;
             }

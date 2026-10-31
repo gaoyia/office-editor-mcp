@@ -134,7 +134,7 @@ pub fn count_on_slide(pkg: &Package, slide_part: &str) -> Result<usize, Error> {
     let Some(part) = comments_part(pkg, slide_part)? else {
         return Ok(0);
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(cm_elements(&doc.root).count())
 }
 
@@ -147,7 +147,7 @@ pub fn collect_on_slide(
     let Some(part) = comments_part(pkg, slide_part)? else {
         return Ok(Vec::new());
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     let rels = Relationships::from_package(pkg, &part)?;
     let authors = load_authors(pkg)?;
     let mut out = Vec::new();
@@ -166,7 +166,7 @@ fn load_authors(pkg: &Package) -> Result<Vec<Author>, Error> {
         return Ok(Vec::new());
     };
     let part = opc::resolve_id(pkg, &pres_part, &rel.id)?;
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(author_elements(&doc.root)
         .map(|e| Author {
             id: e.attr("id").unwrap_or("").to_string(),
@@ -328,7 +328,7 @@ pub fn export_pic(
     };
     let part = comments_part(pkg, slide_part)?
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     let host = find_comment_host(&doc.root, cm)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
     let skip_reply_lst = cm.reply.is_none();
@@ -516,7 +516,7 @@ pub fn insert_picture(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     {
         let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
             Error::with_path(
@@ -541,7 +541,7 @@ pub fn insert_picture(
         )
     })?;
     insert_blip(host, &rid, svg_rid.as_deref());
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -582,7 +582,7 @@ pub fn replace_picture(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let image = picture::read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
     let dirty = {
         let host = find_host_mut(&mut doc.root, &key).ok_or_else(|| {
@@ -606,7 +606,7 @@ pub fn replace_picture(
         xml_dirty
     };
     if dirty {
-        pkg.set(&part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
     }
     Ok(())
 }
@@ -648,7 +648,7 @@ pub fn delete_picture(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let rids = {
         let host = find_host_mut(&mut doc.root, &key).ok_or_else(|| {
             Error::with_path(
@@ -663,7 +663,7 @@ pub fn delete_picture(
             )
         })?
     };
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     for rid in rids {
         let old_media = opc::resolve_id(pkg, &part, &rid).ok();
         let still = find_host_mut(&mut doc.root, &key)
@@ -743,7 +743,7 @@ pub fn apply_insert(
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
         _ => {
-            let doc = xml::parse(pkg.get(&meta.part)?)?;
+            let doc = super::list_pin::parse_part(pkg, &meta.part)?;
             picture::vacant_pos(&pres.root, &doc.root, 914_400, 914_400)
         }
     };
@@ -753,13 +753,13 @@ pub fn apply_insert(
         .clone()
         .unwrap_or_else(crate::host_env::utc_now_millis);
     let guid = crate::host_env::new_guid();
-    let mut slide_doc = xml::parse(pkg.get(&meta.part)?)?;
+    let mut slide_doc = super::list_pin::parse_part(pkg, &meta.part)?;
     let part = ensure_comments_part(pkg, &meta.part, &mut slide_doc, sld_id)?;
-    pkg.set(&meta.part, slide_doc.to_bytes()?)?;
-    let mut cdoc = xml::parse(pkg.get(&part)?)?;
+    super::list_pin::write_part(pkg, &meta.part, &slide_doc)?;
+    let mut cdoc = super::list_pin::parse_part(pkg, &part)?;
     let cm = build_cm(&guid, &author_id, &created, x, y, sld_id, &op.text);
     cdoc.root.push_element(cm);
-    pkg.set(&part, cdoc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &cdoc)?;
     Ok(())
 }
 
@@ -786,7 +786,7 @@ pub fn apply_reply(
         )
     })?;
     {
-        let mut doc = xml::parse(pkg.get(&part)?)?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
         let cm = find_cm_mut(&mut doc.root, parent).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::CommentNotFound { id: op.id.clone() },
@@ -802,7 +802,7 @@ pub fn apply_reply(
         .unwrap_or_else(crate::host_env::utc_now_millis);
     let reply_id = crate::host_env::new_guid();
     let reply = build_reply(&reply_id, &author_id, &created, &op.text);
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let cm = find_cm_mut(&mut doc.root, parent).ok_or_else(|| {
         Error::with_path(
             ErrorKind::CommentNotFound { id: op.id.clone() },
@@ -819,7 +819,7 @@ pub fn apply_reply(
         ));
     };
     lst.push_element(reply);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -836,7 +836,7 @@ pub fn apply_delete(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     match &target.key {
         CommentKey::Top(guid) => {
             if !remove_cm(&mut doc.root, guid) {
@@ -861,7 +861,7 @@ pub fn apply_delete(
             }
         }
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -878,7 +878,7 @@ pub fn apply_set_text(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::CommentNotFound { id: op.id.clone() },
@@ -893,7 +893,7 @@ pub fn apply_set_text(
         )
     })?;
     crate::drawing_text::set_txbody_text(tx, &op.text);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -911,7 +911,7 @@ pub fn apply_set_meta(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::CommentNotFound { id: op.id.clone() },
@@ -938,7 +938,7 @@ pub fn apply_set_meta(
         let aid = ensure_author(pkg, pres_part, &name, &initials)?;
         host.set_attr("authorId", &aid);
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -955,7 +955,7 @@ pub fn apply_set_done(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::CommentNotFound { id: op.id.clone() },
@@ -967,7 +967,7 @@ pub fn apply_set_done(
     } else {
         host.remove_attr("status");
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -1130,7 +1130,7 @@ fn ensure_author(
         cts.write_to(pkg)?;
         AUTHORS_PART.to_string()
     };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if let Some(existing) = doc.root.element_children().find(|e| {
         e.local_name() == "author"
             && e.attr("name") == Some(name)
@@ -1152,7 +1152,7 @@ fn ensure_author(
         .with_attr("userId", user_id)
         .with_attr("providerId", "None");
     doc.root.push_element(author);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(id)
 }
 

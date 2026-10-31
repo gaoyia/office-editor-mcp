@@ -770,11 +770,33 @@ fn graphic_cnv_mut(frame: &mut Element) -> Option<&mut Element> {
         .and_then(|nv| nv.child_by_local_mut("cNvPr"))
 }
 
-fn site_path(root: &Element, index: usize) -> Option<Vec<usize>> {
-    collect_sites(root, "")
+pub(crate) fn pin_links(root: &mut Element) {
+    let paths: Vec<Vec<usize>> = collect_sites(root, "")
         .into_iter()
-        .nth(index.checked_sub(1)?)
-        .map(|s| s.path)
+        .map(|site| site.path)
+        .collect();
+    let attr = crate::xml::pin_attr("link");
+    for (i, path) in paths.iter().enumerate() {
+        let Some(el) = el_at_mut(root, path) else {
+            continue;
+        };
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, (i + 1).to_string());
+        }
+    }
+}
+
+fn site_path(root: &Element, index: usize) -> Option<Vec<usize>> {
+    let attr = crate::xml::pin_attr("link");
+    let mut live = 0usize;
+    for site in collect_sites(root, "") {
+        live += 1;
+        let el = el_at(root, &site.path)?;
+        if crate::xml::pin_matches(el, &attr, index, live) {
+            return Some(site.path);
+        }
+    }
+    None
 }
 
 fn el_at<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> {

@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package, Relationships};
-use crate::xml::{self, Element, Node};
+use crate::xml::{Element, Node};
 
 #[derive(Debug, Clone)]
 pub struct SetShowPrOp {
@@ -43,7 +43,7 @@ pub fn inspect(pkg: &Package, pres_part: &str) -> Result<Value, Error> {
     let Some(part) = pres_props_part(pkg, pres_part)? else {
         return Ok(state_json(&powerpoint_default()));
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(inspect_root(&doc.root))
 }
 
@@ -115,9 +115,9 @@ pub fn apply(pkg: &mut Package, pres_part: &str, op: &SetShowPrOp, i: usize) -> 
             format!("ops[{i}].id"),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     patch_root(&mut doc.root, op);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

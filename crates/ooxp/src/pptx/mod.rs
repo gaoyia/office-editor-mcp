@@ -14,6 +14,7 @@ mod handout;
 mod hyperlink;
 mod ink;
 mod inspect;
+mod list_pin;
 mod master;
 mod media;
 mod model3d;

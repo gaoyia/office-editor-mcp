@@ -827,9 +827,54 @@ fn find_node<'a>(root: &'a Element, key: &ZoomKey) -> Result<Option<&'a Element>
     Ok(None)
 }
 
+pub(crate) fn pin_zooms(root: &mut Element) {
+    let mut n = 0usize;
+    pin_zoom_in(root, &mut n);
+}
+
+fn pin_zoom_in(el: &mut Element, n: &mut usize) {
+    if el.local_name() == "AlternateContent" {
+        if zoom_in(el).is_some() {
+            *n += 1;
+            let attr = crate::xml::pin_attr("zoom");
+            if el.attr(&attr).is_none() {
+                el.set_attr(&attr, n.to_string());
+            }
+            return;
+        }
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                pin_zoom_in(child, n);
+            }
+        }
+        return;
+    }
+    if is_zoom_frame(el) {
+        *n += 1;
+        let attr = crate::xml::pin_attr("zoom");
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, n.to_string());
+        }
+        return;
+    }
+    let kids: Vec<usize> = el
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+        .collect();
+    for i in kids {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_zoom_in(child, n);
+        }
+    }
+}
+
 fn node_matches(node: &Element, index: usize, key: &ZoomKey) -> bool {
     match key {
-        ZoomKey::Index(n) => index == *n,
+        ZoomKey::Index(n) => {
+            crate::xml::pin_matches(node, &crate::xml::pin_attr("zoom"), *n, index)
+        }
         ZoomKey::Id(req) => cnv_of(node).0.is_some_and(|id| ids_match(&id, req)),
     }
 }

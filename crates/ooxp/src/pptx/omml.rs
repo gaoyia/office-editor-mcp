@@ -11,7 +11,42 @@ use super::picture;
 use super::shape;
 use super::{DML_NS, REL_NS};
 
-pub use crate::drawing_math::{collect_acs, key_matches, set_in_index, MathKey};
+pub use crate::drawing_math::{collect_acs, set_in_index, MathKey};
+
+pub(crate) fn pin_maths(root: &mut Element) {
+    let mut n = 0usize;
+    pin_math_in(root, &mut n);
+}
+
+fn pin_math_in(el: &mut Element, n: &mut usize) {
+    if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
+        *n += 1;
+        let attr = crate::xml::pin_attr("math");
+        if el.attr(&attr).is_none() {
+            el.set_attr(&attr, n.to_string());
+        }
+        return;
+    }
+    let kids: Vec<usize> = el
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+        .collect();
+    for i in kids {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_math_in(child, n);
+        }
+    }
+}
+
+fn math_hit(el: &Element, key: &MathKey, index: usize) -> bool {
+    if let MathKey::Index(n) = key {
+        return crate::xml::pin_matches(el, &crate::xml::pin_attr("math"), *n, index);
+    }
+    let raw = crate::drawing_math::cnv_of_ac(el).0;
+    crate::drawing_math::key_matches(key, &raw, index)
+}
 
 #[derive(Debug, Clone)]
 pub struct MathTarget {
@@ -329,7 +364,7 @@ fn find_ac_mut<'a>(
     crate::xml::search_mut(el, |el| {
         if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
             *index += 1;
-            if key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, *index) {
+            if math_hit(el, key, *index) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -441,7 +476,7 @@ fn find_ac<'a>(root: &'a Element, key: &MathKey) -> Option<&'a Element> {
     let mut acs = Vec::new();
     collect_acs(root, &mut acs);
     for (i, ac) in acs.into_iter().enumerate() {
-        if key_matches(key, &crate::drawing_math::cnv_of_ac(ac).0, i + 1) {
+        if math_hit(ac, key, i + 1) {
             return Some(ac);
         }
     }
@@ -458,7 +493,7 @@ fn remove_in(el: &mut Element, key: &MathKey, index: &mut usize) -> bool {
         let Node::Element(child) = n else { continue };
         if child.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(child) {
             *index += 1;
-            if key_matches(key, &crate::drawing_math::cnv_of_ac(child).0, *index) {
+            if math_hit(child, key, *index) {
                 drop = Some(i);
                 break;
             }

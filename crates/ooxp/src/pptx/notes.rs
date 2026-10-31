@@ -92,7 +92,7 @@ pub fn notes_json(
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     let host = picture::TreeHost::Slide {
         n: slide,
         on_notes: true,
@@ -318,7 +318,7 @@ pub fn apply_set_notes_text(
     op_index: usize,
 ) -> Result<(), Error> {
     let notes_part = ensure_notes_slide(pkg, pres_part, pres, slide_part)?;
-    let mut doc = xml::parse(pkg.get(&notes_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &notes_part)?;
     if find_body_mut(&mut doc.root).is_none() {
         append_body_placeholder(&mut doc.root)?;
     }
@@ -335,7 +335,7 @@ pub fn apply_set_notes_text(
         )
     })?;
     crate::drawing_text::set_txbody_text(tx, &op.text);
-    pkg.set(&notes_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &notes_part, &doc)?;
     Ok(())
 }
 
@@ -378,7 +378,7 @@ pub(crate) fn ensure_notes_master(
     });
     pres_rels.write_to(pkg, pres_part)?;
     insert_notes_master_id(&mut pres.root, &rid);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&master, CT_NOTES_MASTER)?;
     if let Some(theme) = cloned_theme.as_deref() {

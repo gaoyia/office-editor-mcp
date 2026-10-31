@@ -6,7 +6,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{resolve_id, ContentTypes, Package};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::shape;
@@ -14,7 +14,48 @@ use super::{DML_NS, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const P14_NS: &str = "http://schemas.microsoft.com/office/powerpoint/2010/main";
-use crate::ink::{self, key_matches, read_inkml, InkKey, CT_INKML};
+use crate::ink::{self, read_inkml, InkKey, CT_INKML};
+
+pub(crate) fn pin_inks(root: &mut Element) {
+    let mut n = 0usize;
+    pin_ink_in(root, &mut n);
+}
+
+fn pin_ink_in(el: &mut Element, n: &mut usize) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(choice) = el.child_by_local_mut("Choice") {
+            if choice_requires_p14(choice) {
+                if let Some(part) = choice.child_by_local_mut("contentPart") {
+                    *n += 1;
+                    let attr = crate::xml::pin_attr("ink");
+                    if part.attr(&attr).is_none() {
+                        part.set_attr(&attr, n.to_string());
+                    }
+                }
+            }
+        }
+        return;
+    }
+    let kids: Vec<usize> = el
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+        .collect();
+    for i in kids {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_ink_in(child, n);
+        }
+    }
+}
+
+fn ink_hit(el: &Element, key: &InkKey, index: usize) -> bool {
+    if let InkKey::Index(n) = key {
+        return crate::xml::pin_matches(el, &crate::xml::pin_attr("ink"), *n, index);
+    }
+    let raw = cnv_of(el).0;
+    crate::ink::key_matches(key, &raw, index)
+}
 
 const DEFAULT_CX: i64 = 914_400;
 const DEFAULT_CY: i64 = 914_400;
@@ -246,7 +287,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_id(id, "id")?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
-    let pres = xml::parse(pkg.get(&pres_part)?)?;
+    let pres = super::list_pin::parse_part(&pkg, &pres_part)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let host = picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
     let part = picture::resolve_tree_part(
@@ -258,7 +299,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
         ErrorKind::InkNotFound { id: id.to_string() },
         "id",
     )?;
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &part)?;
     let content = find_part(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::InkNotFound { id: id.to_string() }, "id"))?;
     let rid = content
@@ -280,7 +321,7 @@ fn find_part<'a>(root: &'a Element, key: &InkKey) -> Option<&'a Element> {
     let mut index = 0usize;
     for part in parts {
         index += 1;
-        if key_matches(key, &cnv_of(part).0, index) {
+        if ink_hit(part, key, index) {
             return Some(part);
         }
     }
@@ -536,7 +577,7 @@ fn ac_matches(ac: &Element, key: &InkKey, index: &mut usize) -> bool {
         return false;
     };
     *index += 1;
-    key_matches(key, &cnv_of(part).0, *index)
+    ink_hit(part, key, *index)
 }
 
 fn patch_ac_geom(
@@ -620,7 +661,7 @@ fn remove_in(el: &mut Element, key: &InkKey, index: &mut usize) -> bool {
             let mut hit = false;
             for part in parts {
                 *index += 1;
-                if key_matches(key, &cnv_of(part).0, *index) {
+                if ink_hit(part, key, *index) {
                     hit = true;
                 }
             }

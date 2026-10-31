@@ -167,7 +167,7 @@ pub fn apply(
         ErrorKind::MasterNotFound { n: 0 },
         &json_path,
     )?;
-    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let old_rids = {
         let mut rids = Vec::new();
         collect_snd_rids(&doc.root, &mut rids);
@@ -196,7 +196,7 @@ pub fn apply(
         }
     }
     drop_unused_audio(pkg, &doc.root, &part, &old_rids)?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

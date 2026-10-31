@@ -50,26 +50,101 @@ struct LayoutRec {
     kind: Option<String>,
 }
 
+pub(crate) fn capture_freeze(
+    pkg: &Package,
+    pres_part: &str,
+    pres_root: &Element,
+) -> Result<(), Error> {
+    let mut snaps = Vec::new();
+    if let Some(lst) = pres_root.child_by_local("sldMasterIdLst") {
+        for el in lst
+            .element_children()
+            .filter(|e| e.local_name() == "sldMasterId")
+        {
+            let id = el.attr("id").map(str::to_string);
+            let mut layouts = Vec::new();
+            if let Some(rid) = shape::rid_attr(el) {
+                let part = opc::resolve_id(pkg, pres_part, rid)?;
+                let doc = super::list_pin::parse_part(pkg, &part)?;
+                if let Some(layout_lst) = doc.root.child_by_local("sldLayoutIdLst") {
+                    for layout in layout_lst
+                        .element_children()
+                        .filter(|e| e.local_name() == "sldLayoutId")
+                    {
+                        layouts.push(layout.attr("id").map(str::to_string));
+                    }
+                }
+            }
+            snaps.push(super::list_pin::MasterSnap { id, layouts });
+        }
+    }
+    super::list_pin::set_masters(snaps);
+    Ok(())
+}
+
 pub fn catalog(pkg: &Package, pres_part: &str, pres_root: &Element) -> Result<Catalog, Error> {
+    let frozen = super::list_pin::masters_frozen();
     let mut masters = Vec::new();
-    for (i, part) in master_parts(pkg, pres_part, pres_root)?
-        .into_iter()
-        .enumerate()
+    let mut extra_master = 0usize;
+    let Some(lst) = pres_root.child_by_local("sldMasterIdLst") else {
+        return Ok(Catalog { masters });
+    };
+    for el in lst
+        .element_children()
+        .filter(|e| e.local_name() == "sldMasterId")
     {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let Some(rid) = shape::rid_attr(el) else {
+            continue;
+        };
+        let part = opc::resolve_id(pkg, pres_part, rid)?;
+        let master_id = el.attr("id");
+        let index = if frozen {
+            match super::list_pin::master_index(master_id) {
+                Some(n) => n,
+                None => {
+                    extra_master += 1;
+                    super::list_pin::master_len() + extra_master
+                }
+            }
+        } else {
+            masters.len() + 1
+        };
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         let name = csld_name(&doc.root);
         let mut layouts = Vec::new();
-        for (k, layout_part) in layout_parts(pkg, &part, &doc.root)?.into_iter().enumerate() {
-            let layout_doc = xml::parse(pkg.get(&layout_part)?)?;
-            layouts.push(LayoutRec {
-                index: k + 1,
-                part: layout_part,
-                name: csld_name(&layout_doc.root),
-                kind: layout_doc.root.attr("type").map(str::to_string),
-            });
+        let mut extra_layout = 0usize;
+        if let Some(layout_lst) = doc.root.child_by_local("sldLayoutIdLst") {
+            for layout_el in layout_lst
+                .element_children()
+                .filter(|e| e.local_name() == "sldLayoutId")
+            {
+                let Some(layout_rid) = shape::rid_attr(layout_el) else {
+                    continue;
+                };
+                let layout_part = opc::resolve_id(pkg, &part, layout_rid)?;
+                let layout_id = layout_el.attr("id");
+                let layout_index = if frozen {
+                    match super::list_pin::layout_index(master_id, layout_id) {
+                        Some(n) => n,
+                        None => {
+                            extra_layout += 1;
+                            super::list_pin::layout_len(master_id) + extra_layout
+                        }
+                    }
+                } else {
+                    layouts.len() + 1
+                };
+                let layout_doc = super::list_pin::parse_part(pkg, &layout_part)?;
+                layouts.push(LayoutRec {
+                    index: layout_index,
+                    part: layout_part,
+                    name: csld_name(&layout_doc.root),
+                    kind: layout_doc.root.attr("type").map(str::to_string),
+                });
+            }
         }
         masters.push(MasterRec {
-            index: i + 1,
+            index,
             part,
             name,
             layouts,
@@ -195,12 +270,12 @@ pub fn masters_json(
 ) -> Result<Value, Error> {
     let mut out = Vec::new();
     for m in &catalog.masters {
-        let doc = xml::parse(pkg.get(&m.part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &m.part)?;
         let host = format!("master:{}", m.index);
         let master_anims = super::timing::list(&doc.root, &host, true);
         let mut layouts = Vec::new();
         for l in &m.layouts {
-            let layout_doc = xml::parse(pkg.get(&l.part)?)?;
+            let layout_doc = super::list_pin::parse_part(pkg, &l.part)?;
             let layout_host = format!("{host}/layout:{}", l.index);
             let layout_anims = super::timing::list(&layout_doc.root, &layout_host, true);
             let mut layout_obj = Map::new();
@@ -606,9 +681,9 @@ pub fn insert_deco_shape(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = catalog(pkg, pres_part, pres_root)?.xml_part(master, layout, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     shape::insert_shape(&mut doc, canvas_sz(pres_root), op)?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -622,7 +697,7 @@ pub fn delete_deco(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if find_placeholder_mut(&mut doc.root, &ph.key).is_some() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -642,7 +717,7 @@ pub fn delete_deco(
         shape::strip_timing_for_spid(&mut doc.root, &id);
     }
     shape::prune_empty_groups(&mut doc.root);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -714,12 +789,12 @@ fn apply_on_placeholder(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let sp = find_master_shape_mut(&mut doc.root, &ph.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ShapeNotFound { id: id.to_string() }, json_path)
     })?;
     f(sp)?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -858,25 +933,6 @@ fn master_parts(pkg: &Package, pres_part: &str, pres_root: &Element) -> Result<V
         {
             if let Some(rid) = shape::rid_attr(el) {
                 out.push(opc::resolve_id(pkg, pres_part, rid)?);
-            }
-        }
-    }
-    Ok(out)
-}
-
-fn layout_parts(
-    pkg: &Package,
-    master_part: &str,
-    master_root: &Element,
-) -> Result<Vec<String>, Error> {
-    let mut out = Vec::new();
-    if let Some(lst) = master_root.child_by_local("sldLayoutIdLst") {
-        for el in lst
-            .element_children()
-            .filter(|e| e.local_name() == "sldLayoutId")
-        {
-            if let Some(rid) = shape::rid_attr(el) {
-                out.push(opc::resolve_id(pkg, master_part, rid)?);
             }
         }
     }
@@ -1232,11 +1288,11 @@ pub fn insert_layout(
         extra: Vec::new(),
     });
     master_rels.write_to(pkg, &master_part)?;
-    let mut doc = xml::parse(pkg.get(&master_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &master_part)?;
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     let next_id = next_unique_sld_id(pkg, pres_part, pres_root)?;
     append_sld_layout_id(&mut doc.root, next_id, &rid);
-    pkg.set(&master_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &master_part, &doc)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&layout_part, CT_SLIDE_LAYOUT)?;
     cts.write_to(pkg)?;
@@ -1309,9 +1365,9 @@ pub fn delete_layout(
             format!("ops[{op_index}].id"),
         ));
     };
-    let mut doc = xml::parse(pkg.get(&master_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &master_part)?;
     remove_sld_layout_id(&mut doc.root, &rid);
-    pkg.set(&master_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &master_part, &doc)?;
     master_rels.remove_by_id(&rid);
     master_rels.write_to(pkg, &master_part)?;
     let mut cts = ContentTypes::from_package(pkg)?;
@@ -1333,7 +1389,7 @@ pub(crate) fn write_placeholder_into(
     cx: Option<i64>,
     cy: Option<i64>,
 ) -> Result<(), Error> {
-    let mut doc = xml::parse(pkg.get(part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, part)?;
     picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
     let cx = cx.unwrap_or(PH_CX);
     let cy = cy.unwrap_or(PH_CY);
@@ -1349,7 +1405,7 @@ pub(crate) fn write_placeholder_into(
         crate::drawing_text::set_txbody_text(tx, text);
     }
     picture::insert_into_sp_tree(&mut doc.root, sp)?;
-    pkg.set(part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, part, &doc)?;
     Ok(())
 }
 
@@ -1392,7 +1448,7 @@ pub fn delete_placeholder(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let spid = placeholder_spid(&doc.root, &ph.key);
     if !remove_placeholder(&mut doc.root, &ph.key) {
         return Err(Error::with_path(
@@ -1404,7 +1460,7 @@ pub fn delete_placeholder(
         shape::strip_timing_for_spid(&mut doc.root, &id);
     }
     shape::prune_empty_groups(&mut doc.root);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -1504,11 +1560,11 @@ pub fn insert_master(
         master_rels.push(copied);
     }
     master_rels.write_to(pkg, &new_master)?;
-    let mut master_doc = xml::parse(pkg.get(&new_master)?)?;
+    let mut master_doc = super::list_pin::parse_part(pkg, &new_master)?;
     picture::ensure_xmlns(&mut master_doc.root, "r", REL_NS);
     let mut next_id = next_unique_sld_id(pkg, pres_part, &pres.root)?;
     rewrite_sld_layout_id_lst(&mut next_id, &mut master_doc.root, &layout_rids);
-    pkg.set(&new_master, master_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &new_master, &master_doc)?;
     let mut pres_rels = Relationships::from_package(pkg, pres_part)?;
     let rid = pres_rels.next_rid();
     pres_rels.push(Relationship {
@@ -1521,7 +1577,7 @@ pub fn insert_master(
     pres_rels.write_to(pkg, pres_part)?;
     picture::ensure_xmlns(&mut pres.root, "r", REL_NS);
     append_sld_master_id(&mut pres.root, next_id, &rid);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&new_master, CT_SLIDE_MASTER)?;
     for (_, dest) in &new_layouts {
@@ -1597,7 +1653,7 @@ pub fn delete_master(
     remove_sld_master_id(&mut pres.root, &rid);
     pres_rels.remove_by_id(&rid);
     pres_rels.write_to(pkg, pres_part)?;
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     pkg.remove(&master_part);
     pkg.remove(&rels_part_name(&master_part));
@@ -1660,7 +1716,7 @@ fn next_unique_sld_id(pkg: &Package, pres_part: &str, pres_root: &Element) -> Re
         }
     }
     for part in master_parts(pkg, pres_part, pres_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if let Some(lst) = doc.root.child_by_local("sldLayoutIdLst") {
             for el in lst
                 .element_children()

@@ -432,9 +432,13 @@ fn fld_rel_path(el: &Element, key: &FieldKey, idx: &mut usize) -> Option<Vec<usi
     None
 }
 
+pub(crate) fn pin_fields(root: &mut Element) {
+    crate::xml::pin_counted(root, "fld", |el| el.local_name() == "fld", |_| false);
+}
+
 fn matches_key(el: &Element, key: &FieldKey, index: usize) -> bool {
     match key {
-        FieldKey::Index(n) => *n == index,
+        FieldKey::Index(n) => crate::xml::pin_matches(el, &crate::xml::pin_attr("fld"), *n, index),
         FieldKey::Guid(g) => el_id(el) == Some(g.as_str()),
     }
 }

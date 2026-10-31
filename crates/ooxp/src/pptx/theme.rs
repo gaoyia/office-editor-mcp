@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package, Relationships};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::handout;
 use super::master;
@@ -108,7 +108,7 @@ pub fn theme_json(pkg: &Package, master_part: &str) -> Result<Value, Error> {
     let Some(part) = theme_part(pkg, master_part)? else {
         return Ok(Value::Null);
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(crate::theme::inspect_full(&doc.root))
 }
 
@@ -163,7 +163,7 @@ pub fn set_theme_colors(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if !slots.is_empty() && !crate::theme::patch_colors(&mut doc.root, slots) {
         return Err(missing_theme(host, &json_path));
     }
@@ -175,7 +175,7 @@ pub fn set_theme_colors(
     if let Some(name) = theme_name {
         crate::theme::patch_theme_name(&mut doc.root, name);
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -192,7 +192,7 @@ pub fn set_theme_fonts(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     crate::theme::patch_fonts(&mut doc.root, patches, &json_path)?;
     if let Some(name) = name {
         if !crate::theme::patch_font_scheme_name(&mut doc.root, name) {
@@ -205,7 +205,7 @@ pub fn set_theme_fonts(
     if let Some(fonts) = minor_scripts {
         crate::theme::replace_script_fonts(&mut doc.root, false, fonts, &json_path)?;
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -222,7 +222,7 @@ pub fn set_theme_fmt(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if let Some((index, w)) = line {
         if !crate::theme::patch_line_width(&mut doc.root, index, w) {
             return Err(Error::with_path(
@@ -255,7 +255,7 @@ pub fn set_theme_fmt(
             ));
         }
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -269,9 +269,9 @@ pub fn set_theme_extra_schemes(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     crate::theme::replace_extra_schemes(&mut doc.root, schemes);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -285,9 +285,9 @@ pub fn set_theme_object_defaults(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     crate::theme::patch_object_defaults(&mut doc.root, defaults);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

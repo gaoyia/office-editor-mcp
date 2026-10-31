@@ -86,7 +86,7 @@ pub fn apply(
             Node::Element(e) => e.local_name() != "modifyVerifier",
             _ => true,
         });
-        pkg.set(pres_part, pres.to_bytes()?)?;
+        super::list_pin::write_part(pkg, pres_part, pres)?;
         return Ok(());
     }
     if op.password.is_none()
@@ -103,7 +103,7 @@ pub fn apply(
     } else {
         strip_hash_attrs(el);
     }
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 

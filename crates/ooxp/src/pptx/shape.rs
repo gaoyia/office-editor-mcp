@@ -181,7 +181,7 @@ pub fn list_slides(
         let rid = rid_attr(sld_id)
             .ok_or_else(|| Error::new(ErrorKind::SlideRelMissing { index: i + 1 }))?;
         let part = opc::resolve_id(pkg, pres_part, rid)?;
-        let doc = crate::xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         let name = doc
             .root
             .child_by_local("cSld")
@@ -316,7 +316,9 @@ fn find_sp_mut<'a>(
         if el.local_name() == "sp" && el.child_by_local("txBody").is_some() {
             *idx += 1;
             if match target {
-                ShapeKey::Index(n) => *idx == *n,
+                ShapeKey::Index(n) => {
+                    crate::xml::pin_matches(el, &crate::xml::pin_attr("shape"), *n, *idx)
+                }
                 ShapeKey::Id(req) => cnv_pr(el)
                     .and_then(|c| c.attr("id"))
                     .is_some_and(|id| ids_match(id, req)),
@@ -375,9 +377,15 @@ fn is_counted_shape(el: &Element) -> bool {
     el.local_name() == "sp" && el.child_by_local("txBody").is_some()
 }
 
+pub(crate) fn pin_shapes(root: &mut Element) {
+    crate::xml::pin_counted(root, "shape", is_counted_shape, |_| false);
+}
+
 fn shape_matches(el: &Element, index: usize, key: &ShapeKey) -> bool {
     match key {
-        ShapeKey::Index(n) => index == *n,
+        ShapeKey::Index(n) => {
+            crate::xml::pin_matches(el, &crate::xml::pin_attr("shape"), *n, index)
+        }
         ShapeKey::Id(req) => cnv_pr(el)
             .and_then(|c| c.attr("id"))
             .is_some_and(|id| ids_match(id, req)),

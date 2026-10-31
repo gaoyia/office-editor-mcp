@@ -1406,21 +1406,26 @@ pub fn insert_row(slide_doc: &mut Document, op: &InsertRowOp, i: usize) -> Resul
     if tr_pos.is_empty() {
         return Err(missing_table(&op.id, i));
     }
-    let ref_i = match after_row {
-        None => tr_pos.len() - 1,
+    let ref_child = match after_row {
+        None => tr_pos[tr_pos.len() - 1],
         Some(r) => {
-            if r < 1 || r > tr_pos.len() {
+            let Some(child) = child_of_pin(tbl, "tr", "tr", r) else {
                 return Err(missing_table(&op.id, i));
-            }
-            r - 1
+            };
+            child
         }
     };
-    let ref_child = tr_pos[ref_i];
     let proto = match &tbl.children[ref_child] {
         Node::Element(e) => e.clone(),
         _ => return Err(missing_table(&op.id, i)),
     };
-    let neu = clone_row_layout(&proto);
+    let mut neu = clone_row_layout(&proto);
+    crate::xml::mark_new(&mut neu, "tr");
+    for cell in neu.element_children_mut() {
+        if cell.local_name() == "tc" {
+            crate::xml::mark_new(cell, "tc");
+        }
+    }
     let insert_at = ref_child + 1;
     tbl.children.insert(insert_at, Node::Element(neu));
     Ok(())
@@ -1473,19 +1478,96 @@ fn clone_tc_layout(src: &Element) -> Element {
     tc
 }
 
+pub(crate) fn pin_tables(root: &mut Element) {
+    pin_tbl_tree(root);
+}
+
+fn pin_tbl_tree(el: &mut Element) {
+    if el.local_name() == "tbl" {
+        pin_one_table(el);
+        return;
+    }
+    let kids: Vec<usize> = el
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+        .collect();
+    for i in kids {
+        if let Node::Element(child) = &mut el.children[i] {
+            pin_tbl_tree(child);
+        }
+    }
+}
+
+fn pin_one_table(tbl: &mut Element) {
+    if let Some(grid) = tbl.child_by_local_mut("tblGrid") {
+        let attr = crate::xml::pin_attr("col");
+        let mut n = 0usize;
+        for col in grid.element_children_mut() {
+            if col.local_name() != "gridCol" {
+                continue;
+            }
+            n += 1;
+            if col.attr(&attr).is_none() {
+                col.set_attr(&attr, n.to_string());
+            }
+        }
+    }
+    let row_attr = crate::xml::pin_attr("tr");
+    let mut row = 0usize;
+    for tr in tbl.element_children_mut() {
+        if tr.local_name() != "tr" {
+            continue;
+        }
+        row += 1;
+        if tr.attr(&row_attr).is_none() {
+            tr.set_attr(&row_attr, row.to_string());
+        }
+        let col_attr = crate::xml::pin_attr("tc");
+        let mut col = 0usize;
+        for tc in tr.element_children_mut() {
+            if tc.local_name() != "tc" {
+                continue;
+            }
+            col += 1;
+            if tc.attr(&col_attr).is_none() {
+                tc.set_attr(&col_attr, col.to_string());
+            }
+        }
+    }
+}
+
+fn child_of_pin(parent: &Element, local: &str, family: &str, wanted: usize) -> Option<usize> {
+    let attr = crate::xml::pin_attr(family);
+    let mut live = 0usize;
+    for (i, node) in parent.children.iter().enumerate() {
+        let Node::Element(el) = node else {
+            continue;
+        };
+        if el.local_name() != local {
+            continue;
+        }
+        live += 1;
+        if crate::xml::pin_matches(el, &attr, wanted, live) {
+            return Some(i);
+        }
+    }
+    None
+}
+
 pub fn delete_row(slide_doc: &mut Document, op: &DeleteRowOp, i: usize) -> Result<(), Error> {
     let tbl = require_tbl(slide_doc, &op.table.key, &op.id, i)?;
     let tr_pos = tr_child_indices(tbl);
-    if op.row < 1 || op.row > tr_pos.len() {
-        return Err(missing_table(&op.id, i));
-    }
     if tr_pos.len() <= 1 {
         return Err(Error::with_path(
             ErrorKind::LastTableRow,
             format!("ops[{i}].id"),
         ));
     }
-    let child_i = tr_pos[op.row - 1];
+    let Some(child_i) = child_of_pin(tbl, "tr", "tr", op.row) else {
+        return Err(missing_table(&op.id, i));
+    };
     let tr = match &tbl.children[child_i] {
         Node::Element(e) => e,
         _ => return Err(missing_table(&op.id, i)),
@@ -1570,10 +1652,9 @@ fn insert_grid_col(tbl: &mut Element, at: usize, w: i64) {
     if col_i < at {
         insert_at = grid.children.len();
     }
-    grid.children.insert(
-        insert_at,
-        Node::Element(Element::new("a:gridCol").with_attr("w", w.to_string())),
-    );
+    let mut col = Element::new("a:gridCol").with_attr("w", w.to_string());
+    crate::xml::mark_new(&mut col, "col");
+    grid.children.insert(insert_at, Node::Element(col));
 }
 
 fn insert_tc_in_row(tr: &mut Element, after: usize) {
@@ -1593,6 +1674,7 @@ fn insert_tc_in_row(tr: &mut Element, after: usize) {
                 let insert_at = tc_insert_index(tr, after);
                 let mut neu = empty_hmerge_tc();
                 neu.name = name;
+                crate::xml::mark_new(&mut neu, "tc");
                 tr.children.insert(insert_at, Node::Element(neu));
                 return;
             }
@@ -1600,7 +1682,9 @@ fn insert_tc_in_row(tr: &mut Element, after: usize) {
         c += 1;
     }
     let insert_at = tc_insert_index(tr, after);
-    tr.children.insert(insert_at, Node::Element(empty_tc()));
+    let mut neu = empty_tc();
+    crate::xml::mark_new(&mut neu, "tc");
+    tr.children.insert(insert_at, Node::Element(neu));
 }
 
 fn tc_child_indices(tr: &Element) -> Vec<usize> {
@@ -1628,7 +1712,16 @@ pub fn delete_col(slide_doc: &mut Document, op: &DeleteColOp, i: usize) -> Resul
     reject_grid(tbl, i)?;
     let n = col_count(tbl);
     let col = op.col as usize;
-    if col < 1 || col > n {
+    if n <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastTableCol,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let Some(grid_i) = tbl
+        .child_by_local("tblGrid")
+        .and_then(|grid| child_of_pin(grid, "gridCol", "col", col))
+    else {
         return Err(Error::with_path(
             ErrorKind::OutOfRange {
                 field: "col".into(),
@@ -1637,14 +1730,10 @@ pub fn delete_col(slide_doc: &mut Document, op: &DeleteColOp, i: usize) -> Resul
             },
             format!("ops[{i}].col"),
         ));
+    };
+    if let Some(grid) = tbl.child_by_local_mut("tblGrid") {
+        grid.children.remove(grid_i);
     }
-    if n <= 1 {
-        return Err(Error::with_path(
-            ErrorKind::LastTableCol,
-            format!("ops[{i}].id"),
-        ));
-    }
-    remove_grid_col(tbl, col - 1);
     let tr_pos = tr_child_indices(tbl);
     for ti in tr_pos {
         let tr = match &mut tbl.children[ti] {
@@ -1656,31 +1745,12 @@ pub fn delete_col(slide_doc: &mut Document, op: &DeleteColOp, i: usize) -> Resul
     Ok(())
 }
 
-fn remove_grid_col(tbl: &mut Element, idx: usize) {
-    let Some(grid) = tbl.child_by_local_mut("tblGrid") else {
+fn delete_tc_in_row(tr: &mut Element, col: usize) {
+    let Some(child_i) = child_of_pin(tr, "tc", "tc", col) else {
         return;
     };
-    let mut seen = 0usize;
-    let mut drop = None;
-    for (i, n) in grid.children.iter().enumerate() {
-        if let Node::Element(e) = n {
-            if e.local_name() == "gridCol" {
-                if seen == idx {
-                    drop = Some(i);
-                    break;
-                }
-                seen += 1;
-            }
-        }
-    }
-    if let Some(i) = drop {
-        grid.children.remove(i);
-    }
-}
-
-fn delete_tc_in_row(tr: &mut Element, col: usize) {
     let tcs = tc_child_indices(tr);
-    let Some(&child_i) = tcs.get(col - 1) else {
+    let Some(live) = tcs.iter().position(|i| *i == child_i) else {
         return;
     };
     let (h_merge, span) = match &tr.children[child_i] {
@@ -1688,7 +1758,7 @@ fn delete_tc_in_row(tr: &mut Element, col: usize) {
         _ => return,
     };
     if h_merge {
-        if let Some(owner) = owner_start_index(&tcs, tr, col - 1) {
+        if let Some(owner) = owner_start_index(&tcs, tr, live) {
             if let Node::Element(tc) = &mut tr.children[tcs[owner]] {
                 let s = grid_span(tc).saturating_sub(1).max(1);
                 if s == 1 {
@@ -1710,7 +1780,7 @@ fn delete_tc_in_row(tr: &mut Element, col: usize) {
                 picture::set_attr_local(tc, "gridSpan", &s.to_string());
             }
         }
-        if let Some(&next_i) = tcs.get(col) {
+        if let Some(&next_i) = tcs.get(live + 1) {
             if let Node::Element(next) = &tr.children[next_i] {
                 if is_on(next, "hMerge") {
                     tr.children.remove(next_i);
@@ -1827,19 +1897,17 @@ fn require_tc_mut<'a>(
     i: usize,
 ) -> Result<&'a mut Element, Error> {
     let tbl = require_tbl(slide_doc, &target.table.key, id, i)?;
-    let tr_pos = tr_child_indices(tbl);
-    if target.row < 1 || target.row > tr_pos.len() {
+    let Some(tr_i) = child_of_pin(tbl, "tr", "tr", target.row) else {
         return Err(missing_table(id, i));
-    }
-    let tr = match &mut tbl.children[tr_pos[target.row - 1]] {
+    };
+    let tr = match &mut tbl.children[tr_i] {
         Node::Element(e) => e,
         _ => return Err(missing_table(id, i)),
     };
-    let tcs = tc_child_indices(tr);
-    if target.col < 1 || target.col > tcs.len() {
+    let Some(tc_i) = child_of_pin(tr, "tc", "tc", target.col) else {
         return Err(missing_table(id, i));
-    }
-    match &mut tr.children[tcs[target.col - 1]] {
+    };
+    match &mut tr.children[tc_i] {
         Node::Element(e) => Ok(e),
         _ => Err(missing_table(id, i)),
     }
@@ -2257,11 +2325,10 @@ pub fn apply_tr_height(
     i: usize,
 ) -> Result<(), Error> {
     let tbl = require_tbl(slide_doc, &op.table.key, &op.id, i)?;
-    let tr_pos = tr_child_indices(tbl);
-    if op.row < 1 || op.row > tr_pos.len() {
+    let Some(tr_i) = child_of_pin(tbl, "tr", "tr", op.row) else {
         return Err(missing_table(&op.id, i));
-    }
-    let tr = match &mut tbl.children[tr_pos[op.row - 1]] {
+    };
+    let tr = match &mut tbl.children[tr_i] {
         Node::Element(e) => e,
         _ => return Err(missing_table(&op.id, i)),
     };

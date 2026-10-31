@@ -12,6 +12,15 @@
 
 演示文稿根节点 id 固定为 `pptx:presentation`。
 
+一次 apply 里，下面这些位置序号按开始时解释。本批新建的不占旧序号。被删掉后再点名，报 `IdNotFound`。
+
+- 母版、版式：记下 `sldMasterId/@id`、`sldLayoutId/@id`
+- 节、自定义放映：演示文稿里的元素顺序
+- 页、备注页、母版和版式上没有 `cNvPr/@id` 的对象，以及链接、域、表的行列：第一次读到该部件时的顺序
+- 批注里的图：该批注部件里的顺序
+
+`series:{idx}`、`trendline:{k}`、`errorBars:{k}` 仍随本批重排。
+
 - **页**
   - id：`slide:{n}`
   - 例子：`slide:1`

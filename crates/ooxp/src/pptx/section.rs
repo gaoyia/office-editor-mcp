@@ -28,6 +28,23 @@ pub enum Place {
     Append,
 }
 
+pub(crate) fn pin(root: &mut Element) {
+    let Some(lst) = section_lst_mut(root) else {
+        return;
+    };
+    let attr = crate::xml::pin_attr("section");
+    let mut n = 0usize;
+    for child in lst.element_children_mut() {
+        if child.local_name() != "section" {
+            continue;
+        }
+        n += 1;
+        if child.attr(&attr).is_none() {
+            child.set_attr(&attr, n.to_string());
+        }
+    }
+}
+
 pub fn count(root: &Element) -> usize {
     section_lst(root)
         .map(|lst| {
@@ -142,7 +159,7 @@ pub fn insert(
     } else {
         insert_into_existing(&mut pres.root, op, &sids, op_index)?;
     }
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -157,7 +174,7 @@ pub fn set_name(
     let lst = section_lst_mut(&mut pres.root).expect("刚确认有节名单");
     let sec = section_at_mut(lst, idx).expect("刚确认节下标");
     sec.set_attr("name", op.name.clone());
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -171,7 +188,7 @@ pub fn delete(
     let idx = ensure_section_index(&pres.root, op.section, op_index, "id")?;
     if count(&pres.root) <= 1 {
         drop_section_lst(&mut pres.root);
-        pkg.set(pres_part, pres.to_bytes()?)?;
+        super::list_pin::write_part(pkg, pres_part, pres)?;
         return Ok(());
     }
     let sids = {
@@ -194,7 +211,7 @@ pub fn delete(
         }
         remove_section_at(lst, idx);
     }
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -232,7 +249,7 @@ pub fn set_slide(
     }
     adopt_orphans(&mut pres.root);
     reorder_sld_id_lst(&mut pres.root);
-    pkg.set(pres_part, pres.to_bytes()?)?;
+    super::list_pin::write_part(pkg, pres_part, pres)?;
     Ok(())
 }
 
@@ -354,16 +371,31 @@ fn ensure_section_index(
     op_index: usize,
     field: &str,
 ) -> Result<usize, Error> {
-    let total = count(root);
-    if n < 1 || n > total {
+    let Some(lst) = section_lst(root) else {
         return Err(Error::with_path(
             ErrorKind::SectionNotFound {
                 id: format!("section:{n}"),
             },
             format!("ops[{op_index}].{field}"),
         ));
+    };
+    let attr = crate::xml::pin_attr("section");
+    let mut live = 0usize;
+    for el in lst
+        .element_children()
+        .filter(|e| e.local_name() == "section")
+    {
+        live += 1;
+        if crate::xml::pin_matches(el, &attr, n, live) {
+            return Ok(live - 1);
+        }
     }
-    Ok(n - 1)
+    Err(Error::with_path(
+        ErrorKind::SectionNotFound {
+            id: format!("section:{n}"),
+        },
+        format!("ops[{op_index}].{field}"),
+    ))
 }
 
 fn adopt_orphans(root: &mut Element) {

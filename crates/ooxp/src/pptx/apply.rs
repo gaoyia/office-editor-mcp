@@ -35,10 +35,14 @@ use super::transition;
 use super::zoom;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
+    let _pins = super::list_pin::PinGuard::enter();
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     opc::reject_strict(&pkg)?;
     let pres_part = opc::office_document_part(&pkg)?;
-    let mut pres = xml::parse(pkg.get(&pres_part)?)?;
+    let mut pres = super::list_pin::parse_part(&pkg, &pres_part)?;
+    section::pin(&mut pres.root);
+    custom_show::pin(&mut pres.root);
+    master::capture_freeze(&pkg, &pres_part, &pres.root)?;
     let mut slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let frozen = shape::SlideFreeze::capture(&slides);
 
@@ -72,7 +76,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 } else {
                     meta.part.clone()
                 };
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 if target.on_notes {
                     if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
                         notes::reject_slide_image(sp, i)?;
@@ -94,7 +98,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )
                 })?;
                 crate::drawing_text::set_txbody_text(tx, &op.text);
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetShapeRuns(op) => {
                 if op.id.starts_with("master:")
@@ -124,7 +128,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 } else {
                     meta.part.clone()
                 };
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 if target.on_notes {
                     if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
                         notes::reject_slide_image(sp, i)?;
@@ -146,7 +150,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )
                 })?;
                 crate::drawing_text::set_txbody_runs(tx, &op.runs, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetShapeFormat(op) => {
                 apply_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
@@ -169,14 +173,14 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     } else {
                         meta.part.clone()
                     };
-                    let mut doc = xml::parse(pkg.get(&part)?)?;
+                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                     let canvas = if *on_notes {
                         notes::notes_size(&pres.root)
                     } else {
                         picture::canvas_size(&pres.root)
                     };
                     shape::insert_shape(&mut doc, canvas, op)?;
-                    pkg.set(&part, doc.to_bytes()?)?;
+                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
                 }
             },
             PptxOp::InsertConnector(op) => {
@@ -190,14 +194,14 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 let canvas = if op.on_notes {
                     notes::notes_size(&pres.root)
                 } else {
                     picture::canvas_size(&pres.root)
                 };
                 connector::insert(&mut doc, canvas, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteConnector(op) => {
                 let part = host_xml_part(
@@ -211,7 +215,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ConnectorNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 let Some(spid) = connector::try_remove(&mut doc.root, &op.target.key) else {
                     return Err(Error::with_path(
                         ErrorKind::ConnectorNotFound { id: op.id.clone() },
@@ -221,7 +225,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 if let Some(id) = spid {
                     shape::strip_timing_for_spid(&mut doc.root, &id);
                 }
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::GroupShapes(op) => {
                 let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
@@ -231,9 +235,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )
                 })?;
                 let part = meta.part.clone();
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 group::group(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::Ungroup(op) => {
                 let (slide, on_notes, master) = match &op.member {
@@ -251,9 +255,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SlideNotFound { n: slide as u32 },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 group::ungroup(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteShape(op) => {
                 if let Some(ph) = &op.placeholder {
@@ -294,9 +298,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         ErrorKind::ConnectorNotFound { id: op.id.clone() },
                         format!("ops[{i}].id"),
                     )?;
-                    let mut doc = xml::parse(pkg.get(&part)?)?;
+                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                     connector::set_pos(&mut doc, op, i)?;
-                    pkg.set(&part, doc.to_bytes()?)?;
+                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
                     continue;
                 }
                 let target = op.target.as_ref().expect("幻灯片形状");
@@ -327,9 +331,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         ErrorKind::ConnectorNotFound { id: op.id.clone() },
                         format!("ops[{i}].id"),
                     )?;
-                    let mut doc = xml::parse(pkg.get(&part)?)?;
+                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                     connector::set_size(&mut doc, op, i)?;
-                    pkg.set(&part, doc.to_bytes()?)?;
+                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
                     continue;
                 }
                 let target = op.target.as_ref().expect("幻灯片形状");
@@ -389,9 +393,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         ErrorKind::ConnectorNotFound { id: op.id.clone() },
                         format!("ops[{i}].id"),
                     )?;
-                    let mut doc = xml::parse(pkg.get(&part)?)?;
+                    let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                     connector::set_line(&mut doc, op, i)?;
-                    pkg.set(&part, doc.to_bytes()?)?;
+                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
                     continue;
                 }
                 let target = op.target.as_ref().expect("形状");
@@ -429,9 +433,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ConnectorNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 connector::set_binds(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetNotesText(op) => {
                 let meta = shape::slide_at_start(&slides, op.slide).ok_or_else(|| {
@@ -496,10 +500,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::PictureNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 let dirty = picture::replace_picture(&mut pkg, &part, &mut doc.root, op, i)?;
                 if dirty {
-                    pkg.set(&part, doc.to_bytes()?)?;
+                    super::list_pin::write_part(&mut pkg, &part, &doc)?;
                 }
             }
             PptxOp::InsertPicture(op) => {
@@ -523,7 +527,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 picture::insert_picture(
                     &mut pkg,
                     &mut doc,
@@ -532,7 +536,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op,
                     &format!("ops[{i}].file"),
                 )?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeletePicture(op) => {
                 if op.target.comment.is_some() {
@@ -559,9 +563,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::PictureNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 picture::delete_picture(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetPictureSize(op) => {
                 let missing = match &op.target {
@@ -579,9 +583,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     missing,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 picture::set_picture_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetPicturePos(op) => {
                 let missing = match &op.target {
@@ -599,9 +603,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     missing,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 picture::set_picture_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertVideo(op) => {
                 let part = ensure_host_part(
@@ -614,7 +618,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 media::insert(
                     &mut pkg,
                     &mut doc,
@@ -624,7 +628,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &format!("ops[{i}].file"),
                     media::MediaKind::Video,
                 )?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertAudio(op) => {
                 let part = ensure_host_part(
@@ -637,7 +641,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 media::insert(
                     &mut pkg,
                     &mut doc,
@@ -647,7 +651,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &format!("ops[{i}].file"),
                     media::MediaKind::Audio,
                 )?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteMedia(op) => {
                 let part = host_xml_part(
@@ -661,9 +665,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MediaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 media::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetMedia(op) => {
                 let part = host_xml_part(
@@ -677,9 +681,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MediaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 media::set(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertSlideSection(op) => {
                 let mut op = op.clone();
@@ -727,9 +731,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ole::insert(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteOle(op) => {
                 let part = host_xml_part(
@@ -743,9 +747,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::OleNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ole::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetOleSize(op) => {
                 let part = host_xml_part(
@@ -759,9 +763,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::OleNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ole::set_size(&mut doc, &part, &pkg, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertModel3d(op) => {
                 let part = ensure_host_part(
@@ -774,9 +778,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::ReplaceModel3d(op) => {
                 let part = host_xml_part(
@@ -790,7 +794,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::Model3dNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::replace(&mut pkg, &part, &doc.root, op, i)?;
             }
             PptxOp::DeleteModel3d(op) => {
@@ -805,9 +809,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::Model3dNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetModel3dSize(op) => {
                 let part = host_xml_part(
@@ -821,9 +825,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::Model3dNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::apply_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetModel3dPos(op) => {
                 let part = host_xml_part(
@@ -837,9 +841,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::Model3dNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::apply_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertInk(op) => {
                 let part = ensure_host_part(
@@ -852,9 +856,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ink::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::ReplaceInk(op) => {
                 let part = host_xml_part(
@@ -868,7 +872,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::InkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 ink::replace(&mut pkg, &part, &doc.root, op, i)?;
             }
             PptxOp::DeleteInk(op) => {
@@ -883,9 +887,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::InkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ink::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetInkSize(op) => {
                 let part = host_xml_part(
@@ -899,9 +903,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::InkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ink::apply_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetInkPos(op) => {
                 let part = host_xml_part(
@@ -915,9 +919,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::InkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 ink::apply_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetModel3dCamera(op) => {
                 let part = host_xml_part(
@@ -931,9 +935,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::Model3dNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 model3d::apply_camera(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertMath(op) => {
                 let part = ensure_host_part(
@@ -946,9 +950,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 omml::insert(&mut pkg, &mut doc, &part, op)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetMath(op) => {
                 let part = host_xml_part(
@@ -962,9 +966,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MathDrawingNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 omml::set(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteMath(op) => {
                 let part = host_xml_part(
@@ -978,9 +982,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MathDrawingNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 omml::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetMathSize(op) => {
                 let part = host_xml_part(
@@ -994,9 +998,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MathDrawingNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 omml::set_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetMathPos(op) => {
                 let part = host_xml_part(
@@ -1010,9 +1014,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::MathDrawingNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 omml::set_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertZoom(op) => {
                 let part = ensure_host_part(
@@ -1025,9 +1029,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 zoom::insert(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteZoom(op) => {
                 let part = host_xml_part(
@@ -1041,9 +1045,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ZoomNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 zoom::delete(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetZoom(op) => {
                 let part = host_xml_part(
@@ -1057,9 +1061,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ZoomNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 zoom::set(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetShowPr(op) => {
                 show::apply(&mut pkg, &pres_part, op, i)?;
@@ -1078,9 +1082,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::insert_chart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteChart(op) => {
                 let part = notes_or_slide_part(
@@ -1094,9 +1098,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::delete_chart(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetChartTitle(op) => {
                 let part = notes_or_slide_part(
@@ -1110,7 +1114,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_title(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSeries(op) => {
@@ -1125,7 +1129,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::AddChartSeries(op) => {
@@ -1140,7 +1144,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_add_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteChartSeries(op) => {
@@ -1155,7 +1159,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_delete_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartType(op) => {
@@ -1170,7 +1174,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_type(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartAxisTitle(op) => {
@@ -1185,7 +1189,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_axis_title(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartLegend(op) => {
@@ -1200,7 +1204,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_legend(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartDataLabels(op) => {
@@ -1215,7 +1219,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_data_labels(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSize(op) => {
@@ -1230,9 +1234,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetChartPos(op) => {
                 let part = notes_or_slide_part(
@@ -1246,9 +1250,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertTrendline(op) => {
                 let part = notes_or_slide_part(
@@ -1262,7 +1266,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_insert_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetTrendline(op) => {
@@ -1277,7 +1281,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_set_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteTrendline(op) => {
@@ -1292,7 +1296,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_delete_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::InsertErrorBars(op) => {
@@ -1307,7 +1311,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_insert_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetErrorBars(op) => {
@@ -1322,7 +1326,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_set_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteErrorBars(op) => {
@@ -1337,7 +1341,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_delete_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSeriesAxis(op) => {
@@ -1352,7 +1356,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::ChartNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 chart::apply_series_axis(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::InsertSmartArt(op) => {
@@ -1366,9 +1370,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::insert_smartart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteSmartArt(op) => {
                 let part = notes_or_slide_part(
@@ -1382,9 +1386,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::delete_smartart(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetSmartArtText(op) => {
                 let part = notes_or_slide_part(
@@ -1398,7 +1402,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_text(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::AddSmartArtPoint(op) => {
@@ -1419,7 +1423,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_add_point(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteSmartArtPoint(op) => {
@@ -1434,7 +1438,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
+                let doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_delete_point(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetSmartArtSize(op) => {
@@ -1449,9 +1453,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetSmartArtPos(op) => {
                 let part = notes_or_slide_part(
@@ -1465,9 +1469,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetSmartArtColors(op) => {
                 let part = notes_or_slide_part(
@@ -1481,9 +1485,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_colors(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetSmartArtStyle(op) => {
                 let part = notes_or_slide_part(
@@ -1497,9 +1501,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_style(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetSmartArtLayout(op) => {
                 let part = notes_or_slide_part(
@@ -1513,9 +1517,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::SmartArtNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 smartart::apply_layout(&mut pkg, &mut doc, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertTable(op) => {
                 let part = ensure_notes_or_slide(
@@ -1528,9 +1532,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::insert_table(&mut pkg, &part, &mut doc, &pres.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteTable(op) => {
                 let part = notes_or_slide_part(
@@ -1544,9 +1548,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::delete_table(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertRow(op) => {
                 let (slide, on_notes, master) = match &op.target {
@@ -1566,9 +1570,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::insert_row(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteRow(op) => {
                 let part = notes_or_slide_part(
@@ -1582,9 +1586,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::delete_row(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertCol(op) => {
                 let part = notes_or_slide_part(
@@ -1598,9 +1602,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::insert_col(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteCol(op) => {
                 let part = notes_or_slide_part(
@@ -1614,9 +1618,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::delete_col(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableCellText(op) => {
                 let part = notes_or_slide_part(
@@ -1630,9 +1634,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_cell_text(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableCellFill(op) => {
                 let part = notes_or_slide_part(
@@ -1646,9 +1650,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_cell_fill(&mut pkg, &part, &mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableCellBorders(op) => {
                 let part = notes_or_slide_part(
@@ -1662,9 +1666,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_cell_borders(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableCellInset(op) => {
                 let part = notes_or_slide_part(
@@ -1678,9 +1682,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_cell_inset(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableCellPr(op) => {
                 let part = notes_or_slide_part(
@@ -1694,9 +1698,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_cell_pr(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableStyleRef(op) => {
                 let part = notes_or_slide_part(
@@ -1710,9 +1714,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::set_table_style_ref(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTablePos(op) => {
                 let part = notes_or_slide_part(
@@ -1726,9 +1730,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::apply_pos(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableSize(op) => {
                 let part = notes_or_slide_part(
@@ -1742,9 +1746,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::apply_size(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableColWidths(op) => {
                 let part = notes_or_slide_part(
@@ -1758,9 +1762,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::apply_col_widths(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetTableTrHeight(op) => {
                 let part = notes_or_slide_part(
@@ -1774,9 +1778,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::TableNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 table::apply_tr_height(&mut doc, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertSlide(op) => {
                 slides::insert(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
@@ -1950,11 +1954,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::SetSlideSize(op) => {
                 theme::set_slide_size(&mut pres, op.cx, op.cy, op.type_name.as_deref(), i)?;
-                pkg.set(&pres_part, pres.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &pres_part, &pres)?;
             }
             PptxOp::SetNotesSize(op) => {
                 theme::set_notes_size(&mut pres, op.cx, op.cy, i)?;
-                pkg.set(&pres_part, pres.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &pres_part, &pres)?;
             }
             PptxOp::SetThemeColors(op) => {
                 theme::set_theme_colors(
@@ -2038,9 +2042,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 hyperlink::apply_insert(&mut pkg, &mut doc, &part, &slides, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetHyperlink(op) => {
                 let part = host_xml_part(
@@ -2054,9 +2058,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::HyperlinkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 hyperlink::apply_set(&mut pkg, &mut doc, &part, &slides, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteHyperlink(op) => {
                 let part = host_xml_part(
@@ -2070,9 +2074,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::HyperlinkNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::InsertField(op) => {
                 let part = ensure_host_part(
@@ -2085,9 +2089,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.shape.master,
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 field::apply_insert(&mut doc.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetField(op) => {
                 let part = host_xml_part(
@@ -2101,9 +2105,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::FieldNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 field::apply_set(&mut doc.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::DeleteField(op) => {
                 let part = host_xml_part(
@@ -2117,9 +2121,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     ErrorKind::FieldNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )?;
-                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let mut doc = super::list_pin::parse_part(&pkg, &part)?;
                 field::apply_delete(&mut doc.root, op, i)?;
-                pkg.set(&part, doc.to_bytes()?)?;
+                super::list_pin::write_part(&mut pkg, &part, &doc)?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;
@@ -2175,9 +2179,9 @@ fn apply_set_shape_format(
             ErrorKind::TableNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )?;
-        let mut doc = xml::parse(pkg.get(&part)?)?;
+        let mut doc = super::list_pin::parse_part(pkg, &part)?;
         table::set_cell_format(&mut doc, &op.id, &target, &op.format, i)?;
-        pkg.set(&part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &part, &doc)?;
         return Ok(());
     }
     let target = shape::parse_shape_id(&op.id, i)?;
@@ -2192,7 +2196,7 @@ fn apply_set_shape_format(
         ErrorKind::ShapeNotFound { id: op.id.clone() },
         format!("ops[{i}].id"),
     )?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if target.on_notes {
         if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
             notes::reject_slide_image(sp, i)?;
@@ -2214,7 +2218,7 @@ fn apply_set_shape_format(
         )
     })?;
     crate::drawing_text::apply(tx, &op.format);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -2262,7 +2266,7 @@ fn write_shape_host(
         },
         "id".into(),
     )?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

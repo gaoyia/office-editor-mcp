@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, ContentTypes, Package, Relationships};
-use crate::xml::{self, Element, Node};
+use crate::xml::{Element, Node};
 
 use super::handout;
 use super::master;
@@ -53,7 +53,7 @@ pub fn theme_override_json(pkg: &Package, host_part: &str) -> Result<Value, Erro
     let Some(part) = override_part(pkg, host_part)? else {
         return Ok(Value::Null);
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(crate::theme::inspect_override_full(&doc.root))
 }
 
@@ -89,9 +89,9 @@ pub fn set_clr_map(
         ClrMapHost::Handout => handout::handout_part(pkg, pres_part)?
             .ok_or_else(|| Error::with_path(ErrorKind::HandoutMasterNotFound, json_path.clone()))?,
     };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     patch_clr_map(&mut doc.root, &op.slots);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -113,9 +113,9 @@ pub fn set_clr_map_ovr(
             cat.xml_part(*master, Some(*layout), &json_path)?
         }
     };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     write_clr_map_ovr(&mut doc.root, &op.value);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -135,9 +135,9 @@ pub fn set_theme_override(
         Some(p) => p,
         None => create_override_part(pkg, &host)?,
     };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     crate::theme::patch_override_colors(&mut doc.root, &op.slots);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
