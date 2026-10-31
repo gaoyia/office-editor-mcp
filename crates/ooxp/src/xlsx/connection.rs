@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{resolve_rel_target, ContentTypes, Package, Relationship, Relationships};
-use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
+use crate::xml::{Document, Element, Node, DEFAULT_DECL};
 
 use super::picture;
 use super::SML_NS;
@@ -138,7 +138,7 @@ pub(crate) fn insert(
     op_index: usize,
 ) -> Result<(), Error> {
     let part = ensure_part(pkg, wb_part)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if name_taken(&doc.root, &op.name) {
         return Err(Error::with_path(
             ErrorKind::InvalidConnection {
@@ -150,7 +150,7 @@ pub(crate) fn insert(
     let id = next_xml_id(&doc.root);
     let conn = build_connection(id, op);
     doc.root.push_element(conn);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -163,16 +163,43 @@ pub(crate) fn delete(
     let Some(part) = find_part(pkg, wb_part)? else {
         return Err(not_found(&op.id, op_index));
     };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
-    let pos = find_included_index(&doc.root, &op.key).ok_or_else(|| not_found(&op.id, op_index))?;
-    let mut seen = 0usize;
-    doc.root.children.retain(|n| match n {
-        Node::Element(e) if e.local_name() == "connection" && !is_deleted(e) => {
-            seen += 1;
-            seen != pos
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    match &op.key {
+        ConnectionKey::Index(k) => {
+            let attr = crate::xml::pin_attr("connection");
+            let mut live = 0usize;
+            let mut removed = false;
+            doc.root.children.retain(|n| match n {
+                Node::Element(e) if e.local_name() == "connection" && !is_deleted(e) => {
+                    live += 1;
+                    if e.attr("id").is_some() {
+                        return true;
+                    }
+                    let drop = crate::xml::pin_matches(e, &attr, *k, live);
+                    if drop {
+                        removed = true;
+                    }
+                    !drop
+                }
+                _ => true,
+            });
+            if !removed {
+                return Err(not_found(&op.id, op_index));
+            }
         }
-        _ => true,
-    });
+        ConnectionKey::Id(_) => {
+            let pos = find_included_index(&doc.root, &op.key)
+                .ok_or_else(|| not_found(&op.id, op_index))?;
+            let mut seen = 0usize;
+            doc.root.children.retain(|n| match n {
+                Node::Element(e) if e.local_name() == "connection" && !is_deleted(e) => {
+                    seen += 1;
+                    seen != pos
+                }
+                _ => true,
+            });
+        }
+    }
     let remain = doc
         .root
         .children_by_local("connection")
@@ -183,7 +210,7 @@ pub(crate) fn delete(
         drop_part(pkg, wb_part, &part)?;
         return Ok(());
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -191,7 +218,7 @@ fn load_included(pkg: &Package, wb_part: &str) -> Result<Vec<(usize, Element)>, 
     let Some(part) = find_part(pkg, wb_part)? else {
         return Ok(Vec::new());
     };
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     Ok(doc
         .root
         .children_by_local("connection")
@@ -225,9 +252,10 @@ fn ensure_part(pkg: &mut Package, wb_part: &str) -> Result<String, Error> {
         return Ok(part);
     }
     let root = Element::new("connections").with_attr("xmlns", SML_NS);
-    pkg.set(
+    super::list_pin::write_part(
+        pkg,
         DEFAULT_PART,
-        Document::new(Some(DEFAULT_DECL.to_string()), root).to_bytes()?,
+        &Document::new(Some(DEFAULT_DECL.to_string()), root),
     )?;
     ensure_rel_and_ct(pkg, wb_part, DEFAULT_PART)?;
     Ok(DEFAULT_PART.to_string())

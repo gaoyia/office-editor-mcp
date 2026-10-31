@@ -204,7 +204,8 @@ pub fn ensure_styles<'a>(
 ) -> Result<&'a mut Element, Error> {
     if slot.is_none() {
         let part = load_or_create_styles(pkg, wb_part)?;
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        super::list_pin::pin_cell_styles(&mut doc.root);
         *slot = Some((part, doc));
     }
     Ok(&mut slot.as_mut().unwrap().1.root)
@@ -282,10 +283,7 @@ pub fn delete_cell_style(
                 json_path,
             ));
         };
-        match parent
-            .children_by_local("cellStyle")
-            .get(op.index.wrapping_sub(1))
-        {
+        match super::list_pin::find_child(parent, "cellStyle", "cellStyle", op.index) {
             None => (false, false),
             Some(el) => (true, el.attr("builtinId").is_some()),
         }
@@ -305,11 +303,12 @@ pub fn delete_cell_style(
         ));
     }
     let parent = styles.child_by_local_mut("cellStyles").unwrap();
-    let mut seen = 0usize;
+    let attr = crate::xml::pin_attr("cellStyle");
+    let mut live = 0usize;
     parent.children.retain(|n| match n {
         Node::Element(e) if e.local_name() == "cellStyle" => {
-            seen += 1;
-            seen != op.index
+            live += 1;
+            !crate::xml::pin_matches(e, &attr, op.index, live)
         }
         _ => true,
     });
@@ -326,11 +325,10 @@ pub fn apply_set_cell_named_style(
 ) -> Result<(), Error> {
     let json_path = format!("ops[{i}].style");
     let (xf_id, mut xf) = {
-        let items = styles
+        let Some(style_el) = styles
             .child_by_local("cellStyles")
-            .map(|c| c.children_by_local("cellStyle"))
-            .unwrap_or_default();
-        let Some(style_el) = items.get(op.style_index.wrapping_sub(1)) else {
+            .and_then(|c| super::list_pin::find_child(c, "cellStyle", "cellStyle", op.style_index))
+        else {
             return Err(Error::with_path(
                 ErrorKind::CellStyleNotFound {
                     id: format!("cellStyle:{}", op.style_index),

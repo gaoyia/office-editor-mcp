@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{resolve_id, ContentTypes, Package};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
@@ -14,7 +14,14 @@ use super::{ExportedMedia, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const XDR14_NS: &str = "http://schemas.microsoft.com/office/excel/2010/spreadsheetDrawing";
-use crate::ink::{self, key_matches, read_inkml, InkKey, CT_INKML};
+use crate::ink::{self, read_inkml, InkKey, CT_INKML};
+
+fn ink_hit(el: &Element, key: &InkKey, index: usize) -> bool {
+    if let InkKey::Index(n) = key {
+        return super::list_pin::index_matches(el, *n, index);
+    }
+    crate::ink::key_matches(key, &cnv_of(el).0, index)
+}
 
 const DEFAULT_CX: i64 = 914_400;
 const DEFAULT_CY: i64 = 914_400;
@@ -190,7 +197,7 @@ pub fn collect(
     let mut out = Vec::new();
     let mut index = 0usize;
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             let mut parts = Vec::new();
             collect_parts(anchor, &mut parts);
@@ -352,9 +359,9 @@ pub fn export(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_id(id, "id")?;
     let sheet_part = picture::lookup_sheet_part(&pkg, &target.sheet, "id")?;
-    let sheet_doc = xml::parse(pkg.get(&sheet_part)?)?;
+    let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let drawing_part = drawing_for(&pkg, &sheet_part, &sheet_doc.root, &target.key, id, "id")?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let part = find_part(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::InkNotFound { id: id.to_string() }, "id"))?;
     let rid = part
@@ -379,7 +386,7 @@ fn drawing_for(
     path: &str,
 ) -> Result<String, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if find_part(&doc.root, key).is_some() {
             return Ok(part);
         }
@@ -394,7 +401,7 @@ fn find_part<'a>(root: &'a Element, key: &InkKey) -> Option<&'a Element> {
     let mut parts = Vec::new();
     collect_parts(root, &mut parts);
     for (i, part) in parts.into_iter().enumerate() {
-        if key_matches(key, &cnv_of(part).0, i + 1) {
+        if ink_hit(part, key, i + 1) {
             return Some(part);
         }
     }
@@ -414,7 +421,7 @@ pub fn insert(
         _ => (DEFAULT_CX, DEFAULT_CY),
     };
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "mc", MC_NS);
@@ -472,7 +479,7 @@ pub fn insert(
     anchor.push_element(ac);
     anchor.push_element(Element::new("xdr:clientData"));
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -597,7 +604,7 @@ pub fn replace(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let inkml = read_inkml(&op.file, &format!("ops[{op_index}].file"))?;
-    let sheet_doc = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet_doc = super::list_pin::parse_part(pkg, sheet_part)?;
     let drawing_part = drawing_for(
         pkg,
         sheet_part,
@@ -606,7 +613,7 @@ pub fn replace(
         &op.id,
         &path,
     )?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let part = find_part(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::InkNotFound { id: op.id.clone() }, path.clone())
     })?;
@@ -634,7 +641,7 @@ pub fn delete(
         &op.id,
         &path,
     )?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let rids = find_ac(&doc.root, &op.target.key)
         .map(|ac| {
             let mut ids = Vec::new();
@@ -649,7 +656,7 @@ pub fn delete(
         ));
     }
     remove_empty_anchors(&mut doc.root);
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     drop_rids(pkg, &drawing_part, &doc.root, &rids)?;
     Ok(())
 }
@@ -737,7 +744,7 @@ fn find_ac_walk<'a>(el: &'a Element, key: &InkKey, index: &mut usize) -> Option<
                 let mut hit = false;
                 for part in &parts {
                     *index += 1;
-                    if key_matches(key, &cnv_of(part).0, *index) {
+                    if ink_hit(part, key, *index) {
                         hit = true;
                     }
                 }
@@ -781,7 +788,7 @@ fn remove_in(el: &mut Element, key: &InkKey, index: &mut usize) -> bool {
             let mut hit = false;
             for part in parts {
                 *index += 1;
-                if key_matches(key, &cnv_of(part).0, *index) {
+                if ink_hit(part, key, *index) {
                     hit = true;
                 }
             }

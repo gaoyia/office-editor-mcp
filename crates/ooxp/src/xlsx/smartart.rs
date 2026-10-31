@@ -83,11 +83,11 @@ pub fn collect_smartarts(
     sheet_part: &str,
     sheet_name: &str,
 ) -> Result<Vec<Value>, Error> {
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
     let mut out = Vec::new();
     let mut index = 0usize;
     for drawing_part in picture::drawing_parts_from(pkg, sheet_part, &sheet.root)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             shape::visit_payloads(anchor, &mut |el| {
                 if is_diagram_frame(el) {
@@ -191,7 +191,7 @@ pub fn insert_smartart(
         op.layout,
         op.points.as_deref(),
     )?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "dgm", DGM_NS);
@@ -227,7 +227,7 @@ pub fn insert_smartart(
         Some(frame),
     );
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -301,7 +301,7 @@ pub fn delete_smartart(
             path.clone(),
         )
     })?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let frame =
         shape::find_object(&doc.root, is_diagram_frame, &op.target.key).ok_or_else(|| {
             Error::with_path(
@@ -330,7 +330,7 @@ pub fn delete_smartart(
     let used: Vec<String> = rids.iter().flatten().cloned().collect();
     shape::write_or_drop_drawing(pkg, sheet_doc, sheet_part, &drawing_part, doc)?;
     if pkg.contains(&drawing_part) {
-        let draw = xml::parse(pkg.get(&drawing_part)?)?;
+        let draw = super::list_pin::parse_part(pkg, &drawing_part)?;
         shape::drop_unused_rels(pkg, &drawing_part, used, rid_still_on_drawing, &draw.root)?;
     }
     for p in &parts {
@@ -372,7 +372,7 @@ fn load_drawing(
 ) -> Result<(Document, String), Error> {
     let drawing_part = shape::find_drawing_for(pkg, sheet_part, sheet_root, is_diagram_frame, key)
         .ok_or_else(|| not_found(id, format!("ops[{i}].id")))?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     Ok((doc, drawing_part))
 }
 
@@ -439,7 +439,7 @@ pub fn apply_text(
         &op.id,
         i,
     )?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     let pt =
         smartart::find_visible_pt_mut(&mut data.root, &op.target.model_id).ok_or_else(|| {
             Error::with_path(
@@ -448,7 +448,7 @@ pub fn apply_text(
             )
         })?;
     smartart::set_point_text(pt, &op.text);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     if !smartart::sync_drawing_text(
         pkg,
         &drawing_part,
@@ -489,7 +489,7 @@ pub fn apply_add_point(
         }
     }
     let data_part = data_part_of(pkg, &draw.root, &drawing_part, &diagram.key, &id, i)?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     let parent_id = match &parent_model {
         Some(mid) => {
             if smartart::find_visible_pt(&data.root, mid).is_none() {
@@ -505,7 +505,7 @@ pub fn apply_add_point(
     let (pt_id, cxn_id) = smartart::next_model_ids(&data.root);
     smartart::append_visible_pt(&mut data.root, &pt_id, op.role, &op.text);
     smartart::append_par_of(&mut data.root, &cxn_id, &parent_id, &pt_id);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     smartart::drop_drawing_caches(pkg, &drawing_part, &data_part)?;
     Ok(())
 }
@@ -533,7 +533,7 @@ pub fn apply_delete_point(
         &op.id,
         i,
     )?;
-    let mut data = xml::parse(pkg.get(&data_part)?)?;
+    let mut data = super::list_pin::parse_part(pkg, &data_part)?;
     if smartart::find_visible_pt(&data.root, &op.target.model_id).is_none() {
         return Err(Error::with_path(
             ErrorKind::SmartArtPointNotFound { id: op.id.clone() },
@@ -549,7 +549,7 @@ pub fn apply_delete_point(
         ));
     }
     smartart::delete_points_and_cxns(&mut data.root, &doomed);
-    pkg.set(&data_part, data.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &data_part, &data)?;
     smartart::drop_drawing_caches(pkg, &drawing_part, &data_part)?;
     Ok(())
 }
@@ -640,7 +640,7 @@ pub fn apply_colors(
         &op.colors.unique_id(),
         &colors_xml(op.colors),
     )?;
-    pkg.set(&drawing_part, draw.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw)?;
     Ok(())
 }
 
@@ -667,7 +667,7 @@ pub fn apply_style(
         op.style.unique_id(),
         &style_xml(op.style),
     )?;
-    pkg.set(&drawing_part, draw.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw)?;
     Ok(())
 }
 
@@ -706,13 +706,13 @@ pub fn apply_layout(
     )?;
     if let Ok(data_part) = data_part_of(pkg, &draw.root, &drawing_part, &op.target.key, &op.id, i) {
         if op.layout.is_flat() {
-            let mut data = xml::parse(pkg.get(&data_part)?)?;
+            let mut data = super::list_pin::parse_part(pkg, &data_part)?;
             smartart::demote_asst(&mut data.root);
-            pkg.set(&data_part, data.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &data_part, &data)?;
         }
         smartart::drop_drawing_caches(pkg, &drawing_part, &data_part)?;
     }
-    pkg.set(&drawing_part, draw.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw)?;
     Ok(())
 }
 

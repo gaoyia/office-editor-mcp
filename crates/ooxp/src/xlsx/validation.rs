@@ -136,16 +136,21 @@ pub(crate) fn apply_delete(
     let Node::Element(parent) = &mut worksheet.children[pos] else {
         return Err(not_found(&op.sheet, op.index, i));
     };
-    let mut seen = 0usize;
-    let before = parent.children.len();
+    let attr = crate::xml::pin_attr("dv");
+    let mut live = 0usize;
+    let mut removed = false;
     parent.children.retain(|n| match n {
         Node::Element(e) if e.local_name() == "dataValidation" => {
-            seen += 1;
-            seen != op.index
+            live += 1;
+            let drop = crate::xml::pin_matches(e, &attr, op.index, live);
+            if drop {
+                removed = true;
+            }
+            !drop
         }
         _ => true,
     });
-    if parent.children.len() == before {
+    if !removed {
         return Err(not_found(&op.sheet, op.index, i));
     }
     if parent.children_by_local("dataValidation").is_empty() {
@@ -421,26 +426,8 @@ fn nth_mut<'a>(
     let Some(parent) = worksheet.child_by_local_mut("dataValidations") else {
         return Err(not_found(sheet, index, i));
     };
-    let mut seen = 0usize;
-    let mut found = None;
-    for (idx, n) in parent.children.iter().enumerate() {
-        let Node::Element(e) = n else { continue };
-        if e.local_name() != "dataValidation" {
-            continue;
-        }
-        seen += 1;
-        if seen == index {
-            found = Some(idx);
-            break;
-        }
-    }
-    let Some(idx) = found else {
-        return Err(not_found(sheet, index, i));
-    };
-    match &mut parent.children[idx] {
-        Node::Element(e) => Ok(e),
-        _ => Err(not_found(sheet, index, i)),
-    }
+    super::list_pin::find_child_mut(parent, "dataValidation", "dv", index)
+        .ok_or_else(|| not_found(sheet, index, i))
 }
 
 fn not_found(sheet: &str, index: usize, i: usize) -> Error {

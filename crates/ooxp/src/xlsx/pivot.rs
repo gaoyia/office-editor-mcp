@@ -1399,10 +1399,20 @@ fn pivot_part_at(
         .iter()
         .filter(|r| r.rel_type.ends_with("/pivotTable"))
         .collect();
-    if index == 0 || index > pts.len() {
-        return Err(not_found(sheet, index, op_index));
-    }
-    let rel = pts[index - 1];
+    let rel = if super::list_pin::pivots_frozen(sheet_part) {
+        let Some(rid) = super::list_pin::pivot_rid(sheet_part, index) else {
+            return Err(not_found(sheet, index, op_index));
+        };
+        pts.iter()
+            .copied()
+            .find(|r| r.id == rid)
+            .ok_or_else(|| not_found(sheet, index, op_index))?
+    } else {
+        if index == 0 || index > pts.len() {
+            return Err(not_found(sheet, index, op_index));
+        }
+        pts[index - 1]
+    };
     let part = resolve_rel_target(sheet_part, &rel.target)?;
     Ok((part, rel.id.clone()))
 }

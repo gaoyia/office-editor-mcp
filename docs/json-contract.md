@@ -172,6 +172,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 - docx 段内的 `bookmark:{n}`、`field:{n}`、`link:{n}`、`math:{n}`、`ruby:{n}`、`sdt:{n}`、`perm:{n}`、`rev:{n}`、`run:{n}`，以及绘图对象的 `:index:{k}`。计数范围见 [docx 分册](json-contract-docx.md#稳定-id)
 - docx 的 `section:{n}`、页眉页脚容器、`toc:{n}`、`caption:{n}`、`xref:{n}`、`index:{n}`、`xe:{n}`、`source:{n}`、`cite:{n}`、`biblio:{n}`、`docPart:{n}`、`font:{n}`
 - pptx 的 `slide:{n}`，以及挂在它下面、按内容编号的形状、图、图表、表、备注、批注等 id
+- xlsx 表内名单、工作簿名单，以及 drawing 对象的 `:index:{k}`。计数范围见 [xlsx 分册](json-contract-xlsx.md#稳定-id)
 
 被前面的 op 删掉后再点名，报 `IdNotFound`，不落到旁边的对象上。同一批里新建的对象不能用这些位置 id 点名，要等下一次 inspect。
 
@@ -179,7 +180,6 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 还没有固定、本批增删后仍会重排的族，按后续切片接上。每接上一族，就从下面删掉：
 
-- xlsx 表内名单、工作簿名单，以及 drawing 对象的 `:index:{k}`
 - pptx 母版、版式、节、自定义放映，以及页上对象的 `:index:{k}`、链接、域、表的行列
 - 三种格式共用的 `trendline:{k}`、`errorBars:{k}`
 

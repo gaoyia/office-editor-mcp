@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationships};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
@@ -14,7 +14,14 @@ use super::{ExportedMedia, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 
-pub use crate::model3d::{key_matches, Model3dKey};
+pub use crate::model3d::Model3dKey;
+
+fn model_hit(el: &Element, key: &Model3dKey, index: usize) -> bool {
+    if let Model3dKey::Index(n) = key {
+        return super::list_pin::index_matches(el, *n, index);
+    }
+    crate::model3d::key_matches(key, &cnv_of(el).0, index)
+}
 
 #[derive(Debug, Clone)]
 pub struct Model3dTarget {
@@ -192,7 +199,7 @@ pub fn collect(
     let mut out = Vec::new();
     let mut index = 0usize;
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             let mut frames = Vec::new();
             collect_frames(anchor, &mut frames);
@@ -340,9 +347,9 @@ pub fn export(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_id(id, "id")?;
     let sheet_part = picture::lookup_sheet_part(&pkg, &target.sheet, "id")?;
-    let sheet_doc = xml::parse(pkg.get(&sheet_part)?)?;
+    let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let drawing_part = drawing_for(&pkg, &sheet_part, &sheet_doc.root, &target.key, id, "id")?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let frame = find_frame(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: id.to_string() }, "id"))?;
     let rid = crate::model3d::glb_embed_rid(frame)
@@ -366,7 +373,7 @@ fn drawing_for(
     path: &str,
 ) -> Result<String, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if find_frame(&doc.root, key).is_some() {
             return Ok(part);
         }
@@ -381,7 +388,7 @@ fn find_frame<'a>(root: &'a Element, key: &Model3dKey) -> Option<&'a Element> {
     let mut frames = Vec::new();
     collect_frames(root, &mut frames);
     for (i, frame) in frames.into_iter().enumerate() {
-        if key_matches(key, &cnv_of(frame).0, i + 1) {
+        if model_hit(frame, key, i + 1) {
             return Some(frame);
         }
     }
@@ -401,7 +408,7 @@ pub fn insert(
         _ => (crate::model3d::DEFAULT_CX, crate::model3d::DEFAULT_CY),
     };
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "mc", MC_NS);
@@ -460,7 +467,7 @@ pub fn insert(
     anchor.push_element(ac);
     anchor.push_element(Element::new("xdr:clientData"));
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -603,7 +610,7 @@ pub fn replace(
     let path = format!("ops[{op_index}].id");
     let glb =
         crate::model3d::read_glb(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
-    let sheet_doc = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet_doc = super::list_pin::parse_part(pkg, sheet_part)?;
     let drawing_part = drawing_for(
         pkg,
         sheet_part,
@@ -612,7 +619,7 @@ pub fn replace(
         &op.id,
         &path,
     )?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let frame = find_frame(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::Model3dNotFound { id: op.id.clone() },
@@ -652,7 +659,7 @@ pub fn delete(
         &op.id,
         &path,
     )?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let rids = find_frame(&doc.root, &op.target.key)
         .map(crate::model3d::collect_embed_rids)
         .unwrap_or_default();
@@ -663,7 +670,7 @@ pub fn delete(
         ));
     }
     remove_empty_anchors(&mut doc.root);
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     drop_rids(pkg, &drawing_part, &doc.root, &rids)?;
     Ok(())
 }
@@ -747,7 +754,7 @@ pub fn set_camera(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = drawing_for(pkg, sheet_part, sheet_root, &op.target.key, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let frame = find_frame_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::Model3dNotFound { id: op.id.clone() },
@@ -761,7 +768,7 @@ pub fn set_camera(
         )
     })?;
     crate::model3d::apply_camera_patch(model, &op.patch)?;
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -794,7 +801,7 @@ fn find_frame_walk_mut<'a>(
         }
         if el.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(el) {
             *index += 1;
-            if key_matches(key, &cnv_of(el).0, *index) {
+            if model_hit(el, key, *index) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -817,7 +824,7 @@ fn remove_in(el: &mut Element, key: &Model3dKey, index: &mut usize) -> bool {
             let mut hit = false;
             for frame in frames {
                 *index += 1;
-                if key_matches(key, &cnv_of(frame).0, *index) {
+                if model_hit(frame, key, *index) {
                     hit = true;
                 }
             }
@@ -828,7 +835,7 @@ fn remove_in(el: &mut Element, key: &Model3dKey, index: &mut usize) -> bool {
         } else if child.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(child)
         {
             *index += 1;
-            if key_matches(key, &cnv_of(child).0, *index) {
+            if model_hit(child, key, *index) {
                 drop = Some(i);
                 break;
             }

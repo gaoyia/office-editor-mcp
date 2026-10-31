@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::ole::{self, FileSpec};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::a1;
 use super::layout;
@@ -174,7 +174,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let target = parse_ole_id(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let sheet_part = picture_lookup(&pkg, &target.sheet, "id")?;
-    let sheet = xml::parse(pkg.get(&sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let obj = find_obj(&pkg, &sheet_part, &sheet.root, &target.key)?
         .ok_or_else(|| Error::with_path(ErrorKind::OleNotFound { id: id.to_string() }, "id"))?;
     let rid = rid_attr(obj).ok_or_else(|| {
@@ -264,7 +264,7 @@ pub fn insert(
     parent.push_element(ac);
 
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     draw_doc.root.push_element(build_dummy_anchor(
@@ -277,7 +277,7 @@ pub fn insert(
         to_off_x,
         to_off_y,
     ));
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
 
     let vml_part = ensure_vml_part(pkg, sheet_part, &mut sheet_doc.root)?;
     let vml_img = picture::add_image_rel(pkg, &vml_part, &png_part)?;
@@ -330,7 +330,7 @@ pub fn delete(
         .into_iter()
         .next()
     {
-        let mut draw = xml::parse(pkg.get(&drawing_part)?)?;
+        let mut draw = super::list_pin::parse_part(pkg, &drawing_part)?;
         if !sid.is_empty() {
             remove_dummy_anchor(&mut draw.root, &sid);
         }
@@ -342,7 +342,7 @@ pub fn delete(
             cts.remove_override(&drawing_part);
             cts.write_to(pkg)?;
         } else {
-            pkg.set(&drawing_part, draw.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &drawing_part, &draw)?;
         }
     }
 
@@ -447,7 +447,7 @@ pub fn set_size(
 
 fn picture_lookup(pkg: &Package, sheet: &str, path: &str) -> Result<String, Error> {
     let wb_part = crate::opc::office_document_part(pkg)?;
-    let wb = xml::parse(pkg.get(&wb_part)?)?;
+    let wb = super::list_pin::parse_part(pkg, &wb_part)?;
     let Some(sheets) = wb.root.child_by_local("sheets") else {
         return Err(Error::with_path(
             ErrorKind::SheetNotFound {
@@ -550,9 +550,117 @@ fn find_obj<'a>(
         .map(|(_, e)| e))
 }
 
+pub(crate) fn pin_objects(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet: &mut Element,
+) -> Result<(), Error> {
+    let Ok(rels) = Relationships::from_package(pkg, sheet_part) else {
+        return Ok(());
+    };
+    let Some(parent) = sheet.child_by_local_mut("oleObjects") else {
+        return Ok(());
+    };
+    let attr = crate::xml::pin_attr("ole");
+    let mut n = 0usize;
+    let kids = parent
+        .children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, node)| matches!(node, Node::Element(_)).then_some(i))
+        .collect::<Vec<_>>();
+    for i in kids {
+        let local = match &parent.children[i] {
+            Node::Element(el) => el.local_name().to_string(),
+            _ => continue,
+        };
+        if local == "AlternateContent" {
+            let choice = match &parent.children[i] {
+                Node::Element(el) => crate::xml::alternate_child(el).unwrap_or(None),
+                _ => None,
+            };
+            let Some(choice) = choice else {
+                continue;
+            };
+            let spot = match &parent.children[i] {
+                Node::Element(el) => match el.children.get(choice) {
+                    Some(Node::Element(branch)) => ole_spot(branch),
+                    _ => None,
+                },
+                _ => None,
+            };
+            let Some(spot) = spot else {
+                continue;
+            };
+            let counted_ok = match &parent.children[i] {
+                Node::Element(el) => match el.children.get(choice) {
+                    Some(Node::Element(branch)) => match spot {
+                        OleSpot::Branch => counted(branch, &rels),
+                        OleSpot::Child(obj_i) => match branch.children.get(obj_i) {
+                            Some(Node::Element(obj)) => counted(obj, &rels),
+                            _ => false,
+                        },
+                    },
+                    _ => false,
+                },
+                _ => false,
+            };
+            if !counted_ok {
+                continue;
+            }
+            n += 1;
+            if let Node::Element(ac) = &mut parent.children[i] {
+                if let Node::Element(branch) = &mut ac.children[choice] {
+                    let obj = match spot {
+                        OleSpot::Branch => branch,
+                        OleSpot::Child(obj_i) => match &mut branch.children[obj_i] {
+                            Node::Element(obj) => obj,
+                            _ => continue,
+                        },
+                    };
+                    if obj.attr(&attr).is_none() {
+                        obj.set_attr(&attr, n.to_string());
+                    }
+                }
+            }
+        } else if local == "oleObject" {
+            let ok = match &parent.children[i] {
+                Node::Element(obj) => counted(obj, &rels),
+                _ => false,
+            };
+            if !ok {
+                continue;
+            }
+            n += 1;
+            if let Node::Element(obj) = &mut parent.children[i] {
+                if obj.attr(&attr).is_none() {
+                    obj.set_attr(&attr, n.to_string());
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+enum OleSpot {
+    Branch,
+    Child(usize),
+}
+
+fn ole_spot(branch: &Element) -> Option<OleSpot> {
+    if branch.local_name() == "oleObject" {
+        return Some(OleSpot::Branch);
+    }
+    branch
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(el) if el.local_name() == "oleObject"))
+        .map(OleSpot::Child)
+}
+
 fn key_matches(key: &OleKey, obj: &Element, index: usize) -> bool {
     match key {
-        OleKey::Index(n) => index == *n,
+        OleKey::Index(n) => super::list_pin::index_matches(obj, *n, index),
         OleKey::Id(want) => obj.attr("shapeId") == Some(want.as_str()),
     }
 }
@@ -715,7 +823,7 @@ fn dummy_names(
 ) -> Result<Vec<(String, String)>, Error> {
     let mut out = Vec::new();
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         picture::walk_all(&doc.root, &mut |e| {
             if e.local_name() == "cNvPr" {
                 if let Some(id) = e.attr_local("id") {
@@ -735,7 +843,7 @@ fn find_dummy_anchor(
     sid: &str,
 ) -> Result<Option<(AnchorKind, Element)>, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         let mut found = None;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             if found.is_some() {
@@ -1002,7 +1110,7 @@ fn patch_dummy_to(
     to_off_y: Option<i64>,
 ) -> Result<bool, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
-        let mut draw = xml::parse(pkg.get(&part)?)?;
+        let mut draw = super::list_pin::parse_part(pkg, &part)?;
         let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
             if kind != AnchorKind::TwoCell || !dummy_in_anchor(anchor, sid) {
                 return Ok(false);
@@ -1011,7 +1119,7 @@ fn patch_dummy_to(
             Ok(true)
         })?;
         if hit {
-            pkg.set(&part, draw.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &part, &draw)?;
             return Ok(true);
         }
     }
@@ -1027,7 +1135,7 @@ fn patch_dummy_ext(
     cy: Option<i64>,
 ) -> Result<bool, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, &sheet_doc.root)? {
-        let mut draw = xml::parse(pkg.get(&part)?)?;
+        let mut draw = super::list_pin::parse_part(pkg, &part)?;
         let hit = picture::walk_anchors_mut(&mut draw.root, &mut |anchor, kind| {
             if !matches!(kind, AnchorKind::OneCell | AnchorKind::Absolute)
                 || !dummy_in_anchor(anchor, sid)
@@ -1049,7 +1157,7 @@ fn patch_dummy_ext(
             Ok(true)
         })?;
         if hit {
-            pkg.set(&part, draw.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &part, &draw)?;
             return Ok(true);
         }
     }

@@ -200,28 +200,29 @@ pub(crate) fn apply_delete(
         let Node::Element(parent) = &worksheet.children[pos] else {
             return Err(not_found(&op.id, i));
         };
-        let links = parent.children_by_local("hyperlink");
-        let Some(el) = links.get(op.index.saturating_sub(1)).copied() else {
+        let Some(el) = super::list_pin::find_child(parent, "hyperlink", "link", op.index) else {
             return Err(not_found(&op.id, i));
         };
-        if op.index == 0 || op.index > links.len() {
-            return Err(not_found(&op.id, i));
-        }
         el.attr_local("id").map(str::to_string)
     };
     let Node::Element(parent) = &mut worksheet.children[pos] else {
         return Err(not_found(&op.id, i));
     };
-    let mut seen = 0usize;
-    let before = parent.children.len();
+    let attr = crate::xml::pin_attr("link");
+    let mut live = 0usize;
+    let mut removed = false;
     parent.children.retain(|n| match n {
         Node::Element(e) if e.local_name() == "hyperlink" => {
-            seen += 1;
-            seen != op.index
+            live += 1;
+            let drop = crate::xml::pin_matches(e, &attr, op.index, live);
+            if drop {
+                removed = true;
+            }
+            !drop
         }
         _ => true,
     });
-    if parent.children.len() == before {
+    if !removed {
         return Err(not_found(&op.id, i));
     }
     if parent.children_by_local("hyperlink").is_empty() {
@@ -295,12 +296,7 @@ fn nth<'a>(worksheet: &'a Element, index: usize, i: usize, id: &str) -> Result<&
     let parent = worksheet
         .child_by_local("hyperlinks")
         .ok_or_else(|| not_found(id, i))?;
-    parent
-        .children_by_local("hyperlink")
-        .into_iter()
-        .nth(index.saturating_sub(1))
-        .filter(|_| index >= 1)
-        .ok_or_else(|| not_found(id, i))
+    super::list_pin::find_child(parent, "hyperlink", "link", index).ok_or_else(|| not_found(id, i))
 }
 
 fn nth_mut<'a>(
@@ -312,16 +308,8 @@ fn nth_mut<'a>(
     let parent = worksheet
         .child_by_local_mut("hyperlinks")
         .ok_or_else(|| not_found(id, i))?;
-    let mut seen = 0usize;
-    for child in parent.element_children_mut() {
-        if child.local_name() == "hyperlink" {
-            seen += 1;
-            if seen == index {
-                return Ok(child);
-            }
-        }
-    }
-    Err(not_found(id, i))
+    super::list_pin::find_child_mut(parent, "hyperlink", "link", index)
+        .ok_or_else(|| not_found(id, i))
 }
 
 fn not_found(id: &str, i: usize) -> Error {

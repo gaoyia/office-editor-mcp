@@ -381,10 +381,15 @@ fn groups(root: &Element) -> Vec<&Element> {
 }
 
 fn nth<'a>(root: &'a Element, index: usize, i: usize, id: &str) -> Result<&'a Element, Error> {
-    groups(root)
-        .into_iter()
-        .nth(index.saturating_sub(1))
-        .ok_or_else(|| not_found(id, i))
+    let attr = crate::xml::pin_attr("spark");
+    let mut live = 0usize;
+    for group in groups(root) {
+        live += 1;
+        if crate::xml::pin_matches(group, &attr, index, live) {
+            return Ok(group);
+        }
+    }
+    Err(not_found(id, i))
 }
 
 fn nth_mut<'a>(
@@ -426,9 +431,12 @@ fn find_path(root: &Element, index: usize) -> Option<(usize, usize, usize)> {
                 continue;
             }
             for (si, sn) in groups.children.iter().enumerate() {
-                if matches!(sn, Node::Element(e) if e.local_name() == "sparklineGroup") {
+                if let Node::Element(e) = sn {
+                    if e.local_name() != "sparklineGroup" {
+                        continue;
+                    }
                     n += 1;
-                    if n == index {
+                    if crate::xml::pin_matches(e, &crate::xml::pin_attr("spark"), index, n) {
                         return Some((ei, gi, si));
                     }
                 }
@@ -439,8 +447,9 @@ fn find_path(root: &Element, index: usize) -> Option<(usize, usize, usize)> {
 }
 
 fn overlaps(root: &Element, host: CellRef, skip: Option<usize>) -> bool {
+    let attr = crate::xml::pin_attr("spark");
     for (i, g) in groups(root).into_iter().enumerate() {
-        if skip == Some(i + 1) {
+        if skip.is_some_and(|wanted| crate::xml::pin_matches(g, &attr, wanted, i + 1)) {
             continue;
         }
         let Some(list) = g.child_by_local("sparklines") else {

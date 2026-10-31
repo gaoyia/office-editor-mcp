@@ -203,7 +203,7 @@ pub fn collect_sheet_charts(
     let mut out = Vec::new();
     let mut index = 0usize;
     for drawing_part in picture::drawing_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             let Some(frame) = direct_chart_frame(anchor) else {
                 return Ok(());
@@ -524,7 +524,7 @@ pub fn insert_chart(
         let doc = apply::dirty_of(dirty_sheets, sheet_part);
         picture::ensure_drawing_part(pkg, doc, sheet_part)?
     };
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
@@ -573,7 +573,7 @@ pub fn insert_chart(
         Some(frame),
     );
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -593,7 +593,7 @@ pub fn delete_chart(
         }
     }
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let rid = find_chart_rid(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
@@ -612,7 +612,7 @@ pub fn delete_chart(
         cts.remove_override(&drawing_part);
         cts.write_to(pkg)?;
     } else {
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         let mut rels = Relationships::from_package(pkg, &drawing_part)?;
         rels.remove_by_id(&rid);
         if rels.rels.is_empty() {
@@ -638,7 +638,7 @@ pub fn set_chart_title(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_chart_title(&mut space.root, &op.title);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -739,7 +739,7 @@ pub fn set_chart_series(
             chart::set_pts(ser, "bubbleSize", sizes, new_f.as_deref());
         });
     }
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(wrote_cells)
 }
 
@@ -879,7 +879,7 @@ pub fn add_chart_series(
     );
     let ser_el = chart::parse_ser_xml(&xml)?;
     chart::insert_ser(&mut space.root, ser_el, op.series_type);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(true)
 }
 
@@ -906,7 +906,7 @@ pub fn delete_chart_series(
         ));
     }
     chart::remove_series_at(&mut space.root, op.index);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -925,7 +925,7 @@ pub fn set_chart_type(
         &op.extra,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -938,7 +938,7 @@ pub fn set_chart_axis_title(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_axis_title(&mut space.root, &op.axis, &op.title, op_index)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -951,7 +951,7 @@ pub fn set_chart_legend(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_legend(&mut space.root, op.show, op.pos.as_deref());
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -964,7 +964,7 @@ pub fn set_chart_data_labels(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_data_labels(&mut space.root, op.show);
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -977,7 +977,7 @@ pub fn insert_trendline(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::series_decor::insert_trendline(&mut space.root, &op.id, op.index, &op.spec, op_index)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -997,7 +997,7 @@ pub fn set_trendline(
         &op.spec,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1016,7 +1016,7 @@ pub fn delete_trendline(
         op.tl_index,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1029,7 +1029,7 @@ pub fn insert_error_bars(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::series_decor::insert_error_bars(&mut space.root, &op.id, op.index, &op.spec, op_index)?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1049,7 +1049,7 @@ pub fn set_error_bars(
         &op.spec,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1068,7 +1068,7 @@ pub fn delete_error_bars(
         op.eb_index,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1087,7 +1087,7 @@ pub fn set_series_axis(
         op.secondary,
         op_index,
     )?;
-    pkg.set(&chart_part, space.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &chart_part, &space)?;
     Ok(())
 }
 
@@ -1099,7 +1099,7 @@ pub fn set_chart_size(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let kind = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
@@ -1132,7 +1132,7 @@ pub fn set_chart_size(
             path,
         ));
     }
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -1144,7 +1144,7 @@ pub fn set_chart_anchor(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
@@ -1176,7 +1176,7 @@ pub fn set_chart_anchor(
                 path,
             ));
         }
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         return Ok(());
     }
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
@@ -1203,7 +1203,7 @@ pub fn set_chart_anchor(
             Some(snapshot.frame),
         ),
     );
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -1372,7 +1372,7 @@ fn load_space(
 ) -> Result<(Document, String), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, target, id, &path)?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let rid = find_chart_rid(&doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ChartNotFound { id: id.to_string() },
@@ -1380,13 +1380,13 @@ fn load_space(
         )
     })?;
     let chart_part = crate::opc::resolve_id(pkg, &drawing_part, &rid)?;
-    Ok((xml::parse(pkg.get(&chart_part)?)?, chart_part))
+    Ok((super::list_pin::parse_part(pkg, &chart_part)?, chart_part))
 }
 
 fn count_charts(pkg: &Package, sheet_part: &str) -> Result<usize, Error> {
     let mut n = 0usize;
     for part in picture::drawing_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, _| {
             if direct_chart_frame(anchor).is_some() {
                 n += 1;
@@ -1405,7 +1405,7 @@ fn find_drawing_for(
     field_path: &str,
 ) -> Result<String, Error> {
     for part in picture::drawing_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if find_chart_rid(&doc.root, &target.key).is_some() {
             return Ok(part);
         }
@@ -1427,7 +1427,7 @@ fn find_chart_rid(root: &Element, key: &ChartKey) -> Option<String> {
             return Ok(());
         };
         index += 1;
-        if key_matches(key, &cnv_of_frame(frame).0, index) {
+        if chart_hit(frame, key, index) {
             rid = chart_rid(frame);
         }
         Ok(())
@@ -1446,12 +1446,19 @@ fn find_anchor_kind(root: &Element, key: &ChartKey) -> Option<AnchorKind> {
             return Ok(());
         };
         index += 1;
-        if key_matches(key, &cnv_of_frame(frame).0, index) {
+        if chart_hit(frame, key, index) {
             kind = Some(k);
         }
         Ok(())
     });
     kind
+}
+
+fn chart_hit(frame: &Element, key: &ChartKey, index: usize) -> bool {
+    match key {
+        ChartKey::Index(n) => super::list_pin::index_matches(frame, *n, index),
+        ChartKey::Cnv(_) => key_matches(key, &cnv_of_frame(frame).0, index),
+    }
 }
 
 fn key_matches(key: &ChartKey, raw: &Option<String>, index: usize) -> bool {
@@ -1470,10 +1477,12 @@ fn key_matches(key: &ChartKey, raw: &Option<String>, index: usize) -> bool {
     }
 }
 
+pub(crate) fn is_chart_frame(el: &Element) -> bool {
+    el.local_name() == "graphicFrame" && graphic_uri(el).is_some()
+}
+
 fn direct_chart_frame(anchor: &Element) -> Option<&Element> {
-    anchor
-        .element_children()
-        .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
+    anchor.element_children().find(|c| is_chart_frame(c))
 }
 
 fn graphic_uri(el: &Element) -> Option<String> {
@@ -1678,7 +1687,7 @@ fn remove_chart_anchor_in(el: &mut Element, key: &ChartKey, index: &mut usize) -
         if AnchorKind::from_local_name(child.local_name()).is_some() {
             if let Some(frame) = direct_chart_frame(child) {
                 *index += 1;
-                if key_matches(key, &cnv_of_frame(frame).0, *index) {
+                if chart_hit(frame, key, *index) {
                     drop = Some(i);
                     break;
                 }
@@ -1701,7 +1710,7 @@ fn charts_match_in(el: &Element, key: &ChartKey, index: &mut usize) -> bool {
             return Ok(());
         };
         *index += 1;
-        if key_matches(key, &cnv_of_frame(frame).0, *index) {
+        if chart_hit(frame, key, *index) {
             matched = true;
         }
         Ok(())
@@ -1726,7 +1735,7 @@ fn replace_chart_anchor_in(
         if AnchorKind::from_local_name(child.local_name()).is_some() {
             if let Some(frame) = direct_chart_frame(child) {
                 *index += 1;
-                if key_matches(key, &cnv_of_frame(frame).0, *index) {
+                if chart_hit(frame, key, *index) {
                     el.children[i] = Node::Element(new_anchor);
                     return true;
                 }
@@ -1787,7 +1796,7 @@ fn snapshot_anchor(root: &Element, key: &ChartKey) -> Option<AnchorSnap> {
             return Ok(());
         };
         index += 1;
-        if !key_matches(key, &cnv_of_frame(frame).0, index) {
+        if !chart_hit(frame, key, index) {
             return Ok(());
         }
         let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"))?;
@@ -1832,9 +1841,8 @@ fn update_extent(root: &mut Element, key: &ChartKey, cx: Option<i64>, cy: Option
             return Ok(false);
         };
         // 上面是不可变借用，下面再按 key 改。先记下是否匹配。
-        let raw = cnv_of_frame(frame).0;
         index += 1;
-        if !key_matches(key, &raw, index) {
+        if !chart_hit(frame, key, index) {
             return Ok(false);
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
@@ -1874,9 +1882,8 @@ fn update_absolute_pos(
         else {
             return Ok(false);
         };
-        let raw = cnv_of_frame(frame).0;
         index += 1;
-        if !key_matches(key, &raw, index) {
+        if !chart_hit(frame, key, index) {
             return Ok(false);
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
@@ -1907,9 +1914,8 @@ fn update_two_cell_to(
         else {
             return Ok(false);
         };
-        let raw = cnv_of_frame(frame).0;
         index += 1;
-        if !key_matches(key, &raw, index) {
+        if !chart_hit(frame, key, index) {
             return Ok(false);
         }
         picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;

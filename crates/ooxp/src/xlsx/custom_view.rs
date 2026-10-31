@@ -372,8 +372,10 @@ fn page_margins_of(sheet: &Element) -> Element {
 }
 
 fn nth_guid(wb: &Element, index: usize, json_path: &str) -> Result<String, Error> {
-    let list = workbook_views(wb);
-    let Some(el) = list.get(index.wrapping_sub(1)) else {
+    let Some(el) = wb
+        .child_by_local("customWorkbookViews")
+        .and_then(|p| super::list_pin::find_child(p, "customWorkbookView", "customView", index))
+    else {
         return Err(Error::with_path(
             ErrorKind::CustomViewNotFound {
                 id: format!("customView:{index}"),
@@ -385,8 +387,10 @@ fn nth_guid(wb: &Element, index: usize, json_path: &str) -> Result<String, Error
 }
 
 fn nth_show(wb: &Element, index: usize, json_path: &str) -> Result<(String, bool), Error> {
-    let list = workbook_views(wb);
-    let Some(el) = list.get(index.wrapping_sub(1)) else {
+    let Some(el) = wb
+        .child_by_local("customWorkbookViews")
+        .and_then(|p| super::list_pin::find_child(p, "customWorkbookView", "customView", index))
+    else {
         return Err(Error::with_path(
             ErrorKind::CustomViewNotFound {
                 id: format!("customView:{index}"),
@@ -404,11 +408,12 @@ fn remove_workbook_view(wb: &mut Element, index: usize) {
     let Some(parent) = wb.child_by_local_mut("customWorkbookViews") else {
         return;
     };
-    let mut seen = 0usize;
+    let attr = crate::xml::pin_attr("customView");
+    let mut live = 0usize;
     parent.children.retain(|n| match n {
         Node::Element(e) if e.local_name() == "customWorkbookView" => {
-            seen += 1;
-            seen != index
+            live += 1;
+            !crate::xml::pin_matches(e, &attr, index, live)
         }
         _ => true,
     });

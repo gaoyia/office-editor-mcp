@@ -370,7 +370,7 @@ pub fn insert_textbox(
         return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
     }
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     push_anchor(
@@ -423,7 +423,7 @@ pub fn insert_shape(
         return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
     }
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     push_anchor(
@@ -464,7 +464,7 @@ pub fn insert_connector(
         return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
     }
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     push_anchor(
@@ -526,7 +526,7 @@ fn push_anchor(
         Some(payload),
     );
     draw_doc.root.push_element(el);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, draw_doc)?;
     Ok(())
 }
 
@@ -735,7 +735,7 @@ fn delete_object(
     let is_obj = kind.matcher();
     let drawing_part = find_drawing_for(pkg, sheet_part, &sheet_doc.root, is_obj, key)
         .ok_or_else(|| Error::with_path(kind.not_found(id.to_string()), path.clone()))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     if !remove_object(&mut doc.root, is_obj, key) {
         return Err(Error::with_path(kind.not_found(id.to_string()), path));
     }
@@ -754,7 +754,7 @@ pub fn set_shape_text(
     let is_obj = op.kind.matcher();
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let sp = find_object_mut(&mut doc.root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
     let Some(tx) = sp.child_by_local_mut("txBody") else {
@@ -764,7 +764,7 @@ pub fn set_shape_text(
         ));
     };
     crate::drawing_text::set_txbody_text(tx, &op.text);
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -779,7 +779,7 @@ pub fn set_shape_runs(
     let is_obj = op.kind.matcher();
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let sp = find_object_mut(&mut doc.root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
     let Some(tx) = sp.child_by_local_mut("txBody") else {
@@ -789,7 +789,7 @@ pub fn set_shape_runs(
         ));
     };
     crate::drawing_text::set_txbody_runs(tx, &op.runs, op_index)?;
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -804,7 +804,7 @@ pub fn set_shape_format(
     let is_obj = op.kind.matcher();
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let sp = find_object_mut(&mut doc.root, is_obj, &op.target.key)
         .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
     let Some(tx) = sp.child_by_local_mut("txBody") else {
@@ -814,7 +814,7 @@ pub fn set_shape_format(
         ));
     };
     crate::drawing_text::apply(tx, &op.format);
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -915,7 +915,7 @@ pub(crate) fn set_object_size(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let kind = find_outer_kind(&doc.root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
     let action = picture::plan_size(kind, &patch, two_cell, op, op_index)?;
@@ -932,7 +932,7 @@ pub(crate) fn set_object_size(
     if !ok {
         return Err(Error::with_path(not_found, path));
     }
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -949,7 +949,7 @@ pub(crate) fn set_object_anchor(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let snapshot = snapshot_outer(&doc.root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
     if matches!(snapshot.kind, AnchorKind::RelSize | AnchorKind::AbsSize) {
@@ -987,7 +987,7 @@ pub(crate) fn set_object_anchor(
         if !patched {
             return Err(Error::with_path(not_found, path));
         }
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         return Ok(());
     }
     if w.rel.is_some() {
@@ -1023,7 +1023,7 @@ pub(crate) fn set_object_anchor(
         if !update_absolute_pos(&mut doc.root, is_obj, key, planned.pos_x, planned.pos_y) {
             return Err(Error::with_path(not_found, path));
         }
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         return Ok(());
     }
     picture::ensure_xmlns(&mut doc.root, "r", super::REL_NS);
@@ -1049,7 +1049,7 @@ pub(crate) fn set_object_anchor(
     if !replace_outer(&mut doc.root, is_obj, key, new_anchor) {
         return Err(Error::with_path(not_found, path));
     }
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -1072,7 +1072,7 @@ pub(crate) fn write_or_drop_drawing(
             cts.write_to(pkg)?;
         }
     } else {
-        pkg.set(drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, drawing_part, &doc)?;
     }
     Ok(())
 }
@@ -1086,12 +1086,12 @@ pub(crate) fn for_each_object<F>(
 where
     F: FnMut(&Element, AnchorKind, &Element, &Relationships) -> Result<(), Error>,
 {
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
     let dummies = ole::dummy_ids(&sheet.root);
     for drawing_part in
         super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
     {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         let rels = Relationships::from_package(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             visit_payloads(anchor, &mut |el| {
@@ -1143,7 +1143,7 @@ pub(crate) fn find_drawing_for(
                         }
                     }
                     index += 1;
-                    if key_matches(key, &payload_cnv(el), index) {
+                    if key_matches(el, key, &payload_cnv(el), index) {
                         hit = true;
                     }
                 }
@@ -1189,9 +1189,9 @@ fn prst_of(el: &Element) -> Option<String> {
         .map(str::to_string)
 }
 
-pub(crate) fn key_matches(key: &DrawKey, raw: &Option<String>, index: usize) -> bool {
+pub(crate) fn key_matches(el: &Element, key: &DrawKey, raw: &Option<String>, index: usize) -> bool {
     match key {
-        DrawKey::Index(n) => index == *n,
+        DrawKey::Index(n) => super::list_pin::index_matches(el, *n, index),
         DrawKey::Cnv(want) => {
             let Some(got) = raw else {
                 return false;
@@ -1298,7 +1298,7 @@ fn outer_contains(
     let _ = visit_payloads(anchor, &mut |el| {
         if is_obj(el) {
             *index += 1;
-            if key_matches(key, &payload_cnv(el), *index) {
+            if key_matches(el, key, &payload_cnv(el), *index) {
                 hit = true;
             }
         }
@@ -1546,7 +1546,7 @@ fn find_object_in<'a>(
             if crate::drawing_math::is_math_ac(el) {
                 if is_obj(el) {
                     *index += 1;
-                    if key_matches(key, &payload_cnv(el), *index) {
+                    if key_matches(el, key, &payload_cnv(el), *index) {
                         return crate::xml::SearchMut::Hit;
                     }
                 }
@@ -1562,7 +1562,7 @@ fn find_object_in<'a>(
         }
         if is_obj(el) {
             *index += 1;
-            if key_matches(key, &payload_cnv(el), *index) {
+            if key_matches(el, key, &payload_cnv(el), *index) {
                 return crate::xml::SearchMut::Hit;
             }
             return crate::xml::SearchMut::Skip;
@@ -1611,7 +1611,7 @@ fn find_object_immut<'a>(
             if crate::drawing_math::is_math_ac(el) {
                 if is_obj(el) {
                     *index += 1;
-                    if key_matches(key, &payload_cnv(el), *index) {
+                    if key_matches(el, key, &payload_cnv(el), *index) {
                         return crate::xml::Search::Hit(el);
                     }
                 }
@@ -1624,7 +1624,7 @@ fn find_object_immut<'a>(
         }
         if is_obj(el) {
             *index += 1;
-            if key_matches(key, &payload_cnv(el), *index) {
+            if key_matches(el, key, &payload_cnv(el), *index) {
                 return crate::xml::Search::Hit(el);
             }
             return crate::xml::Search::Skip;
@@ -1722,7 +1722,7 @@ fn remove_in(
         let is_hit = match &el.children[i] {
             Node::Element(e) if is_obj(e) => {
                 *index += 1;
-                key_matches(key, &cnv_of_object(e).0, *index)
+                key_matches(e, key, &cnv_of_object(e).0, *index)
             }
             _ => false,
         };
@@ -1755,7 +1755,7 @@ fn peek_match(
         if crate::drawing_math::is_math_ac(el) {
             if is_obj(el) {
                 *index += 1;
-                if key_matches(key, &payload_cnv(el), *index) {
+                if key_matches(el, key, &payload_cnv(el), *index) {
                     *found = true;
                 }
             }
@@ -1777,7 +1777,7 @@ fn peek_match(
     }
     if is_obj(el) {
         *index += 1;
-        if key_matches(key, &payload_cnv(el), *index) {
+        if key_matches(el, key, &payload_cnv(el), *index) {
             *found = true;
         }
         return;

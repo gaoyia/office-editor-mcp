@@ -186,8 +186,7 @@ pub(crate) fn delete(
     op: &DeleteExternalLinkOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let n = count(&wb.root);
-    if op.index == 0 || op.index > n {
+    if op.index == 0 {
         return Err(not_found(&op.id, op_index));
     }
     if in_use(pkg, &wb.root, sheet_index, dirty_sheets, op.index as u32)? {
@@ -200,10 +199,7 @@ pub(crate) fn delete(
         .root
         .child_by_local("externalReferences")
         .ok_or_else(|| not_found(&op.id, op_index))?;
-    let el = parent
-        .children_by_local("externalReference")
-        .into_iter()
-        .nth(op.index - 1)
+    let el = super::list_pin::find_child(parent, "externalReference", "extlink", op.index)
         .ok_or_else(|| not_found(&op.id, op_index))?;
     let rid = el.attr_local("id").map(str::to_string);
     let part = match rid.as_deref() {
@@ -228,18 +224,14 @@ pub(crate) fn set_path(
     op: &SetExternalLinkOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let n = count(&wb.root);
-    if op.index == 0 || op.index > n {
+    if op.index == 0 {
         return Err(not_found(&op.id, op_index));
     }
     let parent = wb
         .root
         .child_by_local("externalReferences")
         .ok_or_else(|| not_found(&op.id, op_index))?;
-    let el = parent
-        .children_by_local("externalReference")
-        .into_iter()
-        .nth(op.index - 1)
+    let el = super::list_pin::find_child(parent, "externalReference", "extlink", op.index)
         .ok_or_else(|| not_found(&op.id, op_index))?;
     let rid = el.attr_local("id").ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
@@ -359,11 +351,12 @@ fn drop_reference(root: &mut Element, index: usize) {
         let Some(parent) = root.child_by_local_mut("externalReferences") else {
             return;
         };
-        let mut seen = 0usize;
+        let attr = crate::xml::pin_attr("extlink");
+        let mut live = 0usize;
         parent.children.retain(|n| match n {
             Node::Element(e) if e.local_name() == "externalReference" => {
-                seen += 1;
-                seen != index
+                live += 1;
+                !crate::xml::pin_matches(e, &attr, index, live)
             }
             _ => true,
         });

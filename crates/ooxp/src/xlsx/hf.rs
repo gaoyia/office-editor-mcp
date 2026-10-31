@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{ContentTypes, Package, Relationship, Relationships};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::a1;
 use super::picture::{
@@ -217,7 +217,7 @@ fn collect_hf_pictures(
 ) -> Result<Vec<(HfSlot, PicInfo)>, Error> {
     let mut raw = Vec::new();
     for drawing_part in drawing_hf_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         walk_anchors(&doc.root, &mut |anchor, kind| {
             let Some(pic) = picture::direct_pic(anchor) else {
                 return Ok(());
@@ -263,7 +263,7 @@ fn collect_hf_objects(
     let mut shape_n = [0usize; 6];
     let mut cxn_n = [0usize; 6];
     for drawing_part in drawing_hf_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         let rels = Relationships::from_package(pkg, &drawing_part)?;
         walk_anchors(&doc.root, &mut |anchor, kind| {
             shape::visit_payloads(anchor, &mut |el| {
@@ -417,7 +417,7 @@ pub(crate) fn insert_picture(
         _ => (image.cx, image.cy),
     };
     let drawing_part = ensure_drawing_hf_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     ensure_xmlns(&mut draw_doc.root, "a", A_NS);
     // Excel 16.0：drawingHF 的 cho 等属性若写成 1，打开工作簿会被拒绝。
@@ -450,7 +450,7 @@ pub(crate) fn insert_picture(
         crate::svg::set_svg_blip(&mut anchor, &svg);
     }
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     assign_hf_attr(&mut sheet_doc.root, slot, cnv);
     Ok(())
 }
@@ -485,7 +485,7 @@ fn ensure_drawing_hf_part(
         .with_attr("xmlns:a", A_NS)
         .with_attr("xmlns:r", REL_NS);
     let doc = Document::new(Some(crate::xml::DEFAULT_DECL.to_string()), root);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     let mut rels = Relationships::from_package(pkg, sheet_part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {

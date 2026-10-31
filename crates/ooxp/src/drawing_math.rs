@@ -50,7 +50,13 @@ pub fn key_matches(key: &MathKey, raw: &Option<String>, index: usize) -> bool {
 pub fn set_in_index(el: &mut Element, key: &MathKey, text: &str, index: &mut usize) -> bool {
     if el.local_name() == "AlternateContent" && is_math_ac(el) {
         *index += 1;
-        if key_matches(key, &cnv_of_ac(el).0, *index) {
+        let hit = match key {
+            MathKey::Index(n) => {
+                crate::xml::pin_matches(el, &crate::xml::pin_attr("math"), *n, *index)
+            }
+            _ => key_matches(key, &cnv_of_ac(el).0, *index),
+        };
+        if hit {
             return set_ac_text(el, text);
         }
         return false;

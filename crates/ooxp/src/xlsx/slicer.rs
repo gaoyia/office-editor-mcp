@@ -389,7 +389,7 @@ pub fn delete(
         .into_iter()
         .next()
     {
-        let mut draw = xml::parse(pkg.get(&drawing_part)?)?;
+        let mut draw = super::list_pin::parse_part(pkg, &drawing_part)?;
         remove_slicer_anchor(&mut draw.root, &hit.sle_name, hit.cnv.as_deref());
         shape::write_or_drop_drawing(pkg, sheet_doc, sheet_part, &drawing_part, draw)?;
     }
@@ -802,7 +802,7 @@ fn write_drawing(
     to_off_y: i64,
 ) -> Result<(), Error> {
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "mc", MC_NS);
@@ -834,7 +834,7 @@ fn write_drawing(
         },
     );
     draw_doc.root.push_element(ac);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -858,10 +858,10 @@ fn collect_hits(pkg: &Package, sheet_part: &str) -> Result<Vec<Hit>, Error> {
         .filter(|v| caches.iter().any(|c| c.name == v.cache))
         .map(|v| v.name.as_str())
         .collect();
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
     let mut out = Vec::new();
     for drawing_part in picture::drawing_parts_from(pkg, sheet_part, &sheet.root)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             shape::visit_payloads(anchor, &mut |el| {
                 if is_slicer_or_timeline_frame(el) {
@@ -1064,7 +1064,16 @@ fn sle_name(el: &Element) -> Option<String> {
 fn key_matches(key: &SlicerKey, hit: &Hit, index: usize) -> bool {
     match key {
         SlicerKey::Id(id) => hit.cnv.as_deref() == Some(id.as_str()),
-        SlicerKey::Index(k) => *k == index,
+        SlicerKey::Index(k) => {
+            let frame = hit
+                .anchor
+                .element_children()
+                .find(|el| is_slicer_or_timeline_frame(el));
+            match frame {
+                Some(frame) => super::list_pin::index_matches(frame, *k, index),
+                None => *k == index,
+            }
+        }
     }
 }
 
@@ -1235,7 +1244,7 @@ fn patch_named_view(
             continue;
         }
         let part = resolve_rel_target(sheet_part, &rel.target)?;
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         let hit = doc
             .root
             .element_children()
@@ -1266,7 +1275,7 @@ fn patch_named_view(
         ));
     };
     patch(el)?;
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 
@@ -1509,14 +1518,13 @@ fn table_column(
             format!("ops[{op_index}].source"),
         )
     })?;
-    let parts = parent.children_by_local("tablePart");
-    if index == 0 || index > parts.len() {
+    let Some(el) = super::list_pin::find_child(parent, "tablePart", "table", index) else {
         return Err(Error::with_path(
             ErrorKind::SheetTableNotFound { id: table_id },
             format!("ops[{op_index}].source"),
         ));
-    }
-    let rid = parts[index - 1].attr_local("id").ok_or_else(|| {
+    };
+    let rid = el.attr_local("id").ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
             parent: "tablePart".into(),
             child: "r:id".into(),
@@ -1530,7 +1538,7 @@ fn table_column(
         })
     })?;
     let part = resolve_rel_target(sheet_part, &rel.target)?;
-    let doc = xml::parse(pkg.get(&part)?)?;
+    let doc = super::list_pin::parse_part(pkg, &part)?;
     let xml_id = doc
         .root
         .attr("id")
@@ -1584,7 +1592,7 @@ fn pivot_field(
             continue;
         }
         let part = resolve_rel_target(sheet_part, &rel.target)?;
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         let name = doc.root.attr("name").unwrap_or("").to_string();
         let cache_id = doc.root.attr("cacheId").unwrap_or("").to_string();
         let item_count = cache_item_count(pkg, wb_part, &cache_id, field);
@@ -1627,7 +1635,7 @@ fn cache_item_count(pkg: &Package, wb_part: &str, cache_id: &str, field: &str) -
 /// Excel 16.0 打开时间线时，透视表 `updatedVersion` 必须至少为 8，否则会静默丢掉时间线部件。
 fn bump_pivot_updated_version(pkg: &mut Package, part: &str) -> Result<(), Error> {
     const MIN: u32 = 8;
-    let mut doc = xml::parse(pkg.get(part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, part)?;
     let cur = doc
         .root
         .attr("updatedVersion")
@@ -1637,7 +1645,7 @@ fn bump_pivot_updated_version(pkg: &mut Package, part: &str) -> Result<(), Error
         return Ok(());
     }
     doc.root.set_attr("updatedVersion", MIN.to_string());
-    pkg.set(part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, part, &doc)?;
     Ok(())
 }
 
@@ -1648,19 +1656,19 @@ fn ensure_x14_pivot_cache_id(
     workbook_cache_id: &str,
 ) -> Result<String, Error> {
     let part = pivot_cache_def_part(pkg, wb_part, workbook_cache_id)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let fallback = if workbook_cache_id.is_empty() || workbook_cache_id == "0" {
         "1".to_string()
     } else {
         workbook_cache_id.to_string()
     };
     let id = ensure_pcd_ext(&mut doc.root, &fallback);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(id)
 }
 
 fn pivot_cache_def_part(pkg: &Package, wb_part: &str, cache_id: &str) -> Result<String, Error> {
-    let wb = xml::parse(pkg.get(wb_part)?)?;
+    let wb = super::list_pin::parse_part(pkg, wb_part)?;
     let parent = wb.root.child_by_local("pivotCaches").ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
             parent: "workbook".into(),
@@ -1983,9 +1991,9 @@ fn append_timeline_view(
         Some(Some(s)) => el.set_attr("scrollPosition", s),
     }
     apply_view_attrs(&mut el, view, None, true);
-    let mut doc = xml::parse(pkg.get(timeline_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, timeline_part)?;
     doc.root.push_element(el);
-    pkg.set(timeline_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, timeline_part, &doc)?;
     Ok(())
 }
 
@@ -2092,9 +2100,9 @@ fn append_slicer_view(
         .with_attr("caption", caption)
         .with_attr("rowHeight", row_h.to_string());
     apply_view_attrs(&mut el, view, None, false);
-    let mut doc = xml::parse(pkg.get(slicer_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, slicer_part)?;
     doc.root.push_element(el);
-    pkg.set(slicer_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, slicer_part, &doc)?;
     Ok(())
 }
 
@@ -2417,7 +2425,7 @@ fn remove_slicer_view(
             drop_rid = Some(rel.id.clone());
             drop_part = Some(part);
         } else {
-            pkg.set(&part, doc.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &part, &doc)?;
         }
         break;
     }
@@ -2468,7 +2476,7 @@ fn remove_timeline_view(
             drop_rid = Some(rel.id.clone());
             drop_part = Some(part);
         } else {
-            pkg.set(&part, doc.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &part, &doc)?;
         }
         break;
     }
@@ -2545,7 +2553,7 @@ fn drop_sheet_list_rid(sheet: &mut Element, rid: &str) {
 
 fn cache_users(pkg: &Package, cache_name: &str) -> Result<usize, Error> {
     let wb_part = office_document_part(pkg)?;
-    let wb = xml::parse(pkg.get(&wb_part)?)?;
+    let wb = super::list_pin::parse_part(pkg, &wb_part)?;
     let mut n = 0usize;
     if let Some(sheets) = wb.root.child_by_local("sheets") {
         for sh in sheets.children_by_local("sheet") {
@@ -2811,7 +2819,7 @@ fn mark_cache_field_dates(
     end: &str,
 ) -> Result<(), Error> {
     let part = pivot_cache_def_part(pkg, wb_part, cache_id)?;
-    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     let field_index = {
         let Some(fields) = doc.root.child_by_local("cacheFields") else {
             return Ok(());
@@ -2870,7 +2878,7 @@ fn mark_cache_field_dates(
             }
         }
     }
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     rewrite_cache_records_dates(pkg, &part, field_index, &order)?;
     Ok(())
 }
@@ -2890,7 +2898,7 @@ fn rewrite_cache_records_dates(
         return Ok(());
     };
     let rec_part = resolve_rel_target(def_part, &rel.target)?;
-    let mut doc = xml::parse(pkg.get(&rec_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &rec_part)?;
     for rec in doc.root.element_children_mut() {
         let mut i = 0usize;
         for n in rec.children.iter_mut() {
@@ -2913,7 +2921,7 @@ fn rewrite_cache_records_dates(
             i += 1;
         }
     }
-    pkg.set(&rec_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &rec_part, &doc)?;
     Ok(())
 }
 
@@ -3155,9 +3163,9 @@ fn set_table_selected(
             ));
         }
     }
-    let mut table = xml::parse(pkg.get(&loc.table_part)?)?;
+    let mut table = super::list_pin::parse_part(pkg, &loc.table_part)?;
     write_table_filters(&mut table.root, loc.col_id, selected);
-    pkg.set(&loc.table_part, table.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &loc.table_part, &table)?;
     Ok(())
 }
 
@@ -3167,7 +3175,7 @@ fn set_pivot_selected(
     selected: &[String],
     op_index: usize,
 ) -> Result<(), Error> {
-    let mut doc = xml::parse(pkg.get(&cache.part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &cache.part)?;
     let names = pivot_item_names(pkg, &doc.root, &cache.field);
     let mut want = Vec::new();
     for (k, name) in selected.iter().enumerate() {
@@ -3216,7 +3224,7 @@ fn set_pivot_selected(
     }
     let n = items.children_by_local("i").len();
     items.set_attr("count", n.to_string());
-    pkg.set(&cache.part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &cache.part, &doc)?;
     Ok(())
 }
 
@@ -3245,12 +3253,12 @@ fn set_timeline_filter(
             format!("ops[{op_index}].id"),
         ));
     };
-    let mut doc = xml::parse(pkg.get(&cache.part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &cache.part)?;
     match filter {
         None => clear_timeline_filter(&mut doc.root),
         Some(f) => write_timeline_filter(&mut doc.root, f),
     }
-    pkg.set(&cache.part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &cache.part, &doc)?;
     Ok(())
 }
 

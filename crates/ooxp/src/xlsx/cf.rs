@@ -830,24 +830,7 @@ fn next_priority(root: &Element) -> i32 {
 }
 
 fn find_rule(root: &Element, index: usize) -> Option<(usize, usize)> {
-    let mut n = 0usize;
-    for (ci, node) in root.children.iter().enumerate() {
-        let Node::Element(cf) = node else { continue };
-        if cf.local_name() != "conditionalFormatting" {
-            continue;
-        }
-        for (ri, rn) in cf.children.iter().enumerate() {
-            let Node::Element(r) = rn else { continue };
-            if r.local_name() != "cfRule" {
-                continue;
-            }
-            n += 1;
-            if n == index {
-                return Some((ci, ri));
-            }
-        }
-    }
-    None
+    super::list_pin::find_cf(root, index)
 }
 
 fn format_sqref(ranges: &[(CellRef, CellRef)]) -> String {

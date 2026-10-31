@@ -254,12 +254,10 @@ pub(crate) fn apply_delete(
         let Some(parent) = sheet.root.child_by_local("tableParts") else {
             return Err(not_found(&op.sheet, op.index, op_index));
         };
-        let parts = parent.children_by_local("tablePart");
-        if op.index == 0 || op.index > parts.len() {
+        let Some(el) = super::list_pin::find_child(parent, "tablePart", "table", op.index) else {
             return Err(not_found(&op.sheet, op.index, op_index));
-        }
-        parts[op.index - 1]
-            .attr_local("id")
+        };
+        el.attr_local("id")
             .ok_or_else(|| {
                 Error::new(ErrorKind::XmlMissing {
                     parent: "tablePart".into(),
@@ -285,11 +283,12 @@ pub(crate) fn apply_delete(
     let sheet = apply::dirty_of(dirty_sheets, sheet_part);
     let left = {
         let parent = sheet.root.child_by_local_mut("tableParts").unwrap();
-        let mut seen = 0usize;
+        let attr = crate::xml::pin_attr("table");
+        let mut live = 0usize;
         parent.children.retain(|n| match n {
             Node::Element(e) if e.local_name() == "tablePart" => {
-                seen += 1;
-                seen != op.index
+                live += 1;
+                !crate::xml::pin_matches(e, &attr, op.index, live)
             }
             _ => true,
         });
@@ -413,9 +412,14 @@ fn append_tables_from(
             .attr("ref")
             .and_then(|r| a1::parse_range(r).ok())
             .unwrap_or((CellRef { col: 1, row: 1 }, CellRef { col: 1, row: 1 }));
+        let index = el
+            .attr(&crate::xml::pin_attr("table"))
+            .filter(|s| !s.is_empty())
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(i + 1);
         out.push(TableMeta {
             sheet_part: sheet_part.to_string(),
-            index: i + 1,
+            index,
             xml_id,
             name,
             display_name,
@@ -656,6 +660,7 @@ fn build_table_xml(id: u32, name: &str, refer: &str, columns: &[String]) -> Docu
 }
 
 fn append_table_part(root: &mut Element, rid: &str) {
+    // 新表接在后面，不记空编号。create 同一批还要用 table:1 点刚插入的表。
     let part = Element::new("tablePart").with_attr("r:id", rid);
     if let Some(parent) = root.child_by_local_mut("tableParts") {
         parent.push_element(part);

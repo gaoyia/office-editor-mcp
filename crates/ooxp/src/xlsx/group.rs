@@ -2,7 +2,7 @@
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::Package;
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::layout;
 use super::picture::{self, AnchorKind};
@@ -73,7 +73,7 @@ pub fn group_shapes(
         ));
     }
 
-    let mut draw_doc = xml::parse(pkg.get(&part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
 
     let mut pieces: Vec<(usize, Element, EmuBox)> = Vec::new();
@@ -128,7 +128,7 @@ pub fn group_shapes(
     }
     let at = insert_at.min(draw_doc.root.children.len());
     draw_doc.root.children.insert(at, Node::Element(anchor));
-    pkg.set(&part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &draw_doc)?;
     Ok(())
 }
 
@@ -152,7 +152,7 @@ pub fn ungroup(
             format!("ops[{op_index}].id"),
         ));
     }
-    let mut draw_doc = xml::parse(pkg.get(&hit.part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &hit.part)?;
     let Some(anchor) = anchor_at_mut(&mut draw_doc.root, hit.anchor_index) else {
         return Err(Error::with_path(
             op.kind.not_found(op.id.clone()),
@@ -184,7 +184,7 @@ pub fn ungroup(
         if !anchor_has_other_payload(anchor) {
             draw_doc.root.children.remove(hit.anchor_index);
         }
-        pkg.set(&hit.part, draw_doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &hit.part, &draw_doc)?;
         return Ok(());
     }
     let mut new_anchors = Vec::new();
@@ -202,7 +202,7 @@ pub fn ungroup(
     for (offset, a) in new_anchors.into_iter().enumerate() {
         draw_doc.root.children.insert(at + offset, Node::Element(a));
     }
-    pkg.set(&hit.part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &hit.part, &draw_doc)?;
     Ok(())
 }
 
@@ -239,7 +239,7 @@ fn locate_member(
     kind: DrawObjKind,
 ) -> Result<Option<Hit>, Error> {
     for part in parts {
-        let doc = xml::parse(pkg.get(part)?)?;
+        let doc = super::list_pin::parse_part(pkg, part)?;
         if let Some((anchor_index, nested)) = locate_in(&doc.root, kind, &id.key) {
             return Ok(Some(Hit {
                 part: part.clone(),
@@ -283,7 +283,7 @@ fn locate_in(root: &Element, kind: DrawObjKind, key: &DrawKey) -> Option<(usize,
                 }
             } else if is_obj(p) {
                 index += 1;
-                if shape::key_matches(key, &shape::cnv_of_object(p).0, index) {
+                if shape::key_matches(p, key, &shape::cnv_of_object(p).0, index) {
                     direct = Some(i);
                 }
             }
@@ -308,7 +308,7 @@ fn scan_grp(grp: &Element, is_obj: fn(&Element) -> bool, key: &DrawKey, index: &
             }
         } else if is_obj(c) {
             *index += 1;
-            if shape::key_matches(key, &shape::cnv_of_object(c).0, *index) {
+            if shape::key_matches(c, key, &shape::cnv_of_object(c).0, *index) {
                 hit = true;
             }
         }
@@ -354,7 +354,7 @@ fn direct_payload(
         }
         if is_obj(p) {
             index += 1;
-            if shape::key_matches(key, &shape::cnv_of_object(p).0, index) {
+            if shape::key_matches(p, key, &shape::cnv_of_object(p).0, index) {
                 return Some(p.clone());
             }
         }

@@ -5,14 +5,21 @@ use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{resolve_id, Package, Relationships};
-use crate::xml::{self, Document, Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
 use super::shape;
 use super::REL_NS;
 
-pub use crate::drawing_math::{collect_acs, key_matches, set_in_index, MathKey};
+pub use crate::drawing_math::{collect_acs, set_in_index, MathKey};
+
+fn math_hit(el: &Element, key: &MathKey, index: usize) -> bool {
+    if let MathKey::Index(n) = key {
+        return super::list_pin::index_matches(el, *n, index);
+    }
+    crate::drawing_math::key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, index)
+}
 
 #[derive(Debug, Clone)]
 pub struct MathTarget {
@@ -178,7 +185,7 @@ pub fn collect(
     let mut out = Vec::new();
     let mut index = 0usize;
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             let mut acs = Vec::new();
             collect_acs(anchor, &mut acs);
@@ -309,7 +316,7 @@ fn drawing_for(
     path: &str,
 ) -> Result<String, Error> {
     for part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if find_ac(&doc.root, key).is_some() {
             return Ok(part);
         }
@@ -324,7 +331,7 @@ fn find_ac<'a>(root: &'a Element, key: &MathKey) -> Option<&'a Element> {
     let mut acs = Vec::new();
     collect_acs(root, &mut acs);
     for (i, ac) in acs.into_iter().enumerate() {
-        if key_matches(key, &crate::drawing_math::cnv_of_ac(ac).0, i + 1) {
+        if math_hit(ac, key, i + 1) {
             return Some(ac);
         }
     }
@@ -345,7 +352,7 @@ pub fn insert(
         ),
     };
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "mc", crate::drawing_math::MC_NS);
@@ -397,7 +404,7 @@ pub fn insert(
     anchor.push_element(ac);
     anchor.push_element(Element::new("xdr:clientData"));
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -479,14 +486,14 @@ pub fn set(
         &op.id,
         &path,
     )?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     if !set_in(&mut doc.root, &op.target.key, &op.text) {
         return Err(Error::with_path(
             ErrorKind::MathDrawingNotFound { id: op.id.clone() },
             path,
         ));
     }
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -582,7 +589,7 @@ pub fn delete(
         &op.id,
         &path,
     )?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let rids = find_ac(&doc.root, &op.target.key)
         .map(crate::drawing_math::collect_embed_rids)
         .unwrap_or_default();
@@ -593,7 +600,7 @@ pub fn delete(
         ));
     }
     remove_empty_anchors(&mut doc.root);
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     drop_rids(pkg, &drawing_part, &doc.root, &rids)?;
     Ok(())
 }
@@ -608,7 +615,7 @@ fn remove_in(el: &mut Element, key: &MathKey, index: &mut usize) -> bool {
         let Node::Element(child) = n else { continue };
         if child.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(child) {
             *index += 1;
-            if key_matches(key, &crate::drawing_math::cnv_of_ac(child).0, *index) {
+            if math_hit(child, key, *index) {
                 drop = Some(i);
                 break;
             }

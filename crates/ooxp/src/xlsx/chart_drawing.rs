@@ -4,7 +4,7 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{
     rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
 };
-use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
+use crate::xml::{Document, Element, Node, DEFAULT_DECL};
 use serde_json::json;
 
 use super::picture::{self, AnchorKind};
@@ -95,13 +95,13 @@ pub fn ensure_user_shapes(
         extra: Vec::new(),
     });
     rels.write_to(pkg, &chart_part)?;
-    let mut chart_doc = xml::parse(pkg.get(&chart_part)?)?;
+    let mut chart_doc = super::list_pin::parse_part(pkg, &chart_part)?;
     picture::ensure_xmlns(&mut chart_doc.root, "r", REL_NS);
     if chart_doc.root.child_by_local("userShapes").is_none() {
         chart_doc
             .root
             .push_element(Element::new("c:userShapes").with_attr("r:id", rid));
-        pkg.set(&chart_part, chart_doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &chart_part, &chart_doc)?;
     }
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&part, CT_CHART_SHAPES)?;
@@ -114,7 +114,7 @@ pub fn drop_user_shapes(
     sheet_part: &str,
     drawing_part: &str,
 ) -> Result<(), Error> {
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
     for chart_part in chart_parts(pkg, sheet_part, &sheet.root)? {
         let mut rels = Relationships::from_package(pkg, &chart_part)?;
         let before = rels.rels.len();
@@ -125,12 +125,12 @@ pub fn drop_user_shapes(
             } else {
                 rels.write_to(pkg, &chart_part)?;
             }
-            let mut chart_doc = xml::parse(pkg.get(&chart_part)?)?;
+            let mut chart_doc = super::list_pin::parse_part(pkg, &chart_part)?;
             chart_doc.root.children.retain(|n| match n {
                 Node::Element(e) => e.local_name() != "userShapes",
                 _ => true,
             });
-            pkg.set(&chart_part, chart_doc.to_bytes()?)?;
+            super::list_pin::write_part(pkg, &chart_part, &chart_doc)?;
         }
     }
     pkg.remove(drawing_part);
@@ -148,13 +148,13 @@ pub fn push_rel_anchor(
     mut payload: Element,
 ) -> Result<(), Error> {
     retag_xdr_to_cdr(&mut payload);
-    let mut doc = xml::parse(pkg.get(drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, drawing_part)?;
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut doc.root, "cdr", CDR_NS);
     picture::ensure_xmlns(&mut doc.root, "c", CHART_NS);
     doc.root.push_element(build_rel_size_anchor(rel, payload));
-    pkg.set(drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, drawing_part, &doc)?;
     Ok(())
 }
 
@@ -267,7 +267,7 @@ fn chart_parts(
 ) -> Result<Vec<String>, Error> {
     let mut out = Vec::new();
     for drawing_part in picture::drawing_parts_from(pkg, sheet_part, sheet_root)? {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         let rels = Relationships::from_package(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, _| {
             if let Some(rid) = chart_rid(anchor) {

@@ -6,7 +6,7 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
 };
-use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
+use crate::xml::{Document, Element, Node, DEFAULT_DECL};
 
 use super::a1;
 use super::hf;
@@ -557,11 +557,11 @@ pub fn collect_sheet_pictures(
 ) -> Result<Vec<PicInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
     for drawing_part in
         super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
     {
-        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
         let rels = Relationships::from_package(pkg, &drawing_part)?;
         walk_anchors(&doc.root, &mut |anchor, kind| {
             let Some(pic) = direct_pic(anchor) else {
@@ -657,7 +657,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
     let target = parse_pic_id_at(id, "id")?;
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let doc = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let hf_el = load_hf_el(&pkg, &sheet_part)?;
     let search = PicSearch {
         target: &target,
@@ -689,7 +689,7 @@ pub fn replace_picture(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let hf_el = load_hf_el(pkg, sheet_part)?;
     let search = PicSearch {
         target: &op.target,
@@ -744,7 +744,7 @@ pub fn replace_picture(
         ));
     }
     if xml_dirty {
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     }
     if let Some(rid) = drop_svg {
         drop_rel_if_unused(pkg, &drawing_part, &doc.root, &rid)?;
@@ -778,7 +778,7 @@ pub fn insert_picture(
         return Ok(());
     }
     let drawing_part = ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut draw_doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     // Excel 存的 wsDr 常常只在 a:blip 上写 xmlns:r，根上没有。新锚点用 r:embed，必须把关系命名空间补到根上。
     ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     ensure_xmlns(&mut draw_doc.root, "a", A_NS);
@@ -810,7 +810,7 @@ pub fn insert_picture(
         crate::svg::set_svg_blip(&mut anchor, &svg);
     }
     draw_doc.root.push_element(anchor);
-    pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &draw_doc)?;
     Ok(())
 }
 
@@ -823,7 +823,7 @@ pub fn delete_picture(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let hf_el = load_hf_el(pkg, sheet_part)?;
     let search = PicSearch {
         target: &op.target,
@@ -854,9 +854,8 @@ pub fn delete_picture(
             if !has_blip(pic) {
                 return Ok(());
             }
-            let cnv = cnv_of(pic).0;
-            if search.hit(&cnv, &mut index) {
-                found = cnv;
+            if search.hit(pic, &mut index) {
+                found = cnv_of(pic).0;
             }
             Ok(())
         });
@@ -887,7 +886,7 @@ pub fn delete_picture(
             cts.write_to(pkg)?;
         }
     } else {
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         let mut rels = Relationships::from_package(pkg, &drawing_part)?;
         for rid in &rids {
             rels.remove_by_id(rid);
@@ -914,7 +913,7 @@ pub fn set_picture_size(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let hf_el = load_hf_el(pkg, sheet_part)?;
     let search = PicSearch {
         target: &op.target,
@@ -953,7 +952,7 @@ pub fn set_picture_size(
             path,
         ));
     }
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -965,7 +964,7 @@ pub fn set_picture_anchor(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = super::list_pin::parse_part(pkg, &drawing_part)?;
     let hf_el = load_hf_el(pkg, sheet_part)?;
     let search = PicSearch {
         target: &op.target,
@@ -1009,7 +1008,7 @@ pub fn set_picture_anchor(
                 path,
             ));
         }
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         return Ok(());
     }
     if op.rel.is_some() {
@@ -1043,7 +1042,7 @@ pub fn set_picture_anchor(
                 path,
             ));
         }
-        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        super::list_pin::write_part(pkg, &drawing_part, &doc)?;
         return Ok(());
     }
     // 转锚点会重写 xdr:pic；Excel 原 drawing 根上常常没有 xmlns:r。
@@ -1071,7 +1070,7 @@ pub fn set_picture_anchor(
             Some(snapshot.pic),
         ),
     );
-    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &drawing_part, &doc)?;
     Ok(())
 }
 
@@ -1126,7 +1125,7 @@ fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap>
         if !has_blip(pic) {
             return Ok(());
         }
-        if !search.hit(&cnv_of(pic).0, &mut index) {
+        if !search.hit(pic, &mut index) {
             return Ok(());
         }
         let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"))?;
@@ -1169,7 +1168,7 @@ pub(crate) fn lookup_sheet_part(
     field_path: &str,
 ) -> Result<String, Error> {
     let wb_part = crate::opc::office_document_part(pkg)?;
-    let wb = xml::parse(pkg.get(&wb_part)?)?;
+    let wb = super::list_pin::parse_part(pkg, &wb_part)?;
     let rels = Relationships::from_package(pkg, &wb_part)?;
     let sheets = super::inspect::list_sheets(&wb.root, &rels, &wb_part, pkg)?;
     sheets
@@ -1187,12 +1186,12 @@ pub(crate) fn lookup_sheet_part(
 }
 
 pub(crate) fn drawing_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
-    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, sheet_part)?;
     drawing_parts_from(pkg, sheet_part, &doc.root)
 }
 
 pub(crate) fn drawing_hf_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
-    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, sheet_part)?;
     drawing_hf_parts_from(pkg, sheet_part, &doc.root)
 }
 
@@ -1244,7 +1243,7 @@ fn parts_from_root(
 }
 
 fn load_hf_el(pkg: &Package, sheet_part: &str) -> Result<Option<Element>, Error> {
-    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    let doc = super::list_pin::parse_part(pkg, sheet_part)?;
     Ok(doc.root.child_by_local("drawingHF").cloned())
 }
 
@@ -1254,12 +1253,16 @@ struct PicSearch<'a> {
 }
 
 impl PicSearch<'_> {
-    fn hit(&self, cnv: &Option<String>, index: &mut usize) -> bool {
-        if !self.in_list(cnv) {
+    fn hit(&self, pic: &Element, index: &mut usize) -> bool {
+        let cnv = cnv_of(pic).0;
+        if !self.in_list(&cnv) {
             return false;
         }
         *index += 1;
-        key_matches(&self.target.key, cnv, *index)
+        match &self.target.key {
+            PicKey::Index(n) => super::list_pin::index_matches(pic, *n, *index),
+            PicKey::Cnv(_) => key_matches(&self.target.key, &cnv, *index),
+        }
     }
 
     fn in_list(&self, cnv: &Option<String>) -> bool {
@@ -1285,11 +1288,11 @@ pub(crate) fn find_drawing_for(
     let parts = if target.hf.is_some() {
         drawing_hf_parts(pkg, sheet_part)?
     } else {
-        let sheet = xml::parse(pkg.get(sheet_part)?)?;
+        let sheet = super::list_pin::parse_part(pkg, sheet_part)?;
         super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
     };
     for part in parts {
-        let doc = xml::parse(pkg.get(&part)?)?;
+        let doc = super::list_pin::parse_part(pkg, &part)?;
         if find_blip_rid(&doc.root, &search).is_some() {
             return Ok(part);
         }
@@ -1328,12 +1331,12 @@ fn find_pic_mut_in<'a>(
                 |n| matches!(n, Node::Element(e) if e.local_name() == "pic" && has_blip(e)),
             );
             if let Some(pic_i) = pic_i {
-                let cnv = if let Node::Element(pic) = &el.children[pic_i] {
-                    cnv_of(pic).0
+                let matched = if let Node::Element(pic) = &el.children[pic_i] {
+                    search.hit(pic, index)
                 } else {
-                    return crate::xml::SearchMut::Skip;
+                    false
                 };
-                if search.hit(&cnv, index) {
+                if matched {
                     return crate::xml::SearchMut::HitChild(pic_i);
                 }
             }
@@ -1354,16 +1357,16 @@ fn patch_matched_rel(
     let mut index = 0usize;
     let mut hit = false;
     walk_anchors_mut(root, &mut |anchor, _| {
-        let cnv = {
+        let matched = {
             let Some(pic) = direct_pic(anchor) else {
                 return Ok(false);
             };
             if !has_blip(pic) {
                 return Ok(false);
             }
-            cnv_of(pic).0
+            search.hit(pic, &mut index)
         };
-        if search.hit(&cnv, &mut index) {
+        if matched {
             let _ = super::chart_drawing::patch_rel_box(anchor, rel);
             hit = true;
             Ok(true)
@@ -1708,7 +1711,7 @@ fn find_export_rid(root: &Element, search: &PicSearch<'_>) -> Option<String> {
         let Some(pic) = direct_pic(anchor) else {
             return Ok(());
         };
-        if search.hit(&cnv_of(pic).0, &mut index) {
+        if search.hit(pic, &mut index) {
             rid = crate::svg::blip_rid(pic).or_else(|| blip_embed(pic));
         }
         Ok(())
@@ -1726,7 +1729,7 @@ fn find_image_rids(root: &Element, search: &PicSearch<'_>) -> Option<Vec<String>
         let Some(pic) = direct_pic(anchor) else {
             return Ok(());
         };
-        if search.hit(&cnv_of(pic).0, &mut index) {
+        if search.hit(pic, &mut index) {
             rids = Some(image_rids(pic));
         }
         Ok(())
@@ -1763,7 +1766,7 @@ where
         if !has_blip(pic) {
             return Ok(false);
         }
-        if search.hit(&cnv_of(pic).0, &mut index) {
+        if search.hit(pic, &mut index) {
             found = true;
             f(pic)?;
             return Ok(true);
@@ -1797,7 +1800,7 @@ fn find_blip_attr(root: &Element, search: &PicSearch<'_>, embed_only: bool) -> O
         if !has_blip(pic) {
             return Ok(());
         }
-        if search.hit(&cnv_of(pic).0, &mut index) {
+        if search.hit(pic, &mut index) {
             rid = if embed_only {
                 blip_embed(pic)
             } else {
@@ -1832,7 +1835,7 @@ fn find_anchor_kind(root: &Element, search: &PicSearch<'_>) -> Option<AnchorKind
         if !has_blip(pic) {
             return Ok(());
         }
-        if search.hit(&cnv_of(pic).0, &mut index) {
+        if search.hit(pic, &mut index) {
             kind = Some(k);
         }
         Ok(())
@@ -1865,7 +1868,7 @@ fn pics_match_in(el: &Element, search: &PicSearch<'_>, index: &mut usize) -> boo
         if !has_blip(pic) {
             return Ok(());
         }
-        if search.hit(&cnv_of(pic).0, index) {
+        if search.hit(pic, index) {
             matched = true;
         }
         Ok(())
@@ -1899,7 +1902,7 @@ fn remove_anchor_in(el: &mut Element, search: &PicSearch<'_>, index: &mut usize)
             }
         } else if AnchorKind::from_local(child.local_name()).is_some() {
             if let Some(pic) = direct_pic(child) {
-                if has_blip(pic) && search.hit(&cnv_of(pic).0, index) {
+                if has_blip(pic) && search.hit(pic, index) {
                     drop = Some(i);
                     break;
                 }
@@ -1938,7 +1941,7 @@ fn replace_anchor_in(
         let Node::Element(child) = n else { continue };
         if AnchorKind::from_local(child.local_name()).is_some() {
             if let Some(pic) = direct_pic(child) {
-                if has_blip(pic) && search.hit(&cnv_of(pic).0, index) {
+                if has_blip(pic) && search.hit(pic, index) {
                     *child = new_anchor;
                     return true;
                 }
@@ -1964,7 +1967,7 @@ fn update_extent(
         if !has_blip(pic) {
             return Ok(false);
         }
-        if !search.hit(&cnv_of(pic).0, &mut index) {
+        if !search.hit(pic, &mut index) {
             return Ok(false);
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
@@ -2004,7 +2007,7 @@ fn update_absolute_pos(
         if !has_blip(pic) {
             return Ok(false);
         }
-        if !search.hit(&cnv_of(pic).0, &mut index) {
+        if !search.hit(pic, &mut index) {
             return Ok(false);
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
@@ -2035,7 +2038,7 @@ fn update_two_cell_to(
         if !has_blip(pic) {
             return Ok(false);
         }
-        if !search.hit(&cnv_of(pic).0, &mut index) {
+        if !search.hit(pic, &mut index) {
             return Ok(false);
         }
         apply_two_cell_to(anchor, to, to_off_x, to_off_y)?;
@@ -2071,7 +2074,7 @@ pub(crate) fn ensure_drawing_part(
         .with_attr("xmlns:a", A_NS)
         .with_attr("xmlns:r", REL_NS);
     let doc = Document::new(Some(DEFAULT_DECL.to_string()), root);
-    pkg.set(&part, doc.to_bytes()?)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     let mut rels = Relationships::from_package(pkg, sheet_part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {
@@ -2156,7 +2159,7 @@ pub(crate) fn next_cnv_id(
     let mut max = 0u32;
     let mut scan = |parts: Vec<String>| -> Result<(), Error> {
         for part in parts {
-            let doc = xml::parse(pkg.get(&part)?)?;
+            let doc = super::list_pin::parse_part(pkg, &part)?;
             walk_all(&doc.root, &mut |e| {
                 if e.local_name() == "cNvPr" {
                     if let Some(id) = e.attr_local("id") {

@@ -36,13 +36,17 @@ use super::style;
 use super::REL_CALC_CHAIN;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
+    let _pins = super::list_pin::PinGuard::enter();
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     opc::reject_strict(&pkg)?;
     let wb_part = opc::office_document_part(&pkg)?;
     let mut wb_doc = xml::parse(pkg.get(&wb_part)?)?;
+    super::list_pin::pin_workbook(&mut wb_doc.root);
     let wb_rels = Relationships::from_package(&pkg, &wb_part)?;
 
     let mut sheet_index = sheet_index(&wb_doc.root, &wb_rels, &wb_part)?;
+    super::draw_pin::preload(&pkg, &sheet_index)?;
+    super::list_pin::capture_pivots(&pkg, &sheet_index)?;
 
     let mut dirty_sheets: Vec<(String, Document)> = Vec::new();
     let mut styles_doc: Option<(String, Document)> = None;
@@ -1582,6 +1586,8 @@ pub(crate) fn load_dirty(
         return Ok(());
     }
     let mut parsed = xml::parse(pkg.get(part)?)?;
+    super::list_pin::pin_sheet(&mut parsed.root);
+    let _ = super::ole::pin_objects(pkg, part, &mut parsed.root);
     if make_explicit {
         // 省略 r 的行和单元格按隐式编号补成显式，否则后面插新行会让它们的编号漂移。
         make_refs_explicit(&mut parsed.root);

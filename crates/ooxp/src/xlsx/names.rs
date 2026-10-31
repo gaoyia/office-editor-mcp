@@ -198,17 +198,18 @@ pub(crate) fn apply_delete(
                 format!("ops[{i}].id"),
             ));
         };
-        let mut seen = 0usize;
+        let attr = crate::xml::pin_attr("name");
+        let mut live = 0usize;
         let before = parent.children_by_local("definedName").len();
         parent.children.retain(|n| match n {
             Node::Element(e) if e.local_name() == "definedName" => {
-                seen += 1;
-                seen != op.index
+                live += 1;
+                !crate::xml::pin_matches(e, &attr, op.index, live)
             }
             _ => true,
         });
         let left = parent.children_by_local("definedName").len();
-        if seen < op.index || before == left {
+        if before == left {
             return Err(Error::with_path(
                 ErrorKind::DefinedNameNotFound {
                     id: format!("name:{}", op.index),
@@ -397,26 +398,12 @@ fn parse_local_sheet_id(el: &Element) -> Option<u32> {
 }
 
 fn defined_name_at(parent: &Element, index: usize) -> Option<&Element> {
-    parent
-        .children_by_local("definedName")
-        .into_iter()
-        .nth(index - 1)
+    super::list_pin::find_child(parent, "definedName", "name", index)
 }
 
 fn defined_name_at_mut(wb: &mut Element, index: usize) -> Option<&mut Element> {
     let parent = wb.child_by_local_mut("definedNames")?;
-    let mut seen = 0usize;
-    for n in parent.children.iter_mut() {
-        let Node::Element(e) = n else { continue };
-        if e.local_name() != "definedName" {
-            continue;
-        }
-        seen += 1;
-        if seen == index {
-            return Some(e);
-        }
-    }
-    None
+    super::list_pin::find_child_mut(parent, "definedName", "name", index)
 }
 
 fn ensure_defined_names(root: &mut Element) -> &mut Element {

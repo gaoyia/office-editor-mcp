@@ -11,6 +11,17 @@
 
 ## 稳定 id
 
+一次 apply 里，下面这些位置序号按开始时的顺序解释。本批新建的不占旧序号。被删掉后再点名，报 `IdNotFound`。
+
+- 工作表 XML：`dv:{n}`、`cf:{n}`、`link:{n}`、`spark:{n}`、`editRange:{n}`、`table:{n}`
+- 工作表关系：`pivot:{n}` 记下关系 id
+- 工作簿 XML：`name:{n}`、`customView:{n}`、`extlink:{n}`
+- 样式部件：`cellStyle:{n}`
+- 连接部件：没有 `id` 属性时的 `connection:index:{k}`
+- drawing 没有 `cNvPr/@id` 时的 `:index:{k}`，含页眉页脚图
+
+`series:{idx}`、`trendline:{k}`、`errorBars:{k}` 仍随本批重排。
+
 - **工作簿**
   - id：`xlsx:workbook`
   - 例子：`xlsx:workbook`

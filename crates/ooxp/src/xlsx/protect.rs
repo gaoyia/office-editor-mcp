@@ -500,15 +500,16 @@ pub(crate) fn apply_delete_range(
         let Some(parent) = sheet.child_by_local_mut("protectedRanges") else {
             return Err(range_not_found(&op.sheet, op.index, i));
         };
-        let mut seen = 0usize;
+        let attr = crate::xml::pin_attr("editRange");
+        let mut live = 0usize;
         let mut found = None;
         for (idx, n) in parent.children.iter().enumerate() {
             let Node::Element(e) = n else { continue };
             if e.local_name() != "protectedRange" {
                 continue;
             }
-            seen += 1;
-            if seen == op.index {
+            live += 1;
+            if crate::xml::pin_matches(e, &attr, op.index, live) {
                 found = Some(idx);
                 break;
             }
@@ -599,10 +600,7 @@ fn nth_range<'a>(
     let Some(parent) = worksheet.child_by_local("protectedRanges") else {
         return Err(range_not_found(sheet, index, i));
     };
-    parent
-        .children_by_local("protectedRange")
-        .into_iter()
-        .nth(index.saturating_sub(1))
+    super::list_pin::find_child(parent, "protectedRange", "editRange", index)
         .ok_or_else(|| range_not_found(sheet, index, i))
 }
 
@@ -615,26 +613,8 @@ fn nth_range_mut<'a>(
     let Some(parent) = worksheet.child_by_local_mut("protectedRanges") else {
         return Err(range_not_found(sheet, index, i));
     };
-    let mut seen = 0usize;
-    let mut found = None;
-    for (idx, n) in parent.children.iter().enumerate() {
-        let Node::Element(e) = n else { continue };
-        if e.local_name() != "protectedRange" {
-            continue;
-        }
-        seen += 1;
-        if seen == index {
-            found = Some(idx);
-            break;
-        }
-    }
-    let Some(idx) = found else {
-        return Err(range_not_found(sheet, index, i));
-    };
-    match &mut parent.children[idx] {
-        Node::Element(e) => Ok(e),
-        _ => Err(range_not_found(sheet, index, i)),
-    }
+    super::list_pin::find_child_mut(parent, "protectedRange", "editRange", index)
+        .ok_or_else(|| range_not_found(sheet, index, i))
 }
 
 fn range_not_found(sheet: &str, index: usize, i: usize) -> Error {
