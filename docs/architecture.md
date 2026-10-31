@@ -136,6 +136,7 @@ xlsx 的单元格、公式和 `sheetData` 读写在 `xlsx/cell.rs`。排序颜�
 pptx 的每个 op 在对象模块里做完。`apply.rs` 只分发，并留下大家共用的宿主装载。
 docx 的 create 字段解析在 `request/` 里按领域拆开，和 apply 的解析放在一起。`create.rs` 只拼骨架并复用已有 apply。骨架 XML 在 `create_xml.rs`。
 xlsx 的 create 也按这个拆：字段解析在 `request/`，骨架 XML 在 `create_xml.rs`。
+pptx 的 create 也按这个拆：字段解析在 `request/`，骨架 XML 在 `create_xml.rs`。
 
 ### opc
 

@@ -1,6 +1,6 @@
 # create 解析与写出分开：pptx
 
-状态：❌ 未开始。
+状态：✅ 已完成。
 日期：2026-10-31
 
 不在三种格式的待做表里，不占待做序号。这是 `.plan/2026年-10月-30日-✅-大文件按领域拆开.md` 文末「后续」表里的 `pptx/create.rs`。领域 JSON 不变，写出的包不变。
@@ -33,10 +33,24 @@
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 1 | 文档：`docs/architecture.md` 写明 create 的解析位置（三份里第一份做） | ❌ |
-| 2 | 列出解析函数与写出函数的去向，写回本节 | ❌ |
-| 3 | 搬移 | ❌ |
-| 4 | 测试 | ❌ |
+| 1 | 文档：`docs/architecture.md` 写明 create 的解析位置（三份里第一份做） | ✅ |
+| 2 | 列出解析函数与写出函数的去向，写回本节 | ✅ |
+| 3 | 搬移 | ✅ |
+| 4 | 测试 | ✅ |
+
+### 2. 去向
+
+叶子字段本来就在 `request/` 里。这次把拼页、校验和数组入口也搬过去：
+
+- 页和形状：`create_slide.rs`
+- 图：`create_picture.rs`。音视频、三维、墨迹、公式：`create_media.rs`
+- 图表：`create_chart.rs`
+- SmartArt、表、OLE、连接线、缩放：`create_drawing.rs`
+- 备注：`create_notes.rs`。批注：`create_comment.rs`
+- 切换和动画：`create_timing.rs`。节和自定义放映：`create_deck.rs`
+- 中间结构：`create_types.rs`
+
+骨架 XML 在 `create_xml.rs`。`create.rs` 只拼骨架，再按顺序复用已有 apply。没有另挂在 create 旁边的辅助文件。
 
 ### 4. 验收
 

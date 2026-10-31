@@ -6,6 +6,7 @@ mod chart;
 mod comments;
 pub(crate) mod connector;
 mod create;
+mod create_xml;
 mod custom_show;
 mod field;
 pub(crate) mod geom;

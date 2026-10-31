@@ -46,6 +46,17 @@ pub(crate) use table::parse_create_table;
 use table::*;
 mod extras;
 use extras::*;
+
+pub(crate) mod create_chart;
+pub(crate) mod create_comment;
+pub(crate) mod create_deck;
+pub(crate) mod create_drawing;
+pub(crate) mod create_media;
+pub(crate) mod create_notes;
+pub(crate) mod create_picture;
+pub(crate) mod create_slide;
+pub(crate) mod create_timing;
+pub(crate) mod create_types;
 pub(crate) use extras::{
     parse_create_custom_show, parse_create_handout, parse_create_media, parse_create_ole,
     parse_create_protection, parse_create_section, parse_create_shape, parse_create_show_pr,
