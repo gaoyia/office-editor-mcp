@@ -458,6 +458,51 @@ fn insert_summary_zoom_lists_targets() {
     assert!(xml.contains("summaryZm"));
     assert!(xml.contains("Requires=\"psuz\""));
     assert!(xml.contains("gridLayout"));
+    assert_eq!(xml.matches("<psuz:summaryZmObj").count(), 2);
+}
+
+#[test]
+fn insert_summary_zoom_with_three_sections() {
+    let path = tmp("sum3").with_extension("pptx");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "presentation": {
+            "sections": [
+                { "name": "甲", "start": 1 },
+                { "name": "乙", "start": 2 },
+                { "name": "丙", "start": 3 }
+            ],
+            "slides": [
+                { "shapes": [{ "text": "甲" }] },
+                { "shapes": [{ "text": "乙" }] },
+                { "shapes": [{ "text": "丙" }] }
+            ]
+        }
+    })
+    .to_string())
+    .unwrap();
+    let out = tmp("sum3-out").with_extension("pptx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "insertZoom",
+            "id": "slide:1",
+            "type": "summary",
+            "targets": ["section:1", "section:2", "section:3"]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "zooms": true }));
+    assert_eq!(
+        tree["slides"][0]["zooms"][0]["targets"],
+        json!(["section:1", "section:2", "section:3"])
+    );
+    let xml =
+        String::from_utf8(zip_entry(&out, "ppt/slides/slide1.xml").unwrap_or_default()).unwrap();
+    assert_eq!(xml.matches("<psuz:summaryZmObj").count(), 3);
 }
 
 #[test]

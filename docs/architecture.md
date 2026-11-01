@@ -487,7 +487,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`。删页时按 `r:id` 清引用。
 也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器）。
 也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源。
-也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸，也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）。
+也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸，也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转）。
 也可用 `setShowPr` 改 `presProps` 的 `p:showPr`，也可用 `setProtection` 写出或删掉 `p:modifyVerifier`（给了 `password` 时写 PowerPoint 16.0 的 SHA-512 哈希）。
 脏 `presentation.xml` 的 `sldIdLst`、presentation 关系、新页或被删页及其备注 / 现代批注、内容类型，以及若有则同步 `p14:sectionLst` 与 `p:custShowLst`。
 未点名页原字节写回。插删改图、图表、SmartArt、备注与批注时仍脏该页 XML、该页 `.rels`、notesSlide 及其 `.rels`、必要时 notesMaster 与 presentation、`/ppt/charts/`、embedding、`/ppt/diagrams/`、`/ppt/comments/` 与 `/ppt/authors.xml`。

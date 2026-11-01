@@ -14,6 +14,7 @@ Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 2026-10-31 补跑 `pptx-id-pin-refs.ps1`。删掉第一页后，插页仍留在 A 节末尾，原来的第三页划进 B 节、也能作为新节起点，Zoom 和自定义放映都指向原来的第三页。PowerPoint 16.0 无 Repair。
 2026-10-31 补跑 `pptx-id-pin.ps1`。先插行再写原来第 3 行，字落在原来那一行。先删第一份母版再改原来第二份母版上的形状。PowerPoint 16.0 没有 Repair。
 2026-11-01 补跑 `pptx-placeholder-more.ps1`。版式上插入的内容占位符和图片占位符，用该版式新建一页后分别是内容占位符和图片占位符。没有 Repair。
+2026-11-01 补跑 `pptx-zoom-remain.ps1`。已有两节上插入的摘要缩放，PowerPoint 16.0 打开没有 Repair，认成一个 Zoom。
 
 ## 本机结果（2026-09-28）
 
