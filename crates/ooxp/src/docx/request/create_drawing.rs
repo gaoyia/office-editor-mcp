@@ -333,7 +333,19 @@ pub(crate) fn parse_model3ds(v: Option<&Value>, prefix: &str) -> Result<Vec<NewM
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "file" | "cx" | "cy" | "hyperlink") {
+            if !matches!(
+                k.as_str(),
+                "file"
+                    | "cx"
+                    | "cy"
+                    | "kind"
+                    | "wrap"
+                    | "alignH"
+                    | "alignV"
+                    | "offsetX"
+                    | "offsetY"
+                    | "hyperlink"
+            ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -370,10 +382,15 @@ pub(crate) fn parse_model3ds(v: Option<&Value>, prefix: &str) -> Result<Vec<NewM
                 item_path.clone(),
             ));
         }
+        let (kind, wrap, pos) =
+            super::extras::parse_model3d_float(obj, &item_path, "insertModel3d")?;
         out.push(NewModel3d {
             file,
             cx,
             cy,
+            kind,
+            wrap,
+            pos,
             hyperlink: super::doc_extra::parse_drawing_hlink(
                 obj.get("hyperlink"),
                 &format!("{item_path}.hyperlink"),

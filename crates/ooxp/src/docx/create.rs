@@ -684,6 +684,9 @@ fn push_story_ops(
                     file: m.file.clone(),
                     cx: m.cx,
                     cy: m.cy,
+                    kind: m.kind,
+                    wrap: m.wrap,
+                    pos: m.pos.clone(),
                 }));
                 if let Some(h) = &m.hyperlink {
                     let m_id = format!("{id}/model3d:index:{}", n + 1);

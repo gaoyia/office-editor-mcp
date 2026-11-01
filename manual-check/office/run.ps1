@@ -106,6 +106,7 @@ $order = @(
     'docx-model3d'
     'docx-model3d-geom'
     'docx-model3d-camera'
+    'docx-model3d-float'
     'docx-ink'
     'docx-ink-geom'
     'docx-textbox'

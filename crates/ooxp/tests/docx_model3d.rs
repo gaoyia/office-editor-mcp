@@ -575,3 +575,46 @@ fn reject_empty_camera_and_neg_fov() {
     assert_eq!(err_fov.code(), ErrorCode::InvalidField);
     assert!(!out_fov.exists());
 }
+
+#[test]
+fn insert_anchor_writes_wrap_on_choice_and_fallback() {
+    let src = create_docx("float", json!({ "paragraphs": [{ "text": "hello" }] }));
+    let tree0 = inspect(&src, json!({ "from": 1, "maxParas": 4 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let glb = write_glb("float", &sample_glb());
+    let out = seq_path("float-ins", "docx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertModel3d",
+            "id": para,
+            "file": glb.to_string_lossy(),
+            "kind": "anchor",
+            "wrap": "square",
+            "alignH": "left",
+            "alignV": "top"
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 4, "model3ds": true }));
+    let item = first_model(&tree);
+    assert_eq!(item["kind"], "anchor");
+    assert_eq!(item["wrap"], "square");
+    let doc = part_text(&out, "word/document.xml");
+    assert!(doc.contains("wp:anchor"), "{doc}");
+    assert!(doc.contains("wrapSquare"), "{doc}");
+    assert!(doc.contains(r#"relativeFrom="margin""#), "{doc}");
+    assert_eq!(doc.matches("<wp:anchor ").count(), 2, "{doc}");
+    let err = apply_err(
+        &src,
+        &seq_path("float-bad", "docx"),
+        json!([{
+            "op": "insertModel3d",
+            "id": para,
+            "file": glb.to_string_lossy(),
+            "kind": "inline",
+            "wrap": "square"
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

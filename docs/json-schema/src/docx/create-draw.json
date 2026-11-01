@@ -57,6 +57,17 @@
           "type": "integer",
           "minimum": 1
         },
+        "kind": {
+          "enum": ["inline", "anchor"]
+        },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" },
         "hyperlink": {
           "$ref": "#/$defs/docxDrawingHlinkCreate"
         }

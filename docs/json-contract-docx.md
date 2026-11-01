@@ -261,7 +261,7 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 
 3D 模型的 `{docPrId}` 取该 `w:drawing` 的 `wp:docPr/@id`。没有则用 `model3d:index:{k}`，树上 `"stable": false`。
 `k` 只在该宿主段内从 1 计。页眉页脚 3D 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `model3ds` 上。
-只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，不是 `pic:pic`。
+只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` 包 `am3d:model3d`（`wp:inline` 或 `wp:anchor`），不是 `pic:pic`。
 只走 `Choice Requires="am3d"`。Fallback 海报不进 `pictures`。正文 3D 只收主文档段落的子孙，遇 `w:txbxContent` 停住。
 组合里符合条件的要展开，组合本身不进树。注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
 `insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
@@ -273,7 +273,7 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 `rot` 始终是对象，字段顺序：`ax`、`ay`、`az`。取 `am3d:rot` 对应属性；缺属性或没有该元素则为 `null`。
 `lightRig` 取 `am3d:spPr/a:scene3d/a:lightRig`。没有则为 `null`。有则字段顺序：`rig`、`dir`、`lat`、`lon`、`rev`。
 `rig` / `dir` 取属性原文，缺则为 `null`。`lat` / `lon` / `rev` 取子元 `a:rot` 对应属性整数，缺则为 `null`。
-`insertModel3d` 写入只做 `inline`。已有 3D 可用 `setModel3dWrap` 改成浮动。xlsx / pptx 见各自分册。
+`insertModel3d` 省略 `kind` 时写 `wp:inline`。`kind` 为 `anchor` 时按 `setModel3dWrap` 写成浮动，Choice 与 Fallback 一起改。已有 3D 仍用 `setModel3dWrap` 改绕排。xlsx / pptx 见各自分册。
 
 水印只认页眉部件（`w:hdr`）里的 DrawingML `w:drawing`。
 `wp:docPr/@name` 以 `ooxpWatermark`、`PowerPlusWaterMarkObject` 或 `WordPictureWatermark` 开头，
@@ -1884,7 +1884,7 @@ pptx 母版 `theme.fonts` 同一套字段。pptx 页级 `themeOverride` 挂在�
   - 可选
   - 该段上的 3D 模型列表
   - 省略则不写
-  - 每项必须有 `file`，可选成对的 `cx` / `cy`，规则与 `insertModel3d` 相同
+  - 每项必须有 `file`，可选成对的 `cx` / `cy`，以及 `kind` / `wrap` / 位置，规则与 `insertModel3d` 相同
   - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].footnote`**
@@ -4956,7 +4956,7 @@ xlsx / pptx 同一套字段，见各自分册。
 
 ### insertModel3d
 
-把本地 GLB 作为 3D 模型写入目标段落。不进 `pictures`。不栅格化模型。海报用 1×1 PNG 占位。本期只写 `wp:inline`。
+把本地 GLB 作为 3D 模型写入目标段落。不进 `pictures`。不栅格化模型。海报用 1×1 PNG 占位。省略 `kind` 时写 `wp:inline`。`kind` 为 `anchor` 时按 `setModel3dWrap` 写浮动。
 
 ```json
 {
@@ -4979,8 +4979,11 @@ xlsx / pptx 同一套字段，见各自分册。
 | `id` | 必须是正文或页眉页脚段落 id |
 | `file` | 必须。本地 GLB 路径 |
 | `cx` / `cy` | 成对可选。EMU。都省则 `914400` × `914400` |
+| `kind` | 可选。`inline` 或 `anchor`。省略为 `inline` |
+| `wrap` | `kind` 为 `anchor` 时必填，枚举与 `setPictureWrap` 相同。`inline` 时必须省略 |
+| `alignH` / `alignV` / `offsetX` / `offsetY` | 仅浮动，规则与 `setPictureWrap` 相同 |
 
-- 只给其中一个报 `InvalidField`
+- 只给 `cx` 或 `cy` 其中一个报 `InvalidField`
 - 不是 GLB 报 `InvalidField`
 - 找不到 `file` 报 `Io`
 - 空路径报 `InvalidField`

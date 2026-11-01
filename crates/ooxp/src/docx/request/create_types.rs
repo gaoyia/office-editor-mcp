@@ -132,6 +132,9 @@ pub(crate) struct NewModel3d {
     pub(crate) file: String,
     pub(crate) cx: Option<i64>,
     pub(crate) cy: Option<i64>,
+    pub(crate) kind: super::super::picture::PicKind,
+    pub(crate) wrap: Option<super::super::picture::WrapKind>,
+    pub(crate) pos: super::super::picture::WrapPos,
     pub(crate) hyperlink: Option<DrawingHlink>,
 }
 

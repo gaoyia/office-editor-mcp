@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的 3D 模型：`wp:inline` 里的 `am3d:model3d`。
+//! 正文与页眉页脚里的 3D 模型：`wp:inline` 或 `wp:anchor` 里的 `am3d:model3d`。
 //! 不进 `pictures`。Fallback 海报不进 `pictures`。
 
 use std::collections::HashMap;
@@ -22,6 +22,9 @@ pub struct InsertModel3dOp {
     pub file: String,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub kind: PicKind,
+    pub wrap: Option<WrapKind>,
+    pub pos: WrapPos,
 }
 
 #[derive(Debug, Clone)]
@@ -461,7 +464,15 @@ pub fn apply_insert(
             format!("ops[{i}].id"),
         )
     })?;
-    super::textbox::insert_ac(p, build_docx_ac(doc_pr, &glb_rid, &png_rid, cx, cy));
+    let mut ac = build_docx_ac(doc_pr, &glb_rid, &png_rid, cx, cy);
+    if op.kind == PicKind::Anchor {
+        each_host_drawing_mut(&mut ac, |drawing| {
+            picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+                .map_err(|e| e.at(format!("ops[{i}]")))?;
+            Ok(true)
+        })?;
+    }
+    super::textbox::insert_ac(p, ac);
     dirty.insert(host, ());
     Ok(())
 }

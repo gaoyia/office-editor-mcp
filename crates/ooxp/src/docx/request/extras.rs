@@ -481,7 +481,14 @@ pub(super) fn parse_insert_model3d(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<super::super::model3d::InsertModel3dOp, Error> {
-    deny_keys(obj, i, &["op", "id", "file", "cx", "cy"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "file", "cx", "cy", "kind", "wrap", "alignH", "alignV", "offsetX",
+            "offsetY",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
     let file = require_file(obj, i, "insertModel3d")?;
@@ -496,13 +503,155 @@ pub(super) fn parse_insert_model3d(
             format!("ops[{i}]"),
         ));
     }
+    let (kind, wrap, pos) = parse_model3d_float(obj, &format!("ops[{i}]"), "insertModel3d")?;
     Ok(super::super::model3d::InsertModel3dOp {
         id,
         host,
         file,
         cx,
         cy,
+        kind,
+        wrap,
+        pos,
     })
+}
+
+pub(super) fn parse_model3d_float(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+    op: &str,
+) -> Result<(PicKind, Option<WrapKind>, WrapPos), Error> {
+    let kind = match obj.get("kind") {
+        None => PicKind::Inline,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("{path}.kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.kind"),
+            ));
+        }
+    };
+    let wrap =
+        match obj.get("wrap") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidPicWrap, format!("{path}.wrap"))
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "wrap".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{path}.wrap"),
+                ));
+            }
+        };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("{path}.wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "wrap".into(),
+            },
+            format!("{path}.wrap"),
+        ));
+    }
+    let align_h = match obj.get("alignH") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_align_h(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("{path}.alignH"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "alignH".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.alignH"),
+            ));
+        }
+    };
+    let align_v = match obj.get("alignV") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_align_v(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("{path}.alignV"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "alignV".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.alignV"),
+            ));
+        }
+    };
+    let offset_x = opt_i64(obj, "offsetX", path)?;
+    let offset_y = opt_i64(obj, "offsetY", path)?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    Ok((
+        kind,
+        wrap,
+        WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    ))
+}
+
+fn opt_i64(
+    obj: &serde_json::Map<String, Value>,
+    key: &str,
+    path: &str,
+) -> Result<Option<i64>, Error> {
+    match obj.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(n)) => Ok(Some(n.as_i64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: key.into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{path}.{key}"),
+            )
+        })?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: key.into(),
+                expected: TypeName::Integer,
+            },
+            format!("{path}.{key}"),
+        )),
+    }
 }
 
 pub(super) fn parse_replace_model3d(
