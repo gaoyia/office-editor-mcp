@@ -1311,10 +1311,12 @@ presentation `.rels` 的 Type 为 `http://schemas.microsoft.com/office/2018/10/r
 `commentRangeEnd` 与 `commentReference` 插在父 `commentReference` 所在 run 之后），与 Word 16 `Replies.Add` 一致；`rStyle` 抄父引用 run。
 找不到父批注的范围标记时仍写 `comment` 与 `commentEx`，不报错。inspect 的 `start` / `end` 因此与线程根相同。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。
 父 id 不是批注容器 id 报 `InvalidId`。找不到父批注报 `IdNotFound`。对 `kind` 为 `ink` 的批注发此 op 报 `NotImplemented`。
+Word 16.0 把空的 `wpi:ink` 插进另存批注后再保存，标记会被丢掉。`Replies.Add` 的另存同样丢掉，所以不写回复。
 xlsx 的 `id` 必须是父批注容器 id，不能是回复 id 或单元格 id；对回复 id 报 `InvalidId`。写入同部件一条带 `parentId` 的 `threadedComment`，`ref` 与父相同。
 新回复 `id` 为 `{父 id}/reply:{guid}`。只能写 `worksheet`。
 pptx 的 `id` 必须是父批注容器 id（`slide:{n}/comment:{guid}`），不能是回复 id；对回复 id 报 `InvalidId`。写入该 `p188:cm` 的 `p188:replyLst`。
 新回复 `id` 为 `{父 id}/reply:{guid}`。找不到父批注报 `IdNotFound`。对 `kind` 为 `ink` 的批注发此 op 报 `NotImplemented`。
+PowerPoint 16.0 保存时丢掉注入的空 `ink`。`Replies.Add` 能写出普通回复，父批注里的 `ink` 不在另存结果里，所以不写回复。
 
 ### deleteComment
 
@@ -1348,9 +1350,12 @@ pptx 的 `id` 可以是 `slide:{n}/comment:{guid}` 或回复 id。删父 `p188:c
 
 只改该 `w:comment` 的可见文本，不改范围标记。留下第一段（含 `annotationRef`），按 `setParaText` 的规则改这段的可见 `w:t`，删掉后面多出来的 `w:p`。
 随后把 `commentEx/@paraId` 和指向旧最后一段的 `paraIdParent` 改成留下的那一段。id 不是批注容器 id 报 `InvalidId`。对批注内段落 id 请用 `setParaText`。
-对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `w:t` 时同样拒绝，不写文件。xlsx 的 `id` 可以是批注容器 id 或回复 id。
+对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `w:t` 时同样拒绝，不写文件。
+Word 16.0 改 `Range.Text` 后再另存，空的 `wpi:ink` 也会被丢掉，所以不改字。
+xlsx 的 `id` 可以是批注容器 id 或回复 id。
 只改对应 `threadedComment` 的 `<text>`。pptx 的 `id` 可以是批注容器 id 或回复 id。只改对应 `p188:txBody` 的可见文本，规则与 `setShapeText` 相同。
 对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `txBody` 文本时同样拒绝。
+PowerPoint 16.0 的批注 `Text` 只读，另存也会丢掉空的 `ink`，所以不改字。
 
 ### setCommentMeta
 

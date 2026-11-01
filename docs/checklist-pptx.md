@@ -15,6 +15,7 @@ Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 2026-10-31 补跑 `pptx-id-pin.ps1`。先插行再写原来第 3 行，字落在原来那一行。先删第一份母版再改原来第二份母版上的形状。PowerPoint 16.0 没有 Repair。
 2026-11-01 补跑 `pptx-placeholder-more.ps1`。版式上插入的内容占位符和图片占位符，用该版式新建一页后分别是内容占位符和图片占位符。没有 Repair。
 2026-11-01 补跑 `pptx-zoom-remain.ps1`。已有两节上插入的摘要缩放，PowerPoint 16.0 打开没有 Repair，认成一个 Zoom。
+2026-11-01 探测墨迹批注。PowerPoint 16.0 保存时丢掉空的 `ink`，`Replies.Add` 写出的回复旁边不再有该标记，批注 `Text` 只读。回复和改字仍拒绝，不进 `run.ps1`。
 
 ## 本机结果（2026-09-28）
 
