@@ -1246,3 +1246,123 @@ fn chartex_reads_cells_when_the_cache_is_gone() {
     let ser = &inspect_charts(&edited)["sheets"][0]["charts"][0]["series"][0];
     assert_eq!(ser["values"], json!([7, 8]));
 }
+
+fn wrap_marked(xml: &str, open: &str, close: &str, specs: &[(&str, &str)]) -> String {
+    let mut ranges = Vec::new();
+    let mut rest = 0usize;
+    while let Some(rel) = xml[rest..].find(open) {
+        let start = rest + rel;
+        let end_rel = xml[start..]
+            .find(close)
+            .unwrap_or_else(|| panic!("{close}"));
+        let end = start + end_rel + close.len();
+        ranges.push((start, end));
+        rest = end;
+    }
+    assert_eq!(ranges.len(), specs.len(), "{xml}");
+    let mut out = xml.to_string();
+    for (i, (requires, ns)) in specs.iter().enumerate().rev() {
+        let (start, end) = ranges[i];
+        let inner = out[start..end].to_string();
+        let id = 90 + i;
+        let fallback = format!(
+            r#"<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="{id}" name="海报{id}"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr/></xdr:sp>"#
+        );
+        let wrapped = format!(
+            r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:{requires}="{ns}" Requires="{requires}">{inner}</mc:Choice><mc:Fallback>{fallback}</mc:Fallback></mc:AlternateContent>"#
+        );
+        out.replace_range(start..end, &wrapped);
+    }
+    out
+}
+
+#[test]
+fn chartex_alternate_content_prefixes_stay_charts() {
+    let src = create_book("cx-ac");
+    let made = tmp("cx-ac-made");
+    apply(
+        &src,
+        &made,
+        json!([
+            {
+                "op": "insertChart", "id": "sheet:Sheet1", "type": "chartex",
+                "layoutId": "waterfall", "from": "E2", "dataFrom": "A1", "title": "瀑布",
+                "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [10, 4] }]
+            },
+            {
+                "op": "insertChart", "id": "sheet:Sheet1", "type": "chartex",
+                "layoutId": "funnel", "from": "E16", "dataFrom": "A10", "title": "漏斗",
+                "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [10, 4] }]
+            },
+            {
+                "op": "insertChart", "id": "sheet:Sheet1", "type": "chartex",
+                "layoutId": "clusteredColumn", "from": "E30", "dataFrom": "A20", "title": "直方",
+                "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [10, 4] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let drawing = part_text(&made, "xl/drawings/drawing1.xml");
+    let wrapped = wrap_marked(
+        &drawing,
+        "<xdr:graphicFrame",
+        "</xdr:graphicFrame>",
+        &[
+            (
+                "cx1",
+                "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex",
+            ),
+            (
+                "cx2",
+                "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",
+            ),
+            (
+                "cx7",
+                "http://schemas.microsoft.com/office/drawing/2016/5/13/chartex",
+            ),
+        ],
+    );
+    assert!(wrapped.contains(r#"Requires="cx2""#));
+    assert!(wrapped.contains("海报90"));
+    let packed = tmp("cx-ac-packed");
+    rewrite_part(&made, &packed, "xl/drawings/drawing1.xml", |_| wrapped);
+    let tree = inspect_charts(&packed);
+    let sheet = &tree["sheets"][0];
+    assert_eq!(sheet["chartCount"], 3);
+    assert_eq!(sheet["shapeCount"], 0);
+    let charts = sheet["charts"].as_array().unwrap();
+    let layouts: Vec<_> = charts
+        .iter()
+        .map(|c| c["layoutId"].as_str().unwrap())
+        .collect();
+    assert!(layouts.contains(&"waterfall"), "{layouts:?}");
+    assert!(layouts.contains(&"funnel"), "{layouts:?}");
+    assert!(layouts.contains(&"clusteredColumn"), "{layouts:?}");
+    let funnel = charts.iter().find(|c| c["layoutId"] == "funnel").unwrap();
+    let edited = tmp("cx-ac-set");
+    apply(
+        &packed,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{}/series:0", funnel["id"].as_str().unwrap()),
+            "values": [7, 8]
+        }]),
+    )
+    .unwrap();
+    let again = part_text(&edited, "xl/drawings/drawing1.xml");
+    assert!(again.contains(r#"Requires="cx1""#), "{again}");
+    assert!(again.contains(r#"Requires="cx2""#), "{again}");
+    assert!(again.contains(r#"Requires="cx7""#), "{again}");
+    assert!(again.contains("海报90"), "{again}");
+    assert!(again.contains("<mc:Fallback>"), "{again}");
+    let back = inspect_charts(&edited);
+    let funnel = back["sheets"][0]["charts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["layoutId"] == "funnel")
+        .unwrap();
+    assert_eq!(funnel["series"][0]["values"], json!([7, 8]));
+    assert_eq!(back["sheets"][0]["shapeCount"], 0);
+}

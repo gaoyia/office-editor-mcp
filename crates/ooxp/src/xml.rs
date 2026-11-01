@@ -824,6 +824,8 @@ fn prefix_understood(prefix: &str) -> bool {
         "a14"
             | "am3d"
             | "cx1"
+            | "cx2"
+            | "cx7"
             | "p14"
             | "p15"
             | "pslz"
@@ -1094,6 +1096,14 @@ mod tests {
     fn understood_prefix_enters_choice() {
         let el = branch(&["a14"]);
         assert_eq!(picked(&el), "Choice");
+    }
+
+    #[test]
+    fn chartex_save_prefixes_enter_choice() {
+        for prefix in ["cx1", "cx2", "cx7"] {
+            assert_eq!(picked(&branch(&[prefix])), "Choice", "{prefix}");
+        }
+        assert_eq!(picked(&branch(&["cx4"])), "Fallback");
     }
 
     #[test]

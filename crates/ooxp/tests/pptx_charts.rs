@@ -1373,3 +1373,77 @@ fn chartex_without_cache_reads_the_embedding() {
     assert_eq!(ser["name"], "值");
     assert_eq!(ser["valRef"], "Sheet1!$B$2:$B$3");
 }
+
+#[test]
+fn powerpoint_saved_histogram_choice_is_the_chart() {
+    let src = create_deck("cx-ac");
+    let made = tmp("cx-ac-made").with_extension("pptx");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "layoutId": "clusteredColumn",
+            "title": "直方",
+            "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [5, 2] }]
+        }]),
+    )
+    .unwrap();
+    let xml = String::from_utf8(part_bytes(&made, "ppt/slides/slide1.xml")).unwrap();
+    let start = xml.find("<p:graphicFrame").expect("frame");
+    let end = xml[start..].find("</p:graphicFrame>").expect("frame end")
+        + start
+        + "</p:graphicFrame>".len();
+    let inner = &xml[start..end];
+    let wrapped = format!(
+        r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:cx7="http://schemas.microsoft.com/office/drawing/2016/5/13/chartex" Requires="cx7">{inner}</mc:Choice><mc:Fallback><p:pic><p:nvPicPr><p:cNvPr id="90" name="海报"/></p:nvPicPr></p:pic></mc:Fallback></mc:AlternateContent>"#
+    );
+    let slide = format!("{}{wrapped}{}", &xml[..start], &xml[end..]);
+    let packed = tmp("cx-ac").with_extension("pptx");
+    let bytes = std::fs::read(&made).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "ppt/slides/slide1.xml" {
+                data = slide.as_bytes().to_vec();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(&packed, buf.into_inner()).unwrap();
+    let tree = inspect_charts(&packed);
+    let slide_node = &tree["slides"][0];
+    assert_eq!(slide_node["chartCount"], 1);
+    assert_eq!(slide_node["pictureCount"], 0);
+    assert_eq!(slide_node["charts"][0]["layoutId"], "clusteredColumn");
+    let id = slide_node["charts"][0]["id"].as_str().unwrap();
+    let edited = tmp("cx-ac-set").with_extension("pptx");
+    apply(
+        &packed,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{id}/series:0"),
+            "values": [7, 8]
+        }]),
+    )
+    .unwrap();
+    let after = String::from_utf8(part_bytes(&edited, "ppt/slides/slide1.xml")).unwrap();
+    assert!(after.contains(r#"Requires="cx7""#), "{after}");
+    assert!(after.contains("海报"), "{after}");
+    assert_eq!(
+        inspect_charts(&edited)["slides"][0]["charts"][0]["series"][0]["values"],
+        json!([7, 8])
+    );
+}

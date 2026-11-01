@@ -1727,3 +1727,76 @@ fn chartex_without_cache_reads_the_embedding() {
     assert_eq!(ser["name"], "值");
     assert!(ser.get("valRef").is_none());
 }
+
+#[test]
+fn word_saved_funnel_choice_is_the_chart() {
+    let src = tmp_dir().join(format!(
+        "cx-ac-src-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect(&src, json!({ "from": 1, "maxParas": 2 }));
+    let para = tree["paragraphs"][0]["id"].as_str().unwrap();
+    let made = tmp_dir().join(format!(
+        "cx-ac-made-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": para,
+            "type": "chartex",
+            "layoutId": "funnel",
+            "title": "漏斗",
+            "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [3, 1] }]
+        }]),
+    );
+    let xml = part_text(&made, "word/document.xml");
+    let start = xml.find("<w:drawing").expect("drawing");
+    let end =
+        xml[start..].find("</w:drawing>").expect("drawing end") + start + "</w:drawing>".len();
+    let inner = &xml[start..end];
+    let wrapped = format!(
+        r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice xmlns:cx2="http://schemas.microsoft.com/office/drawing/2015/10/21/chartex" Requires="cx2">{inner}</mc:Choice><mc:Fallback><w:drawing><wp:docPr id="90" name="海报"/></w:drawing></mc:Fallback></mc:AlternateContent>"#
+    );
+    let doc = format!("{}{wrapped}{}", &xml[..start], &xml[end..]);
+    let packed = tmp_dir().join(format!(
+        "cx-ac-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    rewrite_chart(&made, &packed, "word/document.xml", &doc);
+    let seen = inspect(&packed, json!({ "charts": true }));
+    assert_eq!(seen["chartCount"], 1);
+    assert_eq!(seen["pictureCount"], 0);
+    assert_eq!(seen["charts"][0]["layoutId"], "funnel");
+    let id = seen["charts"][0]["id"].as_str().unwrap();
+    let edited = tmp_dir().join(format!(
+        "cx-ac-set-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &packed,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{id}/series:0"),
+            "values": [7, 8]
+        }]),
+    );
+    let after = part_text(&edited, "word/document.xml");
+    assert!(after.contains(r#"Requires="cx2""#), "{after}");
+    assert!(after.contains("海报"), "{after}");
+    assert_eq!(
+        inspect(&edited, json!({ "charts": true }))["charts"][0]["series"][0]["values"],
+        json!([7, 8])
+    );
+}
