@@ -21,6 +21,8 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 补跑 `docx-container-toc.ps1`。文本框里的目录更新域后能看见标题「第一章」，没有 Repair。
 2026-11-01 重跑整套手测。页眉题注、索引和书目改为插入成功，id 带 `header:` 前缀。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
 2026-11-01 探测墨迹批注。Word 16.0 保存时丢掉空的 `wpi:ink`，`Replies.Add` 和改 `Range.Text` 的另存同样丢掉。回复和改字仍拒绝，不进 `run.ps1`。
+2026-11-01 补探测注内 3D 和例外编辑区。`Add3DModel(文件, false, true, Range)` 能把 `am3d:model3d` 另存进脚注、尾注、批注。库仍拒绝。这些部件的 Range 和选区没有 `Editors`。
+2026-11-01 补探测容器里的六类域块。页眉、文本框、脚注、批注里的交叉引用、索引项、引文、书目更新后有结果，没有 Repair。索引更新报不允许。题注只在文本框里出编号，页眉、脚注、批注是「错误!仅主文档。」
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 

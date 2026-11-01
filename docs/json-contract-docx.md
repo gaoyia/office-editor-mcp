@@ -22,7 +22,7 @@
 
 - `bookmark:{n}`、`field:{n}`、`link:{n}`、`math:{n}`、`ruby:{n}`、`sdt:{n}` 在各自故事里从 1 起。正文、页眉、页脚、脚注、尾注、批注各算一个故事。文本框里再从 1 起。
 - `perm:{n}` 与 `rev:{n}` 在正文里含文本框，同一份编号。页眉、页脚各自一份，也含该部件里的文本框。
-- 脚注、尾注、批注里的 `rev:{n}` 仍各自从 1 起，id 带 `footnote:{id}`、`endnote:{id}` 或 `comment:{id}` 前缀。这些部件里的 `permStart` 不编。
+- 脚注、尾注、批注里的 `rev:{n}` 仍各自从 1 起，id 带 `footnote:{id}`、`endnote:{id}` 或 `comment:{id}` 前缀。这些部件里的 `permStart` 不编。Word 16.0 的脚注、尾注、批注 Range 和选区都没有 `Editors`。正文 `Range.Editors.Add(-1)` 再限制阅读能写出 `permStart`。
 - `run:{n}` 在各段里从 1 起，不跟故事共用。
 - 没有 `docPr/@id` 或 `cNvPr/@id` 时，`pic:index:{k}`、`txbx:index:{k}`、`cxn:index:{k}`、`shape:index:{k}`、`ink:index:{k}`、`chart:index:{k}`、`model3d:index:{k}` 在各段里从 1 起。
 - 页眉页脚里的 `pic:index:{k}`、`smartdiagram:index:{k}`、`ole:index:{k}` 在整份部件里从 1 起。正文里的 SmartArt 和 OLE 仍在各段里从 1 起。
@@ -70,7 +70,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 增删换、改尺寸绕排与改相机 / 旋转 / 光源，
-也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内不插：Word 16.0 的 `InlineShapes.Add3DModel` 调用类型不匹配，没有另存出注内 3D。
+也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、尾注内、批注内仍不插，报 `InvalidField`。Word 16.0 能另存，见下文 3D。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
 `create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
@@ -266,7 +266,8 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 `k` 只在该宿主段内从 1 计。页眉页脚 3D 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `model3ds` 上。
 只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` 包 `am3d:model3d`（`wp:inline` 或 `wp:anchor`），不是 `pic:pic`。
 只走 `Choice Requires="am3d"`。Fallback 海报不进 `pictures`。正文 3D 只收主文档段落的子孙，遇 `w:txbxContent` 停住。
-组合里符合条件的要展开，组合本身不进树。注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
+组合里符合条件的要展开，组合本身不进树。注内、尾注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
+Word 16.0 对脚注、尾注、批注的 Range 调用 `InlineShapes.Add3DModel(文件, false, true, Range)` 能另存出 `am3d:model3d`，关系挂在该部件上。只给文件名，或用 `Missing` 填可选参数，正文也会报「请求的对象不可用」。库仍不插，路线图 76。
 `insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
 `camera` 始终是对象，字段顺序：`pos`、`up`、`lookAt`、`fov`。
@@ -393,6 +394,7 @@ Word 16.0 能把 TOC 复杂域另存进页眉、文本框、脚注和批注。
 题注的 `{n}` 从 1 起，按该故事里被收入的顶层 `SEQ` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域（含 TOC 结果）里的 `SEQ` 不编 `caption:`。
 `caption:{n}` 在插删题注之后会变，只够同一次 inspect 之后立刻 apply。根上计数只计正文。容器上的 id 带前缀。
 `insertCaption` 的段落范围与 `insertToc` 相同。`docx:document` 只追加到正文末尾。
+Word 16.0 更新文本框里的 `SEQ` 能得到编号。页眉、脚注、批注里更新后是「错误!仅主文档。」库仍接受插入。
 Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不变），题注节点上的 `bookmark` 给出包住该 SEQ 的书签名。
 
 交叉引用的 `{n}` 从 1 起，按该故事里被收入的顶层 `REF` / `PAGEREF` / `NOTEREF` 域起点的文档顺序。嵌套在其它域里的（含 TOC 结果里的 `PAGEREF`）不编 `xref:`。
@@ -403,6 +405,8 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 索引的 `{n}` 从 1 起，按该故事里被收入的顶层 `INDEX` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域结果里的 `INDEX` 不编 `index:`。
 `index:{n}` 在插删索引之后会变，只够同一次 inspect 之后立刻 apply。根上计数只计正文。
 `insertIndex` 的段落范围与 `insertToc` 相同。
+Word 16.0 更新页眉、文本框、脚注、批注里的 `INDEX` 显示「错误!脚注、尾注、页眉、页脚或批注中不允许有索引。」库仍接受插入。
+交叉引用、索引项、引文、书目块在这四个容器里更新后有结果：交叉引用是书签文字，引文是 `(Ecma, 2006)`，书目是来源条目。索引项没有可见结果。
 
 索引项的 `{n}` 从 1 起，按该故事里被收入的顶层 `XE` 域起点的文档顺序。嵌套在其它域里的不编 `xe:`。`xe:{n}` 在插删索引项之后会变，只够同一次 inspect 之后立刻 apply。
 页眉页脚、文本框、脚注、尾注、批注里的索引项用带容器前缀的 id。根上 `indexEntryCount` 只计正文。

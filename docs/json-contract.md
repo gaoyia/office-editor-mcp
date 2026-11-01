@@ -1799,6 +1799,9 @@ CT `application/vnd.ms-office.chartex+xml`）。宿主 `a:graphicData/@uri` 为 
 inspect 先按 `cx:f` 读单元格，含 `_xlchart.v1.N` 这类定义名；读不到再用 `cx:lvl`。
 `refs` 为真时，`catRef` / `valRef` / `nameRef` 给 `cx:f` 原文。缓存和单元格都有且对不上时给 `cacheStale`，规则与普通图表相同。
 Word 与 PowerPoint 16.0 改数据后另存仍是直接区域并保留 `cx:lvl`，内嵌工作簿不写定义名。Excel 16.0 会改成隐藏定义名并去掉 `cx:lvl`。
+Excel 另存时，瀑布、树状、旭日、箱线的 Choice 是 `Requires="cx1"`。漏斗是 `cx2`，直方和帕累托是 `cx7`。
+库只进入 `cx1`。`cx2` 和 `cx7` 落到 Fallback 形状，inspect 不把它们算进 `charts`。
+箱线系列上 Excel 会补 `cx:statistics quartileMethod="exclusive"`。`setChartSeries` 留着这段。
 `bubble` 的 `sizes` 省略则写成与 `values` 等长的 `1`。
 `type` 为 `combo` 时，每条系列必须带 `type`（`bar`、`col`、`line`、`area` 或 `scatter`），且至少出现两种不同包裹，否则报 `InvalidField`；
 `combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`、`stock`、`surface`、`ofPie`、`chartex`。
