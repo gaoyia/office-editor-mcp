@@ -2250,6 +2250,28 @@ fn tbl_path(root: &Element, r: &TableRef, id: &str, i: usize) -> Result<Vec<usiz
     }
 }
 
+pub(crate) fn row_element_path(
+    root: &Element,
+    r: &TableRef,
+    id: &str,
+    i: usize,
+) -> Result<Vec<usize>, Error> {
+    let TableRef::Row { row, .. } = r else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSdtNeedsPara,
+            },
+            format!("ops[{i}].id"),
+        ));
+    };
+    let tbl_path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at(root, &tbl_path).ok_or_else(|| missing_table(id, i))?;
+    let idx = tr_child_for_pin(tbl, *row).ok_or_else(|| missing_table(id, i))?;
+    let mut path = tbl_path;
+    path.push(idx);
+    Ok(path)
+}
+
 fn pinned_tbl_path(root: &Element, n: usize, id: &str, i: usize) -> Result<Vec<usize>, Error> {
     let paths = collect_tbl_paths(root);
     for (live, (path, _)) in paths.iter().enumerate() {

@@ -3,8 +3,9 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
-use crate::xml::{Element, Node};
+use crate::xml::{self, Element, Node};
 
+use super::comments::W15_NS;
 use super::hf::{self, HfPart};
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
@@ -55,6 +56,7 @@ impl SdtKind {
             "picture" => Some(Self::Picture),
             "group" => Some(Self::Group),
             "equation" => Some(Self::Equation),
+            "repeatingSection" => Some(Self::RepeatingSection),
             _ => None,
         }
     }
@@ -224,6 +226,7 @@ pub struct SdtWrite<'a> {
     pub full_date: Option<&'a str>,
     pub checked: bool,
     pub drawing: Option<Element>,
+    pub binding: Option<(&'a str, &'a str, &'a str)>,
 }
 
 pub fn insert_sdt(
@@ -239,6 +242,9 @@ pub fn insert_sdt(
     let drawing = write.drawing.take();
     match after {
         Some(path) => {
+            if write.kind == SdtKind::RepeatingSection {
+                return wrap_repeating(root, path, &write, err_id, op_i);
+            }
             let xml_id = next_sdt_id(root);
             let el = para::element_at_mut(root, path).ok_or_else(|| {
                 Error::with_path(
@@ -251,7 +257,12 @@ pub fn insert_sdt(
             el.push_element(new_inline_sdt(el, &write, xml_id, drawing));
             Ok(())
         }
-        None => insert_at_body_end(root, &write, drawing, op_i),
+        None => {
+            if write.kind == SdtKind::RepeatingSection {
+                return insert_repeating_at_body_end(root, &write, op_i);
+            }
+            insert_at_body_end(root, &write, drawing, op_i)
+        }
     }
 }
 
@@ -267,7 +278,14 @@ pub struct SdtSet<'a> {
     pub i: usize,
 }
 
-pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
+pub struct BoundWrite {
+    pub store_item_id: String,
+    pub xpath: String,
+    pub prefix_mappings: String,
+    pub text: String,
+}
+
+pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<Option<BoundWrite>, Error> {
     let rec = sdt_at(root, set.n, set.id, set.i)?;
     if rec.kind == SdtKind::RepeatingSection {
         return Err(Error::with_path(
@@ -344,21 +362,30 @@ pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
     let path = rec.path.clone();
     let kind = rec.kind;
     let level = rec.level;
-    {
+    let bound = {
         let sdt = para::element_at(root, &path).ok_or_else(|| missing_sdt(set.id, set.i))?;
-        if pr_has_binding(sdt) {
+        if let Some((store, xpath, mappings)) = simple_binding(sdt) {
+            let Some(text) = set.text else {
+                return Err(Error::with_path(
+                    ErrorKind::ContentControlBound,
+                    format!("ops[{}].id", set.i),
+                ));
+            };
+            Some(BoundWrite {
+                store_item_id: store,
+                xpath,
+                prefix_mappings: mappings,
+                text: text.to_string(),
+            })
+        } else if pr_has_binding(sdt) {
             return Err(Error::with_path(
                 ErrorKind::ContentControlBound,
                 format!("ops[{}].id", set.i),
             ));
+        } else {
+            None
         }
-        if level == SdtLevel::Block && content_has_tbl(sdt) {
-            return Err(Error::with_path(
-                ErrorKind::ContentControlHasTable,
-                format!("ops[{}].id", set.i),
-            ));
-        }
-    }
+    };
     let sdt = para::element_at_mut(root, &path).ok_or_else(|| missing_sdt(set.id, set.i))?;
     clear_showing_plchdr(sdt);
     apply_pr_meta(sdt, set.tag, set.alias);
@@ -373,7 +400,7 @@ pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
     } else if let Some(text) = set.text {
         replace_content(sdt, level, text);
     }
-    Ok(())
+    Ok(bound)
 }
 
 pub fn sdt_picture_rids(
@@ -476,6 +503,133 @@ fn insert_at_body_end(
     new_p.push_element(new_inline_sdt(&new_p, write, xml_id, drawing));
     para::append_before_body_sect_pr(body, new_p);
     Ok(())
+}
+
+fn insert_repeating_at_body_end(
+    root: &mut Element,
+    write: &SdtWrite<'_>,
+    op_i: usize,
+) -> Result<(), Error> {
+    ensure_w15(root);
+    let (outer_id, inner_id) = next_two_sdt_ids(root);
+    let new_id = para::next_para_hex(root);
+    let body = para::story_body_mut(root).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::XmlMissing {
+                parent: "document".into(),
+                child: "body".into(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    let para = para::new_paragraph(body, &new_id, write.text);
+    let shell = repeating_shell(body, Node::Element(para), outer_id, inner_id, write);
+    para::append_before_body_sect_pr(body, shell);
+    Ok(())
+}
+
+pub(crate) fn wrap_repeating(
+    root: &mut Element,
+    path: &[usize],
+    write: &SdtWrite<'_>,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    ensure_w15(root);
+    let (outer_id, inner_id) = next_two_sdt_ids(root);
+    let (parent, idx) = para::parent_and_index_mut(root, path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    let node = parent.children.remove(idx);
+    let shell = repeating_shell(parent, node, outer_id, inner_id, write);
+    parent.children.insert(idx, Node::Element(shell));
+    Ok(())
+}
+
+fn repeating_shell(
+    parent: &Element,
+    inner: Node,
+    outer_id: i64,
+    inner_id: i64,
+    write: &SdtWrite<'_>,
+) -> Element {
+    let mut item_pr = Element::new(parent.prefixed("sdtPr"));
+    item_pr.push_element(val_el(&item_pr, "id", &inner_id.to_string()));
+    item_pr.push_element(Element::new("w15:repeatingSectionItem"));
+    let mut item_content = Element::new(parent.prefixed("sdtContent"));
+    item_content.children.push(inner);
+    let mut item = Element::new(parent.prefixed("sdt"));
+    crate::xml::mark_new(&mut item, "sdt");
+    item.push_element(item_pr);
+    item.push_element(item_content);
+
+    let mut pr = Element::new(parent.prefixed("sdtPr"));
+    if let Some(a) = write.alias.filter(|s| !s.is_empty()) {
+        pr.push_element(val_el(&pr, "alias", a));
+    }
+    if let Some(t) = write.tag.filter(|s| !s.is_empty()) {
+        pr.push_element(val_el(&pr, "tag", t));
+    }
+    pr.push_element(val_el(&pr, "id", &outer_id.to_string()));
+    push_data_binding(&mut pr, write.binding);
+    pr.push_element(Element::new("w15:repeatingSection"));
+    let mut content = Element::new(parent.prefixed("sdtContent"));
+    content.push_element(item);
+    let mut sdt = Element::new(parent.prefixed("sdt"));
+    crate::xml::mark_new(&mut sdt, "sdt");
+    sdt.push_element(pr);
+    sdt.push_element(content);
+    sdt
+}
+
+fn next_two_sdt_ids(root: &Element) -> (i64, i64) {
+    let first = next_sdt_id(root);
+    let mut used = Vec::new();
+    collect_xml_ids(root, &mut used);
+    used.push(first);
+    let mut second = 1i64;
+    while used.contains(&second) {
+        second += 1;
+        if second > i32::MAX as i64 {
+            second = first.saturating_add(1);
+            break;
+        }
+    }
+    (first, second)
+}
+
+fn ensure_w15(root: &mut Element) {
+    let key = "xmlns:w15";
+    if root.attr(key).is_none() {
+        root.set_attr(key, W15_NS);
+    }
+    let mc = "xmlns:mc";
+    if root.attr(mc).is_none() {
+        root.set_attr(mc, MC_NS);
+    }
+    let cur = root.attr_local("Ignorable").unwrap_or("").to_string();
+    if cur.split_whitespace().any(|t| t == "w15") {
+        return;
+    }
+    let next = if cur.is_empty() {
+        "w15".into()
+    } else {
+        format!("{cur} w15")
+    };
+    if let Some((_, v)) = root
+        .attrs
+        .iter_mut()
+        .find(|(k, _)| k.rsplit(':').next() == Some("Ignorable"))
+    {
+        *v = next;
+        return;
+    }
+    root.set_attr("mc:Ignorable", next);
 }
 
 fn collect_sdts(root: &Element) -> Vec<SdtRec> {
@@ -605,6 +759,7 @@ fn new_inline_sdt(
         pr.push_element(val_el(&pr, "tag", t));
     }
     pr.push_element(val_el(&pr, "id", &xml_id.to_string()));
+    push_data_binding(&mut pr, write.binding);
     if write.kind == SdtKind::Checkbox {
         pr.push_element(checkbox_pr(write.checked));
     } else {
@@ -755,6 +910,40 @@ fn collect_wt(el: &Element, out: &mut String) {
     }
 }
 
+fn push_data_binding(pr: &mut Element, binding: Option<(&str, &str, &str)>) {
+    let Some((xpath, mappings, store)) = binding else {
+        return;
+    };
+    pr.push_element(
+        Element::new(pr.prefixed("dataBinding"))
+            .with_attr("w:prefixMappings", mappings)
+            .with_attr("w:xpath", xpath)
+            .with_attr("w:storeItemID", store),
+    );
+}
+
+fn simple_binding(sdt: &Element) -> Option<(String, String, String)> {
+    let binding = sdt.child_by_local("sdtPr")?.child_by_local("dataBinding")?;
+    let store = binding.attr_local("storeItemID")?.to_string();
+    let xpath = binding.attr_local("xpath")?.to_string();
+    let mappings = binding
+        .attr_local("prefixMappings")
+        .unwrap_or("")
+        .to_string();
+    if store.is_empty() || !xpath_is_simple(&xpath) {
+        return None;
+    }
+    Some((store, xpath, mappings))
+}
+
+fn xpath_is_simple(xpath: &str) -> bool {
+    xpath.starts_with('/')
+        && !xpath.contains("//")
+        && !xpath.contains('[')
+        && !xpath.contains('@')
+        && !xpath.contains('(')
+}
+
 fn pr_has_binding(sdt: &Element) -> bool {
     sdt.child_by_local("sdtPr")
         .is_some_and(|p| p.child_by_local("dataBinding").is_some())
@@ -863,6 +1052,7 @@ fn replace_content(sdt: &mut Element, level: SdtLevel, text: &str) {
             content.push_element(run);
         }
         SdtLevel::Block => {
+            let keep_rest = content_has_tbl(sdt);
             let first_p = first_content_para_index(sdt);
             {
                 let Some(content) = sdt.child_by_local_mut("sdtContent") else {
@@ -872,19 +1062,21 @@ fn replace_content(sdt: &mut Element, level: SdtLevel, text: &str) {
                     if let Some(Node::Element(p)) = content.children.get_mut(idx) {
                         para::set_visible_text(p, text);
                     }
-                    let mut drop = Vec::new();
-                    for (i, n) in content.children.iter().enumerate() {
-                        if i == idx {
-                            continue;
-                        }
-                        if let Node::Element(e) = n {
-                            if e.local_name() == "p" {
-                                drop.push(i);
+                    if !keep_rest {
+                        let mut drop = Vec::new();
+                        for (i, n) in content.children.iter().enumerate() {
+                            if i == idx {
+                                continue;
+                            }
+                            if let Node::Element(e) = n {
+                                if e.local_name() == "p" {
+                                    drop.push(i);
+                                }
                             }
                         }
-                    }
-                    for i in drop.into_iter().rev() {
-                        content.children.remove(i);
+                        for i in drop.into_iter().rev() {
+                            content.children.remove(i);
+                        }
                     }
                 } else {
                     let p = para::new_paragraph(content, "00CC0001", text);
@@ -1292,10 +1484,12 @@ fn ensure_w14(root: &mut Element) {
 
 use super::picture;
 use super::request::DeleteContentControlOp;
+use super::request::DeleteRepeatingItemOp;
 use super::request::InsertContentControlOp;
+use super::request::InsertRepeatingItemOp;
 use super::request::InsertSdtPlace;
 use super::request::SetContentControlOp;
-use crate::opc::Package;
+use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::xml::Document;
 use std::collections::HashMap;
 // 从 apply 搬来的操作体。
@@ -1326,6 +1520,23 @@ pub(crate) fn apply_insert_sdt(
         InsertSdtPlace::After(target) => {
             super::apply::part_for_para(pkg, catalog, doc_part, target, &op.id, i)?
         }
+        InsertSdtPlace::WrapRow(row) => {
+            super::tbl::part_for_story(catalog, doc_part, row.story(), &op.id, i)?
+        }
+    };
+    let store_owned = match &op.binding {
+        Some(binding) => Some(prepare_binding(
+            pkg, docs, dirty, doc_part, binding, &op.text, i,
+        )?),
+        None => None,
+    };
+    let binding_ref = match (&op.binding, store_owned.as_deref()) {
+        (Some(binding), Some(store)) => Some((
+            binding.xpath.as_str(),
+            binding.prefix_mappings.as_str(),
+            store,
+        )),
+        _ => None,
     };
     let drawing = if op.kind == super::sdt::SdtKind::Picture {
         let file = op.file.as_deref().ok_or_else(|| {
@@ -1350,6 +1561,7 @@ pub(crate) fn apply_insert_sdt(
         full_date: op.full_date.as_deref(),
         checked: op.checked,
         drawing,
+        binding: binding_ref,
     };
     match &op.place {
         InsertSdtPlace::EndOfDocument => {
@@ -1368,6 +1580,12 @@ pub(crate) fn apply_insert_sdt(
                 )
             })?;
             super::sdt::insert_sdt(&mut doc.root, Some(path.as_slice()), write, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+        InsertSdtPlace::WrapRow(row) => {
+            let doc = super::apply::load_part(pkg, docs, &part_name)?;
+            let path = super::tbl::row_element_path(&doc.root, row, &op.id, i)?;
+            super::sdt::wrap_repeating(&mut doc.root, &path, &write, &op.id, i)?;
             dirty.insert(part_name, ());
         }
     }
@@ -1450,7 +1668,7 @@ pub(crate) fn apply_set_sdt(
     let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
         super::sdt::missing_sdt_err(&op.id, i)
     })?;
-    super::sdt::set_sdt(
+    let bound = super::sdt::set_sdt(
         story,
         &super::sdt::SdtSet {
             n: op.target.n,
@@ -1464,9 +1682,532 @@ pub(crate) fn apply_set_sdt(
             i,
         },
     )?;
+    if let Some(bound) = bound {
+        write_bound_text(pkg, docs, dirty, &bound, i)?;
+    }
     dirty.insert(part_name, ());
     Ok(())
 }
+
+pub(crate) fn apply_insert_repeating_item(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertRepeatingItemOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    super::sdt::insert_repeating_item(story, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+pub(crate) fn apply_delete_repeating_item(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteRepeatingItemOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = super::apply::story_xml_mut(&mut doc.root, &op.target.story, || {
+        super::sdt::missing_sdt_err(&op.id, i)
+    })?;
+    super::sdt::delete_repeating_item(story, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+fn prepare_binding(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    binding: &super::request::SdtBinding,
+    text: &str,
+    i: usize,
+) -> Result<String, Error> {
+    let store = if let Some(id) = &binding.store_item_id {
+        let part = find_store_item(pkg, id).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: "customXml".into(),
+                    child: id.clone(),
+                },
+                format!("ops[{i}].binding.storeItemId"),
+            )
+        })?;
+        load_item(pkg, docs, &part)?;
+        id.clone()
+    } else {
+        let xml = binding.xml.as_deref().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "xml".into(),
+                },
+                format!("ops[{i}].binding.xml"),
+            )
+        })?;
+        create_store(pkg, docs, dirty, doc_part, xml, &binding.prefix_mappings)?
+    };
+    if !text.is_empty() {
+        write_bound_text(
+            pkg,
+            docs,
+            dirty,
+            &BoundWrite {
+                store_item_id: store.clone(),
+                xpath: binding.xpath.clone(),
+                prefix_mappings: binding.prefix_mappings.clone(),
+                text: text.to_string(),
+            },
+            i,
+        )?;
+    }
+    Ok(store)
+}
+
+fn write_bound_text(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    bound: &BoundWrite,
+    i: usize,
+) -> Result<(), Error> {
+    let part = find_store_item(pkg, &bound.store_item_id).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::XmlMissing {
+                parent: "customXml".into(),
+                child: bound.store_item_id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    load_item(pkg, docs, &part)?;
+    let doc = docs.get_mut(&part).unwrap();
+    set_xpath_text(
+        &mut doc.root,
+        &bound.xpath,
+        &bound.prefix_mappings,
+        &bound.text,
+    )
+    .map_err(|e| e.at(format!("ops[{i}].text")))?;
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn load_item(pkg: &Package, docs: &mut HashMap<String, Document>, part: &str) -> Result<(), Error> {
+    if docs.contains_key(part) {
+        return Ok(());
+    }
+    let parsed = xml::parse(pkg.get(part)?)?;
+    docs.insert(part.to_string(), parsed);
+    Ok(())
+}
+
+fn find_store_item(pkg: &Package, store_id: &str) -> Option<String> {
+    let want = store_id.trim().to_ascii_lowercase();
+    for name in pkg.part_names() {
+        let Some(file) = name.strip_prefix("/customXml/itemProps") else {
+            continue;
+        };
+        let Some(n) = file.strip_suffix(".xml") else {
+            continue;
+        };
+        if !n.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        let Ok(bytes) = pkg.get(&name) else {
+            continue;
+        };
+        let Ok(doc) = xml::parse(bytes) else {
+            continue;
+        };
+        let id = doc.root.attr_local("itemID").unwrap_or("");
+        if id.trim().eq_ignore_ascii_case(&want) {
+            return Some(format!("/customXml/item{n}.xml"));
+        }
+    }
+    None
+}
+
+fn create_store(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    xml_text: &str,
+    mappings: &str,
+) -> Result<String, Error> {
+    let n = next_custom_item(pkg);
+    let item = format!("/customXml/item{n}.xml");
+    let props = format!("/customXml/itemProps{n}.xml");
+    let store = crate::host_env::random_guid();
+    let parsed = xml::parse(xml_text.as_bytes())?;
+    pkg.set(&item, parsed.to_bytes()?)?;
+    docs.insert(item.clone(), parsed);
+    dirty.insert(item.clone(), ());
+    let uri = schema_uri(mappings);
+    pkg.set(&props, item_props_xml(&store, &uri).into_bytes())?;
+    let mut item_rels = Relationships { rels: Vec::new() };
+    item_rels.push(Relationship {
+        id: item_rels.next_rid(),
+        rel_type: super::biblio::REL_CUSTOM_XML_PROPS.into(),
+        target: picture::rel_target_from(&item, &props),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    item_rels.write_to(pkg, &item)?;
+    let mut doc_rels = Relationships::from_package(pkg, doc_part)?;
+    doc_rels.push(Relationship {
+        id: doc_rels.next_rid(),
+        rel_type: super::biblio::REL_CUSTOM_XML.into(),
+        target: picture::rel_target_from(doc_part, &item),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    doc_rels.write_to(pkg, doc_part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.set_override(&props, super::biblio::CT_CUSTOM_XML_PROPS)?;
+    cts.write_to(pkg)?;
+    Ok(store)
+}
+
+fn next_custom_item(pkg: &Package) -> u32 {
+    let mut max = 0u32;
+    for name in pkg.part_names() {
+        let Some(file) = name.strip_prefix("/customXml/item") else {
+            continue;
+        };
+        if file.starts_with("Props") {
+            continue;
+        }
+        let Some(n) = file.strip_suffix(".xml") else {
+            continue;
+        };
+        if let Ok(v) = n.parse::<u32>() {
+            max = max.max(v);
+        }
+    }
+    max + 1
+}
+
+fn schema_uri(mappings: &str) -> String {
+    parse_prefix_mappings(mappings)
+        .into_iter()
+        .next()
+        .map(|(_, uri)| uri)
+        .unwrap_or_default()
+}
+
+fn item_props_xml(store: &str, uri: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="no"?><ds:datastoreItem ds:itemID="{store}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="{uri}"/></ds:schemaRefs></ds:datastoreItem>"#
+    )
+}
+
+fn set_xpath_text(
+    root: &mut Element,
+    xpath: &str,
+    mappings: &str,
+    text: &str,
+) -> Result<(), Error> {
+    let prefixes = parse_prefix_mappings(mappings);
+    let steps = xpath_steps(xpath)?;
+    let mut path = Vec::new();
+    {
+        let mut current = &*root;
+        let mut inherited = String::new();
+        for (i, (prefix, local)) in steps.iter().enumerate() {
+            let want_ns = prefix.as_ref().and_then(|p| {
+                prefixes
+                    .iter()
+                    .find(|(name, _)| name == p)
+                    .map(|(_, uri)| uri.as_str())
+            });
+            if i == 0 {
+                if !element_matches(current, local, want_ns, &inherited) {
+                    return Err(Error::new(ErrorKind::XmlMissing {
+                        parent: "customXml".into(),
+                        child: xpath.to_string(),
+                    }));
+                }
+                inherited = element_default_ns(current, &inherited);
+                continue;
+            }
+            let idx = current.children.iter().position(
+                |n| matches!(n, Node::Element(e) if element_matches(e, local, want_ns, &inherited)),
+            );
+            let Some(idx) = idx else {
+                return Err(Error::new(ErrorKind::XmlMissing {
+                    parent: "customXml".into(),
+                    child: xpath.to_string(),
+                }));
+            };
+            let Node::Element(child) = &current.children[idx] else {
+                return Err(Error::new(ErrorKind::XmlMissing {
+                    parent: "customXml".into(),
+                    child: xpath.to_string(),
+                }));
+            };
+            inherited = element_default_ns(child, &inherited);
+            current = child;
+            path.push(idx);
+        }
+        if current.element_children().next().is_some() {
+            return Err(Error::new(ErrorKind::ContentControlBound));
+        }
+    }
+    let mut current = root;
+    for idx in path {
+        let Node::Element(child) = &mut current.children[idx] else {
+            return Err(Error::new(ErrorKind::XmlMissing {
+                parent: "customXml".into(),
+                child: xpath.to_string(),
+            }));
+        };
+        current = child;
+    }
+    current.set_text(text);
+    Ok(())
+}
+
+fn xpath_steps(xpath: &str) -> Result<Vec<(Option<String>, String)>, Error> {
+    if !xpath_is_simple(xpath) {
+        return Err(Error::new(ErrorKind::ContentControlBound));
+    }
+    let mut out = Vec::new();
+    for step in xpath.split('/').filter(|s| !s.is_empty()) {
+        if let Some((prefix, local)) = step.split_once(':') {
+            out.push((Some(prefix.to_string()), local.to_string()));
+        } else {
+            out.push((None, step.to_string()));
+        }
+    }
+    if out.is_empty() {
+        return Err(Error::new(ErrorKind::ContentControlBound));
+    }
+    Ok(out)
+}
+
+fn parse_prefix_mappings(mappings: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut rest = mappings.trim();
+    while let Some(body) = rest.strip_prefix("xmlns:") {
+        let Some((prefix, after)) = body.split_once('=') else {
+            break;
+        };
+        let after = after.trim_start();
+        let Some(quote) = after.chars().next() else {
+            break;
+        };
+        if quote != '\'' && quote != '"' {
+            break;
+        }
+        let Some((uri, tail)) = after[quote.len_utf8()..].split_once(quote) else {
+            break;
+        };
+        out.push((prefix.trim().to_string(), uri.to_string()));
+        rest = tail.trim_start();
+    }
+    out
+}
+
+fn element_default_ns(el: &Element, inherited: &str) -> String {
+    if let Some(v) = el.attr("xmlns") {
+        return v.to_string();
+    }
+    inherited.to_string()
+}
+
+fn element_matches(el: &Element, local: &str, want_ns: Option<&str>, inherited: &str) -> bool {
+    if el.local_name() != local {
+        return false;
+    }
+    let Some(want) = want_ns else {
+        return true;
+    };
+    let got = if let Some((prefix, _)) = el.name.split_once(':') {
+        el.attr(&format!("xmlns:{prefix}")).unwrap_or(inherited)
+    } else {
+        el.attr("xmlns").unwrap_or(inherited)
+    };
+    got == want
+}
+
+pub fn insert_repeating_item(
+    root: &mut Element,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let rec = sdt_at(root, n, id, i)?;
+    let path = rec.path.clone();
+    let role = {
+        let sdt = para::element_at(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+        repeating_role(sdt)
+    };
+    let source_path = match role {
+        Some(RepeatingRole::Item) => path,
+        Some(RepeatingRole::Section) => {
+            let sdt = para::element_at(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+            last_item_path(sdt, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::XmlMissing {
+                        parent: "sdt".into(),
+                        child: "repeatingSectionItem".into(),
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlRepeating,
+                format!("ops[{i}].id"),
+            ));
+        }
+    };
+    let mut clone = {
+        let sdt = para::element_at(root, &source_path).ok_or_else(|| missing_sdt(id, i))?;
+        sdt.clone()
+    };
+    freshen_clone(root, &mut clone);
+    let (parent, idx) =
+        para::parent_and_index_mut(root, &source_path).ok_or_else(|| missing_sdt(id, i))?;
+    parent.children.insert(idx + 1, Node::Element(clone));
+    Ok(())
+}
+
+pub fn delete_repeating_item(
+    root: &mut Element,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let rec = sdt_at(root, n, id, i)?;
+    let path = rec.path;
+    let sdt = para::element_at(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+    if repeating_role(sdt) != Some(RepeatingRole::Item) {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlRepeating,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let count = {
+        let (parent, _) =
+            para::parent_and_index_mut(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+        parent
+            .element_children()
+            .filter(|e| repeating_role(e) == Some(RepeatingRole::Item))
+            .count()
+    };
+    if count <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastRepeatingItem,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let (parent, idx) =
+        para::parent_and_index_mut(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+    parent.children.remove(idx);
+    Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RepeatingRole {
+    Section,
+    Item,
+}
+
+fn repeating_role(sdt: &Element) -> Option<RepeatingRole> {
+    let pr = sdt.child_by_local("sdtPr")?;
+    for child in pr.element_children() {
+        match child.local_name() {
+            "repeatingSection" => return Some(RepeatingRole::Section),
+            "repeatingSectionItem" => return Some(RepeatingRole::Item),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn last_item_path(section: &Element, section_path: &[usize]) -> Option<Vec<usize>> {
+    let content = section.child_by_local("sdtContent")?;
+    let content_idx = section
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sdtContent"))?;
+    let mut last = None;
+    for (i, child) in content.children.iter().enumerate() {
+        if let Node::Element(e) = child {
+            if repeating_role(e) == Some(RepeatingRole::Item) {
+                last = Some(i);
+            }
+        }
+    }
+    let i = last?;
+    let mut path = section_path.to_vec();
+    path.push(content_idx);
+    path.push(i);
+    Some(path)
+}
+
+fn freshen_clone(root: &Element, clone: &mut Element) {
+    let mut used = Vec::new();
+    collect_xml_ids(root, &mut used);
+    freshen_walk(clone, &mut used);
+}
+
+fn freshen_walk(el: &mut Element, used: &mut Vec<i64>) {
+    if el.local_name() == "sdt" {
+        crate::xml::mark_new(el, "sdt");
+        if let Some(pr) = el.child_by_local_mut("sdtPr") {
+            if let Some(id) = pr.child_by_local_mut("id") {
+                let next = next_free_id(used);
+                id.set_attr("w:val", next.to_string());
+                used.push(next);
+            }
+        }
+    }
+    if el.local_name() == "p" && el.attr_local("paraId").is_some() {
+        let hex = format!("{:08X}", next_free_id(used) as u32);
+        if let Some((_, v)) = el
+            .attrs
+            .iter_mut()
+            .find(|(k, _)| k.rsplit(':').next() == Some("paraId"))
+        {
+            *v = hex;
+        }
+    }
+    for child in &mut el.children {
+        if let Node::Element(inner) = child {
+            freshen_walk(inner, used);
+        }
+    }
+}
+
+fn next_free_id(used: &[i64]) -> i64 {
+    let mut n = 1i64;
+    while used.contains(&n) {
+        n += 1;
+    }
+    n
+}
+
 pub(crate) fn sdt_inline_drawing(
     pkg: &mut Package,
     docs: &mut HashMap<String, Document>,

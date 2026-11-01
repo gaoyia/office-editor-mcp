@@ -1505,7 +1505,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ContentControlFieldMismatch => {
             "items 只用于 dropDown/comboBox，fullDate 只用于 date，file 只用于 picture，checked 只用于 checkbox".into()
         }
-        ErrorKind::ContentControlBound => "不能改绑定到自定义 XML 的内容控件".into(),
+        ErrorKind::ContentControlBound => "绑定缺少 storeItemID，或 xpath 不是简单元素路径".into(),
+        ErrorKind::LastRepeatingItem => "不能删掉重复节的最后一项".into(),
         ErrorKind::ContentControlRepeating => "不能改重复节内容控件的值".into(),
         ErrorKind::ContentControlGroup => "不能改组合内容控件的值".into(),
         ErrorKind::ContentControlHasTable => "不能摊平含表格的块级内容控件".into(),

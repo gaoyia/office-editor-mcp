@@ -978,6 +978,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "docx",
+        op: "deleteRepeatingItem",
+        family: "sdt:{n}",
+        test: "repeating_section_items_and_bound_text",
+    },
+    Row {
+        format: "docx",
         op: "deleteContentControl",
         family: "sdt:{n}",
         test: "delete_then_set_original_sdt",
@@ -1221,6 +1227,12 @@ const ROWS: &[Row] = &[
         op: "insertConnector",
         family: "para:index",
         test: "入口同 docx_para_index",
+    },
+    Row {
+        format: "docx",
+        op: "insertRepeatingItem",
+        family: "sdt:{n}",
+        test: "repeating_section_items_and_bound_text",
     },
     Row {
         format: "docx",

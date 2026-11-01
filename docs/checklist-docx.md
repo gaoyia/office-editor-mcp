@@ -16,6 +16,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-10-31 补跑 `docx-doc-pin.ps1`。先插节再改原来第 2 节的页边距，改在最后一节上。Word 16.0 没有 Repair。
 2026-11-01 补跑 `docx-noteref.ps1`。脚注和尾注的引用标记套上书签后，`kind: note` 写成 `NOTEREF`。Word 16.0 更新域后显示对应编号，没有 Repair。
 2026-11-01 补跑 `docx-model3d-float.ps1`。`insertModel3d` 写成四周型浮动后，Word 16.0 打开没有 Repair，形状绕排是四周型。
+2026-11-01 补跑 `docx-sdt-bind.ps1`。Word 另存的绑定控件改字后，控件和自定义 XML 都是新值。重复节再克隆一项后有两项。没有 Repair。
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 

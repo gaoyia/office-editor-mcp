@@ -156,7 +156,7 @@ pub(crate) fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>,
                     ));
                 }
             }
-            SdtKind::Checkbox => {
+            SdtKind::RepeatingSection | SdtKind::Checkbox => {
                 if text_opt.is_some() {
                     return Err(Error::with_path(
                         ErrorKind::ContentControlFieldMismatch,

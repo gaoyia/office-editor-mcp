@@ -578,3 +578,166 @@ fn create_sdt_types_and_handmade_inspect() {
     assert_eq!(kinds["contentControls"][2]["kind"], "group");
     assert_eq!(kinds["contentControls"][3]["kind"], "equation");
 }
+
+#[test]
+fn repeating_section_wraps_the_whole_paragraph_or_row() {
+    let src = create_docx("rep", json!({ "paragraphs": [{ "text": "host" }] }));
+    let tree0 = inspect(&src, false, false);
+    let p1 = first_body_para_id(&tree0);
+    let bad = apply_err(
+        &src,
+        json!([{
+            "op": "insertContentControl",
+            "id": p1,
+            "kind": "repeatingSection",
+            "text": "nope"
+        }]),
+    );
+    assert_eq!(bad.code(), ErrorCode::InvalidField);
+    let out = seq_path("rep-p", "docx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertContentControl",
+            "id": p1,
+            "kind": "repeatingSection"
+        }]),
+    );
+    let tree = inspect(&out, true, false);
+    assert_eq!(tree["contentControlCount"], 2);
+    assert_eq!(tree["contentControls"][0]["kind"], "repeatingSection");
+    assert_eq!(tree["contentControls"][0]["level"], "block");
+    assert_eq!(tree["contentControls"][1]["kind"], "repeatingSection");
+    assert_eq!(tree["contentControls"][1]["parent"], "sdt:1");
+    let doc = part_text(&out, "word/document.xml");
+    assert!(doc.contains("w15:repeatingSection"), "{doc}");
+    assert!(doc.contains("w15:repeatingSectionItem"), "{doc}");
+    assert!(doc.contains(">host</w:t>"), "{doc}");
+
+    let tabled = seq_path("rep-tbl", "docx");
+    apply(
+        &src,
+        &tabled,
+        json!([{
+            "op": "insertTable",
+            "id": "docx:document",
+            "rows": 1,
+            "cols": 1,
+            "cells": [["格"]]
+        }]),
+    );
+    let rowed = seq_path("rep-row", "docx");
+    apply(
+        &tabled,
+        &rowed,
+        json!([{
+            "op": "insertContentControl",
+            "id": "table:1/row:1",
+            "kind": "repeatingSection"
+        }]),
+    );
+    let row_doc = part_text(&rowed, "word/document.xml");
+    assert!(row_doc.contains("w15:repeatingSectionItem"), "{row_doc}");
+    assert!(row_doc.contains("<w:tr>"), "{row_doc}");
+    let row_tree = inspect(&rowed, true, false);
+    assert!(row_tree["contentControlCount"].as_u64().unwrap() >= 2);
+}
+
+#[test]
+fn repeating_section_items_and_bound_text() {
+    let src = create_docx("bind", json!({ "paragraphs": [{ "text": "host" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let bound = seq_path("bind-ins", "docx");
+    apply(
+        &src,
+        &bound,
+        json!([{
+            "op": "insertContentControl",
+            "id": p1,
+            "text": "甲",
+            "binding": {
+                "xpath": "/ns0:root/ns0:name",
+                "prefixMappings": "xmlns:ns0='urn:ooxp:probe'",
+                "xml": "<root xmlns=\"urn:ooxp:probe\"><name>旧</name></root>"
+            }
+        }]),
+    );
+    let tree = inspect(&bound, true, false);
+    assert_eq!(tree["contentControls"][0]["bound"], true);
+    assert_eq!(tree["contentControls"][0]["text"], "甲");
+    let item = part_text(&bound, "customXml/item1.xml");
+    assert!(item.contains(">甲<"), "{item}");
+    let edited = seq_path("bind-set", "docx");
+    apply(
+        &bound,
+        &edited,
+        json!([{ "op": "setContentControl", "id": "sdt:1", "text": "乙" }]),
+    );
+    assert_eq!(
+        inspect(&edited, true, false)["contentControls"][0]["text"],
+        "乙"
+    );
+    let item = part_text(&edited, "customXml/item1.xml");
+    assert!(item.contains(">乙<"), "{item}");
+
+    let repeated = seq_path("rep-item", "docx");
+    apply(
+        &src,
+        &repeated,
+        json!([{ "op": "insertContentControl", "id": p1, "kind": "repeatingSection" }]),
+    );
+    let added = seq_path("rep-item-2", "docx");
+    apply(
+        &repeated,
+        &added,
+        json!([{ "op": "insertRepeatingItem", "id": "sdt:1" }]),
+    );
+    assert_eq!(inspect(&added, true, false)["contentControlCount"], 3);
+    let trimmed = seq_path("rep-item-3", "docx");
+    apply(
+        &added,
+        &trimmed,
+        json!([{ "op": "deleteRepeatingItem", "id": "sdt:3" }]),
+    );
+    assert_eq!(inspect(&trimmed, true, false)["contentControlCount"], 2);
+    let err = apply_err(
+        &trimmed,
+        json!([{ "op": "deleteRepeatingItem", "id": "sdt:2" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let table = write_docx_xml(
+        "sdt-tbl",
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:sdt><w:sdtPr><w:id w:val="1"/><w:richText/></w:sdtPr><w:sdtContent><w:p><w:r><w:t>前</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>格</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:sdtContent></w:sdt><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#,
+    );
+    let kept = seq_path("sdt-tbl-set", "docx");
+    apply(
+        &table,
+        &kept,
+        json!([{ "op": "setContentControl", "id": "sdt:1", "text": "后" }]),
+    );
+    let doc = part_text(&kept, "word/document.xml");
+    assert!(doc.contains(">后<"), "{doc}");
+    assert!(doc.contains("<w:tbl>"), "{doc}");
+
+    let group = write_docx_xml(
+        "sdt-group",
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:sdt><w:sdtPr><w:id w:val="1"/><w:group/></w:sdtPr><w:sdtContent><w:sdt><w:sdtPr><w:id w:val="2"/><w:text/></w:sdtPr><w:sdtContent><w:r><w:t>子</w:t></w:r></w:sdtContent></w:sdt></w:sdtContent></w:sdt></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#,
+    );
+    let child = seq_path("sdt-group-set", "docx");
+    apply(
+        &group,
+        &child,
+        json!([{ "op": "setContentControl", "id": "sdt:2", "text": "改" }]),
+    );
+    assert_eq!(
+        inspect(&child, true, false)["contentControls"][1]["text"],
+        "改"
+    );
+    let shell = apply_err(
+        &group,
+        json!([{ "op": "setContentControl", "id": "sdt:1", "text": "外壳" }]),
+    );
+    assert_eq!(shell.code(), ErrorCode::NotImplemented);
+}

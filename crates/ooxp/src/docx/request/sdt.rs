@@ -16,6 +16,7 @@ pub(super) fn parse_insert_sdt(
         i,
         &[
             "op", "id", "kind", "text", "tag", "alias", "items", "fullDate", "file", "checked",
+            "binding",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -84,7 +85,23 @@ pub(super) fn parse_insert_sdt(
             format!("ops[{i}].checked"),
         ));
     }
-    if kind.needs_text() {
+    if kind == super::super::sdt::SdtKind::RepeatingSection {
+        if id != "docx:document" && text_opt.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].text"),
+            ));
+        }
+        if id == "docx:document" && text_opt.is_none() {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    } else if kind.needs_text() {
         parse_sdt_text(obj, i, "insertContentControl")?;
     } else if text_opt.is_some() {
         return Err(Error::with_path(
@@ -103,7 +120,15 @@ pub(super) fn parse_insert_sdt(
     }
     let text = text_opt.unwrap_or_default();
     let path = format!("ops[{i}].id");
-    let place = if id == "docx:document" {
+    let place = if kind == super::super::sdt::SdtKind::RepeatingSection
+        && (id.contains("/row:") || id.starts_with("row:"))
+    {
+        InsertSdtPlace::WrapRow(super::super::tbl::parse_row_ref(
+            &id,
+            i,
+            IdReason::InsertSdtNeedsPara,
+        )?)
+    } else if id == "docx:document" {
         InsertSdtPlace::EndOfDocument
     } else {
         InsertSdtPlace::After(parse_story_or_box_para_at(
@@ -112,6 +137,7 @@ pub(super) fn parse_insert_sdt(
             IdReason::InsertSdtNeedsPara,
         )?)
     };
+    let binding = parse_sdt_binding(obj.get("binding"), i)?;
     Ok(InsertContentControlOp {
         id,
         place,
@@ -123,7 +149,123 @@ pub(super) fn parse_insert_sdt(
         full_date,
         file,
         checked: checked.unwrap_or(false),
+        binding,
     })
+}
+
+fn parse_sdt_binding(v: Option<&Value>, i: usize) -> Result<Option<SdtBinding>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("ops[{i}].binding");
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "binding".into(),
+                expected: TypeName::Object,
+            },
+            path.clone(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(
+            k.as_str(),
+            "xpath" | "prefixMappings" | "storeItemId" | "xml"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    let xpath = match obj.get("xpath") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "xpath".into(),
+                },
+                format!("{path}.xpath"),
+            ));
+        }
+    };
+    let prefix_mappings = match obj.get("prefixMappings") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "prefixMappings".into(),
+                },
+                format!("{path}.prefixMappings"),
+            ));
+        }
+    };
+    let store_item_id = match obj.get("storeItemId") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::EmptyContentControlText,
+                format!("{path}.storeItemId"),
+            ));
+        }
+    };
+    let xml = match obj.get("xml") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::EmptyContentControlText,
+                format!("{path}.xml"),
+            ));
+        }
+    };
+    if store_item_id.is_some() && xml.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "storeItemId".into(),
+                b: "xml".into(),
+            },
+            path,
+        ));
+    }
+    if store_item_id.is_none() && xml.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertContentControl".into(),
+                field: "xml".into(),
+            },
+            format!("ops[{i}].binding.xml"),
+        ));
+    }
+    Ok(Some(SdtBinding {
+        xpath,
+        prefix_mappings,
+        store_item_id,
+        xml,
+    }))
+}
+
+pub(super) fn parse_insert_repeating_item(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertRepeatingItemOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::super::sdt::parse_sdt_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(InsertRepeatingItemOp { id, target })
+}
+
+pub(super) fn parse_delete_repeating_item(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteRepeatingItemOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::super::sdt::parse_sdt_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteRepeatingItemOp { id, target })
 }
 
 pub(super) fn parse_set_sdt(

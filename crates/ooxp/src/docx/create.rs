@@ -818,6 +818,7 @@ fn push_story_ops(
             ops.push(DocxOp::InsertContentControl(InsertContentControlOp {
                 id: id.clone(),
                 place: InsertSdtPlace::After(host.clone()),
+                binding: None,
                 kind: s.kind,
                 text: s.text.clone(),
                 tag: s.tag.clone(),
@@ -1054,6 +1055,7 @@ fn push_box_follow_ups(
         ops.push(DocxOp::InsertContentControl(InsertContentControlOp {
             id: inner_id.clone(),
             place: InsertSdtPlace::After(inner_host.clone()),
+            binding: None,
             kind: s.kind,
             text: s.text.clone(),
             tag: s.tag.clone(),

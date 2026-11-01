@@ -96,6 +96,7 @@ $order = @(
     'docx-math-struct'
     'docx-sdt'
     'docx-sdt-types'
+    'docx-sdt-bind'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

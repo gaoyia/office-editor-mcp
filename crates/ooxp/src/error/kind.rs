@@ -1154,6 +1154,7 @@ define_error_kinds! {
     ContentControlRepeating => vec![Self::ContentControlRepeating],
     ContentControlGroup => vec![Self::ContentControlGroup],
     ContentControlHasTable => vec![Self::ContentControlHasTable],
+    LastRepeatingItem => vec![Self::LastRepeatingItem],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
     SetParaTextHasMath => vec![Self::SetParaTextHasMath],
     SetParaTextHasRuby => vec![Self::SetParaTextHasRuby],
@@ -2069,6 +2070,7 @@ impl ErrorKind {
             | Self::ErrorBarsDuplicateDir
             | Self::SecondaryAxisNotSupported
             | Self::InvalidSeriesAxis
+            | Self::LastRepeatingItem
             | Self::LastChartSeries
             | Self::InvalidChartType
             | Self::InvalidTransitionType

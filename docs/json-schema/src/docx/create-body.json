@@ -908,7 +908,8 @@
             "checkbox",
             "picture",
             "group",
-            "equation"
+            "equation",
+            "repeatingSection"
           ]
         },
         "tag": {

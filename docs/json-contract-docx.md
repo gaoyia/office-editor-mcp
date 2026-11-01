@@ -440,7 +440,7 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`）、`equation`（`w:equation`）。
 不收 `docPartObj` / `docPartList`（目录等构建基块库仍走 `toc:` / `docPart:`）、`bibliography`、`citation`。
 祖先里有 `w:p` 时 `level` 为 `inline`，否则为 `block`。控件内段落仍走段落 id。`w:sdtPr/w:id/@w:val` 进 `xmlId`，不是树上的唯一键。
-带 `w:dataBinding` 的仍列出，`bound` 为 `true`。不实现 Word 开发者模式 UI，也不写自定义 XML 部件。
+带 `w:dataBinding` 的仍列出，`bound` 为 `true`。不实现 Word 开发者模式 UI。`setContentControl` 在有 `storeItemID` 且 `xpath` 是简单元素路径时，同时改控件文字和自定义 XML 节点。可以在 `insertContentControl` 上用 `binding` 新建或复用 `customXml` 部件。
 
 编号定义在 `/word/numbering.xml`（关系 `/numbering`，ECMA-376 §17.9）。实例 id 用 `w:num/@w:numId`：`num:{numId}`。
 抽象定义 id 用 `w:abstractNum/@w:abstractNumId`：`abstractNum:{abstractNumId}`。`numId` 为 0 表示无编号，不进树。
@@ -3884,6 +3884,7 @@ xlsx / pptx 的 drawing 公式框见各自分册。
 不写 `w:showingPlcHdr`，不写 Word 自带占位图。`group` 写空的 `w:group`；`equation` 写空的 `w:equation`。
 这两类以及旧 kind 的 `sdtContent` 仍是一条 `w:r`/`w:t`。元素名跟宿主段落同一 `w:` 前缀（`w14:checkbox` 除外）。
 `id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该控件的 `w:p`。不插入块级控件。不写 `w:dataBinding`。不写占位符 `showingPlcHdr`。不写 `w:lock`。
+`kind` 为 `repeatingSection` 时例外：只能包住整个段落或整行，不能插进行内。段落 id 包住该段，行 id（`table:{n}/row:{r}`）包住该行，都不写 `text`。`docx:document` 仍要 `text`，先写一段再把整段包进去。外壳是 `w15:repeatingSection`，里面一条 `w15:repeatingSectionItem`。
 
 框内、注内、批注内的段落，以及控件 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。
 空 `text`、不认识的 `kind`、给了 `items` 却不是 `dropDown`/`comboBox`、给了 `fullDate` 却不是 `date`、给了 `file` 却不是 `picture`、
@@ -3906,8 +3907,10 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].conten
 
 `checkbox`：改 `w14:checked` 与内容符号字符，不把 `sdtContent` 换成任意文本。`picture`：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。
 其余 kind 用新文本替换当前值：行内把 `sdtContent` 换成一条 `w:r`/`w:t`；块级只改 `sdtContent` 里第一个 `w:p` 的可见文本，并去掉其余 `w:p`。
-有 `w:showingPlcHdr` 则删掉。不改 `kind`，不改 `w:id`。带 `w:dataBinding` 报 `NotImplemented`。
-`kind` 为 `repeatingSection` 或 `group` 报 `NotImplemented`。块级 `sdtContent` 里有 `w:tbl` 报 `NotImplemented`。
+有 `w:showingPlcHdr` 则删掉。不改 `kind`，不改 `w:id`。
+`w:dataBinding` 有 `storeItemID`，且 `xpath` 以 `/` 开头、没有 `//`、`[`、`@`、`(` 时，改 `text` 会同时改自定义 XML 里那个元素的文本。元素下面还有子元素，或找不到节点，报 `NotImplemented` 或 `XmlBroken`。没有 `storeItemID` 的绑定仍报 `NotImplemented`。
+`kind` 为 `repeatingSection` 或 `group` 的外壳仍报 `NotImplemented`。外壳里面的子控件可以改。块级控件里有表格时只改第一个段落的可见文字，表格留下。
+`insertRepeatingItem` 克隆一项。`deleteRepeatingItem` 删一项；只剩一项报 `InvalidField`。
 空 `text`、给了 `items` 却不是下拉/组合框、给了 `fullDate` 却不是日期、给了 `file` 却不是图片控件、给了 `checked` 却不是复选控件、图片控件没有 `file`、复选控件没有 `checked`，报 `InvalidField`。
 找不到报 `IdNotFound`。id 不是内容控件 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 

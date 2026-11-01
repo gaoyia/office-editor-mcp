@@ -1222,6 +1222,8 @@ pub struct SetEastAsianSettingsOp {
 pub enum InsertSdtPlace {
     After(ParaTarget),
     EndOfDocument,
+    /// 重复节包住整行。
+    WrapRow(TableRef),
 }
 
 #[derive(Debug, Clone)]
@@ -1236,6 +1238,27 @@ pub struct InsertContentControlOp {
     pub full_date: Option<String>,
     pub file: Option<String>,
     pub checked: bool,
+    pub binding: Option<SdtBinding>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SdtBinding {
+    pub xpath: String,
+    pub prefix_mappings: String,
+    pub store_item_id: Option<String>,
+    pub xml: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertRepeatingItemOp {
+    pub id: String,
+    pub target: super::super::sdt::SdtRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteRepeatingItemOp {
+    pub id: String,
+    pub target: super::super::sdt::SdtRef,
 }
 
 #[derive(Debug, Clone)]
@@ -1302,6 +1325,8 @@ pub enum DocxOp {
     SetEastAsianSettings(SetEastAsianSettingsOp),
     InsertContentControl(InsertContentControlOp),
     SetContentControl(SetContentControlOp),
+    InsertRepeatingItem(InsertRepeatingItemOp),
+    DeleteRepeatingItem(DeleteRepeatingItemOp),
     DeleteContentControl(DeleteContentControlOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),

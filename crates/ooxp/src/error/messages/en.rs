@@ -1711,7 +1711,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "items is only for dropDown/comboBox, fullDate is only for date, file is only for picture, and checked is only for checkbox".into()
         }
         ErrorKind::ContentControlBound => {
-            "Cannot change a content control that is bound to custom XML".into()
+            "The binding has no storeItemID, or the xpath is not a simple element path".into()
+        }
+        ErrorKind::LastRepeatingItem => {
+            "Cannot delete the last repeating-section item".into()
         }
         ErrorKind::ContentControlRepeating => {
             "Cannot change the value of a repeating-section content control".into()

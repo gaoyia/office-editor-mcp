@@ -271,6 +271,16 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
             }
+            DocxOp::InsertRepeatingItem(op) => {
+                super::sdt::apply_insert_repeating_item(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::DeleteRepeatingItem(op) => {
+                super::sdt::apply_delete_repeating_item(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
             DocxOp::DeleteContentControl(op) => {
                 super::sdt::apply_delete_sdt(
                     &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,

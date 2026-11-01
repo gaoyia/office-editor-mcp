@@ -16,6 +16,12 @@
     "deleteContentControlOp": [
       "docx"
     ],
+    "insertRepeatingItemOp": [
+      "docx"
+    ],
+    "deleteRepeatingItemOp": [
+      "docx"
+    ],
     "insertNumberingOp": [
       "docx"
     ],
@@ -108,7 +114,8 @@
             "checkbox",
             "picture",
             "group",
-            "equation"
+            "equation",
+            "repeatingSection"
           ]
         },
         "tag": {
@@ -135,14 +142,25 @@
         },
         "checked": {
           "type": "boolean"
+        },
+        "binding": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["xpath", "prefixMappings"],
+          "properties": {
+            "xpath": { "type": "string", "minLength": 1 },
+            "prefixMappings": { "type": "string", "minLength": 1 },
+            "storeItemId": { "type": "string", "minLength": 1 },
+            "xml": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },
     "setContentControlOp": {
       "description": "checkbox：改 w14:checked 与内容符号字符，不把 sdtContent 换成任意文本。",
       "descriptionEn": "checkbox: change w14:checked and the content symbol character. Do not replace sdtContent with arbitrary text.",
-      "limits": "picture：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。其余 kind 用新文本替换当前值：行内把 sdtContent 换成一条 w:r/w:t；块级只改 sdtContent 里第一个 w:p 的可见文本，并去掉其余 w:p。有 w:showingPlcHdr 则删掉。不改 kind，不改 w:id。带 w:dataBinding 报 NotImplemented。",
-      "limitsEn": "picture: replace the picture inside the control with new inline DrawingML, and delete the old media relationship if nothing else references it. Other kinds replace the current value with new text: inline replaces sdtContent with one w:r/w:t; block level changes only the visible text of the first w:p in sdtContent and removes the other w:p elements. If w:showingPlcHdr is present, it is removed. kind is not changed, and w:id is not changed. w:dataBinding returns NotImplemented.",
+      "limits": "picture：用新的行内 DrawingML 换掉控件里的图。其余 kind 用新文本替换当前值。块级有表格时只改第一个 w:p，留下表格。有 storeItemID 且 xpath 是简单元素路径时，同时改 customXml 节点。缺少 storeItemID 或 xpath 不是简单路径，报 NotImplemented。",
+      "limitsEn": "picture replaces the picture inside the control. Other kinds replace the current value. A block control that contains a table only changes the first w:p and keeps the table. When storeItemID is present and xpath is a simple element path, the customXml node changes too. A missing storeItemID or a non-simple xpath returns NotImplemented.",
       "type": "object",
       "required": [
         "op",
@@ -213,6 +231,32 @@
             "none"
           ]
         }
+      }
+    },
+    "insertRepeatingItemOp": {
+      "description": "在重复节里再克隆一项。",
+      "descriptionEn": "Clone one more item inside a repeating section.",
+      "limits": "id 可以是重复节或其中一项。克隆项插在该项后面；点的是节时克隆最后一项。新项换掉 w:id。不是重复节报 NotImplemented。",
+      "limitsEn": "id may be the repeating section or one of its items. The clone is inserted after that item; when id is the section, the last item is cloned. The new item gets a new w:id. An id that is not a repeating section returns NotImplemented.",
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertRepeatingItem" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteRepeatingItemOp": {
+      "description": "删掉重复节里的一项。",
+      "descriptionEn": "Delete one item inside a repeating section.",
+      "limits": "id 必须是 repeatingSectionItem。只剩一项时报 InvalidField。点到外壳报 NotImplemented。",
+      "limitsEn": "id must be a repeatingSectionItem. Deleting the last item returns InvalidField. The section shell returns NotImplemented.",
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteRepeatingItem" },
+        "id": { "type": "string", "minLength": 1 }
       }
     },
     "insertNumberingOp": {

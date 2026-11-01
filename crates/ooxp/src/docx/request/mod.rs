@@ -558,6 +558,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 out.push(DocxOp::InsertContentControl(parse_insert_sdt(obj, i)?))
             }
             "setContentControl" => out.push(DocxOp::SetContentControl(parse_set_sdt(obj, i)?)),
+            "insertRepeatingItem" => out.push(DocxOp::InsertRepeatingItem(
+                parse_insert_repeating_item(obj, i)?,
+            )),
+            "deleteRepeatingItem" => out.push(DocxOp::DeleteRepeatingItem(
+                parse_delete_repeating_item(obj, i)?,
+            )),
             "deleteContentControl" => {
                 out.push(DocxOp::DeleteContentControl(parse_delete_sdt(obj, i)?))
             }
