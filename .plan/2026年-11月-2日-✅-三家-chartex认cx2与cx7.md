@@ -33,6 +33,7 @@ Excel 16.0 另存把 chartex 图形框放进 `mc:AlternateContent`。C20 只认 
 
 - Word 16.0 打开本库漏斗图。`InlineShapes` 是 0（图是浮动的）。`SaveAs2` 返回 RPC `0x800706BE`，磁盘上的文件已经包了 `mc:AlternateContent`，`Requires="cx2"`。文档根上声明了 `cx1` 到 `cx8`。Fallback 是另一个 `w:drawing`。
 - PowerPoint 16.0 另存直方和帕累托，两张都是 `Requires="cx7"`，命名空间 `http://schemas.microsoft.com/office/drawing/2016/5/13/chartex`。Fallback 是 `p:pic`。改单元格后 `Workbook.Close` 也返回 RPC，`SaveAs` 仍然写出了文件。
+- 2026-11-02 追查这两处 RPC（`.plan/2026年-11月-2日-✅-chartex另存RPC错误追查.md`）：Word 那处是进程崩溃，原因是本库写的 docx chartex 没有 `AlternateContent` 外壳，另挂 docx 78 修。PowerPoint 那处是图表数据宿主 Excel 崩溃，PowerPoint 原生图也会，不是本库的问题。
 
 ### 2. 文档
 
