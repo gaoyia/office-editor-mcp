@@ -217,6 +217,7 @@ $order = @(
     'pptx-anim-write'
     'pptx-masters'
     'pptx-master-write'
+    'pptx-placeholder-more'
     'pptx-master-deco'
     'pptx-theme-size'
     'pptx-theme-remain'

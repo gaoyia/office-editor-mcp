@@ -1238,7 +1238,20 @@ pub fn parse_master_or_layout_host(
 pub fn is_writable_placeholder_type(ty: &str) -> bool {
     matches!(
         ty,
-        "title" | "body" | "ctrTitle" | "subTitle" | "dt" | "ftr" | "sldNum" | "hdr"
+        "title"
+            | "body"
+            | "ctrTitle"
+            | "subTitle"
+            | "dt"
+            | "ftr"
+            | "sldNum"
+            | "hdr"
+            | "obj"
+            | "chart"
+            | "tbl"
+            | "pic"
+            | "media"
+            | "sldImg"
     )
 }
 
@@ -1401,8 +1414,10 @@ pub(crate) fn write_placeholder_into(
     let cnv = picture::next_cnv_id(&doc.root);
     let name = placeholder_name(type_name, cnv);
     let mut sp = build_placeholder(cnv, &name, type_name, idx, x, y, cx, cy);
-    if let Some(tx) = sp.child_by_local_mut("txBody") {
-        crate::drawing_text::set_txbody_text(tx, text);
+    if !(type_name == "obj" && text.is_empty()) {
+        if let Some(tx) = sp.child_by_local_mut("txBody") {
+            crate::drawing_text::set_txbody_text(tx, text);
+        }
     }
     picture::insert_into_sp_tree(&mut doc.root, sp)?;
     super::list_pin::write_part(pkg, part, &doc)?;
@@ -1878,6 +1893,12 @@ fn placeholder_name(ty: &str, cnv: u32) -> String {
         "ftr" => format!("页脚占位符 {cnv}"),
         "sldNum" => format!("幻灯片编号占位符 {cnv}"),
         "hdr" => format!("页眉占位符 {cnv}"),
+        "obj" => format!("内容占位符 {cnv}"),
+        "chart" => format!("图表占位符 {cnv}"),
+        "tbl" => format!("表格占位符 {cnv}"),
+        "pic" => format!("图片占位符 {cnv}"),
+        "media" => format!("媒体占位符 {cnv}"),
+        "sldImg" => format!("幻灯片图像占位符 {cnv}"),
         _ => format!("占位符 {cnv}"),
     }
 }
@@ -1900,13 +1921,23 @@ fn build_placeholder(
             .with_attr("name", name),
     );
     let mut cnv_sp = Element::new("p:cNvSpPr");
-    cnv_sp.push_element(Element::new("a:spLocks").with_attr("noGrp", "1"));
+    let mut locks = Element::new("a:spLocks").with_attr("noGrp", "1");
+    if type_name == "pic" || type_name == "sldImg" {
+        locks = locks.with_attr("noChangeAspect", "1");
+    }
+    if type_name == "sldImg" {
+        locks = locks.with_attr("noRot", "1");
+    }
+    cnv_sp.push_element(locks);
     nv.push_element(cnv_sp);
     let mut ph = Element::new("p:ph").with_attr("type", type_name);
     if let Some(idx) = idx {
         ph = ph.with_attr("idx", idx.to_string());
     }
-    if type_name == "body" {
+    if matches!(
+        type_name,
+        "body" | "obj" | "chart" | "tbl" | "pic" | "media"
+    ) {
         ph = ph.with_attr("sz", "quarter");
     }
     let mut nv_pr = Element::new("p:nvPr");
@@ -1930,16 +1961,60 @@ fn build_placeholder(
     let mut geom = Element::new("a:prstGeom").with_attr("prst", "rect");
     geom.push_element(Element::new("a:avLst"));
     sp_pr.push_element(geom);
-    sp_pr.push_element(Element::new("a:noFill"));
-    let mut ln = Element::new("a:ln");
-    ln.push_element(Element::new("a:noFill"));
-    sp_pr.push_element(ln);
+    if type_name == "sldImg" {
+        sp_pr.push_element(Element::new("a:noFill"));
+        let mut ln = Element::new("a:ln").with_attr("w", "12700");
+        let mut fill = Element::new("a:solidFill");
+        fill.push_element(Element::new("a:prstClr").with_attr("val", "black"));
+        ln.push_element(fill);
+        sp_pr.push_element(ln);
+    } else if !matches!(type_name, "obj" | "chart" | "tbl" | "pic" | "media") {
+        sp_pr.push_element(Element::new("a:noFill"));
+        let mut ln = Element::new("a:ln");
+        ln.push_element(Element::new("a:noFill"));
+        sp_pr.push_element(ln);
+    }
     sp.push_element(sp_pr);
 
     let mut tx = Element::new("p:txBody");
-    tx.push_element(Element::new("a:bodyPr"));
+    if type_name == "sldImg" {
+        tx.push_element(
+            Element::new("a:bodyPr")
+                .with_attr("vert", "horz")
+                .with_attr("lIns", "91440")
+                .with_attr("tIns", "45720")
+                .with_attr("rIns", "91440")
+                .with_attr("bIns", "45720")
+                .with_attr("rtlCol", "0")
+                .with_attr("anchor", "ctr"),
+        );
+    } else {
+        tx.push_element(Element::new("a:bodyPr"));
+    }
     tx.push_element(Element::new("a:lstStyle"));
-    tx.push_element(Element::new("a:p"));
+    if type_name == "obj" {
+        for (lvl, line) in [
+            ("0", "单击此处编辑母版文本样式"),
+            ("1", "二级"),
+            ("2", "三级"),
+            ("3", "四级"),
+            ("4", "五级"),
+        ] {
+            let mut p = Element::new("a:p");
+            p.push_element(Element::new("a:pPr").with_attr("lvl", lvl));
+            let mut run = Element::new("a:r");
+            run.push_element(
+                Element::new("a:rPr")
+                    .with_attr("lang", "zh-CN")
+                    .with_attr("altLang", "en-US"),
+            );
+            run.push_element(Element::new("a:t").with_text(line));
+            p.push_element(run);
+            tx.push_element(p);
+        }
+    } else {
+        tx.push_element(Element::new("a:p"));
+    }
     sp.push_element(tx);
     sp
 }
@@ -2133,6 +2208,12 @@ pub(crate) fn op_insert_placeholder(
     op: &super::request::InsertPlaceholderOp,
     i: usize,
 ) -> Result<(), crate::error::Error> {
+    if op.type_name == "sldImg" && !matches!(op.host, PlaceholderHost::NotesMaster) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPlaceholderType,
+            format!("ops[{i}].type"),
+        ));
+    }
     match &op.host {
         PlaceholderHost::Master { master, layout } => {
             insert_placeholder(

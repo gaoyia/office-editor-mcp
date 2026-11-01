@@ -259,8 +259,8 @@
     "insertPlaceholderOp": {
       "description": "往母版或版式插入一个带 p:ph 与 p:txBody 的占位符。",
       "descriptionEn": "Insert a placeholder that has p:ph and p:txBody on a master or layout.",
-      "limits": "装饰形请用 insertShape。不写 theme p:style，不写 a16:creationId。",
-      "limitsEn": "For a decorative shape, use insertShape. Do not write a theme p:style or a16:creationId.",
+      "limits": "装饰形请用 insertShape。不写 theme p:style，不写 a16:creationId。可写 title、body、ctrTitle、subTitle、dt、ftr、sldNum、hdr、obj、chart、tbl、pic、media，以及备注母版上的 sldImg。",
+      "limitsEn": "For a decorative shape, use insertShape. Do not write a theme p:style or a16:creationId. Writable types are title, body, ctrTitle, subTitle, dt, ftr, sldNum, hdr, obj, chart, tbl, pic, media, and sldImg on the notes master.",
       "type": "object",
       "required": [
         "op",

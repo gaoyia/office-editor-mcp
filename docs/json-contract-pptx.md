@@ -2137,12 +2137,16 @@ pptx：`id` 不是母版 id、版式 id、`notesMaster` 或 `handout` 报 `Inval
 
 写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。`p:cNvSpPr` 带 `a:spLocks noGrp="1"`，不写 `txBox`。`a:prstGeom/@prst` 为 `rect`。
 默认 `a:noFill` 与 `a:ln/a:noFill`。始终带 `p:txBody`。新 `cNvPr/@id` 取该宿主（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。
-`cNvPr/@name` 按类型写成「标题占位符 {该 id}」「居中标题占位符 {该 id}」「副标题占位符 {该 id}」「文本占位符 {该 id}」「日期占位符 {该 id}」「页脚占位符 {该 id}」「幻灯片编号占位符 {该 id}」「页眉占位符 {该 id}」。
+`cNvPr/@name` 按类型写成「标题占位符 {该 id}」「居中标题占位符 {该 id}」「副标题占位符 {该 id}」「文本占位符 {该 id}」「日期占位符 {该 id}」「页脚占位符 {该 id}」「幻灯片编号占位符 {该 id}」「页眉占位符 {该 id}」「内容占位符 {该 id}」「图表占位符 {该 id}」「表格占位符 {该 id}」「图片占位符 {该 id}」「媒体占位符 {该 id}」「幻灯片图像占位符 {该 id}」。
 `title` / `ctrTitle` 不写 `p:ph/@idx`。其它类型：该宿主已有整数 `@idx` 则取最大加 1；没有则写 `10`（与 Office 16.0 另存正文占位符一致）。
-`body` 另写 `sz="quarter"`。不改各页 XML。docx / xlsx 上发此 op 报 `InvalidField`。
+`body`、`obj`、`chart`、`tbl`、`pic`、`media` 另写 `sz="quarter"`。`pic` 的 `a:spLocks` 再加 `noChangeAspect="1"`。
+`sldImg` 只写在 `notesMaster`：`a:spLocks` 带 `noGrp`、`noRot`、`noChangeAspect`，`p:spPr` 带 `a:noFill` 和黑色描边。对母版、版式或讲义发 `sldImg` 报 `InvalidField`。
+`obj` 省略 `text` 时写出五级母版提示（「单击此处编辑母版文本样式」到「五级」）。给了 `text` 则只写这份文字。
+这些类型都是 `p:sp`，不是 `p:graphicFrame`。PowerPoint 16.0 的 `AddPlaceholder` 能另存内容、图表、表格、图片和媒体占位符。备注母版的幻灯片图像是 PowerPoint 新建备注母版时写下的 `p:sp`，`AddPlaceholder` 不能再插一个。
+不改各页 XML。docx / xlsx 上发此 op 报 `InvalidField`。
 
-可写 `type`（ECMA-376 `ST_PlaceholderType` 子集，§19.7.10）：`title`、`body`、`ctrTitle`、`subTitle`、`dt`、`ftr`、`sldNum`、`hdr`。
-不在名单里报 `InvalidField`。`obj` / `chart` / `tbl` / `pic` / `media` / `sldImg` 本期不写。
+可写 `type`（ECMA-376 `ST_PlaceholderType` 子集，§19.7.10）：`title`、`body`、`ctrTitle`、`subTitle`、`dt`、`ftr`、`sldNum`、`hdr`、`obj`、`chart`、`tbl`、`pic`、`media`，以及备注母版上的 `sldImg`。
+不在名单里报 `InvalidField`。
 
 ### deletePlaceholder
 

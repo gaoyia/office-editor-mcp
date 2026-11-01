@@ -365,6 +365,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果。不接受整棵时间轴树。第一条 `with` / `after` 进片自动播。
 也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，不删用户形状，不抄占位符进页。
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、带 `p:ph` 的占位符与整份母版。不算母版排版引擎。`insertPlaceholder` 还可写备注母版与讲义。
+内容、图表、表格、图片、媒体占位符，以及备注母版上的幻灯片图像，也用 `insertPlaceholder` 写成 `p:sp`。
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，不抄进各页。
 也可用 `setSlideSize` 只改 `p:sldSz`，不重排形状。也可用 `setNotesSize` 只改 `p:notesSz`，不重排备注形状。
 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme，不把 `schemeClr` 展开成 RGB。

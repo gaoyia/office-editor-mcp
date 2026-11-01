@@ -1450,7 +1450,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::LayoutInUse => "A slide still uses this layout".into(),
         ErrorKind::MasterInUse => "A slide still uses a layout of this master".into(),
         ErrorKind::InvalidPlaceholderType => {
-            "type must be a writable placeholder type".into()
+            "type must be title, body, ctrTitle, subTitle, dt, ftr, sldNum, hdr, obj, chart, tbl, pic, media, or sldImg on the notes master".into()
         }
         ErrorKind::InvalidSlideSizeType => {
             "type must be a writable slide size type".into()

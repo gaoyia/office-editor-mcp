@@ -1299,7 +1299,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::LayoutInUse => "仍有幻灯片使用该版式".into(),
         ErrorKind::MasterInUse => "仍有幻灯片使用该母版下的版式".into(),
         ErrorKind::InvalidPlaceholderType => {
-            "type 必须是可写的占位符类型".into()
+            "type 必须是 title、body、ctrTitle、subTitle、dt、ftr、sldNum、hdr、obj、chart、tbl、pic、media，或备注母版上的 sldImg".into()
         }
         ErrorKind::InvalidSlideSizeType => {
             "type 必须是可写的幻灯片尺寸类型".into()

@@ -243,7 +243,7 @@ fn reject_bad_ids_and_types() {
         json!([{
             "op": "insertPlaceholder",
             "id": "master:1/layout:1",
-            "type": "obj"
+            "type": "clipArt"
         }]),
     )
     .unwrap_err();
@@ -335,4 +335,62 @@ fn xlsx_and_docx_reject_master_write_ops() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
+}
+
+#[test]
+fn content_chart_picture_and_slide_image_placeholders() {
+    let src = create_deck("ph-more");
+    let out = tmp("ph-more-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "obj" },
+            { "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "chart" },
+            { "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "tbl" },
+            { "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "pic" },
+            { "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "media" },
+            { "op": "insertPlaceholder", "id": "notesMaster", "type": "sldImg" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_masters(&out);
+    let types: Vec<_> = tree["masters"][0]["layouts"][0]["placeholders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["type"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(types, ["obj", "chart", "tbl", "pic", "media"]);
+    let xml = part(&out, "ppt/slideLayouts/slideLayout1.xml");
+    assert!(xml.contains(r#"type="obj""#), "{xml}");
+    assert!(xml.contains("单击此处编辑母版文本样式"));
+    assert!(xml.contains(r#"type="chart""#));
+    assert!(xml.contains(r#"sz="quarter""#));
+    assert!(xml.contains(r#"type="pic""#));
+    assert!(xml.contains(r#"noChangeAspect="1""#));
+    assert!(!xml.contains("graphicFrame"));
+    let err = apply(
+        &out,
+        &tmp("sldimg-layout"),
+        json!([{ "op": "insertPlaceholder", "id": "master:1/layout:1", "type": "sldImg" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let notes = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "notesMaster": true }
+    })
+    .to_string())
+    .unwrap();
+    let RunOutput::Inspect(notes) = notes else {
+        panic!("inspect");
+    };
+    let ph = notes["notesMaster"]["placeholders"].as_array().unwrap();
+    assert!(ph.iter().any(|p| p["type"] == "sldImg"));
+    let notes_xml = part(&out, "ppt/notesMasters/notesMaster1.xml");
+    assert!(notes_xml.contains(r#"type="sldImg""#));
+    assert!(notes_xml.contains(r#"noRot="1""#));
 }
