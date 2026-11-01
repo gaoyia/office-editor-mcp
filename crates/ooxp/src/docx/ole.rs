@@ -40,6 +40,11 @@ pub enum OleTarget {
         n: u32,
         key: OleKey,
     },
+    /// 框内、注内、批注内段落上的嵌入对象。
+    Nested {
+        para: ParaTarget,
+        key: OleKey,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +101,76 @@ pub fn collect_body(
     Ok(out)
 }
 
+pub fn list_in_paragraph(
+    pkg: &Package,
+    host: &str,
+    para_el: &Element,
+    para_id: &str,
+) -> Result<Vec<Value>, Error> {
+    let ctx = HostCtx::load(pkg, host)?;
+    let mut out = Vec::new();
+    let mut idx = 0usize;
+    collect_into(&ctx, para_el, para_id, &mut idx, &mut out)?;
+    Ok(out)
+}
+
+pub fn collect_nested(pkg: &Package, doc_part: &str, doc: &Element) -> Result<Vec<Value>, Error> {
+    let mut out = Vec::new();
+    let paras = para::collect_paragraphs(doc);
+    for (i, p) in paras.iter().enumerate() {
+        let (pid, _) = para::para_stable_id(p, i + 1);
+        let boxes = super::textbox::collect_textboxes(p, &pid)?;
+        for b in &boxes {
+            let key = if let Some(d) = &b.doc_pr_id {
+                para::TxbxKey::DocPr(d.clone())
+            } else if let Some((_, rest)) = b.id.rsplit_once("/txbx:index:") {
+                let Ok(n) = rest.parse::<usize>() else {
+                    continue;
+                };
+                para::TxbxKey::Index(n)
+            } else {
+                continue;
+            };
+            let Some(content) = super::textbox::find_txbx_content_by_key(p, &key) else {
+                continue;
+            };
+            let inner = para::collect_paragraphs_in_txbx(content);
+            for (j, ip) in inner.iter().enumerate() {
+                let (ipid, _) = para::para_stable_id_in(&b.id, ip, j + 1);
+                out.extend(list_in_paragraph(pkg, doc_part, ip, &ipid)?);
+            }
+        }
+    }
+    for kind in [para::NoteKind::Footnote, para::NoteKind::Endnote] {
+        let Some(part) = super::notes::part_name(pkg, doc_part, kind)? else {
+            continue;
+        };
+        let note_doc = xml::parse(pkg.get(&part)?)?;
+        for note in super::notes::user_notes(&note_doc.root, kind) {
+            let note_id = note.attr_local("id").unwrap_or("");
+            let container = kind.inspect_id(note_id);
+            let inner = para::collect_paragraphs(note);
+            for (j, ip) in inner.iter().enumerate() {
+                let (ipid, _) = para::para_stable_id_in(&container, ip, j + 1);
+                out.extend(list_in_paragraph(pkg, &part, ip, &ipid)?);
+            }
+        }
+    }
+    if let Some(part) = super::comments::part_name(pkg, doc_part)? {
+        let comments_doc = xml::parse(pkg.get(&part)?)?;
+        for comment in super::comments::comment_elements(&comments_doc.root) {
+            let w_id = comment.attr_local("id").unwrap_or("");
+            let container = super::comments::inspect_id(w_id);
+            let inner = para::collect_paragraphs(comment);
+            for (j, ip) in inner.iter().enumerate() {
+                let (ipid, _) = para::para_stable_id_in(&container, ip, j + 1);
+                out.extend(list_in_paragraph(pkg, &part, ip, &ipid)?);
+            }
+        }
+    }
+    Ok(out)
+}
+
 pub fn collect_hf(pkg: &Package, item: &HfPart, paras: &[&Element]) -> Result<Vec<Value>, Error> {
     let ctx = HostCtx::load(pkg, &item.part)?;
     let mut out = Vec::new();
@@ -144,12 +219,10 @@ pub fn parse_ole_id_at(id: &str, path: &str) -> Result<OleTarget, Error> {
             key,
         }),
         ParaTarget::InTextBox { .. } | ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
-            Err(Error::with_path(
-                ErrorKind::InvalidId {
-                    reason: IdReason::OlePrefix,
-                },
-                path,
-            ))
+            Ok(OleTarget::Nested {
+                para: para::parse_para_id_at(left, &path)?,
+                key,
+            })
         }
     }
 }
@@ -162,10 +235,6 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
         || id.contains("/series:")
         || id.contains("/smartdiagram:")
         || id.contains("/pt:")
-        || id.contains("/txbx:")
-        || id.starts_with("footnote:")
-        || id.starts_with("endnote:")
-        || id.starts_with("comment:")
         || id.starts_with("section:")
     {
         return Err(Error::with_path(
@@ -175,18 +244,17 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
             path,
         ));
     }
-    let target = para::parse_para_id_at(id, &path)?;
-    match target {
-        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(target),
-        ParaTarget::InTextBox { .. } | ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
-            Err(Error::with_path(
+    if let Some((_, after)) = id.split_once("/txbx:") {
+        if !after.contains("/para:") {
+            return Err(Error::with_path(
                 ErrorKind::InvalidId {
                     reason: IdReason::InsertOleNeedsPara,
                 },
                 path,
-            ))
+            ));
         }
     }
+    para::parse_para_id_at(id, &path)
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<super::export::ExportedMedia, Error> {
@@ -230,7 +298,7 @@ pub fn apply_insert(
     op: &InsertOleOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_para(catalog, doc_part, &op.para, &op.id, i)?;
+    let host = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
     {
         let doc = load_part(pkg, docs, &host)?;
         if find_para_mut(&mut doc.root, &op.para).is_none() {
@@ -688,6 +756,10 @@ fn find_object<'a>(root: &'a Element, target: &OleTarget) -> Option<&'a Element>
             find_object_walk(p, &mut 0, key)
         }
         OleTarget::HeaderFooter { key, .. } => find_object_walk(root, &mut 0, key),
+        OleTarget::Nested { para, key } => {
+            let p = nested_para(root, para)?;
+            find_object_walk(p, &mut 0, key)
+        }
     }
 }
 
@@ -729,6 +801,10 @@ fn patch_object_size(
             None => false,
         },
         OleTarget::HeaderFooter { key, .. } => patch_object_walk(root, &mut 0, key, cx, cy),
+        OleTarget::Nested { para, key } => match nested_para_mut(root, para) {
+            Some(p) => patch_object_walk(p, &mut 0, key, cx, cy),
+            None => false,
+        },
     }
 }
 
@@ -949,6 +1025,10 @@ fn remove_object(root: &mut Element, target: &OleTarget) -> bool {
             None => false,
         },
         OleTarget::HeaderFooter { key, .. } => remove_object_walk(root, &mut 0, key),
+        OleTarget::Nested { para, key } => match nested_para_mut(root, para) {
+            Some(p) => remove_object_walk(p, &mut 0, key),
+            None => false,
+        },
     }
 }
 
@@ -1027,17 +1107,40 @@ fn is_empty_run(el: &Element) -> bool {
 }
 
 fn find_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a mut Element> {
+    super::apply::find_insert_para_mut(root, target)
+}
+
+fn nested_para<'a>(root: &'a Element, target: &ParaTarget) -> Option<&'a Element> {
     match target {
-        ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {
-            para::find_paragraph_mut(root, p)
+        ParaTarget::InTextBox { host, key, para } => {
+            let host_p = para::find_paragraph(root, host.body())?;
+            let content = super::textbox::find_txbx_content_by_key(host_p, key)?;
+            para::find_paragraph_in_txbx(content, para)
         }
-        ParaTarget::InTextBox { .. } | ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
-            None
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note = super::notes::find_user_note(root, *kind, note_id)?;
+            para::find_paragraph(note, para)
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let comment = super::comments::find_comment(root, comment_id)?;
+            para::find_paragraph(comment, para)
+        }
+        ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {
+            para::find_paragraph(root, p)
         }
     }
 }
 
+fn nested_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a mut Element> {
+    super::apply::find_insert_para_mut(root, target)
+}
+
 fn part_for_para(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     para: &ParaTarget,
@@ -1059,18 +1162,13 @@ fn part_for_para(
             Ok(item.part.clone())
         }
         ParaTarget::InTextBox { .. } | ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
-            Err(Error::with_path(
-                ErrorKind::InvalidId {
-                    reason: IdReason::InsertOleNeedsPara,
-                },
-                format!("ops[{i}].id"),
-            ))
+            super::apply::part_for_format_para(pkg, catalog, doc_part, para, id, i)
         }
     }
 }
 
 fn part_for_target(
-    _pkg: &Package,
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     target: &OleTarget,
@@ -1090,6 +1188,9 @@ fn part_for_target(
                 )
             })?;
             Ok(item.part.clone())
+        }
+        OleTarget::Nested { para, .. } => {
+            part_for_para(pkg, catalog, doc_part, para, id, 0).map_err(|e| e.at(path.to_string()))
         }
     }
 }

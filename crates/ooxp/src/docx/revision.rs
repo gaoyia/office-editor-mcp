@@ -16,6 +16,13 @@ pub enum RevStory {
         hf_type: HfType,
         n: u32,
     },
+    Note {
+        kind: para::NoteKind,
+        note_id: String,
+    },
+    Comment {
+        comment_id: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -116,7 +123,7 @@ pub fn revisions_json(root: &Element, container: Option<&str>) -> Result<Vec<Val
         let xml_id = el.attr_local("id");
         let author = el.attr_local("author");
         let date = el.attr_local("date");
-        let host = host_para_id(root, path, container, &index_of);
+        let host = host_para_id(root, path, container, &index_of)?;
         let text = match kind {
             RevKind::Ins | RevKind::MoveFrom | RevKind::MoveTo => json!(markup_text(el, false)),
             RevKind::Del => json!(markup_text(el, true)),
@@ -151,6 +158,7 @@ pub fn parse_rev_ref(id: &str, path: &str) -> Result<RevRef, Error> {
 }
 
 pub fn part_for_story(
+    pkg: &crate::opc::Package,
     catalog: &[HfPart],
     doc_part: &str,
     story: &RevStory,
@@ -163,6 +171,12 @@ pub fn part_for_story(
             let cid = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
             let item = hf::find_by_id(catalog, &cid).ok_or_else(|| missing(id, i))?;
             Ok(item.part.clone())
+        }
+        RevStory::Note { kind, .. } => {
+            super::notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| missing(id, i))
+        }
+        RevStory::Comment { .. } => {
+            super::comments::part_name(pkg, doc_part)?.ok_or_else(|| missing(id, i))
         }
     }
 }
@@ -184,30 +198,57 @@ pub fn apply_revision(
     else {
         return Err(missing(id, i));
     };
+    apply_kind(root, &path, kind, accept, i)
+}
+
+pub fn apply_revision_under(
+    root: &mut Element,
+    host_path: &[usize],
+    n: usize,
+    accept: bool,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let host = para::element_at(root, host_path).ok_or_else(|| missing(id, i))?;
+    let hits = collect_rev_hits(host);
+    let Some((rel, kind)) = para::pick_collected(host, hits, n, "rev", |hit| hit.0.as_slice())
+    else {
+        return Err(missing(id, i));
+    };
+    let mut path = host_path.to_vec();
+    path.extend(rel);
+    apply_kind(root, &path, kind, accept, i)
+}
+
+fn apply_kind(
+    root: &mut Element,
+    path: &[usize],
+    kind: RevKind,
+    accept: bool,
+    i: usize,
+) -> Result<(), Error> {
     match (kind, accept) {
         (RevKind::Ins, true) | (RevKind::Del, false) => {
-            unwrap_at(root, &path, kind == RevKind::Del)?
+            unwrap_at(root, path, kind == RevKind::Del)?
         }
-        (RevKind::Ins, false) | (RevKind::Del, true) => remove_at(root, &path)?,
-        (k, true) if k.is_change() => remove_at(root, &path)?,
+        (RevKind::Ins, false) | (RevKind::Del, true) => remove_at(root, path)?,
+        (k, true) if k.is_change() => remove_at(root, path)?,
         (k, false) if k.is_change() => {
             let inner = k.change_inner().ok_or_else(|| xml_broken("revision"))?;
-            restore_prev(root, &path, inner)?;
+            restore_prev(root, path, inner)?;
         }
-        (RevKind::ParaMarkIns, true) | (RevKind::ParaMarkDel, false) => remove_at(root, &path)?,
+        (RevKind::ParaMarkIns, true) | (RevKind::ParaMarkDel, false) => remove_at(root, path)?,
         (RevKind::ParaMarkIns, false) | (RevKind::ParaMarkDel, true) => {
-            delete_host_para(root, &path, i)?;
+            delete_host_para(root, path, i)?;
         }
         (RevKind::RowDel, true) | (RevKind::RowIns, false) => {
-            delete_host_row(root, &path, i)?;
+            delete_host_row(root, path, i)?;
         }
-        (RevKind::RowIns, true) => settle_row(root, &path, true)?,
-        (RevKind::RowDel, false) => settle_row(root, &path, false)?,
-        (RevKind::MoveFrom, true) | (RevKind::MoveTo, false) => {
-            apply_move(root, &path, kind, true)?
-        }
+        (RevKind::RowIns, true) => settle_row(root, path, true)?,
+        (RevKind::RowDel, false) => settle_row(root, path, false)?,
+        (RevKind::MoveFrom, true) | (RevKind::MoveTo, false) => apply_move(root, path, kind, true)?,
         (RevKind::MoveFrom, false) | (RevKind::MoveTo, true) => {
-            apply_move(root, &path, kind, false)?
+            apply_move(root, path, kind, false)?
         }
         _ => return Err(xml_broken("revision")),
     }
@@ -255,9 +296,6 @@ impl WalkCtx {
 fn walk_rev(root: &Element, path: &[usize], ctx: WalkCtx, out: &mut Vec<(Vec<usize>, RevKind)>) {
     let mut stack = vec![(root, path.to_vec(), ctx)];
     while let Some((el, path, ctx)) = stack.pop() {
-        if el.local_name() == "txbxContent" {
-            continue;
-        }
         if el.local_name() == "AlternateContent" {
             if let Some(i) = first_alt(el) {
                 if let Node::Element(c) = &el.children[i] {
@@ -365,35 +403,89 @@ fn host_para_id(
     path: &[usize],
     container: Option<&str>,
     index_of: &[(*const Element, usize)],
-) -> Value {
+) -> Result<Value, Error> {
     let mut cur = root;
-    let mut host: Option<&Element> = None;
+    let mut outer: Option<&Element> = None;
+    let mut txbx: Option<&Element> = None;
+    let mut inner: Option<&Element> = None;
     for &i in path {
         match cur.children.get(i) {
             Some(Node::Element(e)) => {
+                if e.local_name() == "txbxContent" {
+                    txbx = Some(e);
+                }
                 if e.local_name() == "p" {
-                    host = Some(e);
+                    if txbx.is_some() {
+                        inner = Some(e);
+                    } else {
+                        outer = Some(e);
+                    }
                 }
                 cur = e;
             }
-            _ => return Value::Null,
+            _ => return Ok(Value::Null),
         }
     }
-    let Some(p) = host else {
-        return Value::Null;
+    if let Some(content) = txbx {
+        let Some(shell) = outer else {
+            return Ok(Value::Null);
+        };
+        let Some(p) = inner else {
+            return Ok(Value::Null);
+        };
+        let Some(index) = index_of
+            .iter()
+            .find(|(ptr, _)| std::ptr::eq(*ptr, shell))
+            .map(|(_, i)| *i)
+        else {
+            return Ok(Value::Null);
+        };
+        let (shell_id, _) = match container {
+            Some(c) => para::para_stable_id_in(c, shell, index),
+            None => para::para_stable_id(shell, index),
+        };
+        let boxes = super::textbox::collect_textboxes(shell, &shell_id)?;
+        for b in &boxes {
+            let key = if let Some(d) = &b.doc_pr_id {
+                para::TxbxKey::DocPr(d.clone())
+            } else if let Some((_, rest)) = b.id.rsplit_once("/txbx:index:") {
+                let Ok(n) = rest.parse::<usize>() else {
+                    continue;
+                };
+                para::TxbxKey::Index(n)
+            } else {
+                continue;
+            };
+            let Some(found) = super::textbox::find_txbx_content_by_key(shell, &key) else {
+                continue;
+            };
+            if !std::ptr::eq(found, content) {
+                continue;
+            }
+            let paras = para::collect_paragraphs_in_txbx(found);
+            let Some(pos) = paras.iter().position(|el| std::ptr::eq(*el, p)) else {
+                continue;
+            };
+            let (id, _) = para::para_stable_id_in(&b.id, p, pos + 1);
+            return Ok(json!(id));
+        }
+        return Ok(Value::Null);
+    }
+    let Some(p) = outer else {
+        return Ok(Value::Null);
     };
-    let idx = index_of
+    let Some(index) = index_of
         .iter()
         .find(|(ptr, _)| std::ptr::eq(*ptr, p))
-        .map(|(_, i)| *i);
-    let Some(index) = idx else {
-        return Value::Null;
+        .map(|(_, i)| *i)
+    else {
+        return Ok(Value::Null);
     };
     let (id, _) = match container {
         Some(c) => para::para_stable_id_in(c, p, index),
         None => para::para_stable_id(p, index),
     };
-    json!(id)
+    Ok(json!(id))
 }
 
 fn markup_text(el: &Element, deleted: bool) -> String {
@@ -438,6 +530,32 @@ fn split_story<'a>(id: &'a str, path: &str) -> Result<(RevStory, &'a str), Error
     if let Some((pre, rest)) = id.split_once("/rev:") {
         if let Some((kind, hf_type, n)) = para::parse_hf_container_id(pre) {
             return Ok((RevStory::HeaderFooter { kind, hf_type, n }, rest));
+        }
+        if let Some(note_id) = pre.strip_prefix("footnote:") {
+            return Ok((
+                RevStory::Note {
+                    kind: para::NoteKind::Footnote,
+                    note_id: note_id.to_string(),
+                },
+                rest,
+            ));
+        }
+        if let Some(note_id) = pre.strip_prefix("endnote:") {
+            return Ok((
+                RevStory::Note {
+                    kind: para::NoteKind::Endnote,
+                    note_id: note_id.to_string(),
+                },
+                rest,
+            ));
+        }
+        if let Some(comment_id) = pre.strip_prefix("comment:") {
+            return Ok((
+                RevStory::Comment {
+                    comment_id: comment_id.to_string(),
+                },
+                rest,
+            ));
         }
     }
     Err(Error::with_path(
@@ -732,6 +850,13 @@ fn xml_broken(detail: &str) -> Error {
     )
 }
 
+fn direct_child_path(root: &Element, pred: impl Fn(&Element) -> bool) -> Option<Vec<usize>> {
+    root.children.iter().enumerate().find_map(|(i, n)| match n {
+        Node::Element(e) if pred(e) => Some(vec![i]),
+        _ => None,
+    })
+}
+
 fn missing(id: &str, i: usize) -> Error {
     Error::with_path(
         ErrorKind::RevisionNotFound { id: id.to_string() },
@@ -764,9 +889,41 @@ pub(crate) fn apply_rev(
     i: usize,
 ) -> Result<(), Error> {
     let part_name =
-        super::revision::part_for_story(catalog, doc_part, &op.target.story, &op.id, i)?;
+        super::revision::part_for_story(pkg, catalog, doc_part, &op.target.story, &op.id, i)?;
     let doc = super::apply::load_part(pkg, docs, &part_name)?;
-    super::revision::apply_revision(&mut doc.root, op.target.n, accept, &op.id, i)?;
+    match &op.target.story {
+        super::revision::RevStory::Note { kind, note_id } => {
+            let host_path = direct_child_path(&doc.root, |e| {
+                e.local_name() == kind.item_local()
+                    && super::notes::ids_match(e.attr_local("id").unwrap_or(""), note_id)
+                    && super::notes::is_user_note(e)
+            })
+            .ok_or_else(|| missing(&op.id, i))?;
+            super::revision::apply_revision_under(
+                &mut doc.root,
+                &host_path,
+                op.target.n,
+                accept,
+                &op.id,
+                i,
+            )?;
+        }
+        super::revision::RevStory::Comment { comment_id } => {
+            let host_path = direct_child_path(&doc.root, |e| {
+                e.local_name() == "comment" && e.attr_local("id") == Some(comment_id)
+            })
+            .ok_or_else(|| missing(&op.id, i))?;
+            super::revision::apply_revision_under(
+                &mut doc.root,
+                &host_path,
+                op.target.n,
+                accept,
+                &op.id,
+                i,
+            )?;
+        }
+        _ => super::revision::apply_revision(&mut doc.root, op.target.n, accept, &op.id, i)?,
+    }
     dirty.insert(part_name, ());
     Ok(())
 }

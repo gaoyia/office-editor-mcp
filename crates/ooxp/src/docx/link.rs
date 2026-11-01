@@ -1299,24 +1299,17 @@ pub(crate) fn apply_insert_edit_range(
     op: &InsertEditRangeOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
-    let para = super::apply::story_body_para(&op.para).ok_or_else(|| {
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let xml_id = super::perm::next_xml_id(&doc.root);
+    let p = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::InvalidId {
-                reason: crate::error::IdReason::InsertEditRangeNeedsPara,
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
-    let doc = super::apply::load_part(pkg, docs, &part_name)?;
-    super::perm::insert_edit_range(
-        &mut doc.root,
-        para,
-        op.ed_grp.as_deref(),
-        op.ed.as_deref(),
-        &op.id,
-        i,
-    )?;
+    super::perm::insert_markers(p, &xml_id, op.ed_grp.as_deref(), op.ed.as_deref());
     dirty.insert(part_name, ());
     Ok(())
 }

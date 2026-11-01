@@ -304,6 +304,7 @@ fn inspect_lists_parent_range_and_comment_ids() {
             "connectorCount",
             "chartCount",
             "smartArtCount",
+            "revisionCount",
             "paragraphs"
         ]
     );

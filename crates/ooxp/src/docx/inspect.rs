@@ -127,6 +127,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         body_smartart_count += smartart::count_smartarts(p)?;
         body_ole_count += ole::count_in(&pkg, &part, p)?;
     }
+    let nested_ole = ole::collect_nested(&pkg, &part, &doc.root)?;
+    body_ole_count += nested_ole.len();
     let body_table_count = tbl::count_tables(&doc.root);
     let source_count = super::biblio::count_sources(&pkg, &part)?;
 
@@ -255,6 +257,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_charts,
                 expand_smartart,
                 expand_runs,
+                scope.revisions,
             )?;
             let (endnotes, en_seps) = notes_array(
                 &pkg,
@@ -269,6 +272,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_charts,
                 expand_smartart,
                 expand_runs,
+                scope.revisions,
             )?;
             let mut seps = fn_seps;
             seps.extend(en_seps);
@@ -289,6 +293,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_charts,
                 expand_smartart,
                 expand_runs,
+                scope.revisions,
             )?;
         }
         if scope.charts {
@@ -298,7 +303,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["smartArts"] = Value::Array(smartart::collect_body(&pkg, &part, &paras)?);
         }
         if scope.ole_objects {
-            tree["oleObjects"] = Value::Array(ole::collect_body(&pkg, &part, &paras)?);
+            let mut items = ole::collect_body(&pkg, &part, &paras)?;
+            items.extend(ole::collect_nested(&pkg, &part, &doc.root)?);
+            tree["oleObjects"] = Value::Array(items);
         }
         if scope.watermarks {
             tree["watermarks"] = Value::Array(watermark::list_all(&pkg, &catalog)?);
@@ -930,6 +937,7 @@ fn notes_array(
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
+    expand_revisions: bool,
 ) -> Result<(Value, Vec<Value>), Error> {
     let hosts = notes::collect_hosts(pkg, doc_part, doc_root, catalog, kind)?;
     let Some(part) = notes::part_name(pkg, doc_part, kind)? else {
@@ -977,7 +985,11 @@ fn notes_array(
             "connectorCount": media.cxn_count,
             "chartCount": media.chart_count,
             "smartArtCount": media.smart_art_count,
+            "revisionCount": revision::count_revisions(note),
         });
+        if expand_revisions {
+            node["revisions"] = Value::Array(revision::revisions_json(note, Some(&inspect_id))?);
+        }
         attach_story_lists(
             &mut node,
             &media,
@@ -1045,6 +1057,7 @@ fn comments_array(
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
+    expand_revisions: bool,
 ) -> Result<Value, Error> {
     let Some(part) = comments::part_name(pkg, doc_part)? else {
         return Ok(Value::Array(Vec::new()));
@@ -1119,7 +1132,11 @@ fn comments_array(
             "connectorCount": media.cxn_count,
             "chartCount": media.chart_count,
             "smartArtCount": media.smart_art_count,
+            "revisionCount": revision::count_revisions(comment),
         });
+        if expand_revisions {
+            node["revisions"] = Value::Array(revision::revisions_json(comment, Some(&inspect_id))?);
+        }
         attach_story_lists(
             &mut node,
             &media,

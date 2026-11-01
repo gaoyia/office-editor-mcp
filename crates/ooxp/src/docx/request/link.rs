@@ -385,11 +385,27 @@ pub(super) fn parse_insert_edit_range(
 ) -> Result<InsertEditRangeOp, Error> {
     deny_keys(obj, i, &["op", "id", "edGrp", "ed"])?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(
-        &id,
-        &format!("ops[{i}].id"),
-        IdReason::InsertEditRangeNeedsPara,
-    )?;
+    let path = format!("ops[{i}].id");
+    let para = super::super::para::parse_para_id_at(&id, &path).map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertEditRangeNeedsPara,
+            },
+            path.clone(),
+        )
+    })?;
+    if matches!(
+        para,
+        super::super::para::ParaTarget::InNote { .. }
+            | super::super::para::ParaTarget::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertEditRangeNeedsPara,
+            },
+            path,
+        ));
+    }
     let ed_grp = match obj.get("edGrp") {
         None => None,
         Some(Value::String(s)) if super::super::perm::ed_grp_ok(s) => Some(s.clone()),

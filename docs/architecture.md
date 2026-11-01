@@ -154,7 +154,10 @@ pptx 的 create 也按这个拆：字段解析在 `request/`，骨架 XML 在 `c
 一个族在 apply 开始、第一次装载部件时按文档顺序编号一次，属性名是 `ooxp:pin` 或 `ooxp:pin-族名`。之后按这个编号找元素。编号为空表示本批新建，不占旧编号。编号不把部件标脏。
 docx 段落用 `ooxp:pin`。文本框、脚注、尾注、批注各自从 1 起。
 docx 表用 `ooxp:pin-tbl`，行用 `ooxp:pin-tr`，格的起始列用 `ooxp:pin-col`。文本框里的表各自从 1 起。
-docx 段内的书签、域、链接、公式、拼音、内容控件、编辑区、修订和 run 各用自己的 `ooxp:pin-族名`。前八个在故事里从 1 起，文本框里再从 1 起。run 在各段里从 1 起。
+docx 段内的书签、域、链接、公式、拼音、内容控件、编辑区、修订和 run 各用自己的 `ooxp:pin-族名`。
+书签、域、链接、公式、拼音和内容控件在故事里从 1 起，文本框里再从 1 起。
+编辑区和修订在正文里含文本框；脚注、尾注和批注里的修订各自从 1 起。
+run 在各段里从 1 起。
 图、文本框、连接线、形状、墨迹、图表和三维模型的位置退路在各段里从 1 起。页眉页脚里的图、SmartArt、OLE，以及页眉水印，在整份部件里从 1 起。正文里的 SmartArt 和 OLE 仍在各段里从 1 起。
 docx 节用 `ooxp:pin-section`。目录、题注、交叉引用、索引、索引项、引文和书目域各用自己的 `ooxp:pin-族名`。页眉页脚容器在 apply 开始时记下部件名，之后按部件名找回原来的编号。书目源、构建基块和嵌入字体在各自部件里按元素顺序编号。
 xlsx 工作表内的数据验证、条件格式、超链接、迷你图、保护区域和表部件，以及工作簿的定义名、自定义视图、单元格样式、外部引用和没有 id 的连接，各用自己的 `ooxp:pin-族名`。数据透视表在 apply 开始时记下关系 id。
@@ -292,8 +295,8 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.tables` 为 true 时框节点带框内表名单。对应 `scope` 为 true 时框节点还带框内 `w:hyperlink`、书签、域、公式、拼音与内容控件名单。
 `scope.notes` 为 true 时列出用户脚注、尾注与分隔符，注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
-`scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
-`scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文与页眉页脚里的 run 级插入、删除与属性修订。
+`scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入对象。
+`scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文（含文本框）、页眉页脚、脚注、尾注与批注里的 run 级插入、删除与属性修订。
 `scope.hyperlinks` 为 true 时列出正文、页眉页脚与文本框里的 `w:hyperlink`。`scope.bookmarks` 为 true 时列出正文、页眉页脚与文本框里的配对书签。
 `scope.fields` 为 true 时列出正文、页眉页脚与文本框里的 `w:fldChar` / `w:fldSimple`。`scope.tocs` 为 true 时列出主文档目录块。
 `scope.captions` 为 true 时列出主文档题注。`scope.crossRefs` 为 true 时列出主文档交叉引用。`scope.indexes` 为 true 时列出主文档 INDEX 块。
@@ -461,10 +464,10 @@ docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格
 可改整篇镜像边距与装订线在上，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可为空白槽位新建页眉页脚，也可写 `titlePg` 与 `evenAndOddHeaders`。
 也可插入或删除节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删连接线与无框形状并把浮动图 / 框 / 连接线 / 无框形状组合或解开。
 也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表（含框内、注内、批注内；含趋势线、误差线与次轴），也可插删改 SmartArt（宿主范围相同）。
-docx 也可插删嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
+docx 也可往正文、页眉页脚、文本框、脚注、尾注与批注段落插入嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
 docx 也可插删换 3D 模型，并可改已有 3D 的尺寸、绕排与相机 / 旋转 / 光源，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记（限制编辑哈希走遗留预处理，修改密码走 UTF-16LE SHA-512）。
-窗体保护还可脏主文档各节 `w:formProt`，也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写 `w:permStart` / `w:permEnd`。
+窗体保护还可脏主文档各节 `w:formProt`，也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写正文、页眉页脚与文本框段落上的 `w:permStart` / `w:permEnd`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体、方案名与 `fmtScheme` 常用槽，只脏该 theme 部件。
 也可用 `setThemeExtraSchemes` 整份替换补充色板。也可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式。也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。

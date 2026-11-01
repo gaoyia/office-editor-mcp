@@ -508,3 +508,97 @@ fn accept_sect_pr_change_drops_marker() {
     assert!(!xml.contains("sectPrChange"));
     assert!(xml.contains("w:w=\"11906\""));
 }
+
+const CT_BOX: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/></Types>"#;
+
+const DOC_RELS_BOX: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/></Relationships>"#;
+
+const DOCUMENT_BOX: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body><w:p w14:paraId="BBBB0001"><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="3" name="框"/></wp:inline><w:txbxContent><w:p w14:paraId="BBBB0002"><w:ins w:id="7" w:author="A"><w:r><w:t>框内新</w:t></w:r></w:ins></w:p></w:txbxContent></w:drawing></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+
+const FOOT_BOX: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:footnote w:type="separator" w:id="0"><w:p w14:paraId="F0000001"><w:r><w:separator/></w:r></w:p></w:footnote><w:footnote w:id="2"><w:p w14:paraId="F00A0002"><w:r><w:t>旧</w:t></w:r><w:ins w:id="3" w:author="N"><w:r><w:t>注新</w:t></w:r></w:ins></w:p></w:footnote></w:footnotes>"#;
+
+fn write_box_rev(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", CT_BOX),
+            ("_rels/.rels", ROOT_RELS),
+            ("word/document.xml", DOCUMENT_BOX),
+            ("word/_rels/document.xml.rels", DOC_RELS_BOX),
+            ("word/styles.xml", STYLES),
+            ("word/footnotes.xml", FOOT_BOX),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+#[test]
+fn text_box_and_footnote_revisions_accept_and_edit_range_stays_in_the_box() {
+    let path = write_box_rev("box-rev");
+    let tree = inspect(
+        &path,
+        json!({ "revisions": true, "notes": true, "from": 1, "maxParas": 4, "textBoxes": true, "textBoxContent": true }),
+    );
+    assert_eq!(tree["revisionCount"], 1);
+    assert_eq!(tree["revisions"][0]["id"], "rev:1");
+    assert_eq!(tree["revisions"][0]["text"], "框内新");
+    let host = tree["revisions"][0]["host"].as_str().unwrap();
+    assert!(host.contains("/txbx:"), "{host}");
+    assert_eq!(tree["footnotes"][0]["revisionCount"], 1);
+    assert_eq!(
+        tree["footnotes"][0]["revisions"][0]["id"],
+        "footnote:2/rev:1"
+    );
+    assert_eq!(tree["footnotes"][0]["revisions"][0]["text"], "注新");
+
+    let inner = tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    let ranged = tmp_dir().join("box-perm.docx");
+    apply(
+        &path,
+        &ranged,
+        json!([{ "op": "insertEditRange", "id": inner }]),
+    );
+    let perm = inspect(&ranged, json!({ "editRanges": true }));
+    assert_eq!(perm["editRangeCount"], 1);
+    assert_eq!(perm["editRanges"][0]["id"], "perm:1");
+    let xml = part_text(&ranged, "word/document.xml");
+    let tx = xml.find("txbxContent").unwrap();
+    let mark = xml.find("permStart").unwrap();
+    assert!(tx < mark, "例外区应写在文本框里");
+
+    let err = apply_err(
+        &path,
+        json!([{ "op": "insertEditRange", "id": "footnote:2/para:F00A0002" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let out = tmp_dir().join("box-rev-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            { "op": "acceptRevision", "id": "rev:1" },
+            { "op": "acceptRevision", "id": "footnote:2/rev:1" }
+        ]),
+    );
+    let after = inspect(&out, json!({ "revisions": true, "notes": true }));
+    assert_eq!(after["revisionCount"], 0);
+    assert_eq!(after["footnotes"][0]["revisionCount"], 0);
+    let doc = part_text(&out, "word/document.xml");
+    assert!(doc.contains("框内新"));
+    assert!(!doc.contains("w:ins"));
+    let notes = part_text(&out, "word/footnotes.xml");
+    assert!(notes.contains("注新"));
+    assert!(!notes.contains("w:ins"));
+}

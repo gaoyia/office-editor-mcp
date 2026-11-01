@@ -233,6 +233,7 @@ fn inspect_notes_lists_hosts_and_separators() {
             "connectorCount",
             "chartCount",
             "smartArtCount",
+            "revisionCount",
             "paragraphs"
         ]
     );
@@ -413,6 +414,16 @@ fn insert_para_and_picture_in_note() {
         json!([{ "op": "deletePara", "id": "footnote:2/para:F00A0002" }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_edit_range_rejects_a_note_paragraph() {
+    let path = write_sample("perm-note");
+    let err = apply_err(
+        &path,
+        json!([{ "op": "insertEditRange", "id": "footnote:2/para:F00A0002" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }
 
 #[test]

@@ -10,7 +10,7 @@ use crate::xml::{Element, Node};
 
 use super::hf::HfPart;
 use super::link::{self, LinkStory};
-use super::para::{self, BodyPara};
+use super::para::{self};
 
 const ED_GRP: &[&str] = &[
     "everyone",
@@ -112,34 +112,13 @@ pub fn missing_perm_err(id: &str, i: usize) -> Error {
     )
 }
 
-pub fn insert_edit_range(
-    root: &mut Element,
-    para: &BodyPara,
-    ed_grp: Option<&str>,
-    ed: Option<&str>,
-    err_id: &str,
-    op_i: usize,
-) -> Result<(), Error> {
-    let path = para::find_paragraph_path(root, para).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: err_id.to_string(),
-            },
-            format!("ops[{op_i}].id"),
-        )
-    })?;
-    let xml_id = next_perm_xml_id(root);
-    let p = para::element_at_mut(root, &path).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: err_id.to_string(),
-            },
-            format!("ops[{op_i}].id"),
-        )
-    })?;
-    insert_perm_start(p, &xml_id, ed_grp, ed);
-    insert_perm_end(p, &xml_id);
-    Ok(())
+pub fn next_xml_id(root: &Element) -> String {
+    next_perm_xml_id(root)
+}
+
+pub fn insert_markers(p: &mut Element, xml_id: &str, ed_grp: Option<&str>, ed: Option<&str>) {
+    insert_perm_start(p, xml_id, ed_grp, ed);
+    insert_perm_end(p, xml_id);
 }
 
 pub fn delete_edit_range(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(), Error> {
@@ -162,7 +141,7 @@ fn collect_hits(root: &Element) -> Vec<PermHit> {
     let mut starts = Vec::new();
     let mut ends: HashMap<String, Vec<usize>> = HashMap::new();
     let path = Vec::new();
-    walk_perm(root, &path, true, &mut starts, &mut ends);
+    walk_perm(root, &path, false, &mut starts, &mut ends);
     let mut out = Vec::new();
     for rec in starts {
         let end = rec.xml_id.as_ref().and_then(|id| ends.get(id).cloned());
@@ -294,9 +273,6 @@ fn walk_text(
 ) {
     let mut stack = vec![(root, path.to_vec())];
     while let Some((el, path)) = stack.pop() {
-        if el.local_name() == "txbxContent" {
-            continue;
-        }
         if el.local_name() == "AlternateContent" {
             if let Some(i) = first_alt(el) {
                 if let Node::Element(c) = &el.children[i] {

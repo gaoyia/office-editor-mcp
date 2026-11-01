@@ -18,7 +18,7 @@ use super::link;
 use super::notes;
 use super::ole;
 use super::page_bg;
-use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
+use super::para::{self, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::protect;
 use super::request::DocxOp;
@@ -918,12 +918,6 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     pkg.save_to_vec()
 }
 
-pub(crate) fn story_body_para(target: &ParaTarget) -> Option<&BodyPara> {
-    match target {
-        ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => Some(p),
-        _ => None,
-    }
-}
 pub(crate) fn para_target_path(root: &Element, target: &ParaTarget) -> Option<Vec<usize>> {
     match target {
         ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {

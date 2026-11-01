@@ -20,7 +20,9 @@
 
 段内位置 id 同样按 apply 开始时解释：
 
-- `bookmark:{n}`、`field:{n}`、`link:{n}`、`math:{n}`、`ruby:{n}`、`sdt:{n}`、`perm:{n}`、`rev:{n}` 在各自故事里从 1 起。正文、页眉、页脚、脚注、尾注、批注各算一个故事。文本框里再从 1 起。
+- `bookmark:{n}`、`field:{n}`、`link:{n}`、`math:{n}`、`ruby:{n}`、`sdt:{n}` 在各自故事里从 1 起。正文、页眉、页脚、脚注、尾注、批注各算一个故事。文本框里再从 1 起。
+- `perm:{n}` 与 `rev:{n}` 在正文里含文本框，同一份编号。页眉、页脚各自一份，也含该部件里的文本框。
+- 脚注、尾注、批注里的 `rev:{n}` 仍各自从 1 起，id 带 `footnote:{id}`、`endnote:{id}` 或 `comment:{id}` 前缀。这些部件里的 `permStart` 不编。
 - `run:{n}` 在各段里从 1 起，不跟故事共用。
 - 没有 `docPr/@id` 或 `cNvPr/@id` 时，`pic:index:{k}`、`txbx:index:{k}`、`cxn:index:{k}`、`shape:index:{k}`、`ink:index:{k}`、`chart:index:{k}`、`model3d:index:{k}` 在各段里从 1 起。
 - 页眉页脚里的 `pic:index:{k}`、`smartdiagram:index:{k}`、`ole:index:{k}` 在整份部件里从 1 起。正文里的 SmartArt 和 OLE 仍在各段里从 1 起。
@@ -42,10 +44,10 @@
 整篇的镜像边距与装订线在上，写在 `settings.xml`。整篇页面背景色写在主文档 `w:background`，是否显示看 `settings.xml` 的 `w:displayBackgroundShape`。
 页面填充可以是 VML 渐变 / 图片，也可以是 `w:drawing` 里的 DrawingML。
 节上页面边框的 `val` 认 `ST_Border` 全套，含艺术型（如 `apples`）。
-页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。
+页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文、页眉页脚、文本框、脚注、尾注和批注里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件。框内、注内、批注内的 OLE 进根上的 `oleObjects`，id 带容器前缀。
 正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。
 也可改表格样式、`tblLook`、浮动定位、表级格边距，以及单元格底纹、格边距与斜线。
-正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。
+正文（含文本框）、页眉页脚、脚注、尾注和批注里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。
 可用 `insertStyle` / `deleteStyle` 增删自定义样式，可用 `setRunStyle` 给 run 套字符样式。
 apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，
 可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，
@@ -68,7 +70,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 增删换、改尺寸绕排与改相机 / 旋转 / 光源，
-也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
+也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内不插：Word 16.0 的 `InlineShapes.Add3DModel` 调用类型不匹配，没有另存出注内 3D。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
 `create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
@@ -251,11 +253,12 @@ OLE 的 `{token}` 优先取 `o:OLEObject/@ObjectID` 原文（常带前导 `_`）
 Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分文件写成 `oleObject`。两者都进树。
 `objectLink`、`Type="Link"`、`w:control`、`w:movie` 不进树。
 预览图（VML `v:imagedata` 或 `w:object` 里的 `w:drawing`）不进 `pictures`，也不进 `charts` / `smartArts`。
-正文 OLE 只收主文档段落的子孙，遇 `w:txbxContent` 停住；表格单元格里的段落与正文段落同一套规则。页眉页脚 OLE 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `oleObjects` 上。
-框内、注内、批注内的 `w:object` 本期不编；对这些容器发 OLE op 报 `InvalidId`。根上 `oleObjectCount` 仍只计正文，不含页眉页脚。xlsx 与 pptx 的 OLE 见各自分册。
+正文段落子孙里的 OLE 遇 `w:txbxContent` 停住；表格单元格里的段落与正文段落同一套规则。
+框内、脚注、尾注和批注里的 `w:object` 另外收进根上 `oleObjects`，id 带框、注或批注前缀，并计入根上 `oleObjectCount`。
+页眉页脚 OLE 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `oleObjects` 上，不进根上计数。xlsx 与 pptx 的 OLE 见各自分册。
 
-`insertOle` 的 `id` 必须是段落 id：正文或页眉页脚。对 OLE id、图 id、容器 id、框 id、注容器 id、批注容器 id、
-框内 / 注内 / 批注内段落 id 或 `section:{n}` 发 `insertOle` 报 `InvalidId`。
+`insertOle` 的 `id` 必须是段落 id：正文、页眉页脚、框内、脚注、尾注或批注段落。
+对 OLE id、图 id、容器 id、框 id、注容器 id、批注容器 id或 `section:{n}` 发 `insertOle` 报 `InvalidId`。
 `deleteOle` 的 `id` 必须是 OLE id。对段落 id 发 `deleteOle` 报 `InvalidId`。
 `setOleSize` 的 `id` 也必须是 OLE id。只改预览框，不改嵌入字节。
 
@@ -310,9 +313,9 @@ Word 16.0 自己插入的水印通常是 VML；另存若把 DrawingML 改成 VML
 `insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。
 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 的 `id` 必须是表 id。`setTableRowHeight` 的 `id` 必须是行 id。`setCellFormat` / `setCellBorders` 的 `id` 必须是单元格 id。
 正文、页眉页脚与框内的表可以改结构与外观。对注内、批注内的表发这些 op 报 `InvalidId`。对不上的 id 形态报 `InvalidId`。
-框内表带修订痕迹时结构 op 仍报 `NotImplemented`。
+框内表带修订痕迹时结构 op 仍报 `NotImplemented`：不改写修订标记。
 
-修订的 `{n}` 从 1 起，按该故事里被收入节点的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
+修订的 `{n}` 从 1 起，按该故事里被收入节点的文档顺序（含文本框；`mc:AlternateContent` 只进 Choice）。
 OOXML 的 `w:id` 在拆 run 时会重复，因此不用它当树上的唯一键；树上另给 `xmlId` 存原文。`rev:{n}` 在增删修订之后会变，只够同一次 inspect 之后立刻 apply。
 同一 `w:id` 的多个节点是多条修订，`acceptRevision` / `rejectRevision` 按 id 点名；
 run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel` 以及会删掉整段的段落标记修订按下面 apply 节处理。
@@ -327,7 +330,9 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
 本期还收入不在属性容器里、直接子元素不是 `w:p` / `w:tbl` 的 `w:moveFrom` / `w:moveTo`（`kind` 为 `moveFrom` / `moveTo`）。
 `moveFromRangeStart` / `moveFromRangeEnd` / `moveToRangeStart` / `moveToRangeEnd` 不另列，接受 / 拒绝对应包裹节点时删掉成对标记。
 不进树：直接子元素是 `w:p` / `w:tbl` 的块级 `ins`/`del`、其它属性容器上的 `ins`/`del`。
-框内、注内、批注内的修订本期不编；对这些容器发 `acceptRevision` / `rejectRevision` 报 `InvalidId`。`w:id` 缺失时仍列出，`xmlId` 为 `null`。`tblGridChange` 可以没有 `author` / `date`。
+文本框里的修订和正文同一份 `rev:{n}`，可以接受或拒绝。
+脚注、尾注、批注里的修订用 `footnote:{id}/rev:{n}`、`endnote:{id}/rev:{n}`、`comment:{id}/rev:{n}`，编号只在该注或该批注内从 1 起。
+`w:id` 缺失时仍列出，`xmlId` 为 `null`。`tblGridChange` 可以没有 `author` / `date`。
 
 `acceptRevision` / `rejectRevision` 的 `id` 必须是修订 id。对段落 id、表 id、容器 id 或 `section:{n}` 发这两个 op 报 `InvalidId`。
 
@@ -367,7 +372,7 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
 注内、批注内的书签仍不编；对这些容器发书签 op 报 `InvalidId`。
 
 例外编辑区的 `{n}` 从 1 起，按该故事里被收入的 `w:permStart` 的文档顺序（同一套边界）。配对按 `w:id`。不成对的 Start 仍列出。
-框内、注内、批注内的 `permStart` 本期不编；对这些容器发例外区 op 报 `InvalidId`。
+文本框段落可以插例外编辑区，写在主文档里，id 仍是 `perm:{n}`。注内、批注内的 `permStart` 不进这份名单，对这些段落发 `insertEditRange` 报 `InvalidId`。
 
 域的 `{n}` 从 1 起，按该故事里被收入域起点的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
 起点是 `w:fldSimple`，或配对完整的 `w:fldChar/@w:fldCharType="begin"`（§17.16.18、§17.16.19）。
@@ -515,14 +520,14 @@ VML / `w:pict`、图表、SmartArt、文本框、连接线不进宿主段落的 
 Word 16.0 把连接线写成 `wps:wsp`，不是独立 `cxnSp`。
 连接线的 `{docPrId}` 取该 `w:drawing` 的 `wp:docPr/@id`；组合里取该 `wps:wsp` 的 `cNvPr/@id`；再没有则 `cxn:index:{k}`。
 `k` 只在该宿主段内从 1 计，`stable` 为 `false`。页眉页脚连接线挂在它所在的页眉或页脚段落上。
-注内、批注内、框内本期不编连接线；对这些容器发 `insertConnector` 报 `InvalidField` 或 `InvalidId`（见 apply）。
+注内、批注内、框内不编连接线，也不编无框形状。Word 16.0 的 `AddShape` / `AddConnector` 即使锚到文本框段落，对象仍写在正文绘图层，没有进 `txbxContent`。对这些容器发 `insertConnector` / `insertShape` 报 `InvalidField` 或 `InvalidId`。
 `insertConnector` 的 `id` 必须是正文或页眉页脚段落 id。`deleteConnector` 的 `id` 必须是连接线 id。
 
 无框形状只认 `wps:wsp`：没有 `txbx` / `txbxContent` / `linkedTxbx`，且不是连接线（见上）。
 不要把连接线收进 `shapes`。VML / `w:pict` 不编、不改。组合 `wpg:wgp` 本身不进树，里面符合条件的子 `wps:wsp` 展开。
 形状的 `{docPrId}` 取该 `w:drawing` 的 `wp:docPr/@id`；组合里取该 `wps:wsp` 的 `cNvPr/@id`；再没有则 `shape:index:{k}`。
 `k` 只在该宿主段内从 1 计，`stable` 为 `false`。页眉页脚形状挂在它所在的页眉或页脚段落上。
-注内、批注内、框内本期不编形状；对这些容器发 `insertShape` 报 `InvalidField` 或 `InvalidId`（见 apply）。
+注内、批注内、框内不编形状。原因与连接线相同：Word 16.0 不把浮动形状写进这些容器。
 `insertShape` 的 `id` 必须是正文或页眉页脚段落 id。`deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 的 `id` 必须是形状 id。
 `groupShapes` 的 `id` 必须是 `docx:document` 或页眉/页脚容器 id。`ungroup` 的 `id` 必须是该组合内一个图 / 文本框 / 连接线 / 无框形状 id。
 `groupShapes` 不收墨迹画布成员；对墨迹 id 发 `groupShapes` 报 `InvalidId`。
@@ -753,7 +758,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `from` / `maxParas`
   - 省略或 `false` 则只有 `oleObjectCount`，没有名单
   - 不把嵌入字节或预览图放进树
-  - 框内、注内、批注内本期不列出
+  - 框内、注内、批注内的对象进根上 `oleObjects`，id 带容器前缀
 - **`scope.model3ds`**（否）
   - 为 `true` 时列出每个页眉、页脚容器上的 `model3ds`
   - 若同时给了 `from` 与 `maxParas`，切片里每段也填 `model3ds`
@@ -1156,7 +1161,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 文档根上的 `chartCount` 始终出现，只计主文档里被收入的图表个数（判定见上文 docx 图表 id 那节），不含页眉页脚，也不含框内、注内、批注内的图表。没有图表则为 `0`。根上不挂正文 `charts`，除非给了 `scope.charts`。
 - 文档根上的 `smartArtCount` 始终出现，只计主文档里被收入的 SmartArt 个数（判定见上文 docx SmartArt id 那节），不含页眉页脚，也不含框内、注内、批注内的图示。没有图示则为 `0`。
   根上不挂正文 `smartArts`，除非给了 `scope.smartArt`。
-- 文档根上的 `oleObjectCount` 始终出现，只计主文档里被收入的嵌入对象个数（判定见上文 docx OLE id 那节），不含页眉页脚，也不含框内、注内、批注内。没有则为 `0`。
+- 文档根上的 `oleObjectCount` 始终出现，计主文档正文、文本框、脚注、尾注和批注里被收入的嵌入对象个数（判定见上文 docx OLE id 那节），不含页眉页脚。没有则为 `0`。
   根上不挂正文 `oleObjects`，除非给了 `scope.oleObjects`。每条字段顺序：`id`、`progId`、`name`、`kind`、`contentType`、`stable`。
   `progId` 取 `o:OLEObject/@ProgID` 或 `w:objectEmbed/@progId`，缺则为 `null`。
   `name` 取该 `w:object` 里 `wp:docPr/@name`，没有则为 `null`。`kind`：ProgID 为 `Package`（大小写不敏感）时为 `package`，否则为 `embed`。
@@ -1168,13 +1173,13 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `kind` 为 `text`（含 `wps:txbx` / `w:txbxContent`）或 `picture`（含 `pic:pic` 与 `a:blip`）。`name` 取 `wp:docPr/@name`，缺则为 `null`。
   `text`：文字水印为框内可见文本，图片水印为 `null`。
 - 文档根上的 `tableCount` 始终出现，只计主文档里被收入的 `w:tbl` 个数（含嵌套表，判定见上文表 id 那节），不含页眉页脚，也不含框内、注内、批注内的表。没有表则为 `0`。根上不挂正文 `tables`，除非给了 `scope.tables`。框节点另报自己的 `tableCount`。
-- 文档根上的 `revisionCount` 始终出现，只计主文档里被收入的修订节点个数（判定见上文修订 id 那节），不含页眉页脚，也不含框内、注内、批注内的修订。没有修订则为 `0`。
+- 文档根上的 `revisionCount` 始终出现，只计主文档里被收入的修订节点个数（含文本框，判定见上文修订 id 那节），不含页眉页脚，也不含注内、批注内。没有修订则为 `0`。
   根上不挂正文 `revisions`，除非给了 `scope.revisions`。
 - 文档根上的 `hyperlinkCount` 始终出现，只计主文档里被收入的 `w:hyperlink` 个数（判定见上文超链接 id 那节），不含页眉页脚，也不含框内、注内、批注内的链，也不含 DrawingML `a:hlinkClick`。没有链则为 `0`。
   根上不挂正文 `hyperlinks`，除非给了 `scope.hyperlinks`。
 - 文档根上的 `bookmarkCount` 始终出现，只计主文档里被收入的书签个数（判定见上文书签 id 那节），不含页眉页脚，也不含框内、注内、批注内的书签。没有书签则为 `0`。
   根上不挂正文 `bookmarks`，除非给了 `scope.bookmarks`。
-- 文档根上的 `editRangeCount` 始终出现，只计主文档里成对或不成对的 `w:permStart` 个数，不含页眉页脚，也不含框内、注内、批注内。没有则为 `0`。
+- 文档根上的 `editRangeCount` 始终出现，只计主文档里成对或不成对的 `w:permStart` 个数（含文本框），不含页眉页脚，也不含注内、批注内。没有则为 `0`。
   根上不挂正文 `editRanges`，除非给了 `scope.editRanges`。xlsx / pptx 根上不要带 `editRangeCount`。
 - 文档根上的 `fieldCount` 始终出现，只计主文档里被收入的域个数（判定见上文域 id 那节），不含页眉页脚，也不含框内、注内、批注内的域。没有域则为 `0`。根上不挂正文 `fields`，除非给了 `scope.fields`。
 - 文档根上的 `tocCount` 始终出现，只计主文档里被收入的目录块个数（判定见上文目录 id 那节）。没有目录则为 `0`。根上不挂 `tocs`，除非给了 `scope.tocs`。页眉页脚容器不出现 `tocCount`。
@@ -1219,7 +1224,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `smartArtCount` 始终出现，是该部件内被收入的 SmartArt 个数（不含框内图示）。`oleObjectCount` 始终出现，是该部件内被收入的嵌入对象个数（不含框内）。
   `model3dCount` 始终出现，是该部件内被收入的 3D 模型个数。
   `watermarkCount` 始终出现，是该部件内被收入的 DrawingML 水印个数（页脚恒为 `0`）。`tableCount` 始终出现，是该部件内被收入的 `w:tbl` 个数（含嵌套表，不含框内表）。
-  `revisionCount` 始终出现，是该部件内被收入的修订节点个数（不含框内修订）。`hyperlinkCount` 始终出现，是该部件内被收入的 `w:hyperlink` 个数（不含框内链）。
+  `revisionCount` 始终出现，是该部件内被收入的修订节点个数（含文本框）。`hyperlinkCount` 始终出现，是该部件内被收入的 `w:hyperlink` 个数（不含框内链）。
   `bookmarkCount` 始终出现，是该部件内被收入的书签个数（不含框内书签）。`editRangeCount` 始终出现，是该部件内被收入的 `w:permStart` 个数。`fieldCount` 始终出现，是该部件内被收入的域个数（不含框内域）。
   `mathCount` 始终出现，是该部件内被收入的顶层 `m:oMath` 个数（不含框内公式）。`rubyCount` 始终出现，是该部件内被收入的 `w:ruby` 个数（不含框内拼音）。`contentControlCount` 始终出现，是该部件内被收入的内容控件个数（不含框内控件）。
 - 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`top`、`bottom`、`left`、
@@ -1312,8 +1317,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   组合里符合条件的 graphicFrame / `wp:inline` 要展开。注内、批注内、框内不列出。
   `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。
-  用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
+  用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`，
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，给了 `scope.revisions` 时再跟 `revisions`，然后 `paragraphs`。
   `noteId` 是 `w:id` 原文。`type` 恒为 `normal`。
   `host` 是引用所在段落 id 的数组：在主文档、页眉、页脚和文本框里找 `w:footnoteReference` / `w:endnoteReference`，按文档顺序，id 规则与该段落本身相同。
   一条注被引用多次则 `host` 有多项；没有任何引用则为 `[]`，注仍列出。
@@ -1324,8 +1329,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `type` 为 `separator`、`continuationSeparator` 或 `continuationNotice`。对 `noteSeparators` 里的 id 发 apply 报 `InvalidId`。
 - `scope.comments` 为 `true` 时，根上带 `comments`。没有批注时为空数组。按 `comments.xml` 里 `w:comment` 的文档顺序。
   每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`parent`、`kind`、`start`、`end`、`paraCount`、`pictureCount`、
-  `textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
+  `textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`，
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，给了 `scope.revisions` 时再跟 `revisions`，然后 `paragraphs`。
   `commentId` 是 `w:id` 原文。`author` / `initials` / `date` 取对应属性原文，缺则为 `null`。
   `done` 取 `commentEx/@done`：`1` / `true` / `on` 为 `true`，其余或没有 `commentEx` 为 `false`。
   `parent` 用 `paraIdParent` 对上父批注最后一段的 `w14:paraId`，再写成 `comment:{id}`；对不上或没有则为 `null`。根批注的 `parent` 为 `null`。
@@ -1448,12 +1453,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `textDirection/@val` 不是上述六值时报 `XmlBroken`。
   `noWrap` / `tcFitText` / `hideMark` 的 OnOff 不认识时报 `XmlBroken`。
   某行各格占的网格列之和对不上 `colCount` 时仍列出，结构 op 报 `NotImplemented`。
-- `scope.revisions` 为 `true` 时，根上带 `revisions`（正文），每个页眉、页脚容器带 `revisions`。没有修订时为空数组。按该故事里被收入节点的文档顺序。
+- `scope.revisions` 为 `true` 时，根上带 `revisions`（正文，含文本框），每个页眉、页脚容器带 `revisions`。同时给了 `scope.notes` 或 `scope.comments` 时，每条用户注或批注也带 `revisions`。没有修订时为空数组。按该故事里被收入节点的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`xmlId`、`author`、`date`、`host`、`text`。`index` 与 id 里的 `{n}` 相同。
   `kind` 为 `ins`、`del`、`moveFrom`、`moveTo`、`paraMarkIns`、`paraMarkDel`、`rowIns`、`rowDel`、`rPrChange`、`pPrChange`、`tblPrChange`、
   `tblGridChange`、`tblPrExChange`、`tcPrChange`、`trPrChange` 或 `sectPrChange`。
   `xmlId` 是 `w:id` 原文，缺则为 `null`。`author` / `date` 取对应属性原文，缺则为 `null`。
-  `host` 是所在段落 id（正文 `para:…`，页眉页脚带容器前缀）；修订不在任何 `w:p` 里则为 `null`（表行与表 / 节属性修订通常为 `null`）。
+  `host` 是所在段落 id（正文 `para:…`，文本框、页眉页脚、注和批注带容器前缀）；修订不在任何 `w:p` 里则为 `null`（表行与表 / 节属性修订通常为 `null`）。
   `text`：run 级 `ins` / `moveFrom` / `moveTo` 为该节点内可见 `w:t` 拼接；run 级 `del` 为 `w:delText`（以及其中若有的 `w:t`）拼接；段落标记、表行与属性修订为 `null`。
   xlsx / pptx 的 `scope` 里出现 `revisions` 报 `InvalidField`。
 - `scope.hyperlinks` 为 `true` 时，根上带 `hyperlinks`（正文），每个页眉、页脚容器带 `hyperlinks`。没有链时为空数组。按该故事里被收入节点的文档顺序。
@@ -1471,7 +1476,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   每条字段顺序：`id`、`index`、`xmlId`、`edGrp`、`ed`、`host`、`text`。`id` 是 `perm:{n}` 或 `{容器}/perm:{n}`。
   `xmlId` 是 `w:id` 原文，缺则为 `null`。`edGrp` 取 `w:edGrp`，缺则为 `null`。`ed` 取 `w:ed`，缺则为 `null`。
   `host` 是起点所在段落 id。`text` 为配对 `permEnd` 之前的可见 `w:t` 拼接；不成对则为 `""`。
-  框内 / 注内 / 批注内不编。xlsx / pptx 的 `scope` 里出现 `editRanges` 报 `InvalidField`。
+  文本框里的 `permStart` 和正文同一份编号。注内、批注内不编。xlsx / pptx 的 `scope` 里出现 `editRanges` 报 `InvalidField`。
 - `scope.fields` 为 `true` 时，根上带 `fields`（正文），每个页眉、页脚容器带 `fields`。没有域时为空数组。按该故事里被收入域起点的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`code`、`instr`、`host`、`end`、`text`，有 `w:ffData` 时再跟 `form`。
   `kind` 为 `simple`（`w:fldSimple`）或 `complex`（配对 `w:fldChar`）。
@@ -3110,13 +3115,13 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertEditRange"` |
-| `id` | 段落 id（正文或页眉页脚） |
+| `id` | 段落 id（正文、页眉页脚或文本框） |
 | `edGrp` | 可选。`everyone` / `administrators` / `contributors` / `editors` / `owners` / `current` |
 | `ed` | 可选。编辑者别名 |
 
 `edGrp` 与 `ed` 不能同时给。两个都不给时写 `w:edGrp="everyone"`。不认识的 `edGrp` 或空 `ed` 报 `InvalidField`。
 在该段 `w:pPr` 之后插入 `w:permStart`，在段末插入配对 `w:permEnd`。`w:id` 取该部件已有 perm 标记里最大整数加 1，至少为 0。
-框内、注内、批注内的段落，以及非段落 id，报 `InvalidId`。找不到段落报 `IdNotFound`。xlsx / pptx 上发此 op 报 `InvalidField`。
+注内、批注内的段落，以及非段落 id，报 `InvalidId`。文本框段落可以插入，写在主文档里。找不到段落报 `IdNotFound`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteEditRange
 

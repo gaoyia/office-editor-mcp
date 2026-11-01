@@ -537,3 +537,103 @@ fn set_ole_size_rewrites_preview_box() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
+
+#[test]
+fn insert_ole_inside_a_text_box() {
+    let path = create_docx("box-host");
+    let tree0 = inspect(
+        &path,
+        json!({ "from": 1, "maxParas": 4, "textBoxes": true }),
+    );
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let boxed = tmp_dir().join(format!("box-{}.docx", SEQ.fetch_add(1, Ordering::Relaxed)));
+    apply(
+        &path,
+        &boxed,
+        json!([{ "op": "insertTextBox", "id": para, "text": "框" }]),
+    );
+    let tree = inspect(
+        &boxed,
+        json!({ "from": 1, "maxParas": 4, "textBoxes": true, "textBoxContent": true }),
+    );
+    let inner = tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let xlsx = write_xlsx("box-ole");
+    let out = tmp_dir().join(format!(
+        "box-ole-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &boxed,
+        &out,
+        json!([{ "op": "insertOle", "id": inner, "file": xlsx.to_string_lossy() }]),
+    );
+    let listed = inspect(&out, json!({ "oleObjects": true }));
+    assert_eq!(listed["oleObjectCount"], 1);
+    let id = listed["oleObjects"][0]["id"].as_str().unwrap();
+    assert!(id.contains("/txbx:"), "{id}");
+    let xml = String::from_utf8(part_bytes(&out, "word/document.xml")).unwrap();
+    let tx = xml.find("txbxContent").unwrap();
+    let obj = xml.find("w:object").unwrap();
+    assert!(tx < obj, "OLE 应写在文本框里");
+}
+
+#[test]
+fn insert_ole_inside_a_note_and_a_comment() {
+    let path = create_docx("nest-host");
+    let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 4 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let hosted = tmp_dir().join(format!(
+        "nest-host-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &path,
+        &hosted,
+        json!([
+            { "op": "insertFootnote", "id": para, "text": "注" },
+            { "op": "insertComment", "start": para, "end": para, "text": "批" }
+        ]),
+    );
+    let tree = inspect(
+        &hosted,
+        json!({ "from": 1, "maxParas": 4, "notes": true, "comments": true }),
+    );
+    let note_para = tree["footnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let comment_para = tree["comments"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let xlsx = write_xlsx("nest-ole");
+    let out = tmp_dir().join(format!(
+        "nest-ole-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &hosted,
+        &out,
+        json!([
+            { "op": "insertOle", "id": note_para, "file": xlsx.to_string_lossy() },
+            { "op": "insertOle", "id": comment_para, "file": xlsx.to_string_lossy() }
+        ]),
+    );
+    let listed = inspect(&out, json!({ "oleObjects": true }));
+    assert_eq!(listed["oleObjectCount"], 2);
+    let ids: Vec<_> = listed["oleObjects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(ids.iter().any(|id| id.contains("footnote:")), "{ids:?}");
+    assert!(ids.iter().any(|id| id.contains("comment:")), "{ids:?}");
+    let notes = String::from_utf8(part_bytes(&out, "word/footnotes.xml")).unwrap();
+    let comments = String::from_utf8(part_bytes(&out, "word/comments.xml")).unwrap();
+    assert!(notes.contains("w:object"));
+    assert!(comments.contains("w:object"));
+}
