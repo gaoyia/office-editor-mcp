@@ -1511,10 +1511,7 @@ fn chart_rid(drawing: &Element) -> Option<String> {
 }
 
 fn external_data_rid(space: &Element) -> Option<String> {
-    space
-        .child_by_local("externalData")
-        .and_then(|e| e.attr_local("id"))
-        .map(str::to_string)
+    crate::chart::external_data_rid(space)
 }
 
 fn load_embed(pkg: &Package, chart_part: &str, space: &Element) -> Option<Vec<u8>> {

@@ -1645,3 +1645,85 @@ fn chartex_series_updates_cache_and_embedding() {
     }
     assert!(saw_embed);
 }
+
+fn strip_lvl(xml: &str) -> String {
+    let mut out = String::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<cx:lvl") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i..];
+        let end = after.find("</cx:lvl>").expect("cx:lvl");
+        rest = &after[end + "</cx:lvl>".len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn rewrite_chart(src: &Path, dest: &Path, part: &str, text: &str) {
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == part {
+                data = text.as_bytes().to_vec();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
+}
+
+#[test]
+fn chartex_without_cache_reads_the_embedding() {
+    let src = tmp_dir().join(format!(
+        "cx-bare-src-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "甲" }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect(&src, json!({ "from": 1, "maxParas": 2 }));
+    let para = tree["paragraphs"][0]["id"].as_str().unwrap();
+    let made = tmp_dir().join(format!(
+        "cx-bare-made-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": para,
+            "type": "chartex",
+            "layoutId": "funnel",
+            "title": "漏斗",
+            "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [3, 1] }]
+        }]),
+    );
+    let chart = strip_lvl(&part_text(&made, "word/charts/chartEx1.xml"));
+    assert!(!chart.contains("<cx:lvl"), "{chart}");
+    let bare = tmp_dir().join(format!(
+        "cx-bare-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    rewrite_chart(&made, &bare, "word/charts/chartEx1.xml", &chart);
+    let ser = &inspect(&bare, json!({ "charts": true }))["charts"][0]["series"][0];
+    assert_eq!(ser["categories"], json!(["甲", "乙"]));
+    assert_eq!(ser["values"], json!([3, 1]));
+    assert_eq!(ser["name"], "值");
+    assert!(ser.get("valRef").is_none());
+}

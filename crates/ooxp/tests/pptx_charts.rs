@@ -1,12 +1,13 @@
 //! 幻灯片图表：名单、插删、改系列与画布坐标、导出 embedding。
 
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
-use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -1306,4 +1307,69 @@ fn chartex_series_updates_cache_and_embedding() {
         }
     }
     assert!(saw_chart && saw_embed);
+}
+
+fn strip_lvl(xml: &str) -> String {
+    let mut out = String::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<cx:lvl") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i..];
+        let end = after.find("</cx:lvl>").expect("cx:lvl");
+        rest = &after[end + "</cx:lvl>".len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn rewrite_chart(src: &Path, dest: &Path, text: &str) {
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "ppt/charts/chartEx1.xml" {
+                data = text.as_bytes().to_vec();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
+}
+
+#[test]
+fn chartex_without_cache_reads_the_embedding() {
+    let src = create_deck("cx-bare");
+    let made = tmp("cx-bare-made").with_extension("pptx");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "layoutId": "treemap",
+            "title": "树",
+            "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [5, 2] }]
+        }]),
+    )
+    .unwrap();
+    let chart =
+        strip_lvl(&String::from_utf8(part_bytes(&made, "ppt/charts/chartEx1.xml")).unwrap());
+    assert!(!chart.contains("<cx:lvl"), "{chart}");
+    let bare = tmp("cx-bare-gone").with_extension("pptx");
+    rewrite_chart(&made, &bare, &chart);
+    let ser = &inspect_charts(&bare)["slides"][0]["charts"][0]["series"][0];
+    assert_eq!(ser["categories"], json!(["甲", "乙"]));
+    assert_eq!(ser["values"], json!([5, 2]));
+    assert_eq!(ser["name"], "值");
+    assert_eq!(ser["valRef"], "Sheet1!$B$2:$B$3");
 }

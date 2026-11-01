@@ -1,8 +1,8 @@
 # chartex 被 Excel 另存后，inspect 读出的分类和数值是空数组
 
-状态：❌ 未修复。修复切片见 `.plan/2026年-11月-1日-❌-三家-chartex缓存缺失时按引用取值.md`
+状态：✅ 已修复。回归测试 `chartex_reads_cells_when_the_cache_is_gone`、`chartex_without_cache_reads_the_embedding`。手测 `chartex-cache.ps1`。
 日期：2026-11-01
-影响面：Excel 另存过的工作表 chartex（瀑布、漏斗、树状、旭日、直方、帕累托、箱线）。docx、pptx 内嵌的 chartex 待探测。
+影响面：Excel 另存过的工作表 chartex（瀑布、漏斗、树状、旭日、直方、帕累托、箱线）。docx、pptx 缺缓存时按直接区域读内嵌工作簿。
 
 ## 怎么发现的
 

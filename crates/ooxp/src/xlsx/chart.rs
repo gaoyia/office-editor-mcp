@@ -1592,7 +1592,17 @@ pub(crate) fn is_chart_frame(el: &Element) -> bool {
 }
 
 fn direct_chart_frame(anchor: &Element) -> Option<&Element> {
-    anchor.element_children().find(|c| is_chart_frame(c))
+    if let Some(frame) = anchor.element_children().find(|c| is_chart_frame(c)) {
+        return Some(frame);
+    }
+    let alt = anchor
+        .element_children()
+        .find(|c| c.local_name() == "AlternateContent")?;
+    let index = crate::xml::alternate_child(alt).ok()??;
+    let Node::Element(branch) = &alt.children[index] else {
+        return None;
+    };
+    branch.element_children().find(|c| is_chart_frame(c))
 }
 
 fn graphic_uri(el: &Element) -> Option<String> {

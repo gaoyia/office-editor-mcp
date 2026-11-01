@@ -15,6 +15,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-01 补跑 `xlsx-legacy-password.ps1`。遗留 XOR 口令 `secret` 改写成 SHA-512 后，Excel 16.0 用同一口令解开工作表保护。没有 Repair。
 2026-11-01 补跑 `chartex-edit.ps1`。瀑布图改数据后 Excel 读到 42 和 7，加的第二条系列在 C2。漏斗和树状图 Word、PowerPoint 打开没有 Repair。
 2026-11-01 重跑整套手测。公式还引用外部链接时 `deleteExternalLink` 断开链接，B1 留下 `0`，`LinkSources` 少一条，没有 Repair。`xlsx-svg` 与 `xlsx-emf` 曾因 Excel 的 Open 失败，清掉进程后通过。
+2026-11-01 补跑 `chartex-cache.ps1`。Excel 把瀑布图 B2 改成 42 另存后，inspect 读到 42。再 `setChartSeries` 后 Excel 打开没有 Repair，B2、B3 是 7 和 8。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。

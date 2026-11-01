@@ -1,8 +1,12 @@
 //! 工作表图表：名单、插删、改系列与类型。
 
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
+
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
@@ -1125,4 +1129,120 @@ fn chartex_series_title_and_legend() {
     )
     .unwrap_err();
     assert_eq!(last.code(), ErrorCode::InvalidField);
+}
+
+fn strip_lvl(xml: &str) -> String {
+    let mut out = String::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<cx:lvl") {
+        out.push_str(&rest[..i]);
+        let after = &rest[i..];
+        let end = after.find("</cx:lvl>").expect("cx:lvl");
+        rest = &after[end + "</cx:lvl>".len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
+fn rewrite_parts(src: &Path, dest: &Path, parts: &[(&str, &str)]) {
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if let Some((_, text)) = parts.iter().find(|(n, _)| *n == name) {
+                data = text.as_bytes().to_vec();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
+}
+
+#[test]
+fn chartex_reads_cells_when_the_cache_is_gone() {
+    let src = create_book("cx-cache");
+    let made = tmp("cx-cache-made");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "chartex",
+            "layoutId": "waterfall",
+            "from": "E2",
+            "dataFrom": "A1",
+            "series": [{
+                "name": "值",
+                "categories": ["甲", "乙"],
+                "values": [10, 4]
+            }]
+        }]),
+    )
+    .unwrap();
+    let chart = part_text(&made, "xl/charts/chartEx1.xml");
+    assert!(chart.contains("Sheet1!$A$2:$A$3"), "{chart}");
+    assert!(chart.contains("Sheet1!$B$2:$B$3"), "{chart}");
+    let bare_chart = strip_lvl(&chart);
+    assert!(!bare_chart.contains("<cx:lvl"), "{bare_chart}");
+    let bare = tmp("cx-cache-bare");
+    rewrite_parts(
+        &made,
+        &bare,
+        &[("xl/charts/chartEx1.xml", bare_chart.as_str())],
+    );
+    let ser = &inspect_charts(&bare)["sheets"][0]["charts"][0]["series"][0];
+    assert_eq!(ser["categories"], json!(["甲", "乙"]));
+    assert_eq!(ser["values"], json!([10, 4]));
+    assert_eq!(ser["name"], "值");
+    assert_eq!(ser["valRef"], "Sheet1!$B$2:$B$3");
+    assert!(ser.get("cacheStale").is_none());
+
+    let named_chart = bare_chart
+        .replace("Sheet1!$A$2:$A$3", "_xlchart.v1.0")
+        .replace("Sheet1!$B$1", "_xlchart.v1.1")
+        .replace("Sheet1!$B$2:$B$3", "_xlchart.v1.2");
+    let wb = part_text(&made, "xl/workbook.xml").replace(
+        "</workbook>",
+        r#"<definedNames><definedName name="_xlchart.v1.0" hidden="1">Sheet1!$A$2:$A$3</definedName><definedName name="_xlchart.v1.1" hidden="1">Sheet1!$B$1</definedName><definedName name="_xlchart.v1.2" hidden="1">Sheet1!$B$2:$B$3</definedName></definedNames></workbook>"#,
+    );
+    let named = tmp("cx-cache-named");
+    rewrite_parts(
+        &made,
+        &named,
+        &[
+            ("xl/charts/chartEx1.xml", named_chart.as_str()),
+            ("xl/workbook.xml", wb.as_str()),
+        ],
+    );
+    let ser = &inspect_charts(&named)["sheets"][0]["charts"][0]["series"][0];
+    assert_eq!(ser["categories"], json!(["甲", "乙"]));
+    assert_eq!(ser["values"], json!([10, 4]));
+    assert_eq!(ser["name"], "值");
+    assert_eq!(ser["catRef"], "_xlchart.v1.0");
+    assert_eq!(ser["nameRef"], "_xlchart.v1.1");
+    assert_eq!(ser["valRef"], "_xlchart.v1.2");
+
+    let edited = tmp("cx-cache-set");
+    apply(
+        &named,
+        &edited,
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [7, 8]
+        }]),
+    )
+    .unwrap();
+    let ser = &inspect_charts(&edited)["sheets"][0]["charts"][0]["series"][0];
+    assert_eq!(ser["values"], json!([7, 8]));
 }

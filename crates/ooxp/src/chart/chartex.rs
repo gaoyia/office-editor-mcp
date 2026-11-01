@@ -346,7 +346,77 @@ fn lvl_pts(lvl: &Element) -> Vec<Value> {
         .collect()
 }
 
-pub fn series_json(chart_id: &str, space: &Element) -> Vec<Value> {
+struct ReadDim {
+    vals: Vec<Value>,
+    formula: Option<String>,
+    stale: bool,
+}
+
+fn read_dim<F>(parent: &Element, local: &str, read_cells: &mut F) -> ReadDim
+where
+    F: FnMut(&str) -> Option<Vec<Value>>,
+{
+    let Some(dim) = parent.element_children().find(|c| c.local_name() == local) else {
+        return ReadDim {
+            vals: Vec::new(),
+            formula: None,
+            stale: false,
+        };
+    };
+    let formula = dim
+        .child_by_local("f")
+        .map(|f| f.text_content())
+        .filter(|s| !s.is_empty());
+    let cache = dim.child_by_local("lvl").map(lvl_pts);
+    let cells = formula.as_deref().and_then(read_cells);
+    let (vals, stale) = match (cache, cells) {
+        (Some(c), Some(e)) => {
+            let stale = !same_vals(&c, &e);
+            (e, stale)
+        }
+        (None, Some(e)) => (e, false),
+        (Some(c), None) => (c, false),
+        (None, None) => (Vec::new(), false),
+    };
+    ReadDim {
+        vals,
+        formula,
+        stale,
+    }
+}
+
+fn same_vals(a: &[Value], b: &[Value]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(x, y)| dim_text(x) == dim_text(y))
+}
+
+fn dim_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
+fn name_of(v: &Value) -> Option<String> {
+    match v {
+        Value::Null => None,
+        Value::String(s) if s.is_empty() => None,
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        other => Some(other.to_string()),
+    }
+}
+
+pub fn series_json<F>(chart_id: &str, space: &Element, refs: bool, mut read_cells: F) -> Vec<Value>
+where
+    F: FnMut(&str) -> Option<Vec<Value>>,
+{
     let mut data = std::collections::HashMap::new();
     if let Some(cd) = space.child_by_local("chartData") {
         for d in cd.element_children() {
@@ -354,18 +424,8 @@ pub fn series_json(chart_id: &str, space: &Element) -> Vec<Value> {
                 continue;
             }
             let id = d.attr_local("id").unwrap_or("0").to_string();
-            let cats = d
-                .element_children()
-                .find(|c| c.local_name() == "strDim")
-                .and_then(|s| s.child_by_local("lvl"))
-                .map(lvl_pts)
-                .unwrap_or_default();
-            let vals = d
-                .element_children()
-                .find(|c| c.local_name() == "numDim")
-                .and_then(|s| s.child_by_local("lvl"))
-                .map(lvl_pts)
-                .unwrap_or_default();
+            let cats = read_dim(d, "strDim", &mut read_cells);
+            let vals = read_dim(d, "numDim", &mut read_cells);
             data.insert(id, (cats, vals));
         }
     }
@@ -382,23 +442,55 @@ pub fn series_json(chart_id: &str, space: &Element) -> Vec<Value> {
         if ser.local_name() != "series" {
             continue;
         }
-        let name = ser
+        let tx = ser
             .child_by_local("tx")
-            .and_then(|tx| tx.child_by_local("txData"))
+            .and_then(|tx| tx.child_by_local("txData"));
+        let name_ref = tx
+            .and_then(|tx| tx.child_by_local("f"))
+            .map(|f| f.text_content())
+            .filter(|s| !s.is_empty());
+        let cached = tx
             .and_then(|tx| tx.child_by_local("v"))
             .map(|v| v.text_content())
             .filter(|s| !s.is_empty());
+        let name = name_ref
+            .as_deref()
+            .and_then(&mut read_cells)
+            .and_then(|v| v.first().and_then(name_of))
+            .or(cached);
         let did = ser
             .child_by_local("dataId")
             .and_then(|e| e.attr_local("val"))
             .unwrap_or("0");
-        let (cats, vals) = data.get(did).cloned().unwrap_or_default();
+        let (cat_vals, cat_f, cat_stale, val_vals, val_f, val_stale) = match data.get(did) {
+            Some((cats, vals)) => (
+                cats.vals.clone(),
+                cats.formula.clone(),
+                cats.stale,
+                vals.vals.clone(),
+                vals.formula.clone(),
+                vals.stale,
+            ),
+            None => (Vec::new(), None, false, Vec::new(), None, false),
+        };
         let mut m = Map::new();
         m.insert("id".into(), json!(format!("{chart_id}/series:{index}")));
         m.insert("index".into(), json!(index));
         m.insert("name".into(), json!(name));
-        m.insert("categories".into(), json!(cats));
-        m.insert("values".into(), json!(vals));
+        if refs {
+            m.insert("nameRef".into(), json!(name_ref));
+        }
+        m.insert("categories".into(), json!(cat_vals));
+        if refs {
+            m.insert("catRef".into(), json!(cat_f));
+        }
+        m.insert("values".into(), json!(val_vals));
+        if refs {
+            m.insert("valRef".into(), json!(val_f));
+        }
+        if cat_stale || val_stale {
+            m.insert("cacheStale".into(), json!(true));
+        }
         out.push(Value::Object(m));
         index += 1;
     }

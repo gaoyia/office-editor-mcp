@@ -803,7 +803,7 @@ where
     F: FnMut(&str) -> Option<Vec<Value>>,
 {
     if space.child_by_local("chartData").is_some() {
-        return Ok(chartex::series_json(chart_id, space));
+        return Ok(chartex::series_json(chart_id, space, refs, &mut read_cells));
     }
     let mut out = Vec::new();
     let mut index = 0usize;

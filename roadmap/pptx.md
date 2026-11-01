@@ -114,6 +114,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 55 | `.plan/2026年-10月-31日-✅-pptx-插入更多占位符类型.md` | 母版写入剩余（15）已过。内容、图表、表格、图片、媒体和备注母版幻灯片图像。PowerPoint 16.0 无 Repair |
 | 56 | `.plan/2026年-10月-31日-✅-pptx-插入摘要缩放.md` | 幻灯片缩放（21）、幻灯片节（11）已过。已有节上写 summaryZm。PowerPoint 16.0 无 Repair |
 | C19 | `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` | 批注墨迹。PowerPoint 16.0 另存丢掉空 `ink`，回复和改字放弃 |
+| C20 | `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` | C17 已过。缺缓存时按 `cx:f` 读单元格。PowerPoint 不写定义名 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
@@ -133,7 +134,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 C4、C5、C6、C7、C8、C9、C10、C11、C12、C13、C14、C16、C15 见已过表。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9、C10、C14 与 xlsx 同一份，不改 Word。C11 三家同一份。41 保持 🚫。xlsx 主题见已过 xlsx 43，不要和 16 / 46 / 47 / 48 / 49 合成一份。
 第七轮跨格式：C19 `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` 已过，回复和改字 🚫。C17 `.plan/2026年-10月-31日-✅-三家-chartex改数据与地图图表.md` 已过，地图图表 🚫。C18 `.plan/2026年-10月-31日-✅-三家-旧版口令哈希.md` 已过。
-第八轮跨格式待做：C20 `.plan/2026年-11月-1日-❌-三家-chartex缓存缺失时按引用取值.md`。
+第八轮跨格式：C20 `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` 已过。PowerPoint 另存不改定义名，内嵌工作簿不认定义名。
 
 ## 怎么算 PowerPoint 全量做完
 

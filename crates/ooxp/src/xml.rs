@@ -823,6 +823,7 @@ fn prefix_understood(prefix: &str) -> bool {
         prefix,
         "a14"
             | "am3d"
+            | "cx1"
             | "p14"
             | "p15"
             | "pslz"
