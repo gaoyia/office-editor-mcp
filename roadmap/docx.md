@@ -131,6 +131,12 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 第七轮。标「先探测」的，计划第一步用 Word 16.0 另存探测；Word 不支持就标 🚫 放弃，照 39 的先例。docx 这一轮的待做已经做完。
 
+第八轮。审计第七轮时发现的缺口。
+
+| 序 | 计划 | 前置 |
+| --- | --- | --- |
+| 75 | `.plan/2026年-11月-1日-❌-docx-NOTEREF自动套书签.md` | NOTEREF 交叉引用（71）已过 |
+
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
@@ -143,6 +149,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11、C12、C16、C15 见已过表。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
 第七轮跨格式：C19 `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` 已过，回复和改字 🚫（xlsx 没有墨迹批注，不套）。C17 `.plan/2026年-10月-31日-✅-三家-chartex改数据与地图图表.md` 已过，地图图表 🚫。C18 `.plan/2026年-10月-31日-✅-三家-旧版口令哈希.md` 已过。
+第八轮跨格式待做：C20 `.plan/2026年-11月-1日-❌-三家-chartex缓存缺失时按引用取值.md`。
 
 ## 怎么算 Word 全量做完
 
