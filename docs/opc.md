@@ -377,7 +377,7 @@ apply 或 create 插入 SVG 时：
 `[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
 不要 PNG 占位，不要 `svgBlip`。
 apply 或 create 插入 3D 模型时，可能新建 `/word/media/model3dN.glb`（Default `glb` → `model/gltf.binary`）以及海报 `/word/media/imageN.png`。
-宿主 `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。
+宿主 `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。脚注、尾注和批注的宿主是该注或批注部件。
 宿主写 `mc:AlternateContent`，Choice `Requires="am3d"`，Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，Fallback 是海报 `pic`。
 create 给了 `paragraphs[].model3ds` 时同样写入。不把 GLB 当 `insertPicture`。
 

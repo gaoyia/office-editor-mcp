@@ -1232,6 +1232,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::GraphicInRestrictedStory => {
             "不能把图形对象放到文本框、标注、批注、脚注或尾注中".into()
         }
+        ErrorKind::Model3dNoteStaysInline => {
+            "脚注、尾注和批注里的 3D 只能是行内。Word 16.0 的行内形状没有环绕".into()
+        }
         ErrorKind::DocxShapeNeedsAnchor => {
             "docx 的 setShapePos 只能改浮动形状（需要 wp:anchor）".into()
         }

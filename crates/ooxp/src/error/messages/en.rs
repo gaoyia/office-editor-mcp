@@ -1377,6 +1377,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NotesSlideImage => {
             "Cannot edit a placeholder whose type is sldImg".into()
         }
+        ErrorKind::Model3dNoteStaysInline => {
+            "A 3D model in a footnote, endnote, or comment stays inline. Word 16.0 inline shapes have no wrap"
+                .into()
+        }
         ErrorKind::GraphicInRestrictedStory => {
             "Cannot place a graphic object in a text box, callout, comment, footnote, or endnote"
                 .into()

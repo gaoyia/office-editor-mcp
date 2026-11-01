@@ -152,6 +152,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     }
     let nested_ole = ole::collect_nested(&pkg, &part, &doc.root)?;
     body_ole_count += nested_ole.len();
+    let nested_m3d = super::model3d::collect_notes_and_comments(&pkg, &part)?;
+    body_model3d_count += nested_m3d.len();
     let body_table_count = tbl::count_tables(&doc.root);
     let source_count = super::biblio::count_sources(&pkg, &part)?;
 
@@ -332,6 +334,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let mut items = ole::collect_body(&pkg, &part, &paras)?;
             items.extend(ole::collect_nested(&pkg, &part, &doc.root)?);
             tree["oleObjects"] = Value::Array(items);
+        }
+        if expand_model3ds {
+            tree["model3ds"] = Value::Array(super::model3d::list_json(&nested_m3d));
         }
         if scope.watermarks {
             tree["watermarks"] = Value::Array(watermark::list_all(&pkg, &catalog)?);

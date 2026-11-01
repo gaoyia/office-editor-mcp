@@ -557,7 +557,7 @@ pub(crate) fn apply_insert_model3d_hlink(
     i: usize,
 ) -> Result<(), Error> {
     let part_name =
-        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+        model3d::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
     let key = target.key.clone();
     apply_insert_click_hlink(
         pkg,
@@ -857,7 +857,7 @@ pub(crate) fn apply_set_model3d_hlink(
     i: usize,
 ) -> Result<(), Error> {
     let part_name =
-        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+        model3d::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
     let key = target.key.clone();
     apply_set_drawing_hlink(
         pkg,
@@ -1122,7 +1122,7 @@ pub(crate) fn apply_delete_model3d_hlink(
     i: usize,
 ) -> Result<(), Error> {
     let part_name =
-        model3d::part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+        model3d::part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
     let key = target.key.clone();
     apply_delete_drawing_hlink(pkg, docs, dirty, &part_name, id, i, |root| {
         let frame = model3d::find_frame_mut(root, &key)?;

@@ -146,7 +146,7 @@ fn insert_inspect_export_replace_delete() {
         json!({ "from": 1, "maxParas": 8, "model3ds": true, "pictures": true }),
     );
     assert_eq!(tree1["model3dCount"], 1);
-    assert!(tree1.get("model3ds").is_none());
+    assert_eq!(tree1["model3ds"], json!([]));
     assert_eq!(tree1["pictureCount"], 0);
     assert_eq!(tree1["paragraphs"][0]["pictureCount"], 0);
     assert_eq!(tree1["paragraphs"][0]["model3dCount"], 1);
@@ -617,4 +617,278 @@ fn insert_anchor_writes_wrap_on_choice_and_fallback() {
         }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn notes_and_comments_list_inline_models_and_reject_float() {
+    let src = create_docx("note-host", json!({ "paragraphs": [{ "text": "正文" }] }));
+    let tree0 = inspect(&src, json!({ "from": 1, "maxParas": 4 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let hosted = seq_path("note-hosted", "docx");
+    apply(
+        &src,
+        &hosted,
+        json!([
+            { "op": "insertFootnote", "id": para, "text": "注" },
+            { "op": "insertEndnote", "id": para, "text": "尾" },
+            { "op": "insertComment", "start": para, "end": para, "text": "批" }
+        ]),
+    );
+    let tree = inspect(
+        &hosted,
+        json!({ "from": 1, "maxParas": 4, "notes": true, "comments": true }),
+    );
+    let foot = tree["footnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let end = tree["endnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let comment = tree["comments"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let glb = write_glb("note", &sample_glb());
+    let inserted = seq_path("note-m3d", "docx");
+    apply(
+        &hosted,
+        &inserted,
+        json!([
+            { "op": "insertModel3d", "id": foot, "file": glb.to_string_lossy() },
+            { "op": "insertModel3d", "id": end, "file": glb.to_string_lossy() },
+            { "op": "insertModel3d", "id": comment, "file": glb.to_string_lossy() }
+        ]),
+    );
+    let listed = inspect(
+        &inserted,
+        json!({
+            "from": 1,
+            "maxParas": 4,
+            "notes": true,
+            "comments": true,
+            "model3ds": true,
+            "pictures": true
+        }),
+    );
+    assert_eq!(listed["model3dCount"], 3);
+    assert_eq!(listed["pictureCount"], 0);
+    assert_eq!(listed["footnotes"][0]["pictureCount"], 0);
+    let ids: Vec<_> = listed["model3ds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(ids.iter().any(|id| id.starts_with("footnote:")), "{ids:?}");
+    assert!(ids.iter().any(|id| id.starts_with("endnote:")), "{ids:?}");
+    assert!(ids.iter().any(|id| id.starts_with("comment:")), "{ids:?}");
+    assert!(ids.iter().all(|id| id.contains("/model3d:")), "{ids:?}");
+    for item in listed["model3ds"].as_array().unwrap() {
+        assert_eq!(item["kind"], "inline");
+        assert_eq!(item["contentType"], "model/gltf.binary");
+    }
+    let notes = part_text(&inserted, "word/footnotes.xml");
+    assert!(notes.contains("Requires=\"am3d\""), "{notes}");
+    assert!(notes.contains("<wp:inline"), "{notes}");
+    assert!(!notes.contains("<wp:anchor"), "{notes}");
+    let rels = part_text(&inserted, "word/_rels/footnotes.xml.rels");
+    assert!(
+        rels.contains("http://schemas.microsoft.com/office/2017/06/relationships/model3d"),
+        "{rels}"
+    );
+    assert!(rels.contains("media/model3d"), "{rels}");
+    let ct = part_text(&inserted, "[Content_Types].xml");
+    assert!(ct.contains("model/gltf.binary"), "{ct}");
+
+    let foot_id = ids.iter().find(|id| id.starts_with("footnote:")).unwrap();
+    let exported = seq_path("note-export", "glb");
+    let RunOutput::Written { content_type, .. } = export_media(&inserted, foot_id, &exported)
+    else {
+        panic!("exportMedia 应写出脚注里的 GLB");
+    };
+    assert_eq!(content_type.as_deref(), Some("model/gltf.binary"));
+    assert_eq!(std::fs::read(&exported).unwrap(), sample_glb());
+
+    let glb2 = write_glb("note-b", &glb_b());
+    let replaced = seq_path("note-replaced", "docx");
+    apply(
+        &inserted,
+        &replaced,
+        json!([{ "op": "replaceModel3d", "id": foot_id, "file": glb2.to_string_lossy() }]),
+    );
+    let exp2 = seq_path("note-exp2", "glb");
+    export_media(&replaced, foot_id, &exp2);
+    assert_eq!(std::fs::read(&exp2).unwrap(), glb_b());
+
+    let sized = seq_path("note-sized", "docx");
+    apply(
+        &replaced,
+        &sized,
+        json!([{ "op": "setModel3dSize", "id": foot_id, "cx": 3_657_600, "cy": 1_828_800 }]),
+    );
+    let sized_tree = inspect(&sized, json!({ "model3ds": true }));
+    let sized_item = sized_tree["model3ds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"].as_str() == Some(foot_id.as_str()))
+        .unwrap();
+    assert_eq!(sized_item["cx"], 3_657_600);
+    assert_eq!(sized_item["cy"], 1_828_800);
+
+    let cam = seq_path("note-cam", "docx");
+    apply(
+        &sized,
+        &cam,
+        json!([{ "op": "setModel3dCamera", "id": foot_id, "camera": { "fov": 1892375 } }]),
+    );
+    let cam_tree = inspect(&cam, json!({ "model3ds": true }));
+    let cam_item = cam_tree["model3ds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["id"].as_str() == Some(foot_id.as_str()))
+        .unwrap();
+    assert_eq!(cam_item["camera"]["fov"], 1892375);
+
+    let comment_id = ids.iter().find(|id| id.starts_with("comment:")).unwrap();
+    let deleted = seq_path("note-del", "docx");
+    apply(
+        &cam,
+        &deleted,
+        json!([{ "op": "deleteModel3d", "id": comment_id }]),
+    );
+    let after = inspect(&deleted, json!({ "model3ds": true }));
+    assert_eq!(after["model3dCount"], 2);
+    let left: Vec<_> = after["model3ds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        !left.iter().any(|id| id.starts_with("comment:")),
+        "{left:?}"
+    );
+    let comments = part_text(&deleted, "word/comments.xml");
+    assert!(!comments.contains("am3d:model3d"), "{comments}");
+
+    let floated = seq_path("note-float", "docx");
+    let err = apply_err(
+        &hosted,
+        &floated,
+        json!([{
+            "op": "insertModel3d",
+            "id": foot,
+            "file": glb.to_string_lossy(),
+            "kind": "anchor",
+            "wrap": "square"
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!floated.exists());
+    let wrap_err = apply_err(
+        &inserted,
+        &seq_path("note-wrap", "docx"),
+        json!([{
+            "op": "setModel3dWrap",
+            "id": foot_id,
+            "kind": "anchor",
+            "wrap": "square"
+        }]),
+    );
+    assert_eq!(wrap_err.code(), ErrorCode::InvalidField);
+
+    let lone_src = create_docx("lone-host", json!({ "paragraphs": [{ "text": "正文" }] }));
+    let lone0 = inspect(&lone_src, json!({ "from": 1, "maxParas": 4 }));
+    let lone_para = lone0["paragraphs"][0]["id"].as_str().unwrap();
+    let lone_hosted = seq_path("lone-hosted", "docx");
+    apply(
+        &lone_src,
+        &lone_hosted,
+        json!([{ "op": "insertFootnote", "id": lone_para, "text": "注" }]),
+    );
+    let lone_tree = inspect(&lone_hosted, json!({ "notes": true }));
+    let lone_foot = lone_tree["footnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    let lone_ins = seq_path("lone-ins", "docx");
+    apply(
+        &lone_hosted,
+        &lone_ins,
+        json!([{ "op": "insertModel3d", "id": lone_foot, "file": glb.to_string_lossy() }]),
+    );
+    let lone_listed = inspect(&lone_ins, json!({ "model3ds": true }));
+    let lone_id = lone_listed["model3ds"][0]["id"].as_str().unwrap();
+    let lone_del = seq_path("lone-del", "docx");
+    apply(
+        &lone_ins,
+        &lone_del,
+        json!([{ "op": "deleteModel3d", "id": lone_id }]),
+    );
+    let lone_after = inspect(&lone_del, json!({ "model3ds": true }));
+    assert_eq!(lone_after["model3dCount"], 0);
+    assert!(!zip_names(&lone_del).iter().any(|n| n.ends_with(".glb")));
+    let lone_rels = part_text(&lone_del, "word/_rels/footnotes.xml.rels");
+    assert!(!lone_rels.contains("relationships/model3d"), "{lone_rels}");
+}
+
+#[test]
+fn a_hand_written_note_model_without_docpr_uses_index() {
+    let src = create_docx("hand-host", json!({ "paragraphs": [{ "text": "正文" }] }));
+    let tree0 = inspect(&src, json!({ "from": 1, "maxParas": 4 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let hosted = seq_path("hand-hosted", "docx");
+    apply(
+        &src,
+        &hosted,
+        json!([{ "op": "insertFootnote", "id": para, "text": "注" }]),
+    );
+    let packed = seq_path("hand-packed", "docx");
+    inject_note_model(&hosted, &packed);
+    let tree = inspect(
+        &packed,
+        json!({ "notes": true, "model3ds": true, "pictures": true }),
+    );
+    assert_eq!(tree["model3dCount"], 1);
+    assert_eq!(tree["pictureCount"], 0);
+    let item = &tree["model3ds"][0];
+    let id = item["id"].as_str().unwrap();
+    assert!(id.starts_with("footnote:"), "{id}");
+    assert!(id.ends_with("/model3d:index:1"), "{id}");
+    assert_eq!(item["stable"], false);
+    assert_eq!(item["kind"], "inline");
+    assert_eq!(item["name"], "3D 模型 1");
+    assert_eq!(item["cx"], 2_090_761);
+}
+
+fn inject_note_model(src: &Path, dest: &Path) {
+    use std::io::{Cursor, Read, Write};
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipArchive, ZipWriter};
+    let drawing = r#"<w:r><mc:AlternateContent><mc:Choice Requires="am3d"><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="2090761" cy="2090761"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr name="3D 模型 1"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/drawing/2017/model3d"><am3d:model3d r:embed="rId1"/></a:graphicData></a:graphic></wp:inline></w:drawing></mc:Choice><mc:Fallback><w:drawing><wp:inline><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:blipFill><a:blip r:embed="rId2"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></mc:Fallback></mc:AlternateContent></w:r>"#;
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "word/footnotes.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                let end = xml.rfind("</w:p>").expect("footnote para");
+                data = format!("{}{drawing}{}", &xml[..end], &xml[end..]).into_bytes();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
 }

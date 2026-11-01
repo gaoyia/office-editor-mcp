@@ -779,7 +779,8 @@
 - `setInkCanvasWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
 - xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 报 `InvalidField`
 - 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` / `setModel3dCamera` 报 `IdNotFound`
-- `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- `insertModel3d` 的 `id`：docx 必须是正文、页眉页脚、脚注、尾注或批注段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- docx 对脚注、尾注或批注把 `insertModel3d` / `setModel3dWrap` 的 `kind` 写成 `anchor` 报 `InvalidField`
 - 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`
 - `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id
 - `file` 不是 GLB（文件头不是小端 `glTF` version=2）报 `InvalidField`（`InvalidImageFile`）

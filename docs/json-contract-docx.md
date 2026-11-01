@@ -69,8 +69,8 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 无文本框的 `wps:wsp` 形状可进 inspect，并可用 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 增删改。
 正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
-正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 增删换、改尺寸绕排与改相机 / 旋转 / 光源，
-也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、尾注内、批注内仍不插，报 `InvalidField`。Word 16.0 能另存，见下文 3D。
+正文、页眉页脚、脚注、尾注和批注里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 增删换、改尺寸绕排与改相机 / 旋转 / 光源，
+也可按 3D id `exportMedia`。不是图，不进 `pictures`。脚注、尾注和批注里只写行内；改成浮动报 `InvalidField`。见下文 3D。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
 `create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
@@ -266,9 +266,13 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 `k` 只在该宿主段内从 1 计。页眉页脚 3D 挂在它所在的页眉或页脚段落上，名单出现在该容器的 `model3ds` 上。
 只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` 包 `am3d:model3d`（`wp:inline` 或 `wp:anchor`），不是 `pic:pic`。
 只走 `Choice Requires="am3d"`。Fallback 海报不进 `pictures`。正文 3D 只收主文档段落的子孙，遇 `w:txbxContent` 停住。
-组合里符合条件的要展开，组合本身不进树。注内、尾注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
-Word 16.0 对脚注、尾注、批注的 Range 调用 `InlineShapes.Add3DModel(文件, false, true, Range)` 能另存出 `am3d:model3d`，关系挂在该部件上。只给文件名，或用 `Missing` 填可选参数，正文也会报「请求的对象不可用」。库仍不插，路线图 76。
-`insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
+组合里符合条件的要展开，组合本身不进树。
+脚注、尾注和批注里的 3D 另外收进根上 `model3ds`（要 `scope.model3ds`），id 带注或批注前缀，并计入根上 `model3dCount`。
+页眉页脚 3D 仍挂在容器上，不进根上计数。框内 3D 不进根上计数。注节点和批注节点不加 `model3dCount`。
+Word 16.0 对脚注、尾注、批注的 Range 调用 `InlineShapes.Add3DModel(文件, false, true, Range)` 另存出 `wp:inline` 与 `Requires="am3d"`，关系挂在该部件上。
+同一 InlineShape 没有 `WrapFormat.Type`，`ConvertToShape` 失败，所以这些宿主不写浮动。
+`insertModel3d` 的 `id` 必须是正文、页眉页脚、脚注、尾注或批注段落 id。
+`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
 `camera` 始终是对象，字段顺序：`pos`、`up`、`lookAt`、`fov`。
 `pos` / `lookAt` 字段顺序 `x`、`y`、`z`，取 `am3d:camera` 下对应元素属性，能解析成整数则写整数，否则 `null`。
@@ -277,7 +281,8 @@ Word 16.0 对脚注、尾注、批注的 Range 调用 `InlineShapes.Add3DModel(�
 `rot` 始终是对象，字段顺序：`ax`、`ay`、`az`。取 `am3d:rot` 对应属性；缺属性或没有该元素则为 `null`。
 `lightRig` 取 `am3d:spPr/a:scene3d/a:lightRig`。没有则为 `null`。有则字段顺序：`rig`、`dir`、`lat`、`lon`、`rev`。
 `rig` / `dir` 取属性原文，缺则为 `null`。`lat` / `lon` / `rev` 取子元 `a:rot` 对应属性整数，缺则为 `null`。
-`insertModel3d` 省略 `kind` 时写 `wp:inline`。`kind` 为 `anchor` 时按 `setModel3dWrap` 写成浮动，Choice 与 Fallback 一起改。已有 3D 仍用 `setModel3dWrap` 改绕排。xlsx / pptx 见各自分册。
+`insertModel3d` 省略 `kind` 时写 `wp:inline`。`kind` 为 `anchor` 时按 `setModel3dWrap` 写成浮动，Choice 与 Fallback 一起改。已有 3D 仍用 `setModel3dWrap` 改绕排。
+脚注、尾注或批注上把 `kind` 写成 `anchor`，或对已有模型发 `setModel3dWrap` 且 `kind` 为 `anchor`，报 `InvalidField`。xlsx / pptx 见各自分册。
 
 水印只认页眉部件（`w:hdr`）里的 DrawingML `w:drawing`。
 `wp:docPr/@name` 以 `ooxpWatermark`、`PowerPlusWaterMarkObject` 或 `WordPictureWatermark` 开头，
@@ -349,7 +354,7 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
   有 `r:id` 时为外部链（规范说此时忽略 `w:anchor`）；只有 `w:anchor` 时为内部链，指向书签名。两者都没有仍列出，`kind` 为 `anchor`，`anchor` 为 `null`。
   根上 `hyperlinkCount` 与页眉页脚容器上的 `hyperlinkCount` 只计这一套。
 - DrawingML 链：写在图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布、3D 上的 `a:hlinkClick`。
-  宿主可以是正文、页眉页脚、框内图、注内 / 批注内的图或框。注内 / 批注内不列出的墨迹与 3D 仍不能当链宿主。
+  宿主可以是正文、页眉页脚、框内图、注内 / 批注内的图或框，以及注内 / 批注内列出的 3D。注内 / 批注内的墨迹仍不能当链宿主。
   图读 `wp:docPr/a:hlinkClick`；没有则读该 `pic` 的 `cNvPr/a:hlinkClick`（组合子图）。
   文本框、连接线、无框形状读 `wps:cNvPr/a:hlinkClick`；没有则读外层 `wp:docPr/a:hlinkClick`。
   SmartArt、图表、墨迹画布、3D 读该 drawing 的 `wp:docPr/a:hlinkClick`；没有则读该对象的 `cNvPr`。
@@ -1175,8 +1180,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `progId` 取 `o:OLEObject/@ProgID` 或 `w:objectEmbed/@progId`，缺则为 `null`。
   `name` 取该 `w:object` 里 `wp:docPr/@name`，没有则为 `null`。`kind`：ProgID 为 `Package`（大小写不敏感）时为 `package`，否则为 `embed`。
   `contentType` 取 embeddings 部件在 `[Content_Types].xml` 里的 Default 或 Override，都没有则为 `null`。不把嵌入字节放进树。
-- 文档根上的 `model3dCount` 始终出现，只计主文档里被收入的 3D 模型个数（判定见上文 3D 模型 id 那节），不含页眉页脚，也不含框内、注内、批注内。没有则为 `0`。
-  根上不挂正文 `model3ds`。注节点与批注节点不加 `model3dCount`。
+- 文档根上的 `model3dCount` 始终出现，计主文档正文、脚注、尾注和批注里被收入的 3D 模型个数（判定见上文 3D 模型 id 那节），不含页眉页脚，也不含框内。没有则为 `0`。
+  根上不挂正文 `model3ds`。给了 `scope.model3ds` 时根上 `model3ds` 只列脚注、尾注和批注里的模型，字段与段落上的 `model3ds` 相同。注节点与批注节点不加 `model3dCount`。
 - 文档根上的 `watermarkCount` 始终出现，计所有页眉部件里被收入的 DrawingML 水印个数（判定见上文水印 id 那节），不含页脚。没有则为 `0`。
   根上不挂 `watermarks`，除非给了 `scope.watermarks`。每条字段顺序：`id`、`kind`、`name`、`text`、`stable`。
   `kind` 为 `text`（含 `wps:txbx` / `w:txbxContent`）或 `picture`（含 `pic:pic` 与 `a:blip`）。`name` 取 `wp:docPr/@name`，缺则为 `null`。
@@ -4938,6 +4943,7 @@ InkML 部件路径 `/word/ink/inkN.xml`，Content Type `application/inkml+xml`�
 
 字段与 `setPictureWrap` 相同，`id` 必须是 3D 模型 id。行内 / 浮动与绕排规则同图片。
 位置只支持相对页边。Fallback 海报 drawing 同步改绕排。`replaceModel3d` 仍不改几何。
+脚注、尾注或批注里的模型 `kind` 为 `anchor` 时报 `InvalidField`。`kind` 为 `inline` 仍可写。
 xlsx / pptx 上发此 op 报 `InvalidField`。xlsx 改锚点请用 `setModel3dAnchor`。pptx 改画布坐标请用 `setModel3dPos`。
 
 改 3D 尺寸与绕排的示例见 `docs/examples/docx-apply-model3d-geom.json`。
@@ -5004,7 +5010,7 @@ xlsx / pptx 同一套字段，见各自分册。
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertModel3d"` |
-| `id` | 必须是正文或页眉页脚段落 id |
+| `id` | 必须是正文、页眉页脚、脚注、尾注或批注段落 id |
 | `file` | 必须。本地 GLB 路径 |
 | `cx` / `cy` | 成对可选。EMU。都省则 `914400` × `914400` |
 | `kind` | 可选。`inline` 或 `anchor`。省略为 `inline` |
@@ -5015,7 +5021,7 @@ xlsx / pptx 同一套字段，见各自分册。
 - 不是 GLB 报 `InvalidField`
 - 找不到 `file` 报 `Io`
 - 空路径报 `InvalidField`
-- 对注内或批注内段落报 `InvalidField`
+- 对脚注、尾注或批注段落把 `kind` 写成 `anchor` 报 `InvalidField`
 - 对框内段落、图 id、3D id、容器 id 或 `section:{n}` 报 `InvalidId`
 - xlsx / pptx 上的语义见各自分册
 

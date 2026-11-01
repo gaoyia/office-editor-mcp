@@ -128,13 +128,10 @@ pub fn parse_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
     }
     let host = para::parse_host_para_id_at(host, &path)?;
     match host {
-        HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok(TxbxTarget { host, key }),
-        HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::DocxModel3dPrefix,
-            },
-            path,
-        )),
+        HostPara::Body(_)
+        | HostPara::HeaderFooter { .. }
+        | HostPara::InNote { .. }
+        | HostPara::InComment { .. } => Ok(TxbxTarget { host, key }),
     }
 }
 
@@ -188,6 +185,42 @@ fn looks_like_host(id: &str) -> bool {
 
 pub fn count_in(pkg: &Package, host: &str, root: &Element) -> Result<usize, Error> {
     Ok(collect(pkg, host, root, "")?.len())
+}
+
+/// 脚注、尾注、批注里的 3D。id 带容器前缀。计入根上 `model3dCount`。
+pub fn collect_notes_and_comments(
+    pkg: &Package,
+    doc_part: &str,
+) -> Result<Vec<Model3dInfo>, Error> {
+    let mut out = Vec::new();
+    for kind in [para::NoteKind::Footnote, para::NoteKind::Endnote] {
+        let Some(part) = super::notes::part_name(pkg, doc_part, kind)? else {
+            continue;
+        };
+        let note_doc = xml::parse(pkg.get(&part)?)?;
+        for note in super::notes::user_notes(&note_doc.root, kind) {
+            let note_id = note.attr_local("id").unwrap_or("");
+            let container = kind.inspect_id(note_id);
+            let inner = para::collect_paragraphs(note);
+            for (j, ip) in inner.iter().enumerate() {
+                let (ipid, _) = para::para_stable_id_in(&container, ip, j + 1);
+                out.extend(collect(pkg, &part, ip, &ipid)?);
+            }
+        }
+    }
+    if let Some(part) = super::comments::part_name(pkg, doc_part)? {
+        let comments_doc = xml::parse(pkg.get(&part)?)?;
+        for comment in super::comments::comment_elements(&comments_doc.root) {
+            let w_id = comment.attr_local("id").unwrap_or("");
+            let container = super::comments::inspect_id(w_id);
+            let inner = para::collect_paragraphs(comment);
+            for (j, ip) in inner.iter().enumerate() {
+                let (ipid, _) = para::para_stable_id_in(&container, ip, j + 1);
+                out.extend(collect(pkg, &part, ip, &ipid)?);
+            }
+        }
+    }
+    Ok(out)
 }
 
 pub fn collect(
@@ -292,7 +325,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::export::ExportedMed
     let doc_part = crate::opc::office_document_part(&pkg)?;
     let doc_xml = xml::parse(pkg.get(&doc_part)?)?;
     let catalog = super::hf::catalog(&pkg, &doc_part, &doc_xml.root)?;
-    let host = part_for_target(&catalog, &doc_part, &target, id, "id")?;
+    let host = part_for_target(&pkg, &catalog, &doc_part, &target, id, "id")?;
     let xml_doc = if host == doc_part {
         doc_xml
     } else {
@@ -439,16 +472,13 @@ pub fn apply_insert(
     op: &InsertModel3dOp,
     i: usize,
 ) -> Result<(), Error> {
-    if matches!(
-        &op.host,
-        HostPara::InNote { .. } | HostPara::InComment { .. }
-    ) {
+    if note_story(&op.host) && op.kind == PicKind::Anchor {
         return Err(Error::with_path(
-            ErrorKind::GraphicInRestrictedStory,
-            format!("ops[{i}].id"),
+            ErrorKind::Model3dNoteStaysInline,
+            format!("ops[{i}].kind"),
         ));
     }
-    let host = part_for_host(catalog, doc_part, &op.host, &op.id, i)?;
+    let host = part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
     let glb = crate::model3d::read_glb(&op.file).map_err(|e| e.at(format!("ops[{i}].file")))?;
     let (glb_rid, png_rid) = write_media(pkg, &host, glb)?;
     let doc = load_part(pkg, docs, &host)?;
@@ -458,7 +488,7 @@ pub fn apply_insert(
         (Some(x), Some(y)) => (x, y),
         _ => (crate::model3d::DEFAULT_CX, crate::model3d::DEFAULT_CY),
     };
-    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+    let p = find_host_para_mut(&mut doc.root, &op.host).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
@@ -486,6 +516,7 @@ pub fn apply_replace(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -520,6 +551,7 @@ pub fn apply_delete(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -576,6 +608,7 @@ pub fn apply_set_size(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -601,7 +634,14 @@ pub fn apply_set_wrap(
     op: &SetModel3dWrapOp,
     i: usize,
 ) -> Result<(), Error> {
+    if note_story(&op.target.host) && op.kind == PicKind::Anchor {
+        return Err(Error::with_path(
+            ErrorKind::Model3dNoteStaysInline,
+            format!("ops[{i}].kind"),
+        ));
+    }
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -633,6 +673,7 @@ pub fn apply_set_camera(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -924,35 +965,41 @@ fn remove_in(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {
     false
 }
 
+fn note_story(host: &HostPara) -> bool {
+    matches!(host, HostPara::InNote { .. } | HostPara::InComment { .. })
+}
+
+fn find_host_para_mut<'a>(root: &'a mut Element, host: &HostPara) -> Option<&'a mut Element> {
+    match host {
+        HostPara::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note = super::notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
+        }
+        HostPara::InComment { comment_id, para } => {
+            let comment = super::comments::find_comment_mut(root, comment_id)?;
+            para::find_paragraph_mut(comment, para)
+        }
+        _ => para::find_paragraph_mut(root, host.body()),
+    }
+}
+
 fn part_for_host(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     host: &HostPara,
     id: &str,
     i: usize,
 ) -> Result<String, Error> {
-    match host {
-        HostPara::Body(_) => Ok(doc_part.to_string()),
-        HostPara::HeaderFooter {
-            kind, hf_type, n, ..
-        } => {
-            let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
-            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound { id: id.to_string() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
-            Ok(item.part.clone())
-        }
-        HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
-            ErrorKind::GraphicInRestrictedStory,
-            format!("ops[{i}].id"),
-        )),
-    }
+    super::apply::part_for_host(pkg, catalog, doc_part, host, id, i)
 }
 
 pub(crate) fn part_for_target(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     target: &TxbxTarget,
@@ -973,12 +1020,20 @@ pub(crate) fn part_for_target(
             })?;
             Ok(item.part.clone())
         }
-        HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::DocxModel3dPrefix,
-            },
-            path.to_string(),
-        )),
+        HostPara::InNote { kind, .. } => {
+            super::notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::Model3dNotFound { id: id.to_string() },
+                    path.to_string(),
+                )
+            })
+        }
+        HostPara::InComment { .. } => super::comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::Model3dNotFound { id: id.to_string() },
+                path.to_string(),
+            )
+        }),
     }
 }
 

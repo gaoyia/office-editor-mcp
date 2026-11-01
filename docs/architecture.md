@@ -307,7 +307,7 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 `scope.styles` 为 true 时列出 `styles.xml` 里的样式定义。`scope.runs` 为 true 时已列出的段落带 run 名单。
 apply 可改被点名段落的可见文本（主文档、页眉页脚、框内、注内或批注内），可在主文档、页眉页脚与表格单元格插删 `w:p`，可插删 `w:tbl` 以及行与列（含文本框里的表，不含注内 / 批注内）。
 apply 可按 `gridSpan` / `vMerge` 合并与拆分，可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本（含文本框里的 `w:hyperlink`）。
-apply 可给图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布与 3D 写 DrawingML `a:hlinkClick`（含框内图、注内 / 批注内的图或框；OLE 除外；不写 `a:hlinkHover`）。
+apply 可给图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布与 3D 写 DrawingML `a:hlinkClick`（含框内图、注内 / 批注内的图、框或 3D；OLE 除外；不写 `a:hlinkHover`）。
 apply 可插、删、改书签名（含框内），可插、改指令、删域（不求值，含框内），可写入编号定义并把段落套上或去掉编号。
 apply 可增删自定义样式，可给段落换 `pStyle`，可给 run 套字符样式。
 apply 可改被点名段落、字符或表格样式的字体、字号、加粗、颜色与段前段后。字符样式不能写段距。
@@ -467,6 +467,7 @@ docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格
 也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表（含框内、注内、批注内；含趋势线、误差线与次轴），也可插删改 SmartArt（宿主范围相同）。
 docx 也可往正文、页眉页脚、文本框、脚注、尾注与批注段落插入嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
 docx 也可插删换 3D 模型，并可改已有 3D 的尺寸、绕排与相机 / 旋转 / 光源，脏宿主 XML、`.rels`、GLB 与海报 PNG。
+脚注、尾注和批注段落也可以插入、替换、删除、改尺寸、改相机并按 id 导出，只写行内，关系挂在该部件上；改成浮动报 `InvalidField`。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记（限制编辑哈希走遗留预处理，修改密码走 UTF-16LE SHA-512）。
 窗体保护还可脏主文档各节 `w:formProt`，也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写正文、页眉页脚与文本框段落上的 `w:permStart` / `w:permEnd`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。

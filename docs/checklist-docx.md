@@ -22,7 +22,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 重跑整套手测。页眉书目改为插入成功。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
 2026-11-02 页眉题注和索引改回拒绝：Word 更新后分别是「错误!仅主文档。」和「不允许有索引」。页眉书目更新后含 `Ecma` 与 `2006`。正文文本框题注更新后是 `1`。
 2026-11-01 探测墨迹批注。Word 16.0 保存时丢掉空的 `wpi:ink`，`Replies.Add` 和改 `Range.Text` 的另存同样丢掉。回复和改字仍拒绝，不进 `run.ps1`。
-2026-11-01 补探测注内 3D 和例外编辑区。`Add3DModel(文件, false, true, Range)` 能把 `am3d:model3d` 另存进脚注、尾注、批注。库仍拒绝。这些部件的 Range 和选区没有 `Editors`。
+2026-11-02 补跑 `docx-model3d-notes.ps1`。`insertModel3d` 写入脚注和批注后，Word 16.0 打开没有 Repair，两处 Range 的 InlineShape 都是 1。D3n1 通过。
 2026-11-01 补探测容器里的六类域块。页眉、文本框、脚注、批注里的交叉引用、索引项、引文、书目更新后有结果，没有 Repair。索引更新报不允许。题注只在文本框里出编号，页眉、脚注、批注是「错误!仅主文档。」
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
@@ -2166,7 +2166,7 @@ Word 行内 COM 认 `Type=3`（`wdInlineShapePicture`），不是 SVG 的 `17`�
 
 正文与页眉页脚里的 `am3d` AlternateContent。只认 GLB。不进 `pictures`。Fallback 海报不进 `pictures`。不算 3D 渲染引擎。xlsx / pptx 见 X3d / P3d（C7）。
 手测脚本 `manual-check/office/cases/docx-model3d.ps1`。编号用 D3d。
-Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内本期不插。
+Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。脚注、尾注和批注见 D3n。
 
 - **D3d1**
   - 检查：插入
@@ -2187,6 +2187,15 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内�
 - **D3d6**
   - 检查：拒错
   - 通过标准：不是 GLB 的 `file` 报 `InvalidField`。不强制开 Word
+
+## 注内与批注内 3D
+
+脚注、尾注和批注段落上的行内 `am3d`。关系挂在该部件。不进 `pictures`。改成浮动报 `InvalidField`。
+手测脚本 `manual-check/office/cases/docx-model3d-notes.ps1`。编号用 D3n。
+
+- **D3n1**
+  - 检查：插入
+  - 通过标准：`insertModel3d` 写入脚注段和批注段后，根上 `model3dCount` 为 2，id 分别带 `footnote:` 与 `comment:`，`kind` 为 `inline`，`pictureCount` 为 0。Word 16.0 打开没有 Repair。脚注和批注 Range 的 `InlineShapes` 至少各有 1 个
 
 ## 3D 事后几何
 

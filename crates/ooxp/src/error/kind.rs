@@ -785,6 +785,7 @@ define_error_kinds! {
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
     GraphicInRestrictedStory => vec![Self::GraphicInRestrictedStory],
+    Model3dNoteStaysInline => vec![Self::Model3dNoteStaysInline],
     DocxShapeNeedsAnchor => vec![Self::DocxShapeNeedsAnchor],
     NeedPropsField => vec![Self::NeedPropsField],
     NeedProtectionField => vec![Self::NeedProtectionField],
@@ -2181,6 +2182,7 @@ impl ErrorKind {
             | Self::TwoCellMathSize
             | Self::NotesSlideImage
             | Self::GraphicInRestrictedStory
+            | Self::Model3dNoteStaysInline
             | Self::DocxShapeNeedsAnchor
             | Self::NeedPropsField
             | Self::NeedProtectionField

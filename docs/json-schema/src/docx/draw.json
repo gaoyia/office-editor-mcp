@@ -687,8 +687,8 @@
     "docxInsertModel3dOp": {
       "description": "把本地 GLB 作为 3D 模型写入目标段落。",
       "descriptionEn": "Write a local GLB as a 3D model in the target paragraph.",
-      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。省略 kind 时写 wp:inline。kind 为 anchor 时按 setModel3dWrap 写浮动。",
-      "limitsEn": "It is not a picture. The model is not rasterized. The poster is a 1×1 PNG placeholder. Omitting kind writes wp:inline. kind anchor follows setModel3dWrap.",
+      "limits": "不进 pictures。不栅格化模型。海报用 1×1 PNG 占位。id 可以是正文、页眉页脚、脚注、尾注或批注段落。省略 kind 时写 wp:inline。kind 为 anchor 时按 setModel3dWrap 写浮动。脚注、尾注和批注上 kind 为 anchor 报 InvalidField。",
+      "limitsEn": "It is not a picture. The model is not rasterized. The poster is a 1×1 PNG placeholder. id may be a body, header, footer, footnote, endnote, or comment paragraph. Omitting kind writes wp:inline. kind anchor follows setModel3dWrap. kind anchor on a footnote, endnote, or comment is InvalidField.",
       "type": "object",
       "required": [
         "op",
