@@ -157,6 +157,28 @@ impl HostPara {
     }
 }
 
+/// 目录、题注、交叉引用、索引、索引项、引文、书目块所在的故事。
+#[derive(Debug, Clone)]
+pub enum FieldBlockHost {
+    Body,
+    HeaderFooter {
+        kind: HfKind,
+        hf_type: HfType,
+        n: u32,
+    },
+    TextBox {
+        host: HostPara,
+        key: TxbxKey,
+    },
+    Note {
+        kind: NoteKind,
+        note_id: String,
+    },
+    Comment {
+        comment_id: String,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxbxKey {
     DocPr(String),

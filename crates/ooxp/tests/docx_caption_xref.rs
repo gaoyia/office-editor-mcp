@@ -218,13 +218,24 @@ fn insert_caption_rejects_bad_id_and_label() {
         }),
     );
     let tree = inspect(&src, false, false, false);
-    assert!(tree["headers"][0].get("captionCount").is_none());
+    assert_eq!(tree["headers"][0]["captionCount"], 0);
     let hf_para = tree["headers"][0]["paragraphs"][0]["id"]
         .as_str()
         .unwrap()
         .to_string();
-    let err_hf = apply_err(&src, json!([{ "op": "insertCaption", "id": hf_para }]));
-    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    let hf_out = seq_path("hf-cap", "docx");
+    apply(
+        &src,
+        &hf_out,
+        json!([{ "op": "insertCaption", "id": hf_para, "label": "Figure", "title": "页眉图" }]),
+    );
+    let hf_tree = inspect(&hf_out, true, false, false);
+    assert_eq!(hf_tree["captionCount"], 0);
+    assert_eq!(hf_tree["headers"][0]["captionCount"], 1);
+    assert!(hf_tree["headers"][0]["captions"][0]["id"]
+        .as_str()
+        .unwrap()
+        .starts_with("header:default:1/caption:"));
 
     let err_label = apply_err(
         &src,

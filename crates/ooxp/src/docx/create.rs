@@ -460,7 +460,7 @@ fn apply_follow_ups(
                         "document.tocs",
                     ));
                 };
-                (id, InsertTocPlace::After(p))
+                (id, InsertTocPlace::After(ParaTarget::Body(p)))
             }
         };
         ops.push(DocxOp::InsertToc(InsertTocOp {
@@ -550,7 +550,7 @@ fn push_after_blocks(
     blocks: &[doc_extra::CaptionBlock],
     build: impl Fn(&doc_extra::CaptionBlock, String, InsertCaptionPlace) -> DocxOp,
     end: InsertCaptionPlace,
-    after: fn(para::BodyPara) -> InsertCaptionPlace,
+    after: fn(ParaTarget) -> InsertCaptionPlace,
     path: &str,
 ) -> Result<(), Error> {
     for block in blocks {
@@ -567,7 +567,7 @@ fn push_after_blocks(
                         path,
                     ));
                 };
-                (id, after(p))
+                (id, after(ParaTarget::Body(p)))
             }
         };
         ops.push(build(block, id, place));
@@ -580,7 +580,7 @@ fn push_instr_blocks<P: Clone>(
     blocks: &[doc_extra::AfterBlock],
     build: impl Fn(&doc_extra::AfterBlock, String, P) -> DocxOp,
     end: P,
-    after: fn(para::BodyPara) -> P,
+    after: fn(ParaTarget) -> P,
     path: &str,
 ) -> Result<(), Error> {
     for block in blocks {
@@ -597,7 +597,7 @@ fn push_instr_blocks<P: Clone>(
                         path,
                     ));
                 };
-                (id, after(p))
+                (id, after(ParaTarget::Body(p)))
             }
         };
         ops.push(build(block, id, place));

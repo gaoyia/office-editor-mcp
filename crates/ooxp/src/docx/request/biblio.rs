@@ -7,7 +7,6 @@ use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use super::super::para::{self, ParaTarget};
 
 use super::common::*;
-use super::para::*;
 use super::types::*;
 
 pub(super) fn parse_insert_source(
@@ -102,11 +101,7 @@ pub(super) fn parse_insert_citation(
 ) -> Result<InsertCitationOp, Error> {
     deny_keys(obj, i, &["op", "id", "tag"])?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(
-        &id,
-        &format!("ops[{i}].id"),
-        IdReason::InsertCitationNeedsPara,
-    )?;
+    let para = para::parse_para_id_at(&id, &format!("ops[{i}].id"))?;
     let tag = require_string_field(obj, i, "insertCitation", "tag")?;
     if super::super::biblio::tag_invalid(&tag) {
         return Err(Error::with_path(
@@ -123,8 +118,15 @@ pub(super) fn parse_delete_citation(
 ) -> Result<DeleteCitationOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_cite_id(&id, i)?;
-    Ok(DeleteCitationOp { id, n })
+    let (host, n) = super::field::parse_block_id(
+        &id,
+        "cite",
+        i,
+        IdReason::CitePrefix,
+        IdReason::CiteIndexNotInt,
+        IdReason::CiteIndexFromOne,
+    )?;
+    Ok(DeleteCitationOp { id, host, n })
 }
 
 pub(super) fn parse_insert_bibliography(
@@ -164,17 +166,7 @@ pub(super) fn parse_insert_bibliography(
     let place = if id == "docx:document" {
         InsertBibliographyPlace::EndOfDocument
     } else {
-        match para::parse_para_id_at(&id, &path)? {
-            ParaTarget::Body(p) => InsertBibliographyPlace::After(p),
-            _ => {
-                return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::InsertBibliographyNeedsBodyPara,
-                    },
-                    path,
-                ));
-            }
-        }
+        InsertBibliographyPlace::After(para::parse_para_id_at(&id, &path)?)
     };
     Ok(InsertBibliographyOp { id, place, instr })
 }
@@ -185,8 +177,15 @@ pub(super) fn parse_delete_bibliography(
 ) -> Result<DeleteBibliographyOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_biblio_id(&id, i)?;
-    Ok(DeleteBibliographyOp { id, n })
+    let (host, n) = super::field::parse_block_id(
+        &id,
+        "biblio",
+        i,
+        IdReason::BiblioPrefix,
+        IdReason::BiblioIndexNotInt,
+        IdReason::BiblioIndexFromOne,
+    )?;
+    Ok(DeleteBibliographyOp { id, host, n })
 }
 
 pub(super) fn parse_set_bibliography_style(
@@ -428,64 +427,6 @@ pub(super) fn parse_source_id(id: &str, op_index: usize) -> Result<usize, Error>
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SourceIndexFromOne,
-            },
-            path,
-        ));
-    }
-    Ok(n)
-}
-
-pub(super) fn parse_cite_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("cite:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CitePrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CiteIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CiteIndexFromOne,
-            },
-            path,
-        ));
-    }
-    Ok(n)
-}
-
-pub(super) fn parse_biblio_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("biblio:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::BiblioPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::BiblioIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::BiblioIndexFromOne,
             },
             path,
         ));

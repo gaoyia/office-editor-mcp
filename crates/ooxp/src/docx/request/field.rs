@@ -4,10 +4,9 @@ use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 
-use super::super::para::{self, ParaTarget};
+use super::super::para;
 
 use super::common::*;
-use super::para::*;
 use super::types::*;
 
 pub(super) fn parse_insert_toc(
@@ -70,17 +69,7 @@ pub(super) fn parse_insert_toc(
     let place = if id == "docx:document" {
         InsertTocPlace::EndOfDocument
     } else {
-        match para::parse_para_id_at(&id, &path)? {
-            ParaTarget::Body(p) => InsertTocPlace::After(p),
-            _ => {
-                return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::InsertTocNeedsBodyPara,
-                    },
-                    path,
-                ));
-            }
-        }
+        InsertTocPlace::After(para::parse_para_id_at(&id, &path)?)
     };
     Ok(InsertTocOp { id, place, instr })
 }
@@ -91,8 +80,15 @@ pub(super) fn parse_delete_toc(
 ) -> Result<DeleteTocOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_toc_id(&id, i)?;
-    Ok(DeleteTocOp { id, n })
+    let (host, n) = parse_block_id(
+        &id,
+        "toc",
+        i,
+        IdReason::TocPrefix,
+        IdReason::TocIndexNotInt,
+        IdReason::TocIndexFromOne,
+    )?;
+    Ok(DeleteTocOp { id, host, n })
 }
 
 pub(super) fn parse_insert_caption(
@@ -144,17 +140,7 @@ pub(super) fn parse_insert_caption(
     let place = if id == "docx:document" {
         InsertCaptionPlace::EndOfDocument
     } else {
-        match para::parse_para_id_at(&id, &path)? {
-            ParaTarget::Body(p) => InsertCaptionPlace::After(p),
-            _ => {
-                return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::InsertCaptionNeedsBodyPara,
-                    },
-                    path,
-                ));
-            }
-        }
+        InsertCaptionPlace::After(para::parse_para_id_at(&id, &path)?)
     };
     Ok(InsertCaptionOp {
         id,
@@ -171,8 +157,15 @@ pub(super) fn parse_delete_caption(
 ) -> Result<DeleteCaptionOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_caption_id(&id, i)?;
-    Ok(DeleteCaptionOp { id, n })
+    let (host, n) = parse_block_id(
+        &id,
+        "caption",
+        i,
+        IdReason::CaptionPrefix,
+        IdReason::CaptionIndexNotInt,
+        IdReason::CaptionIndexFromOne,
+    )?;
+    Ok(DeleteCaptionOp { id, host, n })
 }
 
 pub(super) fn parse_insert_cross_ref(
@@ -181,11 +174,7 @@ pub(super) fn parse_insert_cross_ref(
 ) -> Result<InsertCrossRefOp, Error> {
     deny_keys(obj, i, &["op", "id", "bookmark", "kind"])?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(
-        &id,
-        &format!("ops[{i}].id"),
-        IdReason::InsertCrossRefNeedsPara,
-    )?;
+    let para = para::parse_para_id_at(&id, &format!("ops[{i}].id"))?;
     let bookmark = match obj.get("bookmark") {
         Some(Value::String(s)) => {
             if s.is_empty() || s.chars().any(char::is_whitespace) {
@@ -243,8 +232,15 @@ pub(super) fn parse_delete_cross_ref(
 ) -> Result<DeleteCrossRefOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_xref_id(&id, i)?;
-    Ok(DeleteCrossRefOp { id, n })
+    let (host, n) = parse_block_id(
+        &id,
+        "xref",
+        i,
+        IdReason::XrefPrefix,
+        IdReason::XrefIndexNotInt,
+        IdReason::XrefIndexFromOne,
+    )?;
+    Ok(DeleteCrossRefOp { id, host, n })
 }
 
 pub(super) fn parse_insert_index(
@@ -284,17 +280,7 @@ pub(super) fn parse_insert_index(
     let place = if id == "docx:document" {
         InsertIndexPlace::EndOfDocument
     } else {
-        match para::parse_para_id_at(&id, &path)? {
-            ParaTarget::Body(p) => InsertIndexPlace::After(p),
-            _ => {
-                return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::InsertIndexNeedsBodyPara,
-                    },
-                    path,
-                ));
-            }
-        }
+        InsertIndexPlace::After(para::parse_para_id_at(&id, &path)?)
     };
     Ok(InsertIndexOp { id, place, instr })
 }
@@ -305,8 +291,15 @@ pub(super) fn parse_delete_index(
 ) -> Result<DeleteIndexOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_index_id(&id, i)?;
-    Ok(DeleteIndexOp { id, n })
+    let (host, n) = parse_block_id(
+        &id,
+        "index",
+        i,
+        IdReason::IndexPrefix,
+        IdReason::IndexIndexNotInt,
+        IdReason::IndexIndexFromOne,
+    )?;
+    Ok(DeleteIndexOp { id, host, n })
 }
 
 pub(super) fn parse_insert_index_entry(
@@ -315,11 +308,7 @@ pub(super) fn parse_insert_index_entry(
 ) -> Result<InsertIndexEntryOp, Error> {
     deny_keys(obj, i, &["op", "id", "entry"])?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(
-        &id,
-        &format!("ops[{i}].id"),
-        IdReason::InsertIndexEntryNeedsPara,
-    )?;
+    let para = para::parse_para_id_at(&id, &format!("ops[{i}].id"))?;
     let entry = match obj.get("entry") {
         Some(Value::String(s)) => {
             super::super::field::parse_index_entry(s)
@@ -354,153 +343,90 @@ pub(super) fn parse_delete_index_entry(
 ) -> Result<DeleteIndexEntryOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let n = parse_xe_id(&id, i)?;
-    Ok(DeleteIndexEntryOp { id, n })
+    let (host, n) = parse_block_id(
+        &id,
+        "xe",
+        i,
+        IdReason::XePrefix,
+        IdReason::XeIndexNotInt,
+        IdReason::XeIndexFromOne,
+    )?;
+    Ok(DeleteIndexEntryOp { id, host, n })
 }
 
-pub(super) fn parse_toc_id(id: &str, op_index: usize) -> Result<usize, Error> {
+pub(super) fn parse_block_id(
+    id: &str,
+    family: &str,
+    op_index: usize,
+    prefix: IdReason,
+    not_int: IdReason,
+    from_one: IdReason,
+) -> Result<(para::FieldBlockHost, usize), Error> {
     let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("toc:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::TocPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::TocIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
+    let (pre, rest) = if let Some(rest) = id.strip_prefix(&format!("{family}:")) {
+        (None, rest)
+    } else if let Some((pre, rest)) = id.rsplit_once(&format!("/{family}:")) {
+        (Some(pre), rest)
+    } else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: prefix },
+            path,
+        ));
+    };
+    let n: usize = rest
+        .parse()
+        .map_err(|_| Error::with_path(ErrorKind::InvalidId { reason: not_int }, path.clone()))?;
     if n < 1 {
         return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::TocIndexFromOne,
-            },
+            ErrorKind::InvalidId { reason: from_one },
             path,
         ));
     }
-    Ok(n)
+    let host = match pre {
+        None => para::FieldBlockHost::Body,
+        Some(pre) => block_host(pre, &path, prefix)?,
+    };
+    Ok((host, n))
 }
 
-pub(super) fn parse_caption_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("caption:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CaptionPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CaptionIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CaptionIndexFromOne,
-            },
-            path,
-        ));
+fn block_host(pre: &str, path: &str, reason: IdReason) -> Result<para::FieldBlockHost, Error> {
+    if pre.contains("/txbx:") {
+        let tx = para::parse_txbx_id_at(pre, path)?;
+        return Ok(para::FieldBlockHost::TextBox {
+            host: tx.host,
+            key: tx.key,
+        });
     }
-    Ok(n)
-}
-
-pub(super) fn parse_xref_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("xref:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XrefPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XrefIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XrefIndexFromOne,
-            },
-            path,
-        ));
+    if let Some((kind, hf_type, n)) = para::parse_hf_container_id(pre) {
+        return Ok(para::FieldBlockHost::HeaderFooter { kind, hf_type, n });
     }
-    Ok(n)
-}
-
-pub(super) fn parse_index_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("index:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::IndexPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::IndexIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::IndexIndexFromOne,
-            },
-            path,
-        ));
+    if let Some(note_id) = pre.strip_prefix("footnote:") {
+        if !note_id.contains('/') {
+            return Ok(para::FieldBlockHost::Note {
+                kind: para::NoteKind::Footnote,
+                note_id: note_id.to_string(),
+            });
+        }
     }
-    Ok(n)
-}
-
-pub(super) fn parse_xe_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("xe:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XePrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let n: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XeIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if n < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::XeIndexFromOne,
-            },
-            path,
-        ));
+    if let Some(note_id) = pre.strip_prefix("endnote:") {
+        if !note_id.contains('/') {
+            return Ok(para::FieldBlockHost::Note {
+                kind: para::NoteKind::Endnote,
+                note_id: note_id.to_string(),
+            });
+        }
     }
-    Ok(n)
+    if let Some(comment_id) = pre.strip_prefix("comment:") {
+        if !comment_id.contains('/') {
+            return Ok(para::FieldBlockHost::Comment {
+                comment_id: comment_id.to_string(),
+            });
+        }
+    }
+    Err(Error::with_path(
+        ErrorKind::InvalidId { reason },
+        path.to_string(),
+    ))
 }
 
 pub(super) fn require_instr(

@@ -773,17 +773,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSection id must be a direct child paragraph of w:body, or docx:document"
                     .into()
             }
-            IdReason::TocPrefix => "Table of contents id must be toc:N".into(),
+            IdReason::TocPrefix => {
+                "Table of contents id must be toc:N, or carry a header, footer, text box, note, or comment prefix"
+                    .into()
+            }
             IdReason::TocIndexNotInt => "toc index must be a positive integer".into(),
             IdReason::TocIndexFromOne => "toc index starts at 1".into(),
             IdReason::InsertTocNeedsBodyPara => {
-                "insertToc id must be a direct child paragraph of w:body, or docx:document".into()
+                "insertToc id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
+                    .into()
             }
             IdReason::CaptionPrefix => "Caption id must be caption:N".into(),
             IdReason::CaptionIndexNotInt => "caption index must be a positive integer".into(),
             IdReason::CaptionIndexFromOne => "caption index starts at 1".into(),
             IdReason::InsertCaptionNeedsBodyPara => {
-                "insertCaption id must be a direct child paragraph of w:body, or docx:document"
+                "insertCaption id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
                     .into()
             }
             IdReason::XrefPrefix => "Cross-reference id must be xref:N".into(),
@@ -796,7 +800,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::IndexIndexNotInt => "index index must be a positive integer".into(),
             IdReason::IndexIndexFromOne => "index index starts at 1".into(),
             IdReason::InsertIndexNeedsBodyPara => {
-                "insertIndex id must be a direct child paragraph of w:body, or docx:document"
+                "insertIndex id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
                     .into()
             }
             IdReason::XePrefix => "Index entry id must be xe:N".into(),
@@ -821,7 +825,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::BiblioIndexNotInt => "biblio index must be a positive integer".into(),
             IdReason::BiblioIndexFromOne => "biblio index starts at 1".into(),
             IdReason::InsertBibliographyNeedsBodyPara => {
-                "insertBibliography id must be a direct child paragraph of w:body, or docx:document"
+                "insertBibliography id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
                     .into()
             }
             IdReason::DocPartPrefix => "Building block id must be docPart:N".into(),

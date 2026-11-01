@@ -252,8 +252,19 @@ fn insert_source_citation_bibliography_then_delete() {
         .as_str()
         .unwrap()
         .to_string();
-    let err_hf = apply_err(&src, json!([{ "op": "insertBibliography", "id": hf }]));
-    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    let hf_out = seq_path("bi-hf-ins", "docx");
+    apply(
+        &src,
+        &hf_out,
+        json!([{ "op": "insertBibliography", "id": hf }]),
+    );
+    let hf_tree = inspect(&hf_out, true, true, true, true);
+    assert_eq!(hf_tree["bibliographyCount"], 0);
+    assert_eq!(hf_tree["headers"][0]["bibliographyCount"], 1);
+    assert_eq!(
+        hf_tree["headers"][0]["bibliographies"][0]["id"],
+        "header:default:1/biblio:1"
+    );
 
     let err_tag = apply_err(
         &src,
@@ -350,7 +361,7 @@ fn biblio_ops_not_for_xlsx_or_pptx() {
 }
 
 #[test]
-fn header_has_no_biblio_counts() {
+fn header_biblio_counts_start_at_zero() {
     let src = create_docx(
         "bi-hf",
         json!({
@@ -360,6 +371,6 @@ fn header_has_no_biblio_counts() {
     );
     let tree = inspect(&src, true, true, true, true);
     assert!(tree["headers"][0].get("sourceCount").is_none());
-    assert!(tree["headers"][0].get("citationCount").is_none());
-    assert!(tree["headers"][0].get("bibliographyCount").is_none());
+    assert_eq!(tree["headers"][0]["citationCount"], 0);
+    assert_eq!(tree["headers"][0]["bibliographyCount"], 0);
 }

@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package};
-use crate::xml::{self, Document, Element};
+use crate::xml::{self, Document, Element, Node};
 
 use super::biblio;
 use super::charts;
@@ -93,16 +93,24 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 super::hf::refresh_hf_catalog(&pkg, &docs, &doc_part, &hf_freeze, &mut catalog)?;
             }
             DocxOp::InsertToc(op) => {
-                super::field::apply_insert_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_insert_toc(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::DeleteToc(op) => {
-                super::field::apply_delete_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_delete_toc(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertCaption(op) => {
-                super::field::apply_insert_caption(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_insert_caption(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::DeleteCaption(op) => {
-                super::field::apply_delete_caption(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_delete_caption(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertCrossRef(op) => {
                 super::field::apply_insert_cross_ref(
@@ -110,13 +118,19 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 )?;
             }
             DocxOp::DeleteCrossRef(op) => {
-                super::field::apply_delete_cross_ref(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_delete_cross_ref(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertIndex(op) => {
-                super::field::apply_insert_index(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_insert_index(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::DeleteIndex(op) => {
-                super::field::apply_delete_index(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_delete_index(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertIndexEntry(op) => {
                 super::field::apply_insert_index_entry(
@@ -124,7 +138,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 )?;
             }
             DocxOp::DeleteIndexEntry(op) => {
-                super::field::apply_delete_index_entry(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::field::apply_delete_index_entry(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertSource(op) => {
                 super::biblio::apply_insert_source(
@@ -142,13 +158,19 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 )?;
             }
             DocxOp::DeleteCitation(op) => {
-                super::biblio::apply_delete_citation(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::biblio::apply_delete_citation(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertBibliography(op) => {
-                super::biblio::apply_insert_bibliography(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::biblio::apply_insert_bibliography(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::DeleteBibliography(op) => {
-                super::biblio::apply_delete_bibliography(&mut docs, &mut dirty, &doc_part, op, i)?;
+                super::biblio::apply_delete_bibliography(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::SetBibliographyStyle(op) => {
                 biblio::set_style(
@@ -932,8 +954,49 @@ pub(crate) fn para_target_path(root: &Element, target: &ParaTarget) -> Option<Ve
             path.extend(para::find_paragraph_path_in_txbx(content, para)?);
             Some(path)
         }
-        _ => None,
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note_path = note_child_path(root, *kind, note_id)?;
+            let note = para::element_at(root, &note_path)?;
+            let mut path = note_path;
+            path.extend(para::find_paragraph_path(note, para)?);
+            Some(path)
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let comment_path = comment_child_path(root, comment_id)?;
+            let comment = para::element_at(root, &comment_path)?;
+            let mut path = comment_path;
+            path.extend(para::find_paragraph_path(comment, para)?);
+            Some(path)
+        }
     }
+}
+
+fn note_child_path(root: &Element, kind: para::NoteKind, note_id: &str) -> Option<Vec<usize>> {
+    root.children.iter().enumerate().find_map(|(i, n)| match n {
+        Node::Element(e)
+            if e.local_name() == kind.item_local()
+                && notes::ids_match(e.attr_local("id").unwrap_or(""), note_id)
+                && notes::is_user_note(e) =>
+        {
+            Some(vec![i])
+        }
+        _ => None,
+    })
+}
+
+fn comment_child_path(root: &Element, comment_id: &str) -> Option<Vec<usize>> {
+    root.children.iter().enumerate().find_map(|(i, n)| match n {
+        Node::Element(e)
+            if e.local_name() == "comment" && e.attr_local("id") == Some(comment_id) =>
+        {
+            Some(vec![i])
+        }
+        _ => None,
+    })
 }
 pub(crate) fn story_xml_mut<'a>(
     root: &'a mut Element,

@@ -194,8 +194,15 @@ fn insert_index_and_entry_then_delete() {
         .as_str()
         .unwrap()
         .to_string();
-    let err_hf = apply_err(&src, json!([{ "op": "insertIndex", "id": hf }]));
-    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    let hf_out = seq_path("ix-hf", "docx");
+    apply(&src, &hf_out, json!([{ "op": "insertIndex", "id": hf }]));
+    let hf_tree = inspect(&hf_out, true, true, true);
+    assert_eq!(hf_tree["indexCount"], 0);
+    assert_eq!(hf_tree["headers"][0]["indexCount"], 1);
+    assert_eq!(
+        hf_tree["headers"][0]["indexes"][0]["id"],
+        "header:default:1/index:1"
+    );
 
     let err_entry = apply_err(
         &src,
@@ -269,7 +276,7 @@ fn index_ops_not_for_xlsx_or_pptx() {
 }
 
 #[test]
-fn header_has_no_index_count() {
+fn header_index_counts_start_at_zero() {
     let src = create_docx(
         "ix-hf",
         json!({
@@ -278,6 +285,6 @@ fn header_has_no_index_count() {
         }),
     );
     let tree = inspect(&src, true, true, true);
-    assert!(tree["headers"][0].get("indexCount").is_none());
-    assert!(tree["headers"][0].get("indexEntryCount").is_none());
+    assert_eq!(tree["headers"][0]["indexCount"], 0);
+    assert_eq!(tree["headers"][0]["indexEntryCount"], 0);
 }

@@ -382,37 +382,41 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
 HYPERLINK 域进本名单，不进 `hyperlinks`。主文档里 `code` 为 `TOC` 或 `TOA` 的域另外编目录 id，它们仍出现在 `fields` 里。
 主文档里顶层 `SEQ` 另外编题注 id，顶层 `REF` / `PAGEREF` / `NOTEREF` 另外编交叉引用 id，顶层 `INDEX` 另外编索引 id，顶层 `XE` 另外编索引项 id，它们仍出现在 `fields` 里。
 
-目录的 `{n}` 从 1 起，按主文档里被收入的 TOC / TOA 域起点的文档顺序，与域名单同一套边界。`toc:{n}` 在插删目录之后会变，只够同一次 inspect 之后立刻 apply。
+目录的 `{n}` 从 1 起，按该故事里被收入的 TOC / TOA 域起点的文档顺序，与域名单同一套边界。正文 id 是 `toc:{n}`。页眉页脚、文本框、脚注、尾注、批注各自从 1 起，id 带容器前缀。
+`toc:{n}` 在插删目录之后会变，只够同一次 inspect 之后立刻 apply。
 `kind` 为 `toc`（`TOC` 且指令里没有 `\c` 开关）、`tof`（`TOC` 且有 `\c`，图表目录）或 `toa`（`TOA`）。
-页眉页脚、框内、注内、批注内的 TOC 本期不编 `toc:`；对这些容器发 `insertToc` / `deleteToc` 报 `InvalidId`。
+根上 `tocCount` 只计正文，不含页眉页脚、文本框、注和批注。这些容器自己报 `tocCount`。给了 `scope.tocs` 才列名单。
+`insertToc` 的 `id` 可以是正文、页眉页脚、文本框、脚注、尾注或批注段落，也可以是 `docx:document`（只追加到正文末尾）。表格单元格仍报 `InvalidId`。
+Word 16.0 能把 TOC 复杂域另存进页眉、文本框、脚注和批注。
 嵌套在 TOC 结果里的 `PAGEREF` / `HYPERLINK` 域不算目录块。
 
-题注的 `{n}` 从 1 起，按主文档里被收入的顶层 `SEQ` 域起点的文档顺序，与域名单同一套边界。嵌套在其它域（含 TOC 结果）里的 `SEQ` 不编 `caption:`。
-`caption:{n}` 在插删题注之后会变，只够同一次 inspect 之后立刻 apply。
-页眉页脚、框内、注内、批注内的 SEQ 本期不编 `caption:`；对这些容器发 `insertCaption` / `deleteCaption` 报 `InvalidId`。
+题注的 `{n}` 从 1 起，按该故事里被收入的顶层 `SEQ` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域（含 TOC 结果）里的 `SEQ` 不编 `caption:`。
+`caption:{n}` 在插删题注之后会变，只够同一次 inspect 之后立刻 apply。根上计数只计正文。容器上的 id 带前缀。
+`insertCaption` 的段落范围与 `insertToc` 相同。`docx:document` 只追加到正文末尾。
 Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不变），题注节点上的 `bookmark` 给出包住该 SEQ 的书签名。
 
-交叉引用的 `{n}` 从 1 起，按主文档里被收入的顶层 `REF` / `PAGEREF` / `NOTEREF` 域起点的文档顺序。嵌套在其它域里的（含 TOC 结果里的 `PAGEREF`）不编 `xref:`。
+交叉引用的 `{n}` 从 1 起，按该故事里被收入的顶层 `REF` / `PAGEREF` / `NOTEREF` 域起点的文档顺序。嵌套在其它域里的（含 TOC 结果里的 `PAGEREF`）不编 `xref:`。
 `xref:{n}` 在插删交叉引用之后会变，只够同一次 inspect 之后立刻 apply。`kind` 为 `ref`（`REF`）、`page`（`PAGEREF`）或 `note`（`NOTEREF`）。
-页眉页脚里的交叉引用本期不编 `xref:`，仍出现在该容器 `fields` 里；对页眉页脚段落发 `insertCrossRef` 可以写入，但树上的 `xref:` 只计正文。
-框内、注内、批注内本期不编；对这些容器发 `insertCrossRef` / `deleteCrossRef` 报 `InvalidId`。
+页眉页脚、文本框、脚注、尾注、批注里的交叉引用用带容器前缀的 id。根上 `crossRefCount` 只计正文。
+`insertCrossRef` 可以写到这些段落。书签仍在主文档里查找。
 
-索引的 `{n}` 从 1 起，按主文档里被收入的顶层 `INDEX` 域起点的文档顺序，与域名单同一套边界。嵌套在其它域结果里的 `INDEX` 不编 `index:`。
-`index:{n}` 在插删索引之后会变，只够同一次 inspect 之后立刻 apply。
-页眉页脚、框内、注内、批注内的 INDEX 本期不编 `index:`；对这些容器发 `insertIndex` / `deleteIndex` 报 `InvalidId`。
+索引的 `{n}` 从 1 起，按该故事里被收入的顶层 `INDEX` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域结果里的 `INDEX` 不编 `index:`。
+`index:{n}` 在插删索引之后会变，只够同一次 inspect 之后立刻 apply。根上计数只计正文。
+`insertIndex` 的段落范围与 `insertToc` 相同。
 
-索引项的 `{n}` 从 1 起，按主文档里被收入的顶层 `XE` 域起点的文档顺序。嵌套在其它域里的不编 `xe:`。`xe:{n}` 在插删索引项之后会变，只够同一次 inspect 之后立刻 apply。
-页眉页脚里的 XE 本期不编 `xe:`，仍出现在该容器 `fields` 里；对页眉页脚段落发 `insertIndexEntry` 可以写入，但树上的 `xe:` 只计正文。
-框内、注内、批注内本期不编；对这些容器发 `insertIndexEntry` / `deleteIndexEntry` 报 `InvalidId`。
+索引项的 `{n}` 从 1 起，按该故事里被收入的顶层 `XE` 域起点的文档顺序。嵌套在其它域里的不编 `xe:`。`xe:{n}` 在插删索引项之后会变，只够同一次 inspect 之后立刻 apply。
+页眉页脚、文本框、脚注、尾注、批注里的索引项用带容器前缀的 id。根上 `indexEntryCount` 只计正文。
+`insertIndexEntry` 可以写到这些段落。
 
 书目源的 `{n}` 从 1 起，按 bibliography customXml 里 `b:Source` 的文档顺序。没有该部件则为 0。`source:{n}` 在插删源之后会变。
 `insertSource` / `deleteSource` 的 id 规则见 apply。
 
-引文的 `{n}` 从 1 起，按主文档里被收入的顶层 `CITATION` 域起点的文档顺序。嵌套在其它域结果里的不编 `cite:`。
-页眉页脚里的 CITATION 本期不编 `cite:`，仍出现在该容器 `fields` 里；对页眉页脚段落发 `insertCitation` 可以写入。框内、注内、批注内本期不编。
+引文的 `{n}` 从 1 起，按该故事里被收入的顶层 `CITATION` 域起点的文档顺序。嵌套在其它域结果里的不编 `cite:`。
+页眉页脚、文本框、脚注、尾注、批注里的引文用带容器前缀的 id。根上 `citationCount` 只计正文。
+`insertCitation` 可以写到这些段落。`tag` 仍要在书目源里。
 
-书目块的 `{n}` 从 1 起，按主文档里被收入的顶层 `BIBLIOGRAPHY` 域起点的文档顺序。嵌套在其它域结果里的不编 `biblio:`。
-页眉页脚、框内、注内、批注内本期不编 `biblio:`；对这些容器发 `insertBibliography` / `deleteBibliography` 报 `InvalidId`。
+书目块的 `{n}` 从 1 起，按该故事里被收入的顶层 `BIBLIOGRAPHY` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域结果里的不编 `biblio:`。
+根上计数只计正文。`insertBibliography` 的段落范围与 `insertToc` 相同。
 
 构建基块的 `{n}` 从 1 起，按 glossary 部件里 `w:docPart` 的文档顺序。没有 glossary 部件则为 0。`docPart:{n}` 在插删基块之后会变。
 `insertDocPart` / `deleteDocPart` / `insertDocPartContent` 的 id 规则见 apply。
@@ -1213,7 +1217,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
 - `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`、
   `connectorCount`、`shapeCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`watermarkCount`、`tableCount`、`revisionCount`、
-  `hyperlinkCount`、`bookmarkCount`、`editRangeCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`，
+  `hyperlinkCount`、`bookmarkCount`、`editRangeCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`citationCount`、`bibliographyCount`、`mathCount`、`rubyCount`、`contentControlCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有形状名单时再跟 `shapes`，有墨迹画布名单时再跟 `inkCanvases`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，
   有 OLE 名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，有书签名单时再跟 `bookmarks`，
   有例外编辑区名单时再跟 `editRanges`，有域名单时再跟 `fields`，有公式名单时再跟 `maths`，有拼音名单时再跟 `rubies`，有内容控件名单时再跟 `contentControls`，有段落时再跟 `paragraphs`。
@@ -1282,7 +1286,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
   每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`textAnchor`、`link`、
-  `paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`、`stable`、`hyperlink`，
+  `paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`citationCount`、`bibliographyCount`、`mathCount`、`rubyCount`、`contentControlCount`、`stable`、`hyperlink`，
   有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`，给了 `scope.tables` 时再跟 `tables`，
   给了 `scope.hyperlinks` 时再跟 `hyperlinks`，给了 `scope.bookmarks` 时再跟 `bookmarks`，给了 `scope.fields` 时再跟 `fields`，
   给了 `scope.maths` 时再跟 `maths`，给了 `scope.rubies` 时再跟 `rubies`，给了 `scope.contentControls` 时再跟 `contentControls`。
@@ -1317,8 +1321,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   组合里符合条件的 graphicFrame / `wp:inline` 要展开。注内、批注内、框内不列出。
   `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。
-  用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，给了 `scope.revisions` 时再跟 `revisions`，然后 `paragraphs`。
+  用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`citationCount`、`bibliographyCount`，
+  给了 `scope.revisions` 时紧跟 `revisions`。给了对应 scope 时再跟 `tocs`、`captions`、`crossRefs`、`indexes`、`indexEntries`、`citations`、`bibliographies`。
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
   `noteId` 是 `w:id` 原文。`type` 恒为 `normal`。
   `host` 是引用所在段落 id 的数组：在主文档、页眉、页脚和文本框里找 `w:footnoteReference` / `w:endnoteReference`，按文档顺序，id 规则与该段落本身相同。
   一条注被引用多次则 `host` 有多项；没有任何引用则为 `[]`，注仍列出。
@@ -1329,8 +1334,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `type` 为 `separator`、`continuationSeparator` 或 `continuationNotice`。对 `noteSeparators` 里的 id 发 apply 报 `InvalidId`。
 - `scope.comments` 为 `true` 时，根上带 `comments`。没有批注时为空数组。按 `comments.xml` 里 `w:comment` 的文档顺序。
   每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`parent`、`kind`、`start`、`end`、`paraCount`、`pictureCount`、
-  `textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，给了 `scope.revisions` 时再跟 `revisions`，然后 `paragraphs`。
+  `textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`、`revisionCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`citationCount`、`bibliographyCount`，
+  给了 `scope.revisions` 时紧跟 `revisions`。给了对应 scope 时再跟 `tocs`、`captions`、`crossRefs`、`indexes`、`indexEntries`、`citations`、`bibliographies`。
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
   `commentId` 是 `w:id` 原文。`author` / `initials` / `date` 取对应属性原文，缺则为 `null`。
   `done` 取 `commentEx/@done`：`1` / `true` / `on` 为 `true`，其余或没有 `commentEx` 为 `false`。
   `parent` 用 `paraIdParent` 对上父批注最后一段的 `w14:paraId`，再写成 `comment:{id}`；对不上或没有则为 `null`。根批注的 `parent` 为 `null`。

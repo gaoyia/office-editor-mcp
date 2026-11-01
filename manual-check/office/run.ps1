@@ -125,6 +125,7 @@ $order = @(
     'docx-docprops'
     'docx-ole'
     'docx-container-ole'
+    'docx-container-toc'
     'docx-protect'
     'docx-protect-hash'
     'docx-create-password'

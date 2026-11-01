@@ -540,6 +540,7 @@ pub(crate) enum IdReason {
     XrefIndexNotInt,
     XrefIndexFromOne,
     /// insertCrossRef 必须用正文或页眉页脚段落 id
+    #[allow(dead_code)]
     InsertCrossRefNeedsPara,
     /// 索引 id 必须是 index:N
     IndexPrefix,
@@ -552,6 +553,7 @@ pub(crate) enum IdReason {
     XeIndexNotInt,
     XeIndexFromOne,
     /// insertIndexEntry 必须用正文或页眉页脚段落 id
+    #[allow(dead_code)]
     InsertIndexEntryNeedsPara,
     /// 书目源 id 必须是 source:N
     SourcePrefix,
@@ -564,6 +566,7 @@ pub(crate) enum IdReason {
     CiteIndexNotInt,
     CiteIndexFromOne,
     /// insertCitation 必须用正文或页眉页脚段落 id
+    #[allow(dead_code)]
     InsertCitationNeedsPara,
     /// 书目块 id 必须是 biblio:N
     BiblioPrefix,

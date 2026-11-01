@@ -730,17 +730,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSectionNeedsBodyPara => {
                 "insertSection 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
             }
-            IdReason::TocPrefix => "目录 id 必须是 toc:N".into(),
+            IdReason::TocPrefix => "目录 id 必须是 toc:N，或带页眉、页脚、文本框、脚注、尾注、批注前缀".into(),
             IdReason::TocIndexNotInt => "toc 序号必须是正整数".into(),
             IdReason::TocIndexFromOne => "toc 序号从 1 起".into(),
             IdReason::InsertTocNeedsBodyPara => {
-                "insertToc 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+                "insertToc 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
             }
             IdReason::CaptionPrefix => "题注 id 必须是 caption:N".into(),
             IdReason::CaptionIndexNotInt => "caption 序号必须是正整数".into(),
             IdReason::CaptionIndexFromOne => "caption 序号从 1 起".into(),
             IdReason::InsertCaptionNeedsBodyPara => {
-                "insertCaption 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+                "insertCaption 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
             }
             IdReason::XrefPrefix => "交叉引用 id 必须是 xref:N".into(),
             IdReason::XrefIndexNotInt => "xref 序号必须是正整数".into(),
@@ -752,7 +752,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::IndexIndexNotInt => "index 序号必须是正整数".into(),
             IdReason::IndexIndexFromOne => "index 序号从 1 起".into(),
             IdReason::InsertIndexNeedsBodyPara => {
-                "insertIndex 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+                "insertIndex 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
             }
             IdReason::XePrefix => "索引项 id 必须是 xe:N".into(),
             IdReason::XeIndexNotInt => "xe 序号必须是正整数".into(),
@@ -774,7 +774,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::BiblioIndexNotInt => "biblio 序号必须是正整数".into(),
             IdReason::BiblioIndexFromOne => "biblio 序号从 1 起".into(),
             IdReason::InsertBibliographyNeedsBodyPara => {
-                "insertBibliography 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+                "insertBibliography 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
             }
             IdReason::DocPartPrefix => "构建基块 id 必须是 docPart:N".into(),
             IdReason::DocPartIndexNotInt => "docPart 序号必须是正整数".into(),

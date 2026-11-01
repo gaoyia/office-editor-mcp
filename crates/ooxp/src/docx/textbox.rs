@@ -113,6 +113,13 @@ pub struct TxbxExpand {
     pub hyperlinks: bool,
     pub bookmarks: bool,
     pub fields: bool,
+    pub tocs: bool,
+    pub captions: bool,
+    pub cross_refs: bool,
+    pub indexes: bool,
+    pub index_entries: bool,
+    pub citations: bool,
+    pub bibliographies: bool,
     pub maths: bool,
     pub rubies: bool,
     pub content_controls: bool,
@@ -129,6 +136,35 @@ pub fn textboxes_json(
     let mut out = Vec::new();
     for b in boxes {
         let text_anchor = text_anchor_json(host, b)?;
+        let content_now = find_txbx_content_for(host, host_para_id, &b.id)?;
+        let toc_n = content_now
+            .as_ref()
+            .map(|c| field::count_tocs(c))
+            .unwrap_or(0);
+        let caption_n = content_now
+            .as_ref()
+            .map(|c| field::count_captions(c))
+            .unwrap_or(0);
+        let xref_n = content_now
+            .as_ref()
+            .map(|c| field::count_cross_refs(c))
+            .unwrap_or(0);
+        let index_n = content_now
+            .as_ref()
+            .map(|c| field::count_indexes(c))
+            .unwrap_or(0);
+        let xe_n = content_now
+            .as_ref()
+            .map(|c| field::count_index_entries(c))
+            .unwrap_or(0);
+        let cite_n = content_now
+            .as_ref()
+            .map(|c| field::count_citations(c))
+            .unwrap_or(0);
+        let biblio_n = content_now
+            .as_ref()
+            .map(|c| field::count_bibliographies(c))
+            .unwrap_or(0);
         let mut node = json!({
             "id": b.id,
             "docPrId": b.doc_pr_id,
@@ -150,6 +186,13 @@ pub fn textboxes_json(
             "hyperlinkCount": b.hyperlink_count,
             "bookmarkCount": b.bookmark_count,
             "fieldCount": b.field_count,
+            "tocCount": toc_n,
+            "captionCount": caption_n,
+            "crossRefCount": xref_n,
+            "indexCount": index_n,
+            "indexEntryCount": xe_n,
+            "citationCount": cite_n,
+            "bibliographyCount": biblio_n,
             "mathCount": b.math_count,
             "rubyCount": b.ruby_count,
             "contentControlCount": b.content_control_count,
@@ -160,6 +203,31 @@ pub fn textboxes_json(
             Some(d) => super::drawing_hlink::inspect_textbox(d, Some(&rels)),
             None => Value::Null,
         };
+        if let Some(content) = content_now {
+            if expand.tocs {
+                node["tocs"] = Value::Array(field::tocs_json(content, Some(&b.id))?);
+            }
+            if expand.captions {
+                node["captions"] = Value::Array(field::captions_json(content, Some(&b.id))?);
+            }
+            if expand.cross_refs {
+                node["crossRefs"] = Value::Array(field::cross_refs_json(content, Some(&b.id))?);
+            }
+            if expand.indexes {
+                node["indexes"] = Value::Array(field::indexes_json(content, Some(&b.id))?);
+            }
+            if expand.index_entries {
+                node["indexEntries"] =
+                    Value::Array(field::index_entries_json(content, Some(&b.id))?);
+            }
+            if expand.citations {
+                node["citations"] = Value::Array(field::citations_json(content, Some(&b.id))?);
+            }
+            if expand.bibliographies {
+                node["bibliographies"] =
+                    Value::Array(field::bibliographies_json(content, Some(&b.id))?);
+            }
+        }
         if expand.content {
             fill_one_box(
                 pkg,

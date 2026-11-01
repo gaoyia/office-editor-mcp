@@ -305,6 +305,13 @@ fn inspect_lists_parent_range_and_comment_ids() {
             "chartCount",
             "smartArtCount",
             "revisionCount",
+            "tocCount",
+            "captionCount",
+            "crossRefCount",
+            "indexCount",
+            "indexEntryCount",
+            "citationCount",
+            "bibliographyCount",
             "paragraphs"
         ]
     );

@@ -570,7 +570,8 @@ pub(crate) fn apply_insert_citation(
             format!("ops[{i}].tag"),
         ));
     }
-    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
     let doc = super::apply::load_part(pkg, docs, &part_name)?;
     let xml_id = sdt::next_sdt_id(&doc.root);
     let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
@@ -584,42 +585,83 @@ pub(crate) fn apply_insert_citation(
     Ok(())
 }
 pub(crate) fn apply_delete_citation(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteCitationOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    field::delete_citation(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    field::apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::CitationNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        field::delete_citation,
+    )
 }
 pub(crate) fn apply_insert_bibliography(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &InsertBibliographyOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
     let after = match &op.place {
         InsertBibliographyPlace::After(p) => Some(p),
         InsertBibliographyPlace::EndOfDocument => None,
     };
-    field::insert_bibliography(&mut doc.root, after, &op.instr, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    field::apply_insert_at(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        after,
+        &op.id,
+        i,
+        |root| field::insert_bibliography(root, after, &op.instr, &op.id, i),
+    )
 }
 pub(crate) fn apply_delete_bibliography(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteBibliographyOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    field::delete_bibliography(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    field::apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::BibliographyNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        field::delete_bibliography,
+    )
 }

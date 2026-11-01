@@ -298,9 +298,9 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入对象。
 `scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文（含文本框）、页眉页脚、脚注、尾注与批注里的 run 级插入、删除与属性修订。
 `scope.hyperlinks` 为 true 时列出正文、页眉页脚与文本框里的 `w:hyperlink`。`scope.bookmarks` 为 true 时列出正文、页眉页脚与文本框里的配对书签。
-`scope.fields` 为 true 时列出正文、页眉页脚与文本框里的 `w:fldChar` / `w:fldSimple`。`scope.tocs` 为 true 时列出主文档目录块。
-`scope.captions` 为 true 时列出主文档题注。`scope.crossRefs` 为 true 时列出主文档交叉引用。`scope.indexes` 为 true 时列出主文档 INDEX 块。
-`scope.indexEntries` 为 true 时列出主文档 XE 索引项。`scope.sources` 为 true 时列出书目源。`scope.citations` 为 true 时列出主文档 CITATION。
+`scope.fields` 为 true 时列出正文、页眉页脚与文本框里的 `w:fldChar` / `w:fldSimple`。`scope.tocs` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的目录块。
+`scope.captions` 为 true 时列出同样范围的题注。`scope.crossRefs` 为 true 时列出同样范围的交叉引用。`scope.indexes` 为 true 时列出同样范围的 INDEX 块。
+`scope.indexEntries` 为 true 时列出同样范围的 XE 索引项。`scope.sources` 为 true 时列出书目源。`scope.citations` 为 true 时列出同样范围的 CITATION。
 `scope.bibliographies` 为 true 时列出主文档 BIBLIOGRAPHY 块。`scope.docParts` 为 true 时列出 glossary 构建基块。
 `scope.embeddedFonts` 为 true 时列出 fontTable 里的嵌入字体面。`scope.maths` 为 true 时列出正文、页眉页脚与文本框里的顶层 `m:oMath`，名单带 `expr`。
 `scope.contentControls` 为 true 时列出正文、页眉页脚与文本框里被收入的 `w:sdt`。`scope.numbering` 为 true 时列出 `numbering.xml` 里的编号实例。

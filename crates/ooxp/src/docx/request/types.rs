@@ -927,7 +927,7 @@ pub struct DeleteSectionOp {
 
 #[derive(Debug, Clone)]
 pub enum InsertTocPlace {
-    After(para::BodyPara),
+    After(ParaTarget),
     EndOfDocument,
 }
 
@@ -941,12 +941,13 @@ pub struct InsertTocOp {
 #[derive(Debug, Clone)]
 pub struct DeleteTocOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
 #[derive(Debug, Clone)]
 pub enum InsertCaptionPlace {
-    After(para::BodyPara),
+    After(ParaTarget),
     EndOfDocument,
 }
 
@@ -962,6 +963,7 @@ pub struct InsertCaptionOp {
 #[derive(Debug, Clone)]
 pub struct DeleteCaptionOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
@@ -976,12 +978,13 @@ pub struct InsertCrossRefOp {
 #[derive(Debug, Clone)]
 pub struct DeleteCrossRefOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
 #[derive(Debug, Clone)]
 pub enum InsertIndexPlace {
-    After(para::BodyPara),
+    After(ParaTarget),
     EndOfDocument,
 }
 
@@ -995,6 +998,7 @@ pub struct InsertIndexOp {
 #[derive(Debug, Clone)]
 pub struct DeleteIndexOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
@@ -1008,6 +1012,7 @@ pub struct InsertIndexEntryOp {
 #[derive(Debug, Clone)]
 pub struct DeleteIndexEntryOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
@@ -1039,12 +1044,13 @@ pub struct InsertCitationOp {
 #[derive(Debug, Clone)]
 pub struct DeleteCitationOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 
 #[derive(Debug, Clone)]
 pub enum InsertBibliographyPlace {
-    After(para::BodyPara),
+    After(ParaTarget),
     EndOfDocument,
 }
 
@@ -1058,6 +1064,7 @@ pub struct InsertBibliographyOp {
 #[derive(Debug, Clone)]
 pub struct DeleteBibliographyOp {
     pub id: String,
+    pub host: para::FieldBlockHost,
     pub n: usize,
 }
 

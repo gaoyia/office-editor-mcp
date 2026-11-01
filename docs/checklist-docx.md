@@ -18,6 +18,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 补跑 `docx-model3d-float.ps1`。`insertModel3d` 写成四周型浮动后，Word 16.0 打开没有 Repair，形状绕排是四周型。
 2026-11-01 补跑 `docx-sdt-bind.ps1`。Word 另存的绑定控件改字后，控件和自定义 XML 都是新值。重复节再克隆一项后有两项。没有 Repair。
 2026-11-01 补跑 `docx-container-ole.ps1`。文本框段落里插入的嵌入对象，Word 16.0 打开没有 Repair，框内能看见该 OLE。
+2026-11-01 补跑 `docx-container-toc.ps1`。文本框里的目录更新域后能看见标题「第一章」，没有 Repair。
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 

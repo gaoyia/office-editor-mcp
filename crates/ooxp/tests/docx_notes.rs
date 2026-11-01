@@ -234,6 +234,13 @@ fn inspect_notes_lists_hosts_and_separators() {
             "chartCount",
             "smartArtCount",
             "revisionCount",
+            "tocCount",
+            "captionCount",
+            "crossRefCount",
+            "indexCount",
+            "indexEntryCount",
+            "citationCount",
+            "bibliographyCount",
             "paragraphs"
         ]
     );

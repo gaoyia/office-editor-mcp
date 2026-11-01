@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use crate::error::Error;
 use crate::opc::{self, Package, Relationships};
-use crate::xml;
+use crate::xml::{self, Element};
 
 use super::charts;
 use super::comments;
@@ -72,6 +72,22 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
     let expand_edit_ranges = scope.as_ref().is_some_and(|s| s.edit_ranges);
     let expand_fields = scope.as_ref().is_some_and(|s| s.fields);
+    let expand_tocs = scope.as_ref().is_some_and(|s| s.tocs);
+    let expand_captions = scope.as_ref().is_some_and(|s| s.captions);
+    let expand_xrefs = scope.as_ref().is_some_and(|s| s.cross_refs);
+    let expand_indexes = scope.as_ref().is_some_and(|s| s.indexes);
+    let expand_xes = scope.as_ref().is_some_and(|s| s.index_entries);
+    let expand_cites = scope.as_ref().is_some_and(|s| s.citations);
+    let expand_biblios = scope.as_ref().is_some_and(|s| s.bibliographies);
+    let block_flags = BlockFlags {
+        tocs: expand_tocs,
+        captions: expand_captions,
+        cross_refs: expand_xrefs,
+        indexes: expand_indexes,
+        index_entries: expand_xes,
+        citations: expand_cites,
+        bibliographies: expand_biblios,
+    };
     let expand_maths = scope.as_ref().is_some_and(|s| s.maths);
     let expand_rubies = scope.as_ref().is_some_and(|s| s.rubies);
     let expand_sdts = scope.as_ref().is_some_and(|s| s.content_controls);
@@ -94,6 +110,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         bookmarks: expand_bookmarks,
         edit_ranges: expand_edit_ranges,
         fields: expand_fields,
+        tocs: expand_tocs,
+        captions: expand_captions,
+        cross_refs: expand_xrefs,
+        indexes: expand_indexes,
+        index_entries: expand_xes,
+        citations: expand_cites,
+        bibliographies: expand_biblios,
         maths: expand_maths,
         rubies: expand_rubies,
         content_controls: expand_sdts,
@@ -258,6 +281,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_smartart,
                 expand_runs,
                 scope.revisions,
+                &block_flags,
             )?;
             let (endnotes, en_seps) = notes_array(
                 &pkg,
@@ -273,6 +297,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_smartart,
                 expand_runs,
                 scope.revisions,
+                &block_flags,
             )?;
             let mut seps = fn_seps;
             seps.extend(en_seps);
@@ -294,6 +319,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 expand_smartart,
                 expand_runs,
                 scope.revisions,
+                &block_flags,
             )?;
         }
         if scope.charts {
@@ -337,28 +363,28 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["fields"] = Value::Array(field::fields_json(&doc.root, None)?);
         }
         if scope.tocs {
-            tree["tocs"] = Value::Array(field::tocs_json(&doc.root)?);
+            tree["tocs"] = Value::Array(field::tocs_json(&doc.root, None)?);
         }
         if scope.captions {
-            tree["captions"] = Value::Array(field::captions_json(&doc.root)?);
+            tree["captions"] = Value::Array(field::captions_json(&doc.root, None)?);
         }
         if scope.cross_refs {
-            tree["crossRefs"] = Value::Array(field::cross_refs_json(&doc.root)?);
+            tree["crossRefs"] = Value::Array(field::cross_refs_json(&doc.root, None)?);
         }
         if scope.indexes {
-            tree["indexes"] = Value::Array(field::indexes_json(&doc.root)?);
+            tree["indexes"] = Value::Array(field::indexes_json(&doc.root, None)?);
         }
         if scope.index_entries {
-            tree["indexEntries"] = Value::Array(field::index_entries_json(&doc.root)?);
+            tree["indexEntries"] = Value::Array(field::index_entries_json(&doc.root, None)?);
         }
         if scope.sources {
             tree["sources"] = Value::Array(super::biblio::sources_json(&pkg, &part)?);
         }
         if scope.citations {
-            tree["citations"] = Value::Array(field::citations_json(&doc.root)?);
+            tree["citations"] = Value::Array(field::citations_json(&doc.root, None)?);
         }
         if scope.bibliographies {
-            tree["bibliographies"] = Value::Array(field::bibliographies_json(&doc.root)?);
+            tree["bibliographies"] = Value::Array(field::bibliographies_json(&doc.root, None)?);
         }
         if scope.doc_parts {
             tree["docParts"] = Value::Array(super::glossary::parts_json(&pkg, &part)?);
@@ -414,6 +440,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                             hyperlinks: expand_hyperlinks,
                             bookmarks: expand_bookmarks,
                             fields: expand_fields,
+                            tocs: expand_tocs,
+                            captions: expand_captions,
+                            cross_refs: expand_xrefs,
+                            indexes: expand_indexes,
+                            index_entries: expand_xes,
+                            citations: expand_cites,
+                            bibliographies: expand_biblios,
                             maths: expand_maths,
                             rubies: expand_rubies,
                             content_controls: expand_sdts,
@@ -574,6 +607,13 @@ struct HfExpand {
     bookmarks: bool,
     edit_ranges: bool,
     fields: bool,
+    tocs: bool,
+    captions: bool,
+    cross_refs: bool,
+    indexes: bool,
+    index_entries: bool,
+    citations: bool,
+    bibliographies: bool,
     maths: bool,
     rubies: bool,
     content_controls: bool,
@@ -687,6 +727,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "inkCanvasCount",
         json!(ink_n),
     );
+    put_block_counts(&mut node, &doc.root, "fieldCount");
     if expand.pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
@@ -711,6 +752,13 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
                     hyperlinks: expand.hyperlinks,
                     bookmarks: expand.bookmarks,
                     fields: expand.fields,
+                    tocs: expand.tocs,
+                    captions: expand.captions,
+                    cross_refs: expand.cross_refs,
+                    indexes: expand.indexes,
+                    index_entries: expand.index_entries,
+                    citations: expand.citations,
+                    bibliographies: expand.bibliographies,
                     maths: expand.maths,
                     rubies: expand.rubies,
                     content_controls: expand.content_controls,
@@ -779,6 +827,20 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     if expand.fields {
         node["fields"] = Value::Array(field::fields_json(&doc.root, Some(&item.id))?);
     }
+    put_block_lists(
+        &mut node,
+        &doc.root,
+        &item.id,
+        &BlockFlags {
+            tocs: expand.tocs,
+            captions: expand.captions,
+            cross_refs: expand.cross_refs,
+            indexes: expand.indexes,
+            index_entries: expand.index_entries,
+            citations: expand.citations,
+            bibliographies: expand.bibliographies,
+        },
+    )?;
     if expand.maths {
         node["maths"] = Value::Array(math::maths_json(&doc.root, Some(&item.id))?);
     }
@@ -938,6 +1000,7 @@ fn notes_array(
     expand_smartart: bool,
     expand_runs: bool,
     expand_revisions: bool,
+    blocks: &BlockFlags,
 ) -> Result<(Value, Vec<Value>), Error> {
     let hosts = notes::collect_hosts(pkg, doc_part, doc_root, catalog, kind)?;
     let Some(part) = notes::part_name(pkg, doc_part, kind)? else {
@@ -987,9 +1050,11 @@ fn notes_array(
             "smartArtCount": media.smart_art_count,
             "revisionCount": revision::count_revisions(note),
         });
+        put_block_counts(&mut node, note, "revisionCount");
         if expand_revisions {
             node["revisions"] = Value::Array(revision::revisions_json(note, Some(&inspect_id))?);
         }
+        put_block_lists(&mut node, note, &inspect_id, blocks)?;
         attach_story_lists(
             &mut node,
             &media,
@@ -1058,6 +1123,7 @@ fn comments_array(
     expand_smartart: bool,
     expand_runs: bool,
     expand_revisions: bool,
+    blocks: &BlockFlags,
 ) -> Result<Value, Error> {
     let Some(part) = comments::part_name(pkg, doc_part)? else {
         return Ok(Value::Array(Vec::new()));
@@ -1134,9 +1200,11 @@ fn comments_array(
             "smartArtCount": media.smart_art_count,
             "revisionCount": revision::count_revisions(comment),
         });
+        put_block_counts(&mut node, comment, "revisionCount");
         if expand_revisions {
             node["revisions"] = Value::Array(revision::revisions_json(comment, Some(&inspect_id))?);
         }
+        put_block_lists(&mut node, comment, &inspect_id, blocks)?;
         attach_story_lists(
             &mut node,
             &media,
@@ -1350,6 +1418,65 @@ fn stamp_value(v: &mut Value, coverage: &comments::CommentCoverage) {
 }
 
 /// `json!` 键太多会撞递归上限，新增根字段按契约顺序插到已有键后面。
+fn put_block_counts(node: &mut Value, root: &Element, after: &str) {
+    let obj = node.as_object_mut().unwrap();
+    let items = [
+        ("tocCount", field::count_tocs(root)),
+        ("captionCount", field::count_captions(root)),
+        ("crossRefCount", field::count_cross_refs(root)),
+        ("indexCount", field::count_indexes(root)),
+        ("indexEntryCount", field::count_index_entries(root)),
+        ("citationCount", field::count_citations(root)),
+        ("bibliographyCount", field::count_bibliographies(root)),
+    ];
+    let mut anchor = after.to_string();
+    for (key, n) in items {
+        insert_json_after(obj, &anchor, key, json!(n));
+        anchor = key.to_string();
+    }
+}
+
+struct BlockFlags {
+    tocs: bool,
+    captions: bool,
+    cross_refs: bool,
+    indexes: bool,
+    index_entries: bool,
+    citations: bool,
+    bibliographies: bool,
+}
+
+fn put_block_lists(
+    node: &mut Value,
+    root: &Element,
+    container: &str,
+    flags: &BlockFlags,
+) -> Result<(), Error> {
+    let id = Some(container);
+    if flags.tocs {
+        node["tocs"] = Value::Array(field::tocs_json(root, id)?);
+    }
+    if flags.captions {
+        node["captions"] = Value::Array(field::captions_json(root, id)?);
+    }
+    if flags.cross_refs {
+        node["crossRefs"] = Value::Array(field::cross_refs_json(root, id)?);
+    }
+    if flags.indexes {
+        node["indexes"] = Value::Array(field::indexes_json(root, id)?);
+    }
+    if flags.index_entries {
+        node["indexEntries"] = Value::Array(field::index_entries_json(root, id)?);
+    }
+    if flags.citations {
+        node["citations"] = Value::Array(field::citations_json(root, id)?);
+    }
+    if flags.bibliographies {
+        node["bibliographies"] = Value::Array(field::bibliographies_json(root, id)?);
+    }
+    Ok(())
+}
+
 fn insert_json_after(map: &mut Map<String, Value>, after: &str, key: &str, val: Value) {
     if !map.contains_key(after) {
         map.insert(key.into(), val);

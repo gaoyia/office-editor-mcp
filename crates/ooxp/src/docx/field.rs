@@ -1250,6 +1250,22 @@ pub fn instr_is_toc_or_toa(instr: &str) -> bool {
 }
 
 pub(crate) fn pin_doc_lists(root: &mut Element) {
+    let name = root.local_name();
+    if name == "footnotes" || name == "endnotes" || name == "comments" {
+        for child in &mut root.children {
+            if let Node::Element(el) = child {
+                let local = el.local_name();
+                if local == "footnote" || local == "endnote" || local == "comment" {
+                    pin_doc_lists_one(el);
+                }
+            }
+        }
+        return;
+    }
+    pin_doc_lists_one(root);
+}
+
+fn pin_doc_lists_one(root: &mut Element) {
     pin_rec_family(root, toc_recs(root), "toc");
     pin_rec_family(root, caption_recs(root), "caption");
     pin_rec_family(root, xref_recs(root), "xref");
@@ -1257,6 +1273,13 @@ pub(crate) fn pin_doc_lists(root: &mut Element) {
     pin_rec_family(root, xe_recs(root), "xe");
     pin_rec_family(root, citation_recs(root), "cite");
     pin_rec_family(root, bibliography_recs(root), "biblio");
+}
+
+fn block_id(container: Option<&str>, family: &str, n: usize) -> String {
+    match container {
+        Some(c) => format!("{c}/{family}:{n}"),
+        None => format!("{family}:{n}"),
+    }
 }
 
 fn pin_rec_family(root: &mut Element, recs: Vec<FieldRec>, family: &str) {
@@ -1297,8 +1320,8 @@ pub fn count_tocs(root: &Element) -> usize {
     toc_recs(root).len()
 }
 
-pub fn tocs_json(root: &Element) -> Result<Vec<Value>, Error> {
-    let fields = fields_json(root, None)?;
+pub fn tocs_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, container)?;
     let mut out = Vec::new();
     let mut n = 0usize;
     for f in fields {
@@ -1309,7 +1332,7 @@ pub fn tocs_json(root: &Element) -> Result<Vec<Value>, Error> {
         };
         n += 1;
         out.push(json!({
-            "id": format!("toc:{n}"),
+            "id": block_id(container, "toc", n),
             "index": n,
             "kind": kind.as_str(),
             "field": f["id"],
@@ -1324,14 +1347,14 @@ pub fn tocs_json(root: &Element) -> Result<Vec<Value>, Error> {
 
 pub fn insert_toc(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&para::ParaTarget>,
     instr: &str,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
-        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+        let path = super::apply::para_target_path(root, para).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::ParaNotFound {
                     id: err_id.to_string(),
@@ -1349,7 +1372,7 @@ pub fn insert_toc(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            if parent.local_name() != "body" {
+            if !is_story_container(parent.local_name()) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::InsertTocNeedsBodyPara,
@@ -1494,16 +1517,11 @@ fn toc_blocked_by_sect_pr(root: &Element, rec: &FieldRec) -> bool {
 }
 
 fn ensure_body_has_para(root: &mut Element) -> Result<(), Error> {
+    if para::story_body_mut(root).is_none() {
+        return Ok(());
+    }
     let hex = para::next_para_hex(root);
-    let body = para::story_body_mut(root).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::XmlMissing {
-                parent: "document".into(),
-                child: "body".into(),
-            },
-            "document",
-        )
-    })?;
+    let body = para::story_body_mut(root).unwrap();
     if body.element_children().any(|e| e.local_name() == "p") {
         return Ok(());
     }
@@ -1789,7 +1807,7 @@ pub fn count_cross_refs(root: &Element) -> usize {
         .count()
 }
 
-pub fn captions_json(root: &Element) -> Result<Vec<Value>, Error> {
+pub fn captions_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
     let index_of = para_index_map(root);
     let recs = collect_fields(root);
     let mut out = Vec::new();
@@ -1800,21 +1818,21 @@ pub fn captions_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("caption:{n}"),
+            "id": block_id(container, "caption", n),
             "index": n,
-            "field": format!("field:{}", i + 1),
+            "field": block_id(container, "field", i + 1),
             "instr": rec.instr,
             "identifier": first_field_arg(&rec.instr),
             "bookmark": wrapping_bookmark_name(root, rec),
-            "host": host_para_id(root, &rec.start, None, &index_of),
-            "end": host_para_id(root, &rec.end, None, &index_of),
+            "host": host_para_id(root, &rec.start, container, &index_of),
+            "end": host_para_id(root, &rec.end, container, &index_of),
             "text": rec.result,
         }));
     }
     Ok(out)
 }
 
-pub fn cross_refs_json(root: &Element) -> Result<Vec<Value>, Error> {
+pub fn cross_refs_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
     let index_of = para_index_map(root);
     let recs = collect_fields(root);
     let mut out = Vec::new();
@@ -1828,14 +1846,14 @@ pub fn cross_refs_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("xref:{n}"),
+            "id": block_id(container, "xref", n),
             "index": n,
             "kind": kind.as_str(),
-            "field": format!("field:{}", i + 1),
+            "field": block_id(container, "field", i + 1),
             "instr": rec.instr,
             "bookmark": first_field_arg(&rec.instr),
-            "host": host_para_id(root, &rec.start, None, &index_of),
-            "end": host_para_id(root, &rec.end, None, &index_of),
+            "host": host_para_id(root, &rec.start, container, &index_of),
+            "end": host_para_id(root, &rec.end, container, &index_of),
             "text": rec.result,
         }));
     }
@@ -1865,7 +1883,7 @@ fn xref_recs(root: &Element) -> Vec<FieldRec> {
 
 pub fn insert_caption(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&para::ParaTarget>,
     label: &str,
     title: Option<&str>,
     bookmark: Option<&str>,
@@ -1889,7 +1907,7 @@ pub fn insert_caption(
     let xml_id = link::next_bookmark_xml_id(root);
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
-        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+        let path = super::apply::para_target_path(root, para).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::ParaNotFound {
                     id: err_id.to_string(),
@@ -1907,7 +1925,7 @@ pub fn insert_caption(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            if parent.local_name() != "body" {
+            if !is_story_container(parent.local_name()) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::InsertCaptionNeedsBodyPara,
@@ -2056,8 +2074,8 @@ pub fn count_index_entries(root: &Element) -> usize {
     xe_recs(root).len()
 }
 
-pub fn indexes_json(root: &Element) -> Result<Vec<Value>, Error> {
-    let fields = fields_json(root, None)?;
+pub fn indexes_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, container)?;
     let recs = collect_fields(root);
     let mut out = Vec::new();
     let mut n = 0usize;
@@ -2068,7 +2086,7 @@ pub fn indexes_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("index:{n}"),
+            "id": block_id(container, "index", n),
             "index": n,
             "field": f["id"],
             "instr": f["instr"],
@@ -2080,8 +2098,8 @@ pub fn indexes_json(root: &Element) -> Result<Vec<Value>, Error> {
     Ok(out)
 }
 
-pub fn index_entries_json(root: &Element) -> Result<Vec<Value>, Error> {
-    let fields = fields_json(root, None)?;
+pub fn index_entries_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, container)?;
     let recs = collect_fields(root);
     let mut out = Vec::new();
     let mut n = 0usize;
@@ -2092,7 +2110,7 @@ pub fn index_entries_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("xe:{n}"),
+            "id": block_id(container, "xe", n),
             "index": n,
             "field": f["id"],
             "instr": f["instr"],
@@ -2107,7 +2125,7 @@ pub fn index_entries_json(root: &Element) -> Result<Vec<Value>, Error> {
 
 pub fn insert_index(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&para::ParaTarget>,
     instr: &str,
     err_id: &str,
     op_i: usize,
@@ -2123,9 +2141,16 @@ pub fn insert_index(
     )
 }
 
+fn is_story_container(name: &str) -> bool {
+    matches!(
+        name,
+        "body" | "hdr" | "ftr" | "txbxContent" | "footnote" | "endnote" | "comment"
+    )
+}
+
 fn insert_body_field(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&para::ParaTarget>,
     instr: &str,
     err_id: &str,
     op_i: usize,
@@ -2134,7 +2159,7 @@ fn insert_body_field(
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
-        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+        let path = super::apply::para_target_path(root, para).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::ParaNotFound {
                     id: err_id.to_string(),
@@ -2152,7 +2177,7 @@ fn insert_body_field(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            if parent.local_name() != "body" {
+            if !is_story_container(parent.local_name()) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId { reason },
                     format!("ops[{op_i}].id"),
@@ -2283,8 +2308,8 @@ pub fn count_bibliographies(root: &Element) -> usize {
     bibliography_recs(root).len()
 }
 
-pub fn citations_json(root: &Element) -> Result<Vec<Value>, Error> {
-    let fields = fields_json(root, None)?;
+pub fn citations_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, container)?;
     let recs = collect_fields(root);
     let mut out = Vec::new();
     let mut n = 0usize;
@@ -2295,7 +2320,7 @@ pub fn citations_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("cite:{n}"),
+            "id": block_id(container, "cite", n),
             "index": n,
             "field": f["id"],
             "instr": f["instr"],
@@ -2308,8 +2333,8 @@ pub fn citations_json(root: &Element) -> Result<Vec<Value>, Error> {
     Ok(out)
 }
 
-pub fn bibliographies_json(root: &Element) -> Result<Vec<Value>, Error> {
-    let fields = fields_json(root, None)?;
+pub fn bibliographies_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, container)?;
     let recs = collect_fields(root);
     let mut out = Vec::new();
     let mut n = 0usize;
@@ -2320,7 +2345,7 @@ pub fn bibliographies_json(root: &Element) -> Result<Vec<Value>, Error> {
         }
         n += 1;
         out.push(json!({
-            "id": format!("biblio:{n}"),
+            "id": block_id(container, "biblio", n),
             "index": n,
             "field": f["id"],
             "instr": f["instr"],
@@ -2392,7 +2417,7 @@ pub fn delete_citation(
 
 pub fn insert_bibliography(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&para::ParaTarget>,
     instr: &str,
     err_id: &str,
     op_i: usize,
@@ -2534,69 +2559,215 @@ pub(crate) fn apply_delete_field(
     dirty.insert(part_name, ());
     Ok(())
 }
-pub(crate) fn apply_insert_toc(
+fn block_part_name(
+    pkg: &Package,
+    catalog: &[hf::HfPart],
+    doc_part: &str,
+    host: &para::FieldBlockHost,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match host {
+        para::FieldBlockHost::Body => Ok(doc_part.to_string()),
+        para::FieldBlockHost::HeaderFooter { kind, hf_type, n } => {
+            super::apply::part_for_hf(catalog, *kind, *hf_type, *n, id, i)
+        }
+        para::FieldBlockHost::TextBox { host, .. } => {
+            super::apply::part_for_host(pkg, catalog, doc_part, host, id, i)
+        }
+        para::FieldBlockHost::Note { kind, .. } => super::notes::part_name(pkg, doc_part, *kind)?
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            }),
+        para::FieldBlockHost::Comment { .. } => super::comments::part_name(pkg, doc_part)?
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            }),
+    }
+}
+
+fn block_root_mut<'a>(
+    root: &'a mut Element,
+    host: &para::FieldBlockHost,
+) -> Option<&'a mut Element> {
+    match host {
+        para::FieldBlockHost::Body | para::FieldBlockHost::HeaderFooter { .. } => Some(root),
+        para::FieldBlockHost::TextBox { host, key } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            super::textbox::find_txbx_content_by_key_mut(host_p, key)
+        }
+        para::FieldBlockHost::Note { kind, note_id } => {
+            super::notes::find_user_note_mut(root, *kind, note_id)
+        }
+        para::FieldBlockHost::Comment { comment_id } => {
+            super::comments::find_comment_mut(root, comment_id)
+        }
+    }
+}
+
+pub(crate) fn apply_delete_block(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
+    host: &para::FieldBlockHost,
+    n: usize,
+    id: &str,
+    i: usize,
+    missing: impl Fn() -> Error,
+    delete: fn(&mut Element, usize, &str, usize) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let part_name = block_part_name(pkg, catalog, doc_part, host, id, i)?;
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    let story = block_root_mut(&mut doc.root, host).ok_or_else(&missing)?;
+    delete(story, n, id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+pub(crate) fn apply_insert_at(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    target: Option<&para::ParaTarget>,
+    id: &str,
+    i: usize,
+    insert: impl FnOnce(&mut Element) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let part_name = match target {
+        Some(p) => super::apply::part_for_format_para(pkg, catalog, doc_part, p, id, i)?,
+        None => doc_part.to_string(),
+    };
+    let doc = super::apply::load_part(pkg, docs, &part_name)?;
+    insert(&mut doc.root)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+pub(crate) fn apply_insert_toc(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &InsertTocOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
     let after = match &op.place {
         InsertTocPlace::After(p) => Some(p),
         InsertTocPlace::EndOfDocument => None,
     };
-    super::field::insert_toc(&mut doc.root, after, &op.instr, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_insert_at(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        after,
+        &op.id,
+        i,
+        |root| insert_toc(root, after, &op.instr, &op.id, i),
+    )
 }
 pub(crate) fn apply_delete_toc(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteTocOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    super::field::delete_toc(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::TocNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        delete_toc,
+    )
 }
 pub(crate) fn apply_insert_caption(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &InsertCaptionOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
     let after = match &op.place {
         InsertCaptionPlace::After(p) => Some(p),
         InsertCaptionPlace::EndOfDocument => None,
     };
-    super::field::insert_caption(
-        &mut doc.root,
+    apply_insert_at(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
         after,
-        &op.label,
-        op.title.as_deref(),
-        op.bookmark.as_deref(),
         &op.id,
         i,
-    )?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+        |root| {
+            insert_caption(
+                root,
+                after,
+                &op.label,
+                op.title.as_deref(),
+                op.bookmark.as_deref(),
+                &op.id,
+                i,
+            )
+        },
+    )
 }
 pub(crate) fn apply_delete_caption(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteCaptionOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    super::field::delete_caption(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::CaptionNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        delete_caption,
+    )
 }
 pub(crate) fn apply_insert_cross_ref(
     pkg: &Package,
@@ -2618,7 +2789,8 @@ pub(crate) fn apply_insert_cross_ref(
             ));
         }
     }
-    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
     let doc = super::apply::load_part(pkg, docs, &part_name)?;
     let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
         Error::with_path(
@@ -2631,44 +2803,85 @@ pub(crate) fn apply_insert_cross_ref(
     Ok(())
 }
 pub(crate) fn apply_delete_cross_ref(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteCrossRefOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    super::field::delete_cross_ref(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::CrossRefNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        delete_cross_ref,
+    )
 }
 pub(crate) fn apply_insert_index(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &InsertIndexOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
     let after = match &op.place {
         InsertIndexPlace::After(p) => Some(p),
         InsertIndexPlace::EndOfDocument => None,
     };
-    super::field::insert_index(&mut doc.root, after, &op.instr, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_insert_at(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        after,
+        &op.id,
+        i,
+        |root| insert_index(root, after, &op.instr, &op.id, i),
+    )
 }
 pub(crate) fn apply_delete_index(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteIndexOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    super::field::delete_index(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::IndexNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        delete_index,
+    )
 }
 pub(crate) fn apply_insert_index_entry(
     pkg: &Package,
@@ -2679,7 +2892,8 @@ pub(crate) fn apply_insert_index_entry(
     op: &InsertIndexEntryOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = super::apply::part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let part_name =
+        super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
     let doc = super::apply::load_part(pkg, docs, &part_name)?;
     let el = super::apply::find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
         Error::with_path(
@@ -2692,14 +2906,30 @@ pub(crate) fn apply_insert_index_entry(
     Ok(())
 }
 pub(crate) fn apply_delete_index_entry(
+    pkg: &Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
+    catalog: &[hf::HfPart],
     op: &DeleteIndexEntryOp,
     i: usize,
 ) -> Result<(), Error> {
-    let doc = docs.get_mut(doc_part).unwrap();
-    super::field::delete_index_entry(&mut doc.root, op.n, &op.id, i)?;
-    dirty.insert(doc_part.to_string(), ());
-    Ok(())
+    apply_delete_block(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        catalog,
+        &op.host,
+        op.n,
+        &op.id,
+        i,
+        || {
+            Error::with_path(
+                ErrorKind::IndexEntryNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        },
+        delete_index_entry,
+    )
 }

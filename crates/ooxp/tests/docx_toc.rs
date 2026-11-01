@@ -173,13 +173,20 @@ fn insert_toc_rejects_bad_id_and_kind() {
         }),
     );
     let tree = inspect(&src, false, false);
-    assert!(tree["headers"][0].get("tocCount").is_none());
+    assert_eq!(tree["headers"][0]["tocCount"], 0);
     let hf_para = tree["headers"][0]["paragraphs"][0]["id"]
         .as_str()
         .unwrap()
         .to_string();
-    let err_hf = apply_err(&src, json!([{ "op": "insertToc", "id": hf_para }]));
-    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    let hf_out = seq_path("hf-toc", "docx");
+    apply(&src, &hf_out, json!([{ "op": "insertToc", "id": hf_para }]));
+    let hf_tree = inspect(&hf_out, true, false);
+    assert_eq!(hf_tree["tocCount"], 0);
+    assert_eq!(hf_tree["headers"][0]["tocCount"], 1);
+    assert_eq!(
+        hf_tree["headers"][0]["tocs"][0]["id"],
+        "header:default:1/toc:1"
+    );
 
     let err_kind = apply_err(
         &src,
@@ -243,6 +250,78 @@ fn toc_ops_not_for_xlsx_or_pptx() {
     .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn toc_in_a_text_box_and_a_footnote_uses_container_ids() {
+    let src = create_docx("box-fn", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let tree0 = inspect(&src, false, false);
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let boxed = seq_path("box", "docx");
+    apply(
+        &src,
+        &boxed,
+        json!([
+            { "op": "insertTextBox", "id": para, "text": "框" },
+            { "op": "insertFootnote", "id": para, "text": "注" }
+        ]),
+    );
+    let tree = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": boxed.to_string_lossy(),
+        "scope": {
+            "from": 1, "maxParas": 4,
+            "textBoxes": true, "textBoxContent": true, "notes": true
+        }
+    })
+    .to_string())
+    .unwrap();
+    let RunOutput::Inspect(tree) = tree else {
+        panic!("inspect");
+    };
+    let inner = tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let note = tree["footnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = seq_path("box-fn-toc", "docx");
+    apply(
+        &boxed,
+        &out,
+        json!([
+            { "op": "insertToc", "id": inner },
+            { "op": "insertToc", "id": note }
+        ]),
+    );
+    let listed = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": {
+            "from": 1, "maxParas": 4, "tocs": true,
+            "textBoxes": true, "notes": true
+        }
+    })
+    .to_string())
+    .unwrap();
+    let RunOutput::Inspect(listed) = listed else {
+        panic!("inspect");
+    };
+    assert_eq!(listed["tocCount"], 0);
+    let box_id = listed["paragraphs"][0]["textBoxes"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert_eq!(listed["paragraphs"][0]["textBoxes"][0]["tocCount"], 1);
+    assert_eq!(
+        listed["paragraphs"][0]["textBoxes"][0]["tocs"][0]["id"],
+        format!("{box_id}/toc:1")
+    );
+    assert_eq!(listed["footnotes"][0]["tocCount"], 1);
+    assert_eq!(listed["footnotes"][0]["tocs"][0]["id"], "footnote:2/toc:1");
 }
 
 const CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;
