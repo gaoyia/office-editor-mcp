@@ -172,13 +172,12 @@
     "insertCrossRefOp": {
       "description": "在该段已有内容之后插入一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
       "descriptionEn": "After the paragraph's existing content, insert one complex field: fldChar begin (w:dirty=\"true\"), one instrText, fldChar separate, and fldChar end.",
-      "limits": "不写结果 run，不在库里解析书签内容。kind 为 note 时写 NOTEREF，并带 \\h。bookmark 缺、空串或含空白报 InvalidField。主文档里没有该名报 IdNotFound。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
-      "limitsEn": "Does not write a result run, and this library does not resolve bookmark contents. kind note writes NOTEREF with \\h. A missing bookmark, an empty string, or a bookmark that contains whitespace returns InvalidField. A name that is not in the main document returns IdNotFound. A missing paragraph returns IdNotFound. An id that is not a paragraph id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
+      "limits": "不写结果 run，不计算注的编号。kind 为 note 时写 NOTEREF，并带 \\h。bookmark 与 target 必须二选一，都给、都不给，或 target 配了不是 note 的 kind，报 InvalidField。bookmark 空串或含空白报 InvalidField。主文档里没有该书签名报 IdNotFound。target 为 footnote:{id} 或 endnote:{id}：已有紧邻的 _Ref 书签则复用，否则在引用标记 run 前后插入。正文文本框可以套。引用标记只在页眉或页脚里时报 InvalidField。找不到该注报 IdNotFound。target 不是注 id 报 InvalidId。同一批刚插入的注要先 inspect 再另一次 apply。找不到段落报 IdNotFound。id 不是段落 id 报 InvalidId。xlsx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "Does not write a result run and does not compute the note number. kind note writes NOTEREF with \\h. bookmark and target are mutually exclusive: both, neither, or target with a kind other than note returns InvalidField. An empty bookmark or one that contains whitespace returns InvalidField. A bookmark name missing from the main document returns IdNotFound. target is footnote:{id} or endnote:{id}: reuse a tight _Ref bookmark, or insert one around the reference run. A mark in a main-document text box is allowed. A mark that exists only in a header or footer returns InvalidField. A missing note returns IdNotFound. A target that is not a note id returns InvalidId. A note inserted in the same batch must be inspected, then targeted in a later apply. A missing paragraph returns IdNotFound. An id that is not a paragraph id returns InvalidId. This op on xlsx / pptx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
-        "id",
-        "bookmark"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -190,6 +189,10 @@
           "minLength": 1
         },
         "bookmark": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
           "type": "string",
           "minLength": 1
         },

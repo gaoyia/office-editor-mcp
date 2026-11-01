@@ -971,7 +971,9 @@ pub struct DeleteCaptionOp {
 pub struct InsertCrossRefOp {
     pub id: String,
     pub para: ParaTarget,
-    pub bookmark: String,
+    pub bookmark: Option<String>,
+    /// `kind` 为 note 时点名的脚注或尾注。`note_id` 是 `w:id`，不含 `footnote:` 前缀。
+    pub target: Option<(NoteKind, String)>,
     pub kind: super::super::field::CrossRefKind,
 }
 

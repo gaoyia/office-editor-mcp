@@ -961,6 +961,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "label must be a SEQ identifier: a Latin letter followed by up to 39 Latin letters, digits, or underscores".into()
         }
         ErrorKind::InvalidCrossRefKind => "kind must be ref, page, or note".into(),
+        ErrorKind::CrossRefBookmarkOrTarget => {
+            "insertCrossRef needs exactly one of bookmark or target, and target only with kind note"
+                .into()
+        }
+        ErrorKind::NoteMarkOutsideMain => {
+            "the note mark is in a header or footer, so it cannot take a main-document bookmark"
+                .into()
+        }
         ErrorKind::InvalidIndexInstr => "instr must start with INDEX".into(),
         ErrorKind::InvalidIndexEntry => {
             "entry must be non-empty, must not be only whitespace, and must not contain a double quote"

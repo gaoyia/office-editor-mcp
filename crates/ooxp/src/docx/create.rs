@@ -891,7 +891,8 @@ fn push_story_ops(
             ops.push(DocxOp::InsertCrossRef(InsertCrossRefOp {
                 id: id.clone(),
                 para: host.clone(),
-                bookmark: c.bookmark.clone(),
+                bookmark: Some(c.bookmark.clone()),
+                target: None,
                 kind: c.kind,
             }));
         }

@@ -172,7 +172,7 @@ pub(super) fn parse_insert_cross_ref(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertCrossRefOp, Error> {
-    deny_keys(obj, i, &["op", "id", "bookmark", "kind"])?;
+    deny_keys(obj, i, &["op", "id", "bookmark", "target", "kind"])?;
     let id = require_op_id(obj, i)?;
     let para = para::parse_para_id_at(&id, &format!("ops[{i}].id"))?;
     let bookmark = match obj.get("bookmark") {
@@ -183,7 +183,7 @@ pub(super) fn parse_insert_cross_ref(
                     format!("ops[{i}].bookmark"),
                 ));
             }
-            s.clone()
+            Some(s.clone())
         }
         Some(_) => {
             return Err(Error::with_path(
@@ -194,15 +194,20 @@ pub(super) fn parse_insert_cross_ref(
                 format!("ops[{i}].bookmark"),
             ));
         }
-        None => {
+        None => None,
+    };
+    let target_raw = match obj.get("target") {
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
             return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "insertCrossRef".into(),
-                    field: "bookmark".into(),
+                ErrorKind::WrongType {
+                    field: "target".into(),
+                    expected: TypeName::String,
                 },
-                format!("ops[{i}].bookmark"),
+                format!("ops[{i}].target"),
             ));
         }
+        None => None,
     };
     let kind = match obj.get("kind") {
         None => super::super::field::CrossRefKind::Ref,
@@ -218,10 +223,42 @@ pub(super) fn parse_insert_cross_ref(
             ));
         }
     };
+    let (bookmark, target) = match (bookmark, target_raw) {
+        (Some(name), None) => (Some(name), None),
+        (None, Some(raw)) => {
+            if kind != super::super::field::CrossRefKind::Note {
+                return Err(Error::with_path(
+                    ErrorKind::CrossRefBookmarkOrTarget,
+                    format!("ops[{i}].target"),
+                ));
+            }
+            let parsed = para::parse_note_id_at(&raw, &format!("ops[{i}].target"))?;
+            let Some(para::NoteIdTarget::Container {
+                kind: note_kind,
+                note_id,
+            }) = parsed
+            else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::NotePrefix,
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            };
+            (None, Some((note_kind, note_id)))
+        }
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::CrossRefBookmarkOrTarget,
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+    };
     Ok(InsertCrossRefOp {
         id,
         para,
         bookmark,
+        target,
         kind,
     })
 }

@@ -1047,9 +1047,12 @@
 - 题注段落带分节符且不能整段删掉时，`deleteCaption` 报 `NotImplemented`
 - 找不到交叉引用时，`deleteCrossRef` 报 `IdNotFound`
 - id 不是 `xref:{n}` 报 `InvalidId`
-- `insertCrossRef` 的 `id` 必须是正文或页眉页脚段落 id
-- `bookmark` 缺、空串、含空白或不认识的 `kind` 报 `InvalidField`
+- `insertCrossRef` 的 `id` 必须是段落 id
+- `bookmark` 与 `target` 必须二选一。都给、都不给，或 `target` 配了不是 `note` 的 `kind`，报 `InvalidField`
+- `bookmark` 空串、含空白或不认识的 `kind` 报 `InvalidField`
 - 主文档里没有该书签报 `IdNotFound`
+- `target` 不是 `footnote:{id}` 或 `endnote:{id}` 报 `InvalidId`。找不到该注报 `IdNotFound`
+- 引用标记只在页眉或页脚里时报 `InvalidField`
 - xlsx / pptx 上发 `insertCrossRef` / `deleteCrossRef` 报 `InvalidField`
 - 找不到索引时，`deleteIndex` 报 `IdNotFound`
 - id 不是 `index:{n}` 报 `InvalidId`

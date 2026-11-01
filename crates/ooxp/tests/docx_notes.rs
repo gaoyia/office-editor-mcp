@@ -42,22 +42,36 @@ fn tmp_dir() -> PathBuf {
 }
 
 fn write_sample(tag: &str) -> PathBuf {
+    write_document(tag, DOCUMENT, CT, DOC_RELS, &[])
+}
+
+fn write_document(
+    tag: &str,
+    document: &str,
+    content_types: &str,
+    doc_rels: &str,
+    extra: &[(&str, &str)],
+) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.docx"));
     let mut cursor = Cursor::new(Vec::new());
     {
         let mut zip = ZipWriter::new(&mut cursor);
         let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
-        for (name, body) in [
-            ("[Content_Types].xml", CT.as_bytes()),
+        let mut files = vec![
+            ("[Content_Types].xml", content_types.as_bytes()),
             ("_rels/.rels", ROOT_RELS.as_bytes()),
-            ("word/document.xml", DOCUMENT.as_bytes()),
-            ("word/_rels/document.xml.rels", DOC_RELS.as_bytes()),
+            ("word/document.xml", document.as_bytes()),
+            ("word/_rels/document.xml.rels", doc_rels.as_bytes()),
             ("word/styles.xml", STYLES.as_bytes()),
             ("word/settings.xml", SETTINGS.as_bytes()),
             ("word/footnotes.xml", FOOTNOTES.as_bytes()),
             ("word/endnotes.xml", ENDNOTES.as_bytes()),
-        ] {
+        ];
+        for (name, body) in extra {
+            files.push((name, body.as_bytes()));
+        }
+        for (name, body) in files {
             zip.start_file(name, opt).unwrap();
             zip.write_all(body).unwrap();
         }
@@ -441,4 +455,165 @@ fn body_para_id_does_not_hit_note() {
         json!([{ "op": "setParaText", "id": "para:F00A0002", "text": "x" }]),
     );
     assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+const BODY_MARK: &str = r#"<w:p w14:paraId="AAAA0002"><w:r><w:t>正文</w:t></w:r><w:r><w:footnoteReference w:id="2"/></w:r><w:r><w:endnoteReference w:id="2"/></w:r></w:p>"#;
+
+fn replace_body(mark: &str) -> String {
+    DOCUMENT.replace(BODY_MARK, mark)
+}
+
+#[test]
+fn noteref_wraps_footnote_and_endnote_marks() {
+    let path = write_sample("noteref");
+    let out = tmp_dir().join("noteref-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            { "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" },
+            { "op": "insertCrossRef", "id": "para:AAAA0002", "target": "endnote:2", "kind": "note" }
+        ]),
+    );
+    let xml = part_text(&out, "word/document.xml");
+    assert!(xml.contains(
+        r#"<w:bookmarkStart w:id="0" w:name="_Ref000000001"/><w:r><w:footnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="0"/>"#
+    ));
+    assert!(xml.contains(
+        r#"<w:bookmarkStart w:id="1" w:name="_Ref000000002"/><w:r><w:endnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="1"/>"#
+    ));
+    assert!(xml.contains(" NOTEREF _Ref000000001 \\h "));
+    assert!(xml.contains(" NOTEREF _Ref000000002 \\h "));
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 5, "crossRefs": true }));
+    assert_eq!(tree["crossRefCount"], 2);
+    assert_eq!(tree["crossRefs"][0]["kind"], "note");
+    assert_eq!(tree["crossRefs"][0]["bookmark"], "_Ref000000001");
+    assert_eq!(tree["crossRefs"][1]["bookmark"], "_Ref000000002");
+
+    let again = tmp_dir().join("noteref-again.docx");
+    apply(
+        &out,
+        &again,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" }]),
+    );
+    let xml2 = part_text(&again, "word/document.xml");
+    assert_eq!(xml2.matches("bookmarkStart").count(), 2);
+    assert_eq!(xml2.matches(" NOTEREF _Ref000000001 \\h ").count(), 2);
+}
+
+#[test]
+fn noteref_reuses_a_tight_bookmark_and_ignores_a_loose_one() {
+    let tight = replace_body(
+        r#"<w:p w14:paraId="AAAA0002"><w:r><w:t>正文</w:t></w:r><w:bookmarkStart w:id="9" w:name="_RefFn1"/><w:r><w:footnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="9"/><w:r><w:endnoteReference w:id="2"/></w:r></w:p>"#,
+    );
+    let path = write_document("tight", &tight, CT, DOC_RELS, &[]);
+    let out = tmp_dir().join("tight-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" }]),
+    );
+    let xml = part_text(&out, "word/document.xml");
+    assert_eq!(xml.matches("bookmarkStart").count(), 1);
+    assert!(xml.contains(" NOTEREF _RefFn1 \\h "));
+    assert!(!xml.contains("_Ref000000001"));
+
+    let loose = replace_body(
+        r#"<w:p w14:paraId="AAAA0002"><w:bookmarkStart w:id="3" w:name="_RefLoose"/><w:r><w:t>正文</w:t></w:r><w:r><w:footnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="3"/><w:r><w:endnoteReference w:id="2"/></w:r></w:p>"#,
+    );
+    let loose_path = write_document("loose", &loose, CT, DOC_RELS, &[]);
+    let loose_out = tmp_dir().join("loose-out.docx");
+    apply(
+        &loose_path,
+        &loose_out,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" }]),
+    );
+    let xml = part_text(&loose_out, "word/document.xml");
+    assert!(xml.contains("_RefLoose"));
+    assert!(xml.contains(
+        r#"<w:bookmarkStart w:id="4" w:name="_Ref000000001"/><w:r><w:footnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="4"/>"#
+    ));
+}
+
+#[test]
+fn noteref_wraps_a_mark_inside_a_text_box() {
+    let document = replace_body(
+        r#"<w:p w14:paraId="AAAA0002"><w:r><w:t>正文</w:t></w:r><w:r><w:drawing><w:txbxContent><w:p w14:paraId="TXBX0001"><w:r><w:footnoteReference w:id="2"/></w:r></w:p></w:txbxContent></w:drawing></w:r></w:p>"#,
+    );
+    let path = write_document("txbx", &document, CT, DOC_RELS, &[]);
+    let out = tmp_dir().join("txbx-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" }]),
+    );
+    let xml = part_text(&out, "word/document.xml");
+    let tx = xml.find("txbxContent").expect("txbx");
+    let slice = &xml[tx..];
+    let start = slice.find("bookmarkStart").expect("start");
+    let mark = slice.find("footnoteReference").expect("mark");
+    let end = slice.find("bookmarkEnd").expect("end");
+    assert!(start < mark && mark < end);
+    assert!(slice.contains(
+        r#"<w:bookmarkStart w:id="0" w:name="_Ref000000001"/><w:r><w:footnoteReference w:id="2"/></w:r><w:bookmarkEnd w:id="0"/>"#
+    ));
+}
+
+#[test]
+fn noteref_rejects_a_header_mark_and_a_bad_target() {
+    let document = DOCUMENT.replace(r#"<w:r><w:footnoteReference w:id="2"/></w:r>"#, "");
+    let ct = CT.replace(
+        "</Types>",
+        r#"<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>"#,
+    );
+    let rels = DOC_RELS.replace(
+        "</Relationships>",
+        r#"<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>"#,
+    );
+    let header = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:r><w:footnoteReference w:id="2"/></w:r></w:p></w:hdr>"#;
+    let document = document.replace(
+        r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>"#,
+        r#"<w:sectPr><w:headerReference w:type="default" r:id="rId5"/><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>"#,
+    );
+    let path = write_document(
+        "hdr",
+        &document,
+        &ct,
+        &rels,
+        &[("word/header1.xml", header)],
+    );
+    let before = std::fs::read(&path).unwrap();
+    let err = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "note" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+
+    let path = write_sample("bad-target");
+    let missing = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:99", "kind": "note" }]),
+    );
+    assert_eq!(missing.code(), ErrorCode::IdNotFound);
+    let bad_id = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "para:AAAA0001", "kind": "note" }]),
+    );
+    assert_eq!(bad_id.code(), ErrorCode::InvalidId);
+    let both = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "bookmark": "_RefFn1", "target": "footnote:2", "kind": "note" }]),
+    );
+    assert_eq!(both.code(), ErrorCode::InvalidField);
+    let neither = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "kind": "note" }]),
+    );
+    assert_eq!(neither.code(), ErrorCode::InvalidField);
+    let wrong_kind = apply_err(
+        &path,
+        json!([{ "op": "insertCrossRef", "id": "para:AAAA0002", "target": "footnote:2", "kind": "ref" }]),
+    );
+    assert_eq!(wrong_kind.code(), ErrorCode::InvalidField);
 }

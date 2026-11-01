@@ -890,6 +890,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "label 必须是 SEQ 序列名：拉丁字母开头，其后最多 39 个拉丁字母、数字或下划线".into()
         }
         ErrorKind::InvalidCrossRefKind => "kind 只能是 ref、page 或 note".into(),
+        ErrorKind::CrossRefBookmarkOrTarget => {
+            "insertCrossRef 的 bookmark 与 target 必须二选一，且 target 只配 kind 为 note".into()
+        }
+        ErrorKind::NoteMarkOutsideMain => "引用标记在页眉或页脚，不能套主文档书签".into(),
         ErrorKind::InvalidIndexInstr => "instr 必须以 INDEX 开头".into(),
         ErrorKind::InvalidIndexEntry => {
             "entry 不能为空、不能只含空白、也不能含英文双引号".into()

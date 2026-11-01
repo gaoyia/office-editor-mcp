@@ -2465,6 +2465,7 @@ pub fn delete_bibliography(
     Ok(())
 }
 
+use super::notes;
 use super::request::DeleteCaptionOp;
 use super::request::DeleteCrossRefOp;
 use super::request::DeleteFieldOp;
@@ -2778,17 +2779,27 @@ pub(crate) fn apply_insert_cross_ref(
     op: &InsertCrossRefOp,
     i: usize,
 ) -> Result<(), Error> {
-    {
-        let main = docs.get(doc_part).unwrap();
-        if !link::all_bookmark_names(&main.root).contains(&op.bookmark) {
+    let bookmark = match (&op.bookmark, &op.target) {
+        (Some(name), None) => {
+            let main = docs.get(doc_part).unwrap();
+            if !link::all_bookmark_names(&main.root).contains(name) {
+                return Err(Error::with_path(
+                    ErrorKind::BookmarkNotFound { id: name.clone() },
+                    format!("ops[{i}].bookmark"),
+                ));
+            }
+            name.clone()
+        }
+        (None, Some((kind, note_id))) => {
+            bookmark_for_note(pkg, docs, dirty, doc_part, catalog, *kind, note_id, i)?
+        }
+        _ => {
             return Err(Error::with_path(
-                ErrorKind::BookmarkNotFound {
-                    id: op.bookmark.clone(),
-                },
+                ErrorKind::CrossRefBookmarkOrTarget,
                 format!("ops[{i}].bookmark"),
             ));
         }
-    }
+    };
     let part_name =
         super::apply::part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
     let doc = super::apply::load_part(pkg, docs, &part_name)?;
@@ -2798,9 +2809,179 @@ pub(crate) fn apply_insert_cross_ref(
             format!("ops[{i}].id"),
         )
     })?;
-    super::field::insert_cross_ref(el, &op.bookmark, op.kind);
+    super::field::insert_cross_ref(el, &bookmark, op.kind);
     dirty.insert(part_name, ());
     Ok(())
+}
+
+fn bookmark_for_note(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    kind: para::NoteKind,
+    note_id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    let shown = format!("{}:{note_id}", kind.as_str());
+    if !user_note_exists(pkg, docs, doc_part, kind, note_id)? {
+        return Err(Error::with_path(
+            ErrorKind::NoteNotFound { id: shown },
+            format!("ops[{i}].target"),
+        ));
+    }
+    let path = {
+        let main = docs.get(doc_part).unwrap();
+        find_note_ref_run(&main.root, kind, note_id)
+    };
+    if let Some(path) = path {
+        let main = docs.get_mut(doc_part).unwrap();
+        let (name, changed) = bind_note_ref_bookmark(&mut main.root, &path)?;
+        if changed {
+            dirty.insert(doc_part.to_string(), ());
+        }
+        return Ok(name);
+    }
+    if note_mark_in_headers(pkg, docs, catalog, kind, note_id)? {
+        return Err(Error::with_path(
+            ErrorKind::NoteMarkOutsideMain,
+            format!("ops[{i}].target"),
+        ));
+    }
+    Err(Error::with_path(
+        ErrorKind::NoteNotFound { id: shown },
+        format!("ops[{i}].target"),
+    ))
+}
+
+fn user_note_exists(
+    pkg: &Package,
+    docs: &HashMap<String, Document>,
+    doc_part: &str,
+    kind: para::NoteKind,
+    note_id: &str,
+) -> Result<bool, Error> {
+    let Some(part) = notes::part_name(pkg, doc_part, kind)? else {
+        return Ok(false);
+    };
+    if let Some(doc) = docs.get(&part) {
+        return Ok(notes::find_user_note(&doc.root, kind, note_id).is_some());
+    }
+    let bytes = pkg.get(&part)?;
+    let parsed = crate::xml::parse(bytes)?;
+    Ok(notes::find_user_note(&parsed.root, kind, note_id).is_some())
+}
+
+fn note_mark_in_headers(
+    pkg: &Package,
+    docs: &HashMap<String, Document>,
+    catalog: &[hf::HfPart],
+    kind: para::NoteKind,
+    note_id: &str,
+) -> Result<bool, Error> {
+    for item in catalog {
+        if let Some(doc) = docs.get(&item.part) {
+            if find_note_ref_run(&doc.root, kind, note_id).is_some() {
+                return Ok(true);
+            }
+            continue;
+        }
+        let bytes = pkg.get(&item.part)?;
+        let parsed = crate::xml::parse(bytes)?;
+        if find_note_ref_run(&parsed.root, kind, note_id).is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn find_note_ref_run(root: &Element, kind: para::NoteKind, note_id: &str) -> Option<Vec<usize>> {
+    fn walk(
+        el: &Element,
+        path: &mut Vec<usize>,
+        kind: para::NoteKind,
+        note_id: &str,
+    ) -> Option<Vec<usize>> {
+        for (i, node) in el.children.iter().enumerate() {
+            if let Node::Element(child) = node {
+                path.push(i);
+                if let Some(found) = walk(child, path, kind, note_id) {
+                    return Some(found);
+                }
+                path.pop();
+            }
+        }
+        if el.local_name() == "r" && run_has_note_ref(el, kind, note_id) {
+            return Some(path.clone());
+        }
+        None
+    }
+    let mut path = Vec::new();
+    walk(root, &mut path, kind, note_id)
+}
+
+fn run_has_note_ref(el: &Element, kind: para::NoteKind, note_id: &str) -> bool {
+    let local = kind.reference_local();
+    let mut found = false;
+    crate::xml::walk_elements(el, &mut |node| {
+        if !found
+            && node.local_name() == local
+            && notes::ids_match(node.attr_local("id").unwrap_or(""), note_id)
+        {
+            found = true;
+        }
+    });
+    found
+}
+
+fn bind_note_ref_bookmark(root: &mut Element, path: &[usize]) -> Result<(String, bool), Error> {
+    let Some((&run_index, parent_path)) = path.split_last() else {
+        return Err(xml_broken("note reference"));
+    };
+    let parent = para::element_at(root, parent_path).ok_or_else(|| xml_broken("note reference"))?;
+    if let Some(name) = tight_ref_name(parent, run_index) {
+        return Ok((name, false));
+    }
+    let name = unused_ref_name(&link::all_bookmark_names(root));
+    let xml_id = link::next_bookmark_xml_id(root);
+    let parent =
+        para::element_at_mut(root, parent_path).ok_or_else(|| xml_broken("note reference"))?;
+    insert_bookmark_around(parent, run_index, &xml_id, &name);
+    Ok((name, true))
+}
+
+fn tight_ref_name(parent: &Element, run_index: usize) -> Option<String> {
+    let prev = run_index.checked_sub(1)?;
+    let Node::Element(start) = parent.children.get(prev)? else {
+        return None;
+    };
+    let Node::Element(end) = parent.children.get(run_index + 1)? else {
+        return None;
+    };
+    if start.local_name() != "bookmarkStart" || end.local_name() != "bookmarkEnd" {
+        return None;
+    }
+    let name = start.attr_local("name")?;
+    if !name.starts_with("_Ref") {
+        return None;
+    }
+    let sid = start.attr_local("id")?;
+    if end.attr_local("id") != Some(sid) {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+fn insert_bookmark_around(parent: &mut Element, run_index: usize, xml_id: &str, name: &str) {
+    let mut end = Element::new(parent.prefixed("bookmarkEnd"));
+    end.set_attr(&end.prefixed("id"), xml_id);
+    parent.children.insert(run_index + 1, Node::Element(end));
+    let mut start = Element::new(parent.prefixed("bookmarkStart"));
+    crate::xml::mark_new(&mut start, "bookmark");
+    start.set_attr(&start.prefixed("id"), xml_id);
+    start.set_attr(&start.prefixed("name"), name);
+    parent.children.insert(run_index, Node::Element(start));
 }
 pub(crate) fn apply_delete_cross_ref(
     pkg: &Package,

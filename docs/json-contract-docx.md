@@ -398,7 +398,7 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 交叉引用的 `{n}` 从 1 起，按该故事里被收入的顶层 `REF` / `PAGEREF` / `NOTEREF` 域起点的文档顺序。嵌套在其它域里的（含 TOC 结果里的 `PAGEREF`）不编 `xref:`。
 `xref:{n}` 在插删交叉引用之后会变，只够同一次 inspect 之后立刻 apply。`kind` 为 `ref`（`REF`）、`page`（`PAGEREF`）或 `note`（`NOTEREF`）。
 页眉页脚、文本框、脚注、尾注、批注里的交叉引用用带容器前缀的 id。根上 `crossRefCount` 只计正文。
-`insertCrossRef` 可以写到这些段落。书签仍在主文档里查找。
+`insertCrossRef` 可以写到这些段落。只给 `bookmark` 时，书签仍在主文档里查找。`kind` 为 `note` 且给了 `target` 时，库在主文档的引用标记上套 `_Ref` 书签。
 
 索引的 `{n}` 从 1 起，按该故事里被收入的顶层 `INDEX` 域起点的文档顺序，与目录同一套容器边界。嵌套在其它域结果里的 `INDEX` 不编 `index:`。
 `index:{n}` 在插删索引之后会变，只够同一次 inspect 之后立刻 apply。根上计数只计正文。
@@ -3329,15 +3329,24 @@ id 不是 `caption:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidF
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertCrossRef"` |
-| `id` | 段落 id（正文或页眉页脚） |
-| `bookmark` | 必填。目标书签名，可以以下划线开头（题注的 `_Ref*`）。必须在主文档里已有对应 `w:bookmarkStart` |
-| `kind` | 可选。`ref`（缺省）写入 ` REF {bookmark} \h `；`page` 写入 ` PAGEREF {bookmark} \h `；`note` 写入 ` NOTEREF {bookmark} \h `。其它值报 `InvalidField` |
+| `id` | 段落 id。范围见上文交叉引用 |
+| `bookmark` | 与 `target` 二选一。书签名，可以以下划线开头。必须在主文档里已有 |
+| `target` | 与 `bookmark` 二选一。`footnote:{id}` 或 `endnote:{id}`，且 `kind` 为 `note` |
+| `kind` | 可选。`ref`（缺省）、`page` 或 `note`。其它值报 `InvalidField` |
 
-在该段已有内容之后插入一组复杂域：`fldChar begin`（`w:dirty="true"`）、一条 `instrText`、`fldChar separate`、`fldChar end`。不写结果 run，不在库里解析书签内容。
-`note` 引用脚注或尾注的编号。Word 16.0 把 `_Ref` 书签套在正文里的 `w:footnoteReference` 或 `w:endnoteReference` 上；本 op 不新建这本书签，调用方要事先放好。
-Word 的开关是 `\h`（超链接）、`\p`（相对位置，和 `\h` 一起时写成 `\p \h`）、`\f`（带格式的引用标记）。这里和 `ref` / `page` 一样只写 `\h`。
-`bookmark` 缺、空串或含空白报 `InvalidField`。主文档里没有该名报 `IdNotFound`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。
-xlsx / pptx 上发此 op 报 `InvalidField`。
+在该段已有内容之后插入一组复杂域：`fldChar begin`（`w:dirty="true"`）、一条 `instrText`、`fldChar separate`、`fldChar end`。不写结果 run，不在库里解析书签内容，也不计算注的编号。
+
+- `ref` 写入 ` REF {bookmark} \h `，`page` 写入 ` PAGEREF {bookmark} \h `，`note` 写入 ` NOTEREF {name} \h `
+- `bookmark` 与 `target` 都给、都不给，或 `target` 配了不是 `note` 的 `kind`，报 `InvalidField`
+- 给了 `bookmark` 时不新建书签。空串或含空白报 `InvalidField`。主文档里没有该名报 `IdNotFound`
+- 给了 `target` 时，在主文档部件里找引用该注的 `w:footnoteReference` 或 `w:endnoteReference` 所在的 run
+- 这个 run 已经被一本 `_Ref*` 书签紧邻包住时，复用它的名字
+- 否则在该 run 前后插入一对书签。名字是尚未占用的 `_Ref` 加九位数字，与 `insertCaption` 相同
+- 正文文本框里的引用标记可以套。引用标记只在页眉或页脚里时报 `InvalidField`
+- 找不到该注报 `IdNotFound`。`target` 不是注 id 报 `InvalidId`
+- 同一批 apply 里刚插入的注还没有可回读的 id。先 inspect 拿到 `footnote:{id}` 或 `endnote:{id}`，再另一次 apply
+- 找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`
+- xlsx / pptx 上发此 op 报 `InvalidField`
 
 ### deleteCrossRef
 

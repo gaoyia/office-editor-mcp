@@ -1123,6 +1123,8 @@ define_error_kinds! {
     InvalidTocKind => vec![Self::InvalidTocKind],
     InvalidSeqIdentifier => vec![Self::InvalidSeqIdentifier],
     InvalidCrossRefKind => vec![Self::InvalidCrossRefKind],
+    CrossRefBookmarkOrTarget => vec![Self::CrossRefBookmarkOrTarget],
+    NoteMarkOutsideMain => vec![Self::NoteMarkOutsideMain],
     InvalidIndexInstr => vec![Self::InvalidIndexInstr],
     InvalidIndexEntry => vec![Self::InvalidIndexEntry],
     InvalidSourceTag => vec![Self::InvalidSourceTag],
@@ -1838,6 +1840,8 @@ impl ErrorKind {
             | Self::InvalidTocKind
             | Self::InvalidSeqIdentifier
             | Self::InvalidCrossRefKind
+            | Self::CrossRefBookmarkOrTarget
+            | Self::NoteMarkOutsideMain
             | Self::InvalidIndexInstr
             | Self::InvalidIndexEntry
             | Self::InvalidSourceTag
