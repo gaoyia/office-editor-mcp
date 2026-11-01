@@ -953,7 +953,7 @@
 - 序号不存在报 `IdNotFound`，不是允许编辑区域 id 报 `InvalidId`
 - 对 `chartsheet` 发允许编辑区域 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
-- 已有 SHA-512 却不给或给错 `password` 的规则与 `setProtection` 相同
+- 已有哈希却不给或给错 `password` 的规则与 `setProtection` 相同
 - 找不到书签时，`setBookmark` / `deleteBookmark` 报 `IdNotFound`
 - id 不是书签 id 报 `InvalidId`
 - `insertBookmark` 的 `id` 必须是正文、页眉页脚或框内段落 id
