@@ -665,7 +665,7 @@ apply 的 `setShowPr` 只改 `/ppt/presProps.xml` 的 `p:showPr`，插在 `prnPr
 
 apply 的 `setProtection` 只改 `presentation.xml` 的 `p:modifyVerifier`（`defaultTextStyle` 之后、`extLst` 之前）。
 无密码时写空元素或删掉元素。给了 `password` 则写 PowerPoint 16.0 的 `crypt*` / `hashData` / `saltData` / `spinCount`。
-已有可校验的 SHA-512 哈希时必须给对得上的口令。未知哈希不覆盖。
+已有能核的哈希时必须给对得上的口令。算法认不出的哈希不覆盖。
 
 apply 插入幻灯片 OLE 时，可能新建 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（或其它 Office 扩展名，
 CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `application/vnd.openxmlformats-officedocument.oleObject`），以及一张预览 `/ppt/media/imageN.png`。

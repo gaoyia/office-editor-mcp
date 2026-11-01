@@ -745,9 +745,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::XrefPrefix => "交叉引用 id 必须是 xref:N".into(),
             IdReason::XrefIndexNotInt => "xref 序号必须是正整数".into(),
             IdReason::XrefIndexFromOne => "xref 序号从 1 起".into(),
-            IdReason::InsertCrossRefNeedsPara => {
-                "insertCrossRef 的 id 必须是正文或页眉页脚段落 id".into()
-            }
             IdReason::IndexPrefix => "索引 id 必须是 index:N".into(),
             IdReason::IndexIndexNotInt => "index 序号必须是正整数".into(),
             IdReason::IndexIndexFromOne => "index 序号从 1 起".into(),
@@ -757,9 +754,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::XePrefix => "索引项 id 必须是 xe:N".into(),
             IdReason::XeIndexNotInt => "xe 序号必须是正整数".into(),
             IdReason::XeIndexFromOne => "xe 序号从 1 起".into(),
-            IdReason::InsertIndexEntryNeedsPara => {
-                "insertIndexEntry 的 id 必须是正文或页眉页脚段落 id".into()
-            }
             IdReason::SourcePrefix => "书目源 id 必须是 source:N".into(),
             IdReason::SourceIndexNotInt => "source 序号必须是正整数".into(),
             IdReason::SourceIndexFromOne => "source 序号从 1 起".into(),
@@ -767,9 +761,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CitePrefix => "引文 id 必须是 cite:N".into(),
             IdReason::CiteIndexNotInt => "cite 序号必须是正整数".into(),
             IdReason::CiteIndexFromOne => "cite 序号从 1 起".into(),
-            IdReason::InsertCitationNeedsPara => {
-                "insertCitation 的 id 必须是正文或页眉页脚段落 id".into()
-            }
             IdReason::BiblioPrefix => "书目块 id 必须是 biblio:N".into(),
             IdReason::BiblioIndexNotInt => "biblio 序号必须是正整数".into(),
             IdReason::BiblioIndexFromOne => "biblio 序号从 1 起".into(),
@@ -1262,7 +1253,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionPasswordBlank => {
             "password 与 writePassword 必须是非空字符串".into()
         }
-        ErrorKind::ProtectionPasswordWrong => "口令与已有 SHA-512 哈希对不上".into(),
+        ErrorKind::ProtectionPasswordWrong => "口令与已有哈希对不上".into(),
         ErrorKind::ProtectionPasswordNeedsDoc => {
             "password 只能配限制编辑，不能只配 readOnlyRecommended".into()
         }

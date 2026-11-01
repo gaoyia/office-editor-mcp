@@ -1184,7 +1184,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertBibliography",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1196,19 +1196,19 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertCaption",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertChart",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertCitation",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1220,13 +1220,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertComment",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertConnector",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1238,13 +1238,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertContentControl",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertCrossRef",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1262,7 +1262,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertEditRange",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1274,7 +1274,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertEndnote",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1286,13 +1286,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertField",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertFootnote",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1304,37 +1304,37 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertHyperlink",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertIndex",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertIndexEntry",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertInkCanvas",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertMath",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertModel3d",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1346,7 +1346,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertOle",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1358,7 +1358,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertPicture",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1370,7 +1370,7 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertRuby",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1382,13 +1382,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertShape",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertSmartArt",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1412,13 +1412,13 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "insertTextBox",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "insertToc",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -1742,25 +1742,25 @@ const ROWS: &[Row] = &[
         format: "docx",
         op: "setParaFormat",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "setParaNumbering",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "setParaRuns",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
         op: "setParaStyle",
         family: "para:index",
-        test: "入口同 docx_para_index",
+        test: "入口同 insert_then_edit_keeps_original_paragraph",
     },
     Row {
         format: "docx",
@@ -2252,7 +2252,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "insertComment",
         family: "slide:{n}",
-        test: "入口同 pptx_slides",
+        test: "入口同 delete_then_edit_uses_original_slide",
     },
     Row {
         format: "pptx",
@@ -2618,7 +2618,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setNotesText",
         family: "slide:{n}",
-        test: "入口同 pptx_slides",
+        test: "入口同 delete_then_edit_uses_original_slide",
     },
     Row {
         format: "pptx",
@@ -2708,13 +2708,13 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setSlideHidden",
         family: "slide:{n}",
-        test: "入口同 pptx_slides",
+        test: "入口同 delete_then_edit_uses_original_slide",
     },
     Row {
         format: "pptx",
         op: "setSlideLayout",
         family: "slide:{n}",
-        test: "入口同 pptx_slides",
+        test: "入口同 delete_then_edit_uses_original_slide",
     },
     Row {
         format: "pptx",
@@ -2870,7 +2870,7 @@ const ROWS: &[Row] = &[
         format: "pptx",
         op: "setTransition",
         family: "slide:{n}",
-        test: "入口同 pptx_slides",
+        test: "入口同 delete_then_edit_uses_original_slide",
     },
     Row {
         format: "pptx",
@@ -2922,5 +2922,44 @@ fn help_ops_are_in_the_coverage_table() {
             assert!(!row.family.is_empty(), "{} {} 缺族", row.format, row.op);
             assert!(!row.test.is_empty(), "{} {} 缺测试", row.format, row.op);
         }
+    }
+}
+
+fn test_fn_names() -> std::collections::HashSet<String> {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let mut names = std::collections::HashSet::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|ext| ext != "rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        for line in text.lines() {
+            if let Some(rest) = line.trim_start().strip_prefix("fn ") {
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                names.insert(name);
+            }
+        }
+    }
+    names
+}
+
+#[test]
+fn coverage_table_names_real_tests() {
+    let names = test_fn_names();
+    for row in ROWS {
+        if row.test == "-" || row.test.starts_with("待第二期") {
+            continue;
+        }
+        let name = row.test.strip_prefix("入口同 ").unwrap_or(row.test);
+        assert!(
+            names.contains(name),
+            "{} {} 点名的测试 {name} 不在 tests/ 里",
+            row.format,
+            row.op
+        );
     }
 }

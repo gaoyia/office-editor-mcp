@@ -793,9 +793,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::XrefPrefix => "Cross-reference id must be xref:N".into(),
             IdReason::XrefIndexNotInt => "xref index must be a positive integer".into(),
             IdReason::XrefIndexFromOne => "xref index starts at 1".into(),
-            IdReason::InsertCrossRefNeedsPara => {
-                "insertCrossRef id must be a body or header/footer paragraph id".into()
-            }
             IdReason::IndexPrefix => "Index id must be index:N".into(),
             IdReason::IndexIndexNotInt => "index index must be a positive integer".into(),
             IdReason::IndexIndexFromOne => "index index starts at 1".into(),
@@ -806,9 +803,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::XePrefix => "Index entry id must be xe:N".into(),
             IdReason::XeIndexNotInt => "xe index must be a positive integer".into(),
             IdReason::XeIndexFromOne => "xe index starts at 1".into(),
-            IdReason::InsertIndexEntryNeedsPara => {
-                "insertIndexEntry id must be a body or header/footer paragraph id".into()
-            }
             IdReason::SourcePrefix => "Bibliography source id must be source:N".into(),
             IdReason::SourceIndexNotInt => "source index must be a positive integer".into(),
             IdReason::SourceIndexFromOne => "source index starts at 1".into(),
@@ -818,9 +812,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CitePrefix => "Citation id must be cite:N".into(),
             IdReason::CiteIndexNotInt => "cite index must be a positive integer".into(),
             IdReason::CiteIndexFromOne => "cite index starts at 1".into(),
-            IdReason::InsertCitationNeedsPara => {
-                "insertCitation id must be a body or header/footer paragraph id".into()
-            }
             IdReason::BiblioPrefix => "Bibliography id must be biblio:N".into(),
             IdReason::BiblioIndexNotInt => "biblio index must be a positive integer".into(),
             IdReason::BiblioIndexFromOne => "biblio index starts at 1".into(),
@@ -1409,7 +1400,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "password and writePassword must be non-empty strings".into()
         }
         ErrorKind::ProtectionPasswordWrong => {
-            "password does not match the existing SHA-512 hash".into()
+            "password does not match the existing password hash".into()
         }
         ErrorKind::ProtectionPasswordNeedsDoc => {
             "password can only be used with document editing protection, not readOnlyRecommended alone"

@@ -179,7 +179,7 @@
   - docx create 出现 `password`
   - 目标 `writeProtection` 已有密码哈希却不给对得上的 `writePassword` 就要改对应字段
   - `p:modifyVerifier` / docx / xlsx 已有密码哈希却不给对得上的 `password`
-    （含 pptx 非 `cryptAlgorithmSid=14` 加 `hashData`、docx 非 `cryptAlgorithmSid=14`、xlsx 遗留 XOR）
+    （含算法认不出、无从核对的哈希。各格式能核的算法见 `json-contract.md` 的 `setProtection`）
   - 已有口令哈希的圈数大于 1000 万。本库不跑这圈，也不把它说成口令错误。`inspect` 和不改保护的打开不核对圈数
 
 ### 各码在具体 op 上的判定
@@ -944,8 +944,8 @@
 - 除 op 与 id 外一个可写字段都不给报 `InvalidField`
 - 对 `chartsheet` 发工作表专用权限键报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
-- 空 `password` 或口令对不上已有 SHA-512 哈希报 `InvalidField`
-- 不给 `password` 却要改已有哈希，或哈希不是本期 SHA-512，报 `NotImplemented`
+- 空 `password` 或口令对不上已有哈希报 `InvalidField`
+- 不给 `password` 却要改已有哈希，或哈希算法认不出，报 `NotImplemented`
 - xlsx 的 `insertProtectedRange` 的 id 是工作表
 - 必须给 `name` 与 `sqref`
 - `name` 去掉首尾空白后为空、长于 255，或同一表内大小写不敏感重名，报 `InvalidField`
@@ -1137,8 +1137,8 @@
 - 没有 embedding 报 `OpcPartMissing`
 - `setProps` / `setCustomProp` 的 id 不是对应格式根报 `InvalidId`
 - `setProtection` 一个可写字段都不给、docx 的 `edit` 不认识、pptx 缺 `enforced`，报 `InvalidField`
-- 空 `password` 或口令对不上已有 SHA-512 哈希报 `InvalidField`
-- 不给 `password` 却要改已有哈希，或哈希不是本期能校验的 SHA-512，报 `NotImplemented`
+- 空 `password` 或口令对不上已有哈希报 `InvalidField`
+- 不给 `password` 却要改已有哈希，或哈希算法认不出，报 `NotImplemented`
 - docx create 出现 `password` 报 `NotImplemented`
 - `setShowPr` 五个字段一个都不给、或 `type` 不是 `present` / `browse` / `kiosk`，报 `InvalidField`
 - `setProps` 八个可写字段一个都不给、`setCustomProp` 的 `name` 为空、`type` 不认识或与 `value` 对不上，报 `InvalidField`
