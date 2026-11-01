@@ -191,7 +191,7 @@ $failXlsx = Invoke-OoxpExpectFail @{
 $codeXlsx = Get-PptErrorCode $failXlsx
 
 $pf5ok = ($codeId -eq 'InvalidId') -and (-not (Test-Path $badIdOut)) `
-    -and ($codeNotes -eq 'InvalidId') -and (-not (Test-Path $notesOut)) `
+    -and ($codeNotes -eq 'IdNotFound') -and (-not (Test-Path $notesOut)) `
     -and ($codeType -eq 'InvalidField') -and (-not (Test-Path $badTypeOut)) `
     -and ($codeInstr -eq 'InvalidField') -and (-not (Test-Path $instrOut)) `
     -and ($codeXlsx -eq 'InvalidField') -and (-not (Test-Path $xlsxOut))

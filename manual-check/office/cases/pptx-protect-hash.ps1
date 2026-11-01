@@ -216,5 +216,5 @@ $codeIso = Get-PptErrorCode $isoFail
 $pph5ok = ($blankFail.ExitCode -ne 0) -and ($codeBlank -eq 'InvalidField') -and (-not (Test-Path $failBlank)) `
     -and ($wrongFail.ExitCode -ne 0) -and ($codeWrong -eq 'InvalidField') -and (-not (Test-Path $failWrong)) `
     -and ($nopwFail.ExitCode -ne 0) -and ($codeNoPw -eq 'NotImplemented') -and (-not (Test-Path $failNoPw)) `
-    -and ($isoFail.ExitCode -ne 0) -and ($codeIso -eq 'NotImplemented') -and (-not (Test-Path $failIsoOut))
+    -and ($isoFail.ExitCode -ne 0) -and ($codeIso -eq 'InvalidField') -and (-not (Test-Path $failIsoOut))
 Add-Check 'pptx-Pph5' $pph5ok "blank=$codeBlank wrong=$codeWrong nopw=$codeNoPw iso=$codeIso"

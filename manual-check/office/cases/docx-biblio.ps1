@@ -191,14 +191,27 @@ Add-Check 'docx-Bi5' (
 ) "cite=$($treeDel.citationCount) src=$($treeDel.sourceCount) texts=$($delTexts -join '|') caption=$capD"
 Close-WordDoc $docD
 
-$failHf = Get-OutPath 'docx-biblio-fail-hf.docx'
-$rawHf = Invoke-OoxpExpectFail @{
+$hfOut = Get-OutPath 'docx-biblio-hf.docx'
+Close-WordDocByPath $word $hfOut
+if (Test-Path $hfOut) { Remove-Item -Force $hfOut }
+Invoke-OoxpRequest @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
-    output = $failHf.Replace('\', '/')
+    output = $hfOut.Replace('\', '/')
     ops = @(@{ op = 'insertBibliography'; id = $hfPara })
-} 'docx-biblio-fail-hf'
-try { $codeHf = ($rawHf.Stderr | ConvertFrom-Json).error.code } catch { $codeHf = $null }
+} 'docx-biblio-fail-hf' | Out-Null
+$treeHf = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $hfOut.Replace('\', '/'); format = 'docx'
+    scope = @{ headerFooter = $true; bibliographies = $true }
+} 'docx-biblio-inspect-hf'
+$hfId = ''
+if ($treeHf.headers -and $treeHf.headers[0].bibliographies) {
+    $hfId = [string]$treeHf.headers[0].bibliographies[0].id
+}
+$docHf = Open-WordDoc $word $hfOut
+$capHf = [string]$docHf.ActiveWindow.Caption
+Close-WordDoc $docHf
 
 $xlsx = Get-OutPath 'docx-biblio-xlsx.xlsx'
 Invoke-OoxpRequest @{
@@ -216,6 +229,9 @@ $rawX = Invoke-OoxpExpectFail @{
 try { $codeX = ($rawX.Stderr | ConvertFrom-Json).error.code } catch { $codeX = $null }
 
 Add-Check 'docx-Bi6' (
-    ($rawHf.ExitCode -ne 0) -and ($codeHf -eq 'InvalidId') -and (-not (Test-Path $failHf)) -and
+    ($hfId -like 'header:*/biblio:1') -and
+    ([int]$treeHf.bibliographyCount -eq 0) -and
+    ([int]$treeHf.headers[0].bibliographyCount -eq 1) -and
+    ($capHf -notmatch 'Repair') -and
     ($rawX.ExitCode -ne 0) -and ($codeX -eq 'InvalidField') -and (-not (Test-Path $failX))
-) "hf=$codeHf wroteHf=$([bool](Test-Path $failHf)) xlsx=$codeX wroteX=$([bool](Test-Path $failX))"
+) "hf=$hfId root=$($treeHf.bibliographyCount) header=$($treeHf.headers[0].bibliographyCount) caption=$capHf xlsx=$codeX"

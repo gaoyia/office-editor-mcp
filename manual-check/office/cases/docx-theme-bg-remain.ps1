@@ -232,17 +232,18 @@ Invoke-OoxpRequest @{
     workbook = @{ sheets = @(@{ name = 'Sheet1' }) }
 } 'docx-fm-xlsx-create' | Out-Null
 $failX = Get-OutPath 'docx-theme-bg-fail-xlsx.xlsx'
+if (Test-Path $failX) { Remove-Item -Force $failX }
 $rawX = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $xlsx.Replace('\', '/')
     output = $failX.Replace('\', '/')
-    ops = @(@{ op = 'setThemeOverride'; id = 'xlsx:workbook'; accent1 = 'FF0000' })
+    ops = @(@{ op = 'setThemeOverride'; id = 'slide:1'; accent1 = 'FF0000' })
 } 'docx-fm-fail-xlsx'
 $codeId = $null
 $codeX = $null
 try { $codeId = ($badId.Stderr | ConvertFrom-Json).error.code } catch {}
 try { $codeX = ($rawX.Stderr | ConvertFrom-Json).error.code } catch {}
 Add-Check 'docx-Fm7' (
-    ($codeId -eq 'InvalidId') -and ($codeX -eq 'InvalidField') -and
+    ($codeId -eq 'InvalidId') -and ($codeX -eq 'InvalidId') -and
     (-not (Test-Path $failBad)) -and (-not (Test-Path $failX))
 ) "id=$codeId xlsx=$codeX wrote=$([bool](Test-Path $failBad))"

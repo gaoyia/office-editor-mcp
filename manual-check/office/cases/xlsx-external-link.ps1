@@ -156,21 +156,44 @@ try {
     if ($ws) { Release-Com $ws }
 }
 Close-AllWorkbooks $excel
-$failUse = Get-OutPath 'xlsx-extlink-inuse.xlsx'
-$blocked = Invoke-OoxpExpectFail @{
+$broke = Get-OutPath 'xlsx-extlink-inuse.xlsx'
+if (Test-Path $broke) { Remove-Item -Force $broke }
+Invoke-OoxpRequest @{
     schemaVersion = 1; action = 'apply'
     path = $formulaOut.Replace('\', '/')
-    output = $failUse.Replace('\', '/')
+    output = $broke.Replace('\', '/')
     ops = @(@{ op = 'deleteExternalLink'; id = 'extlink:1' })
-} 'xlsx-xel-inuse'
-$codeUse = $null
-try { $codeUse = ($blocked.Stderr | ConvertFrom-Json).error.code } catch {}
+} 'xlsx-xel-inuse' | Out-Null
+$treeB = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $broke.Replace('\', '/'); format = 'xlsx'
+    scope = @{ sheet = 'Sheet1'; range = 'B1'; externalLinks = $true }
+} 'xlsx-xel-inspect-broke'
+$cellB = $null
+if ($treeB.sheets) { $cellB = @($treeB.sheets[0].cells) | Select-Object -First 1 }
+Close-AllWorkbooks $excel
+$wbB = Open-ExcelBook $excel $broke
+$capB = [string]$wbB.Windows.Item(1).Caption
+$linksB = @(Get-ExcelLinkSources $wbB)
+$valB = $null
+$formulaB = ''
+$wsB = $null
+try {
+    $wsB = $wbB.Worksheets.Item(1)
+    $valB = $wsB.Range('B1').Value2
+    $formulaB = [string]$wsB.Range('B1').Formula
+} finally {
+    if ($wsB) { Release-Com $wsB }
+}
+Close-AllWorkbooks $excel
 $xel3ok = ($capF -notmatch 'Repair') `
     -and ($formula -match "Sheet1'!A1" -or $formula -match 'Sheet1!A1') `
-    -and ($blocked.ExitCode -ne 0) `
-    -and ($codeUse -eq 'NotImplemented') `
-    -and (-not (Test-Path $failUse))
-Add-Check 'xlsx-Xel3' $xel3ok "caption=$capF formula=$formula code=$codeUse wrote=$(Test-Path $failUse)"
+    -and ($capB -notmatch 'Repair') `
+    -and ([int]$treeB.externalLinkCount -eq 0) `
+    -and ($linksB.Count -eq 0) `
+    -and ([string]$valB -eq '0') `
+    -and ($formulaB -notmatch '\[1\]')
+Add-Check 'xlsx-Xel3' $xel3ok "before=$formula caption=$capB links=$($linksB.Count) count=$($treeB.externalLinkCount) value=$valB formula=$formulaB cell=$($cellB.value)"
 
 $cleared = Get-OutPath 'xlsx-extlink-cleared.xlsx'
 if (Test-Path $cleared) { Remove-Item -Force $cleared }

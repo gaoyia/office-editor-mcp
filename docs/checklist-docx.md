@@ -19,6 +19,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 补跑 `docx-sdt-bind.ps1`。Word 另存的绑定控件改字后，控件和自定义 XML 都是新值。重复节再克隆一项后有两项。没有 Repair。
 2026-11-01 补跑 `docx-container-ole.ps1`。文本框段落里插入的嵌入对象，Word 16.0 打开没有 Repair，框内能看见该 OLE。
 2026-11-01 补跑 `docx-container-toc.ps1`。文本框里的目录更新域后能看见标题「第一章」，没有 Repair。
+2026-11-01 重跑整套手测。页眉题注、索引和书目改为插入成功，id 带 `header:` 前缀。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
 2026-11-01 探测墨迹批注。Word 16.0 保存时丢掉空的 `wpi:ink`，`Replies.Add` 和改 `Range.Text` 的另存同样丢掉。回复和改字仍拒绝，不进 `run.ps1`。
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
 A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
@@ -363,7 +364,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Cy1–Cy8** ✅
   - Word 16.0：`docx-create-round4.ps1`，8 PASS / 0 FAIL
   - 样式、表外观、形状、连接线、拼音、题注 / 索引 / 书目、嵌入字体、DrawingML 链
-  - create 给 `protection.password` 仍为 `NotImplemented`
+  - 只给 `protection.password`、不给限制编辑种类，为 `InvalidField`
   - 标题栏无 Repair
 - **Cd1–Cd6** ✅
   - Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL
@@ -911,7 +912,7 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 
 ## 图表稀有类型
 
-`insertChart` 写出股价、曲面、复合饼；`setChartType` 在系列条数对得上时转入或转出。chartex 仍除删除与尺寸 / 绕排外锁死。
+`insertChart` 写出股价、曲面、复合饼；`setChartType` 在系列条数对得上时转入或转出。chartex 可以改标题、图例和系列；换类型、轴标题、数据标签、趋势线和误差线仍报 `NotImplemented`。
 手测脚本 `manual-check/office/cases/docx-charts-rare.ps1`。编号用 Cq。xlsx / pptx 各有对应脚本。
 
 - **Cq1**
@@ -932,6 +933,7 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 - **Cq5**
   - 检查：仍拒绝
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
+  - 源里已有 chartex 时 `setChartType` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
   - 均未写坏文件
@@ -1514,9 +1516,8 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 通过标准：`deleteCaption` 之后 `captionCount` 为 0，标题段还在，Word 无修复
 - **Cp6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertCaption` 得 `InvalidId`
-  - xlsx 上发 `insertCaption` 得 `InvalidField`
-  - 未写文件
+  - 通过标准：对页眉段落发 `insertCaption` 成功，id 带 `header:` 前缀，根上 `captionCount` 仍为 0，Word 无 Repair
+  - xlsx 上发 `insertCaption` 得 `InvalidField`，未写文件
 
 ## 索引
 
@@ -1540,9 +1541,8 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 通过标准：`deleteIndexEntry` 之后 `indexEntryCount` 为 0，标题段还在，Word 无修复
 - **Ix6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertIndex` 得 `InvalidId`
-  - xlsx 上发 `insertIndex` 得 `InvalidField`
-  - 未写文件
+  - 通过标准：对页眉段落发 `insertIndex` 成功，id 带 `header:` 前缀，根上 `indexCount` 仍为 0，Word 无 Repair
+  - xlsx 上发 `insertIndex` 得 `InvalidField`，未写文件
 
 ## 参考文献
 
@@ -1570,9 +1570,8 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 标题段还在，Word 无修复
 - **Bi6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertBibliography` 得 `InvalidId`
-  - xlsx 上发 `insertBibliography` 得 `InvalidField`
-  - 未写文件
+  - 通过标准：对页眉段落发 `insertBibliography` 成功，id 带 `header:` 前缀，根上 `bibliographyCount` 仍为 0，Word 无 Repair
+  - xlsx 上发 `insertBibliography` 得 `InvalidField`，未写文件
 
 ## 构建基块
 
@@ -1798,7 +1797,7 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
 
 ## create 第四轮
 
-create 复用 46–51 已有 apply：自定义样式、表外观、无框形状、连接线、拼音、题注 / 交叉引用 / 索引 / 参考文献 / 构建基块、嵌入字体、东亚设置、例外编辑区、图与框上的 DrawingML 链。不写修订痕迹。`protection.password` 仍报 `NotImplemented`。不算排版引擎。
+create 复用 46–51 已有 apply：自定义样式、表外观、无框形状、连接线、拼音、题注 / 交叉引用 / 索引 / 参考文献 / 构建基块、嵌入字体、东亚设置、例外编辑区、图与框上的 DrawingML 链。不写修订痕迹。只给 `protection.password`、不给限制编辑种类，报 `InvalidField`。配上 `edit` 的口令由 `docx-create-password.ps1` 覆盖。不算排版引擎。
 手测脚本 `manual-check/office/cases/docx-create-round4.ps1`。编号用 Cy（不要和 Cd、Cs、Cf、C、Pq 撞）。
 
 | 序号 | 检查 | 通过标准 |
@@ -1809,12 +1808,12 @@ create 复用 46–51 已有 apply：自定义样式、表外观、无框形状�
 | Cy4 | 题注书目基块 | `captionCount` / `indexCount` / `bibliographyCount` / `sourceCount` / `docPartCount` 均为 1，`bibliographyStyle.styleName` 为 MLA |
 | Cy5 | 字体与东亚 | `embeddedFontCount` 为 1，名为 Calibri；`fontEmbed.trueType` 为 true；`eastAsianSettings.characterSpacingControl` 为 `compressPunctuation` |
 | Cy6 | DrawingML 链 | `pictureCount` 为 1，图上 `hyperlink.url` 为 `https://example.com`；根上 `hyperlinkCount` 仍为 0 |
-| Cy7 | password | create 给 `protection.password` 报 `NotImplemented` |
+| Cy7 | password | 只给 `protection.password`、不给限制编辑种类，报 `InvalidField` |
 | Cy8 | 打开 | Word 打开后无修复；COM `Shapes.Count` 至少 2，第一格底纹 RGB=255，图上 Hyperlink.Address 为 example.com，`BibliographyStyle` 为 MLA |
 
 ## create 第五轮
 
-create 复用 53–55 已有 apply：框内表、框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段边框底纹制表位、run 突出显示 / 删除线 / 上下标、组合、`writePassword`。不写修订痕迹。限制编辑口令 `password` 仍报 `NotImplemented`。不算排版引擎。
+create 复用 53–55 已有 apply：框内表、框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段边框底纹制表位、run 突出显示 / 删除线 / 上下标、组合、`writePassword`。不写修订痕迹。限制编辑口令要配 `edit`，只给 `password` 报 `InvalidField`。不算排版引擎。
 手测脚本 `manual-check/office/cases/docx-create-round5.ps1`。编号用 Cz（不要和 Cy、Cs、Cf、C、Cd、Bx、Bf、Bd、Rh 撞）。
 
 | 序号 | 检查 | 通过标准 |
@@ -2016,7 +2015,7 @@ create 可写 `document.theme` / `pageBackground` / `pageBorders`。不算主题
 | Fm4 | 艺术边框 | `setPageBorders` 四边 `val=apples` 后树上为 `apples`，Word 无修复 |
 | Fm5 | DrawingML 背景 | `setPageBackground` `fill.kind=gradient` 后 `pageBackground.fill.kind` 为 `drawing`，Word 无修复 |
 | Fm6 | create | 给了 `document.theme` 与 `pageBackground` 后树上有 theme 与背景色，Word 无修复。默认 create 仍无 theme |
-| Fm7 | 拒错 | 对段落 id 发 `setThemeFmt` 得 `InvalidId`；xlsx 上发 `setThemeOverride` 得 `InvalidField`。未写文件 |
+| Fm7 | 拒错 | 对段落 id 发 `setThemeFmt` 得 `InvalidId`；xlsx 上对 `slide:1` 发 `setThemeOverride` 得 `InvalidId`。未写文件 |
 
 ## 主题剩余
 

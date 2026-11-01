@@ -124,7 +124,7 @@ $fail = Invoke-OoxpExpectFail @{
 } 'docx-create-round4-write-password'
 Add-Check 'docx-Cy7' (
     ($fail.ExitCode -ne 0) -and
-    ((Get-OoxpErrorCode $fail) -eq 'NotImplemented')
+    ((Get-OoxpErrorCode $fail) -eq 'InvalidField')
 ) "code=$(Get-OoxpErrorCode $fail)"
 
 $seed = Ensure-DocxCreate

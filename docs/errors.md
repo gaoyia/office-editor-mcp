@@ -62,6 +62,7 @@
   - apply 遇到第一期不认识的 `op`
 - **`InvalidField`**（退出码 2）
   - 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键
+  - docx create 只给 `password`、不给限制编辑种类
   - 字符串含有 XML 不允许的字符。`path` 指向该字段，例如 `ops[2].text`、`workbook.sheets[0].cells[3].value`。文案带码位，例如 `U+000B`
   - `run_bytes` 做 inspect、apply、exportMedia、exportChartData 时没带上包字节。不带 `path`。英文是 `Package bytes are required`，中文是 `缺少文件字节`
 - **`InvalidRange`**（退出码 2）
@@ -142,7 +143,8 @@
   - `setCell` 的 `sharedRef` 同时盖住两组及以上已有共享组，或 `sharedRef` / `arrayRef` 盖住数组公式、数据表，或 `arrayRef` 盖住已有共享组
   - `mergeRange` 盖住仍有从属格的共享公式主格、数组公式主格或数据表公式
   - 对墨迹批注发 `setCommentText` / `replyComment`，或在墨迹批注内插图 / 插图表 / 插 SmartArt / 插删段
-  - 对 `other` / 已写入的 `chartex` 发除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 以外的图表 op
+  - 对 `other` 发除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 以外的图表 op
+  - 对已写入的 `chartex` 发趋势线、误差线、`setChartType`、轴标题或数据标签，或对帕累托、箱线增删系列
   - 对 `stock` / `surface` / `ofPie` 发 `addChartSeries` / `deleteChartSeries`
   - 对透视图表发 `setChartSeries` / `addChartSeries` / `deleteChartSeries` / `setChartType`
   - `setChartType` 不能无损转换
@@ -150,8 +152,6 @@
   - xlsx 图表公式是三维引用、带运算符的定义名，或不连续引用长度对不上
   - `setSmartArtLayout` 当前 uniqueId 不在库内 `list` / `org` / `cycle` 三族里
   - 对图表工作表上仅剩的那张图发 `deleteChart`
-  - 删或改名工作表时 `definedNames` 或其它表公式 / 图表 `c:f` 仍引用旧表名
-  - 对仍被单元格公式或定义名里的 `[n]` 引用的外部引用发 `deleteExternalLink`
   - 对 `dialogsheet` / `macrosheet` 发下列 op，以及批注 op、文本框 op、形状与连接线 op、SmartArt op
     - `deleteSheet`
     - `renameSheet`
@@ -176,7 +176,6 @@
   - 段内本期收入的拼音
   - 段内本期收入的行内内容控件
   - docx 表格结构 op 碰到表/行/单元格上的修订痕迹、网格变更标记，或某行占的列数对不上 `colCount`
-  - docx create 出现 `password`
   - 目标 `writeProtection` 已有密码哈希却不给对得上的 `writePassword` 就要改对应字段
   - `p:modifyVerifier` / docx / xlsx 已有密码哈希却不给对得上的 `password`
     （含算法认不出、无从核对的哈希。各格式能核的算法见 `json-contract.md` 的 `setProtection`）
@@ -1124,7 +1123,7 @@
 - 空 `text`、不认识的 `kind` / `keep`、或 `items` / `fullDate` / `file` / `checked` 与 `kind` 不匹配，或 `picture` 没有 `file`，报 `InvalidField`
 - xlsx / pptx 上发内容控件 op 报 `InvalidField`
 - 目标段落含本期收入的行内内容控件时 `setParaText` 报 `NotImplemented`
-- 带 `w:dataBinding`、重复节改值、组合控件改值，或块级控件里有表，报 `NotImplemented`
+- 没有 `storeItemID` 的 `w:dataBinding`、绑定路径不是简单元素路径，或 `repeatingSection` / `group` 外壳，报 `NotImplemented`。块级控件里有表时只改第一个段落，表格留下
 - 控件落在带分节符且删掉后该段会变空的段落上时，`deleteContentControl` 报 `NotImplemented`
 - `exportMedia` 找不到图、嵌入对象、3D 模型、墨迹画布或媒体报 `IdNotFound`
 - docx 的 `id` 可以是图 id、OLE id、3D 模型 id 或墨迹画布 id
@@ -1139,7 +1138,7 @@
 - `setProtection` 一个可写字段都不给、docx 的 `edit` 不认识、pptx 缺 `enforced`，报 `InvalidField`
 - 空 `password` 或口令对不上已有哈希报 `InvalidField`
 - 不给 `password` 却要改已有哈希，或哈希算法认不出，报 `NotImplemented`
-- docx create 出现 `password` 报 `NotImplemented`
+- docx create 只给 `password`、不给限制编辑种类，报 `InvalidField`
 - `setShowPr` 五个字段一个都不给、或 `type` 不是 `present` / `browse` / `kiosk`，报 `InvalidField`
 - `setProps` 八个可写字段一个都不给、`setCustomProp` 的 `name` 为空、`type` 不认识或与 `value` 对不上，报 `InvalidField`
 - `deleteCustomProp` 的 id 不是 `prop:{name}` 报 `InvalidId`

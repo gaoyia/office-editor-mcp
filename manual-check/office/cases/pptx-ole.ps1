@@ -283,7 +283,7 @@ $failXlsx = Invoke-OoxpExpectFail @{
 } 'pptx-ole-fail-xlsx'
 $po5ok = ((Get-PptErrorCode $badDel) -eq 'InvalidId') `
     -and ((Get-PptErrorCode $badIns) -eq 'InvalidId') `
-    -and ((Get-PptErrorCode $failXlsx) -eq 'InvalidField') `
+    -and ((Get-PptErrorCode $failXlsx) -eq 'InvalidId') `
     -and (-not (Test-Path $failDel)) `
     -and (-not (Test-Path $failIns)) `
     -and (-not (Test-Path $failX))

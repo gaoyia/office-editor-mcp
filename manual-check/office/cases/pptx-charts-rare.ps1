@@ -195,7 +195,7 @@ if ($chartex) {
         schemaVersion = 1; action = 'apply'
         path = $src.Replace('\', '/')
         output = $cxOut.Replace('\', '/')
-        ops = @(@{ op = 'setChartTitle'; id = $chartex.id; title = '不该写' })
+        ops = @(@{ op = 'setChartType'; id = $chartex.id; type = 'col' })
     } 'pptx-charts-rare-chartex-title'
 } else {
     $rawCx = Invoke-OoxpExpectFail @{

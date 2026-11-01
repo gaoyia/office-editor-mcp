@@ -14,6 +14,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-01 补跑 `xlsx-break-link.ps1`。断开第一条外部链接后，编辑链接只剩原来的第二条，单元格公式仍指向那个文件。没有缓存的格子是 0。Excel 16.0 没有 Repair。
 2026-11-01 补跑 `xlsx-legacy-password.ps1`。遗留 XOR 口令 `secret` 改写成 SHA-512 后，Excel 16.0 用同一口令解开工作表保护。没有 Repair。
 2026-11-01 补跑 `chartex-edit.ps1`。瀑布图改数据后 Excel 读到 42 和 7，加的第二条系列在 C2。漏斗和树状图 Word、PowerPoint 打开没有 Repair。
+2026-11-01 重跑整套手测。公式还引用外部链接时 `deleteExternalLink` 断开链接，B1 留下 `0`，`LinkSources` 少一条，没有 Repair。`xlsx-svg` 与 `xlsx-emf` 曾因 Excel 的 Open 失败，清掉进程后通过。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -957,6 +958,7 @@ Excel 16.0 插入的图通常是 `twoCellAnchor`；真 `oneCell` 由 `insertChar
 - **Xq5**
   - 检查：仍拒绝
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
+  - 源里已有 chartex 时 `setChartType` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
   - 均未写坏文件
@@ -1701,8 +1703,9 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - Excel 16.0 对未引用的 `externalReferences` 不填 `LinkSources`
 - **Xel3**
   - 检查：公式占用
-  - 通过标准：写了 `=[1]Sheet1!A1` 后再 `deleteExternalLink` 得 `NotImplemented`，未写文件
-  - COM Formula 含 `Sheet1` 与 `A1`（Excel 可能写成 `'…[file.xlsx]Sheet1'!A1`）
+  - 通过标准：写了 `=[1]Sheet1!A1` 后再 `deleteExternalLink`，B1 留下缓存值 `0`，`externalLinkCount` 为 0
+  - Excel `LinkSources` 少一条，没有 Repair
+  - 删之前的公式含 `Sheet1` 与 `A1`
 - **Xel4**
   - 检查：删除
   - 通过标准：清掉公式后再删，`externalLinkCount=0`、无 Repair

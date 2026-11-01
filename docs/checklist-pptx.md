@@ -15,6 +15,7 @@ Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 2026-10-31 补跑 `pptx-id-pin.ps1`。先插行再写原来第 3 行，字落在原来那一行。先删第一份母版再改原来第二份母版上的形状。PowerPoint 16.0 没有 Repair。
 2026-11-01 补跑 `pptx-placeholder-more.ps1`。版式上插入的内容占位符和图片占位符，用该版式新建一页后分别是内容占位符和图片占位符。没有 Repair。
 2026-11-01 补跑 `pptx-zoom-remain.ps1`。已有两节上插入的摘要缩放，PowerPoint 16.0 打开没有 Repair，认成一个 Zoom。
+2026-11-01 重跑整套手测。版式上的 `sldImg` 仍为 `InvalidField`。备注形状上的域找不到时为 `IdNotFound`。认得出的 SHA-512 对不上口令为 `InvalidField`。形状 id 上插视频为 `InvalidId`。xlsx 上对 `slide:1` 插 OLE 为 `InvalidId`。
 2026-11-01 探测墨迹批注。PowerPoint 16.0 保存时丢掉空的 `ink`，`Replies.Add` 写出的回复旁边不再有该标记，批注 `Text` 只读。回复和改字仍拒绝，不进 `run.ps1`。
 
 ## 本机结果（2026-09-28）
@@ -863,6 +864,7 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 - **Pq5**
   - 检查：仍拒绝
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
+  - 源里已有 chartex 时 `setChartType` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
   - 均未写坏文件
@@ -1634,7 +1636,7 @@ inspect 列出 slideMaster / slideLayout 与占位符。apply 改占位符文字
 - **Mw5**
   - 检查：拒错
   - 通过标准：对页 id 发 `insertLayout` 得 `InvalidId`
-  - `type` 不在白名单得 `InvalidField`
+  - 版式上的 `sldImg` 得 `InvalidField`
   - xlsx / docx 发 `insertLayout` 得 `InvalidField`
   - 均未写文件
 
@@ -2018,7 +2020,7 @@ apply 能插本地 MP4 / WAV、删除。`exportMedia` 写出媒体部件，不�
 - **Pmd5**
   - 检查：删除
   - 通过标准：`deleteMedia` 后该对象消失，无 Repair
-  - 对页 id 发 `insertVideo` 得 `InvalidId`，WAV 当视频得 `InvalidField`，未写文件
+  - 对形状 id 发 `insertVideo` 得 `InvalidId`，WAV 当视频得 `InvalidField`，未写文件
 
 ## 媒体事后几何
 
@@ -2127,7 +2129,7 @@ inspect 计 `oleObjectCount`，`scope.oleObjects` 列名单。`exportMedia` 按 
   - 检查：拒错
   - 通过标准：对页 id 发 `deleteOle` 得 `InvalidId`
   - 对 `slide:1/ole:…` 发 `insertOle` 得 `InvalidId`
-  - xlsx 发 `insertOle` 得 `InvalidField`，未写文件
+  - xlsx 上对 `slide:1` 发 `insertOle` 得 `InvalidId`，未写文件
 - **Po6**
   - 检查：事后改尺寸
   - 通过标准：✅ `setOleSize` 改 `cx` 后树上 `cx` 对得上，`a:off` 不动。对图 id 发此 op 得 `InvalidId`
@@ -2275,12 +2277,12 @@ inspect 仍只报 `hasPassword`。不破解密码。带哈希或空 verifier 的
   - 通过标准：✅ 空 `password` 得 `InvalidField`
   - 错口令解开得 `InvalidField`
   - 不给 `password` 改带 `hashData` 的保护得 `NotImplemented`
-  - ISO `hashValue` 样例即使给了 `password` 也得 `NotImplemented`
+  - 认得出的 SHA-512 对不上口令得 `InvalidField`
   - 未写文件
 
 ## 字段
 
-inspect 计 `fieldCount`，`scope.fields` 列名单。apply 能往幻灯片文本形状插入、改类型、删除 `a:fld`。不算放映引擎，不刷新缓存。create 用 `shapes[].fields` 复用 `insertField`。备注 / 母版上的域不进本期。
+inspect 计 `fieldCount`，`scope.fields` 列名单。apply 能往幻灯片、备注、母版或版式文本形状插入、改类型、删除 `a:fld`。不算放映引擎，不刷新缓存。create 用 `shapes[].fields` 复用 `insertField`。
 脚本：`manual-check/office/cases/pptx-fields.ps1`。编号用 **Pf**（不要跟 Pw、Pz、Po、Pd 撞）。
 
 - **Pf1**
@@ -2301,7 +2303,7 @@ inspect 计 `fieldCount`，`scope.fields` 列名单。apply 能往幻灯片文�
   - 无 Repair
 - **Pf5**
   - 检查：拒错
-  - 通过标准：页 id / 备注形状 id 得 `InvalidId`
+  - 通过标准：页 id 得 `InvalidId`；找不到的备注形状得 `IdNotFound`
   - `type=other` 得 `InvalidField`
   - xlsx 拒 `insertField`
   - docx 式 `instr` 在 pptx 上未知字段

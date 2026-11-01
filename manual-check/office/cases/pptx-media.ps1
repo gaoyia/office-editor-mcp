@@ -204,7 +204,7 @@ $failId = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $created.Replace('\', '/')
     output = $badIdOut.Replace('\', '/')
-    ops = @(@{ op = 'insertVideo'; id = 'slide:1/notes'; file = $mp4.Replace('\', '/') })
+    ops = @(@{ op = 'insertVideo'; id = 'slide:1/shape:1'; file = $mp4.Replace('\', '/') })
 } 'pptx-media-bad-id'
 $codeId = Get-PptErrorCode $failId
 

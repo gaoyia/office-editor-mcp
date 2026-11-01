@@ -221,7 +221,7 @@ $mw4ok = ([int]$treeM.masterCount -eq 2) `
     -and (-not (Test-Path $failMs))
 Add-Check 'pptx-Mw4' $mw4ok "masterCount=$($treeM.masterCount) designs=$desN cap=$capM ly=$(Get-PptErrorCode $badLy) ms=$(Get-PptErrorCode $badMs)"
 
-# Mw5：页 id 得 InvalidId；坏 type 得 InvalidField；xlsx / docx 得 InvalidField。
+# Mw5：页 id 得 InvalidId；版式上的 sldImg 得 InvalidField；xlsx / docx 得 InvalidField。
 $failSlideOut = Get-OutPath 'pptx-mw-fail-slide.pptx'
 $failTypeOut = Get-OutPath 'pptx-mw-fail-type.pptx'
 if (Test-Path $failSlideOut) { Remove-Item -Force $failSlideOut }
@@ -236,7 +236,7 @@ $failType = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $hostPath.Replace('\', '/')
     output = $failTypeOut.Replace('\', '/')
-    ops = @(@{ op = 'insertPlaceholder'; id = 'master:1/layout:1'; type = 'obj' })
+    ops = @(@{ op = 'insertPlaceholder'; id = 'master:1/layout:1'; type = 'sldImg' })
 } 'pptx-mw-fail-type'
 $xlsx = Ensure-XlsxCreate
 $docx = Ensure-DocxCreate
