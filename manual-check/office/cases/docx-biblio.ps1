@@ -196,7 +196,7 @@ Close-WordDocByPath $word $hfOut
 if (Test-Path $hfOut) { Remove-Item -Force $hfOut }
 Invoke-OoxpRequest @{
     schemaVersion = 1; action = 'apply'
-    path = $src.Replace('\', '/')
+    path = $full.Replace('\', '/')
     output = $hfOut.Replace('\', '/')
     ops = @(@{ op = 'insertBibliography'; id = $hfPara })
 } 'docx-biblio-fail-hf' | Out-Null
@@ -211,6 +211,17 @@ if ($treeHf.headers -and $treeHf.headers[0].bibliographies) {
 }
 $docHf = Open-WordDoc $word $hfOut
 $capHf = [string]$docHf.ActiveWindow.Caption
+$bib = ''
+$hdr = $docHf.Sections.Item(1).Headers.Item(1)
+$hfFields = $hdr.Range.Fields
+if ($hfFields.Count -ge 1) {
+    $f = $hfFields.Item(1)
+    try { [void]$f.Update() } catch {}
+    try { $bib = ([string]$f.Result.Text).Trim() } catch { $bib = '' }
+    Release-Com $f
+}
+Release-Com $hfFields
+Release-Com $hdr
 Close-WordDoc $docHf
 
 $xlsx = Get-OutPath 'docx-biblio-xlsx.xlsx'
@@ -230,8 +241,8 @@ try { $codeX = ($rawX.Stderr | ConvertFrom-Json).error.code } catch { $codeX = $
 
 Add-Check 'docx-Bi6' (
     ($hfId -like 'header:*/biblio:1') -and
-    ([int]$treeHf.bibliographyCount -eq 0) -and
+    ([int]$treeHf.bibliographyCount -eq 1) -and
     ([int]$treeHf.headers[0].bibliographyCount -eq 1) -and
-    ($capHf -notmatch 'Repair') -and
+    ($capHf -notmatch 'Repair') -and ($bib -match 'Ecma') -and ($bib -match '2006') -and
     ($rawX.ExitCode -ne 0) -and ($codeX -eq 'InvalidField') -and (-not (Test-Path $failX))
-) "hf=$hfId root=$($treeHf.bibliographyCount) header=$($treeHf.headers[0].bibliographyCount) caption=$capHf xlsx=$codeX"
+) "hf=$hfId bib=$bib caption=$capHf xlsx=$codeX"

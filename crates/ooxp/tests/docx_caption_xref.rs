@@ -223,19 +223,13 @@ fn insert_caption_rejects_bad_id_and_label() {
         .as_str()
         .unwrap()
         .to_string();
-    let hf_out = seq_path("hf-cap", "docx");
-    apply(
+    let before = std::fs::read(&src).unwrap();
+    let err_hf = apply_err(
         &src,
-        &hf_out,
         json!([{ "op": "insertCaption", "id": hf_para, "label": "Figure", "title": "页眉图" }]),
     );
-    let hf_tree = inspect(&hf_out, true, false, false);
-    assert_eq!(hf_tree["captionCount"], 0);
-    assert_eq!(hf_tree["headers"][0]["captionCount"], 1);
-    assert!(hf_tree["headers"][0]["captions"][0]["id"]
-        .as_str()
-        .unwrap()
-        .starts_with("header:default:1/caption:"));
+    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    assert_eq!(std::fs::read(&src).unwrap(), before);
 
     let err_label = apply_err(
         &src,
@@ -454,4 +448,64 @@ fn note_cross_ref(tag: &str, op: &str, local: &str, bookmark: &str) {
 fn noteref_footnote_and_endnote() {
     note_cross_ref("fn", "insertFootnote", "footnoteReference", "_RefFn1");
     note_cross_ref("en", "insertEndnote", "endnoteReference", "_RefEn1");
+}
+
+#[test]
+fn caption_in_a_body_text_box_is_kept_and_a_note_is_rejected() {
+    let src = create_docx("cap-box", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let tree = inspect(&src, false, false, false);
+    let para = first_body_para_id(&tree);
+    let boxed = seq_path("cap-boxed", "docx");
+    apply(
+        &src,
+        &boxed,
+        json!([
+            { "op": "insertTextBox", "id": para, "text": "框" },
+            { "op": "insertFootnote", "id": para, "text": "注" }
+        ]),
+    );
+    let RunOutput::Inspect(inner) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": boxed.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 4, "textBoxes": true, "textBoxContent": true, "notes": true }
+    }).to_string()).unwrap() else { panic!("inspect"); };
+    let tx = inner["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    let note = inner["footnotes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    let before = std::fs::read(&boxed).unwrap();
+    assert_eq!(
+        apply_err(
+            &boxed,
+            json!([{ "op": "insertCaption", "id": note, "label": "Figure", "title": "注" }])
+        )
+        .code(),
+        ErrorCode::InvalidId
+    );
+    assert_eq!(std::fs::read(&boxed).unwrap(), before);
+    let out = seq_path("cap-box-out", "docx");
+    apply(
+        &boxed,
+        &out,
+        json!([{ "op": "insertCaption", "id": tx, "label": "Figure", "title": "框图" }]),
+    );
+    let RunOutput::Inspect(listed) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": out.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 4, "captions": true, "textBoxes": true }
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("inspect");
+    };
+    assert_eq!(listed["captionCount"], 0);
+    assert_eq!(listed["paragraphs"][0]["textBoxes"][0]["captionCount"], 1);
+    let id = listed["paragraphs"][0]["textBoxes"][0]["captions"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert!(id.contains("/caption:1"), "{id}");
 }

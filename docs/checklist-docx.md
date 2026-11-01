@@ -19,7 +19,8 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 补跑 `docx-sdt-bind.ps1`。Word 另存的绑定控件改字后，控件和自定义 XML 都是新值。重复节再克隆一项后有两项。没有 Repair。
 2026-11-01 补跑 `docx-container-ole.ps1`。文本框段落里插入的嵌入对象，Word 16.0 打开没有 Repair，框内能看见该 OLE。
 2026-11-01 补跑 `docx-container-toc.ps1`。文本框里的目录更新域后能看见标题「第一章」，没有 Repair。
-2026-11-01 重跑整套手测。页眉题注、索引和书目改为插入成功，id 带 `header:` 前缀。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
+2026-11-01 重跑整套手测。页眉书目改为插入成功。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
+2026-11-02 页眉题注和索引改回拒绝：Word 更新后分别是「错误!仅主文档。」和「不允许有索引」。页眉书目更新后含 `Ecma` 与 `2006`。正文文本框题注更新后是 `1`。
 2026-11-01 探测墨迹批注。Word 16.0 保存时丢掉空的 `wpi:ink`，`Replies.Add` 和改 `Range.Text` 的另存同样丢掉。回复和改字仍拒绝，不进 `run.ps1`。
 2026-11-01 补探测注内 3D 和例外编辑区。`Add3DModel(文件, false, true, Range)` 能把 `am3d:model3d` 另存进脚注、尾注、批注。库仍拒绝。这些部件的 Range 和选区没有 `Editors`。
 2026-11-01 补探测容器里的六类域块。页眉、文本框、脚注、批注里的交叉引用、索引项、引文、书目更新后有结果，没有 Repair。索引更新报不允许。题注只在文本框里出编号，页眉、脚注、批注是「错误!仅主文档。」
@@ -1505,7 +1506,7 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - `bookmarkCount` 仍为 0（`_Ref` 隐藏书签）
 - **Cp2**
   - 检查：打开
-  - 通过标准：Word 打开后无修复
+  - 通过标准：Word 打开后无修复，更新 `SEQ` 后结果是 `1`
 - **Cp3**
   - 检查：交叉引用
   - 通过标准：用题注上的 `bookmark` 发 `insertCrossRef` 后 `crossRefCount` 为 1，`kind` 为 `ref`
@@ -1518,7 +1519,8 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 通过标准：`deleteCaption` 之后 `captionCount` 为 0，标题段还在，Word 无修复
 - **Cp6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertCaption` 成功，id 带 `header:` 前缀，根上 `captionCount` 仍为 0，Word 无 Repair
+  - 通过标准：对页眉段落发 `insertCaption` 得 `InvalidId`，未写文件
+  - 正文文本框里的题注，Word 更新 `SEQ` 后结果是 `1`，没有 Repair
   - xlsx 上发 `insertCaption` 得 `InvalidField`，未写文件
 
 ## 索引
@@ -1543,7 +1545,7 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 通过标准：`deleteIndexEntry` 之后 `indexEntryCount` 为 0，标题段还在，Word 无修复
 - **Ix6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertIndex` 成功，id 带 `header:` 前缀，根上 `indexCount` 仍为 0，Word 无 Repair
+  - 通过标准：对页眉段落发 `insertIndex` 得 `InvalidId`，未写文件
   - xlsx 上发 `insertIndex` 得 `InvalidField`，未写文件
 
 ## 参考文献
@@ -1572,7 +1574,8 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
   - 标题段还在，Word 无修复
 - **Bi6**
   - 检查：拒错
-  - 通过标准：对页眉段落发 `insertBibliography` 成功，id 带 `header:` 前缀，根上 `bibliographyCount` 仍为 0，Word 无 Repair
+  - 通过标准：对已有正文书目的文档，页眉再插一块，id 带 `header:` 前缀，根上 `bibliographyCount` 仍是正文那一块
+  - Word 更新该域后结果含 `Ecma` 与 `2006`，没有 Repair
   - xlsx 上发 `insertBibliography` 得 `InvalidField`，未写文件
 
 ## 构建基块

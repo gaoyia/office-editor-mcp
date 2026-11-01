@@ -1031,16 +1031,16 @@
 - xlsx / pptx 上发 `insertSection` / `deleteSection` 报 `InvalidField`
 - 找不到目录时，`deleteToc` 报 `IdNotFound`
 - id 不是 `toc:{n}` 报 `InvalidId`
-- `insertToc` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`
-- 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` / `toc:{n}` 发该 op 报 `InvalidId`
+- `insertToc` 的 `id` 可以是正文、页眉页脚、文本框、脚注、尾注、批注段落，或 `docx:document`
+- 对表格单元格内的段落或 `section:{n}` / `toc:{n}` 发该 op 报 `InvalidId`
 - 找不到段落时报 `IdNotFound`
 - 不认识的 `kind`、空白或非 TOC/TOA 的 `instr` 报 `InvalidField`
 - xlsx / pptx 上发 `insertToc` / `deleteToc` 报 `InvalidField`
 - 目录块落在带分节符且删掉域后该段会变空的段落上时，`deleteToc` 报 `NotImplemented`
 - 找不到题注时，`deleteCaption` 报 `IdNotFound`
 - id 不是 `caption:{n}` 报 `InvalidId`
-- `insertCaption` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`
-- 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` / `caption:{n}` / `toc:{n}` 发该 op 报 `InvalidId`
+- `insertCaption` 的 `id` 必须是正文段落、正文文本框段落，或 `docx:document`
+- 对页眉、页脚、脚注、尾注、批注、这些故事里的文本框、表格单元格，或 `section:{n}` / `caption:{n}` / `toc:{n}` 发该 op 报 `InvalidId`。Word 更新 `SEQ` 的原话是「错误!仅主文档。」
 - 找不到段落时报 `IdNotFound`
 - 不合法的 `label`、空或含空白的 `bookmark`、或书签名已被占用，报 `InvalidField`
 - xlsx / pptx 上发 `insertCaption` / `deleteCaption` 报 `InvalidField`
@@ -1056,8 +1056,8 @@
 - xlsx / pptx 上发 `insertCrossRef` / `deleteCrossRef` 报 `InvalidField`
 - 找不到索引时，`deleteIndex` 报 `IdNotFound`
 - id 不是 `index:{n}` 报 `InvalidId`
-- `insertIndex` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`
-- 对页眉页脚、框内、注内、批注内、表格单元格内的段落发该 op 报 `InvalidId`
+- `insertIndex` 的 `id` 必须是正文段落或 `docx:document`
+- 对页眉、页脚、文本框、脚注、尾注、批注、表格单元格发该 op 报 `InvalidId`。Word 更新 `INDEX` 的原话是「错误!脚注、尾注、页眉、页脚或批注中不允许有索引。」
 - 空白 `instr` 或 `instr` 不是 INDEX 报 `InvalidField`
 - xlsx / pptx 上发 `insertIndex` / `deleteIndex` 报 `InvalidField`
 - 找不到索引项时，`deleteIndexEntry` 报 `IdNotFound`

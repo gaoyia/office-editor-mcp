@@ -740,7 +740,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CaptionIndexNotInt => "caption 序号必须是正整数".into(),
             IdReason::CaptionIndexFromOne => "caption 序号从 1 起".into(),
             IdReason::InsertCaptionNeedsBodyPara => {
-                "insertCaption 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
+                "insertCaption 的 id 必须是正文或正文文本框段落，或 docx:document".into()
             }
             IdReason::XrefPrefix => "交叉引用 id 必须是 xref:N".into(),
             IdReason::XrefIndexNotInt => "xref 序号必须是正整数".into(),
@@ -749,7 +749,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::IndexIndexNotInt => "index 序号必须是正整数".into(),
             IdReason::IndexIndexFromOne => "index 序号从 1 起".into(),
             IdReason::InsertIndexNeedsBodyPara => {
-                "insertIndex 的 id 必须是正文、页眉页脚、文本框、脚注、尾注或批注段落，或 docx:document".into()
+                "insertIndex 的 id 必须是正文段落，或 docx:document".into()
             }
             IdReason::XePrefix => "索引项 id 必须是 xe:N".into(),
             IdReason::XeIndexNotInt => "xe 序号必须是正整数".into(),

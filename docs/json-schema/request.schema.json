@@ -4662,8 +4662,8 @@
     "insertTocOp": {
       "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
       "descriptionEn": "After the named paragraph, insert a new w:p (a new w14:paraId) containing one complex field: fldChar begin (w:dirty=\"true\"), one instrText, fldChar separate, and fldChar end.",
-      "limits": "不写结果 run，不在库里根据标题算页码。不包 w:sdt。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
-      "limitsEn": "Does not write a result run, and this library does not compute page numbers from headings. Does not wrap a w:sdt. Paragraphs inside a table cell, header, footer, text box, note, or comment, and section:{n}, toc:{n}, a container id, a table id, or a run id, all return InvalidId. A missing paragraph returns IdNotFound.",
+      "limits": "不写结果 run，不在库里根据标题算页码。不包 w:sdt。id 可以是正文、页眉页脚、文本框、脚注、尾注、批注段落，或 docx:document。表格单元格、section:{n}、toc:{n}、容器 id、表 id、run id 报 InvalidId。找不到段落报 IdNotFound。",
+      "limitsEn": "Does not write a result run, and this library does not compute page numbers from headings. Does not wrap a w:sdt. id may be a body, header, footer, text box, footnote, endnote, or comment paragraph, or docx:document. A table cell, section:{n}, toc:{n}, a container id, a table id, or a run id returns InvalidId. A missing paragraph returns IdNotFound.",
       "type": "object",
       "required": [
         "op",
@@ -4715,8 +4715,8 @@
     "insertCaptionOp": {
       "description": "在点名段之后插入一个新的 w:p（新 w14:paraId）：bookmarkStart、标签 run（{label} 后带一个空格）、 一组复杂 SEQ 域（fldChar begin 带 w:dirty=\"true\"、指令 SEQ {label} \\* ARABIC 、separate、end， 不写结果 run）、bookmarkEnd、若给了 title 再写说明 run（若 title 不是以空白开头则前面补一个空格）。",
       "descriptionEn": "After the named paragraph, insert a new w:p (a new w14:paraId): bookmarkStart, a label run ({label} followed by one space), one complex SEQ field (fldChar begin with w:dirty=\"true\", instruction SEQ {label} \\* ARABIC, separate, end; no result run is written), bookmarkEnd, and, if title is given, a description run (a leading space is added when title does not already start with whitespace).",
-      "limits": "不写 Caption 段落样式。不在库里求序号。",
-      "limitsEn": "Does not write the Caption paragraph style. This library does not compute the sequence number.",
+      "limits": "不写 Caption 段落样式。不在库里求序号。id 只能是正文段落、正文文本框段落，或 docx:document。页眉、页脚、脚注、尾注、批注，以及这些故事里的文本框，报 InvalidId。Word 更新 SEQ 的原话是「错误!仅主文档。」",
+      "limitsEn": "Does not write the Caption paragraph style. This library does not compute the sequence number. id must be a body paragraph, a body text-box paragraph, or docx:document. A header, footer, footnote, endnote, comment, or a text box in those stories returns InvalidId. Word's updated SEQ says the field is main-document only.",
       "type": "object",
       "required": [
         "op",
@@ -4825,8 +4825,8 @@
     "insertIndexOp": {
       "description": "在点名段之后插入一个新的 w:p（新 w14:paraId），里面写一组复杂域：fldChar begin（w:dirty=\"true\"）、一条 instrText、fldChar separate、fldChar end。",
       "descriptionEn": "After the named paragraph, insert a new w:p (a new w14:paraId) containing one complex field: fldChar begin (w:dirty=\"true\"), one instrText, fldChar separate, and fldChar end.",
-      "limits": "不写结果 run，不在库里根据 XE 算页码。不包 w:sdt，不写 Index 样式，不改 sectPr 分栏。表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 section:{n}、index:{n}、toc:{n}、容器 id、表 id、run id，一律报 InvalidId。找不到段落报 IdNotFound。",
-      "limitsEn": "Does not write a result run, and this library does not compute page numbers from XE entries. Does not wrap a w:sdt, does not write the Index style, and does not change sectPr columns. Paragraphs inside a table cell, header, footer, text box, note, or comment, and section:{n}, index:{n}, toc:{n}, a container id, a table id, or a run id, all return InvalidId. A missing paragraph returns IdNotFound.",
+      "limits": "不写结果 run，不在库里根据 XE 算页码。不包 w:sdt，不写 Index 样式，不改 sectPr 分栏。id 只能是正文段落或 docx:document。页眉、页脚、文本框、脚注、尾注、批注、表格单元格，以及 section:{n}、index:{n}、toc:{n}、容器 id、表 id、run id，报 InvalidId。Word 更新 INDEX 的原话是「错误!脚注、尾注、页眉、页脚或批注中不允许有索引。」已有文件里的 INDEX 仍可 inspect 和 deleteIndex。找不到段落报 IdNotFound。",
+      "limitsEn": "Does not write a result run, and this library does not compute page numbers from XE entries. Does not wrap a w:sdt, does not write the Index style, and does not change sectPr columns. id must be a body paragraph or docx:document. A header, footer, text box, footnote, endnote, comment, table cell, section:{n}, index:{n}, toc:{n}, a container id, a table id, or a run id returns InvalidId. Word's updated INDEX says an index is not allowed in a footnote, endnote, header, footer, or comment. An INDEX already in a file can still be inspected and deleted. A missing paragraph returns IdNotFound.",
       "type": "object",
       "required": [
         "op",

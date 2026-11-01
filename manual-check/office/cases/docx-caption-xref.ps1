@@ -105,7 +105,8 @@ Add-Check 'docx-Cp1' (
 $word = Ensure-MsWord $src
 $docC = Open-WordDoc $word $cap
 $capC = [string]$docC.ActiveWindow.Caption
-Add-Check 'docx-Cp2' ($capC -notmatch 'Repair') $capC
+$seq = (Get-FieldResultText $docC).Trim()
+Add-Check 'docx-Cp2' (($capC -notmatch 'Repair') -and ($seq -eq '1')) "caption=$capC seq=$seq"
 Close-WordDoc $docC
 
 $xref = Get-OutPath 'docx-caption-xref-xref.docx'
@@ -180,27 +181,56 @@ Add-Check 'docx-Cp5' (
 ) "count=$($treeDel.captionCount) texts=$($delTexts -join '|') caption=$capD"
 Close-WordDoc $docD
 
-$hfOut = Get-OutPath 'docx-caption-xref-hf.docx'
-Close-WordDocByPath $word $hfOut
-if (Test-Path $hfOut) { Remove-Item -Force $hfOut }
+$failHf = Get-OutPath 'docx-caption-xref-fail-hf.docx'
+if (Test-Path $failHf) { Remove-Item -Force $failHf }
+$rawHf = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $failHf.Replace('\', '/')
+    ops = @(@{ op = 'insertCaption'; id = $hfPara; label = 'Figure'; title = 'header' })
+} 'docx-caption-xref-fail-hf'
+try { $codeHf = ($rawHf.Stderr | ConvertFrom-Json).error.code } catch { $codeHf = $null }
+
+$boxed = Get-OutPath 'docx-caption-xref-box.docx'
 Invoke-OoxpRequest @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
-    output = $hfOut.Replace('\', '/')
-    ops = @(@{ op = 'insertCaption'; id = $hfPara; label = 'Figure'; title = 'header' })
-} 'docx-caption-xref-fail-hf' | Out-Null
-$treeHf = Invoke-OoxpTree @{
+    output = $boxed.Replace('\', '/')
+    ops = @(@{ op = 'insertTextBox'; id = $p1; text = '框' })
+} 'docx-caption-xref-box' | Out-Null
+$boxTree = Invoke-OoxpTree @{
     schemaVersion = 1; action = 'inspect'
-    path = $hfOut.Replace('\', '/'); format = 'docx'
-    scope = @{ headerFooter = $true; captions = $true }
-} 'docx-caption-xref-inspect-hf'
-$hfId = ''
-if ($treeHf.headers -and $treeHf.headers[0].captions) {
-    $hfId = [string]$treeHf.headers[0].captions[0].id
+    path = $boxed.Replace('\', '/'); format = 'docx'
+    scope = @{ from = 1; maxParas = 5; textBoxes = $true; textBoxContent = $true }
+} 'docx-caption-xref-box-inspect'
+$tx = [string]$boxTree.paragraphs[0].textBoxes[0].paragraphs[0].id
+$boxCap = Get-OutPath 'docx-caption-xref-box-cap.docx'
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $boxed.Replace('\', '/')
+    output = $boxCap.Replace('\', '/')
+    ops = @(@{ op = 'insertCaption'; id = $tx; label = 'Figure'; title = 'box' })
+} 'docx-caption-xref-box-cap' | Out-Null
+$docBox = Open-WordDoc $word $boxCap
+$capBox = [string]$docBox.ActiveWindow.Caption
+$boxSeq = ''
+$shapes = $docBox.Shapes
+if ($shapes.Count -ge 1) {
+    $sh = $shapes.Item(1)
+    $rng = $sh.TextFrame.TextRange
+    $flds = $rng.Fields
+    if ($flds.Count -ge 1) {
+        $f = $flds.Item(1)
+        try { [void]$f.Update() } catch {}
+        try { $boxSeq = ([string]$f.Result.Text).Trim() } catch { $boxSeq = '' }
+        Release-Com $f
+    }
+    Release-Com $flds
+    Release-Com $rng
+    Release-Com $sh
 }
-$docHf = Open-WordDoc $word $hfOut
-$capHf = [string]$docHf.ActiveWindow.Caption
-Close-WordDoc $docHf
+Release-Com $shapes
+Close-WordDoc $docBox
 
 $xlsx = Get-OutPath 'docx-caption-xref-xlsx.xlsx'
 Invoke-OoxpRequest @{
@@ -218,9 +248,7 @@ $rawX = Invoke-OoxpExpectFail @{
 try { $codeX = ($rawX.Stderr | ConvertFrom-Json).error.code } catch { $codeX = $null }
 
 Add-Check 'docx-Cp6' (
-    ($hfId -like 'header:*/caption:*') -and
-    ([int]$treeHf.captionCount -eq 0) -and
-    ([int]$treeHf.headers[0].captionCount -eq 1) -and
-    ($capHf -notmatch 'Repair') -and
+    ($rawHf.ExitCode -ne 0) -and ($codeHf -eq 'InvalidId') -and (-not (Test-Path $failHf)) -and
+    ($capBox -notmatch 'Repair') -and ($boxSeq -eq '1') -and
     ($rawX.ExitCode -ne 0) -and ($codeX -eq 'InvalidField') -and (-not (Test-Path $failX))
-) "hf=$hfId root=$($treeHf.captionCount) header=$($treeHf.headers[0].captionCount) caption=$capHf xlsx=$codeX"
+) "hf=$codeHf box=$boxSeq caption=$capBox xlsx=$codeX"

@@ -1925,7 +1925,7 @@ pub fn insert_caption(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            if !is_story_container(parent.local_name()) {
+            if !caption_host_ok(root, &parent_path) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::InsertCaptionNeedsBodyPara,
@@ -2138,6 +2138,7 @@ pub fn insert_index(
         op_i,
         IdReason::InsertIndexNeedsBodyPara,
         "index",
+        |name| name == "body",
     )
 }
 
@@ -2148,6 +2149,34 @@ fn is_story_container(name: &str) -> bool {
     )
 }
 
+/// 题注只留在主文档：正文段，或正文里的文本框。页眉页脚、注、批注，以及落在这些故事里的文本框，Word 更新后是「错误!仅主文档。」
+fn caption_host_ok(root: &Element, parent_path: &[usize]) -> bool {
+    let Some(parent) = para::element_at(root, parent_path) else {
+        return false;
+    };
+    if !matches!(parent.local_name(), "body" | "txbxContent") {
+        return false;
+    }
+    !path_in_outer_story(root, parent_path)
+}
+
+fn path_in_outer_story(root: &Element, path: &[usize]) -> bool {
+    let mut cur = root;
+    for &i in path {
+        let Some(Node::Element(el)) = cur.children.get(i) else {
+            return false;
+        };
+        if matches!(
+            el.local_name(),
+            "hdr" | "ftr" | "footnote" | "endnote" | "comment"
+        ) {
+            return true;
+        }
+        cur = el;
+    }
+    false
+}
+
 fn insert_body_field(
     root: &mut Element,
     after: Option<&para::ParaTarget>,
@@ -2156,6 +2185,7 @@ fn insert_body_field(
     op_i: usize,
     reason: IdReason,
     family: &str,
+    host_ok: fn(&str) -> bool,
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
@@ -2177,7 +2207,7 @@ fn insert_body_field(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            if !is_story_container(parent.local_name()) {
+            if !host_ok(parent.local_name()) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId { reason },
                     format!("ops[{op_i}].id"),
@@ -2430,6 +2460,7 @@ pub fn insert_bibliography(
         op_i,
         IdReason::InsertBibliographyNeedsBodyPara,
         "biblio",
+        is_story_container,
     )
 }
 

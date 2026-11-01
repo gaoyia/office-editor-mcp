@@ -194,15 +194,10 @@ fn insert_index_and_entry_then_delete() {
         .as_str()
         .unwrap()
         .to_string();
-    let hf_out = seq_path("ix-hf", "docx");
-    apply(&src, &hf_out, json!([{ "op": "insertIndex", "id": hf }]));
-    let hf_tree = inspect(&hf_out, true, true, true);
-    assert_eq!(hf_tree["indexCount"], 0);
-    assert_eq!(hf_tree["headers"][0]["indexCount"], 1);
-    assert_eq!(
-        hf_tree["headers"][0]["indexes"][0]["id"],
-        "header:default:1/index:1"
-    );
+    let before = std::fs::read(&src).unwrap();
+    let err_hf = apply_err(&src, json!([{ "op": "insertIndex", "id": hf }]));
+    assert_eq!(err_hf.code(), ErrorCode::InvalidId);
+    assert_eq!(std::fs::read(&src).unwrap(), before);
 
     let err_entry = apply_err(
         &src,
@@ -273,6 +268,96 @@ fn index_ops_not_for_xlsx_or_pptx() {
     .to_string())
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn index_in_a_header_or_text_box_is_rejected_but_an_old_one_can_be_deleted() {
+    let src = create_docx(
+        "ix-reject",
+        json!({
+            "paragraphs": [{ "text": "正文" }],
+            "headers": [{ "type": "default", "paragraphs": [{ "text": "页眉" }] }]
+        }),
+    );
+    let tree = inspect(&src, true, false, false);
+    let body = tree["paragraphs"][0]["id"].as_str().unwrap();
+    let header = tree["headers"][0]["paragraphs"][0]["id"].as_str().unwrap();
+    let boxed = seq_path("ix-box", "docx");
+    apply(
+        &src,
+        &boxed,
+        json!([{ "op": "insertTextBox", "id": body, "text": "框" }]),
+    );
+    let inner = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": boxed.to_string_lossy(),
+        "scope": { "from": 1, "maxParas": 4, "textBoxes": true, "textBoxContent": true, "headerFooter": true }
+    }).to_string()).unwrap();
+    let RunOutput::Inspect(inner) = inner else {
+        panic!("inspect");
+    };
+    let tx = inner["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    let before = std::fs::read(&boxed).unwrap();
+    assert_eq!(
+        apply_err(&boxed, json!([{ "op": "insertIndex", "id": header }])).code(),
+        ErrorCode::InvalidId
+    );
+    assert_eq!(
+        apply_err(&boxed, json!([{ "op": "insertIndex", "id": tx }])).code(),
+        ErrorCode::InvalidId
+    );
+    assert_eq!(std::fs::read(&boxed).unwrap(), before);
+
+    let old = seq_path("ix-old", "docx");
+    inject_header_index(&src, &old);
+    let listed = inspect(&old, true, false, false);
+    assert_eq!(listed["indexCount"], 0);
+    assert_eq!(listed["headers"][0]["indexCount"], 1);
+    assert_eq!(
+        listed["headers"][0]["indexes"][0]["id"],
+        "header:default:1/index:1"
+    );
+    let deleted = seq_path("ix-old-del", "docx");
+    apply(
+        &old,
+        &deleted,
+        json!([{ "op": "deleteIndex", "id": "header:default:1/index:1" }]),
+    );
+    let after = inspect(&deleted, true, false, false);
+    assert_eq!(after["headers"][0]["indexCount"], 0);
+}
+
+fn inject_header_index(src: &Path, dest: &Path) {
+    use std::io::{Cursor, Read, Write};
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipArchive, ZipWriter};
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    {
+        let mut zout = ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "word/header1.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                let start = xml.find("<w:r>").expect("header run");
+                let end = xml.find("</w:p>").expect("header para");
+                let field = r#"<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> INDEX \h "A" \c "1" </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>"#;
+                data = format!("{}{field}{}", &xml[..start], &xml[end..]).into_bytes();
+            }
+            zout.start_file(name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
 }
 
 #[test]

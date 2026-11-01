@@ -787,7 +787,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CaptionIndexNotInt => "caption index must be a positive integer".into(),
             IdReason::CaptionIndexFromOne => "caption index starts at 1".into(),
             IdReason::InsertCaptionNeedsBodyPara => {
-                "insertCaption id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
+                "insertCaption id must be a body paragraph, a body text-box paragraph, or docx:document"
                     .into()
             }
             IdReason::XrefPrefix => "Cross-reference id must be xref:N".into(),
@@ -797,8 +797,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::IndexIndexNotInt => "index index must be a positive integer".into(),
             IdReason::IndexIndexFromOne => "index index starts at 1".into(),
             IdReason::InsertIndexNeedsBodyPara => {
-                "insertIndex id must be a body, header, footer, text box, note, or comment paragraph, or docx:document"
-                    .into()
+                "insertIndex id must be a body paragraph or docx:document".into()
             }
             IdReason::XePrefix => "Index entry id must be xe:N".into(),
             IdReason::XeIndexNotInt => "xe index must be a positive integer".into(),

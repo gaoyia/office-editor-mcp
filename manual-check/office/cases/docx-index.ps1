@@ -185,27 +185,15 @@ Add-Check 'docx-Ix5' (
 ) "count=$($treeDel.indexEntryCount) texts=$($delTexts -join '|') caption=$capD"
 Close-WordDoc $docD
 
-$hfOut = Get-OutPath 'docx-index-hf.docx'
-Close-WordDocByPath $word $hfOut
-if (Test-Path $hfOut) { Remove-Item -Force $hfOut }
-Invoke-OoxpRequest @{
+$failHf = Get-OutPath 'docx-index-fail-hf.docx'
+if (Test-Path $failHf) { Remove-Item -Force $failHf }
+$rawHf = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
-    output = $hfOut.Replace('\', '/')
+    output = $failHf.Replace('\', '/')
     ops = @(@{ op = 'insertIndex'; id = $hfPara })
-} 'docx-index-fail-hf' | Out-Null
-$treeHf = Invoke-OoxpTree @{
-    schemaVersion = 1; action = 'inspect'
-    path = $hfOut.Replace('\', '/'); format = 'docx'
-    scope = @{ headerFooter = $true; indexes = $true }
-} 'docx-index-inspect-hf'
-$hfId = ''
-if ($treeHf.headers -and $treeHf.headers[0].indexes) {
-    $hfId = [string]$treeHf.headers[0].indexes[0].id
-}
-$docHf = Open-WordDoc $word $hfOut
-$capHf = [string]$docHf.ActiveWindow.Caption
-Close-WordDoc $docHf
+} 'docx-index-fail-hf'
+try { $codeHf = ($rawHf.Stderr | ConvertFrom-Json).error.code } catch { $codeHf = $null }
 
 $xlsx = Get-OutPath 'docx-index-xlsx.xlsx'
 Invoke-OoxpRequest @{
@@ -223,9 +211,6 @@ $rawX = Invoke-OoxpExpectFail @{
 try { $codeX = ($rawX.Stderr | ConvertFrom-Json).error.code } catch { $codeX = $null }
 
 Add-Check 'docx-Ix6' (
-    ($hfId -like 'header:*/index:1') -and
-    ([int]$treeHf.indexCount -eq 0) -and
-    ([int]$treeHf.headers[0].indexCount -eq 1) -and
-    ($capHf -notmatch 'Repair') -and
+    ($rawHf.ExitCode -ne 0) -and ($codeHf -eq 'InvalidId') -and (-not (Test-Path $failHf)) -and
     ($rawX.ExitCode -ne 0) -and ($codeX -eq 'InvalidField') -and (-not (Test-Path $failX))
-) "hf=$hfId root=$($treeHf.indexCount) header=$($treeHf.headers[0].indexCount) caption=$capHf xlsx=$codeX"
+) "hf=$codeHf xlsx=$codeX"
