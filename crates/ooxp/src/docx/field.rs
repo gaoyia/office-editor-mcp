@@ -2151,6 +2151,9 @@ fn is_story_container(name: &str) -> bool {
 
 /// 题注只留在主文档：正文段，或正文里的文本框。页眉页脚、注、批注，以及落在这些故事里的文本框，Word 更新后是「错误!仅主文档。」
 fn caption_host_ok(root: &Element, parent_path: &[usize]) -> bool {
+    if root.local_name() != "document" {
+        return false;
+    }
     let Some(parent) = para::element_at(root, parent_path) else {
         return false;
     };

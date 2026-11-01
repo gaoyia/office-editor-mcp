@@ -509,3 +509,55 @@ fn caption_in_a_body_text_box_is_kept_and_a_note_is_rejected() {
         .unwrap();
     assert!(id.contains("/caption:1"), "{id}");
 }
+
+#[test]
+fn caption_in_a_header_text_box_is_rejected() {
+    let src = create_docx(
+        "cap-hdr-box",
+        json!({
+            "paragraphs": [{ "text": "甲" }],
+            "headers": [{ "type": "default", "paragraphs": [{ "text": "页眉" }] }]
+        }),
+    );
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "headerFooter": true }
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("inspect");
+    };
+    let hp = tree["headers"][0]["paragraphs"][0]["id"].as_str().unwrap();
+    let boxed = seq_path("cap-hdr-boxed", "docx");
+    apply(
+        &src,
+        &boxed,
+        json!([{ "op": "insertTextBox", "id": hp, "text": "框" }]),
+    );
+    let RunOutput::Inspect(inner) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": boxed.to_string_lossy(),
+        "scope": { "headerFooter": true, "textBoxes": true, "textBoxContent": true }
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("inspect");
+    };
+    let tx = inner["headers"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap();
+    assert!(tx.starts_with("header:"), "{tx}");
+    let before = std::fs::read(&boxed).unwrap();
+    assert_eq!(
+        apply_err(
+            &boxed,
+            json!([{ "op": "insertCaption", "id": tx, "label": "Figure", "title": "框图" }])
+        )
+        .code(),
+        ErrorCode::InvalidId
+    );
+    assert_eq!(std::fs::read(&boxed).unwrap(), before);
+}
