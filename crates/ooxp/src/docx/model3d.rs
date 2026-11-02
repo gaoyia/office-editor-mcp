@@ -789,18 +789,14 @@ fn write_media(pkg: &mut Package, host: &str, glb: Vec<u8>) -> Result<(String, S
 }
 
 fn build_docx_ac(doc_pr: u32, glb_rid: &str, png_rid: &str, cx: i64, cy: i64) -> Element {
-    let mut ac = Element::new("mc:AlternateContent").with_attr("xmlns:mc", MC_NS);
-    let mut choice = Element::new("mc:Choice")
-        .with_attr("xmlns:am3d", crate::model3d::AM3D_NS)
-        .with_attr("Requires", "am3d");
     let mut drawing = Element::new("w:drawing");
     drawing.push_element(build_inline(doc_pr, glb_rid, png_rid, cx, cy, false));
-    choice.push_element(drawing);
-    ac.push_element(choice);
-    let mut fallback = Element::new("mc:Fallback");
-    fallback.push_element(build_fallback_drawing(doc_pr, png_rid, cx, cy));
-    ac.push_element(fallback);
-    ac
+    xml::alternate_content(
+        "am3d",
+        crate::model3d::AM3D_NS,
+        drawing,
+        Some(build_fallback_drawing(doc_pr, png_rid, cx, cy)),
+    )
 }
 
 fn build_inline(

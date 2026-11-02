@@ -1804,6 +1804,11 @@ Word 另存漏斗也是 `cx2`。PowerPoint 另存直方和帕累托是 `cx7`。
 库进入 `cx1`、`cx2`、`cx7`。`cx4`（地图）不进。
 Fallback 里的海报形状或图片不进 `shapes` / `pictures`。
 箱线系列上 Excel 会补 `cx:statistics quartileMethod="exclusive"`。`setChartSeries` 留着这段，也留下 `AlternateContent` 外壳。
+docx 写 chartex 时，`w:drawing` 包在 `mc:AlternateContent` 的 Choice 里，前缀在 Choice 上声明。
+漏斗用 `Requires="cx2"`，其余布局用 `cx1`，与 Word 16.0 粘贴 Excel 原生图后另存的前缀一致。Fallback 写成空的 `mc:Fallback`，不写海报。
+不包外壳时 Word 16.0 一另存就崩溃。只有 Choice、没有 Fallback 时，Word 另存会拆掉外壳，下一次另存同样崩溃。
+xlsx、pptx 仍写裸图形框，Excel、PowerPoint 另存正常。
+本库以前写出、没有外壳的 docx 图，apply 不去补。要让 Word 另存不崩，先 `deleteChart` 再重新 `insertChart`。
 `bubble` 的 `sizes` 省略则写成与 `values` 等长的 `1`。
 `type` 为 `combo` 时，每条系列必须带 `type`（`bar`、`col`、`line`、`area` 或 `scatter`），且至少出现两种不同包裹，否则报 `InvalidField`；
 `combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`、`stock`、`surface`、`ofPie`、`chartex`。

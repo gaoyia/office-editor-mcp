@@ -41,8 +41,8 @@ C21 第 1 步的探测日志 `target/probe-c21-save.txt`：
 | 补 `theme1.xml` | 崩 |
 | 内嵌工作簿路径改成 `../embeddings/` | 崩 |
 | 包 `Requires="cx1"` 的 `AlternateContent`，Fallback 放占位文字 | 正常 |
-| 同上，不写 Fallback | 正常 |
-| 同上，Fallback 为空 | 正常 |
+| 同上，不写 Fallback | 第一次正常；78 探测时再另存一次，崩 |
+| 同上，Fallback 为空 | 正常，再另存也正常 |
 
 ### 2. PowerPoint 对照
 
@@ -59,7 +59,7 @@ Application 日志事件 1000：
 
 ### 4. 结论
 
-- Word：本库写进 docx 的 chartex 没有 `AlternateContent` 外壳，另存时 Word 崩溃。缺陷记录 `.bugfix-reports/2026年-11月-2日-❌-docx的chartex让Word另存时崩溃.md`，修复切片 `.plan/2026年-11月-2日-❌-docx-chartex包AlternateContent.md`（docx 78）。
+- Word：本库写进 docx 的 chartex 没有 `AlternateContent` 外壳，另存时 Word 崩溃。缺陷记录 `.bugfix-reports/2026年-11月-2日-✅-docx的chartex让Word另存时崩溃.md`，修复切片 `.plan/2026年-11月-2日-✅-docx-chartex包AlternateContent.md`（docx 78）。
 - PowerPoint：Office 自身行为，不改。手测以后关数据工作簿报 RPC 错误时，先看 PowerPoint 进程是否还在。
 - 之前的 chartex 手测只开不存，所以一直没暴露。
 

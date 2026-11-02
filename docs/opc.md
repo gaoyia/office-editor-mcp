@@ -395,6 +395,7 @@ apply 插入图表时，可能新建 `/word/charts/chartN.xml`（CT `application
 宿主关系 Type 为 `http://schemas.microsoft.com/office/2014/relationships/chartEx`。
 chartEx `.rels` 除 embedding 外再指向同目录 `styleN.xml` / `colorsN.xml`
 （CT `application/vnd.ms-office.chartstyle+xml` / `application/vnd.ms-office.chartcolorstyle+xml`）。
+宿主里的 `w:drawing` 包在 `mc:AlternateContent` 里，漏斗 `Requires="cx2"`，其余 `cx1`，Fallback 为空，不新建海报部件。
 apply 或 create 插入 SmartArt 时，可能新建 `/word/diagrams/` 下的 data / layout / colors
  / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、
 `…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`），

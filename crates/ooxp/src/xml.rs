@@ -752,6 +752,29 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
     Ok(())
 }
 
+pub(crate) const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+
+/// 新写一个 `mc:AlternateContent`。`Requires` 的前缀在 Choice 上声明。`fallback` 为 `None` 时写空的 `mc:Fallback`。
+pub(crate) fn alternate_content(
+    prefix: &str,
+    ns: &str,
+    choice_child: Element,
+    fallback: Option<Element>,
+) -> Element {
+    let mut ac = Element::new("mc:AlternateContent").with_attr("xmlns:mc", MC_NS);
+    let mut choice = Element::new("mc:Choice")
+        .with_attr(format!("xmlns:{prefix}"), ns)
+        .with_attr("Requires", prefix);
+    choice.push_element(choice_child);
+    ac.push_element(choice);
+    let mut fb = Element::new("mc:Fallback");
+    if let Some(f) = fallback {
+        fb.push_element(f);
+    }
+    ac.push_element(fb);
+    ac
+}
+
 /// 进入 `AlternateContent` 的哪一支。下标指向 `Choice` 或 `Fallback`。
 /// 没有可进的支时返回 `Ok(None)`。`Requires` 拆不开时返回 `XmlBroken`。
 pub(crate) fn alternate_child(el: &Element) -> Result<Option<usize>, Error> {

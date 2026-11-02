@@ -1800,3 +1800,191 @@ fn word_saved_funnel_choice_is_the_chart() {
         json!([7, 8])
     );
 }
+
+const CX1_NS: &str = "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex";
+const CX2_NS: &str = "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex";
+
+fn seq_out(tag: &str) -> PathBuf {
+    tmp_dir().join(format!(
+        "{tag}-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+fn chartex_series(layout: &str) -> Value {
+    let one = |name: &str, values: [i64; 3]| json!({ "name": name, "categories": ["甲", "乙", "丙"], "values": values });
+    match layout {
+        "pareto" => json!([one("值", [10, 4, 2]), one("线", [10, 14, 16])]),
+        "boxWhisker" => json!([
+            one("a", [1, 2, 3]),
+            one("b", [2, 3, 4]),
+            one("c", [3, 4, 5])
+        ]),
+        _ => json!([one("值", [10, 4, 2])]),
+    }
+}
+
+/// 外壳里只有一张 chartex：Choice 声明并要求 `prefix`，里面是 `w:drawing`，后面跟空的 Fallback。
+fn assert_one_chartex_shell(doc: &str, prefix: &str, ns: &str) {
+    assert_eq!(doc.matches("<mc:AlternateContent").count(), 1, "{doc}");
+    let at = doc.find("<mc:AlternateContent").unwrap();
+    let shell = &doc[at..doc.find("</mc:AlternateContent>").unwrap()];
+    assert!(
+        shell.contains(&format!(r#"xmlns:{prefix}="{ns}""#)),
+        "{shell}"
+    );
+    assert!(
+        shell.contains(&format!(r#"Requires="{prefix}""#)),
+        "{shell}"
+    );
+    assert!(shell.contains("<mc:Choice"), "{shell}");
+    let choice = &shell[shell.find("<mc:Choice").unwrap()..shell.find("</mc:Choice>").unwrap()];
+    assert!(choice.contains("<w:drawing>"), "{choice}");
+    assert!(
+        choice.contains(r#"uri="http://schemas.microsoft.com/office/drawing/2014/chartex""#),
+        "{choice}"
+    );
+    assert!(shell.contains("<mc:Fallback/>"), "{shell}");
+}
+
+#[test]
+fn inserted_chartex_is_wrapped_for_word() {
+    let src = write_sample("cx-shell-src", false);
+    for (layout, prefix, ns) in [
+        ("waterfall", "cx1", CX1_NS),
+        ("treemap", "cx1", CX1_NS),
+        ("sunburst", "cx1", CX1_NS),
+        ("clusteredColumn", "cx1", CX1_NS),
+        ("pareto", "cx1", CX1_NS),
+        ("boxWhisker", "cx1", CX1_NS),
+        ("funnel", "cx2", CX2_NS),
+    ] {
+        let out = seq_out(&format!("cx-shell-{layout}"));
+        apply(
+            &src,
+            &out,
+            json!([{
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "chartex",
+                "layoutId": layout,
+                "series": chartex_series(layout)
+            }]),
+        );
+        assert_one_chartex_shell(&part_text(&out, "word/document.xml"), prefix, ns);
+        let charts = inspect(&out, json!({ "charts": true }))["charts"].clone();
+        let cx = charts
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["type"] == "chartex")
+            .unwrap_or_else(|| panic!("{layout}: {charts}"));
+        assert_eq!(cx["layoutId"], layout);
+    }
+}
+
+#[test]
+fn classic_chart_stays_bare() {
+    let src = write_sample("col-bare-src", false);
+    let out = seq_out("col-bare");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "col",
+            "series": [{ "name": "值", "categories": ["甲", "乙"], "values": [1, 2] }]
+        }]),
+    );
+    let doc = part_text(&out, "word/document.xml");
+    assert!(!doc.contains("AlternateContent"), "{doc}");
+}
+
+#[test]
+fn created_chartex_is_wrapped_for_word() {
+    let path = seq_out("cx-shell-create");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "document": {
+            "paragraphs": [{
+                "text": "甲",
+                "charts": [{ "type": "chartex", "layoutId": "funnel", "series": chartex_series("funnel") }]
+            }]
+        }
+    })
+    .to_string())
+    .unwrap();
+    assert_one_chartex_shell(&part_text(&path, "word/document.xml"), "cx2", CX2_NS);
+}
+
+#[test]
+fn chart_ops_keep_the_chartex_shell() {
+    let src = write_sample("cx-shell-ops-src", false);
+    let made = seq_out("cx-shell-ops");
+    apply(
+        &src,
+        &made,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "chartex",
+            "layoutId": "waterfall",
+            "series": chartex_series("waterfall")
+        }]),
+    );
+    let charts = inspect(&made, json!({ "charts": true }))["charts"].clone();
+    let id = charts
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "chartex")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let steps = [
+        json!({ "op": "setChartTitle", "id": id, "title": "新标题" }),
+        json!({ "op": "setChartLegend", "id": id, "show": false }),
+        json!({ "op": "setChartSeries", "id": format!("{id}/series:0"), "values": [7, 8, 9] }),
+        json!({ "op": "addChartSeries", "id": id, "name": "二", "values": [1, 2, 3] }),
+        json!({ "op": "deleteChartSeries", "id": format!("{id}/series:1") }),
+        json!({ "op": "setChartSize", "id": id, "cx": 3_657_600, "cy": 1_828_800 }),
+        json!({ "op": "setChartWrap", "id": id, "kind": "anchor", "wrap": "square" }),
+    ];
+    let mut cur = made;
+    for step in steps {
+        let next = seq_out("cx-shell-step");
+        apply(&cur, &next, json!([step.clone()]));
+        assert_one_chartex_shell(&part_text(&next, "word/document.xml"), "cx1", CX1_NS);
+        let seen = inspect(&next, json!({ "charts": true }))["charts"].clone();
+        assert!(
+            seen.as_array()
+                .unwrap()
+                .iter()
+                .any(|c| c["id"] == id && c["type"] == "chartex"),
+            "{step}: {seen}"
+        );
+        cur = next;
+    }
+    let seen = inspect(&cur, json!({ "charts": true }))["charts"].clone();
+    let cx = seen
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == id)
+        .unwrap();
+    assert_eq!(cx["title"], "新标题");
+    assert_eq!(nums(&cx["series"][0]["values"]), vec![7, 8, 9]);
+
+    let gone = seq_out("cx-shell-del");
+    apply(&cur, &gone, json!([{ "op": "deleteChart", "id": id }]));
+    let doc = part_text(&gone, "word/document.xml");
+    assert!(!doc.contains("AlternateContent"), "{doc}");
+    assert!(
+        !doc.contains("<w:r/>") && !doc.contains("<w:r></w:r>"),
+        "{doc}"
+    );
+}

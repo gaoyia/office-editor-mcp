@@ -498,10 +498,6 @@ fn build_xlsx_ac(
     off_x: i64,
     off_y: i64,
 ) -> Element {
-    let mut ac = Element::new("mc:AlternateContent").with_attr("xmlns:mc", MC_NS);
-    let mut choice = Element::new("mc:Choice")
-        .with_attr("xmlns:am3d", crate::model3d::AM3D_NS)
-        .with_attr("Requires", "am3d");
     let mut frame = Element::new("xdr:graphicFrame").with_attr("macro", "");
     let mut nv = Element::new("xdr:nvGraphicFramePr");
     nv.push_element(
@@ -530,13 +526,12 @@ fn build_xlsx_ac(
     data.push_element(crate::model3d::build_model3d_el(glb_rid, png_rid, cx, cy));
     graphic.push_element(data);
     frame.push_element(graphic);
-    choice.push_element(frame);
-    ac.push_element(choice);
-
-    let mut fallback = Element::new("mc:Fallback");
-    fallback.push_element(build_fallback_pic(cnv, name, png_rid, cx, cy, off_x, off_y));
-    ac.push_element(fallback);
-    ac
+    crate::xml::alternate_content(
+        "am3d",
+        crate::model3d::AM3D_NS,
+        frame,
+        Some(build_fallback_pic(cnv, name, png_rid, cx, cy, off_x, off_y)),
+    )
 }
 
 fn build_fallback_pic(

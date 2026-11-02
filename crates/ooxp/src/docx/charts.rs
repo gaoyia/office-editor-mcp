@@ -638,9 +638,27 @@ pub fn apply_insert(
     );
     picture::apply_wrap(&mut drawing, op.kind, op.wrap, &op.pos)
         .map_err(|e| e.at(format!("ops[{i}]")))?;
+    if op.chart_type == ChartType::Chartex {
+        let (prefix, ns) = chartex_choice(op.extra.layout_id.as_deref());
+        drawing = crate::xml::alternate_content(prefix, ns, drawing, None);
+    }
     picture::insert_drawing_into_para(p, drawing);
     dirty.insert(host, ());
     Ok(())
+}
+
+/// Word 16.0 另存裸的 chartex 会崩溃。前缀照 Word 粘贴 Excel 原生图后另存的结果。
+fn chartex_choice(layout: Option<&str>) -> (&'static str, &'static str) {
+    match layout {
+        Some("funnel") => (
+            "cx2",
+            "http://schemas.microsoft.com/office/drawing/2015/10/21/chartex",
+        ),
+        _ => (
+            "cx1",
+            "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex",
+        ),
+    }
 }
 
 pub fn apply_delete(

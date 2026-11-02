@@ -298,6 +298,33 @@ function Close-WordDoc($doc) {
     }
 }
 
+# 打开时 Word 很宽容，有些文件要另存才会让它崩溃（例如没包 AlternateContent 的 chartex）。
+# 判据：另存后进程还在、文件写出来、Application 日志没有新的 WINWORD.EXE 崩溃（事件 1000）。
+# 崩了就清掉共用实例，后面的脚本会重新起一个 Word。
+function Save-WordDocChecked($doc, [string]$savedPath) {
+    $since = Get-Date
+    $procId = $global:OoxpWordPid
+    if (Test-Path $savedPath) { Remove-Item -Force $savedPath }
+    $err = ''
+    try { $doc.SaveAs2($savedPath) } catch { $err = $_.Exception.Message }
+    Start-Sleep -Seconds 2
+    $alive = [bool]($procId -and (Get-Process -Id $procId -ErrorAction SilentlyContinue))
+    $crashes = @()
+    try {
+        $crashes = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; Id = 1000; StartTime = $since } -ErrorAction Stop |
+            Where-Object { $_.Message -match 'WINWORD\.EXE' })
+    } catch {}
+    if (-not $alive) {
+        $global:OoxpWord = $null
+        $global:OoxpWordPid = $null
+    }
+    $saved = Test-Path $savedPath
+    [pscustomobject]@{
+        Ok = ($alive -and -not $err -and $saved -and $crashes.Count -eq 0)
+        Detail = "alive=$alive saved=$saved crash=$($crashes.Count) err=$err"
+    }
+}
+
 # apply 的目标文件若正被 Word 开着，ooxp 写不进去，所以写之前先关掉。
 function Close-WordDocByPath($word, [string]$path) {
     $collection = $word.Documents

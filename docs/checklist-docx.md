@@ -22,6 +22,7 @@ Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply �
 2026-11-01 重跑整套手测。页眉书目改为插入成功。create 只给 `password` 为 `InvalidField`。`setThemeOverride` 在 xlsx 上对 `slide:1` 为 `InvalidId`。
 2026-11-02 页眉题注和索引改回拒绝：Word 更新后分别是「错误!仅主文档。」和「不允许有索引」。页眉书目更新后含 `Ecma` 与 `2006`。正文文本框题注更新后是 `1`。
 2026-11-01 探测墨迹批注。Word 16.0 保存时丢掉空的 `wpi:ink`，`Replies.Add` 和改 `Range.Text` 的另存同样丢掉。回复和改字仍拒绝，不进 `run.ps1`。
+2026-11-02 新增 `docx-chartex-save.ps1`。七种 chartex 包上外壳后，Word 16.0 另存进程都在，日志没有崩溃，另存结果仍有外壳。Cxs1–Cxs7 通过。`chartex-edit.ps1` 的 docx-Cx1 补上另存，同样通过。
 2026-11-02 补跑 `docx-model3d-notes.ps1`。`insertModel3d` 写入脚注和批注后，Word 16.0 打开没有 Repair，两处 Range 的 InlineShape 都是 1。D3n1 通过。
 2026-11-01 补探测容器里的六类域块。页眉、文本框、脚注、批注里的交叉引用、索引项、引文、书目更新后有结果，没有 Repair。索引更新报不允许。题注只在文本框里出编号，页眉、脚注、批注是「错误!仅主文档。」
 2026-10-30 补跑 `docx-tab-br.ps1`。段落 `a`、制表、`b`、换行、`c`，Word 16.0 能看见。
@@ -2196,6 +2197,16 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。脚注、尾注和�
 - **D3n1**
   - 检查：插入
   - 通过标准：`insertModel3d` 写入脚注段和批注段后，根上 `model3dCount` 为 2，id 分别带 `footnote:` 与 `comment:`，`kind` 为 `inline`，`pictureCount` 为 0。Word 16.0 打开没有 Repair。脚注和批注 Range 的 `InlineShapes` 至少各有 1 个
+
+## chartex 另存
+
+docx 里的 chartex 包在 `mc:AlternateContent` 里：漏斗 `cx2`，其余 `cx1`，Fallback 为空。
+不包外壳时 Word 16.0 打开不报错，一另存进程就崩溃，所以本节必须让 Word 另存。
+手测脚本 `manual-check/office/cases/docx-chartex-save.ps1`。编号用 Cxs，不要和 Cx 撞。
+
+- **Cxs1–Cxs7**
+  - 检查：瀑布、漏斗、树状、旭日、直方、帕累托、箱线各一份
+  - 通过标准：写出的 `Requires` 对得上布局。Word 16.0 打开没有 Repair。`SaveAs2` 后进程还在，文件写出，Application 日志没有新的 `WINWORD.EXE` 事件 1000。另存结果里仍有 `Requires="cx1"` 或 `cx2`
 
 ## 3D 事后几何
 

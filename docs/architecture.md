@@ -181,6 +181,7 @@ pptx 母版和版式按开始时的 `sldMasterId/@id`、`sldLayoutId/@id` 认回
 ### 标记兼容性
 
 读取 `mc:AlternateContent` 时，全库用 `xml::alternate_child` 决定进入哪一支。create 写出的 `AlternateContent` 形状不变。
+新写的 3D 外壳和 docx chartex 外壳用 `xml::alternate_content`：前缀在 `Choice` 上声明，不给 Fallback 时写空的 `mc:Fallback`。
 
 `Choice` 的 `Requires` 按空白拆成前缀。每个前缀都在下表里，才进入这支。有一个不在表里，就跳过这支。多个 `Choice` 按文档顺序取第一支全部在表里的。都没有，就进入 `Fallback`。没有 `Fallback` 就不进入这段。
 

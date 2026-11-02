@@ -85,8 +85,10 @@ Invoke-OoxpRequest @{
 $word = Ensure-MsWord $docx2
 $doc = Open-WordDoc $word $docx2
 $capW = [string]$doc.ActiveWindow.Caption
-Add-Check 'docx-Cx1' ($capW -notmatch 'Repair') "caption=$capW"
-Close-WordDoc $doc
+$savedW = Get-OutPath 'chartex-edit-2-saved.docx'
+$saveW = Save-WordDocChecked $doc $savedW
+Add-Check 'docx-Cx1' (($capW -notmatch 'Repair') -and $saveW.Ok) "caption=$capW $($saveW.Detail)"
+if ($global:OoxpWord) { Close-WordDoc $doc }
 
 $pptx = Get-OutPath 'chartex-edit.pptx'
 Invoke-OoxpRequest @{
