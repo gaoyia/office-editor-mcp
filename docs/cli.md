@@ -36,6 +36,9 @@ stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向
 | create / apply / exportMedia / exportChartData 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
 | 失败 | 空 | `{ "ok": false, "error": { ... } }` | 见 [errors.md](errors.md) |
 
+release 构建 `panic = "abort"`。程序自身出错（panic）时不写错误 JSON，进程直接终止，退出码不在上表里：Windows 上是 `0xC0000409`，其它系统由 `SIGABRT` 决定。
+调用方只认 0 和 errors.md 里列出的退出码，其余一律当作程序故障。原文件不受影响：保存先写临时文件再重命名。
+
 JSON 打印用稳定的字段顺序，不要求 pretty-print。调试时可以加 `--pretty`，让 stdout 带缩进。默认紧凑一行，方便管道。
 
 ## 编码与路径
