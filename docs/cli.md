@@ -156,7 +156,7 @@ JSON-RPC 解析失败是 `-32700`，不接受的批量请求是 `-32600`，未�
 
 ## 发布
 
-只在 `main` 上编译并发布。版本号取 `Cargo.toml` 里的 `version`。同一版本再次推到 `main` 时，删掉旧的 GitHub Release，再按当前提交重建。
+推送 tag `v<版本>` 时编译并发布。`Cargo.toml` 里的 `version` 必须和 tag 一致，例如 `0.1.1` 对应 `v0.1.1`。推 `main` 不发布。
 
 包名用 Node.js 的 `process.platform` 和 `process.arch`。
 

@@ -2,8 +2,8 @@ name: release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 permissions:
   contents: write
@@ -103,18 +103,18 @@ jobs:
         run: |
           set -euo pipefail
           version=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
-          tag="v${version}"
+          tag="${GITHUB_REF_NAME}"
+          if [ "$tag" != "v${version}" ]; then
+            echo "tag ${tag} 与 Cargo.toml 的版本 v${version} 不一致" >&2
+            exit 1
+          fi
           (
             cd dist
             sha256sum ooxp-v"${version}"-* | sort -k2 > SHASUMS256.txt
           )
           notes=$(mktemp)
-          printf '%s\n' "来自 main 的 ${GITHUB_SHA}。" "" "包名是 Node.js 的 process.platform 加 process.arch。" > "$notes"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release delete "$tag" --yes --cleanup-tag
-          fi
+          printf '%s\n' "来自 tag ${tag} 的 ${GITHUB_SHA}。" "" "包名是 Node.js 的 process.platform 加 process.arch。" > "$notes"
           gh release create "$tag" dist/* \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
             --title "ooxp ${tag}" \
             --notes-file "$notes"
