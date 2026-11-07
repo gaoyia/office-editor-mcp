@@ -1,0 +1,120 @@
+name: release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+            lint: true
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            lint: false
+          - runner: macos-latest
+            platform: darwin
+            arch: arm64
+            lint: false
+          - runner: windows-latest
+            platform: win32
+            arch: x64
+            lint: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: fmt
+        if: matrix.lint
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        if: matrix.lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: test
+        run: cargo test --workspace
+
+      - name: build
+        run: cargo build -p ooxp-cli --release
+
+      - name: pack
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
+          platform="${{ matrix.platform }}"
+          arch="${{ matrix.arch }}"
+          stem="ooxp-v${version}-${platform}-${arch}"
+          mkdir -p "dist/${stem}"
+          if [ "$platform" = "win32" ]; then
+            cp target/release/ooxp.exe "dist/${stem}/ooxp.exe"
+            python -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED); z.write(sys.argv[2], sys.argv[3]); z.close()' \
+              "dist/${stem}.zip" "dist/${stem}/ooxp.exe" "${stem}/ooxp.exe"
+          else
+            cp target/release/ooxp "dist/${stem}/ooxp"
+            chmod +x "dist/${stem}/ooxp"
+            tar -C dist -czf "dist/${stem}.tar.gz" "$stem"
+          fi
+          rm -rf "dist/${stem}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
+          tag="v${version}"
+          (
+            cd dist
+            sha256sum ooxp-v"${version}"-* | sort -k2 > SHASUMS256.txt
+          )
+          notes=$(mktemp)
+          printf '%s\n' "来自 main 的 ${GITHUB_SHA}。" "" "包名是 Node.js 的 process.platform 加 process.arch。" > "$notes"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release delete "$tag" --yes --cleanup-tag
+          fi
+          gh release create "$tag" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "ooxp ${tag}" \
+            --notes-file "$notes"

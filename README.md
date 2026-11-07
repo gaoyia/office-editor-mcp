@@ -44,6 +44,8 @@ cargo test
 
 二进制名是 `ooxp`。库 crate 也叫 `ooxp`。
 
+推到 `main` 会发布四个包，名字用 Node.js 的 `process.platform` 和 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-arm64`、`win32-x64`。文件名和目录见 `docs/cli.md` 的「发布」。
+
 ## 命令行
 
 ```text

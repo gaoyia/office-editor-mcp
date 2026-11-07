@@ -1,6 +1,6 @@
 # 命令行
 
-日期：2026-10-30
+日期：2026-11-07
 
 二进制名：`ooxp`。不带 `mcp` 时只做三件事：读入一份领域 JSON，交给库，把结果写到 stdout 或磁盘。`ooxp mcp` 从标准输入读 JSON-RPC，把同一份领域 JSON 交给库。
 
@@ -151,3 +151,21 @@ JSON-RPC 解析失败是 `-32700`，不接受的批量请求是 `-32600`，未�
 成功时，`result.content[0].text` 是命令行会写到 stdout 的那份 JSON。失败时同一位置放 stderr 那种 `{"ok":false,"error":...}`，并带 `isError: true`。库看到的仍是领域 JSON，看不到 `jsonrpc`、`method`、`id`。
 
 操作名单不放进 `tools/list`。要查某个 `op` 怎么填，调用 `help`。
+
+## 发布
+
+只在 `main` 上编译并发布。版本号取 `Cargo.toml` 里的 `version`。同一版本再次推到 `main` 时，删掉旧的 GitHub Release，再按当前提交重建。
+
+包名用 Node.js 的 `process.platform` 和 `process.arch`。
+
+| 名字 | 系统 |
+| --- | --- |
+| `linux-x64` | Linux x64 |
+| `linux-arm64` | Linux arm64 |
+| `darwin-arm64` | macOS arm64 |
+| `win32-x64` | Windows x64 |
+
+- 文件名是 `ooxp-v<版本>-<platform>-<arch>`
+- Windows 用 `.zip`，另外三个用 `.tar.gz`
+- 压缩包里是同名目录。可执行文件是 `ooxp`，Windows 上是 `ooxp.exe`
+- 同一版 Release 里还有 `SHASUMS256.txt`，每行是 SHA-256 和文件名
