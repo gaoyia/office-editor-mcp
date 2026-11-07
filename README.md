@@ -176,3 +176,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 ```
 
 给代理看的工作流程在 `AGENTS.md` 和 `.cursor/skills/ooxp/SKILL.md`。
+
+## Star
+
+[![Star 数折线图](https://api.star-history.com/svg?repos=gaoyia/ooxp&type=Date)](https://star-history.com/#gaoyia/ooxp&Date)
