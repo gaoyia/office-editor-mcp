@@ -11,6 +11,7 @@ strip = true
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/gaoyia/ooxp"
 
 [workspace.dependencies]
 zip = { version = "2", default-features = false }

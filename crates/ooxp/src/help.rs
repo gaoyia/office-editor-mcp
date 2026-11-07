@@ -8,7 +8,7 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, Lang, TypeName};
 use crate::json::{self, Format};
 
-const SCHEMA_TEXT: &str = include_str!("../../../docs/json-schema/request.schema.json");
+const SCHEMA_TEXT: &str = include_str!("../schema/request.schema.json");
 const SEARCH_LIMIT: usize = 20;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

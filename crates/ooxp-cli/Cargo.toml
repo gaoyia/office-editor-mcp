@@ -2,14 +2,16 @@
 name = "ooxp-cli"
 version = { workspace = true }
 edition = { workspace = true }
+repository = { workspace = true }
 license-file = "../../LICENSE"
-description = "ooxp 命令行"
+readme = "../../README.md"
+description = "ooxp 命令行：用领域 JSON 读写 .xlsx / .docx / .pptx"
 
 [[bin]]
 name = "ooxp"
 path = "src/main.rs"
 
 [dependencies]
-ooxp = { path = "../ooxp" }
+ooxp = { path = "../ooxp", version = "0.1.0" }
 clap = { workspace = true }
 serde_json = { workspace = true }

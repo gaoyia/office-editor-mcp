@@ -5,7 +5,9 @@
     python docs/json-schema/build.py
 
 不要手改拼出来的 request.schema.json。
-`--check` 只比较，不写文件。分块和拼出来的文件不一致时退出码为 1。
+脚本写两份同样的内容：本目录一份给文档，crate 里一份给 `include_str!`。
+发布到 crates.io 时包里看不到 `docs/`，所以 crate 里必须自带这一份。
+`--check` 只比较，不写文件。任一份和分块不一致时退出码为 1。
 """
 
 from __future__ import annotations
@@ -16,7 +18,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
-OUT = ROOT / "request.schema.json"
+OUTS = (
+    ROOT / "request.schema.json",
+    ROOT.parents[1] / "crates" / "ooxp" / "schema" / "request.schema.json",
+)
 FORMATS = ("xlsx", "docx", "pptx")
 CATALOGS = (
     ("anyApplyOp", "anyOf", None),
@@ -139,15 +144,18 @@ def main() -> int:
     check_only = "--check" in sys.argv
     text = dump(build())
     if check_only:
-        current = OUT.read_text(encoding="utf-8") if OUT.is_file() else ""
-        if current != text:
-            print(
-                "request.schema.json 和 src/ 不一致。运行 python docs/json-schema/build.py",
-                file=sys.stderr,
-            )
-            return 1
+        for out in OUTS:
+            current = out.read_text(encoding="utf-8") if out.is_file() else ""
+            if current != text:
+                print(
+                    f"{out} 和 src/ 不一致。运行 python docs/json-schema/build.py",
+                    file=sys.stderr,
+                )
+                return 1
         return 0
-    OUT.write_text(text, encoding="utf-8", newline="\n")
+    for out in OUTS:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(text, encoding="utf-8", newline="\n")
     return 0
 
 

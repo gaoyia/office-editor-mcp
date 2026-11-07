@@ -12,7 +12,7 @@
 python docs/json-schema/build.py
 ```
 
-脚本把 `src/` 拼回 `request.schema.json`。只想核对、不写文件：
+脚本把 `src/` 拼回两份 `request.schema.json`：本目录一份，`crates/ooxp/schema/` 一份。库用 `include_str!` 读 crate 里那份，这样发到 crates.io 时不依赖 `docs/`。两份内容相同，都不要手改。只想核对、不写文件：
 
 ```text
 python docs/json-schema/build.py --check
@@ -38,6 +38,6 @@ python docs/json-schema/build.py --check
 
 ## 哪些文件入库
 
-`request.schema.json` 是脚本写出来的，但要提交。测试靠它和 `src/` 对得上。
+两份 `request.schema.json` 都是脚本写出来的，但要提交。测试靠它们和 `src/` 对得上。
 
 跑 Python 会留下 `__pycache__` 和 `.pyc`。这些不入库，删了再跑会再生。

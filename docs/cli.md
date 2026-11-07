@@ -6,6 +6,8 @@
 
 ## 调用
 
+从 crates.io 安装命令行：`cargo install ooxp-cli`。库的 crate 名是 `ooxp`。
+
 ```text
 ooxp [--input <文件|->] [--lang <标签>] [--pretty]
 ooxp mcp [--lang <标签>]

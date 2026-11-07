@@ -38,6 +38,8 @@
 需要 Rust 2021 edition。
 
 ```text
+cargo add ooxp
+cargo install ooxp-cli
 cargo build -p ooxp-cli --release
 cargo test
 ```
