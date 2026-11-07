@@ -664,10 +664,9 @@ pub(crate) fn color_json(el: &Element) -> Option<Value> {
         if let Some(tint) = el.attr("tint").and_then(|s| s.parse::<f64>().ok()) {
             m.insert("tint".into(), json!(tint));
         }
-    } else if let Some(indexed) = el.attr("indexed").and_then(|s| s.parse::<u32>().ok()) {
-        m.insert("indexed".into(), json!(indexed));
     } else {
-        return None;
+        let indexed = el.attr("indexed").and_then(|s| s.parse::<u32>().ok())?;
+        m.insert("indexed".into(), json!(indexed));
     }
     Some(Value::Object(m))
 }

@@ -370,8 +370,15 @@ fn delete_then_original_citation_and_bibliography() {
 
 #[test]
 fn delete_then_original_font() {
-    let font = r"C:\Windows\Fonts\calibri.ttf";
-    assert!(Path::new(font).is_file(), "本机应有 Calibri.ttf");
+    let font_path = std::env::temp_dir()
+        .join("ooxp-docx-doc-pin")
+        .join("sample.ttf");
+    std::fs::create_dir_all(font_path.parent().unwrap()).unwrap();
+    // 只要过 TTF 文件头检查。名字来自请求，不读本机字体。
+    let mut font_bytes = vec![0, 1, 0, 0];
+    font_bytes.resize(64, 0x11);
+    std::fs::write(&font_path, font_bytes).unwrap();
+    let font = font_path.to_string_lossy();
     let src = create("font", json!({ "paragraphs": [{ "text": "宿主" }] }));
     let made = apply(
         &src,

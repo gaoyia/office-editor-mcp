@@ -2,6 +2,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::OnceLock;
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
@@ -19,8 +20,17 @@ fn seq_path(tag: &str, ext: &str) -> PathBuf {
     tmp_dir().join(format!("{tag}-{n}.{ext}"))
 }
 
-fn calibri() -> &'static str {
-    r"C:\Windows\Fonts\calibri.ttf"
+fn font_file() -> &'static str {
+    static PATH: OnceLock<String> = OnceLock::new();
+    PATH.get_or_init(|| {
+        let path = tmp_dir().join("sample.ttf");
+        // 只要过 TTF 文件头检查。名字来自请求，不读本机字体。
+        let mut bytes = vec![0, 1, 0, 0];
+        bytes.resize(64, 0x11);
+        std::fs::write(&path, bytes).unwrap();
+        path.to_string_lossy().into_owned()
+    })
+    .as_str()
 }
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
@@ -123,14 +133,13 @@ fn insert_op() -> Value {
         "op": "insertEmbeddedFont",
         "id": "docx:document",
         "name": "Calibri",
-        "file": calibri(),
+        "file": font_file(),
         "style": "regular"
     })
 }
 
 #[test]
 fn insert_export_set_flags_then_delete() {
-    assert!(Path::new(calibri()).is_file(), "本机应有 Calibri.ttf");
     let src = create_docx(
         "fe-src",
         json!({
@@ -182,7 +191,7 @@ fn insert_export_set_flags_then_delete() {
     assert!(settings.contains("embedTrueTypeFonts"));
     assert!(!settings.contains("subsetted"));
 
-    let ttf = std::fs::read(calibri()).unwrap();
+    let ttf = std::fs::read(font_file()).unwrap();
     let odttf = part_bytes(&with_font, "word/fonts/font1.odttf");
     assert_eq!(odttf.len(), ttf.len());
     assert_ne!(&odttf[..32], &ttf[..32]);
@@ -253,7 +262,7 @@ fn insert_rejects_bad_fields_and_missing_delete() {
             "op": "insertEmbeddedFont",
             "id": "docx:document",
             "name": "  ",
-            "file": calibri()
+            "file": font_file()
         }]),
     );
     assert_eq!(err_name.code(), ErrorCode::InvalidField);
@@ -264,7 +273,7 @@ fn insert_rejects_bad_fields_and_missing_delete() {
             "op": "insertEmbeddedFont",
             "id": "docx:document",
             "name": "Calibri",
-            "file": calibri(),
+            "file": font_file(),
             "style": "underline"
         }]),
     );
@@ -276,7 +285,7 @@ fn insert_rejects_bad_fields_and_missing_delete() {
             "op": "insertEmbeddedFont",
             "id": "docx:document",
             "name": "Calibri",
-            "file": calibri(),
+            "file": font_file(),
             "subsetted": true
         }]),
     );
@@ -291,7 +300,7 @@ fn insert_rejects_bad_fields_and_missing_delete() {
             "op": "insertEmbeddedFont",
             "id": "para:1",
             "name": "Calibri",
-            "file": calibri()
+            "file": font_file()
         }]),
     );
     assert_eq!(err_id.code(), ErrorCode::InvalidId);

@@ -1611,7 +1611,7 @@ run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `
 
 `insertEmbeddedFont` 把本地 TTF/OTF 按 ECMA-376 §17.8.1 混淆后写入 `fontTable`；`deleteEmbeddedFont` 删嵌入面与 odttf；`setFontEmbed` 写 settings 三个标志。
 不实现子集化引擎，不改本机字体库。手测脚本 `manual-check/office/cases/docx-font-embed.ps1`。
-`file` 用本机 `C:\Windows\Fonts\calibri.ttf`，不要把 ttf 提交进仓库。
+手测的 `file` 用本机 `C:\Windows\Fonts\calibri.ttf`，不要把 ttf 提交进仓库。自动化测试不读这条路径，自己写一份带 TTF 文件头的临时文件。
 
 - **Fe1**
   - 项：名单

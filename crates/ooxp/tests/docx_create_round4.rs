@@ -35,8 +35,13 @@ fn png_path() -> PathBuf {
     path
 }
 
-fn calibri() -> &'static str {
-    r"C:\Windows\Fonts\calibri.ttf"
+fn font_file() -> PathBuf {
+    let path = seq_path("font", "ttf");
+    // 只要过 TTF 文件头检查。名字来自请求，不读本机字体。
+    let mut bytes = vec![0, 1, 0, 0];
+    bytes.resize(64, 0x11);
+    std::fs::write(&path, &bytes).unwrap();
+    path
 }
 
 fn create_docx(tag: &str, document: Value) -> PathBuf {
@@ -123,7 +128,7 @@ fn full_scope() -> Value {
     })
 }
 
-fn round4_document(pic: &Path, with_font: bool) -> Value {
+fn round4_document(pic: &Path, font: &Path) -> Value {
     let mut document = json!({
         "styles": [{ "styleId": "ooxpTbl", "type": "table", "name": "ooxpTbl" }],
         "sources": [{ "tag": "Book1", "title": "Sample Book", "sourceType": "Book" }],
@@ -165,17 +170,15 @@ fn round4_document(pic: &Path, with_font: bool) -> Value {
         "indexes": [{}],
         "bibliographies": [{}]
     });
-    if with_font {
-        document["embeddedFonts"] = json!([{ "name": "Calibri", "file": calibri() }]);
-    }
+    document["embeddedFonts"] = json!([{ "name": "Calibri", "file": font.to_string_lossy() }]);
     document
 }
 
 #[test]
 fn create_round4_writes_styles_table_shapes_ruby_biblio_and_drawing_link() {
     let pic = png_path();
-    let with_font = Path::new(calibri()).is_file();
-    let path = create_docx("round4", round4_document(&pic, with_font));
+    let font = font_file();
+    let path = create_docx("round4", round4_document(&pic, &font));
     let tree = inspect(&path, full_scope());
 
     assert!(tree["styleCount"].as_u64().unwrap() >= 5, "{tree}");
@@ -230,11 +233,9 @@ fn create_round4_writes_styles_table_shapes_ruby_biblio_and_drawing_link() {
         "compressPunctuation"
     );
     assert_eq!(tree["fontEmbed"]["trueType"], true);
-    if with_font {
-        assert_eq!(tree["embeddedFontCount"], 1);
-        assert_eq!(tree["embeddedFonts"][0]["name"], "Calibri");
-        assert!(zip_has(&path, "word/fontTable.xml"));
-    }
+    assert_eq!(tree["embeddedFontCount"], 1);
+    assert_eq!(tree["embeddedFonts"][0]["name"], "Calibri");
+    assert!(zip_has(&path, "word/fontTable.xml"));
 
     let settings = part_text(&path, "word/settings.xml");
     assert!(settings.contains("compressPunctuation"), "{settings}");
