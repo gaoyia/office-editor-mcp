@@ -33,8 +33,15 @@ impl Session {
         self.inner.put_file(name, bytes);
     }
 
-    pub fn run(&mut self, request_json: &str, package: Option<Vec<u8>>) -> JsValue {
-        outcome_to_js(self.inner.run_inner(request_json, package.as_deref()))
+    /// `package` 长度为 0 表示这次没有包。
+    /// 不用 `Option`：生成的绑定在缺省时会沿用上一段字符串的长度，读到空指针。
+    pub fn run(&mut self, request_json: &str, package: Vec<u8>) -> JsValue {
+        let pkg = if package.is_empty() {
+            None
+        } else {
+            Some(package.as_slice())
+        };
+        outcome_to_js(self.inner.run_inner(request_json, pkg))
     }
 }
 

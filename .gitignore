@@ -19,6 +19,7 @@ manual-check/**/out/**
 
 # 浏览器演示的 wasm 由构建生成
 demo/web/pkg/
+demo/web/pkg-debug/
 
 # Python 跑脚本留下的缓存。拼出来的 request.schema.json 仍要入库
 __pycache__/

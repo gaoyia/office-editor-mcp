@@ -205,6 +205,50 @@ mod tests {
     }
 
     #[test]
+    fn demo_create_then_apply_for_three_formats() {
+        let host = Host::boot();
+        let cases = [
+            (
+                r#"{"schemaVersion":1,"action":"create","path":"book.xlsx","format":"xlsx","workbook":{"sheets":[{"name":"Sheet1","cells":[{"ref":"A1","value":1},{"ref":"A2","value":"hello"},{"ref":"A3","value":true},{"ref":"B1","formula":"=SUM(A1)"}]}]}}"#,
+                "book.xlsx",
+                r#"{"schemaVersion":1,"action":"apply","path":"book.xlsx","output":"book.patched.xlsx","ops":[{"op":"setCell","id":"cell:Sheet1!A1","value":42},{"op":"setCell","id":"cell:Sheet1!A2","value":"已修改"}]}"#,
+                "book.patched.xlsx",
+            ),
+            (
+                r#"{"schemaVersion":1,"action":"create","path":"note.docx","format":"docx","document":{"paragraphs":[{"style":"Heading1","text":"标题"},{"text":"hello"}]}}"#,
+                "note.docx",
+                r#"{"schemaVersion":1,"action":"apply","path":"note.docx","output":"note.patched.docx","ops":[{"op":"setParaText","id":"para:00000001","text":"新标题"}]}"#,
+                "note.patched.docx",
+            ),
+            (
+                r#"{"schemaVersion":1,"action":"create","path":"deck.pptx","format":"pptx","presentation":{"slides":[{"shapes":[{"text":"标题"},{"text":"hello"}]},{"shapes":[{"text":"第二页"}]}]}}"#,
+                "deck.pptx",
+                r#"{"schemaVersion":1,"action":"apply","path":"deck.pptx","output":"deck.patched.pptx","ops":[{"op":"setShapeText","id":"slide:1/shape:2","text":"新标题"}]}"#,
+                "deck.patched.pptx",
+            ),
+        ];
+        for (create, created, apply, patched) in cases {
+            let made = host.run_inner(create, None);
+            let bytes = match made {
+                Outcome::Bytes { path, bytes, .. } => {
+                    assert_eq!(path, created);
+                    bytes
+                }
+                Outcome::Fail(value) => panic!("{created}: {value}"),
+                Outcome::Json(value) => panic!("{created}: {value}"),
+            };
+            match host.run_inner(apply, Some(&bytes)) {
+                Outcome::Bytes { path, bytes, .. } => {
+                    assert_eq!(path, patched);
+                    assert!(bytes.starts_with(b"PK"));
+                }
+                Outcome::Fail(value) => panic!("{patched}: {value}"),
+                Outcome::Json(value) => panic!("{patched}: {value}"),
+            }
+        }
+    }
+
+    #[test]
     fn inspect_without_bytes_names_the_path() {
         let host = Host::boot();
         match host.run_inner(r#"{"action":"inspect","path":"no.xlsx"}"#, None) {

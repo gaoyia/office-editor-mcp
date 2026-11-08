@@ -8,7 +8,8 @@ readme = "../../README.md"
 description = "Office Open XML Patch：用领域 JSON 读写 .xlsx / .docx / .pptx"
 
 [dependencies]
-zip = { workspace = true, default-features = false, features = ["deflate", "deflate64", "aes-crypto", "time"] }
+# `time` 的默认时间会调用系统时钟。wasm32 没有这项，所以只在本机依赖里打开。
+zip = { workspace = true, default-features = false, features = ["deflate", "deflate64", "aes-crypto"] }
 quick-xml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -18,7 +19,7 @@ base64 = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 getrandom = { workspace = true }
-zip = { workspace = true, features = ["bzip2", "lzma", "zstd"] }
+zip = { workspace = true, features = ["bzip2", "lzma", "zstd", "time"] }
 
 [dev-dependencies]
 # 集成测试要自己拆包核对字节，用得到 zip。

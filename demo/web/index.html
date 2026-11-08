@@ -3,63 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ooxp 浏览器演示</title>
+  <title>ooxp 示例</title>
   <link rel="stylesheet" href="./app.css">
 </head>
 <body>
   <header>
     <h1>ooxp</h1>
-    <p>授权一个本地目录后，代理只读写这个目录。生成的文件写入该目录并直接下载，页面不预览。</p>
+    <p>下面是创建和修改的示例请求。运行后直接下载，页面不预览。选了目录的话，文件同时写入该目录。</p>
+    <div class="row">
+      <button id="pick" type="button">选择目录</button>
+      <button id="restore" type="button" hidden>恢复授权</button>
+      <span id="dir-name">还没有授权目录。不选也能运行，结果只下载。</span>
+    </div>
   </header>
-  <div class="layout">
-    <section>
-      <h2>接口</h2>
-      <fieldset>
-        <legend>类型</legend>
-        <label><input type="radio" name="kind" value="openai" checked> OpenAI</label>
-        <label><input type="radio" name="kind" value="anthropic"> Anthropic</label>
-      </fieldset>
-      <label>地址前缀
-        <input id="prefix" type="text" autocomplete="off" spellcheck="false">
-      </label>
-      <label>密钥
-        <input id="key" type="password" autocomplete="off">
-      </label>
-      <p class="hint">密钥只留在这个标签页，只发给上面的前缀。</p>
-      <label>模型
-        <input id="model" type="text" list="model-list" autocomplete="off" spellcheck="false">
-      </label>
-      <datalist id="model-list"></datalist>
-      <div class="row">
-        <button id="load-models" type="button">获取模型</button>
-        <span id="model-status"></span>
-      </div>
-      <p id="urls" class="hint"></p>
-
-      <h2>目录</h2>
-      <div class="row">
-        <button id="pick" type="button">选择目录</button>
-        <button id="restore" type="button" hidden>恢复授权</button>
-      </div>
-      <p id="dir-name">还没有授权目录。</p>
-      <ul id="files"></ul>
-      <label>按相对路径下载
-        <input id="dl-path" type="text" autocomplete="off" spellcheck="false" placeholder="例如 out/a.xlsx">
-      </label>
-      <button id="dl-btn" type="button">下载</button>
-    </section>
-    <section>
-      <h2>对话</h2>
-      <div id="log"></div>
-      <form id="composer">
-        <textarea id="text" placeholder="例如：在这个目录里做一个三列的销售表，或写一个 index.html"></textarea>
-        <div class="row">
-          <button type="submit">发送</button>
-          <button id="stop" type="button">停止</button>
-        </div>
-      </form>
-    </section>
-  </div>
+  <main id="examples"></main>
+  <section>
+    <h2>结果</h2>
+    <div id="log"></div>
+  </section>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
