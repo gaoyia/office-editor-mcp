@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/ooxp", "crates/ooxp-cli"]
+members = ["crates/ooxp", "crates/ooxp-cli", "crates/ooxp-wasm"]
 
 [profile.release]
 opt-level = "z"

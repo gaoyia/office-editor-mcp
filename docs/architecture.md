@@ -46,7 +46,7 @@ xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作�
 
 ## 模块
 
-建议用 Cargo workspace，两个 crate。xlsx、docx、pptx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。
+库和命令行是两个 crate。浏览器演示另有 `ooxp-wasm`，只包门口，不增加动作。xlsx、docx、pptx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。
 
 ```text
 crates/ooxp/                 库
@@ -79,6 +79,8 @@ crates/ooxp/                 库
   docx/                      文档
   pptx/                      演示文稿
 crates/ooxp-cli/             命令行，只依赖 ooxp
+crates/ooxp-wasm/            浏览器绑定，只调用 run_bytes
+demo/web/                    临时演示页
 ```
 
 每个名字都是 `crates/ooxp/src` 下的文件或目录。`json` 与 `dispatch` 是单文件，不是目录。
@@ -124,6 +126,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp
 - 同一线程嵌套另一次调用时，内层压在外层上面，结束时只弹自己的一层。
 - 栈空时与没有装入相同：没有读取回调就读不到用户文件，时间和随机数走系统。
 - `wasm32` 上库不自己读磁盘。
+- 浏览器演示的绑定在 `crates/ooxp-wasm`，页面在 `demo/web`。页面只把用户授权目录里的字节交给 `run_bytes`，并装入时间和随机数。细节见 [wasm-demo.md](wasm-demo.md)。它不增加领域 JSON 的动作。
 
 每种格式的 `scope` 与 `ops` 解析放在该格式的 `request/` 目录。
 `parse_scope` 与 `parse_ops` 仍是入口；类型和解析函数按领域拆到子文件。

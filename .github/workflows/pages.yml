@@ -1,0 +1,54 @@
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: wasm-bindgen
+        run: |
+          set -euo pipefail
+          curl -sSfL -o wbg.tgz https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.127/wasm-bindgen-0.2.127-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf wbg.tgz
+          sudo mv wasm-bindgen-0.2.127-x86_64-unknown-linux-musl/wasm-bindgen /usr/local/bin/wasm-bindgen
+
+      - name: build
+        run: |
+          set -euo pipefail
+          cargo build -p ooxp-wasm --target wasm32-unknown-unknown --release
+          wasm-bindgen target/wasm32-unknown-unknown/release/ooxp_wasm.wasm --out-dir demo/web/pkg --target web
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: demo/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -48,7 +48,8 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 ├── Cargo.toml                         ← workspace
 ├── crates/
 │   ├── ooxp/                          ← 库：opc、json、xlsx、docx
-│   └── ooxp-cli/                      ← 命令行，二进制名 ooxp
+│   ├── ooxp-cli/                      ← 命令行，二进制名 ooxp
+│   └── ooxp-wasm/                     ← 浏览器绑定，只调用 run_bytes
 ├── .agents/
 │   └── rules/
 │       ├── engineering-principles.md
@@ -59,6 +60,8 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 │   ├── docx.md
 │   ├── xlsx.md
 │   └── pptx.md
+├── demo/
+│   └── web/                           ← 临时演示页
 ├── docs/                              ← 规格真源
 │   ├── architecture.md
 │   ├── json-contract.md
@@ -71,6 +74,7 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 │   ├── checklist-xlsx.md
 │   ├── checklist-docx.md
 │   ├── checklist-pptx.md
+│   ├── wasm-demo.md
 │   ├── examples/
 │   └── json-schema/
 │       ├── README.md

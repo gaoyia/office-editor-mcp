@@ -129,6 +129,10 @@ PowerShell 里如果中文显示乱码，先把输出解码设成 UTF-8：
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 ```
 
+## 浏览器演示
+
+临时页面在 `demo/web`。它把库编成 wasm，在你授权的一个本地目录里生成和检查文件。生成结果写入该目录并直接下载，页面不预览。地址前缀、两种接口和模型列表的拼法见 `docs/wasm-demo.md`。
+
 ## 在 Rust 里调用
 
 本机按路径读写用 `ooxp::run`。调用方已经拿着包字节时用 `ooxp::run_bytes`，它不打开 Office 文件，也不按路径读图片或音视频。`run` 不编进 `wasm32`。
@@ -160,6 +164,7 @@ let out = ooxp::run(json, None)?;
 | `docs/errors.md` | 错误码 |
 | `docs/opc.md` | ZIP、Content Types、关系部件 |
 | `docs/examples/` | 可直接交给命令行的样例 |
+| `docs/wasm-demo.md` | 浏览器演示页 |
 | `roadmap/` | docx、xlsx、pptx 还剩什么 |
 
 机器可读的请求 Schema 在 `docs/json-schema/request.schema.json`，由 `docs/json-schema/src/` 拼出来。改分块后运行 `python docs/json-schema/build.py`。与 Markdown 冲突时以 `docs/` 里的契约为准。
