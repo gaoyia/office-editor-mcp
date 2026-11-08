@@ -564,7 +564,7 @@ const FORMATS = [
 const UI = {
   zh: {
     lead: "ooxp 的 WebAssembly 示例",
-    slogan: "全球网页 Office 编辑最好的 MCP 之一",
+    slogan: "全球 Office 编辑最好的 MCP 之一",
     aside: "为了不违反广告法加了之一",
     bannerStrong: "请更新浏览器。",
     bannerSpan: "这个浏览器不能改本地文件。请换成新版 Chrome 或 Edge，再用 https 或 localhost 打开。",
@@ -632,7 +632,7 @@ const UI = {
   },
   en: {
     lead: "WebAssembly examples for ooxp",
-    slogan: "One of the best MCPs for editing Office files on the web.",
+    slogan: "One of the best MCPs for editing Office files.",
     aside: "Added “one of” so this does not violate advertising law.",
     bannerStrong: "Update your browser.",
     bannerSpan: "This browser cannot edit local files. Use a current Chrome or Edge, and open the page over https or localhost.",
@@ -1320,7 +1320,7 @@ function renderExamples() {
       button.type = "button";
       button.className = "write";
       button.textContent = t("write");
-      button.disabled = true;
+      button.disabled = busy || !session;
       const status = document.createElement("p");
       status.className = "status";
       button.addEventListener("click", () => {
