@@ -85,9 +85,69 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: wasm-bindgen
+        run: |
+          set -euo pipefail
+          curl -sSfL -o wbg.tgz https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.127/wasm-bindgen-0.2.127-x86_64-unknown-linux-musl.tar.gz
+          tar -xzf wbg.tgz
+          sudo mv wasm-bindgen-0.2.127-x86_64-unknown-linux-musl/wasm-bindgen /usr/local/bin/wasm-bindgen
+
+      - name: build
+        run: cargo build -p ooxp-wasm --target wasm32-unknown-unknown --release
+
+      - name: pack
+        run: |
+          set -euo pipefail
+          version=$(awk -F'"' '/^version = /{print $2; exit}' Cargo.toml)
+          stem="ooxp-v${version}-wasm"
+          out="dist/${stem}"
+          mkdir -p "$out"
+          wasm-bindgen target/wasm32-unknown-unknown/release/ooxp_wasm.wasm --out-dir "$out" --target bundler
+          cp LICENSE "$out/LICENSE"
+          python - "$out" "$version" <<'PY'
+          import json, pathlib, sys
+          out, version = sys.argv[1], sys.argv[2]
+          root = pathlib.Path(out)
+          package = {
+              "name": "wasm",
+              "version": version,
+              "description": "ooxp 的 TypeScript 绑定。先调用 init，再使用 Session。",
+              "type": "module",
+              "main": "./index.ts",
+              "types": "./index.ts",
+              "files": ["index.ts", "ooxp_wasm.js", "ooxp_wasm.d.ts", "ooxp_wasm_bg.wasm", "LICENSE"],
+          }
+          root.joinpath("package.json").write_text(json.dumps(package, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          root.joinpath("index.ts").write_text(
+              "// 浏览器里调用 ooxp。先 await init()，再 new Session()。\n"
+              "export { default as init, Session } from \"./ooxp_wasm.js\";\n",
+              encoding="utf-8",
+          )
+          PY
+          tar -C dist -czf "dist/${stem}.tar.gz" "$stem"
+          rm -rf "$out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm
+          path: dist/*
+          if-no-files-found: error
+
   release:
     name: release
-    needs: package
+    needs: [package, wasm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -113,7 +173,7 @@ jobs:
             sha256sum ooxp-v"${version}"-* | sort -k2 > SHASUMS256.txt
           )
           notes=$(mktemp)
-          printf '%s\n' "来自 tag ${tag} 的 ${GITHUB_SHA}。" "" "包名是 Node.js 的 process.platform 加 process.arch。" > "$notes"
+          printf '%s\n' "来自 tag ${tag} 的 ${GITHUB_SHA}。" "" "命令行包名是 Node.js 的 process.platform 加 process.arch。另有 TypeScript 包 ooxp-v${version}-wasm.tar.gz。" > "$notes"
           gh release create "$tag" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "ooxp ${tag}" \

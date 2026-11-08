@@ -6,7 +6,7 @@
 
 页面在 `demo/web`。绑定在 `crates/ooxp-wasm`。推到 `main` 后，`.github/workflows/pages.yml` 编出 wasm 并发布到 GitHub Pages。
 
-页面标题是 Office Open XML Patch。页头的描述和关键词包含 `office-edit`、`xlsx-edit`、`docx-edit`、`pptx-edit`，以及 `office-edit-mcp`、`xlsx-edit-mcp`、`docx-edit-mcp`、`pptx-edit-mcp`。标题下面写明这是 ooxp 的 WebAssembly 示例。页面可以在中文和 English 之间切换，示例请求里的可见文字跟着切换。介绍页说明支持的格式。演示文稿那一卡顺带写了一句：支持写入动画。页面也说明文件如何写入目录、MCP 接入，以及按最新 GitHub Release 拼出的下载地址。许可证仍是 Business Source License 1.0。捐赠段落与 [ffrm](https://github.com/gaoyia/ffrm) 相同。每种格式两份请求：一份创建，一份就地修改。请求可以改。当前标签会换成对应的按钮颜色。
+页面标题是 Office Open XML Patch。页头的描述和关键词包含 `office-edit`、`xlsx-edit`、`docx-edit`、`pptx-edit`，以及 `office-edit-mcp`、`xlsx-edit-mcp`、`docx-edit-mcp`、`pptx-edit-mcp`。标题下面写明这是 ooxp 的 WebAssembly 示例。页面可以在中文和 English 之间切换，示例请求里的可见文字跟着切换。介绍页说明支持的格式。演示文稿那一卡顺带写了一句：支持写入动画。页面也说明文件如何写入目录、MCP 接入，以及按最新 GitHub Release 拼出的下载地址。下载里有 TypeScript 包 `ooxp-v<版本>-wasm.tar.gz`。许可证仍是 Business Source License 1.0。捐赠段落与 [ffrm](https://github.com/gaoyia/ffrm) 相同。每种格式两份请求：一份创建，一份就地修改。请求可以改。当前标签会换成对应的按钮颜色。
 
 示例写这些文件：
 

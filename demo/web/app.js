@@ -851,6 +851,7 @@ const PLATS = [
   { id: "linux-x64", ext: "tar.gz", label: "linux" },
   { id: "linux-arm64", ext: "tar.gz", label: "linuxArm" },
   { id: "darwin-arm64", ext: "tar.gz", label: "mac" },
+  { id: "wasm", ext: "tar.gz" },
 ];
 
 let lang = localStorage.getItem("ooxp-demo-lang") === "en" ? "en" : "zh";
@@ -902,7 +903,7 @@ function renderDownloads() {
     const asset = release && release.assets && name
       ? release.assets.find((item) => item.name === name)
       : null;
-    link.querySelector(".kind").textContent = t(plat.label);
+    link.querySelector(".kind").textContent = plat.label ? t(plat.label) : plat.id;
     if (!releaseLoaded) {
       link.querySelector(".file").textContent = t("finding");
       link.href = "https://github.com/gaoyia/ooxp/releases/latest";
