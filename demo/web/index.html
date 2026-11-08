@@ -3,24 +3,147 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ooxp 示例</title>
+  <title>Office Open XML Patch</title>
+  <meta name="description" content="office-edit, xlsx-edit, docx-edit, pptx-edit, office-edit-mcp. ooxp 在网页里读写 .xlsx、.docx、.pptx，并能把动画写进演示文稿。">
+  <meta name="keywords" content="office-edit, xlsx-edit, docx-edit, pptx-edit, excel-edit, word-edit, powerpoint-edit, office-edit-mcp, xlsx-edit-mcp, docx-edit-mcp, pptx-edit-mcp, office-mcp, ooxml-edit, ooxp">
+  <meta name="application-name" content="ooxp">
+  <meta property="og:title" content="Office Open XML Patch">
+  <meta property="og:description" content="office-edit, xlsx-edit, docx-edit, pptx-edit, office-edit-mcp. ooxp edits .xlsx, .docx, and .pptx on the web, including animations in presentations.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://github.com/gaoyia/ooxp">
   <link rel="stylesheet" href="./app.css">
 </head>
 <body>
-  <header>
-    <h1>ooxp</h1>
-    <p>下面是创建和修改的示例请求。运行后直接下载，页面不预览。选了目录的话，文件同时写入该目录。</p>
-    <div class="row">
-      <button id="pick" type="button">选择目录</button>
-      <button id="restore" type="button" hidden>恢复授权</button>
-      <span id="dir-name">还没有授权目录。不选也能运行，结果只下载。</span>
+  <div class="page">
+  <header class="top">
+    <div class="topbar">
+      <div class="brand">
+        <p class="mark">ooxp
+          <a class="gh" href="https://github.com/gaoyia/ooxp" aria-label="GitHub">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.7 7.7 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+            </svg>
+          </a>
+        </p>
+        <h1>Office Open XML Patch</h1>
+      </div>
     </div>
+    <p id="lead" class="lead">ooxp 的 WebAssembly 示例</p>
+    <p class="slogan" data-i18n="slogan">全球网页 Office 编辑最好的 MCP 之一</p>
+    <p class="aside" data-i18n="aside">为了不违反广告法加了之一</p>
   </header>
-  <main id="examples"></main>
-  <section>
-    <h2>结果</h2>
-    <div id="log"></div>
-  </section>
+  <div class="switch" role="group" aria-label="Language">
+    <button id="lang-zh" type="button" aria-pressed="true">中文</button>
+    <button id="lang-en" type="button" aria-pressed="false">EN</button>
+  </div>
+  <div id="unsupported" class="banner" hidden>
+    <strong data-i18n="bannerStrong">请更新浏览器。</strong>
+    <span data-i18n="bannerSpan">这个浏览器不能改本地文件。请换成新版 Chrome 或 Edge，再用 https 或 localhost 打开。</span>
+  </div>
+  <div class="layout">
+    <section class="work">
+      <div id="tabs" class="tabs" role="tablist" aria-label="页面"></div>
+      <div id="panels">
+        <div class="panel home" data-format="home">
+          <article class="card hero">
+            <h2 data-i18n="heroTitle">按稳定 id 改包里的 XML</h2>
+            <p data-i18n="heroBody">ooxp 读写新版 Office 文件。已有文件只改目标节点，其余部件按原字节写回。只有新建才整包生成。这一页的示例写进你授权的目录。</p>
+          </article>
+          <div class="format-grid">
+            <article class="card format xlsx">
+              <h3 data-i18n="tabXlsx">工作簿</h3>
+              <p class="ext">.xlsx</p>
+              <p data-i18n="cardXlsx">表格、图表、条件格式和迷你图。.xlsm 可以查看，不执行宏。</p>
+              <button type="button" class="ghost" data-goto="xlsx" data-i18n="gotoXlsx">看工作簿示例</button>
+            </article>
+            <article class="card format docx">
+              <h3 data-i18n="tabDocx">文档</h3>
+              <p class="ext">.docx</p>
+              <p data-i18n="cardDocx">段落、表格、图片、公式、水印和批注。</p>
+              <button type="button" class="ghost" data-goto="docx" data-i18n="gotoDocx">看文档示例</button>
+            </article>
+            <article class="card format pptx">
+              <h3 data-i18n="tabPptx">演示文稿</h3>
+              <p class="ext">.pptx</p>
+              <p data-i18n="cardPptx">幻灯片、形状、图示、图表和切换，支持写入动画。</p>
+              <button type="button" class="ghost" data-goto="pptx" data-i18n="gotoPptx">看演示文稿示例</button>
+            </article>
+          </div>
+          <article class="card">
+            <h3 data-i18n="formatsTitle">支持的格式</h3>
+            <p data-i18n="formatsBody">只读写 .docx、.xlsx、.pptx。老的二进制 .doc、.xls、.ppt 不在范围内。库不排版、不算公式、也不放映。</p>
+            <h3 class="sub" data-i18n="landTitle">文件怎么落地</h3>
+            <p data-i18n="landBody">示例不从浏览器另存。先在右侧选择一个目录，再点「写入目录」，文件直接出现在那里。</p>
+          </article>
+          <article class="card">
+            <h3>MCP</h3>
+            <p data-i18n="mcpBody">把命令行接到编辑器。command 也可以写成这个程序的完整路径。</p>
+            <pre class="mcp"><code id="mcp-json"></code></pre>
+          </article>
+          <article class="card">
+            <h3 data-i18n="downloads">下载</h3>
+            <p id="release-meta" class="meta"></p>
+            <div class="dl-grid">
+              <a class="choice" data-plat="win32-x64" href="https://github.com/gaoyia/ooxp/releases/latest"><span class="kind"></span><span class="file"></span></a>
+              <a class="choice" data-plat="linux-x64" href="https://github.com/gaoyia/ooxp/releases/latest"><span class="kind"></span><span class="file"></span></a>
+              <a class="choice" data-plat="linux-arm64" href="https://github.com/gaoyia/ooxp/releases/latest"><span class="kind"></span><span class="file"></span></a>
+              <a class="choice" data-plat="darwin-arm64" href="https://github.com/gaoyia/ooxp/releases/latest"><span class="kind"></span><span class="file"></span></a>
+            </div>
+          </article>
+          <article class="card license">
+            <h3 data-i18n="licenseTitle">许可证</h3>
+            <p><span data-i18n="license">本软件以 Business Source License 1.0 发布。</span>
+              <a class="gh" href="https://github.com/gaoyia/ooxp" aria-label="GitHub">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                  <path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.7 7.7 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path>
+                </svg>
+              </a>
+            </p>
+          </article>
+          <article class="card donate">
+            <h3 data-i18n="donate">捐赠</h3>
+            <p><strong>强烈谴责A股市场环境</strong>：作者因买入股【华铁股份】现【R通达1】不完全统计<strong>家庭总计亏损高达200万</strong>。目前正在起诉，进入二审阶段，执行更是不知要到什么时候了，这已经是第三、四年了，其余股票也亏损严重，现金流状况至今难以缓解。</p>
+            <p>故在此赛博要饭接受捐赠，谢谢。</p>
+            <ul class="codes">
+              <li>
+                <figure>
+                  <img src="https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/donate.jpg" alt="微信赞赏码">
+                  <figcaption>微信赞赏码</figcaption>
+                </figure>
+              </li>
+              <li>
+                <figure>
+                  <img src="https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/zfbhb.jpg" alt="支付宝领红包">
+                  <figcaption>支付宝领红包</figcaption>
+                </figure>
+              </li>
+              <li>
+                <figure>
+                  <img src="https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/zfb.jpg" alt="支付宝">
+                  <figcaption>支付宝</figcaption>
+                </figure>
+              </li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+    <aside class="dir" aria-label="授权目录">
+      <div class="dir-head">
+        <h2 data-i18n="dirTitle">目录</h2>
+        <p id="dir-name">还没有授权目录。</p>
+        <div class="row">
+          <button id="pick" type="button" data-i18n="pick">选择目录</button>
+          <button id="forget" type="button" class="ghost" data-i18n="forget" hidden>取消授权</button>
+          <button id="restore" type="button" data-i18n="restore" hidden>恢复授权</button>
+        </div>
+      </div>
+      <p id="change" class="change" hidden></p>
+      <ul id="files"></ul>
+      <div id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+  </div>
   <script type="module" src="./app.js"></script>
 </body>
 </html>

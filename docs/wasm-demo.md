@@ -6,24 +6,26 @@
 
 页面在 `demo/web`。绑定在 `crates/ooxp-wasm`。推到 `main` 后，`.github/workflows/pages.yml` 编出 wasm 并发布到 GitHub Pages。
 
-页面上是六份示例请求：xlsx、docx、pptx 各一份创建、一份修改。请求可以改。运行后文件直接下载，页面不预览。
+页面标题是 Office Open XML Patch。页头的描述和关键词包含 `office-edit`、`xlsx-edit`、`docx-edit`、`pptx-edit`，以及 `office-edit-mcp`、`xlsx-edit-mcp`、`docx-edit-mcp`、`pptx-edit-mcp`。标题下面写明这是 ooxp 的 WebAssembly 示例。页面可以在中文和 English 之间切换，示例请求里的可见文字跟着切换。介绍页说明支持的格式。演示文稿那一卡顺带写了一句：支持写入动画。页面也说明文件如何写入目录、MCP 接入，以及按最新 GitHub Release 拼出的下载地址。许可证仍是 Business Source License 1.0。捐赠段落与 [ffrm](https://github.com/gaoyia/ffrm) 相同。每种格式两份请求：一份创建，一份就地修改。请求可以改。当前标签会换成对应的按钮颜色。
 
-修改请求用的是创建结果里的 id。
+示例写这些文件：
 
-- xlsx 单元格是 `cell:Sheet1!A1`
-- docx 第一段是 `para:00000001`
-- pptx 第一页第一个文本框是 `slide:1/shape:2`
+- `ooxp-example-业绩.xlsx`：深色标题、数据条、色阶、图标集、迷你图、组合图、环形图、循环图示，以及一整页图表工作表。修改格是 `cell:业绩!C4` 和 `cell:业绩!A1`。英文界面写成 `ooxp-example-results.xlsx`
+- `ooxp-example-发布说明.docx`：页眉页脚、水印、页边、分色导语、字体宽窄、公式、图片、拼音、控件、行内循环图示和环形图，以及一张三列色卡。图片路径是 `mark.png`，字节由页面事先放进会话。修改段是 `para:00000001`。英文界面写成 `ooxp-example-notes.docx`
+- `ooxp-example-发布会.pptx`：六页。每页有一张背景图，标题所在的位置是透明的。角落三处装饰在进入该页时自动播放。内容是表格、图示或图表。每页一种切换。修改形状是 `slide:1/shape:2`。英文界面写成 `ooxp-example-briefing.pptx`
 
-没跑过创建时，修改会失败，除非授权目录里已经有 `path` 指向的文件。
+修改请求不写 `output`，结果覆盖 `path`。目录里还没有该文件时，修改会失败。
 
 ## 本地目录
 
-选择目录是可选的。授了读写权限之后，运行结果除了下载，还会按 `path` 或 `output` 写进这个目录。修改时如果目录里已有 `path`，就读那一份，不再用刚才创建的字节。
+必须先授权一个目录。页面不下载。运行结果只按 `path` 或 `output` 写进这个目录，旁边列出目录里的文件，并标出这次新增或改过的名字。
 
 - 只能读写这一个目录，路径相对该目录，不能带盘符，也不能含 `..`
+- 文件正被 Word、Excel 或 PowerPoint 打开时，浏览器会报缓存状态已变。页面改写成「文件被占用」，请先关掉那个程序再写入
 - 库不按路径读磁盘。页面读出字节交给 `run_bytes`，再把结果写回去
-- 需要 Chrome 或 Edge，页面要在 `https` 或 `localhost` 上打开
+- 浏览器要有目录选择接口。没有时，页面提示换新版 Chrome 或 Edge，并用 `https` 或 `localhost` 打开
 - 授权句柄存在这个站点的 IndexedDB 里。刷新后权限还在就接着用，掉了要点「恢复授权」
+- 目录已经打开时，「取消授权」会忘掉这次保存的句柄。浏览器自己记住的站点权限还在，下次选同一目录可能不再询问
 
 ## 时钟
 
