@@ -119,6 +119,8 @@
           }
         },
         "kind": {
+          "description": "省略时为 anchor，绕排为 square。",
+          "descriptionEn": "When omitted, kind is anchor and wrap is square.",
           "enum": [
             "inline",
             "anchor"

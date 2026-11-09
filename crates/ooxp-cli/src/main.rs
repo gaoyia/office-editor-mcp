@@ -10,7 +10,15 @@ use clap::Parser;
 use ooxp::{io_path, peek_lang, run, written_json, Error, Lang, RunOutput};
 
 #[derive(Parser, Debug)]
-#[command(name = "ooxp", about = "用领域 JSON 读写 OOXML 文件")]
+#[command(
+    name = "ooxp",
+    version,
+    about = "用领域 JSON 读写 OOXML 文件",
+    long_about = "用领域 JSON 读写 OOXML 文件。\n\
+不带 mcp 时，成功的 JSON 写到 stdout，失败的 JSON 写到 stderr，请求错误的退出码是 2。\n\
+locale 高于 --lang，再高于环境变量 OOXP_LANG。\n\
+ooxp mcp 从标准输入读 JSON-RPC。一行一条，也接受 Content-Length 头。"
+)]
 struct Cli {
     /// 领域 JSON 路径。`-` 或省略时从 stdin 读。
     #[arg(long)]

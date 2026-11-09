@@ -254,7 +254,7 @@ core / app / custom 是包根关系指向的部件（ECMA-376 §15.2.12，常见
 
 ## create
 
-只有 create 允许从 JSON 生成整包。
+只有 create 允许从 JSON 生成整包。`path` 必填。
 
 xlsx 的 `workbook` 见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 docx 的 `document` 见 [json-contract-docx.md](json-contract-docx.md#create)。

@@ -615,61 +615,93 @@
       ]
     },
     "shapePaintObject": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "enum": [
-            "solid",
-            "grad",
-            "blip"
-          ]
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "color"
+          ],
+          "properties": {
+            "type": {
+              "const": "solid"
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            "alpha": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
         },
-        "color": {
-          "type": "string",
-          "pattern": "^[0-9A-Fa-f]{6}$"
-        },
-        "alpha": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100000
-        },
-        "ang": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 21600000
-        },
-        "stops": {
-          "type": "array",
-          "minItems": 2,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "pos",
-              "color"
-            ],
-            "properties": {
-              "pos": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 100000
-              },
-              "color": {
-                "type": "string",
-                "pattern": "^[0-9A-Fa-f]{6}$"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "stops"
+          ],
+          "properties": {
+            "type": {
+              "const": "grad"
+            },
+            "alpha": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "ang": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 21600000
+            },
+            "stops": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pos",
+                  "color"
+                ],
+                "properties": {
+                  "pos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^[0-9A-Fa-f]{6}$"
+                  }
+                }
               }
             }
           }
         },
-        "file": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "const": "blip"
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
-      }
+      ]
     },
     "shapeLine": {
       "type": "object",

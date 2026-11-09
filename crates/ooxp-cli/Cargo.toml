@@ -12,6 +12,6 @@ name = "ooxp"
 path = "src/main.rs"
 
 [dependencies]
-ooxp = { path = "../ooxp", version = "0.1.5" }
+ooxp = { path = "../ooxp", version = "0.1.6" }
 clap = { workspace = true }
 serde_json = { workspace = true }

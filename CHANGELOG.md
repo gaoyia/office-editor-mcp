@@ -2,6 +2,14 @@
 
 从 0.1.3 起，每次发布在这里写这一版改了什么。更早的版本不补。
 
+## 0.1.6
+
+- `help` 里 xlsx 单元格的 `font`、`fill`、`border`、`align` 指向 `cellFont`、`cellFill`、`cellBorder`、`cellAlign`，不再指向整条 `setCellStyleOp`。
+- `shapePaint` 按 `solid`、`grad`、`blip` 分成三支。`grad` 不收 `color`，`blip` 不收 `alpha`。
+- `help` 写明：docx 图表省略 `kind` 时为 `anchor`，绕排为 `square`。表的 `style` 是 `style:` 加上 `styleId`。`after` 从 1 起，`0` 表示插在第一段之前。
+- `createRequest` 的 `required` 包含 `path`。
+- `ooxp --help` 写明 `mcp`、stdout 与 stderr。新增 `ooxp --version`。
+
 ## 0.1.5
 
 - `help` 不带参数时，`ask` 是可原样提交的完整请求，每条都带 `action`。

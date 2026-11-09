@@ -469,7 +469,8 @@
       "type": "object",
       "comment": "path 必填。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
-        "action"
+        "action",
+        "path"
       ],
       "additionalProperties": false,
       "properties": {

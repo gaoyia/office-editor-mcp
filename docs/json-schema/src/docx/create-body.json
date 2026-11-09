@@ -175,6 +175,8 @@
       "additionalProperties": false,
       "properties": {
         "after": {
+          "description": "从 1 起，表插在该段之后。0 表示插在第一段之前。省略则插在全部段落之后。",
+          "descriptionEn": "Starts at 1. The table is inserted after that paragraph. 0 means before the first paragraph. When omitted, the table goes after every paragraph.",
           "type": "integer",
           "minimum": 0
         },
@@ -192,6 +194,8 @@
           }
         },
         "style": {
+          "description": "值是 style: 加上 styleId，不是样式的显示名。",
+          "descriptionEn": "The value is style: plus the styleId, not the style's display name.",
           "type": "string"
         },
         "look": {

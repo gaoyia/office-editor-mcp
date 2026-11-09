@@ -10,6 +10,7 @@
 
 ```text
 ooxp [--input <文件|->] [--lang <标签>] [--pretty]
+ooxp --version
 ooxp mcp [--lang <标签>]
 ```
 
@@ -22,6 +23,10 @@ ooxp mcp [--lang <标签>]
 - **`--pretty`**
   - stdout 的 JSON 带缩进
   - 默认紧凑一行
+- **`--version`**
+  - 打印版本号后退出
+  - 版本与 `Cargo.toml` 的 `version` 相同
+  - `ooxp mcp` 不接受这个参数
 
 请求没有 `locale`、命令行也没给 `--lang` 时，读环境变量 `OOXP_LANG`。再没有就用英文。标签匹配规则见 [errors.md](errors.md)。`--help` 本身不翻译。
 

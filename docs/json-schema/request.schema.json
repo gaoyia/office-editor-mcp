@@ -305,6 +305,8 @@
       "additionalProperties": false,
       "properties": {
         "after": {
+          "description": "从 1 起，表插在该段之后。0 表示插在第一段之前。省略则插在全部段落之后。",
+          "descriptionEn": "Starts at 1. The table is inserted after that paragraph. 0 means before the first paragraph. When omitted, the table goes after every paragraph.",
           "type": "integer",
           "minimum": 0
         },
@@ -322,6 +324,8 @@
           }
         },
         "style": {
+          "description": "值是 style: 加上 styleId，不是样式的显示名。",
+          "descriptionEn": "The value is style: plus the styleId, not the style's display name.",
           "type": "string"
         },
         "look": {
@@ -1707,6 +1711,8 @@
           }
         },
         "kind": {
+          "description": "省略时为 anchor，绕排为 square。",
+          "descriptionEn": "When omitted, kind is anchor and wrap is square.",
           "enum": [
             "inline",
             "anchor"
@@ -10927,61 +10933,93 @@
       ]
     },
     "shapePaintObject": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type"
-      ],
-      "properties": {
-        "type": {
-          "enum": [
-            "solid",
-            "grad",
-            "blip"
-          ]
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "color"
+          ],
+          "properties": {
+            "type": {
+              "const": "solid"
+            },
+            "color": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            "alpha": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            }
+          }
         },
-        "color": {
-          "type": "string",
-          "pattern": "^[0-9A-Fa-f]{6}$"
-        },
-        "alpha": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 100000
-        },
-        "ang": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 21600000
-        },
-        "stops": {
-          "type": "array",
-          "minItems": 2,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "pos",
-              "color"
-            ],
-            "properties": {
-              "pos": {
-                "type": "integer",
-                "minimum": 0,
-                "maximum": 100000
-              },
-              "color": {
-                "type": "string",
-                "pattern": "^[0-9A-Fa-f]{6}$"
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "stops"
+          ],
+          "properties": {
+            "type": {
+              "const": "grad"
+            },
+            "alpha": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100000
+            },
+            "ang": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 21600000
+            },
+            "stops": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pos",
+                  "color"
+                ],
+                "properties": {
+                  "pos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^[0-9A-Fa-f]{6}$"
+                  }
+                }
               }
             }
           }
         },
-        "file": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "const": "blip"
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
         }
-      }
+      ]
     },
     "shapeLine": {
       "type": "object",
@@ -15457,7 +15495,8 @@
       "type": "object",
       "comment": "path 必填。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
-        "action"
+        "action",
+        "path"
       ],
       "additionalProperties": false,
       "properties": {
@@ -19004,6 +19043,129 @@
         }
       }
     },
+    "cellFont": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 409
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "boolean",
+            "string",
+            "null"
+          ]
+        },
+        "color": {
+          "$ref": "#/$defs/cellColor"
+        }
+      }
+    },
+    "cellFill": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fg": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "bg": {
+          "$ref": "#/$defs/cellColor"
+        }
+      }
+    },
+    "cellBorder": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "left": {
+          "$ref": "#/$defs/cellBorderSide"
+        },
+        "right": {
+          "$ref": "#/$defs/cellBorderSide"
+        },
+        "top": {
+          "$ref": "#/$defs/cellBorderSide"
+        },
+        "bottom": {
+          "$ref": "#/$defs/cellBorderSide"
+        },
+        "diagonal": {
+          "$ref": "#/$defs/cellBorderSide"
+        },
+        "diagonalUp": {
+          "type": "boolean"
+        },
+        "diagonalDown": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cellAlign": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "horizontal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vertical": {
+          "type": "string",
+          "minLength": 1
+        },
+        "wrap": {
+          "type": "boolean"
+        },
+        "indent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 250
+        },
+        "rotation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "shrink": {
+          "type": "boolean"
+        }
+      }
+    },
     "setCellStyleOp": {
       "description": "写单元格的数字格式、字体、填充、边框与对齐。",
       "descriptionEn": "Write a cell's number format, font, fill, border, and alignment.",
@@ -19031,127 +19193,16 @@
           "minLength": 1
         },
         "font": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "sz": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "maximum": 409
-            },
-            "bold": {
-              "type": "boolean"
-            },
-            "italic": {
-              "type": "boolean"
-            },
-            "underline": {
-              "type": [
-                "boolean",
-                "string",
-                "null"
-              ]
-            },
-            "color": {
-              "$ref": "#/$defs/cellColor"
-            }
-          }
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "pattern": {
-              "type": "string",
-              "minLength": 1
-            },
-            "fg": {
-              "$ref": "#/$defs/cellColor"
-            },
-            "bg": {
-              "$ref": "#/$defs/cellColor"
-            }
-          }
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "style": {
-              "type": "string",
-              "minLength": 1
-            },
-            "color": {
-              "$ref": "#/$defs/cellColor"
-            },
-            "left": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "right": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "top": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "bottom": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "diagonal": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "diagonalUp": {
-              "type": "boolean"
-            },
-            "diagonalDown": {
-              "type": "boolean"
-            }
-          }
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "horizontal": {
-              "type": "string",
-              "minLength": 1
-            },
-            "vertical": {
-              "type": "string",
-              "minLength": 1
-            },
-            "wrap": {
-              "type": "boolean"
-            },
-            "indent": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 250
-            },
-            "rotation": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 180
-            },
-            "shrink": {
-              "type": "boolean"
-            }
-          }
+          "$ref": "#/$defs/cellAlign"
         }
       },
       "anyOf": [
@@ -19356,127 +19407,16 @@
           "minLength": 1
         },
         "font": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "sz": {
-              "type": "number",
-              "exclusiveMinimum": 0,
-              "maximum": 409
-            },
-            "bold": {
-              "type": "boolean"
-            },
-            "italic": {
-              "type": "boolean"
-            },
-            "underline": {
-              "type": [
-                "boolean",
-                "string",
-                "null"
-              ]
-            },
-            "color": {
-              "$ref": "#/$defs/cellColor"
-            }
-          }
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "pattern": {
-              "type": "string",
-              "minLength": 1
-            },
-            "fg": {
-              "$ref": "#/$defs/cellColor"
-            },
-            "bg": {
-              "$ref": "#/$defs/cellColor"
-            }
-          }
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "style": {
-              "type": "string",
-              "minLength": 1
-            },
-            "color": {
-              "$ref": "#/$defs/cellColor"
-            },
-            "left": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "right": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "top": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "bottom": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "diagonal": {
-              "$ref": "#/$defs/cellBorderSide"
-            },
-            "diagonalUp": {
-              "type": "boolean"
-            },
-            "diagonalDown": {
-              "type": "boolean"
-            }
-          }
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "type": [
-            "object",
-            "null"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "horizontal": {
-              "type": "string",
-              "minLength": 1
-            },
-            "vertical": {
-              "type": "string",
-              "minLength": 1
-            },
-            "wrap": {
-              "type": "boolean"
-            },
-            "indent": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 250
-            },
-            "rotation": {
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 180
-            },
-            "shrink": {
-              "type": "boolean"
-            }
-          }
+          "$ref": "#/$defs/cellAlign"
         }
       },
       "anyOf": [
@@ -20688,16 +20628,16 @@
           "minLength": 1
         },
         "font": {
-          "$ref": "#/$defs/setCellStyleOp/properties/font"
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "$ref": "#/$defs/setCellStyleOp/properties/fill"
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "$ref": "#/$defs/setCellStyleOp/properties/border"
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "$ref": "#/$defs/setCellStyleOp/properties/align"
+          "$ref": "#/$defs/cellAlign"
         },
         "namedStyle": {
           "type": "string",
@@ -20770,16 +20710,16 @@
           "$ref": "#/$defs/insertCellStyleOp/properties/numFmt"
         },
         "font": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/font"
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/fill"
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/border"
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/align"
+          "$ref": "#/$defs/cellAlign"
         }
       },
       "anyOf": [

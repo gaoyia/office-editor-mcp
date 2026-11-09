@@ -344,7 +344,7 @@ fn help_expands_one_ref_layer() {
 
     let sheet_def = help(serde_json::json!({"name": "xlsxSheetCreate"})).unwrap();
     let cell = &sheet_def["fields"]["properties"]["cells"]["items"];
-    assert_eq!(cell["properties"]["font"]["$ref"], "setCellStyleOp");
+    assert_eq!(cell["properties"]["font"]["$ref"], "cellFont");
 
     let cell_def = help(serde_json::json!({"name": "xlsxCellCreate"})).unwrap();
     let color = &cell_def["fields"]["properties"]["font"]["properties"]["color"];
@@ -377,6 +377,75 @@ fn shape_create_enums_exclude_connectors() {
         .unwrap();
     assert!(prst.iter().any(|item| item == "ellipse"));
     assert!(prst.iter().all(|item| item != "straightConnector1"));
+}
+
+fn find_type_branch<'a>(value: &'a serde_json::Value, kind: &str) -> Option<&'a serde_json::Value> {
+    let is_branch = value
+        .get("properties")
+        .and_then(|props| props.get("type"))
+        .and_then(|ty| ty.get("const"))
+        .and_then(|item| item.as_str())
+        == Some(kind);
+    if is_branch {
+        return Some(value);
+    }
+    match value {
+        serde_json::Value::Array(items) => {
+            items.iter().find_map(|item| find_type_branch(item, kind))
+        }
+        serde_json::Value::Object(map) => {
+            map.values().find_map(|item| find_type_branch(item, kind))
+        }
+        _ => None,
+    }
+}
+
+#[test]
+fn cell_font_ref_is_not_the_whole_op() {
+    let sheet = help(serde_json::json!({"name": "xlsxSheetCreate"})).unwrap();
+    let font = &sheet["fields"]["properties"]["cells"]["items"]["properties"]["font"];
+    assert_eq!(font["$ref"], "cellFont");
+    let def = help(serde_json::json!({"name": "cellFont"})).unwrap();
+    let props = def["fields"]["properties"].as_object().unwrap();
+    assert!(props.get("color").is_some());
+    assert!(props.get("op").is_none());
+    assert!(props.get("id").is_none());
+}
+
+#[test]
+fn shape_paint_branches_by_type() {
+    let value = help(serde_json::json!({"name": "shapePaint"})).unwrap();
+    let grad = find_type_branch(&value["fields"], "grad").unwrap();
+    assert!(grad["properties"].get("color").is_none(), "{grad}");
+    assert!(grad["properties"].get("stops").is_some());
+    let blip = find_type_branch(&value["fields"], "blip").unwrap();
+    assert!(blip["properties"].get("alpha").is_none(), "{blip}");
+    assert!(blip["properties"].get("file").is_some());
+}
+
+#[test]
+fn help_shows_chart_kind_and_table_placement() {
+    let chart = help(serde_json::json!({"name": "docxChartCreate"})).unwrap();
+    let kind = chart["fields"]["properties"]["kind"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(kind.contains("anchor"));
+    let table = help(serde_json::json!({"name": "docxTableCreate"})).unwrap();
+    let style = table["fields"]["properties"]["style"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(style.contains("style:"));
+    let after = table["fields"]["properties"]["after"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(after.contains("从 1 起"));
+}
+
+#[test]
+fn create_request_requires_path() {
+    let value = help(serde_json::json!({"name": "createRequest"})).unwrap();
+    let required = value["fields"]["required"].as_array().unwrap();
+    assert!(required.iter().any(|item| item == "path"));
 }
 
 #[test]

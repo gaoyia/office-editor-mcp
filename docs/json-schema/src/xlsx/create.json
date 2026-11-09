@@ -1137,16 +1137,16 @@
           "minLength": 1
         },
         "font": {
-          "$ref": "#/$defs/setCellStyleOp/properties/font"
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "$ref": "#/$defs/setCellStyleOp/properties/fill"
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "$ref": "#/$defs/setCellStyleOp/properties/border"
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "$ref": "#/$defs/setCellStyleOp/properties/align"
+          "$ref": "#/$defs/cellAlign"
         },
         "namedStyle": {
           "type": "string",
@@ -1219,16 +1219,16 @@
           "$ref": "#/$defs/insertCellStyleOp/properties/numFmt"
         },
         "font": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/font"
+          "$ref": "#/$defs/cellFont"
         },
         "fill": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/fill"
+          "$ref": "#/$defs/cellFill"
         },
         "border": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/border"
+          "$ref": "#/$defs/cellBorder"
         },
         "align": {
-          "$ref": "#/$defs/insertCellStyleOp/properties/align"
+          "$ref": "#/$defs/cellAlign"
         }
       },
       "anyOf": [

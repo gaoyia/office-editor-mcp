@@ -10,6 +10,22 @@ fn tmp(name: &str) -> PathBuf {
 }
 
 #[test]
+fn help_and_version_are_on_the_command() {
+    let bin = env!("CARGO_BIN_EXE_ooxp");
+    let help_out = Command::new(bin).arg("--help").output().unwrap();
+    assert!(help_out.status.success());
+    let help_text = String::from_utf8(help_out.stdout).unwrap();
+    assert!(help_text.contains("mcp"));
+    assert!(help_text.contains("stdout"));
+    assert!(help_text.contains("stderr"));
+    assert!(help_text.contains("--version"));
+    let version = Command::new(bin).arg("--version").output().unwrap();
+    assert!(version.status.success());
+    let version_text = String::from_utf8(version.stdout).unwrap();
+    assert!(version_text.contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
 fn cli_create_then_inspect() {
     let bin = env!("CARGO_BIN_EXE_ooxp");
     let xlsx = tmp("cli-book.xlsx");
