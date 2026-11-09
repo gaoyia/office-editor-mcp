@@ -162,7 +162,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
   这里的 `formats` 是字符串数组，不带说明对象，与 `op` 那条 `chooseFormat` 的 `formats` 不是一回事。
 - 带 `format`：`kind` 仍是 `def`，`fields.properties` 只留该格式认的键。
 - `format` 为 `xlsm` 时，先按 `crates/ooxp/src/json.rs` 的 `parse_format` 收成 `xlsx` 再筛。
-  `help.rs` 的 `format_key` 已经做了这一步，现有运行结果不会筛出空表；实施欠账是 `def_detail` 还没收到这个归一后的值。
+  `help()` 用 `format_key` 归一后把该值传给 `def_detail`，现有运行结果不会筛出空表。
 
 过滤依据写在 `docs/json-schema/src/shared/envelope.json` 里：`inspectScope.properties` 的每个键带一个 `formats` 数组，`help` 按它筛，不在代码里另抄一份键表。
 筛完的 `fields.properties` 里仍带这个 `formats`，值来自 schema，不随 `format` 改写。

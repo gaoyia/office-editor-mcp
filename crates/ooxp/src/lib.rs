@@ -35,7 +35,7 @@ pub use dispatch::run;
 pub use dispatch::{run_bytes, ByteOutput};
 pub use error::{io_path, peek_lang, Error, ErrorCode, Lang};
 pub use host_env::{install as install_clock, EnvGuard};
-pub use json::{envelope_fields, written_json, Action, RunOutput};
+pub use json::{dry_run_json, dry_run_value, envelope_fields, written_json, Action, RunOutput};
 pub use model3d::sample_glb;
 
 #[cfg(test)]

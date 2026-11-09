@@ -15,6 +15,7 @@ mod handout;
 mod hyperlink;
 mod ink;
 mod inspect;
+mod layout_check;
 mod list_pin;
 mod master;
 mod media;
@@ -37,10 +38,11 @@ mod timing;
 mod transition;
 mod zoom;
 
-pub use apply::apply;
+pub use apply::{apply, dry_run};
 pub use chart::export_chart_data;
 pub use create::create;
 pub use inspect::inspect;
+pub use layout_check::layout_check;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
 

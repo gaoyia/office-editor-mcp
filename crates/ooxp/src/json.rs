@@ -10,6 +10,10 @@ use crate::error::{Error, ErrorKind, TypeName};
 pub enum RunOutput {
     Inspect(Value),
     Help(Value),
+    DryRun {
+        ops_applied: usize,
+        parts: Vec<String>,
+    },
     Written {
         path: PathBuf,
         ops_applied: Option<usize>,
@@ -31,6 +35,7 @@ pub enum Action {
     Apply,
     ExportMedia,
     ExportChartData,
+    LayoutCheck,
     Help,
 }
 
@@ -71,8 +76,10 @@ pub fn envelope_fields(action: Action) -> &'static [&'static str] {
             "format",
             "output",
             "ops",
+            "dryRun",
             "locale",
         ],
+        Action::LayoutCheck => &["schemaVersion", "action", "path", "format", "locale"],
         Action::ExportMedia | Action::ExportChartData => &[
             "schemaVersion",
             "action",
@@ -118,6 +125,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "apply" => Action::Apply,
         "exportMedia" => Action::ExportMedia,
         "exportChartData" => Action::ExportChartData,
+        "layoutCheck" => Action::LayoutCheck,
         "help" => Action::Help,
         other => {
             return Err(Error::new(ErrorKind::UnsupportedAction {
@@ -331,6 +339,24 @@ pub fn written_json(
     if let Some(ct) = content_type {
         body["contentType"] = json!(ct);
     }
+    if pretty {
+        serde_json::to_string_pretty(&body).unwrap()
+    } else {
+        serde_json::to_string(&body).unwrap()
+    }
+}
+
+pub fn dry_run_value(ops_applied: usize, parts: &[String]) -> Value {
+    json!({
+        "ok": true,
+        "dryRun": true,
+        "opsApplied": ops_applied,
+        "parts": parts,
+    })
+}
+
+pub fn dry_run_json(ops_applied: usize, parts: &[String], pretty: bool) -> String {
+    let body = dry_run_value(ops_applied, parts);
     if pretty {
         serde_json::to_string_pretty(&body).unwrap()
     } else {

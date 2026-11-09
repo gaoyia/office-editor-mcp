@@ -192,6 +192,19 @@ impl Package {
         names
     }
 
+    /// 列出本批标脏的部件名，排序去重。删除也是标脏，见 json-contract.md 的 dryRun。
+    pub fn dirty_part_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .parts
+            .iter()
+            .filter(|(_, part)| part.dirty)
+            .map(|(name, _)| name.clone())
+            .collect();
+        names.sort();
+        names.dedup();
+        names
+    }
+
     /// 写入或覆盖部件，并标脏。
     pub fn set(&mut self, name: &str, data: Vec<u8>) -> Result<(), Error> {
         let name = normalize_part_name(name)?;
@@ -646,6 +659,34 @@ mod tests {
         pkg.set("/keep.xml", b"unchanged-bytes".to_vec()).unwrap();
         pkg.set("/edit.xml", b"old".to_vec()).unwrap();
         pkg.save_to_vec().unwrap()
+    }
+
+    #[test]
+    fn dirty_part_names_cover_removed_parts() {
+        let mut pkg = Package::open_bytes(minimal_package_bytes()).unwrap();
+        assert!(
+            pkg.dirty_part_names().is_empty(),
+            "未标脏的部件不能进 parts"
+        );
+
+        pkg.set("/edit.xml", b"new".to_vec()).unwrap();
+        pkg.remove("/keep.xml");
+        assert_eq!(
+            pkg.dirty_part_names(),
+            vec!["/edit.xml".to_string(), "/keep.xml".to_string()],
+            "被删部件也算本批标脏"
+        );
+    }
+
+    #[test]
+    fn dirty_part_names_when_only_remove() {
+        let mut pkg = Package::open_bytes(minimal_package_bytes()).unwrap();
+        pkg.remove("/keep.xml");
+        assert_eq!(
+            pkg.dirty_part_names(),
+            vec!["/keep.xml".to_string()],
+            "只删部件时 parts 不能是空数组"
+        );
     }
 
     #[test]

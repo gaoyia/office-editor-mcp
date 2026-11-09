@@ -44,7 +44,7 @@ mod textbox;
 mod theme;
 mod watermark;
 
-pub use apply::apply;
+pub use apply::{apply, dry_run};
 pub use charts::export_chart_data;
 pub use create::create;
 pub use export::export_media;

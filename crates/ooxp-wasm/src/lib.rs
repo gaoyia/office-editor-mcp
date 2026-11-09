@@ -67,6 +67,9 @@ impl Host {
             .collect();
         match run_bytes(request_json, package, &refs) {
             Ok(ByteOutput::Inspect(value) | ByteOutput::Help(value)) => Outcome::Json(value),
+            Ok(ByteOutput::DryRun { ops_applied, parts }) => {
+                Outcome::Json(ooxp::dry_run_value(ops_applied, &parts))
+            }
             Ok(ByteOutput::Bytes {
                 bytes,
                 ops_applied,
@@ -88,7 +91,7 @@ impl Host {
 fn needs_package(action: &str) -> bool {
     matches!(
         action,
-        "inspect" | "apply" | "exportMedia" | "exportChartData"
+        "inspect" | "apply" | "exportMedia" | "exportChartData" | "layoutCheck"
     )
 }
 

@@ -184,12 +184,50 @@ fn data_from_help_sits_on_the_field() {
 }
 
 #[test]
-fn scope_is_a_definition_not_an_op() {
+fn scope_without_format_is_a_standalone_choose_format() {
     let value = help(serde_json::json!({"name": "inspectScope"})).unwrap();
-    assert_eq!(value["kind"], "def");
-    assert!(value["description"].as_str().unwrap().contains("查看范围"));
-    assert!(value["limits"].as_str().unwrap().contains("不能混用"));
-    assert!(value["fields"]["properties"].get("sheet").is_some());
+    assert_eq!(value["kind"], "chooseFormat");
+    assert_eq!(value["name"], "inspectScope");
+    let formats: Vec<&str> = value["formats"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item.as_str().unwrap())
+        .collect();
+    assert_eq!(formats, ["xlsx", "docx", "pptx"]);
+    assert!(value.get("fields").is_none());
+    assert!(value.get("description").is_none());
+}
+
+#[test]
+fn scope_with_format_keeps_only_that_formats_keys() {
+    let xlsx = help(serde_json::json!({"name": "inspectScope", "format": "xlsx"})).unwrap();
+    assert_eq!(xlsx["kind"], "def");
+    let props = xlsx["fields"]["properties"].as_object().unwrap();
+    assert!(props.contains_key("sheet"));
+    assert!(!props.contains_key("from"));
+    assert!(!props.contains_key("timing"));
+    for (_, schema) in props {
+        let formats = schema["formats"].as_array().unwrap();
+        assert!(
+            formats.iter().any(|item| item == "xlsx"),
+            "xlsx 过滤后仍留着别的格式键: {schema:?}"
+        );
+    }
+
+    let pptx = help(serde_json::json!({"name": "inspectScope", "format": "pptx"})).unwrap();
+    let props = pptx["fields"]["properties"].as_object().unwrap();
+    assert!(props.contains_key("timing"));
+    assert!(!props.contains_key("sheet"));
+}
+
+#[test]
+fn xlsm_is_folded_to_xlsx_before_scope_filter() {
+    let xlsm = help(serde_json::json!({"name": "inspectScope", "format": "xlsm"})).unwrap();
+    let xlsx = help(serde_json::json!({"name": "inspectScope", "format": "xlsx"})).unwrap();
+    assert_eq!(xlsm["kind"], "def");
+    assert_eq!(xlsm["fields"]["properties"], xlsx["fields"]["properties"]);
+    assert!(xlsm["fields"]["properties"].get("sheet").is_some());
 }
 
 #[test]

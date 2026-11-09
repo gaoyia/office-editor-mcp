@@ -29,6 +29,14 @@ use super::smartart;
 use super::style;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
+    apply_pkg(bytes, ops)?.save_to_vec()
+}
+
+pub fn dry_run(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<String>, Error> {
+    Ok(apply_pkg(bytes, ops)?.dirty_part_names())
+}
+
+fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error> {
     let _pins = super::list_pin::PinGuard::enter();
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     opc::reject_strict(&pkg)?;
@@ -1364,7 +1372,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
         pkg.set(&wb_part, wb_doc.to_bytes()?)?;
     }
 
-    pkg.save_to_vec()
+    Ok(pkg)
 }
 
 fn require_named_sheet(

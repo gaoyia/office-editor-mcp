@@ -27,6 +27,14 @@ use super::textbox;
 use super::watermark;
 
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
+    apply_pkg(bytes, ops)?.save_to_vec()
+}
+
+pub fn dry_run(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<String>, Error> {
+    Ok(apply_pkg(bytes, ops)?.dirty_part_names())
+}
+
+fn apply_pkg(bytes: &[u8], ops: &[DocxOp]) -> Result<crate::opc::Package, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     opc::reject_strict(&pkg)?;
     let doc_part = opc::office_document_part(&pkg)?;
@@ -937,7 +945,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
         pkg.set(name, doc.to_bytes()?)?;
     }
 
-    pkg.save_to_vec()
+    Ok(pkg)
 }
 
 pub(crate) fn para_target_path(root: &Element, target: &ParaTarget) -> Option<Vec<usize>> {

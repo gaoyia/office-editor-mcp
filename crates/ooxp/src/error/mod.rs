@@ -25,11 +25,20 @@ enum Inner {
     App {
         kind: ErrorKind,
         path: Option<String>,
+        /// 两个对象字段合装，避免把 `Error` 撑到 128 字节以上：
+        /// 那样全仓库的 `Result<_, Error>` 都会触发 clippy::result_large_err。
+        objects: Option<Box<ObjectInfo>>,
     },
     Io {
         err: io::Error,
         path: Option<PathBuf>,
     },
+}
+
+#[derive(Debug)]
+struct ObjectInfo {
+    id: Option<String>,
+    name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +139,11 @@ pub fn peek_lang(input_json: &str) -> Option<Lang> {
 impl Error {
     pub(crate) fn new(kind: ErrorKind) -> Self {
         Self {
-            inner: Inner::App { kind, path: None },
+            inner: Inner::App {
+                kind,
+                path: None,
+                objects: None,
+            },
         }
     }
 
@@ -139,6 +152,7 @@ impl Error {
             inner: Inner::App {
                 kind,
                 path: Some(path.into()),
+                objects: None,
             },
         }
     }
@@ -146,10 +160,11 @@ impl Error {
     /// 给已有错误补上 JSON 字段路径，不改身份。
     pub(crate) fn at(self, path: impl Into<String>) -> Self {
         match self.inner {
-            Inner::App { kind, .. } => Self {
+            Inner::App { kind, objects, .. } => Self {
                 inner: Inner::App {
                     kind,
                     path: Some(path.into()),
+                    objects,
                 },
             },
             other => Self { inner: other },
@@ -159,7 +174,40 @@ impl Error {
     /// 还没有 JSON 路径时补上。已有路径或 I/O 错误保持原样。
     pub(crate) fn or_at(self, path: impl Into<String>) -> Self {
         match self.inner {
-            Inner::App { path: None, kind } => Self::with_path(kind, path),
+            Inner::App {
+                path: None,
+                kind,
+                objects,
+            } => Self {
+                inner: Inner::App {
+                    kind,
+                    path: Some(path.into()),
+                    objects,
+                },
+            },
+            other => Self { inner: other },
+        }
+    }
+
+    /// 给该条 op 的错误补上对象 id 与名字，读不到时保持缺省。
+    pub(crate) fn with_object(
+        self,
+        object_id: Option<String>,
+        object_name: Option<String>,
+    ) -> Self {
+        match self.inner {
+            Inner::App { kind, path, .. } => Self {
+                inner: Inner::App {
+                    kind,
+                    path,
+                    objects: (object_id.is_some() || object_name.is_some()).then(|| {
+                        Box::new(ObjectInfo {
+                            id: object_id,
+                            name: object_name,
+                        })
+                    }),
+                },
+            },
             other => Self { inner: other },
         }
     }
@@ -232,6 +280,18 @@ impl Error {
         if let Some(p) = self.field_path() {
             error["path"] = json!(p);
         }
+        if let Inner::App {
+            objects: Some(info),
+            ..
+        } = &self.inner
+        {
+            if let Some(id) = &info.id {
+                error["objectId"] = json!(id);
+            }
+            if let Some(name) = &info.name {
+                error["objectName"] = json!(name);
+            }
+        }
         if let Some(os) = self.os_message() {
             error["osMessage"] = json!(os);
         }
@@ -262,6 +322,17 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+#[cfg(test)]
+mod size_tests {
+    #[test]
+    fn error_stays_below_result_large_err_threshold() {
+        assert!(
+            std::mem::size_of::<super::Error>() < 128,
+            "Error 撑到 128 字节会让所有 Result<_, Error> 触发 clippy::result_large_err"
+        );
+    }
+}
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Self {

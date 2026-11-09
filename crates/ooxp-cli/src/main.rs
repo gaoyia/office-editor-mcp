@@ -68,6 +68,9 @@ fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
             };
             println!("{text}");
         }
+        RunOutput::DryRun { ops_applied, parts } => {
+            println!("{}", ooxp::dry_run_json(ops_applied, &parts, cli.pretty));
+        }
         RunOutput::Written {
             path,
             ops_applied,

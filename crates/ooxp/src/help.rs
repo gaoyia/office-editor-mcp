@@ -65,7 +65,7 @@ pub fn help(obj: &Map<String, Value>) -> Result<Value, Error> {
         return op_detail(op, format, lang);
     }
     if let Some(name) = name {
-        return def_detail(name, lang);
+        return def_detail(name, format, lang);
     }
     if let Some(q) = q {
         return Ok(search(q, format, lang));
@@ -264,6 +264,7 @@ const ACTIONS: &[(&str, &str)] = &[
     ("apply", "applyRequest"),
     ("exportMedia", "exportMediaRequest"),
     ("exportChartData", "exportChartDataRequest"),
+    ("layoutCheck", "layoutCheckRequest"),
     ("help", "helpRequest"),
 ];
 
@@ -563,7 +564,7 @@ fn detail_value(entry: &OpEntry, others: &[String], lang: HelpLang) -> Value {
     out
 }
 
-fn def_detail(name: &str, lang: HelpLang) -> Result<Value, Error> {
+fn def_detail(name: &str, format: Option<&str>, lang: HelpLang) -> Result<Value, Error> {
     let Some(body) = catalog().defs.get(name) else {
         return Err(Error::with_path(
             ErrorKind::UnknownField {
@@ -572,6 +573,13 @@ fn def_detail(name: &str, lang: HelpLang) -> Result<Value, Error> {
             "name",
         ));
     };
+    if name == "inspectScope" && format.is_none() {
+        return Ok(json!({
+            "kind": "chooseFormat",
+            "name": "inspectScope",
+            "formats": ["xlsx", "docx", "pptx"],
+        }));
+    }
     let description_zh = text_of(body, "description");
     let description_en = text_of(body, "descriptionEn");
     let limits_zh = text_of(body, "limits");
@@ -589,10 +597,30 @@ fn def_detail(name: &str, lang: HelpLang) -> Result<Value, Error> {
         "description": description,
         "fields": fields_of(body),
     });
+    if let Some(format) = format {
+        if name == "inspectScope" {
+            retain_scope_fields(&mut out, format);
+        }
+    }
     if !limits.is_empty() {
         out["limits"] = json!(limits);
     }
     Ok(out)
+}
+
+fn retain_scope_fields(out: &mut Value, format: &str) {
+    let Some(props) = out
+        .pointer_mut("/fields/properties")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    props.retain(|_, schema| {
+        schema
+            .get("formats")
+            .and_then(Value::as_array)
+            .is_some_and(|formats| formats.iter().any(|f| f.as_str() == Some(format)))
+    });
 }
 
 fn fields_of(body: &Value) -> Value {

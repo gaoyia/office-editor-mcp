@@ -43,7 +43,7 @@ mod theme;
 mod validation;
 mod view;
 
-pub use apply::apply;
+pub use apply::{apply, dry_run};
 pub use create::{create, create_with_workbook_ct};
 pub use inspect::inspect;
 pub use picture::export_media;

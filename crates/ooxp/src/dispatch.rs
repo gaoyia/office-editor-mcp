@@ -14,6 +14,10 @@ use crate::{docx, pptx, xlsx};
 pub enum ByteOutput {
     Inspect(Value),
     Help(Value),
+    DryRun {
+        ops_applied: usize,
+        parts: Vec<String>,
+    },
     Bytes {
         bytes: Vec<u8>,
         ops_applied: Option<usize>,
@@ -43,6 +47,10 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
             let bytes = require_package(package)?;
             Ok(ByteOutput::Inspect(inspect_bytes(&req, bytes)?))
         }
+        Action::LayoutCheck => {
+            let bytes = require_package(package)?;
+            Ok(ByteOutput::Inspect(layout_check_bytes(&req, bytes)?))
+        }
         Action::Create => Ok(ByteOutput::Bytes {
             bytes: create_bytes(&req)?,
             ops_applied: None,
@@ -50,12 +58,20 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
         }),
         Action::Apply => {
             let bytes = require_package(package)?;
-            let (out, n) = apply_bytes(&req, bytes)?;
-            Ok(ByteOutput::Bytes {
-                bytes: out,
-                ops_applied: Some(n),
-                content_type: None,
-            })
+            if req.obj.get("dryRun").and_then(Value::as_bool) == Some(true) {
+                let (parts, n) = apply_dry_run(&req, bytes)?;
+                Ok(ByteOutput::DryRun {
+                    ops_applied: n,
+                    parts,
+                })
+            } else {
+                let (out, n) = apply_bytes(&req, bytes)?;
+                Ok(ByteOutput::Bytes {
+                    bytes: out,
+                    ops_applied: Some(n),
+                    content_type: None,
+                })
+            }
         }
         Action::ExportMedia => {
             let bytes = require_package(package)?;
@@ -95,7 +111,11 @@ pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
     let _files = crate::host_files::install_reader(crate::host_files::cache_read);
     let package = match req.action {
         Action::Help | Action::Create => None,
-        Action::Inspect | Action::Apply | Action::ExportMedia | Action::ExportChartData => {
+        Action::Inspect
+        | Action::Apply
+        | Action::ExportMedia
+        | Action::ExportChartData
+        | Action::LayoutCheck => {
             let path = str_field(&req.obj, "path")?;
             Some(fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?)
         }
@@ -104,6 +124,7 @@ pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
     match produced {
         ByteOutput::Inspect(tree) => Ok(RunOutput::Inspect(tree)),
         ByteOutput::Help(tree) => Ok(RunOutput::Help(tree)),
+        ByteOutput::DryRun { ops_applied, parts } => Ok(RunOutput::DryRun { ops_applied, parts }),
         ByteOutput::Bytes {
             bytes,
             ops_applied,
@@ -159,9 +180,11 @@ fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
                     "output",
                 )
             }),
-        Action::Inspect | Action::Help => Err(Error::new(ErrorKind::UnsupportedAction {
-            action: "bytes".into(),
-        })),
+        Action::Inspect | Action::LayoutCheck | Action::Help => {
+            Err(Error::new(ErrorKind::UnsupportedAction {
+                action: "bytes".into(),
+            }))
+        }
     }
 }
 
@@ -327,6 +350,67 @@ fn apply_bytes(req: &Request, bytes: &[u8]) -> Result<(Vec<u8>, usize), Error> {
             Ok((pptx::apply(bytes, &parsed)?, parsed.len()))
         },
     )
+    .map_err(|err| with_op_object(err, ops))
+}
+
+fn apply_dry_run(req: &Request, bytes: &[u8]) -> Result<(Vec<String>, usize), Error> {
+    let fmt = format_of(req)?;
+    let ops = require_ops(&req.obj)?;
+    for_format(
+        fmt,
+        || {
+            let parsed = xlsx::parse_ops(ops)?;
+            Ok((xlsx::dry_run(bytes, &parsed)?, parsed.len()))
+        },
+        || {
+            let parsed = docx::parse_ops(ops)?;
+            Ok((docx::dry_run(bytes, &parsed)?, parsed.len()))
+        },
+        || {
+            let parsed = pptx::parse_ops(ops)?;
+            Ok((pptx::dry_run(bytes, &parsed)?, parsed.len()))
+        },
+    )
+    .map_err(|err| with_op_object(err, ops))
+}
+
+/// apply（含 dryRun）失败时，从出错那条 op 的顶层 JSON 读 `id` / `name` 挂到错误上。
+/// 只认字符串，不读包，不解释成 `p:cNvPr/@name`；定位不到就保持缺省。
+fn with_op_object(err: Error, ops: &[Value]) -> Error {
+    let Some(i) = err.field_path().and_then(op_index) else {
+        return err;
+    };
+    let Some(obj) = ops.get(i).and_then(Value::as_object) else {
+        return err;
+    };
+    let object_id = obj.get("id").and_then(Value::as_str).map(str::to_string);
+    let object_name = obj.get("name").and_then(Value::as_str).map(str::to_string);
+    err.with_object(object_id, object_name)
+}
+
+fn op_index(path: &str) -> Option<usize> {
+    let (digits, _) = path.strip_prefix("ops[")?.split_once(']')?;
+    digits.parse().ok()
+}
+
+fn layout_check_bytes(req: &Request, bytes: &[u8]) -> Result<Value, Error> {
+    match format_of(req)? {
+        Format::Pptx => pptx::layout_check(bytes),
+        Format::Xlsx => Err(Error::with_path(
+            ErrorKind::ActionNotForFormat {
+                format: "xlsx".into(),
+                action: "layoutCheck".into(),
+            },
+            "format",
+        )),
+        Format::Docx => Err(Error::with_path(
+            ErrorKind::ActionNotForFormat {
+                format: "docx".into(),
+                action: "layoutCheck".into(),
+            },
+            "format",
+        )),
+    }
 }
 
 struct Exported {
