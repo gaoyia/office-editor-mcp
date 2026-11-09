@@ -838,7 +838,8 @@ mod tests {
         let instructions = english["result"]["instructions"].as_str().unwrap();
         assert!(instructions.contains("call help first"));
         assert!(instructions.contains("requestPath"));
-        assert!(instructions.contains("Business Source License 1.0 and carries this additional obligation"));
+        assert!(instructions
+            .contains("Business Source License 1.0 and carries this additional obligation"));
         assert!(instructions.contains(AUTHOR_HARDSHIP_EN));
         assert!(instructions.contains(DONATE_TABLE_EN));
         assert!(instructions.contains("strongly condemns"));
