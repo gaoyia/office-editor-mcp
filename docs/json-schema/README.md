@@ -36,6 +36,9 @@ python docs/json-schema/build.py --check
 它和分块顶层的 `formats` 不是一回事：顶层那份按定义名给 apply 操作标格式，由脚本汇总进三份操作目录；property 上这份只给 `help` 看，脚本原样带进生成物。
 改完分块要重跑 `build.py`。`request.schema.json` 里的 `inspectScope` 仍是三格式键的并集，跨格式键由各格式的解析器拒绝。
 
+`formats` 的取值只有 `xlsx`、`docx`、`pptx`，与 `build.py` 的 `FORMATS` 一致。`format` 为 `xlsm` 时先按 `parse_format` 收成 `xlsx` 再筛，不能拿原字符串去比。
+`help.rs` 的 `format_key` 已经做了这一步，现有运行结果不会出现空字段表；实施欠账是 `def_detail` 还没收到这个归一后的值。
+
 每个操作的 `description` 只写它做什么，英文写在 `descriptionEn`。不能怎么填写在 `limits`，英文写在 `limitsEn`。`help` 检索看中英两边，返回时按 `locale` 只留一种。不写 `locale` 用中文。
 
 同一种格式里名字相同、填法不同的定义，定义名前面带格式，例如 `xlsxInsertMathOp`。请求里的 `op` 仍写 `insertMath`。

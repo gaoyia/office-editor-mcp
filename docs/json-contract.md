@@ -156,7 +156,14 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 带 `name` 时，打开一个定义，例如 `inspectScope`、`xlsxWorkbook`。新建和查看范围不在操作名单里，走这里。
 
-`name=inspectScope` 是特例。不带 `format` 时返回 `kind=chooseFormat`，列出可选格式，不给 `fields`；带 `format` 时只返回该格式认的键。
+`name=inspectScope` 是特例，返回形状单独定，不沿用 `op` 那条 `chooseFormat`。
+
+- 不带 `format`：`kind` 为 `chooseFormat`，`name` 为 `inspectScope`，`formats` 为 `["xlsx", "docx", "pptx"]` 三个字符串，不给 `fields`。
+  这里的 `formats` 是字符串数组，不带说明对象，与 `op` 那条 `chooseFormat` 的 `formats` 不是一回事。
+- 带 `format`：`kind` 仍是 `def`，`fields.properties` 只留该格式认的键。
+- `format` 为 `xlsm` 时，先按 `crates/ooxp/src/json.rs` 的 `parse_format` 收成 `xlsx` 再筛。
+  `help.rs` 的 `format_key` 已经做了这一步，现有运行结果不会筛出空表；实施欠账是 `def_detail` 还没收到这个归一后的值。
+
 过滤依据写在 `docs/json-schema/src/shared/envelope.json` 里：`inspectScope.properties` 的每个键带一个 `formats` 数组，`help` 按它筛，不在代码里另抄一份键表。
 筛完的 `fields.properties` 里仍带这个 `formats`，值来自 schema，不随 `format` 改写。
 请求 schema 里的 `inspectScope` 始终是三格式键的并集。跨格式键由各格式的 `parse_scope` 拒绝，报 `InvalidField`，`help` 过滤不改变这件事。
@@ -258,6 +265,7 @@ pptx 的 `presentation` 见 [json-contract-pptx.md](json-contract-pptx.md#create
 apply 的入参是操作列表，不是树。另可带布尔字段 `dryRun`。
 
 - `dryRun: true` 时各条 op 仍按顺序在内存树上执行，但不生成包字节，也不写盘。
+- `dryRun: true` 时 `output` 被忽略，不报 `InvalidField`，仍然不写文件。`dryRun` 省略或为 `false` 时，`output` 照旧是另存路径。
 - 成功响应不带 `path`，改带 `dryRun: true`、`opsApplied` 与 `parts`。`parts` 是本批标脏的部件名，排序去重。
 - 任一 op 失败仍按现有错误形态返回，源包不变。不新增事务或回滚类型。
 - 省略或 `false` 时行为不变。响应形状见 [errors.md](errors.md#成功形态)。
@@ -2313,7 +2321,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
       "shapes": [
         {
           "id": "slide:1/shape:2",
-          "name": "标题框",
+          "name": "Title Box",
           "box": { "x": 914400, "y": 457200, "cx": 3000000, "cy": 800000 },
           "outOfBounds": false
         }
@@ -2330,13 +2338,36 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 }
 ```
 
-字段说明：
+形状集合与坐标系：
 
-- `slideSize` 取自 `p:sldSz`，`box` 与 `area` 都是 EMU 整数。`box` 只读 `a:xfrm`，不展开组合里的子形状。
-- `outOfBounds` 是形状 `box` 越出 `slideSize` 的 id 名单；每个形状上的同名布尔是这一条的简写。
-- `overlaps` 列出同页两两相交的形状对，`area` 是相交矩形面积。按 `spTree` 顺序去重，每对只列一次。
-- `textOverflow` 是按字号与框尺寸估算可能放不下的形状 id。`estimated` 恒为 `true`：不读字体度量，不排文字，不保证与 PowerPoint 一致。
-- `name` 取 `p:cNvPr/@name`，没有就省略。id 仍是 `inspect` 那套稳定 id，可直接拿去写 apply 的 op。
+- `shapes` 与 `inspect` 的 `shapes` 同集合：只收带 `p:txBody` 的 `p:sp`，沿 `p:grpSp` 递归收子形状，组合本身不产生条目。
+  `mc:AlternateContent` 与 `a14` 公式框的例外按 [pptx 分册](json-contract-pptx.md) 第 422 到 428 行，不在本文重复。
+- id 只用子形状的 `inspect` 稳定 id，可直接拿去写 apply 的 op。`name` 取 `p:cNvPr/@name`，没有就省略。
+- `box` 是幻灯片 EMU。形状自身 `a:xfrm` 给的是组内坐标，要沿祖先组合链换算。
+- 一层组合取 `p:grpSpPr/a:xfrm` 的 `off=(gx,gy)`、`ext=(gcx,gcy)`、`chOff=(cx0,cy0)`、`chExt=(ccx,ccy)`。
+  换算为 `sx = gx + (x - cx0) × gcx / ccx`，`sy = gy + (y - cy0) × gcy / ccy`，`scx = cx × gcx / ccx`，`scy = cy × gcy / ccy`。
+- 嵌套组合按从最内层到最外层逐层套用。中间按有理数算，最后四舍五入到最近 EMU 整数。
+  `ccx` 或 `ccy` 为 0 时该层按恒等处理。缺 `a:xfrm` 的形状不给 `box`。
+- `box` 与同一 id 在 `inspect` 里的 `x` / `y` / `cx` / `cy` 不是同一坐标系，不能直接比相等。
+  后者按 [pptx 分册](json-contract-pptx.md) 第 1220 行取自身 `a:xfrm` 的原始 EMU，不换算。第 914 行是图的规则，管不到形状。
+- 仓库目前只在生成组合时写 `chOff` / `chExt`，没有读取换算的代码，`layoutCheck` 要自己实现这一步。
+
+判定式，都按 EMU 整数算：
+
+- `slideSize` 取 `p:sldSz` 的 `cx` / `cy`。
+- 越出条件：`x < 0`、`y < 0`、`x + cx > slideSize.cx`、`y + cy > slideSize.cy`，四条有一条成立即越出。
+  相等不算。越出的 id 进该页 `outOfBounds`，形状上的同名布尔为 `true`。
+  缺 `box` 的形状不进名单，布尔为 `false`。
+- 相交宽 `iw = min(x1+cx1, x2+cx2) - max(x1, x2)`，高 `ih = min(y1+cy1, y2+cy2) - max(y1, y2)`。
+  只有 `iw > 0` 且 `ih > 0` 才列入 `overlaps`，`area = iw × ih`。边界相接时 `area` 为 0，不列入。
+  每对只列一次，`spTree` 文档序在前的放 `a`。缺 `box` 的形状不参与。
+- 文字溢出的 `estimated` 恒为 `true`，表示下面这个可复现的阈值，不表示排版准确，也不保证与 PowerPoint 一致。
+- 文本取 `p:txBody` 里 `a:r/a:t` 按文档序拼接，段间与 `a:br` 各算一次换行，字符数按 Unicode 标量数计。
+- 字号 `sz` 取各 run 的 `a:rPr/@sz` 最大值，取不到用 1800。`szEMU = sz × 127`。
+- 可用宽 `w = box.cx - lIns - rIns`，可用高 `h = box.cy - tIns - bIns`。四个 inset 取 `a:bodyPr`，`lIns` / `rIns` 缺省 91440，`tIns` / `bIns` 缺省 45720。
+- 每行容量 `n = max(1, floor(w / (szEMU × 0.5)))`；所需行数 `rows` 为各段 `max(1, ceil(段字符数 / n))` 之和，再加显式换行数。
+- `rows × szEMU × 1.2 > h` 时该形状 id 进 `textOverflow`。`0.5` 与 `1.2` 是固定估算系数，不读字体度量、不排文字。
+  无 `p:txBody`、文本为空或缺 `box` 的形状不进名单。
 
 `layoutCheck` 不改 `inspect` / `apply` / `create` 的语义，也不进 `opc` 的写回路径。失败时走 [errors.md](errors.md) 的错误形态。
 

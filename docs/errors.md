@@ -9,18 +9,24 @@
   "ok": false,
   "error": {
     "code": "InvalidField",
-    "message": "x 从 0 起",
+    "message": "x starts at 0",
     "path": "ops[16].x",
-    "objectId": "slide:1/shape:10",
-    "objectName": "标题框"
+    "objectId": "slide:1/shape:10"
   }
 }
 ```
 
 `code` 是稳定字符串，给程序认。取值与退出码见下表，不随语言变。`message` 是给人看的短句，按语言渲染，默认英文。
+示例是默认英文；请求带 `locale: zh-CN` 时这一句是「x 从 0 起」。
 `path` 是可选的 JSON 指针风格路径，指向入参里出错的字段；定位不到就省略。apply 出错时 `path` 仍指向该条 op 里的字段，例如 `ops[16].x`。
-apply 出错时还可以有 `objectId` 与 `objectName`。`objectId` 是该条 op 的 `id` 原值，不解析、不换成内部编号；`objectName` 是该对象的名字，可选。
-两个字段都在构造该条 op 的错误时读取，读不到就省略。它们不参与语言渲染，也不影响 `code` 与退出码。
+apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构造该条 op 的错误时读取，读不到就省略。
+
+- `objectId` 是该条 op 的 `id` 原值，不解析、不换成内部编号。
+- `objectName` 只在这条 op 的 JSON 自身带字符串字段 `name` 时出现，值就是这个字符串。不读包，不去查 `p:cNvPr/@name`。
+- 多数 op 没有 `name`。带 `name` 的 op 里，这个字段是版式名、主题方案名、书签名、节名、自定义放映名或系列名，值按原样带出。
+
+负坐标这类字段错误在 `parse_off_at` 解析期就能报，此时 `parse_ops` 手里只有 `ops`，拿不到包内名字，所以包内名字不能当 `objectName` 的来源。
+`objectId` 与 `objectName` 不参与语言渲染，也不影响 `code` 与退出码。
 
 `Io` 错误还可以带可选字段 `osMessage`，放操作系统给的原文。它的语言由系统决定，我们不承诺是哪一门，也不要用它做字符串匹配。只有系统确实给了原文时才出现。
 
@@ -1182,7 +1188,7 @@ apply 带 `dryRun: true` 时成功响应不带 `path`，也不写文件。它带
 }
 ```
 
-`parts` 按部件名排序，去重。没有标脏部件时是空数组。`dryRun` 失败时仍走错误形态，`objectId` 与 `objectName` 照样给。
+`parts` 按部件名排序，去重。没有标脏部件时是空数组。`dryRun` 失败时仍走错误形态，`objectId` 与 `objectName` 按本文开头的规则给。
 
 `layoutCheck` 成功：stdout 是几何检查结果 JSON，不带 `ok`、不带 `path`。它不写文件，详见 [json-contract.md](json-contract.md#layoutcheck)。
 
