@@ -1,0 +1,1816 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "ooxp-example-销售经营看板.xlsx",
+  "workbook": {
+    "props": {
+      "title": "2026 销售经营看板",
+      "subject": "由 ooxp 领域 JSON 生成的 Excel 示例",
+      "creator": "ooxp 试用示例",
+      "description": "含合并单元格、KPI 卡片、公式、条件格式、冻结窗格、筛选与嵌入图表",
+      "keywords": "OOXML, xlsx, 看板, 示例",
+      "category": "示例工作簿",
+      "company": "示例科技",
+      "custom": [
+        {
+          "name": "生成方式",
+          "value": "ooxp create",
+          "type": "lpwstr"
+        }
+      ]
+    },
+    "sheets": [
+      {
+        "name": "总览",
+        "view": {
+          "zoom": 95,
+          "frozenRows": 9,
+          "frozenCols": 1,
+          "activeCell": "A10"
+        },
+        "cols": [
+          {
+            "col": "A",
+            "width": 16
+          },
+          {
+            "col": "B",
+            "width": 14
+          },
+          {
+            "col": "C",
+            "width": 14
+          },
+          {
+            "col": "D",
+            "width": 12
+          },
+          {
+            "col": "E",
+            "width": 12
+          },
+          {
+            "col": "F",
+            "width": 12
+          },
+          {
+            "col": "G",
+            "width": 12
+          },
+          {
+            "col": "H",
+            "width": 22
+          }
+        ],
+        "rows": [
+          {
+            "row": 1,
+            "height": 30
+          },
+          {
+            "row": 3,
+            "height": 22
+          },
+          {
+            "row": 5,
+            "height": 20
+          },
+          {
+            "row": 6,
+            "height": 32
+          },
+          {
+            "row": 8,
+            "height": 24
+          },
+          {
+            "row": 9,
+            "height": 26
+          }
+        ],
+        "merges": [
+          "A1:H2",
+          "A3:H3",
+          "A8:H8"
+        ],
+        "autoFilter": {
+          "ref": "A9:H15"
+        },
+        "print": {
+          "orientation": "landscape",
+          "fitToPage": true,
+          "fitToWidth": 1,
+          "fitToHeight": 1,
+          "printArea": "A1:H33",
+          "hCenter": true
+        },
+        "cells": [
+          {
+            "ref": "A1",
+            "value": "2026 销售经营看板",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 20,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "1F4E79"
+              }
+            },
+            "align": {
+              "horizontal": "left",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A3",
+            "value": "数据口径：合并报表 · 更新于 2026-11-10 · 金额单位 万元",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "italic": true,
+              "color": {
+                "rgb": "44546A"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "EAF1FB"
+              }
+            },
+            "align": {
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A5",
+            "value": "营业收入",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "44546A"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "C5",
+            "value": "毛利率",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "44546A"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "E5",
+            "value": "活跃客户(万)",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "44546A"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "G5",
+            "value": "同比增速",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "44546A"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A6",
+            "value": 10760,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "1F4E79"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "C6",
+            "value": 0.446,
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "1F4E79"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "E6",
+            "value": 16.9,
+            "numFmt": "0.0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "1F4E79"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "G6",
+            "value": 0.278,
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "C00000"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A8",
+            "value": "月度收入明细与达成情况",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 12,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "2E75B6"
+              }
+            },
+            "align": {
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A9",
+            "value": "月份",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "B9",
+            "value": "2025 年",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "C9",
+            "value": "2026 年",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "D9",
+            "value": "同比",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "E9",
+            "value": "目标",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "F9",
+            "value": "达成率",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "G9",
+            "value": "状态",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "H9",
+            "value": "备注",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A10",
+            "value": "1 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B10",
+            "value": 720,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C10",
+            "value": 850,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D10",
+            "formula": "=(C10-B10)/B10",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E10",
+            "value": 820,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F10",
+            "formula": "=C10/E10",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G10",
+            "formula": "=IF(F10>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H10",
+            "value": "春节前交付集中",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A11",
+            "value": "2 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B11",
+            "value": 680,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C11",
+            "value": 790,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D11",
+            "formula": "=(C11-B11)/B11",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E11",
+            "value": 830,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F11",
+            "formula": "=C11/E11",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G11",
+            "formula": "=IF(F11>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H11",
+            "value": "假期影响",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A12",
+            "value": "3 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B12",
+            "value": 760,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C12",
+            "value": 940,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D12",
+            "formula": "=(C12-B12)/B12",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E12",
+            "value": 900,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F12",
+            "formula": "=C12/E12",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G12",
+            "formula": "=IF(F12>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H12",
+            "value": "企业版上线",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A13",
+            "value": "4 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B13",
+            "value": 810,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C13",
+            "value": 1010,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D13",
+            "formula": "=(C13-B13)/B13",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E13",
+            "value": 960,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F13",
+            "formula": "=C13/E13",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G13",
+            "formula": "=IF(F13>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H13",
+            "value": "渠道下沉启动",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A14",
+            "value": "5 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B14",
+            "value": 840,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C14",
+            "value": 1080,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D14",
+            "formula": "=(C14-B14)/B14",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E14",
+            "value": 1020,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F14",
+            "formula": "=C14/E14",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G14",
+            "formula": "=IF(F14>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H14",
+            "value": "华东交付中心投产",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A15",
+            "value": "6 月",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "F5F8FD"
+              }
+            }
+          },
+          {
+            "ref": "B15",
+            "value": 880,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C15",
+            "value": 1160,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "D15",
+            "formula": "=(C15-B15)/B15",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "E15",
+            "value": 1100,
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "F15",
+            "formula": "=C15/E15",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "G15",
+            "formula": "=IF(F15>=1,\"达标\",\"跟进\")",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "H15",
+            "value": "半年度收官",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          },
+          {
+            "ref": "A16",
+            "value": "合计",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "1F4E79"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "B16",
+            "formula": "=SUM(B10:B15)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "C16",
+            "formula": "=SUM(C10:C15)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "D16",
+            "formula": "=(C16-B16)/B16",
+            "numFmt": "0.0%",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          }
+        ],
+        "conditionalFormats": [
+          {
+            "sqref": "C10:C15",
+            "type": "dataBar",
+            "priority": 1,
+            "dataBar": {
+              "cfvo": [
+                {
+                  "type": "min"
+                },
+                {
+                  "type": "max"
+                }
+              ],
+              "color": {
+                "rgb": "2E75B6"
+              },
+              "showValue": true
+            }
+          },
+          {
+            "sqref": "D10:D15",
+            "type": "colorScale",
+            "priority": 2,
+            "colorScale": {
+              "cfvo": [
+                {
+                  "type": "min"
+                },
+                {
+                  "type": "percentile",
+                  "val": "50"
+                },
+                {
+                  "type": "max"
+                }
+              ],
+              "colors": [
+                {
+                  "rgb": "F8696B"
+                },
+                {
+                  "rgb": "FFEB84"
+                },
+                {
+                  "rgb": "63BE7B"
+                }
+              ]
+            }
+          },
+          {
+            "sqref": "F10:F15",
+            "type": "cellIs",
+            "operator": "lessThan",
+            "formulas": [
+              "1"
+            ],
+            "priority": 3
+          }
+        ],
+        "charts": [
+          {
+            "type": "col",
+            "title": "月度收入对比（万元）",
+            "from": "A19",
+            "to": "H33",
+            "anchor": "twoCell",
+            "dataFrom": "J2",
+            "series": [
+              {
+                "name": "2025 年",
+                "categories": [
+                  "1月",
+                  "2月",
+                  "3月",
+                  "4月",
+                  "5月",
+                  "6月"
+                ],
+                "values": [
+                  720,
+                  680,
+                  760,
+                  810,
+                  840,
+                  880
+                ]
+              },
+              {
+                "name": "2026 年",
+                "categories": [
+                  "1月",
+                  "2月",
+                  "3月",
+                  "4月",
+                  "5月",
+                  "6月"
+                ],
+                "values": [
+                  850,
+                  790,
+                  940,
+                  1010,
+                  1080,
+                  1160
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "区域明细",
+        "view": {
+          "zoom": 100,
+          "frozenRows": 3,
+          "activeCell": "A4"
+        },
+        "cols": [
+          {
+            "col": "A",
+            "width": 16
+          },
+          {
+            "col": "B",
+            "width": 14
+          },
+          {
+            "col": "C",
+            "width": 13
+          },
+          {
+            "col": "D",
+            "width": 13
+          },
+          {
+            "col": "E",
+            "width": 13
+          },
+          {
+            "col": "F",
+            "width": 15
+          }
+        ],
+        "rows": [
+          {
+            "row": 1,
+            "height": 28
+          },
+          {
+            "row": 3,
+            "height": 24
+          }
+        ],
+        "merges": [
+          "A1:F1"
+        ],
+        "autoFilter": {
+          "ref": "A3:F8"
+        },
+        "print": {
+          "orientation": "landscape",
+          "fitToPage": true,
+          "fitToWidth": 1,
+          "fitToHeight": 1,
+          "printArea": "A1:F8",
+          "hCenter": true
+        },
+        "cells": [
+          {
+            "ref": "A1",
+            "value": "区域销售明细（2026 上半年）",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "1F4E79"
+              }
+            },
+            "align": {
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A3",
+            "value": "区域",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "B3",
+            "value": "负责人",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "C3",
+            "value": "Q1",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "D3",
+            "value": "Q2",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "E3",
+            "value": "Q3",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "F3",
+            "value": "合计",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "4472C4"
+              }
+            },
+            "align": {
+              "horizontal": "center",
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A4",
+            "value": "华东",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "B4",
+            "value": "陈可",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C4",
+            "value": 320,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "D4",
+            "value": 380,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "E4",
+            "value": 410,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "F4",
+            "formula": "=SUM(C4:E4)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "A5",
+            "value": "华南",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "B5",
+            "value": "林夕",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C5",
+            "value": 280,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "D5",
+            "value": 330,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "E5",
+            "value": 390,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "F5",
+            "formula": "=SUM(C5:E5)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "A6",
+            "value": "华北",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "B6",
+            "value": "周明",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C6",
+            "value": 250,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "D6",
+            "value": 290,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "E6",
+            "value": 360,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "F6",
+            "formula": "=SUM(C6:E6)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "A7",
+            "value": "西南",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "B7",
+            "value": "苏禾",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "C7",
+            "value": 180,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "D7",
+            "value": 220,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "E7",
+            "value": 260,
+            "numFmt": "#,##0"
+          },
+          {
+            "ref": "F7",
+            "formula": "=SUM(C7:E7)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            }
+          },
+          {
+            "ref": "A8",
+            "value": "合计",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true,
+              "color": {
+                "rgb": "1F4E79"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "C8",
+            "formula": "=SUM(C4:C7)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "D8",
+            "formula": "=SUM(D4:D7)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "E8",
+            "formula": "=SUM(E4:E7)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "F8",
+            "formula": "=SUM(F4:F7)",
+            "numFmt": "#,##0",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          }
+        ],
+        "conditionalFormats": [
+          {
+            "sqref": "C4:E7",
+            "type": "colorScale",
+            "priority": 1,
+            "colorScale": {
+              "cfvo": [
+                {
+                  "type": "min"
+                },
+                {
+                  "type": "max"
+                }
+              ],
+              "colors": [
+                {
+                  "rgb": "FFFFFF"
+                },
+                {
+                  "rgb": "2E75B6"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "说明",
+        "cols": [
+          {
+            "col": "A",
+            "width": 22
+          },
+          {
+            "col": "B",
+            "width": 70
+          }
+        ],
+        "rows": [
+          {
+            "row": 1,
+            "height": 28
+          }
+        ],
+        "merges": [
+          "A1:B1"
+        ],
+        "print": {
+          "orientation": "landscape",
+          "fitToPage": true,
+          "fitToWidth": 1,
+          "fitToHeight": 1,
+          "printArea": "A1:B6",
+          "hCenter": true
+        },
+        "cells": [
+          {
+            "ref": "A1",
+            "value": "工作簿说明",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 16,
+              "bold": true,
+              "color": {
+                "rgb": "FFFFFF"
+              }
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "1F4E79"
+              }
+            },
+            "align": {
+              "vertical": "center"
+            }
+          },
+          {
+            "ref": "A3",
+            "value": "生成工具",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "B3",
+            "value": "ooxp（领域 JSON → OOXML），未调用 Excel 生成",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "A4",
+            "value": "总览",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "B4",
+            "value": "KPI 卡片、月度明细、SUM/IF 公式、数据条与三色刻度、冻结窗格、自动筛选、嵌入柱状图",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "A5",
+            "value": "区域明细",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "B5",
+            "value": "按区域汇总的季度收入，含 SUM 公式与色阶条件格式",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10
+            }
+          },
+          {
+            "ref": "A6",
+            "value": "公式说明",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "bold": true
+            },
+            "fill": {
+              "pattern": "solid",
+              "fg": {
+                "rgb": "D9E2F3"
+              }
+            }
+          },
+          {
+            "ref": "B6",
+            "value": "公式按字符串保存，本工具不计算；用 Excel 打开后会自动重算并显示结果",
+            "font": {
+              "name": "微软雅黑",
+              "sz": 10,
+              "italic": true,
+              "color": {
+                "rgb": "7F7F7F"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "format": "xlsx"
+}

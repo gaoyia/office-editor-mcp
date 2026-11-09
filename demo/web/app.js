@@ -1,43 +1,7 @@
 import init, { Session } from "./pkg/ooxp_wasm.js";
-
-function slidePictures(bg) {
-  return [
-    { file: bg, x: 0, y: 0, cx: 12192000, cy: 6858000 },
-    { file: "deco-bar.png", x: 0, y: 0, cx: 120000, cy: 6858000 },
-    { file: "deco-ring.png", x: 10650000, y: 0, cx: 2400000, cy: 2400000 },
-    { file: "deco-dot.png", x: 11520000, y: 6320000, cx: 220000, cy: 220000 },
-  ];
-}
-
-function coverCard(x, title, body, head) {
-  const edge = { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } };
-  return {
-    rows: 2,
-    cols: 1,
-    x,
-    y: 2720000,
-    cx: 3358533,
-    cy: 2360000,
-    rowHeights: [760000, 1600000],
-    tableStyleId: null,
-    tblLook: null,
-    cells: [
-      [{ text: title, fill: head, borders: edge, cellMar: { top: 180000, left: 160000, right: 120000, bottom: 40000 } }],
-      [{ text: body, fill: "F6F5F1", borders: edge, cellMar: { top: 100000, left: 160000, right: 140000, bottom: 80000 } }],
-    ],
-  };
-}
-
-function decoAnims(rest) {
-  return [
-    { type: "fade", shape: 1, trigger: "with", dur: 480 },
-    { type: "fade", picture: 2, trigger: "with", delay: 40, dur: 560 },
-    { type: "zoom", picture: 3, trigger: "with", delay: 120, dur: 680 },
-    { type: "flyIn", picture: 4, trigger: "with", delay: 140, dur: 640 },
-    ...rest,
-    { type: "growShrink", picture: 4, trigger: "after", dur: 700, repeat: 2 },
-  ];
-}
+import xlsxCreate from "./samples/xlsx.json" with { type: "json" };
+import docxCreate from "./samples/docx.json" with { type: "json" };
+import pptxCreate from "./samples/pptx.json" with { type: "json" };
 
 const FORMATS = [
   {
@@ -46,154 +10,20 @@ const FORMATS = [
     color: "var(--xlsx)",
     items: [
       {
-        name: "业绩看板",
-        blurb: "深色标题、数据条、色阶、图标集、迷你图、组合图、环形图和循环图示，另有一整页图表。写入「ooxp-example-业绩.xlsx」。",
-        request: {
-          schemaVersion: 1,
-          action: "create",
-          path: "ooxp-example-业绩.xlsx",
-          format: "xlsx",
-          workbook: {
-            theme: {
-              name: "业绩",
-              colors: { accent1: "0F6E6E", accent2: "1D4E89", accent3: "C2410C", accent4: "7C3AED" },
-              fonts: { majorLatin: "Calibri", majorEa: "微软雅黑" },
-            },
-            sheets: [
-              {
-                name: "业绩",
-                cells: [
-                  {
-                    ref: "A1",
-                    value: "本季业绩",
-                    font: { bold: true, sz: 18, color: { rgb: "F7F4EE" } },
-                    fill: { pattern: "solid", fg: { rgb: "0F6E6E" } },
-                    align: { horizontal: "center", vertical: "center" },
-                  },
-                  { ref: "A3", value: "产品", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "B3", value: "一月", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "C3", value: "二月", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "D3", value: "三月", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "E3", value: "合计", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "F3", value: "趋势", font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { pattern: "solid", fg: { rgb: "1C1917" } } },
-                  { ref: "A4", value: "甲" },
-                  { ref: "B4", value: 42, numFmt: "#,##0" },
-                  { ref: "C4", value: 38, numFmt: "#,##0" },
-                  { ref: "D4", value: 55, numFmt: "#,##0" },
-                  { ref: "E4", formula: "=SUM(B4:D4)", numFmt: "#,##0", font: { bold: true } },
-                  { ref: "A5", value: "乙" },
-                  { ref: "B5", value: 28, numFmt: "#,##0" },
-                  { ref: "C5", value: 61, numFmt: "#,##0" },
-                  { ref: "D5", value: 33, numFmt: "#,##0" },
-                  { ref: "E5", formula: "=SUM(B5:D5)", numFmt: "#,##0", font: { bold: true } },
-                  { ref: "A6", value: "丙" },
-                  { ref: "B6", value: 51, numFmt: "#,##0" },
-                  { ref: "C6", value: 22, numFmt: "#,##0" },
-                  { ref: "D6", value: 47, numFmt: "#,##0" },
-                  { ref: "E6", formula: "=SUM(B6:D6)", numFmt: "#,##0", font: { bold: true } },
-                  { ref: "A7", value: "丁" },
-                  { ref: "B7", value: 19, numFmt: "#,##0" },
-                  { ref: "C7", value: 44, numFmt: "#,##0" },
-                  { ref: "D7", value: 36, numFmt: "#,##0" },
-                  { ref: "E7", formula: "=SUM(B7:D7)", numFmt: "#,##0", font: { bold: true } },
-                ],
-                cols: [
-                  { col: "A", width: 14 },
-                  { col: "B", width: 12 },
-                  { col: "C", width: 12 },
-                  { col: "D", width: 12 },
-                  { col: "E", width: 12 },
-                  { col: "F", width: 16 },
-                  { col: "G", width: 3 },
-                ],
-                rows: [
-                  { row: 1, height: 36 },
-                  { row: 3, toRow: 7, height: 22 },
-                ],
-                merges: ["A1:F1"],
-                tables: [{ ref: "A3:E7", name: "Quarter", columns: ["产品", "一月", "二月", "三月", "合计"] }],
-                charts: [
-                  {
-                    type: "combo",
-                    title: "三个月",
-                    from: "H3",
-                    dataFrom: "AA3",
-                    cx: 5029200,
-                    cy: 2286000,
-                    series: [
-                      { name: "一月", type: "col", categories: ["甲", "乙", "丙", "丁"], values: [42, 28, 51, 19] },
-                      { name: "二月", type: "col", categories: ["甲", "乙", "丙", "丁"], values: [38, 61, 22, 44] },
-                      { name: "三月", type: "line", categories: ["甲", "乙", "丙", "丁"], values: [55, 33, 47, 36] },
-                    ],
-                  },
-                  {
-                    type: "doughnut",
-                    title: "合计占比",
-                    from: "H17",
-                    dataFrom: "AA12",
-                    cx: 5029200,
-                    cy: 2286000,
-                    series: [{ name: "合计", categories: ["甲", "乙", "丙", "丁"], values: [135, 122, 120, 99] }],
-                  },
-                ],
-                conditionalFormats: [
-                  { sqref: "B4:B7", type: "dataBar", dataBar: { color: { rgb: "0F6E6E" } } },
-                  {
-                    sqref: "C4:C7",
-                    type: "colorScale",
-                    colorScale: { colors: [{ rgb: "F8696B" }, { rgb: "FFEB84" }, { rgb: "63BE7B" }] },
-                  },
-                  { sqref: "D4:D7", type: "iconSet" },
-                ],
-                sparklines: [
-                  { ref: "F4", formula: "B4:D4", type: "column", high: true, low: true },
-                  { ref: "F5", formula: "B5:D5", type: "column", high: true, low: true },
-                  { ref: "F6", formula: "B6:D6", type: "column", high: true, low: true },
-                  { ref: "F7", formula: "B7:D7", type: "column", high: true, low: true },
-                ],
-                smartArts: [
-                  {
-                    layout: "cycle",
-                    from: "A10",
-                    cx: 5029200,
-                    cy: 2286000,
-                    points: [{ text: "创建" }, { text: "图表" }, { text: "条件格式" }, { text: "改格" }],
-                  },
-                ],
-                comments: [{ cell: "A1", text: "旁边有组合图和环形图，下一张表是整页图。", author: "ooxp" }],
-                headerFooters: [
-                  { kind: "odd", side: "header", text: "&C本季业绩" },
-                  { kind: "odd", side: "footer", text: "&R第 &P 页" },
-                ],
-                view: { frozenRows: 3, zoom: 110 },
-              },
-              {
-                name: "总览",
-                kind: "chartsheet",
-                type: "col",
-                title: "季度对比",
-                dataSheet: "业绩",
-                dataFrom: "AA21",
-                series: [
-                  { name: "一月", categories: ["甲", "乙", "丙", "丁"], values: [42, 28, 51, 19] },
-                  { name: "二月", categories: ["甲", "乙", "丙", "丁"], values: [38, 61, 22, 44] },
-                  { name: "三月", categories: ["甲", "乙", "丙", "丁"], values: [55, 33, 47, 36] },
-                ],
-              },
-            ],
-          },
-        },
+        name: "销售经营看板",
+        blurb: "KPI、月度公式、数据条、色阶、冻结窗格、筛选和柱状图，另有一张区域明细。写入「ooxp-example-销售经营看板.xlsx」。",
+        request: xlsxCreate,
       },
       {
-        name: "改本季数字",
-        blurb: "把标题和「甲」的二月改掉，仍写回「ooxp-example-业绩.xlsx」。请先写入上面那份。",
+        name: "改看板数字",
+        blurb: "把总览标题和 1 月的 2026 年收入改掉，仍写回「ooxp-example-销售经营看板.xlsx」。请先写入上面那份。",
         request: {
           schemaVersion: 1,
           action: "apply",
-          path: "ooxp-example-业绩.xlsx",
+          path: "ooxp-example-销售经营看板.xlsx",
           ops: [
-            { op: "setCell", id: "cell:业绩!A1", value: "本季业绩 · 已改" },
-            { op: "setCell", id: "cell:业绩!C4", value: 88 },
+            { op: "setCell", id: "cell:总览!A1", value: "2026 销售经营看板 · 已改" },
+            { op: "setCell", id: "cell:总览!C10", value: 920 },
           ],
         },
       },
@@ -205,160 +35,18 @@ const FORMATS = [
     color: "var(--docx)",
     items: [
       {
-        name: "一页说明",
-        blurb: "水印、页边、分色导语、字体宽窄、公式、图片、拼音、控件、行内图示和环形图，写入「ooxp-example-发布说明.docx」。",
-        request: {
-          schemaVersion: 1,
-          action: "create",
-          path: "ooxp-example-发布说明.docx",
-          format: "docx",
-          document: {
-            theme: {
-              name: "说明",
-              colors: { accent1: "0F6E6E", accent2: "C2410C", accent3: "1D4E89" },
-              fonts: { majorLatin: "Calibri", minorLatin: "Cambria", majorEa: "微软雅黑", minorEa: "宋体" },
-            },
-            pageBackground: { color: "FBF7F1" },
-            watermarks: [{ text: "OOXP" }],
-            pageBorders: {
-              offsetFrom: "page",
-              top: { val: "single", sz: 18, space: 14, color: "0F6E6E" },
-              left: { val: "single", sz: 18, space: 14, color: "0F6E6E" },
-              bottom: { val: "single", sz: 18, space: 14, color: "0F6E6E" },
-              right: { val: "single", sz: 18, space: 14, color: "0F6E6E" },
-            },
-            numberings: [{ kind: "bullet" }],
-            headers: [{ type: "default", paragraphs: [{ text: "ooxp  ·  发布说明" }] }],
-            footers: [{ type: "default", paragraphs: [{ text: "第 ", fields: [{ instr: " PAGE " }] }] }],
-            paragraphs: [
-              {
-                style: "Heading1",
-                text: "今晚发布",
-                footnote: "脚注、页眉和页码写在各自分部里。",
-                endnote: "尾注写在文末。",
-                bookmarks: [{ name: "top" }],
-                comments: [{ text: "批注", author: "ooxp", replies: [{ text: "回复" }] }],
-              },
-              {
-                runs: [
-                  { text: "三种格式", sz: 28, bold: true, color: "0F6E6E" },
-                  { text: "，一次写进", sz: 28 },
-                  { text: "同一个包", sz: 28, bold: true, color: "1D4E89" },
-                  { text: "。", sz: 28 },
-                ],
-                shd: { fill: "E7F3F1" },
-                hyperlinks: [{ text: "仓库", url: "https://github.com/gaoyia/ooxp" }],
-              },
-              { text: "工作簿写表和图", num: 1 },
-              { text: "文档写版式和图示", num: 1 },
-              { text: "演示文稿写页和切换", num: 1 },
-              {
-                runs: [
-                  { text: "黑体", font: "SimHei", eastAsiaFont: "黑体", sz: 32, bold: true },
-                  { text: "  ", sz: 32 },
-                  { text: "楷体", font: "KaiTi", eastAsiaFont: "楷体", sz: 32 },
-                  { text: "  ", sz: 32 },
-                  { text: "Cambria", font: "Cambria", sz: 32, italic: true, color: "1D4E89" },
-                  { text: "  ", sz: 32 },
-                  { text: "等宽", font: "Consolas", eastAsiaFont: "Consolas", sz: 28, highlight: "yellow" },
-                ],
-              },
-              {
-                runs: [
-                  { text: "窄", scale: 50, sz: 44, eastAsiaFont: "微软雅黑" },
-                  { text: "正", scale: 100, sz: 44, eastAsiaFont: "微软雅黑" },
-                  { text: "宽", scale: 200, sz: 44, color: "C2410C", eastAsiaFont: "微软雅黑" },
-                  { text: " 疏", spacing: 80, sz: 32, underline: "wave", color: "0F6E6E" },
-                  { text: "密", spacing: -12, sz: 32 },
-                  { text: "字宽", eastAsianLayout: { combine: true, combineBrackets: "square" }, sz: 32 },
-                ],
-                borders: { bottom: { val: "single", sz: 12, color: "0F6E6E" } },
-              },
-              { text: "", maths: [{ text: "a^2+b^2=c^2", kind: "display" }] },
-              { pictures: [{ file: "mark.png", cx: 2743200, cy: 1828800 }] },
-              {
-                text: "汉字",
-                rubies: [{ base: "汉字", rt: "hànzì" }],
-                crossRefs: [{ bookmark: "top" }],
-              },
-              {
-                contentControls: [
-                  { kind: "checkbox", checked: true },
-                  { kind: "dropDown", text: "甲", items: ["甲", "乙", "丙"] },
-                ],
-                fields: [{ instr: " DATE ", result: "2026-11-08" }],
-              },
-              {
-                text: "循环",
-                smartArts: [
-                  {
-                    layout: "cycle",
-                    kind: "inline",
-                    cx: 5029200,
-                    cy: 2286000,
-                    points: [{ text: "创建" }, { text: "打开" }, { text: "修改" }, { text: "保存" }],
-                  },
-                ],
-              },
-              {
-                text: "份额",
-                charts: [
-                  {
-                    type: "doughnut",
-                    kind: "inline",
-                    cx: 4572000,
-                    cy: 2743200,
-                    title: "份额",
-                    series: [{ name: "格式", categories: ["工作簿", "文档", "演示文稿"], values: [5, 3, 4] }],
-                  },
-                ],
-              },
-            ],
-            tables: [
-              {
-                after: 13,
-                align: "center",
-                look: { firstRow: true, bandedRows: false, firstColumn: false },
-                width: { type: "dxa", w: 9000 },
-                cols: [3000, 3000, 3000],
-                rowHeights: [
-                  { h: 460, rule: "atLeast" },
-                  { h: 720, rule: "atLeast" },
-                ],
-                cellMar: { top: 80, left: 120, bottom: 80, right: 120 },
-                borders: {
-                  top: { val: "single", sz: 12, color: "0F6E6E" },
-                  left: { val: "single", sz: 12, color: "0F6E6E" },
-                  bottom: { val: "single", sz: 12, color: "0F6E6E" },
-                  right: { val: "single", sz: 12, color: "0F6E6E" },
-                  insideH: { val: "single", sz: 4, color: "D6D3D1" },
-                  insideV: { val: "single", sz: 8, color: "FFFFFF" },
-                },
-                cellFormats: [
-                  { r: 1, c: 1, fill: "D8EFEA", vAlign: "center" },
-                  { r: 1, c: 2, fill: "F4E4D7", vAlign: "center" },
-                  { r: 1, c: 3, fill: "D6E4F5", vAlign: "center" },
-                  { r: 2, c: 1, fill: "FBF7F1", vAlign: "center" },
-                  { r: 2, c: 2, fill: "FBF7F1", vAlign: "center" },
-                  { r: 2, c: 3, fill: "FBF7F1", vAlign: "center" },
-                ],
-                cells: [
-                  ["工作簿", "文档", "演示文稿"],
-                  ["表和图", "图示和公式", "形状和切换"],
-                ],
-              },
-            ],
-          },
-        },
+        name: "经营分析报告",
+        blurb: "页眉页脚、水印、页边、标题、表格和柱状图，另有公式、图示、环形图、拼音、控件、脚注与批注。写入「ooxp-example-经营分析报告.docx」。",
+        request: docxCreate,
       },
       {
         name: "改标题",
-        blurb: "把第一段换成新标题，仍写回「ooxp-example-发布说明.docx」。请先写入上面那份。",
+        blurb: "把标题换成新文字，仍写回「ooxp-example-经营分析报告.docx」。请先写入上面那份。",
         request: {
           schemaVersion: 1,
           action: "apply",
-          path: "ooxp-example-发布说明.docx",
-          ops: [{ op: "setParaText", id: "para:00000001", text: "标题已经改过" }],
+          path: "ooxp-example-经营分析报告.docx",
+          ops: [{ op: "setParaText", id: "para:00000001", text: "2026 年度产品经营分析报告 · 已改" }],
         },
       },
     ],
@@ -369,192 +57,18 @@ const FORMATS = [
     color: "var(--pptx)",
     items: [
       {
-        name: "六页发布会",
-        blurb: "每页一张背景，角落三处装饰在进页时自动出现。内容是表格、图示和图表。写入「ooxp-example-发布会.pptx」。",
-        request: {
-          schemaVersion: 1,
-          action: "create",
-          path: "ooxp-example-发布会.pptx",
-          format: "pptx",
-          presentation: {
-            sections: [
-              { name: "开场", start: 1 },
-              { name: "图", start: 3 },
-              { name: "数字", start: 5 },
-            ],
-            handout: { header: "ooxp", footer: "发布会" },
-            slides: [
-              {
-                shapes: [
-                  { text: "今晚发布", sz: 5400, bold: true, color: "0F6E6E", align: "ctr", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" },
-                  { text: "六页排开", sz: 1800, color: "6F655C", align: "ctr", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" },
-                ],
-                pictures: slidePictures("bg-two.png"),
-                tables: [
-                  coverCard(838200, "工作簿", "表和图", "E7F2F0"),
-                  coverCard(4416733, "文档", "图示和公式", "F3EEE6"),
-                  coverCard(7995266, "演示文稿", "形状和切换", "E7EDF5"),
-                ],
-                comments: [{ text: "封面批注", author: "ooxp", x: 420000, y: 6000000 }],
-                transition: { type: "fade", dur: 800 },
-                anims: decoAnims([
-                  { type: "flyIn", shape: 2, trigger: "with", delay: 60, dur: 480 },
-                  { type: "fade", table: 1, trigger: "with", delay: 40, dur: 460 },
-                  { type: "fade", table: 2, trigger: "with", delay: 70, dur: 460 },
-                  { type: "fade", table: 3, trigger: "with", delay: 70, dur: 460 },
-                ]),
-                notes: "封面。第一个文本框是 slide:1/shape:2。",
-              },
-              {
-                shapes: [{ text: "三件事", sz: 4000, bold: true, color: "1C1917", align: "l", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" }],
-                pictures: slidePictures("bg-one.png"),
-                tables: [
-                  {
-                    rows: 3,
-                    cols: 2,
-                    x: 838200,
-                    y: 1900000,
-                    cx: 9800000,
-                    cy: 3600000,
-                    colWidths: [1500000, 8300000],
-                    rowHeights: [1200000, 1200000, 1200000],
-                    tableStyleId: null,
-                    tblLook: null,
-                    cells: [
-                      [
-                        { text: "01", fill: "E7F2F0", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                        { text: "表、图、条件格式", fill: "F6F5F1", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                      ],
-                      [
-                        { text: "02", fill: "F3EEE6", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                        { text: "版式、图示、公式", fill: "F6F5F1", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                      ],
-                      [
-                        { text: "03", fill: "E7EDF5", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                        { text: "页、形状、切换", fill: "F6F5F1", borders: { left: { color: "FFFFFF", width: 6350 }, right: { color: "FFFFFF", width: 6350 }, top: { color: "FFFFFF", width: 6350 }, bottom: { color: "FFFFFF", width: 6350 } } },
-                      ],
-                    ],
-                  },
-                ],
-                transition: { type: "push", dir: "l", dur: 700 },
-                anims: decoAnims([{ type: "fade", table: 1, trigger: "with", delay: 80, dur: 500 }]),
-                notes: "三行目录。",
-              },
-              {
-                shapes: [{ text: "版式", sz: 4000, bold: true, color: "1C1917", align: "l", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" }],
-                pictures: slidePictures("bg-one.png"),
-                smartArts: [
-                  {
-                    layout: "list",
-                    x: 2200000,
-                    y: 1900000,
-                    cx: 7800000,
-                    cy: 4000000,
-                    points: [{ text: "页边" }, { text: "页眉" }, { text: "公式" }, { text: "水印" }],
-                  },
-                ],
-                transition: { type: "wipe", dir: "r", dur: 700 },
-                anims: decoAnims([{ type: "fade", smartArt: 1, trigger: "with", delay: 100, dur: 600 }]),
-                notes: "左图右清单。",
-              },
-              {
-                shapes: [{ text: "四步", sz: 4000, bold: true, color: "1C1917", align: "l", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" }],
-                pictures: slidePictures("bg-one.png"),
-                smartArts: [
-                  {
-                    layout: "cycle",
-                    x: 2600000,
-                    y: 1750000,
-                    cx: 7000000,
-                    cy: 4400000,
-                    points: [{ text: "创建" }, { text: "打开" }, { text: "修改" }, { text: "保存" }],
-                  },
-                ],
-                transition: { type: "wheel", spokes: 4, dur: 700 },
-                anims: decoAnims([{ type: "zoom", smartArt: 1, trigger: "with", delay: 80, dur: 640 }]),
-                notes: "循环四步。",
-              },
-              {
-                shapes: [{ text: "三个月", sz: 4000, bold: true, color: "1C1917", align: "l", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" }],
-                pictures: slidePictures("bg-one.png"),
-                charts: [
-                  {
-                    type: "col",
-                    title: "销量",
-                    x: 838200,
-                    y: 1750000,
-                    cx: 6000000,
-                    cy: 4300000,
-                    series: [
-                      { name: "一月", categories: ["甲", "乙", "丙", "丁"], values: [42, 28, 51, 19] },
-                      { name: "二月", categories: ["甲", "乙", "丙", "丁"], values: [38, 61, 22, 44] },
-                      { name: "三月", categories: ["甲", "乙", "丙", "丁"], values: [55, 33, 47, 36] },
-                    ],
-                  },
-                ],
-                tables: [
-                  {
-                    rows: 5,
-                    cols: 2,
-                    x: 7400000,
-                    y: 2100000,
-                    cx: 3700000,
-                    cy: 3200000,
-                    tableStyleId: null,
-                    tblLook: null,
-                    cells: [
-                      [
-                        { text: "产品", fill: "D8EFEA" },
-                        { text: "二月", fill: "D8EFEA" },
-                      ],
-                      [
-                        { text: "甲", fill: "FBF7F1" },
-                        { text: "38", fill: "FBF7F1" },
-                      ],
-                      [
-                        { text: "乙", fill: "FBF7F1" },
-                        { text: "61", fill: "FBF7F1" },
-                      ],
-                      [
-                        { text: "丙", fill: "FBF7F1" },
-                        { text: "22", fill: "FBF7F1" },
-                      ],
-                      [
-                        { text: "丁", fill: "FBF7F1" },
-                        { text: "44", fill: "FBF7F1" },
-                      ],
-                    ],
-                  },
-                ],
-                transition: { type: "split", orient: "horz", dur: 700 },
-                anims: decoAnims([
-                  { type: "wipe", chart: 1, trigger: "with", delay: 80, dur: 700 },
-                  { type: "fade", table: 1, trigger: "with", delay: 80, dur: 500 },
-                ]),
-                notes: "左图右表。",
-              },
-              {
-                shapes: [
-                  { text: "回到封面", sz: 4000, bold: true, color: "0F6E6E", align: "ctr", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑", slide: 1 },
-                  { text: "写完了", sz: 1800, color: "6F655C", align: "ctr", textAnchor: "ctr", font: "Calibri", eastAsiaFont: "微软雅黑" },
-                ],
-                pictures: slidePictures("bg-two.png"),
-                transition: { type: "doors", dur: 700 },
-                anims: decoAnims([{ type: "flyIn", shape: 2, trigger: "with", delay: 100, dur: 520 }]),
-                notes: "标题链回第一页。",
-              },
-            ],
-          },
-        },
+        name: "产品战略发布",
+        blurb: "五页演示，带不同切换和逐项动画。目录单击展开，数据页单击出图，目标页单击出表。写入「ooxp-example-产品战略发布.pptx」。",
+        request: pptxCreate,
       },
       {
-        name: "改封面",
-        blurb: "改第一页第一个文本框，仍写回「ooxp-example-发布会.pptx」。请先写入上面那份。",
+        name: "改封面标题",
+        blurb: "把封面标题改掉，仍写回「ooxp-example-产品战略发布.pptx」。请先写入上面那份。",
         request: {
           schemaVersion: 1,
           action: "apply",
-          path: "ooxp-example-发布会.pptx",
-          ops: [{ op: "setShapeText", id: "slide:1/shape:2", text: "ooxp · 已改" }],
+          path: "ooxp-example-产品战略发布.pptx",
+          ops: [{ op: "setShapeText", id: "slide:1/shape:7", text: "2026 产品战略发布 · 已改" }],
         },
       },
     ],
@@ -701,147 +215,218 @@ const UI = {
 };
 
 const EN_TEXT = {
-  "工作簿": "Workbook",
-  "业绩看板": "Results board",
-  "深色标题、数据条、色阶、图标集、迷你图、组合图、环形图和循环图示，另有一整页图表。写入「ooxp-example-业绩.xlsx」。": "A dark title, data bars, a color scale, an icon set, sparklines, a combo chart, a doughnut, and a cycle diagram, plus a full-page chart. Writes ooxp-example-results.xlsx.",
-  "ooxp-example-业绩.xlsx": "ooxp-example-results.xlsx",
-  "业绩": "Results",
-  "本季业绩": "This quarter",
-  "产品": "Product",
-  "一月": "January",
-  "二月": "February",
-  "三月": "March",
-  "合计": "Total",
-  "趋势": "Trend",
-  "甲": "A",
-  "乙": "B",
-  "丙": "C",
-  "丁": "D",
-  "三个月": "Three months",
-  "合计占比": "Share",
-  "创建": "Create",
-  "图表": "a chart",
-  "条件格式": "Formats",
-  "改格": "Edit",
-  "旁边有组合图和环形图，下一张表是整页图。": "The combo chart and the doughnut sit beside this table. The next sheet is a full-page chart.",
-  "&C本季业绩": "&CThis quarter",
-  "&R第 &P 页": "&RPage &P",
-  "总览": "Overview",
-  "季度对比": "Quarter",
-  "改本季数字": "Edit this quarter",
-  "把标题和「甲」的二月改掉，仍写回「ooxp-example-业绩.xlsx」。请先写入上面那份。": "Change the title and A's February, then write back to ooxp-example-results.xlsx. Create the file above first.",
-  "cell:业绩!A1": "cell:Results!A1",
-  "cell:业绩!C4": "cell:Results!C4",
-  "本季业绩 · 已改": "This quarter · edited",
-  "文档": "Document",
-  "一页说明": "Release notes",
-  "水印、页边、分色导语、字体宽窄、公式、图片、拼音、控件、行内图示和环形图，写入「ooxp-example-发布说明.docx」。": "A watermark, page border, colored lead, font width, a formula, a picture, ruby text, content controls, an inline diagram, and a doughnut. Writes ooxp-example-notes.docx.",
-  "三种格式": "Three formats",
-  "，一次写进": ", into ",
-  "同一个包": "one package",
-  "工作簿写表和图": "Workbook: tables and charts",
-  "文档写版式和图示": "Document: layout and a diagram",
-  "演示文稿写页和切换": "Slides: pages and transitions",
-  "表和图": "Tables and charts",
-  "图示和公式": "A diagram and formulas",
-  "形状和切换": "Shapes and transitions",
-  "ooxp-example-发布说明.docx": "ooxp-example-notes.docx",
-  "说明": "Notes",
-  "ooxp  ·  发布说明": "ooxp  ·  Notes",
-  "第 ": "Page ",
-  "今晚发布": "Tonight",
-  "脚注、页眉和页码写在各自分部里。": "The footnote, header, and page number each live in their own part.",
-  "尾注写在文末。": "The endnote sits at the end.",
-  "批注": "Comment",
-  "回复": "Reply",
-  "这一页同时有": "This page has ",
-  "分色正文": "colored text",
-  "、": ", ",
-  "图示": "a diagram",
-  "和": " and ",
-  "。": ".",
-  "仓库": "Repository",
-  "工作簿：数据条、色阶、图标集": "Workbook: data bars, color scale, icon set",
-  "文档：页边、图示、环形图": "Document: page border, diagram, doughnut",
-  "演示文稿：四页切换": "Slides: four transitions",
-  "黑体": "Hei",
-  "楷体": "Kai",
-  "等宽": "Mono",
-  "窄": "Narrow",
-  "正": "Regular",
   "宽": "Wide",
-  " 疏": " Loose",
   "密": "Tight",
-  "编号": "Item",
-  "左\t中": "Left\tCenter",
-  "循环": "Cycle",
-  "打开": "Open",
-  "修改": "Change",
-  "保存": "Save",
-  "份额": "Share",
-  "格式": "Format",
-  "看到什么": "What you see",
-  "写在哪": "Where",
-  "数据条和色阶": "Data bars and color scale",
-  "业绩表": "Results sheet",
-  "整页柱状图": "Full-page columns",
-  "四页切换": "Four transitions",
-  "发布会": "Briefing",
-  "中": "Medium",
-  "压进窄列": "Packed",
-  "中等宽度": "Medium width",
-  "这一列最宽，用来对照列宽": "This column is the widest",
-  "改标题": "Edit the title",
-  "把第一段换成新标题，仍写回「ooxp-example-发布说明.docx」。请先写入上面那份。": "Change the first paragraph and write back to ooxp-example-notes.docx. Create the file above first.",
-  "标题已经改过": "Title updated",
+  "正": "Regular",
+  "窄": "Narrow",
+  " 黄": " Mark",
+  "1月": "Jan",
+  "2月": "Feb",
+  "3月": "Mar",
+  "4月": "Apr",
+  "5月": "May",
+  "6月": "Jun",
+  "交付": "Deliver",
+  "其他": "Other",
+  "区域": "Region",
+  "华东": "East China",
+  "华北": "North China",
+  "华南": "South China",
+  "合计": "Total",
+  "同比": "YoY",
+  "周明": "Zhou Ming",
+  "备注": "Note",
+  "季度": "Quarter",
+  "实施": "Services",
+  "开场": "Opening",
+  "总览": "Overview",
+  "指标": "Metric",
+  "收入": "Revenue",
+  "收尾": "Close",
+  "月份": "Month",
+  "林夕": "Lin Xi",
+  "正文": "Body",
+  "渠道": "Channel",
+  "状态": "Status",
+  "目标": "Target",
+  "续费": "Renew",
+  "苏禾": "Su He",
+  "西南": "Southwest",
+  "订阅": "Subscribe",
+  "说明": "Notes",
+  "陈可": "Chen Ke",
+  "预测": "Forecast",
+  "  疏": "  Loose",
+  " 与 ": " and ",
+  "1 月": "January",
+  "2 月": "February",
+  "3 月": "March",
+  "4 月": "April",
+  "5 月": "May",
+  "6 月": "June",
+  "毛利率": "Gross margin",
+  "负责人": "Owner",
+  "达成率": "Attainment",
+  "企业订阅": "Enterprise subscriptions",
+  "假期影响": "Holiday effect",
+  "公式说明": "Formulas",
+  "关键动作": "Key move",
+  "区域明细": "Regions",
+  "同比变化": "YoY change",
+  "同比增速": "YoY growth",
+  "复核项：": "Review: ",
+  "收入构成": "Revenue mix",
+  "数据版本": "Data version",
+  "核心数据": "Core numbers",
+  "活跃客户": "Active customers",
+  "渠道下沉": "broader channels",
+  "生成工具": "Tool",
+  "生成方式": "How it was made",
+  "目标拆解": "Targets",
+  "示例文档": "Sample document",
+  "示例演示": "Sample deck",
+  "示例科技": "Sample Co.",
+  "稳健增长": "steady growth",
+  "第一季度": "Q1",
+  "第三季度": "Q3",
+  "第二季度": "Q2",
+  "第四季度": "Q4",
+  "经营回顾": "Review",
+  "结论  ": "Conclusion  ",
+  "营业收入": "Revenue",
+  "落地节奏": "Cadence",
+  "谢谢观看": "Thank you",
+  "企业版上线": "Enterprise edition launched",
+  "半年度收官": "Half-year close",
+  "工作簿说明": "About this workbook",
+  "示例工作簿": "Sample workbook",
+  "16.9 万": "169,000",
+  "2025 年": "2025",
+  "2026 年": "2026",
+  "一、执行摘要": "1. Executive summary",
+  "三、季度趋势": "3. Quarterly trend",
+  "二、核心指标": "2. Core metrics",
+  "季度目标拆解": "Quarterly targets",
+  "核心经营数据": "Core operating numbers",
+  "渠道下沉启动": "Channel expansion started",
+  "续费流程改造": "Renewal process redesign",
+  "阅读提示  ": "How to read  ",
+  "：营业收入 ": ": revenue ",
+  "企业版订阅上线": "Enterprise subscription launch",
+  "四、下一步行动": "4. Next steps",
+  "增长主要来自 ": "Growth came mainly from ",
+  "春节前交付集中": "Deliveries clustered before the holiday",
+  "活跃客户(万)": "Active customers (10k)",
+  "活跃客户（万）": "Active customers (10k)",
+  "渠道下沉与培训": "Channel expansion and training",
+  "净推荐值 NPS": "NPS",
+  "华东交付中心投产": "East China delivery center opened",
+  "工具与格式说明：": "Tools and format: ",
+  "收入目标（万元）": "Revenue target (10k yuan)",
+  "营业收入（万元）": "Revenue (10k yuan)",
+  "10,760 万元": "107.6 million yuan",
+  "ooxp 试用示例": "ooxp sample",
+  "ooxp 项目主页": "ooxp project",
+  "五、附注与资料来源": "5. Notes and sources",
+  "同比增速写成公式：": "Year-over-year growth as a formula:",
+  "图 2  经营闭环": "Figure 2  Operating loop",
+  "月度收入对比（万元）": "Monthly revenue (10k yuan)",
+  "2026 产品战略发布": "2026 product strategy",
+  "2026 销售经营看板": "2026 sales board",
+  "分季度营业收入（万元）": "Quarterly revenue (10k yuan)",
+  "月度收入明细与达成情况": "Monthly revenue and attainment",
+  "目录 / Agenda": "Agenda",
+  "经营两个字可以带拼音。": "经营 can carry a ruby gloss.",
+  "查看领域 JSON 契约": "Read the domain JSON contract",
+  "改已有段落仍用 apply。": "Editing an existing paragraph still uses apply.",
+  "2026 年度产品经营分析报告": "2026 annual business review",
+  "六、这份 JSON 还能写什么": "6. What else this JSON can write",
+  "2026 年前三季度，业务保持 ": "Through Q3 2026, the business stayed on ",
+  "内部资料 · 仅供演示   第 ": "Internal · demo only   Page ",
+  "区域销售明细（2026 上半年）": "Regional sales (2026 H1)",
+  "尾注集中在文末，用来放资料来源。": "The endnote sits at the end and holds the source.",
+  "把年度目标落到每个季度、每个负责人": "Break the annual target down by quarter and owner",
+  "从数据到决策：一套可复制的增长方法论": "From numbers to decisions: a repeatable growth method",
+  "四个议题，串起从复盘到落地的完整闭环": "Four topics, from the review through to delivery",
+  "图 1  分季度营业收入对比（万元）": "Figure 1  Quarterly revenue (10k yuan)",
+  "OOXML, pptx, 演示, 示例": "OOXML, pptx, slides, sample",
+  "OOXML, xlsx, 看板, 示例": "OOXML, xlsx, board, sample",
+  "图 3  2026 年收入构成（万元）": "Figure 3  2026 revenue mix (10k yuan)",
+  "图表和图示都是行内的，不会浮到标题上。": "The chart and the diagram are inline, so they do not cover the heading.",
+  "这一章只负责炫技，不改前面的经营结论。": "This section only shows what the file can hold. It does not change the findings above.",
+  "Q & A   ·   数据与资料可下载": "Q & A   ·   The numbers and the files can be downloaded",
+  "下面每一样都由 create 直接写出：": "Each of the following is written by create:",
+  "脚注写在本页底部，和正文的批注不是一处。": "The footnote sits at the bottom of the page, separate from the comment.",
+  "=IF(F10>=1,\"达标\",\"跟进\")": "=IF(F10>=1,\"Met\",\"Watch\")",
+  "=IF(F11>=1,\"达标\",\"跟进\")": "=IF(F11>=1,\"Met\",\"Watch\")",
+  "=IF(F12>=1,\"达标\",\"跟进\")": "=IF(F12>=1,\"Met\",\"Watch\")",
+  "=IF(F13>=1,\"达标\",\"跟进\")": "=IF(F13>=1,\"Met\",\"Watch\")",
+  "=IF(F14>=1,\"达标\",\"跟进\")": "=IF(F14>=1,\"Met\",\"Watch\")",
+  "=IF(F15>=1,\"达标\",\"跟进\")": "=IF(F15>=1,\"Met\",\"Watch\")",
+  "OOXML, docx, 示例, 经营分析": "OOXML, docx, sample, business review",
+  "以上对象都在同一份 create 请求里。": "All of these objects are in the same create request.",
+  "建立季度滚动预测机制，减少一次性预算偏差。": "Set up a rolling quarterly forecast so the budget is not fixed once a year.",
+  "2026 年前三季度 · 收入与利润同步改善": "Through Q3 2026 · revenue and profit improved together",
+  "建立滚动预测机制，让资源投入跟着结果动态调整。": "A rolling forecast lets spending follow the results.",
+  "按季度拆分目标，明确负责人、里程碑与验收口径。": "Split the target by quarter, with an owner, a milestone, and a definition of done.",
+  "OOXP  ·  2026 年度产品经营分析报告": "OOXP  ·  2026 annual business review",
+  "ooxp-example-产品战略发布.pptx": "ooxp-example-strategy.pptx",
+  "ooxp-example-经营分析报告.docx": "ooxp-example-report.docx",
+  "ooxp-example-销售经营看板.xlsx": "ooxp-example-sales.xlsx",
+  "数据来源：合并报表（模拟数据） · 03 / 05": "Source: consolidated figures (sample) · 03 / 05",
+  "用一张图看清季度趋势，把 KPI 与业务动作对齐。": "One chart for the quarterly trend, with KPIs lined up to the work.",
+  " 两条主线；成本侧通过供应链集中采购对冲了部分投入。": ". Central purchasing offset part of the extra cost.",
+  "在华东与华南新增 3 个区域交付中心，缩短实施周期。": "Open three more delivery centers in East and South China to shorten implementation.",
+  "按区域汇总的季度收入，含 SUM 公式与色阶条件格式": "Quarterly revenue by region, with SUM formulas and a color scale",
+  "由 ooxp 领域 JSON 生成的 Excel 示例": "An Excel sample generated from ooxp domain JSON",
+  "由 ooxp 领域 JSON 生成的 Word 文档示例": "A Word sample generated from ooxp domain JSON",
+  "公式、循环图示、环形图、字宽字距、拼音、复选框和交叉引用。": "a formula, a cycle diagram, a doughnut, character width and spacing, ruby text, a checkbox, and a cross-reference.",
+  "完成企业版订阅的续费流程改造，目标把续费率提升至 92%。": "Redesign enterprise-subscription renewal, aiming for a 92% renewal rate.",
+  "把毛利率口径统一到财务新准则，并在 12 月完成回溯调整。": "Align gross margin with the new accounting policy and finish the look-back in December.",
+  "注：Q4 为预测值，按渠道签约节奏折算 · 04 / 05": "Note: Q4 is a forecast from the channel pipeline · 04 / 05",
+  "复盘 2025 年的收入结构与渠道变化，找出真正的增长来源。": "Review the 2025 revenue mix and channel shift, and name the real source of growth.",
+  "由 ooxp 领域 JSON 生成的 PowerPoint 示例": "A PowerPoint sample generated from ooxp domain JSON",
+  "下表对比 2025 与 2026 年的关键经营指标（单位见首列）。": "The table compares key 2025 and 2026 metrics. Units are in the first column.",
+  "ooxp（领域 JSON → OOXML），未调用 Excel 生成": "ooxp (domain JSON to OOXML), written without Excel",
+  "含合并单元格、KPI 卡片、公式、条件格式、冻结窗格、筛选与嵌入图表": "Merged cells, KPI cards, formulas, conditional formatting, a frozen pane, a filter, and an embedded chart",
+  "说明：2026 年第四季度为预测值，按渠道签约节奏与历史季节性折算。": "Note: Q4 2026 is a forecast from the channel pipeline and the usual seasonal pattern.",
+  "，同比增长 27.8%；毛利率提升 3.4 个百分点至 44.6%。": ", up 27.8% year over year. Gross margin rose 3.4 points to 44.6%.",
+  "数据口径：合并报表 · 更新于 2026-11-10 · 金额单位 万元": "Basis: consolidated figures · updated 2026-11-10 · amounts in 10k yuan",
+  "公式按字符串保存，本工具不计算；用 Excel 打开后会自动重算并显示结果": "Formulas are stored as text. This tool does not calculate them. Excel recalculates when the file opens.",
+  "5 页 16:9 演示文稿：封面、议程、数据图表、目标表格、结束页，带切换和逐项动画": "A 5-slide 16:9 deck: cover, agenda, chart, target table, and close, with transitions and per-object animation",
+  "OOXP 领域 JSON 生成示例   ·   2026.11   ·   内部资料": "OOXP domain-JSON sample   ·   2026.11   ·   Internal",
+  "OOXP  ·  用领域 JSON 读写 Office 文件   ·   05 / 05": "OOXP  ·  Read and write Office files with domain JSON   ·   05 / 05",
+  "KPI 卡片、月度明细、SUM/IF 公式、数据条与三色刻度、冻结窗格、自动筛选、嵌入柱状图": "KPI cards, a monthly table, SUM/IF formulas, data bars and a three-color scale, a frozen pane, an autofilter, and an embedded column chart",
+  "在收入与利润双增的前提下，建议把资源继续向高毛利的订阅业务倾斜，并保持对交付产能的同步投入。": "With both revenue and profit up, keep shifting effort toward high-margin subscriptions and match delivery capacity to that shift.",
+  "包含标题层级、混排文字、项目符号、带底纹表格、嵌入式图表，以及公式、图示、环形图、拼音、控件和水印的完整示例": "Headings, mixed runs, bullets, a shaded table, an embedded chart, plus a formula, a diagram, a doughnut, ruby text, content controls, and a watermark",
+  "OOXP 领域 JSON 生成示例   |   数据截至 2026 年第三季度   |   编制日期 2026-11-10": "OOXP domain-JSON sample   |   Figures through Q3 2026   |   Prepared 2026-11-10",
+  "本文档由一份 JSON 请求整包生成。前五章是经营分析，第六章集中演示公式、图示、环形图、字距、拼音、控件、脚注、批注和交叉引用。未调用 Office。": "This document is created from one JSON request. The first five sections are the business review. Section 6 shows a formula, a diagram, a doughnut, spacing, ruby text, controls, a footnote, a comment, and a cross-reference. Office was not called.",
+  "工作簿": "Workbook",
+  "文档": "Document",
   "演示文稿": "Slides",
-  "六页发布会": "Six-slide briefing",
-  "每页一张背景，角落三处装饰在进页时自动出现。内容是表格、图示和图表。写入「ooxp-example-发布会.pptx」。": "Each slide has a background. Three corner ornaments appear as the slide opens. The content is a table, a diagram, or a chart. Writes ooxp-example-briefing.pptx.",
-  "页边": "Page edge",
-  "页眉": "Header",
-  "公式": "Formula",
-  "水印": "Watermark",
-  "左图右表。": "Chart on the left, table on the right.",
-  "版式": "Layout",
-  "写完了": "Done",
-  "六页排开": "Six slides",
-  "三件事": "Three things",
-  "表、图、条件格式": "Tables, charts, formats",
-  "版式、图示、公式": "Layout, diagrams, formulas",
-  "页、形状、切换": "Pages, shapes, transitions",
-  "一边图一边清单": "Picture and a list",
-  "封面": "Cover",
-  "色卡": "Cards",
-  "插图": "Picture",
-  "四步": "Four steps",
-  "回到封面": "Back to the cover",
-  "点这一行回到第一页": "This line returns to the first slide",
-  "封面批注": "Cover comment",
-  "三张色卡。": "Three color cards.",
-  "三行目录。": "Three rows.",
-  "左图右清单。": "Picture on the left, list on the right.",
-  "循环四步。": "A four-step cycle.",
-  "标题链回第一页。": "The title links back to the first slide.",
-  "ooxp-example-发布会.pptx": "ooxp-example-briefing.pptx",
-  "开场": "Open",
-  "路线": "Route",
-  "数字": "Numbers",
-  "四页，四种切换": "Four slides, four transitions",
-  "封面。第一个文本框是 slide:1/shape:2。": "Cover. The first text box is slide:1/shape:2.",
-  "组织图示。": "Organization diagram.",
-  "结构": "Structure",
-  "环形图铺在标题下面。": "The doughnut sits under the title.",
-  "销量": "Sales",
-  "上面三个合计，下面是柱状图。": "Three totals above, a column chart below.",
-  "改封面": "Edit the cover",
-  "改第一页第一个文本框，仍写回「ooxp-example-发布会.pptx」。请先写入上面那份。": "Change the first text box on the first slide and write back to ooxp-example-briefing.pptx. Create the file above first.",
-  "ooxp · 已改": "ooxp · edited",
+  "销售经营看板": "Sales board",
+  "改看板数字": "Edit the board",
+  "KPI、月度公式、数据条、色阶、冻结窗格、筛选和柱状图，另有一张区域明细。写入「ooxp-example-销售经营看板.xlsx」。": "KPIs, monthly formulas, data bars, a color scale, a frozen pane, a filter, and a column chart, plus a regional sheet. Writes ooxp-example-sales.xlsx.",
+  "把总览标题和 1 月的 2026 年收入改掉，仍写回「ooxp-example-销售经营看板.xlsx」。请先写入上面那份。": "Change the overview title and January 2026 revenue, then write back to ooxp-example-sales.xlsx. Create the file above first.",
+  "2026 销售经营看板 · 已改": "2026 sales board · edited",
+  "cell:总览!A1": "cell:Overview!A1",
+  "cell:总览!C10": "cell:Overview!C10",
+  "经营分析报告": "Business review",
+  "改标题": "Edit the title",
+  "页眉页脚、水印、页边、标题、表格和柱状图，另有公式、图示、环形图、拼音、控件、脚注与批注。写入「ooxp-example-经营分析报告.docx」。": "A header and footer, watermark, page border, headings, a table, and a column chart, plus a formula, a diagram, a doughnut, ruby text, controls, a footnote, and a comment. Writes ooxp-example-report.docx.",
+  "把标题换成新文字，仍写回「ooxp-example-经营分析报告.docx」。请先写入上面那份。": "Replace the title and write back to ooxp-example-report.docx. Create the file above first.",
+  "2026 年度产品经营分析报告 · 已改": "2026 annual business review · edited",
+  "产品战略发布": "Product strategy",
+  "改封面标题": "Edit the cover",
+  "五页演示，带不同切换和逐项动画。目录单击展开，数据页单击出图，目标页单击出表。写入「ooxp-example-产品战略发布.pptx」。": "Five slides with different transitions and per-object animation. The agenda advances on click, the chart waits for a click, and so does the table. Writes ooxp-example-strategy.pptx.",
+  "把封面标题改掉，仍写回「ooxp-example-产品战略发布.pptx」。请先写入上面那份。": "Change the cover title and write back to ooxp-example-strategy.pptx. Create the file above first.",
+  "2026 产品战略发布 · 已改": "2026 product strategy · edited",
 };
 
 const SKIP_TEXT = new Set([
   "font", "eastAsiaFont", "majorLatin", "minorLatin", "majorEa", "minorEa",
   "author", "url", "instr", "file", "prst", "val", "rule", "type", "kind", "op",
-  "action", "format", "layout", "ref", "formula", "sqref", "cell", "numFmt",
+  "action", "format", "layout", "ref", "sqref", "cell", "numFmt",
   "align", "underline", "highlight", "combineBrackets", "pattern", "rgb", "color",
   "side", "offsetFrom", "dir", "wrap",
 ]);
@@ -1133,88 +718,6 @@ function setBusy(next) {
   for (const button of document.querySelectorAll(".write")) button.disabled = next || !session;
 }
 
-let markBytes = null;
-let deckCache = null;
-
-function drawPng(width, height, paint) {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext("2d");
-  ctx.textBaseline = "top";
-  paint(ctx, width, height);
-  return new Promise((resolvePromise, reject) => {
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        reject(new Error(lang === "zh" ? "页面没有画出插图" : "The page could not draw a picture"));
-        return;
-      }
-      resolvePromise(new Uint8Array(await blob.arrayBuffer()));
-    }, "image/png");
-  });
-}
-
-function paintBg(ctx, w, h, holes, lineY) {
-  ctx.fillStyle = "#FFFFFF";
-  ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = "rgba(14, 92, 86, 0.07)";
-  ctx.beginPath();
-  ctx.arc(60, h + 40, 460, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#0E5C56";
-  ctx.fillRect(132, lineY, 1656, 3);
-  for (const hole of holes) ctx.clearRect(hole.x, hole.y, hole.w, hole.h);
-}
-
-function paintDot(ctx, w, h) {
-  ctx.fillStyle = "#0E5C56";
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, w / 2 - 2, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function paintRing(ctx, w, h) {
-  ctx.strokeStyle = "#C2410C";
-  ctx.lineWidth = 28;
-  ctx.beginPath();
-  ctx.arc(w / 2, h / 2, w / 2 - 24, 0, Math.PI * 2);
-  ctx.stroke();
-}
-
-function paintBar(ctx, w, h) {
-  ctx.fillStyle = "#0E5C56";
-  ctx.fillRect(0, 0, w, h);
-}
-
-async function demoMark() {
-  if (markBytes) return markBytes;
-  markBytes = await drawPng(240, 160, (ctx) => {
-    ctx.fillStyle = "#0E5C56";
-    ctx.fillRect(0, 0, 240, 160);
-    ctx.fillStyle = "#FFFDF8";
-    ctx.font = "600 64px Segoe UI, Microsoft YaHei, sans-serif";
-    ctx.textBaseline = "middle";
-    ctx.fillText("ooxp", 48, 80);
-  });
-  return markBytes;
-}
-
-async function deckPictures() {
-  if (deckCache) return deckCache;
-  const one = [{ x: 116, y: 92, w: 1688, h: 158 }];
-  const two = [{ x: 116, y: 92, w: 1688, h: 302 }];
-  const files = {
-    "mark.png": await demoMark(),
-    "bg-one.png": await drawPng(1920, 1080, (ctx, w, h) => paintBg(ctx, w, h, one, 276)),
-    "bg-two.png": await drawPng(1920, 1080, (ctx, w, h) => paintBg(ctx, w, h, two, 418)),
-    "deco-dot.png": await drawPng(160, 160, paintDot),
-    "deco-ring.png": await drawPng(800, 800, paintRing),
-    "deco-bar.png": await drawPng(32, 400, paintBar),
-  };
-  deckCache = files;
-  return files;
-}
-
 async function runRequest(raw, statusEl) {
   if (!session) throw new Error(t("libFail"));
   if (!root) throw new Error(t("needDir"));
@@ -1235,8 +738,6 @@ async function runRequest(raw, statusEl) {
     }
   }
   session.clear_files();
-  const pictures = await deckPictures();
-  for (const [name, bytes] of Object.entries(pictures)) session.put_file(name, bytes);
   const before = listing.slice();
   const out = session.run(JSON.stringify(request), pkg);
   if (!out.ok) {

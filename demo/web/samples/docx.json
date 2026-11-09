@@ -1,0 +1,816 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "ooxp-example-经营分析报告.docx",
+  "document": {
+    "props": {
+      "title": "2026 年度产品经营分析报告",
+      "subject": "由 ooxp 领域 JSON 生成的 Word 文档示例",
+      "creator": "ooxp 试用示例",
+      "description": "包含标题层级、混排文字、项目符号、带底纹表格、嵌入式图表，以及公式、图示、环形图、拼音、控件和水印的完整示例",
+      "keywords": "OOXML, docx, 示例, 经营分析",
+      "category": "示例文档",
+      "company": "示例科技",
+      "custom": [
+        {
+          "name": "生成方式",
+          "value": "ooxp create",
+          "type": "lpwstr"
+        },
+        {
+          "name": "数据版本",
+          "value": 2026,
+          "type": "i4"
+        }
+      ]
+    },
+    "theme": {
+      "name": "经营",
+      "colors": {
+        "accent1": "1F4E79",
+        "accent2": "2E75B6",
+        "accent3": "C00000",
+        "accent4": "5B6B7B",
+        "accent5": "9DB7D6",
+        "accent6": "EAF1FB"
+      },
+      "fonts": {
+        "majorLatin": "Calibri",
+        "minorLatin": "Calibri",
+        "majorEa": "微软雅黑",
+        "minorEa": "微软雅黑"
+      }
+    },
+    "watermarks": [
+      {
+        "text": "OOXP"
+      }
+    ],
+    "pageBorders": {
+      "offsetFrom": "page",
+      "top": {
+        "val": "single",
+        "sz": 12,
+        "space": 18,
+        "color": "1F4E79"
+      },
+      "left": {
+        "val": "single",
+        "sz": 12,
+        "space": 18,
+        "color": "1F4E79"
+      },
+      "bottom": {
+        "val": "single",
+        "sz": 12,
+        "space": 18,
+        "color": "1F4E79"
+      },
+      "right": {
+        "val": "single",
+        "sz": 12,
+        "space": 18,
+        "color": "1F4E79"
+      }
+    },
+    "numberings": [
+      {
+        "kind": "bullet"
+      },
+      {
+        "kind": "decimal"
+      }
+    ],
+    "styles": [
+      {
+        "styleId": "TableGrid",
+        "type": "table",
+        "name": "Table Grid"
+      }
+    ],
+    "headers": [
+      {
+        "type": "default",
+        "paragraphs": [
+          {
+            "text": "OOXP  ·  2026 年度产品经营分析报告"
+          }
+        ]
+      }
+    ],
+    "footers": [
+      {
+        "type": "default",
+        "paragraphs": [
+          {
+            "text": "内部资料 · 仅供演示   第 ",
+            "fields": [
+              {
+                "code": "PAGE",
+                "result": "1"
+              }
+            ],
+            "hyperlinks": []
+          }
+        ]
+      }
+    ],
+    "paragraphs": [
+      {
+        "style": "Heading1",
+        "runs": [
+          {
+            "text": "2026 年度产品经营分析报告",
+            "bold": true,
+            "sz": 46,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ],
+        "bookmarks": [
+          {
+            "name": "cover"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "OOXP 领域 JSON 生成示例   |   数据截至 2026 年第三季度   |   编制日期 2026-11-10",
+            "italic": true,
+            "sz": 20,
+            "color": "5B6B7B",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "shd": {
+          "fill": "EAF1FB"
+        },
+        "runs": [
+          {
+            "text": "阅读提示  ",
+            "bold": true,
+            "sz": 21,
+            "color": "1F4E79"
+          },
+          {
+            "text": "本文档由一份 JSON 请求整包生成。前五章是经营分析，第六章集中演示公式、图示、环形图、字距、拼音、控件、脚注、批注和交叉引用。未调用 Office。",
+            "sz": 21,
+            "color": "33475B"
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "一、执行摘要",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "2026 年前三季度，业务保持 ",
+            "sz": 22
+          },
+          {
+            "text": "稳健增长",
+            "bold": true,
+            "sz": 22,
+            "color": "C00000"
+          },
+          {
+            "text": "：营业收入 ",
+            "sz": 22
+          },
+          {
+            "text": "10,760 万元",
+            "bold": true,
+            "sz": 22,
+            "color": "1F4E79"
+          },
+          {
+            "text": "，同比增长 27.8%；毛利率提升 3.4 个百分点至 44.6%。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "增长主要来自 ",
+            "sz": 22
+          },
+          {
+            "text": "企业订阅",
+            "bold": true,
+            "sz": 22
+          },
+          {
+            "text": " 与 ",
+            "sz": 22
+          },
+          {
+            "text": "渠道下沉",
+            "bold": true,
+            "sz": 22
+          },
+          {
+            "text": " 两条主线；成本侧通过供应链集中采购对冲了部分投入。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "二、核心指标",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "下表对比 2025 与 2026 年的关键经营指标（单位见首列）。",
+            "sz": 22,
+            "color": "44546A"
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "三、季度趋势",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "图 1  分季度营业收入对比（万元）",
+            "sz": 20,
+            "color": "44546A"
+          }
+        ],
+        "charts": [
+          {
+            "type": "col",
+            "title": "分季度营业收入（万元）",
+            "series": [
+              {
+                "name": "2025 年",
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "values": [
+                  1820,
+                  2010,
+                  2160,
+                  2430
+                ]
+              },
+              {
+                "name": "2026 年",
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "values": [
+                  2380,
+                  2640,
+                  2910,
+                  2830
+                ]
+              }
+            ],
+            "kind": "inline",
+            "cx": 5200000,
+            "cy": 2200000
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "说明：2026 年第四季度为预测值，按渠道签约节奏与历史季节性折算。",
+            "sz": 20,
+            "italic": true,
+            "color": "7F7F7F"
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "四、下一步行动",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "num": 1,
+        "ilvl": 0,
+        "runs": [
+          {
+            "text": "完成企业版订阅的续费流程改造，目标把续费率提升至 92%。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "num": 1,
+        "ilvl": 0,
+        "runs": [
+          {
+            "text": "在华东与华南新增 3 个区域交付中心，缩短实施周期。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "num": 1,
+        "ilvl": 0,
+        "runs": [
+          {
+            "text": "把毛利率口径统一到财务新准则，并在 12 月完成回溯调整。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "num": 1,
+        "ilvl": 0,
+        "runs": [
+          {
+            "text": "建立季度滚动预测机制，减少一次性预算偏差。",
+            "sz": 22
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "五、附注与资料来源",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ]
+      },
+      {
+        "text": "工具与格式说明：",
+        "hyperlinks": [
+          {
+            "text": "ooxp 项目主页",
+            "url": "https://github.com/gaoyia/ooxp",
+            "tooltip": "查看领域 JSON 契约"
+          }
+        ]
+      },
+      {
+        "shd": {
+          "fill": "F2F6FC"
+        },
+        "runs": [
+          {
+            "text": "结论  ",
+            "bold": true,
+            "sz": 22,
+            "color": "1F4E79"
+          },
+          {
+            "text": "在收入与利润双增的前提下，建议把资源继续向高毛利的订阅业务倾斜，并保持对交付产能的同步投入。",
+            "sz": 22,
+            "color": "33475B"
+          }
+        ]
+      },
+      {
+        "style": "Heading2",
+        "runs": [
+          {
+            "text": "六、这份 JSON 还能写什么",
+            "bold": true,
+            "sz": 30,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          }
+        ],
+        "comments": [
+          {
+            "text": "这一章只负责炫技，不改前面的经营结论。",
+            "author": "ooxp",
+            "initials": "ox",
+            "replies": [
+              {
+                "text": "图表和图示都是行内的，不会浮到标题上。",
+                "author": "ooxp"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "footnote": "脚注写在本页底部，和正文的批注不是一处。",
+        "runs": [
+          {
+            "text": "下面每一样都由 create 直接写出：",
+            "sz": 22,
+            "color": "33475B"
+          },
+          {
+            "text": "公式、循环图示、环形图、字宽字距、拼音、复选框和交叉引用。",
+            "sz": 22,
+            "bold": true,
+            "color": "1F4E79"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "同比增速写成公式：",
+            "sz": 22,
+            "color": "44546A"
+          }
+        ],
+        "maths": [
+          {
+            "text": "(10760-8420)/8420",
+            "kind": "display"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "图 2  经营闭环",
+            "sz": 20,
+            "color": "44546A"
+          }
+        ],
+        "smartArts": [
+          {
+            "layout": "cycle",
+            "kind": "inline",
+            "cx": 5486400,
+            "cy": 2468880,
+            "points": [
+              {
+                "text": "订阅"
+              },
+              {
+                "text": "交付"
+              },
+              {
+                "text": "续费"
+              },
+              {
+                "text": "预测"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "图 3  2026 年收入构成（万元）",
+            "sz": 20,
+            "color": "44546A"
+          }
+        ],
+        "charts": [
+          {
+            "type": "doughnut",
+            "title": "收入构成",
+            "kind": "inline",
+            "cx": 4572000,
+            "cy": 2743200,
+            "series": [
+              {
+                "name": "收入",
+                "categories": [
+                  "企业订阅",
+                  "渠道",
+                  "实施",
+                  "其他"
+                ],
+                "values": [
+                  4860,
+                  3120,
+                  1980,
+                  800
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "窄",
+            "scale": 50,
+            "sz": 44,
+            "eastAsiaFont": "微软雅黑",
+            "color": "1F4E79"
+          },
+          {
+            "text": "正",
+            "scale": 100,
+            "sz": 44,
+            "eastAsiaFont": "微软雅黑",
+            "color": "2E75B6"
+          },
+          {
+            "text": "宽",
+            "scale": 200,
+            "sz": 44,
+            "eastAsiaFont": "微软雅黑",
+            "color": "C00000"
+          },
+          {
+            "text": "  疏",
+            "spacing": 120,
+            "sz": 28,
+            "underline": "wave",
+            "color": "1F4E79"
+          },
+          {
+            "text": "密",
+            "spacing": -20,
+            "sz": 28,
+            "color": "33475B"
+          },
+          {
+            "text": " 黄",
+            "highlight": "yellow",
+            "sz": 28,
+            "bold": true
+          }
+        ]
+      },
+      {
+        "text": "经营两个字可以带拼音。",
+        "rubies": [
+          {
+            "base": "经营",
+            "rt": "jīng yíng"
+          }
+        ],
+        "crossRefs": [
+          {
+            "bookmark": "cover",
+            "kind": "page"
+          }
+        ]
+      },
+      {
+        "runs": [
+          {
+            "text": "复核项：",
+            "sz": 22,
+            "color": "33475B"
+          }
+        ],
+        "contentControls": [
+          {
+            "kind": "checkbox",
+            "checked": true
+          },
+          {
+            "kind": "dropDown",
+            "text": "第三季度",
+            "items": [
+              "第一季度",
+              "第二季度",
+              "第三季度",
+              "第四季度"
+            ]
+          }
+        ],
+        "fields": [
+          {
+            "instr": " DATE ",
+            "result": "2026-11-10"
+          }
+        ]
+      },
+      {
+        "endnote": "尾注集中在文末，用来放资料来源。",
+        "shd": {
+          "fill": "F2F6FC"
+        },
+        "runs": [
+          {
+            "text": "以上对象都在同一份 create 请求里。",
+            "sz": 22,
+            "color": "33475B"
+          },
+          {
+            "text": "改已有段落仍用 apply。",
+            "bold": true,
+            "sz": 22,
+            "color": "1F4E79"
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "after": 8,
+        "style": "style:TableGrid",
+        "align": "center",
+        "width": {
+          "type": "pct",
+          "w": 5000
+        },
+        "cols": [
+          2600,
+          1800,
+          1800,
+          1800
+        ],
+        "cellMar": {
+          "top": 100,
+          "bottom": 100,
+          "left": 120,
+          "right": 120
+        },
+        "look": {
+          "firstRow": true,
+          "bandedRows": true,
+          "firstColumn": false
+        },
+        "borders": {
+          "top": {
+            "val": "single",
+            "sz": 6,
+            "color": "9DB7D6"
+          },
+          "left": {
+            "val": "single",
+            "sz": 6,
+            "color": "9DB7D6"
+          },
+          "bottom": {
+            "val": "single",
+            "sz": 6,
+            "color": "9DB7D6"
+          },
+          "right": {
+            "val": "single",
+            "sz": 6,
+            "color": "9DB7D6"
+          },
+          "insideH": {
+            "val": "single",
+            "sz": 4,
+            "color": "C9D8EC"
+          },
+          "insideV": {
+            "val": "single",
+            "sz": 4,
+            "color": "C9D8EC"
+          }
+        },
+        "cellFormats": [
+          {
+            "r": 1,
+            "c": 1,
+            "fill": "D9E2F3",
+            "vAlign": "center"
+          },
+          {
+            "r": 1,
+            "c": 2,
+            "fill": "D9E2F3",
+            "vAlign": "center"
+          },
+          {
+            "r": 1,
+            "c": 3,
+            "fill": "D9E2F3",
+            "vAlign": "center"
+          },
+          {
+            "r": 1,
+            "c": 4,
+            "fill": "D9E2F3",
+            "vAlign": "center"
+          },
+          {
+            "r": 3,
+            "c": 1,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 3,
+            "c": 2,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 3,
+            "c": 3,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 3,
+            "c": 4,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 5,
+            "c": 1,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 5,
+            "c": 2,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 5,
+            "c": 3,
+            "fill": "F5F8FD"
+          },
+          {
+            "r": 5,
+            "c": 4,
+            "fill": "F5F8FD"
+          }
+        ],
+        "cells": [
+          [
+            "指标",
+            "2025 年",
+            "2026 年",
+            "同比变化"
+          ],
+          [
+            "营业收入（万元）",
+            "8,420",
+            "10,760",
+            "+27.8%"
+          ],
+          [
+            "毛利率",
+            "41.2%",
+            "44.6%",
+            "+3.4 pt"
+          ],
+          [
+            "活跃客户（万）",
+            "12.4",
+            "16.9",
+            "+36.3%"
+          ],
+          [
+            "净推荐值 NPS",
+            "42",
+            "51",
+            "+9"
+          ]
+        ]
+      }
+    ]
+  },
+  "format": "docx"
+}

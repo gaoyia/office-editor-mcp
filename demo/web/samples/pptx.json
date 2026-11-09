@@ -1,0 +1,1335 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "ooxp-example-产品战略发布.pptx",
+  "presentation": {
+    "props": {
+      "title": "2026 产品战略发布",
+      "subject": "由 ooxp 领域 JSON 生成的 PowerPoint 示例",
+      "creator": "ooxp 试用示例",
+      "description": "5 页 16:9 演示文稿：封面、议程、数据图表、目标表格、结束页，带切换和逐项动画",
+      "keywords": "OOXML, pptx, 演示, 示例",
+      "category": "示例演示",
+      "company": "示例科技"
+    },
+    "sections": [
+      {
+        "name": "开场",
+        "start": 1
+      },
+      {
+        "name": "正文",
+        "start": 2
+      },
+      {
+        "name": "收尾",
+        "start": 5
+      }
+    ],
+    "slides": [
+      {
+        "transition": {
+          "type": "fade",
+          "dur": 800
+        },
+        "anims": [
+          {
+            "type": "wipe",
+            "shape": 2,
+            "trigger": "with",
+            "dur": 450
+          },
+          {
+            "type": "fade",
+            "shape": 3,
+            "trigger": "with",
+            "delay": 120,
+            "dur": 700
+          },
+          {
+            "type": "fade",
+            "shape": 4,
+            "trigger": "with",
+            "delay": 200,
+            "dur": 700
+          },
+          {
+            "type": "flyIn",
+            "shape": 5,
+            "trigger": "after",
+            "delay": 80,
+            "dur": 450
+          },
+          {
+            "type": "fade",
+            "shape": 6,
+            "trigger": "after",
+            "delay": 60,
+            "dur": 650
+          },
+          {
+            "type": "fade",
+            "shape": 7,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 450
+          },
+          {
+            "type": "wipe",
+            "shape": 8,
+            "trigger": "with",
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 9,
+            "trigger": "after",
+            "delay": 160,
+            "dur": 400
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 6858000,
+            "fill": {
+              "type": "grad",
+              "ang": 5400000,
+              "stops": [
+                {
+                  "pos": 0,
+                  "color": "0B2545"
+                },
+                {
+                  "pos": 100000,
+                  "color": "1B6CA8"
+                }
+              ]
+            }
+          },
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 130000,
+            "fill": "2E75B6"
+          },
+          {
+            "prst": "ellipse",
+            "x": 9400000,
+            "y": 4400000,
+            "cx": 2400000,
+            "cy": 2400000,
+            "fill": {
+              "type": "solid",
+              "color": "FFFFFF",
+              "alpha": 12000
+            }
+          },
+          {
+            "prst": "ellipse",
+            "x": 10300000,
+            "y": 200000,
+            "cx": 1600000,
+            "cy": 1600000,
+            "fill": {
+              "type": "solid",
+              "color": "5B9BD5",
+              "alpha": 22000
+            }
+          },
+          {
+            "prst": "roundRect",
+            "x": 900000,
+            "y": 1550000,
+            "cx": 2100000,
+            "cy": 460000,
+            "fill": "2E75B6",
+            "text": "ANNUAL PLAN 2026",
+            "sz": 1400,
+            "bold": true,
+            "color": "FFFFFF",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 900000,
+            "y": 2300000,
+            "cx": 10400000,
+            "cy": 1000000,
+            "text": "2026 产品战略发布",
+            "sz": 5400,
+            "bold": true,
+            "color": "FFFFFF",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 900000,
+            "y": 3350000,
+            "cx": 10000000,
+            "cy": 600000,
+            "text": "从数据到决策：一套可复制的增长方法论",
+            "sz": 2600,
+            "color": "CFE2F3",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "ctr"
+          },
+          {
+            "prst": "rect",
+            "x": 900000,
+            "y": 4150000,
+            "cx": 1400000,
+            "cy": 55000,
+            "fill": "FFD966"
+          },
+          {
+            "x": 900000,
+            "y": 5100000,
+            "cx": 9000000,
+            "cy": 420000,
+            "text": "OOXP 领域 JSON 生成示例   ·   2026.11   ·   内部资料",
+            "sz": 1600,
+            "color": "9DC3E6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l"
+          }
+        ]
+      },
+      {
+        "transition": {
+          "type": "push",
+          "dir": "l",
+          "dur": 650
+        },
+        "anims": [
+          {
+            "type": "wipe",
+            "shape": 2,
+            "trigger": "with",
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 3,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 4,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 350
+          },
+          {
+            "type": "wipe",
+            "shape": 5,
+            "trigger": "with",
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 22,
+            "trigger": "with",
+            "dur": 300
+          },
+          {
+            "type": "flyIn",
+            "shape": 6,
+            "trigger": "click",
+            "dur": 420
+          },
+          {
+            "type": "zoom",
+            "shape": 10,
+            "trigger": "with",
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 14,
+            "trigger": "with",
+            "delay": 80,
+            "dur": 300
+          },
+          {
+            "type": "fade",
+            "shape": 18,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 280
+          },
+          {
+            "type": "flyIn",
+            "shape": 7,
+            "trigger": "click",
+            "dur": 420
+          },
+          {
+            "type": "zoom",
+            "shape": 11,
+            "trigger": "with",
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 15,
+            "trigger": "with",
+            "delay": 80,
+            "dur": 300
+          },
+          {
+            "type": "fade",
+            "shape": 19,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 280
+          },
+          {
+            "type": "flyIn",
+            "shape": 8,
+            "trigger": "click",
+            "dur": 420
+          },
+          {
+            "type": "zoom",
+            "shape": 12,
+            "trigger": "with",
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 16,
+            "trigger": "with",
+            "delay": 80,
+            "dur": 300
+          },
+          {
+            "type": "fade",
+            "shape": 20,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 280
+          },
+          {
+            "type": "flyIn",
+            "shape": 9,
+            "trigger": "click",
+            "dur": 420
+          },
+          {
+            "type": "zoom",
+            "shape": 13,
+            "trigger": "with",
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 17,
+            "trigger": "with",
+            "delay": 80,
+            "dur": 300
+          },
+          {
+            "type": "fade",
+            "shape": 21,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 280
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 6858000,
+            "fill": "F7FAFD"
+          },
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 130000,
+            "fill": "1F4E79"
+          },
+          {
+            "x": 800000,
+            "y": 450000,
+            "cx": 10000000,
+            "cy": 700000,
+            "text": "目录 / Agenda",
+            "sz": 3200,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 800000,
+            "y": 1120000,
+            "cx": 8000000,
+            "cy": 400000,
+            "text": "四个议题，串起从复盘到落地的完整闭环",
+            "sz": 1800,
+            "color": "5B6B7B",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "prst": "rect",
+            "x": 800000,
+            "y": 1600000,
+            "cx": 1200000,
+            "cy": 60000,
+            "fill": "2E75B6"
+          },
+          {
+            "prst": "roundRect",
+            "x": 800000,
+            "y": 2000000,
+            "cx": 2500000,
+            "cy": 3300000,
+            "fill": "FFFFFF",
+            "line": {
+              "color": "D6E4F0",
+              "width": 12700
+            }
+          },
+          {
+            "prst": "roundRect",
+            "x": 3500000,
+            "y": 2000000,
+            "cx": 2500000,
+            "cy": 3300000,
+            "fill": "FFFFFF",
+            "line": {
+              "color": "D6E4F0",
+              "width": 12700
+            }
+          },
+          {
+            "prst": "roundRect",
+            "x": 6200000,
+            "y": 2000000,
+            "cx": 2500000,
+            "cy": 3300000,
+            "fill": "FFFFFF",
+            "line": {
+              "color": "D6E4F0",
+              "width": 12700
+            }
+          },
+          {
+            "prst": "roundRect",
+            "x": 8900000,
+            "y": 2000000,
+            "cx": 2500000,
+            "cy": 3300000,
+            "fill": "FFFFFF",
+            "line": {
+              "color": "D6E4F0",
+              "width": 12700
+            }
+          },
+          {
+            "prst": "ellipse",
+            "x": 1000000,
+            "y": 2150000,
+            "cx": 700000,
+            "cy": 700000,
+            "fill": "2E75B6",
+            "text": "01",
+            "sz": 1400,
+            "bold": true,
+            "color": "FFFFFF",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "prst": "ellipse",
+            "x": 3700000,
+            "y": 2150000,
+            "cx": 700000,
+            "cy": 700000,
+            "fill": "2E75B6",
+            "text": "02",
+            "sz": 1400,
+            "bold": true,
+            "color": "FFFFFF",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "prst": "ellipse",
+            "x": 6400000,
+            "y": 2150000,
+            "cx": 700000,
+            "cy": 700000,
+            "fill": "2E75B6",
+            "text": "03",
+            "sz": 1400,
+            "bold": true,
+            "color": "FFFFFF",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "prst": "ellipse",
+            "x": 9100000,
+            "y": 2150000,
+            "cx": 700000,
+            "cy": 700000,
+            "fill": "2E75B6",
+            "text": "04",
+            "sz": 1400,
+            "bold": true,
+            "color": "FFFFFF",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 1000000,
+            "y": 2950000,
+            "cx": 2100000,
+            "cy": 500000,
+            "text": "经营回顾",
+            "sz": 2400,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 3700000,
+            "y": 2950000,
+            "cx": 2100000,
+            "cy": 500000,
+            "text": "核心数据",
+            "sz": 2400,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 6400000,
+            "y": 2950000,
+            "cx": 2100000,
+            "cy": 500000,
+            "text": "目标拆解",
+            "sz": 2400,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 9100000,
+            "y": 2950000,
+            "cx": 2100000,
+            "cy": 500000,
+            "text": "落地节奏",
+            "sz": 2400,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 1000000,
+            "y": 3550000,
+            "cx": 2100000,
+            "cy": 1400000,
+            "text": "复盘 2025 年的收入结构与渠道变化，找出真正的增长来源。",
+            "sz": 1600,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "t"
+          },
+          {
+            "x": 3700000,
+            "y": 3550000,
+            "cx": 2100000,
+            "cy": 1400000,
+            "text": "用一张图看清季度趋势，把 KPI 与业务动作对齐。",
+            "sz": 1600,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "t"
+          },
+          {
+            "x": 6400000,
+            "y": 3550000,
+            "cx": 2100000,
+            "cy": 1400000,
+            "text": "按季度拆分目标，明确负责人、里程碑与验收口径。",
+            "sz": 1600,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "t"
+          },
+          {
+            "x": 9100000,
+            "y": 3550000,
+            "cx": 2100000,
+            "cy": 1400000,
+            "text": "建立滚动预测机制，让资源投入跟着结果动态调整。",
+            "sz": 1600,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "l",
+            "textAnchor": "t"
+          },
+          {
+            "x": 800000,
+            "y": 5750000,
+            "cx": 10500000,
+            "cy": 400000,
+            "text": "02 / 05",
+            "sz": 1400,
+            "color": "8FA9C4",
+            "align": "r"
+          }
+        ]
+      },
+      {
+        "transition": {
+          "type": "wipe",
+          "dir": "d",
+          "dur": 600
+        },
+        "anims": [
+          {
+            "type": "wipe",
+            "shape": 2,
+            "trigger": "with",
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 3,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 4,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 18,
+            "trigger": "with",
+            "dur": 300
+          },
+          {
+            "type": "flyIn",
+            "shape": 5,
+            "trigger": "after",
+            "delay": 60,
+            "dur": 380
+          },
+          {
+            "type": "zoom",
+            "shape": 9,
+            "trigger": "with",
+            "dur": 320
+          },
+          {
+            "type": "fade",
+            "shape": 13,
+            "trigger": "with",
+            "delay": 50,
+            "dur": 250
+          },
+          {
+            "type": "flyIn",
+            "shape": 6,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 380
+          },
+          {
+            "type": "zoom",
+            "shape": 10,
+            "trigger": "with",
+            "dur": 320
+          },
+          {
+            "type": "fade",
+            "shape": 14,
+            "trigger": "with",
+            "delay": 50,
+            "dur": 250
+          },
+          {
+            "type": "flyIn",
+            "shape": 7,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 380
+          },
+          {
+            "type": "zoom",
+            "shape": 11,
+            "trigger": "with",
+            "dur": 320
+          },
+          {
+            "type": "fade",
+            "shape": 15,
+            "trigger": "with",
+            "delay": 50,
+            "dur": 250
+          },
+          {
+            "type": "flyIn",
+            "shape": 8,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 380
+          },
+          {
+            "type": "zoom",
+            "shape": 12,
+            "trigger": "with",
+            "dur": 320
+          },
+          {
+            "type": "fade",
+            "shape": 16,
+            "trigger": "with",
+            "delay": 50,
+            "dur": 250
+          },
+          {
+            "type": "fade",
+            "chart": 1,
+            "trigger": "click",
+            "dur": 700
+          },
+          {
+            "type": "fade",
+            "shape": 17,
+            "trigger": "with",
+            "delay": 80,
+            "dur": 300
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 6858000,
+            "fill": "FFFFFF"
+          },
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 130000,
+            "fill": "1F4E79"
+          },
+          {
+            "x": 800000,
+            "y": 420000,
+            "cx": 10000000,
+            "cy": 650000,
+            "text": "核心经营数据",
+            "sz": 3200,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 800000,
+            "y": 1050000,
+            "cx": 10000000,
+            "cy": 380000,
+            "text": "2026 年前三季度 · 收入与利润同步改善",
+            "sz": 1800,
+            "color": "5B6B7B",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "prst": "roundRect",
+            "x": 800000,
+            "y": 1600000,
+            "cx": 2500000,
+            "cy": 1350000,
+            "fill": "EAF1FB"
+          },
+          {
+            "prst": "roundRect",
+            "x": 3500000,
+            "y": 1600000,
+            "cx": 2500000,
+            "cy": 1350000,
+            "fill": "EAF1FB"
+          },
+          {
+            "prst": "roundRect",
+            "x": 6200000,
+            "y": 1600000,
+            "cx": 2500000,
+            "cy": 1350000,
+            "fill": "EAF1FB"
+          },
+          {
+            "prst": "roundRect",
+            "x": 8900000,
+            "y": 1600000,
+            "cx": 2500000,
+            "cy": 1350000,
+            "fill": "EAF1FB"
+          },
+          {
+            "x": 800000,
+            "y": 1720000,
+            "cx": 2500000,
+            "cy": 700000,
+            "text": "10,760",
+            "sz": 3600,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 3500000,
+            "y": 1720000,
+            "cx": 2500000,
+            "cy": 700000,
+            "text": "+27.8%",
+            "sz": 3600,
+            "bold": true,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 6200000,
+            "y": 1720000,
+            "cx": 2500000,
+            "cy": 700000,
+            "text": "44.6%",
+            "sz": 3600,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 8900000,
+            "y": 1720000,
+            "cx": 2500000,
+            "cy": 700000,
+            "text": "16.9 万",
+            "sz": 3600,
+            "bold": true,
+            "color": "2E75B6",
+            "font": "Microsoft YaHei",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 800000,
+            "y": 2420000,
+            "cx": 2500000,
+            "cy": 400000,
+            "text": "营业收入（万元）",
+            "sz": 1500,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          },
+          {
+            "x": 3500000,
+            "y": 2420000,
+            "cx": 2500000,
+            "cy": 400000,
+            "text": "同比增速",
+            "sz": 1500,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          },
+          {
+            "x": 6200000,
+            "y": 2420000,
+            "cx": 2500000,
+            "cy": 400000,
+            "text": "毛利率",
+            "sz": 1500,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          },
+          {
+            "x": 8900000,
+            "y": 2420000,
+            "cx": 2500000,
+            "cy": 400000,
+            "text": "活跃客户",
+            "sz": 1500,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          },
+          {
+            "x": 800000,
+            "y": 3050000,
+            "cx": 10000000,
+            "cy": 400000,
+            "text": "图 1  分季度营业收入对比（万元）",
+            "sz": 1600,
+            "bold": true,
+            "color": "44546A",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 800000,
+            "y": 6200000,
+            "cx": 10500000,
+            "cy": 380000,
+            "text": "数据来源：合并报表（模拟数据） · 03 / 05",
+            "sz": 1400,
+            "color": "8FA9C4",
+            "align": "r"
+          }
+        ],
+        "charts": [
+          {
+            "type": "col",
+            "title": "分季度营业收入（万元）",
+            "x": 800000,
+            "y": 3450000,
+            "cx": 10500000,
+            "cy": 2650000,
+            "series": [
+              {
+                "name": "2025 年",
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "values": [
+                  1820,
+                  2010,
+                  2160,
+                  2430
+                ]
+              },
+              {
+                "name": "2026 年",
+                "categories": [
+                  "Q1",
+                  "Q2",
+                  "Q3",
+                  "Q4"
+                ],
+                "values": [
+                  2380,
+                  2640,
+                  2910,
+                  2830
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "transition": {
+          "type": "cover",
+          "dir": "l",
+          "dur": 700
+        },
+        "anims": [
+          {
+            "type": "wipe",
+            "shape": 2,
+            "trigger": "with",
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 3,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 4,
+            "trigger": "after",
+            "delay": 40,
+            "dur": 350
+          },
+          {
+            "type": "fade",
+            "shape": 5,
+            "trigger": "with",
+            "dur": 300
+          },
+          {
+            "type": "flyIn",
+            "table": 1,
+            "trigger": "click",
+            "dur": 650
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 6858000,
+            "fill": "FFFFFF"
+          },
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 130000,
+            "fill": "1F4E79"
+          },
+          {
+            "x": 800000,
+            "y": 420000,
+            "cx": 10000000,
+            "cy": 650000,
+            "text": "季度目标拆解",
+            "sz": 3200,
+            "bold": true,
+            "color": "1F4E79",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 800000,
+            "y": 1050000,
+            "cx": 10000000,
+            "cy": 380000,
+            "text": "把年度目标落到每个季度、每个负责人",
+            "sz": 1800,
+            "color": "5B6B7B",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑"
+          },
+          {
+            "x": 800000,
+            "y": 5700000,
+            "cx": 10500000,
+            "cy": 400000,
+            "text": "注：Q4 为预测值，按渠道签约节奏折算 · 04 / 05",
+            "sz": 1400,
+            "color": "8FA9C4",
+            "align": "r"
+          }
+        ],
+        "tables": [
+          {
+            "rows": 5,
+            "cols": 4,
+            "x": 800000,
+            "y": 1650000,
+            "cx": 10500000,
+            "cy": 3700000,
+            "colWidths": [
+              2900000,
+              2500000,
+              2500000,
+              2600000
+            ],
+            "rowHeights": [
+              740000,
+              740000,
+              740000,
+              740000,
+              740000
+            ],
+            "tblLook": {
+              "firstRow": true,
+              "bandRow": true
+            },
+            "cells": [
+              [
+                {
+                  "text": "季度",
+                  "fill": "1F4E79"
+                },
+                {
+                  "text": "收入目标（万元）",
+                  "fill": "1F4E79"
+                },
+                {
+                  "text": "关键动作",
+                  "fill": "1F4E79"
+                },
+                {
+                  "text": "负责人",
+                  "fill": "1F4E79"
+                }
+              ],
+              [
+                {
+                  "text": "Q1",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "2,380",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "企业版订阅上线",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "陈可",
+                  "fill": "EAF1FB"
+                }
+              ],
+              [
+                {
+                  "text": "Q2",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "2,640",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "渠道下沉与培训",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "林夕",
+                  "fill": "FFFFFF"
+                }
+              ],
+              [
+                {
+                  "text": "Q3",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "2,910",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "华东交付中心投产",
+                  "fill": "EAF1FB"
+                },
+                {
+                  "text": "周明",
+                  "fill": "EAF1FB"
+                }
+              ],
+              [
+                {
+                  "text": "Q4",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "2,830",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "续费流程改造",
+                  "fill": "FFFFFF"
+                },
+                {
+                  "text": "苏禾",
+                  "fill": "FFFFFF"
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "transition": {
+          "type": "zoom",
+          "dir": "in",
+          "dur": 800
+        },
+        "anims": [
+          {
+            "type": "fade",
+            "shape": 3,
+            "trigger": "with",
+            "dur": 700
+          },
+          {
+            "type": "zoom",
+            "shape": 4,
+            "trigger": "after",
+            "delay": 80,
+            "dur": 600
+          },
+          {
+            "type": "fade",
+            "shape": 5,
+            "trigger": "after",
+            "delay": 60,
+            "dur": 450
+          },
+          {
+            "type": "wipe",
+            "shape": 6,
+            "trigger": "with",
+            "dur": 400
+          },
+          {
+            "type": "fade",
+            "shape": 7,
+            "trigger": "after",
+            "delay": 120,
+            "dur": 400
+          },
+          {
+            "type": "growShrink",
+            "shape": 4,
+            "trigger": "after",
+            "delay": 200,
+            "dur": 450
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 6858000,
+            "fill": {
+              "type": "grad",
+              "ang": 5400000,
+              "stops": [
+                {
+                  "pos": 0,
+                  "color": "0B2545"
+                },
+                {
+                  "pos": 100000,
+                  "color": "1B6CA8"
+                }
+              ]
+            }
+          },
+          {
+            "prst": "rect",
+            "x": 0,
+            "y": 0,
+            "cx": 12192000,
+            "cy": 130000,
+            "fill": "2E75B6"
+          },
+          {
+            "prst": "ellipse",
+            "x": 200000,
+            "y": 4600000,
+            "cx": 2000000,
+            "cy": 2000000,
+            "fill": {
+              "type": "solid",
+              "color": "FFFFFF",
+              "alpha": 10000
+            }
+          },
+          {
+            "x": 900000,
+            "y": 2400000,
+            "cx": 10400000,
+            "cy": 1000000,
+            "text": "谢谢观看",
+            "sz": 5600,
+            "bold": true,
+            "color": "FFFFFF",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr",
+            "textAnchor": "ctr"
+          },
+          {
+            "x": 900000,
+            "y": 3500000,
+            "cx": 10400000,
+            "cy": 600000,
+            "text": "Q & A   ·   数据与资料可下载",
+            "sz": 2400,
+            "color": "CFE2F3",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          },
+          {
+            "prst": "rect",
+            "x": 5500000,
+            "y": 4250000,
+            "cx": 1200000,
+            "cy": 60000,
+            "fill": "FFD966"
+          },
+          {
+            "x": 900000,
+            "y": 5300000,
+            "cx": 10400000,
+            "cy": 420000,
+            "text": "OOXP  ·  用领域 JSON 读写 Office 文件   ·   05 / 05",
+            "sz": 1500,
+            "color": "9DC3E6",
+            "font": "Microsoft YaHei",
+            "eastAsiaFont": "微软雅黑",
+            "align": "ctr"
+          }
+        ]
+      }
+    ]
+  },
+  "format": "pptx"
+}
