@@ -174,6 +174,16 @@ fn load_catalog() -> Catalog {
     Catalog { ops, defs }
 }
 
+fn lookup_enum_def(reference: &str) -> Option<Value> {
+    let name = reference.strip_prefix("#/$defs/")?;
+    if name.contains('/') {
+        return None;
+    }
+    let body = catalog().defs.get(name)?;
+    body.get("enum")?;
+    Some(body.clone())
+}
+
 fn lookup_def_pointer(reference: &str) -> Option<Value> {
     let rest = reference.strip_prefix("#/$defs/")?;
     let (name, tail) = rest.split_once('/')?;
@@ -212,12 +222,12 @@ fn index(lang: HelpLang) -> Value {
             action_row("layoutCheck", "layoutCheckRequest", lang),
             action_row("help", "helpRequest", lang),
         ],
-        "ask": {
-            "list": {"format": "xlsx"},
-            "search": {"q": ask_query(lang), "format": "xlsx"},
-            "op": {"format": "xlsx", "op": "setCell"},
-            "def": {"name": "inspectScope"}
-        }
+        "ask": [
+            {"action": "help", "format": "xlsx"},
+            {"action": "help", "q": ask_query(lang), "format": "xlsx"},
+            {"action": "help", "format": "xlsx", "op": "setCell"},
+            {"action": "help", "name": "inspectScope"}
+        ]
     })
 }
 
@@ -711,6 +721,10 @@ fn shorten_refs(value: &Value) -> Value {
             if map.len() == 1 {
                 if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
                     if let Some(resolved) = lookup_def_pointer(reference) {
+                        return shorten_refs(&resolved);
+                    }
+                    // 只展开「整份定义就是一份 enum」的词表。其它单独的 $ref 仍只留定义名。
+                    if let Some(resolved) = lookup_enum_def(reference) {
                         return shorten_refs(&resolved);
                     }
                     return json!({ "$ref": ref_def_name(reference) });

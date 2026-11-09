@@ -319,6 +319,48 @@ fn search_reaches_defs_not_just_ops() {
 }
 
 #[test]
+fn ask_entries_are_complete_requests() {
+    let value = help(serde_json::json!({})).unwrap();
+    let ask = value["ask"].as_array().unwrap();
+    assert!(value.get("def").is_none());
+    assert!(!ask.is_empty());
+    for item in ask {
+        assert_eq!(item["action"], "help");
+        assert!(item.get("def").is_none());
+        let again = help(item.clone()).unwrap();
+        assert!(again.get("kind").is_some());
+    }
+}
+
+#[test]
+fn cell_create_style_reuses_set_cell_style_fields() {
+    let value = help(serde_json::json!({"name": "xlsxCellCreate"})).unwrap();
+    let font = &value["fields"]["properties"]["font"];
+    assert!(font["properties"].get("color").is_some(), "{font}");
+    let fill = &value["fields"]["properties"]["fill"];
+    assert!(fill["properties"].get("fg").is_some(), "{fill}");
+    let fg = help(serde_json::json!({"q": "fg"})).unwrap();
+    assert!(!fg["matches"].as_array().unwrap().is_empty());
+    let miss = help(serde_json::json!({"q": "fgColor"})).unwrap();
+    assert!(miss["matches"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn shape_create_enums_exclude_connectors() {
+    let value = help(serde_json::json!({"name": "pptxShapeCreate"})).unwrap();
+    let align = value["fields"]["properties"]["align"]["enum"]
+        .as_array()
+        .unwrap();
+    assert!(align.iter().any(|item| item == "l"));
+    assert!(align.iter().any(|item| item.is_null()));
+    let prst = value["fields"]["properties"]["prst"]["enum"]
+        .as_array()
+        .unwrap();
+    assert!(prst.iter().any(|item| item == "ellipse"));
+    assert!(prst.iter().all(|item| item != "straightConnector1"));
+}
+
+#[test]
 fn unknown_op_and_mixed_keys_fail() {
     let err = help(serde_json::json!({"op": "notAnOp"})).unwrap_err();
     assert_eq!(err.code(), ErrorCode::UnsupportedOp);

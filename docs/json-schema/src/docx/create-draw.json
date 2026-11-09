@@ -412,7 +412,7 @@
       "additionalProperties": false,
       "properties": {
         "prst": {
-          "type": "string"
+          "$ref": "#/$defs/shapePrst"
         },
         "cx": {
           "type": "integer",

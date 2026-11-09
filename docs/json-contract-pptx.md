@@ -40,6 +40,7 @@
 - **形状**
   - id：`slide:{n}/shape:{shapeId}`
   - 例子：`slide:1/shape:4`
+  - 该宿主 `p:spTree` 自己的 `cNvPr/@id` 是 `1`，不是形状。新建形状至少从 `2` 起
 - **无 `cNvPr/@id` 的形状**
   - id：`slide:{n}/shape:index:{k}`
   - 例子：`slide:1/shape:index:2`
@@ -1494,6 +1495,7 @@ pptx 认 23 个键：`slide`、`maxShapes`，以及下列 21 个开关。
   - 二维数组，行数与列数必须与 `rows` / `cols` 一致
   - 每格可以是字符串，也可以是对象
   - 对象可有 `text`（省略当作 `""`）
+  - 格子对象没有字号、颜色、加粗。改可见文字用 `setTableCellText`。改字色用 `setShapeFormat`，`id` 用单元格 id
   - 对象可有可选 `fill`：规则与 `setTableCellFill` 的 `fill` 相同（六位字符串、对象或 `null`）
   - `null` 写成 `a:noFill`。省略则不写填充子元
   - `type` 为 `blip` 时必须有 `file`（本地图片路径，规则与 `insertPicture` 相同）

@@ -1184,7 +1184,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "该页不在任何幻灯片节里".into()
         }
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
-        ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
+        ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格。图表用 scope.charts，不要带 range".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表插入或改文本框、形状与连接线".into(),

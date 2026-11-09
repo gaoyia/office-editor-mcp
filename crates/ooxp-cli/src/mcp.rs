@@ -125,7 +125,7 @@ ooxp 是 Office Open XML Patch。它用领域 JSON 读写 docx、xlsx、pptx。�
 
 不知道如何使用这些工具时，先调用 help。不带参数可以看七个动作怎么用。要某个格式的操作名单，带上 format。要某一条操作的字段，再带上 format 和 op。查完再调用对应的工具。
 
-调用先走 inspect，只用返回树上的 id。id 和 op 名都从 inspect 或 help 里取。接着用 apply，一次只写需要的 op。create 只用于新建文件，它是 action。op 名单里没有 create。要看它的字段，用 help 打开 name 为 createRequest 的定义。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。这三项不要同时出现。exportMedia 和 exportChartData 把字节写到 output 给出的另一个路径。这些字节不进入 inspect 树。
+调用先走 inspect，只用返回树上的 id。id 和 op 名都从 inspect 或 help 里取。接着用 apply，一次只写需要的 op。create 整包生成一份新文件，目标路径已存在则覆盖。改已有内容用 apply。它是 action。op 名单里没有 create。要看它的字段，用 help 打开 name 为 createRequest 的定义。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。这三项不要同时出现。exportMedia 和 exportChartData 把字节写到 output 给出的另一个路径。这些字节不进入 inspect 树。
 
 七个工具的参数有两种形状。直接写领域 JSON，字段名保持原样。或者只写 requestPath，指向本机上一份领域 JSON 文件。两种不要同时写。action 由工具名补上。调用方写了 action 时，它必须和工具名相同。schemaVersion 可以省略，省略视为 1。写了又不是 1，调用会被拒绝。format 可以省略，程序从 path 的扩展名推断。path 是这份 Office 文件在本机的路径。apply 要另存时，把新路径写在 output，省略则写回 path。exportMedia 和 exportChartData 把落盘路径写在 output。调用被拒绝时，读错误里的 code 和字段，再改请求。
 
@@ -138,7 +138,7 @@ ooxp is Office Open XML Patch. It reads and writes docx, xlsx, and pptx with dom
 
 If you do not know how to use these tools, call help first. With no arguments it shows how the seven actions work. For one format's operation list, add format. For one operation's fields, add format and op. Then call the tool.
 
-Start with inspect, and use only ids from the returned tree. Take ids and op names from inspect or help. Then use apply, and send only the ops you need. create is only for a new file. It is an action. The op list has no create. To see its fields, open the definition named createRequest with help. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation. Do not send those three together. exportMedia and exportChartData write bytes to the path in output. Those bytes do not enter the inspect tree.
+Start with inspect, and use only ids from the returned tree. Take ids and op names from inspect or help. Then use apply, and send only the ops you need. create generates a whole new file, and an existing path is overwritten. To change existing content, use apply. It is an action. The op list has no create. To see its fields, open the definition named createRequest with help. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation. Do not send those three together. exportMedia and exportChartData write bytes to the path in output. Those bytes do not enter the inspect tree.
 
 Each of the seven tools takes one of two shapes. Write domain JSON directly and keep the field names. Or write only requestPath, pointing at a domain JSON file on this machine. Do not send both. The tool name fills in action. If you write action, it must match the tool name. schemaVersion may be omitted, and that means 1. Any other value is rejected. format may be omitted; the program infers it from the path extension. path is the Office file on this machine. To save apply as another file, put the new path in output. Omit it to write back to path. exportMedia and exportChartData put the destination path in output. When a call is rejected, read the error code and field, then change the request.
 
@@ -259,7 +259,7 @@ fn tools(lang: Lang) -> Value {
             ),
             tool(
                 "create",
-                say(lang, "只用于新建文件。已经存在的文件用 apply。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。", "Only for a new file. An existing file uses apply. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation."),
+                say(lang, "整包生成一份新文件。目标路径已存在则覆盖。改已有内容用 apply。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。", "Generate a whole new file. An existing path is overwritten. To change existing content, use apply. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation."),
                 domain_properties(Action::Create, lang),
                 &["path"],
                 lang,

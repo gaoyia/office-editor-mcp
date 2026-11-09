@@ -94,6 +94,8 @@
       "additionalProperties": false,
       "properties": {
         "rgb": {
+          "description": "6 位或 8 位十六进制。写入时改为大写；6 位前面补 FF。",
+          "descriptionEn": "6 or 8 hex digits. Written in uppercase; 6 digits get an FF prefix.",
           "type": "string",
           "pattern": "^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
         },

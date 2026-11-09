@@ -473,6 +473,8 @@
           ]
         },
         "num": {
+          "description": "从 1 起，指向 document.numberings 的下标，不是 num:{n}。",
+          "descriptionEn": "Starts at 1. It is an index into document.numberings, not num:{n}.",
           "type": "integer",
           "minimum": 1
         },
@@ -679,6 +681,8 @@
           ]
         },
         "num": {
+          "description": "从 1 起，指向 document.numberings 的下标，不是 num:{n}。",
+          "descriptionEn": "Starts at 1. It is an index into document.numberings, not num:{n}.",
           "type": "integer",
           "minimum": 1
         },

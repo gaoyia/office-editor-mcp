@@ -42,6 +42,8 @@ cargo build -p ooxp-cli --release
 cargo test
 ```
 
+预编译包在 [GitHub Releases](https://github.com/gaoyia/ooxp/releases)。四个命令行包和 `wasm` 的名字见 [docs/cli.md](docs/cli.md) 的「发布」。Windows 上用 `Get-FileHash 文件 -Algorithm SHA256`，对照同一次 Release 的 `SHASUMS256.txt`。
+
 ## 命令行
 
 ```text

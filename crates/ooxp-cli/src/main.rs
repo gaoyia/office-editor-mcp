@@ -15,7 +15,7 @@ struct Cli {
     /// 领域 JSON 路径。`-` 或省略时从 stdin 读。
     #[arg(long)]
     input: Option<String>,
-    /// 错误文案语言。请求里的 locale 优先。
+    /// 错误文案语言。请求里的 locale 优先。省略时错误文案是英文。
     #[arg(long)]
     lang: Option<String>,
     /// 把 stdout 的 JSON 缩进打印。

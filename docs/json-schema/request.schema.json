@@ -603,6 +603,8 @@
           ]
         },
         "num": {
+          "description": "从 1 起，指向 document.numberings 的下标，不是 num:{n}。",
+          "descriptionEn": "Starts at 1. It is an index into document.numberings, not num:{n}.",
           "type": "integer",
           "minimum": 1
         },
@@ -809,6 +811,8 @@
           ]
         },
         "num": {
+          "description": "从 1 起，指向 document.numberings 的下标，不是 num:{n}。",
+          "descriptionEn": "Starts at 1. It is an index into document.numberings, not num:{n}.",
           "type": "integer",
           "minimum": 1
         },
@@ -1996,7 +2000,7 @@
       "additionalProperties": false,
       "properties": {
         "prst": {
-          "type": "string"
+          "$ref": "#/$defs/shapePrst"
         },
         "cx": {
           "type": "integer",
@@ -6283,8 +6287,8 @@
     "setParaTextOp": {
       "description": "改一个段落里的文字。",
       "descriptionEn": "Change the text in one paragraph.",
-      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
-      "limitsEn": "A missing paragraph returns IdNotFound. Paragraphs are not inserted or deleted. A header or footer container id (one without /para:) returns InvalidId. w:drawing in that paragraph must stay, including a run that has only the drawing and whose w:t has already been cleared.",
+      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。多个 run 时只留第一个 run 已有的 w:rPr，其余 run 的字符格式去掉。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
+      "limitsEn": "A missing paragraph returns IdNotFound. Paragraphs are not inserted or deleted. When there are several runs, only the first run's existing w:rPr stays, and character formatting on the other runs is dropped. A header or footer container id (one without /para:) returns InvalidId. w:drawing in that paragraph must stay, including a run that has only the drawing and whose w:t has already been cleared.",
       "type": "object",
       "required": [
         "op",
@@ -8818,10 +8822,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -8832,16 +8833,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -8872,8 +8867,7 @@
           "$ref": "#/$defs/shapeGeom"
         },
         "prst": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/shapePrst"
         },
         "x": {
           "type": "integer"
@@ -9319,8 +9313,8 @@
     "pptxPresentation": {
       "description": "新建演示文稿时的正文，只在 create 里使用。",
       "descriptionEn": "Body of a new presentation. Use it only with create.",
-      "limits": "不要把它当成 apply 的补丁。",
-      "limitsEn": "Do not send it as an apply patch.",
+      "limits": "不要把它当成 apply 的补丁。slides 为空则生成一页，该页一个空文本框。某一页 shapes 为空则生成一个空文本框。create 不写画布尺寸，建好后用 setSlideSize。",
+      "limitsEn": "Do not send it as an apply patch. An empty slides array creates one slide with one empty text box. An empty shapes array on a slide creates one empty text box. create does not set the slide size; use setSlideSize after the file exists.",
       "type": "object",
       "required": [
         "slides"
@@ -10545,8 +10539,7 @@
           "minimum": 1
         },
         "prst": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/shapePrst"
         },
         "sz": {
           "type": [
@@ -10575,10 +10568,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -10589,16 +10579,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -11099,10 +11083,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -11113,16 +11094,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -14902,6 +14877,118 @@
         }
       }
     },
+    "drawingAlign": {
+      "description": "段落水平对齐。l、ctr、r、just，或 null 去掉属性。",
+      "descriptionEn": "Paragraph horizontal alignment: l, ctr, r, or just. null removes the attribute.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "l",
+        "ctr",
+        "r",
+        "just",
+        null
+      ]
+    },
+    "drawingTextAnchor": {
+      "description": "文本框垂直对齐。t、ctr、b、just、dist，或 null 去掉属性。",
+      "descriptionEn": "Text body vertical anchor: t, ctr, b, just, or dist. null removes the attribute.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "t",
+        "ctr",
+        "b",
+        "just",
+        "dist",
+        null
+      ]
+    },
+    "drawingUnderline": {
+      "description": "下划线。sng、none、dbl，或 null 去掉属性。",
+      "descriptionEn": "Underline: sng, none, or dbl. null removes the attribute.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "sng",
+        "none",
+        "dbl",
+        null
+      ]
+    },
+    "shapePrst": {
+      "description": "可写的预设几何名。不含连接线。",
+      "descriptionEn": "Writable preset geometry name. Connector names are not included.",
+      "type": "string",
+      "enum": [
+        "rect",
+        "roundRect",
+        "round1Rect",
+        "round2SameRect",
+        "round2DiagRect",
+        "snipRoundRect",
+        "snip1Rect",
+        "snip2SameRect",
+        "snip2DiagRect",
+        "ellipse",
+        "triangle",
+        "rtTriangle",
+        "parallelogram",
+        "trapezoid",
+        "diamond",
+        "pentagon",
+        "hexagon",
+        "heptagon",
+        "octagon",
+        "decagon",
+        "dodecagon",
+        "star4",
+        "star5",
+        "star6",
+        "star8",
+        "star16",
+        "star24",
+        "star32",
+        "plus",
+        "plaque",
+        "teardrop",
+        "homePlate",
+        "chevron",
+        "pie",
+        "donut",
+        "noSmoking",
+        "blockArc",
+        "rightArrow",
+        "leftArrow",
+        "upArrow",
+        "downArrow",
+        "leftRightArrow",
+        "upDownArrow",
+        "quadArrow",
+        "stripedRightArrow",
+        "notchedRightArrow",
+        "bentUpArrow",
+        "cube",
+        "can",
+        "lightningBolt",
+        "heart",
+        "sun",
+        "moon",
+        "smileyFace",
+        "foldedCorner",
+        "bevel",
+        "frame",
+        "cloud",
+        "ribbon",
+        "wave"
+      ]
+    },
     "format": {
       "enum": [
         "xlsx",
@@ -14913,8 +15000,8 @@
     "inspectRequest": {
       "description": "按 scope 看文件的一部分。",
       "descriptionEn": "View part of the file according to scope.",
-      "limits": "不要一次要整份文件。改内容用 apply，不要把这次看到的树整份送回去当修改。",
-      "limitsEn": "Do not request the whole file at once. To change content, use apply. Do not send the whole tree you just saw back as the edit.",
+      "limits": "不要一次要整份文件。不带 scope 只返回名单，不返回单元格。xlsx 公式格的 value 是包里的缓存，没有缓存则为 null，库不算。改内容用 apply，不要把这次看到的树整份送回去当修改。",
+      "limitsEn": "Do not request the whole file at once. Without scope the result is only the list, not cells. An xlsx formula cell's value is the cached value in the package; it is null when there is no cache, and the library does not calculate it. To change content, use apply. Do not send the whole tree you just saw back as the edit.",
       "type": "object",
       "required": [
         "action",
@@ -15363,10 +15450,10 @@
       }
     },
     "createRequest": {
-      "description": "只用于新建文件。",
-      "descriptionEn": "Only for creating a new file.",
-      "limits": "已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
-      "limitsEn": "A file that already exists uses apply. xlsx uses workbook, docx uses document, and pptx uses presentation. Do not write all three together.",
+      "description": "整包生成一份新文件。目标路径已存在则覆盖。",
+      "descriptionEn": "Generate a whole new file. An existing path is overwritten.",
+      "limits": "改已有内容用 apply，不要靠 create 覆盖。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
+      "limitsEn": "To change existing content, use apply instead of overwriting with create. xlsx uses workbook, docx uses document, and pptx uses presentation. Do not write all three together.",
       "type": "object",
       "comment": "path 必填。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
@@ -16754,8 +16841,8 @@
     "setShapeTextOp": {
       "description": "改形状里的文字。",
       "descriptionEn": "Change the text inside a shape.",
-      "limits": "找不到该形状报 IdNotFound。对 slide:{n} 或 slide:{n}/notes（没有 /shape:）发本 op 报 InvalidId。 对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 xlsx 改工作表文本框或无 txBox 形状的 xdr:txBody，规则与 pptx 相同（把下文的 p:sp / p:txBody 换成 xdr:sp / xdr:txBody）。",
-      "limitsEn": "A missing shape returns IdNotFound. This op on slide:{n} or slide:{n}/notes (no /shape:) returns InvalidId. This op on a shape on a notes page, notes master, or handout whose placeholder p:ph/@type is sldImg returns InvalidField and writes nothing. xlsx changes xdr:txBody of a worksheet text box or a shape without txBox, with the same rules as pptx (read p:sp / p:txBody below as xdr:sp / xdr:txBody).",
+      "limits": "找不到该形状报 IdNotFound。第一个含 a:t 的 run 留下 a:rPr，其余可见 run 清掉。对 slide:{n} 或 slide:{n}/notes（没有 /shape:）发本 op 报 InvalidId。 对备注页、备注母版或讲义上占位符 p:ph/@type 为 sldImg 的形状发本 op 报 InvalidField，不写文件。 xlsx 改工作表文本框或无 txBox 形状的 xdr:txBody，规则与 pptx 相同（把下文的 p:sp / p:txBody 换成 xdr:sp / xdr:txBody）。",
+      "limitsEn": "A missing shape returns IdNotFound. The first run that contains a:t keeps its a:rPr, and the other visible runs are cleared. This op on slide:{n} or slide:{n}/notes (no /shape:) returns InvalidId. This op on a shape on a notes page, notes master, or handout whose placeholder p:ph/@type is sldImg returns InvalidField and writes nothing. xlsx changes xdr:txBody of a worksheet text box or a shape without txBox, with the same rules as pptx (read p:sp / p:txBody below as xdr:sp / xdr:txBody).",
       "type": "object",
       "required": [
         "op",
@@ -17640,10 +17727,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -17654,16 +17738,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -18895,6 +18973,8 @@
       "additionalProperties": false,
       "properties": {
         "rgb": {
+          "description": "6 位或 8 位十六进制。写入时改为大写；6 位前面补 FF。",
+          "descriptionEn": "6 or 8 hex digits. Written in uppercase; 6 digits get an FF prefix.",
           "type": "string",
           "pattern": "^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
         },
@@ -20138,10 +20218,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -20152,16 +20229,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -20239,8 +20310,7 @@
           "type": "string"
         },
         "prst": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/shapePrst"
         },
         "sz": {
           "type": [
@@ -20269,10 +20339,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -20283,16 +20350,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -20627,28 +20688,16 @@
           "minLength": 1
         },
         "font": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/font"
         },
         "fill": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/fill"
         },
         "border": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/border"
         },
         "align": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/align"
         },
         "namedStyle": {
           "type": "string",

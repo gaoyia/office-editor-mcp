@@ -667,10 +667,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -681,16 +678,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -768,8 +759,7 @@
           "type": "string"
         },
         "prst": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/shapePrst"
         },
         "sz": {
           "type": [
@@ -798,10 +788,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -812,16 +799,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -1156,28 +1137,16 @@
           "minLength": 1
         },
         "font": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/font"
         },
         "fill": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/fill"
         },
         "border": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/border"
         },
         "align": {
-          "type": [
-            "object",
-            "null"
-          ]
+          "$ref": "#/$defs/setCellStyleOp/properties/align"
         },
         "namedStyle": {
           "type": "string",

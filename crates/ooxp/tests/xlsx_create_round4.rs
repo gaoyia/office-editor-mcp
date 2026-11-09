@@ -4,7 +4,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, ErrorCode, RunOutput};
+use ooxp::{run, ErrorCode, Lang, RunOutput};
 use serde_json::{json, Value};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
@@ -429,4 +429,54 @@ fn create_remain_errors_remap_and_reject_meta() {
         err.field_path(),
         Some("workbook.sheets[0].groups[0].shapes[1]")
     );
+}
+
+#[test]
+fn chartsheet_cell_scope_mentions_charts() {
+    let path = tmp("cs-cells");
+    create(
+        &path,
+        json!({
+            "sheets": [
+                { "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] },
+                {
+                    "name": "Chart1",
+                    "kind": "chartsheet",
+                    "type": "col",
+                    "dataFrom": "A1",
+                    "series": [{ "name": "Q1", "values": [1] }]
+                }
+            ]
+        }),
+    );
+    let opened = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "locale": "zh-CN",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": "Chart1", "range": "A1" }
+    })
+    .to_string())
+    .unwrap_err();
+    let message = opened.to_json(Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(message.contains("scope.charts"), "{message}");
+
+    let closed = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "locale": "zh-CN",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": "Chart1" }
+    })
+    .to_string())
+    .unwrap_err();
+    let early = closed.to_json(Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(early.contains("必须同时给"));
+    assert!(!early.contains("scope.charts"), "{early}");
 }

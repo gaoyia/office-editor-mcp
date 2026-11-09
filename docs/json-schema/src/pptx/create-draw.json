@@ -290,10 +290,7 @@
           "type": "boolean"
         },
         "underline": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingUnderline"
         },
         "font": {
           "type": "string",
@@ -304,16 +301,10 @@
           "minLength": 1
         },
         "align": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingAlign"
         },
         "textAnchor": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "$ref": "#/$defs/drawingTextAnchor"
         },
         "spcBef": {
           "$ref": "#/$defs/drawingTextSpacing"
@@ -344,8 +335,7 @@
           "$ref": "#/$defs/shapeGeom"
         },
         "prst": {
-          "type": "string",
-          "minLength": 1
+          "$ref": "#/$defs/shapePrst"
         },
         "x": {
           "type": "integer"

@@ -51,8 +51,8 @@
     "setParaTextOp": {
       "description": "改一个段落里的文字。",
       "descriptionEn": "Change the text in one paragraph.",
-      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
-      "limitsEn": "A missing paragraph returns IdNotFound. Paragraphs are not inserted or deleted. A header or footer container id (one without /para:) returns InvalidId. w:drawing in that paragraph must stay, including a run that has only the drawing and whose w:t has already been cleared.",
+      "limits": "找不到该段落报 IdNotFound。不插入、不删除段落。多个 run 时只留第一个 run 已有的 w:rPr，其余 run 的字符格式去掉。对页眉或页脚容器 id（没有 /para:）报 InvalidId。该段里的 w:drawing 必须留下，包括只剩绘图、已经被清掉 w:t 的 run。",
+      "limitsEn": "A missing paragraph returns IdNotFound. Paragraphs are not inserted or deleted. When there are several runs, only the first run's existing w:rPr stays, and character formatting on the other runs is dropped. A header or footer container id (one without /para:) returns InvalidId. w:drawing in that paragraph must stay, including a run that has only the drawing and whose w:t has already been cleared.",
       "type": "object",
       "required": [
         "op",

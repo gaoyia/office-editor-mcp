@@ -4,8 +4,8 @@
     "pptxPresentation": {
       "description": "新建演示文稿时的正文，只在 create 里使用。",
       "descriptionEn": "Body of a new presentation. Use it only with create.",
-      "limits": "不要把它当成 apply 的补丁。",
-      "limitsEn": "Do not send it as an apply patch.",
+      "limits": "不要把它当成 apply 的补丁。slides 为空则生成一页，该页一个空文本框。某一页 shapes 为空则生成一个空文本框。create 不写画布尺寸，建好后用 setSlideSize。",
+      "limitsEn": "Do not send it as an apply patch. An empty slides array creates one slide with one empty text box. An empty shapes array on a slide creates one empty text box. create does not set the slide size; use setSlideSize after the file exists.",
       "type": "object",
       "required": [
         "slides"

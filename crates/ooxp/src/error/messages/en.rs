@@ -1310,7 +1310,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedsPptxSectionList => "the presentation has no slide section list".into(),
         ErrorKind::SlideNotInPptxSection => "that slide is not in any section".into(),
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
-        ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
+        ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets. For charts, use scope.charts and do not send range".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
         ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => {

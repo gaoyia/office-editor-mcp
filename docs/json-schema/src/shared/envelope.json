@@ -12,8 +12,8 @@
     "inspectRequest": {
       "description": "按 scope 看文件的一部分。",
       "descriptionEn": "View part of the file according to scope.",
-      "limits": "不要一次要整份文件。改内容用 apply，不要把这次看到的树整份送回去当修改。",
-      "limitsEn": "Do not request the whole file at once. To change content, use apply. Do not send the whole tree you just saw back as the edit.",
+      "limits": "不要一次要整份文件。不带 scope 只返回名单，不返回单元格。xlsx 公式格的 value 是包里的缓存，没有缓存则为 null，库不算。改内容用 apply，不要把这次看到的树整份送回去当修改。",
+      "limitsEn": "Do not request the whole file at once. Without scope the result is only the list, not cells. An xlsx formula cell's value is the cached value in the package; it is null when there is no cache, and the library does not calculate it. To change content, use apply. Do not send the whole tree you just saw back as the edit.",
       "type": "object",
       "required": [
         "action",
@@ -462,10 +462,10 @@
       }
     },
     "createRequest": {
-      "description": "只用于新建文件。",
-      "descriptionEn": "Only for creating a new file.",
-      "limits": "已经存在的文件用 apply。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
-      "limitsEn": "A file that already exists uses apply. xlsx uses workbook, docx uses document, and pptx uses presentation. Do not write all three together.",
+      "description": "整包生成一份新文件。目标路径已存在则覆盖。",
+      "descriptionEn": "Generate a whole new file. An existing path is overwritten.",
+      "limits": "改已有内容用 apply，不要靠 create 覆盖。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不要同时写。",
+      "limitsEn": "To change existing content, use apply instead of overwriting with create. xlsx uses workbook, docx uses document, and pptx uses presentation. Do not write all three together.",
       "type": "object",
       "comment": "path 必填。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": [
