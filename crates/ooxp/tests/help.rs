@@ -47,6 +47,34 @@ fn index_says_there_is_no_preview() {
 }
 
 #[test]
+fn index_lists_all_seven_actions() {
+    let value = help(serde_json::json!({})).unwrap();
+    let actions = value["actions"].as_array().unwrap();
+    assert_eq!(actions.len(), 7);
+    let names: Vec<&str> = actions
+        .iter()
+        .map(|item| item["action"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "inspect",
+            "create",
+            "apply",
+            "exportMedia",
+            "exportChartData",
+            "layoutCheck",
+            "help",
+        ]
+    );
+    let layout_check = actions
+        .iter()
+        .find(|item| item["action"] == "layoutCheck")
+        .unwrap();
+    assert!(!layout_check["description"].as_str().unwrap().is_empty());
+}
+
+#[test]
 fn index_tells_actions_apart() {
     let value = help(serde_json::json!({})).unwrap();
     assert_eq!(value["kind"], "actions");
