@@ -2346,12 +2346,16 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `box` 是幻灯片 EMU。形状自身 `a:xfrm` 给的是组内坐标，要沿祖先组合链换算。
 - 一层组合取 `p:grpSpPr/a:xfrm` 的 `off=(gx,gy)`、`ext=(gcx,gcy)`、`chOff=(cx0,cy0)`、`chExt=(ccx,ccy)`。
   换算为 `sx = gx + (x - cx0) × gcx / ccx`，`sy = gy + (y - cy0) × gcy / ccy`，`scx = cx × gcx / ccx`，`scy = cy × gcy / ccy`。
-- `off` 元素或属性缺失时取 `gx = 0`、`gy = 0`；`ext` 缺失时该层按恒等处理，不再往下读。
-- `chOff` 元素或属性缺失时取 `cx0 = 0`、`cy0 = 0`；`chExt` 元素或属性缺失时取 `ccx = gcx`、`ccy = gcy`。
-  这几个是本契约的缺省值，不依赖 Office 的补齐行为。
+- 四个元素都按属性补缺省，已有属性原样保留，不因同伴缺失被重置；元素整体缺失视作两个属性都缺。
+- `a:off/@x` 缺取 `gx = 0`，`/@y` 缺取 `gy = 0`；`a:ext/@cx` 缺取 `gcx = 0`，`/@cy` 缺取 `gcy = 0`。
+- `a:chOff/@x` 缺取 `cx0 = 0`，`/@y` 缺取 `cy0 = 0`。
+- `a:chExt/@cx` 缺取 `ccx = gcx`，`/@cy` 缺取 `ccy = gcy`；这里取同一层 `a:ext` 补完缺省后的值。
+- 例：`<a:off x="914400"/>` 得 `gx = 914400`、`gy = 0`；`<a:chExt cy="100"/>` 得 `ccx = gcx`、`ccy = 100`。
+- 这几个是本契约的缺省值，不依赖 Office 补齐。
 - 嵌套组合按从最内层到最外层逐层套用。中间按有理数算，最后四舍五入到最近 EMU 整数，半值远离零。
   负坐标会出现，`-1.5` 收成 `-2`，`1.5` 收成 `2`。
-- 只有 `ccx` 或 `ccy` 的数值为 0 时该层按恒等处理；元素缺失走上面的缺省值，不算 0。缺 `a:xfrm` 的形状不给 `box`。
+- 恒等判定看补完缺省后的值：`ccx` 或 `ccy` 为 0 时该层按恒等处理。
+  缺失本身不判 0，先按上面补缺省；补完仍为 0 才恒等。缺 `a:xfrm` 的形状不给 `box`。
 - `box` 与同一 id 在 `inspect` 里的 `x` / `y` / `cx` / `cy` 不是同一坐标系，不能直接比相等。
   后者按 [pptx 分册](json-contract-pptx.md) 第 1220 行取自身 `a:xfrm` 的原始 EMU，不换算。第 914 行是图的规则，管不到形状。
 - 仓库目前只在生成组合时写 `chOff` / `chExt`，没有读取换算的代码，`layoutCheck` 要自己实现这一步。
