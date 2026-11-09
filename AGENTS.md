@@ -98,3 +98,7 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 ## 建议的开工顺序
 
 按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。xlsx、docx、pptx 第一期都已实现。`ooxp mcp` 只是命令行上的 JSON-RPC 入口，领域 JSON 仍原样交给库。
+
+## 发布
+
+推送 tag `v<版本>` 会发布四个命令行包，外加一个名为 `wasm` 的 TypeScript 包。版本号在 `Cargo.toml`，tag 是 `v` 加上这个版本号。命令行名字用 Node.js 的 `process.platform` 和 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-arm64`、`win32-x64`。文件名和目录见 `docs/cli.md` 的「发布」。
