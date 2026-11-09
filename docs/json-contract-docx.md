@@ -905,10 +905,9 @@ xlsx 的 `scope` 里出现 `textBoxContent`、`notes`、`oleObjects`、`watermar
 `bookmarks`、`editRanges`、`fields`、`tocs`、`captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、
 `docParts`、`maths`、`contentControls`、`numbering`、`styles`、`runs`、`rubies` 或 `inkCanvases` 报 `InvalidField`。
 xlsx 认 `scope.pictures`、`scope.charts`、`scope.headerFooter`、`scope.comments`、`scope.textBoxes` 与 `scope.smartArt`。
-pptx 的 `scope` 里出现 `headerFooter`、`textBoxes`、`textBoxContent`、`revisions`、`hyperlinks`、`bookmarks`、`editRanges`、`fields`、`tocs`、
-`captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、`docParts`、`maths`、
-`contentControls`、`numbering`、`styles`、`oleObjects`、`watermarks`、`runs`、`rubies` 或 `inkCanvases` 报 `InvalidField`。
-pptx 认 `scope.pictures`、`scope.charts`、`scope.smartArt`、`scope.tables`、`scope.notes`、`scope.comments` 与 `scope.timing`。
+pptx 的 `scope` 认哪些键，见 [pptx 分册](json-contract-pptx.md#scope)，本节不重复列举。
+`headerFooter`、`textBoxContent`、`revisions`、`bookmarks`、`watermarks`、`runs`、`rubies`、`inkCanvases` 出现在 pptx 上报 `InvalidField`。
+`hyperlinks`、`fields`、`maths`、`oleObjects` 是 pptx 自己认的键，不能按 docx 的规则推。
 xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开幻灯片 DrawingML 表；docx 展开 `w:tbl`。
 只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。xlsx 的 `scope` 里出现 `textBoxContent` 仍报 `InvalidField`。
 

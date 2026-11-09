@@ -572,6 +572,7 @@
   - `scope.handout`
   - `scope.sections`
   - `scope.customShows`
+  - `scope.inks`
 - docx 认 `scope.connectors`
 - xlsx 认 `scope.connectors` 与 `scope.shapes`
 - xlsx / docx 的 `scope` 里出现 `handout` 或 `notesMaster` 报 `InvalidField`

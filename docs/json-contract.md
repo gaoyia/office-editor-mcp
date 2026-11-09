@@ -22,7 +22,8 @@ pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母
 xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。
 pptx 的 `scope.charts` 与图表 op 认幻灯片、备注页与幻灯片母版 / 版式上的图表 `p:graphicFrame`；`exportChartData` 认这些图表 id，写出 embedding。
 pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片、备注页与幻灯片母版 / 版式上的 diagram `p:graphicFrame`。
-pptx 的 `scope.tables` 与表格 op 认幻灯片、备注页与幻灯片母版 / 版式上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
+pptx 的 `scope.tables` 与表格 op 认幻灯片上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
+备注里的表不进幻灯片 `tables`，只在 `scope.notes` 时出现在 `notes` 上。逐键范围以 [pptx 分册](json-contract-pptx.md#scope) 为准。
 pptx 的 `scope.connectors` 列出该页 `p:cxnSp`；`scope.notes` 与 `scope.connectors` 同开时备注上也列；`scope.masters` 同开时母版 / 版式上也列。
 apply 用 `insertConnector` / `deleteConnector` / `setConnector` / `groupShapes` / `ungroup`，
 以及 `insertShape` 的 `prst` / `geom`、`setShapeGeom`。
@@ -59,7 +60,8 @@ pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形�
 装饰形还可用 `setShapeGeom`。
 pptx 的 `scope.handout` 列出讲义母版 theme、页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符，也可用同一套 theme op 改讲义 theme。
 pptx 的 `scope.notesMaster` 列出备注母版 theme 与占位符，apply 用同一套占位符 op、预设动画与 theme op。
-pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
+pptx 的 `scope.hyperlinks` 与超链接 op 认形状级 `p:cNvPr/a:hlinkClick`、run 级 `a:rPr/a:hlinkClick`、悬停事件，以及图 / 表 / 图表 / SmartArt / 单元格上的链。
+`scope.notes` 与 `scope.hyperlinks` 同开时备注上也填，`scope.masters` 同开时母版 / 版式上也填。逐键范围以 [pptx 分册](json-contract-pptx.md#scope) 为准。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
 xlsx 仍拒 `scope.fields` 与这三条。docx 仍写 `w:fldChar` / `instr`，并可按 `code` 写常用域与窗体 `ffData`。
 pptx 的 `scope.media` 与媒体 op 认幻灯片、备注页与幻灯片母版 / 版式上带 `a:videoFile` / `a:audioFile` 的 `p:pic`，与普通图分家。

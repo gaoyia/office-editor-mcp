@@ -431,6 +431,15 @@ pptx 批注走 `slide:{n}/comment:{guid}`，不走 `comment:{w:id}`。
 ## inspect
 
 xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，混用报 `InvalidField`。请求信封见 [json-contract.md](json-contract.md#请求)。
+本节是 pptx `scope` 键的唯一清单。主册与 docx 分册里的跨格式说明不逐键列举，与本节冲突时以本节为准。
+pptx 认 23 个键：`slide`、`maxShapes`，以及下列 21 个开关。
+
+- `pictures`、`media`、`charts`、`smartArt`、`notes`、`comments`
+- `hyperlinks`、`fields`、`tables`、`connectors`、`timing`
+- `masters`、`notesMaster`、`handout`、`sections`、`customShows`
+- `oleObjects`、`model3ds`、`inks`、`maths`、`zooms`
+
+`shapes`、`textBoxes`、`headerFooter` 等是 xlsx / docx 的键，pptx 一律报 `InvalidField`。
 
 ### scope
 
@@ -652,9 +661,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - xlsx / docx 的 `scope` 里出现 `customShows` 报 `InvalidField`
 
 只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。
-只给 `pictures: true`、`charts: true`、`smartArt: true`、`tables: true`、`oleObjects: true`、`zooms: true`、`connectors: true`、
-`notes: true`、`comments: true`、`hyperlinks: true`、`fields: true`、`timing: true`、`masters: true`、`notesMaster: true`、`handout: true`、
-`sections: true` 或 `customShows: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。
+本节开头列的 21 个开关只给任意一个、不给 `slide` 都合法，各页都带对应名单、都不带幻灯片 `shapes`。
 根上 `masters` 只看 `scope.masters`。根上 `notesMaster` 只看 `scope.notesMaster`。根上 `handout` 只看 `scope.handout`。根上 `sections` 只看 `scope.sections`。
 根上 `customShows` 只看 `scope.customShows`。`slide` 小于 `1` 报 `InvalidField`。
 `slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；
