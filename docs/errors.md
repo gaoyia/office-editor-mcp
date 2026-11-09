@@ -22,8 +22,9 @@
 apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构造该条 op 的错误时读取，读不到就省略。
 
 - `objectId` 是该条 op 的 `id` 原值，不解析、不换成内部编号。
-- `objectName` 只在这条 op 的 JSON 自身带字符串字段 `name` 时出现，值就是这个字符串。不读包，不去查 `p:cNvPr/@name`。
-- 多数 op 没有 `name`。带 `name` 的 op 里，这个字段是版式名、主题方案名、书签名、节名、自定义放映名或系列名，值按原样带出。
+- `objectName` 只在该条 op 的顶层 JSON 有字符串字段 `name` 时出现，值就是这个原值。
+  语义跟该 op 自己的 `name`，不读包，不解释成 `p:cNvPr/@name`。
+- 不枚举哪些 op 带 `name`。除 pptx 的版式名、节名、系列名外，docx 的 `InsertDocPartOp.name` 是构建基块名，xlsx 的 `InsertProtectedRangeOp.name` 是保护区域名，列清单会漏。
 
 负坐标这类字段错误在 `parse_off_at` 解析期就能报，此时 `parse_ops` 手里只有 `ops`，拿不到包内名字，所以包内名字不能当 `objectName` 的来源。
 `objectId` 与 `objectName` 不参与语言渲染，也不影响 `code` 与退出码。

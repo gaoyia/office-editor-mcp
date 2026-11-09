@@ -2346,13 +2346,17 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `box` 是幻灯片 EMU。形状自身 `a:xfrm` 给的是组内坐标，要沿祖先组合链换算。
 - 一层组合取 `p:grpSpPr/a:xfrm` 的 `off=(gx,gy)`、`ext=(gcx,gcy)`、`chOff=(cx0,cy0)`、`chExt=(ccx,ccy)`。
   换算为 `sx = gx + (x - cx0) × gcx / ccx`，`sy = gy + (y - cy0) × gcy / ccy`，`scx = cx × gcx / ccx`，`scy = cy × gcy / ccy`。
-- 嵌套组合按从最内层到最外层逐层套用。中间按有理数算，最后四舍五入到最近 EMU 整数。
-  `ccx` 或 `ccy` 为 0 时该层按恒等处理。缺 `a:xfrm` 的形状不给 `box`。
+- `off` 元素或属性缺失时取 `gx = 0`、`gy = 0`；`ext` 缺失时该层按恒等处理，不再往下读。
+- `chOff` 元素或属性缺失时取 `cx0 = 0`、`cy0 = 0`；`chExt` 元素或属性缺失时取 `ccx = gcx`、`ccy = gcy`。
+  这几个是本契约的缺省值，不依赖 Office 的补齐行为。
+- 嵌套组合按从最内层到最外层逐层套用。中间按有理数算，最后四舍五入到最近 EMU 整数，半值远离零。
+  负坐标会出现，`-1.5` 收成 `-2`，`1.5` 收成 `2`。
+- 只有 `ccx` 或 `ccy` 的数值为 0 时该层按恒等处理；元素缺失走上面的缺省值，不算 0。缺 `a:xfrm` 的形状不给 `box`。
 - `box` 与同一 id 在 `inspect` 里的 `x` / `y` / `cx` / `cy` 不是同一坐标系，不能直接比相等。
   后者按 [pptx 分册](json-contract-pptx.md) 第 1220 行取自身 `a:xfrm` 的原始 EMU，不换算。第 914 行是图的规则，管不到形状。
 - 仓库目前只在生成组合时写 `chOff` / `chExt`，没有读取换算的代码，`layoutCheck` 要自己实现这一步。
 
-判定式，都按 EMU 整数算：
+判定式都用整数算，长度量取 EMU：
 
 - `slideSize` 取 `p:sldSz` 的 `cx` / `cy`。
 - 越出条件：`x < 0`、`y < 0`、`x + cx > slideSize.cx`、`y + cy > slideSize.cy`，四条有一条成立即越出。
@@ -2362,11 +2366,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   只有 `iw > 0` 且 `ih > 0` 才列入 `overlaps`，`area = iw × ih`。边界相接时 `area` 为 0，不列入。
   每对只列一次，`spTree` 文档序在前的放 `a`。缺 `box` 的形状不参与。
 - 文字溢出的 `estimated` 恒为 `true`，表示下面这个可复现的阈值，不表示排版准确，也不保证与 PowerPoint 一致。
-- 文本取 `p:txBody` 里 `a:r/a:t` 按文档序拼接，段间与 `a:br` 各算一次换行，字符数按 Unicode 标量数计。
-- 字号 `sz` 取各 run 的 `a:rPr/@sz` 最大值，取不到用 1800。`szEMU = sz × 127`。
+- 文本按 `p:txBody` 的 `a:p` 分段，段内再按 `a:br` 拆成片段。每个片段取 `a:r/a:t` 按文档序拼接，字符数按 Unicode 标量数计。
+- 字号 `sz` 取各 run 的 `a:rPr/@sz` 最大值；取不到或数值为 0 时按 1800 处理，避免除零。`szEMU = sz × 127`。
 - 可用宽 `w = box.cx - lIns - rIns`，可用高 `h = box.cy - tIns - bIns`。四个 inset 取 `a:bodyPr`，`lIns` / `rIns` 缺省 91440，`tIns` / `bIns` 缺省 45720。
-- 每行容量 `n = max(1, floor(w / (szEMU × 0.5)))`；所需行数 `rows` 为各段 `max(1, ceil(段字符数 / n))` 之和，再加显式换行数。
-- `rows × szEMU × 1.2 > h` 时该形状 id 进 `textOverflow`。`0.5` 与 `1.2` 是固定估算系数，不读字体度量、不排文字。
+- 每行容量 `n = max(1, floor(2 × w / szEMU))`。`rows` 为各片段 `max(1, ceil(片段字符数 / n))` 之和，不再另加换行数；空片段计 1 行。
+- `rows × sz × 762 > h × 5` 时该形状 id 进 `textOverflow`。
+  这是纯整数比较：`szEMU × 6/5` 展开就是 `sz × 762 / 5`，不引入浮点。系数 `1/2` 与 `6/5` 是固定估算值，不读字体度量、不排文字。
   无 `p:txBody`、文本为空或缺 `box` 的形状不进名单。
 
 `layoutCheck` 不改 `inspect` / `apply` / `create` 的语义，也不进 `opc` 的写回路径。失败时走 [errors.md](errors.md) 的错误形态。
