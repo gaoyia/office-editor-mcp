@@ -8,17 +8,15 @@
 
 命令行可以执行 `ooxp mcp`，从标准输入读 JSON-RPC。工具参数仍是领域 JSON。库不解析信封。外部调用方也可以自己包传输信封，`params` 里必须是完整的领域 JSON。
 
-## 许可与捐赠
+## 许可
 
-本仓库以 Business Source License 1.0 发布，全文在 `LICENSE`。作者目前有经济压力，选用这份许可是迫不得已。接受捐赠或出售商用授权。
+本仓库以 Business Source License 1.0 发布，全文在 `LICENSE`。
 
-**工具作者强烈谴责A股市场环境**：工具作者因买入A股【华铁股份】现【R通达1】董事长占用上市公司13亿。不完全统计**家庭总计亏损高达200万人民币**。目前正在起诉，进入二审阶段，执行更是不知要到什么时候了，这已经是第三、四年了，其余股票也亏损严重，现金流状况至今难以缓解。
+- Change Date 是 `2126-10-29`，之后转为 Change License（MIT），见 `LICENSE` 开头。
+- Change Date 之前，**非生产用途**不受 Use Limitation 限制：可以复制、修改、展示、使用、制作衍生作品和再分发。
+- **生产使用和商用**必须另向作者购买商业授权，写信到 gaoyia@qq.com。
 
-生产使用和商用必须向作者购买商业授权。购买请写信到 gaoyia@qq.com。
-
-| 微信赞赏码 | 支付宝领红包 | 支付宝 |
-| --- | --- | --- |
-| ![微信赞赏码](https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/donate.jpg) | ![支付宝领红包](https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/zfbhb.jpg) | ![支付宝](https://cdn.jsdelivr.net/gh/gaoyia/gaoyia@v0.0.2/zfb.jpg) |
+捐赠与作者近况见 [DONATE.md](DONATE.md)。
 
 ## 动作
 
@@ -34,18 +32,18 @@
 
 `inspect` 默认不把整份文件倒出来，也不把媒体字节塞进树。`apply` 的入参是操作列表，不能是整棵 inspect 树。
 
-## 构建
+## 安装与构建
 
-需要 Rust 2021 edition。
+从 crates.io 装命令行：`cargo install ooxp-cli`。库用 `cargo add ooxp`。源码构建需要 Rust 2021 edition：
 
 ```text
-cargo add ooxp
-cargo install ooxp-cli
 cargo build -p ooxp-cli --release
 cargo test
 ```
 
 二进制名是 `ooxp`。库 crate 也叫 `ooxp`。
+
+Release 资产的下载链接会跳转到带签名的地址。某些网络下 `curl -L` 跟这个跳转会返回 504，而 `static.crates.io` 仍可用；遇到这种情况改走 crates.io 安装，不要反复重试 Release 链接。同一版 Release 里还有 `SHASUMS256.txt`，每行是 SHA-256 和文件名，下完压缩包后按它核对。
 
 推送 tag `v<版本>` 会发布四个命令行包，外加一个名为 `wasm` 的 TypeScript 包。版本号在 `Cargo.toml`，tag 是 `v` 加上这个版本号。命令行名字用 Node.js 的 `process.platform` 和 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-arm64`、`win32-x64`。文件名和目录见 `docs/cli.md` 的「发布」。
 
