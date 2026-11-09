@@ -272,7 +272,11 @@ $order = @(
     'xlsx-implicit-cell'
     'pptx-connector-line'
     'docx-chart-shared'
-    # 阶段二探测用例：只往 out 写 XML 对照片段，不改仓库文件，也不挂待做序号。
+)
+
+# 阶段二探测用例：只往 out 写 XML 对照片段，不改仓库文件，也不挂待做序号。
+# 不进默认全跑，只有 -Case 里点名带 probe 才选，免得把没出结果的探测混进日常验收。
+$probeOrder = @(
     'pptx-bg-fill-probe'
     'pptx-zorder-probe'
     'pptx-offslide-geom-probe'
@@ -281,10 +285,17 @@ $order = @(
 $casesDir = Join-Path $PSScriptRoot 'cases'
 if ($List) {
     $order | ForEach-Object { "  $_" }
+    $probeOrder | ForEach-Object { "  $_ (probe)" }
     return
 }
 
-$selected = @($order | Where-Object { $name = $_; @($Case | Where-Object { $name -like $_ }).Count -gt 0 })
+$wantProbe = @($Case | Where-Object { $_ -like '*probe*' }).Count -gt 0
+$pool = @($order) + @($probeOrder)
+$selected = @($pool | Where-Object {
+    $name = $_
+    $match = @($Case | Where-Object { $name -like $_ }).Count -gt 0
+    $match -and ($wantProbe -or ($probeOrder -notcontains $name))
+})
 if (-not $selected.Count) {
     throw "没有用例匹配 $($Case -join ',')，可选的有：$($order -join ', ')"
 }

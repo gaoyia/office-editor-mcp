@@ -37,6 +37,14 @@ pwsh -File manual-check\office\run.ps1 -List             # 只看有哪些用例
 pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word、Excel 和 PowerPoint
 ```
 
+阶段二的 PowerPoint 16.0 另存探测用例不进默认全跑，要按名字单跑：
+
+```powershell
+pwsh -File manual-check\office\run.ps1 -Case 'pptx-*-probe'
+```
+
+这三份只往 `office/out` 写另存的 pptx 和 XML 对照片段，不改仓库里的文件、不挂待做序号。探测结果回来前不写契约、不改 Rust 写入逻辑。
+
 默认跑完把 `xlsx-applied.xlsx`、`docx-applied.docx` 和 `pptx-applied.pptx` 留在 Office 里，方便接着用肉眼过清单。看完想收拾干净，就加 `-CloseOffice`。
 
 结果打在屏幕上，同时写进 `office/out/office-results.csv`，逐条日志在 `office/out/com-log.txt`。每个用例套独立的 try/catch，一个塌了不影响后面的，所以不必再为了跑完剩下的去复制脚本。
