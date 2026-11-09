@@ -272,6 +272,10 @@ $order = @(
     'xlsx-implicit-cell'
     'pptx-connector-line'
     'docx-chart-shared'
+    # 阶段二探测用例：只往 out 写 XML 对照片段，不改仓库文件，也不挂待做序号。
+    'pptx-bg-fill-probe'
+    'pptx-zorder-probe'
+    'pptx-offslide-geom-probe'
 )
 
 $casesDir = Join-Path $PSScriptRoot 'cases'
