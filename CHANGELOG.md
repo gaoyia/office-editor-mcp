@@ -13,3 +13,4 @@
 - pptx 的 `insertShape` 和 `insertPicture` 可以用 `index`、`before` 或 `after` 指定图层。create 的图片可以用 `index`。
 - pptx 形状的坐标可以为负。连接线和图片的坐标仍从 0 起。
 - pptx 的 create 可以在 `shapes` 里直接写预设几何、坐标、尺寸、填充和线条。这些都省略时，缺省文本框与上一版字节相同。
+- 命令行压缩包的根上直接是可执行文件和 `LICENSE`，不再套同名目录。Release 另外附上同一份 `LICENSE`。`SHASUMS256.txt` 包含这份许可证和各个压缩包。

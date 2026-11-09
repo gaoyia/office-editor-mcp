@@ -175,7 +175,8 @@ JSON-RPC 解析失败是 `-32700`，不接受的批量请求是 `-32600`，未�
 
 - 命令行文件名是 `ooxp-v<版本>-<platform>-<arch>`
 - Windows 用 `.zip`，另外三个用 `.tar.gz`
-- 压缩包里是同名目录。可执行文件是 `ooxp`，Windows 上是 `ooxp.exe`
-- TypeScript 包的文件名是 `ooxp-v<版本>-wasm.tar.gz`，目录名相同，包名是 `wasm`
+- 命令行压缩包的根上直接是可执行文件和 `LICENSE`。可执行文件是 `ooxp`，Windows 上是 `ooxp.exe`
+- TypeScript 包的文件名是 `ooxp-v<版本>-wasm.tar.gz`。包内有一层同名目录，目录里是源文件和 `LICENSE`。包名是 `wasm`
 - 入口是 `index.ts`。先 `await init()`，再 `new Session()`
-- 同一版 Release 里还有 `SHASUMS256.txt`，每行是 SHA-256 和文件名
+- 同一版 Release 里还有仓库根的 `LICENSE`，以及 `SHASUMS256.txt`
+- `SHASUMS256.txt` 每行是 SHA-256 和文件名，包含 `LICENSE` 和各个压缩包
