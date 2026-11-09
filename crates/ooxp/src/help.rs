@@ -174,20 +174,13 @@ fn load_catalog() -> Catalog {
     Catalog { ops, defs }
 }
 
-fn lookup_enum_def(reference: &str) -> Option<Value> {
-    let name = reference.strip_prefix("#/$defs/")?;
-    if name.contains('/') {
-        return None;
-    }
-    let body = catalog().defs.get(name)?;
-    body.get("enum")?;
-    Some(body.clone())
-}
-
-fn lookup_def_pointer(reference: &str) -> Option<Value> {
+fn lookup_ref(reference: &str) -> Option<Value> {
     let rest = reference.strip_prefix("#/$defs/")?;
-    let (name, tail) = rest.split_once('/')?;
+    let (name, tail) = rest.split_once('/').unwrap_or((rest, ""));
     let mut current = catalog().defs.get(name)?.clone();
+    if tail.is_empty() {
+        return Some(current);
+    }
     for part in tail.split('/') {
         let key = part.replace("~1", "/").replace("~0", "~");
         current = current.get(&key)?.clone();
@@ -635,7 +628,7 @@ fn retain_scope_fields(out: &mut Value, format: &str) {
 }
 
 fn fields_of(body: &Value) -> Value {
-    let mut value = shorten_refs(body);
+    let mut value = shorten_refs(body, true);
     if let Some(obj) = value.as_object_mut() {
         obj.remove("description");
         obj.remove("descriptionEn");
@@ -715,28 +708,32 @@ fn pick<'a>(
     }
 }
 
-fn shorten_refs(value: &Value) -> Value {
+/// `expand` 为真时，单独的 `$ref` 换成被引用的定义。换进去的那一层不再展开。
+fn shorten_refs(value: &Value, expand: bool) -> Value {
     match value {
         Value::Object(map) => {
             if map.len() == 1 {
                 if let Some(reference) = map.get("$ref").and_then(Value::as_str) {
-                    if let Some(resolved) = lookup_def_pointer(reference) {
-                        return shorten_refs(&resolved);
-                    }
-                    // 只展开「整份定义就是一份 enum」的词表。其它单独的 $ref 仍只留定义名。
-                    if let Some(resolved) = lookup_enum_def(reference) {
-                        return shorten_refs(&resolved);
+                    if expand {
+                        if let Some(resolved) = lookup_ref(reference) {
+                            return shorten_refs(&resolved, false);
+                        }
                     }
                     return json!({ "$ref": ref_def_name(reference) });
                 }
             }
             let mut out = Map::new();
             for (key, child) in map {
-                out.insert(key.clone(), shorten_refs(child));
+                out.insert(key.clone(), shorten_refs(child, expand));
             }
             Value::Object(out)
         }
-        Value::Array(items) => Value::Array(items.iter().map(shorten_refs).collect()),
+        Value::Array(items) => Value::Array(
+            items
+                .iter()
+                .map(|item| shorten_refs(item, expand))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }

@@ -39,6 +39,8 @@ python docs/json-schema/build.py --check
 `formats` 的取值只有 `xlsx`、`docx`、`pptx`，与 `build.py` 的 `FORMATS` 一致。`format` 为 `xlsm` 时先按 `parse_format` 收成 `xlsx` 再筛，不能拿原字符串去比。
 `help()` 用 `format_key` 归一后把该值传给 `def_detail`，现有运行结果不会出现空字段表。
 
+`help` 读的就是 crate 里这份 `request.schema.json`。打开一个定义或一条操作时，单独的 `$ref` 只展开一层，展开后里面的 `$ref` 只留定义名。文件本身不展开 `$ref`。搜索不跟着 `$ref` 走。
+
 每个操作的 `description` 只写它做什么，英文写在 `descriptionEn`。不能怎么填写在 `limits`，英文写在 `limitsEn`。`help` 检索看中英两边，返回时按 `locale` 只留一种。不写 `locale` 用中文。
 
 同一种格式里名字相同、填法不同的定义，定义名前面带格式，例如 `xlsxInsertMathOp`。请求里的 `op` 仍写 `insertMath`。

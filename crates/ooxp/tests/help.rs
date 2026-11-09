@@ -333,6 +333,25 @@ fn ask_entries_are_complete_requests() {
 }
 
 #[test]
+fn help_expands_one_ref_layer() {
+    let book = help(serde_json::json!({"name": "xlsxWorkbook"})).unwrap();
+    let sheet = &book["fields"]["properties"]["sheets"]["items"];
+    assert!(sheet["properties"].get("name").is_some(), "{sheet}");
+    assert_eq!(
+        sheet["properties"]["cells"]["items"]["$ref"],
+        "xlsxCellCreate"
+    );
+
+    let sheet_def = help(serde_json::json!({"name": "xlsxSheetCreate"})).unwrap();
+    let cell = &sheet_def["fields"]["properties"]["cells"]["items"];
+    assert_eq!(cell["properties"]["font"]["$ref"], "setCellStyleOp");
+
+    let cell_def = help(serde_json::json!({"name": "xlsxCellCreate"})).unwrap();
+    let color = &cell_def["fields"]["properties"]["font"]["properties"]["color"];
+    assert_eq!(color["$ref"], "cellColor");
+}
+
+#[test]
 fn cell_create_style_reuses_set_cell_style_fields() {
     let value = help(serde_json::json!({"name": "xlsxCellCreate"})).unwrap();
     let font = &value["fields"]["properties"]["font"];

@@ -64,6 +64,23 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 用 `ProcessStartInfo` 时改设 `StandardOutputEncoding` 与 `StandardErrorEncoding`，`manual-check/office/` 下的脚本就是这么写的。
 
+## help
+
+`action` 为 `help` 时不读 Office 文件，也不改文件。
+
+- 不带参数时返回七个动作，以及 `ask`
+- `ask` 里的每一条都是可以原样提交的 help 请求
+- 带 `format` 时列出该格式的 op
+- 带 `q` 时按当前层写出的字段名和说明搜索
+- 搜索不跟着 `$ref` 走进被引用的定义
+- 带 `format` 加 `op`，或带 `name`，打开这一层的字段
+- 这一层里单独一个 `$ref` 展开成被引用定义的字段
+- 展开进去之后，里面的 `$ref` 只留定义名；要再看就用 `name`
+- 同一个对象里 `$ref` 旁边还有别的键时，不展开
+- 返回的 `fields` 不是整份 schema
+- 整份请求 schema 在 [json-schema/request.schema.json](json-schema/request.schema.json)
+- 那份文件里的 `$ref` 保持链接，不在文件里展开
+
 ## mcp
 
 `ooxp mcp` 启动后从标准输入读消息，把结果写回标准输出。标准输入是终端时，向 stderr 写一句正在等待，这句跟着 `--lang`。没带 `--lang` 时这句是中文。然后继续等。`--lang` 后面要有语言标签，例如 `ooxp mcp --lang zh-CN`。其它参数向 stderr 写「mcp 只接受 --lang」，退出码 1，此时还没有协议消息。
