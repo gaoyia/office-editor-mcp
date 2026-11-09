@@ -145,7 +145,7 @@ let out = ooxp::run(json, None)?;
 
 ## 文档
 
-行为以 `docs/` 为准。
+行为以 `docs/` 为准。每次发布改了什么写在根目录的 `CHANGELOG.md`。
 
 | 文件 | 内容 |
 | --- | --- |

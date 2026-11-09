@@ -173,7 +173,22 @@ jobs:
             sha256sum ooxp-v"${version}"-* | sort -k2 > SHASUMS256.txt
           )
           notes=$(mktemp)
-          printf '%s\n' "来自 tag ${tag} 的 ${GITHUB_SHA}。" "" "命令行包名是 Node.js 的 process.platform 加 process.arch。另有 TypeScript 包 ooxp-v${version}-wasm.tar.gz。" > "$notes"
+          python - "$version" CHANGELOG.md "$notes" <<'PY'
+          import pathlib, sys
+          version, src, dest = sys.argv[1], pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3])
+          heading = f"## {version}"
+          lines = src.read_text(encoding="utf-8").splitlines()
+          start = next((i + 1 for i, line in enumerate(lines) if line.strip() == heading), None)
+          if start is None:
+              sys.stderr.write(f"CHANGELOG.md 没有 {heading}\n")
+              sys.exit(1)
+          end = next((j for j in range(start, len(lines)) if lines[j].startswith("## ")), len(lines))
+          body = "\n".join(lines[start:end]).strip()
+          if not body:
+              sys.stderr.write(f"CHANGELOG.md 的 {heading} 是空的\n")
+              sys.exit(1)
+          dest.write_text(body + "\n", encoding="utf-8")
+          PY
           gh release create "$tag" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "ooxp ${tag}" \

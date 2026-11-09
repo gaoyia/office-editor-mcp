@@ -102,3 +102,5 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 ## 发布
 
 推送 tag `v<版本>` 会发布四个命令行包，外加一个名为 `wasm` 的 TypeScript 包。版本号在 `Cargo.toml`，tag 是 `v` 加上这个版本号。命令行名字用 Node.js 的 `process.platform` 和 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-arm64`、`win32-x64`。文件名和目录见 `docs/cli.md` 的「发布」。
+
+发新版前，在 `CHANGELOG.md` 写这一版改了什么。标题是 `## ` 加上 `Cargo.toml` 里的版本号。发布工作流把这一节当作 Release 说明。从 0.1.3 起记，更早的版本不补。
