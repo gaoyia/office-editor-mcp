@@ -38,6 +38,18 @@ jobs:
           set -euo pipefail
           cargo build -p ooxp-wasm --target wasm32-unknown-unknown --release
           wasm-bindgen target/wasm32-unknown-unknown/release/ooxp_wasm.wasm --out-dir demo/web/pkg --target web
+          stamp="$(date -u +%Y%m%d%H%M%S)"
+          OOXP_BUILD="$stamp" python - <<'PY'
+          from pathlib import Path
+          import os
+          stamp = os.environ["OOXP_BUILD"]
+          for name in ("demo/web/index.html", "demo/web/app.js"):
+              path = Path(name)
+              text = path.read_text(encoding="utf-8")
+              if "__OOXP_BUILD__" not in text:
+                  raise SystemExit(f"missing stamp token: {name}")
+              path.write_text(text.replace("__OOXP_BUILD__", stamp), encoding="utf-8")
+          PY
 
       - uses: actions/upload-pages-artifact@v3
         with:

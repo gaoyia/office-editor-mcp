@@ -1,7 +1,7 @@
-import init, { Session } from "./pkg/ooxp_wasm.js";
-import xlsxCreate from "./samples/xlsx.json" with { type: "json" };
-import docxCreate from "./samples/docx.json" with { type: "json" };
-import pptxCreate from "./samples/pptx.json" with { type: "json" };
+import init, { Session } from "./pkg/ooxp_wasm.js?v=__OOXP_BUILD__";
+import xlsxCreate from "./samples/xlsx.json?v=__OOXP_BUILD__" with { type: "json" };
+import docxCreate from "./samples/docx.json?v=__OOXP_BUILD__" with { type: "json" };
+import pptxCreate from "./samples/pptx.json?v=__OOXP_BUILD__" with { type: "json" };
 
 const FORMATS = [
   {
@@ -965,7 +965,7 @@ async function boot() {
     renderFiles(null);
   }
   try {
-    await init();
+    await init(new URL("./pkg/ooxp_wasm_bg.wasm?v=__OOXP_BUILD__", import.meta.url));
     session = new Session();
     const ping = session.run(JSON.stringify({ action: "help", locale: lang === "zh" ? "zh" : "en" }), new Uint8Array(0));
     if (!ping.ok) throw new Error(ping.error && ping.error.message ? ping.error.message : t("libFail"));

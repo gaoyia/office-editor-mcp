@@ -59,3 +59,5 @@ wasm-bindgen target/wasm32-unknown-unknown/release/ooxp_wasm.wasm --out-dir demo
 ```
 
 `wasm-bindgen` 命令行的版本必须和 `crates/ooxp-wasm` 里锁定的 `wasm-bindgen` 相同。当前是 `0.2.127`。
+
+样式表、页面脚本、三份示例 JSON、wasm 胶水脚本和 wasm 本体的地址都带 `__OOXP_BUILD__`。发布打包时把它换成当次的 UTC 时间戳，格式是 `YYYYMMDDHHMMSS`。同一次发布只用这一个值。本地打开不替换，占位符本身也是固定的。赞赏码在 jsDelivr 上，地址自带版本，不走这个占位符。
