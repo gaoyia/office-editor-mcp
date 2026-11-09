@@ -7,7 +7,8 @@
 
 产品名是 `ooxp`，全称 Office Open XML Patch。一个 Rust 库，外加一个命令行工具。库只认领域 JSON。命令行把 stdin 或文件里的领域 JSON 交给库，再把结果写到 stdout 或磁盘。
 
-命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把六个动作登记成工具。参数有两种形状：直接写领域 JSON，或只写 `requestPath` 指向一份领域 JSON 文件。命令行读完文件后，交给库的仍是领域 JSON。库不解析这一层信封。
+命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把七个动作登记成工具。七个动作是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`layoutCheck`、`help`。
+参数有两种形状：直接写领域 JSON，或只写 `requestPath` 指向一份领域 JSON 文件。命令行读完文件后，交给库的仍是领域 JSON。库不解析这一层信封。
 
 不许为了信封去改领域 JSON。`requestPath` 不是领域字段。也不许把动作拆扁成一套 MCP 专用字段。
 
@@ -43,6 +44,16 @@ pptx 的 `exportMedia` 认幻灯片图、备注图、批注内图、母版 / 版
 docx 的 `exportMedia` 认图、OLE、墨迹画布、3D 与嵌入字体。图写出 `/word/media/…`，OLE 写出 embeddings，墨迹写出 `/word/ink/…`，3D 写出 GLB，`font:{n}` 写出 `/word/fonts/…`。
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
+
+## 只读检查与试运行
+
+`layoutCheck` 是第七个动作，只读几何。它按 `path` 打开包，读每页形状的包围盒，返回越界、重叠与文字溢出估算。
+不写文件、不生成图片、不调用 Office、不按新画布重排。它不进 `opc` 的写回路径，也不改 `inspect` / `apply` / `create` 的语义。
+本期只对 pptx 实现，xlsx / docx 报 `InvalidField`。
+
+`apply` 的 `dryRun` 是可选布尔字段。设为 `true` 时，各条 op 仍按顺序在内存树上执行，但不调 `save_to_vec`，也不调 `write_atomic`。
+成功时返回本批标脏的部件名，不写任何文件。任一 op 失败仍按现有路径提前返回，内存树丢弃，源包不变。
+现有实现已经是全批原子，不新增事务或回滚类型。
 
 ## 模块
 

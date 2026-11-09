@@ -572,7 +572,10 @@ pptx 认 23 个键：`slide`、`maxShapes`，以及下列 21 个开关。
   - 为 `true` 时给每页填 `tables`
   - 省略或 `false` 则只有 `tableCount`，没有名单
   - 不依赖 `scope.slide`
-  - 备注里的表不进幻灯片 `tables`，只在 `scope.notes` 时出现在 `notes` 上
+  - 幻灯片上的表进每页 `tables`
+  - 备注里的表不进幻灯片 `tables`，只在 `scope.notes` 同开时出现在该页 `notes` 上
+  - 母版与版式上的表只在 `scope.masters` 同开时出现在该母版或版式上
+  - 备注表与母版表的 id 判定见本文表格 id 节，批注、备注母版、讲义上的表不进树
 - **`scope.oleObjects`**（否）
   - 为 `true` 时给每页填 `oleObjects`
   - 省略或 `false` 则只有 `oleObjectCount`，没有名单

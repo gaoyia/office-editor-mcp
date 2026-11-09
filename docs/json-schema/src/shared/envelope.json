@@ -52,190 +52,392 @@
       "properties": {
         "sheet": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "formats": [
+            "xlsx"
+          ]
         },
         "range": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "formats": [
+            "xlsx"
+          ]
         },
         "maxCells": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 20000
+          "maximum": 20000,
+          "formats": [
+            "xlsx"
+          ]
         },
         "from": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "formats": [
+            "docx"
+          ]
         },
         "maxParas": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 5000
+          "maximum": 5000,
+          "formats": [
+            "docx"
+          ]
         },
         "headerFooter": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx"
+          ]
         },
         "pictures": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "textBoxes": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx"
+          ]
         },
         "shapes": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx"
+          ]
         },
         "textBoxContent": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "notes": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx",
+            "pptx"
+          ]
         },
         "comments": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "charts": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "smartArt": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "slicers": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "protectedRanges": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "connections": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "externalLinks": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "customViews": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "cellStyles": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "oleObjects": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "watermarks": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "tables": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx",
+            "pptx"
+          ]
         },
         "connectors": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "inkCanvases": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "model3ds": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "inks": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "pptx"
+          ]
         },
         "timing": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "masters": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "notesMaster": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "handout": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "media": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "sections": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "customShows": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "zooms": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "pptx"
+          ]
         },
         "revisions": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "hyperlinks": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "sparklines": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
         },
         "bookmarks": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "editRanges": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "fields": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx",
+            "pptx"
+          ]
         },
         "tocs": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "captions": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "crossRefs": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "indexes": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "indexEntries": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "sources": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "citations": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "bibliographies": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "docParts": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "embeddedFonts": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "maths": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "xlsx",
+            "docx",
+            "pptx"
+          ]
         },
         "contentControls": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "numbering": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "styles": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "runs": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "rubies": {
-          "type": "boolean"
+          "type": "boolean",
+          "formats": [
+            "docx"
+          ]
         },
         "slide": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "formats": [
+            "pptx"
+          ]
         },
         "maxShapes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 5000
+          "maximum": 5000,
+          "formats": [
+            "pptx"
+          ]
         }
       },
       "dependentRequired": {
@@ -385,6 +587,9 @@
           "type": "string",
           "minLength": 1
         },
+        "dryRun": {
+          "type": "boolean"
+        },
         "locale": {
           "type": "string"
         },
@@ -499,6 +704,36 @@
         "output": {
           "type": "string",
           "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
+      }
+    },
+    "layoutCheckRequest": {
+      "description": "只读检查页上形状的几何，不改文件。",
+      "descriptionEn": "Check shape geometry on slides without changing the file.",
+      "limits": "不生成图片，不调用 Office，不重排。本期只做 pptx，其余格式报 InvalidField。",
+      "limitsEn": "No images, no Office calls, no reflow. Only pptx is supported in this phase; other formats return InvalidField.",
+      "type": "object",
+      "required": [
+        "action",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "layoutCheck"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
         },
         "locale": {
           "type": "string"

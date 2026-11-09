@@ -22,8 +22,9 @@ pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母
 xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。
 pptx 的 `scope.charts` 与图表 op 认幻灯片、备注页与幻灯片母版 / 版式上的图表 `p:graphicFrame`；`exportChartData` 认这些图表 id，写出 embedding。
 pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片、备注页与幻灯片母版 / 版式上的 diagram `p:graphicFrame`。
-pptx 的 `scope.tables` 与表格 op 认幻灯片上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
-备注里的表不进幻灯片 `tables`，只在 `scope.notes` 时出现在 `notes` 上。逐键范围以 [pptx 分册](json-contract-pptx.md#scope) 为准。
+pptx 的 `scope.tables` 与表格 op 认 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
+幻灯片上的表进每页 `tables`。备注里的表只在 `scope.notes` 同开时出现在 `notes` 上。
+母版与版式上的表只在 `scope.masters` 同开时出现在该母版或版式上。逐键范围以 [pptx 分册](json-contract-pptx.md#scope) 为准。
 pptx 的 `scope.connectors` 列出该页 `p:cxnSp`；`scope.notes` 与 `scope.connectors` 同开时备注上也列；`scope.masters` 同开时母版 / 版式上也列。
 apply 用 `insertConnector` / `deleteConnector` / `setConnector` / `groupShapes` / `ungroup`，
 以及 `insertShape` 的 `prst` / `geom`、`setShapeGeom`。
@@ -99,10 +100,10 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 可选。省略视为 `1`。写了就必须是 `1` |
-| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`help` 之一 |
+| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`layoutCheck`、`help` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，六种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
+`locale` 不属于动作参数，七种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
 这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。`ooxp mcp --lang` 与这里的 `--lang` 同一档。没带时，错误文案只剩 `locale` 和 `OOXP_LANG`。`help` 在请求和 `--lang` 都没给语言时仍是中文。自己另写的外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
@@ -135,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 本工具不调用它们。不写 `format`、`q`、`op`、`name` 时，这句话写在 `help` 这一条的 `limits` 里。搜「预览」或 `preview` 也会命中。
 
-不带 `format`、`q`、`op`、`name` 时，只说明六个动作各自干什么，以及下一步该带哪些字段。
+不带 `format`、`q`、`op`、`name` 时，只说明七个动作各自干什么，以及下一步该带哪些字段。
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
 
@@ -154,6 +155,11 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 带 `op` 时，返回这一个操作的说明和字段。里面的引用只留定义名，不继续展开。同一种名字在多种格式里形状不同时，必须带 `format`；不带就只列出每种格式的说明，不把字段并成一份。
 
 带 `name` 时，打开一个定义，例如 `inspectScope`、`xlsxWorkbook`。新建和查看范围不在操作名单里，走这里。
+
+`name=inspectScope` 是特例。不带 `format` 时返回 `kind=chooseFormat`，列出可选格式，不给 `fields`；带 `format` 时只返回该格式认的键。
+过滤依据写在 `docs/json-schema/src/shared/envelope.json` 里：`inspectScope.properties` 的每个键带一个 `formats` 数组，`help` 按它筛，不在代码里另抄一份键表。
+筛完的 `fields.properties` 里仍带这个 `formats`，值来自 schema，不随 `format` 改写。
+请求 schema 里的 `inspectScope` 始终是三格式键的并集。跨格式键由各格式的 `parse_scope` 拒绝，报 `InvalidField`，`help` 过滤不改变这件事。
 
 `op` 与 `name` 不能同时出现。`q` 不能和 `op` 或 `name` 同时出现。不写 `locale` 时，`description` 和 `limits` 是中文。`locale` 为 `en` 时这两条换成英文。一次结果里只出一种语言。动作目录里的 `ask.search.q` 也跟着这一种语言：中文是「单元格」，英文是 `cell`。
 
@@ -249,7 +255,14 @@ pptx 的 `presentation` 见 [json-contract-pptx.md](json-contract-pptx.md#create
 
 ## apply
 
-apply 的入参是操作列表，不是树。下面这种写法非法，必须报 `InvalidField`：
+apply 的入参是操作列表，不是树。另可带布尔字段 `dryRun`。
+
+- `dryRun: true` 时各条 op 仍按顺序在内存树上执行，但不生成包字节，也不写盘。
+- 成功响应不带 `path`，改带 `dryRun: true`、`opsApplied` 与 `parts`。`parts` 是本批标脏的部件名，排序去重。
+- 任一 op 失败仍按现有错误形态返回，源包不变。不新增事务或回滚类型。
+- 省略或 `false` 时行为不变。响应形状见 [errors.md](errors.md#成功形态)。
+
+下面这种写法非法，必须报 `InvalidField`：
 
 ```json
 {
@@ -2279,6 +2292,53 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 写出的是 embedding 部件的原字节。`contentType` 取自 `[Content_Types].xml`；没有则省略。
 
 成功时 stdout 见 [errors.md](errors.md)。源包不写回。
+
+## layoutCheck
+
+`layoutCheck` 是第七个动作，工具名就是 `layoutCheck`。参数仍是整份领域 JSON，或 MCP 里单独给 `requestPath`。
+它只读几何：不写文件、不生成图片、不调用 Office、不按新画布重排。本期只对 pptx 实现，xlsx / docx 报 `InvalidField`。
+
+请求只认 `action`、`schemaVersion`、`path`、`format`、`locale`。没有 `scope`，也不接受 `ops` 或 `output`。
+
+成功时 stdout 是一份 JSON 树，不带 `ok`、不带 `path`：
+
+```json
+{
+  "schemaVersion": 1,
+  "format": "pptx",
+  "slideSize": { "cx": 12192000, "cy": 6858000 },
+  "slides": [
+    {
+      "id": "slide:1",
+      "shapes": [
+        {
+          "id": "slide:1/shape:2",
+          "name": "标题框",
+          "box": { "x": 914400, "y": 457200, "cx": 3000000, "cy": 800000 },
+          "outOfBounds": false
+        }
+      ],
+      "outOfBounds": ["slide:1/shape:9"],
+      "overlaps": [
+        { "a": "slide:1/shape:2", "b": "slide:1/shape:3", "area": 123456 }
+      ],
+      "textOverflow": [
+        { "id": "slide:1/shape:4", "estimated": true }
+      ]
+    }
+  ]
+}
+```
+
+字段说明：
+
+- `slideSize` 取自 `p:sldSz`，`box` 与 `area` 都是 EMU 整数。`box` 只读 `a:xfrm`，不展开组合里的子形状。
+- `outOfBounds` 是形状 `box` 越出 `slideSize` 的 id 名单；每个形状上的同名布尔是这一条的简写。
+- `overlaps` 列出同页两两相交的形状对，`area` 是相交矩形面积。按 `spTree` 顺序去重，每对只列一次。
+- `textOverflow` 是按字号与框尺寸估算可能放不下的形状 id。`estimated` 恒为 `true`：不读字体度量，不排文字，不保证与 PowerPoint 一致。
+- `name` 取 `p:cNvPr/@name`，没有就省略。id 仍是 `inspect` 那套稳定 id，可直接拿去写 apply 的 op。
+
+`layoutCheck` 不改 `inspect` / `apply` / `create` 的语义，也不进 `opc` 的写回路径。失败时走 [errors.md](errors.md) 的错误形态。
 
 ## 两层 JSON
 

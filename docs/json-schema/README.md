@@ -32,6 +32,10 @@ python docs/json-schema/build.py --check
 
 一个文件里是一块事情，不是一个操作一个文件。操作要在该文件的 `formats` 里写上给哪种格式用。`xlsx`、`docx`、`pptx` 三种里可以写一个或多个。总名单由脚本按 `formats` 扫出来，不用手写。
 
+`inspectScope` 的每个 property 上另有 `formats` 数组，写这个 scope 键被哪几种格式接受。`help` 用这份名单按 `format` 过滤字段，不在代码里另抄一份键表。
+它和分块顶层的 `formats` 不是一回事：顶层那份按定义名给 apply 操作标格式，由脚本汇总进三份操作目录；property 上这份只给 `help` 看，脚本原样带进生成物。
+改完分块要重跑 `build.py`。`request.schema.json` 里的 `inspectScope` 仍是三格式键的并集，跨格式键由各格式的解析器拒绝。
+
 每个操作的 `description` 只写它做什么，英文写在 `descriptionEn`。不能怎么填写在 `limits`，英文写在 `limitsEn`。`help` 检索看中英两边，返回时按 `locale` 只留一种。不写 `locale` 用中文。
 
 同一种格式里名字相同、填法不同的定义，定义名前面带格式，例如 `xlsxInsertMathOp`。请求里的 `op` 仍写 `insertMath`。

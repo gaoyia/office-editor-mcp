@@ -8,14 +8,19 @@
 {
   "ok": false,
   "error": {
-    "code": "IdNotFound",
-    "message": "Sheet not found: Sheet9",
-    "path": "ops[0].id"
+    "code": "InvalidField",
+    "message": "x 从 0 起",
+    "path": "ops[16].x",
+    "objectId": "slide:1/shape:10",
+    "objectName": "标题框"
   }
 }
 ```
 
-`code` 是稳定字符串，给程序认。取值与退出码见下表，不随语言变。`message` 是给人看的短句，按语言渲染，默认英文。`path` 是可选的 JSON 指针风格路径，指向入参里出错的字段；定位不到就省略。
+`code` 是稳定字符串，给程序认。取值与退出码见下表，不随语言变。`message` 是给人看的短句，按语言渲染，默认英文。
+`path` 是可选的 JSON 指针风格路径，指向入参里出错的字段；定位不到就省略。apply 出错时 `path` 仍指向该条 op 里的字段，例如 `ops[16].x`。
+apply 出错时还可以有 `objectId` 与 `objectName`。`objectId` 是该条 op 的 `id` 原值，不解析、不换成内部编号；`objectName` 是该对象的名字，可选。
+两个字段都在构造该条 op 的错误时读取，读不到就省略。它们不参与语言渲染，也不影响 `code` 与退出码。
 
 `Io` 错误还可以带可选字段 `osMessage`，放操作系统给的原文。它的语言由系统决定，我们不承诺是哪一门，也不要用它做字符串匹配。只有系统确实给了原文时才出现。
 
@@ -55,7 +60,7 @@
 - **`UnsupportedSchema`**（退出码 2）
   - `schemaVersion` 不是 `1`
 - **`UnsupportedAction`**（退出码 2）
-  - `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData`
+  - `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData` / `layoutCheck` / `help`
 - **`UnsupportedFormat`**（退出码 2）
   - 扩展名或 `format` 不是 `xlsx` / `xlsm` / `docx` / `pptx`
 - **`UnsupportedOp`**（退出码 2）
@@ -1165,6 +1170,21 @@ create / apply / exportMedia / exportChartData 成功：stdout 为一行 JSON：
 ```
 
 `opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create、`exportMedia` 与 `exportChartData` 省略该字段。
+
+apply 带 `dryRun: true` 时成功响应不带 `path`，也不写文件。它带 `dryRun: true`、`opsApplied` 和 `parts`，`parts` 是本批标脏的部件名数组：
+
+```json
+{
+  "ok": true,
+  "dryRun": true,
+  "opsApplied": 3,
+  "parts": ["/ppt/slides/slide1.xml", "/ppt/slides/_rels/slide1.xml.rels"]
+}
+```
+
+`parts` 按部件名排序，去重。没有标脏部件时是空数组。`dryRun` 失败时仍走错误形态，`objectId` 与 `objectName` 照样给。
+
+`layoutCheck` 成功：stdout 是几何检查结果 JSON，不带 `ok`、不带 `path`。它不写文件，详见 [json-contract.md](json-contract.md#layoutcheck)。
 
 `exportMedia` 与 `exportChartData` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段：
 
