@@ -2,7 +2,7 @@
 
 从 0.1.3 起，每次发布在这里写这一版改了什么。更早的版本不补。
 
-## 0.1.4
+## 0.1.5
 
 - `help` 不带参数时，`ask` 是可原样提交的完整请求，每条都带 `action`。
 - `help` 打开定义或操作时，单独的 `$ref` 只展开一层，里面的 `$ref` 仍只留定义名。完整请求 schema 在 `docs/json-schema/request.schema.json`。
@@ -18,6 +18,10 @@
 - 对图表工作表带 `sheet` 和 `range` 读单元格时，错误指出改用 `scope.charts`，不要带 `range`。
 - pptx 建表说明写明：格子对象没有字号、颜色、加粗。改文字用 `setTableCellText`，改字色用 `setShapeFormat`。
 - README 写明预编译包在 GitHub Releases，Windows 用 `Get-FileHash` 对照 `SHASUMS256.txt`。没有 `win32-arm64`。`--lang` 省略时错误文案是英文。
+
+## 0.1.4
+
+- 已从 crates.io 撤回，由 0.1.5 代替。变更内容见上一节。
 
 ## 0.1.3
 
