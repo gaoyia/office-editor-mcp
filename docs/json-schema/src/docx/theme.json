@@ -2,7 +2,8 @@
   "$comment": "编辑用分块，由 build.py 拼进 request.schema.json。",
   "formats": {
     "setPageBackgroundOp": [
-      "docx"
+      "docx",
+      "pptx"
     ],
     "setPageBordersOp": [
       "docx"
@@ -79,6 +80,11 @@
         },
         "fill": {
           "$ref": "#/$defs/pageBackgroundFill"
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
         }
       }
     },

@@ -89,6 +89,18 @@
           "type": "integer",
           "minimum": 0
         },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "before": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "string",
+          "minLength": 1
+        },
         "from": {
           "type": "string",
           "minLength": 1

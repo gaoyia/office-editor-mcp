@@ -1,8 +1,10 @@
 //! create 写出的骨架 XML。
 
+use crate::error::{Error, ErrorKind};
 use crate::xml;
 
 use super::request::create_types::NewShape;
+use super::request::{ShapeLine, ShapePaint};
 use super::{DML_NS, PML_NS, REL_NS};
 
 pub(crate) fn presentation_xml(slide_count: usize, notes_cx: i64, notes_cy: i64) -> String {
@@ -28,24 +30,137 @@ pub(crate) fn empty_sp_tree() -> String {
         .to_string()
 }
 
-pub(crate) fn slide_xml(shapes: &[NewShape]) -> String {
+pub(crate) fn slide_xml(shapes: &[NewShape], path: &str) -> Result<String, Error> {
     let tree = empty_sp_tree();
-    let mut body = String::new();
+    let mut frags = Vec::new();
+    let custom = shapes.iter().any(NewShape::needs_custom_markup);
     for (i, sh) in shapes.iter().enumerate() {
-        let id = i as u32 + 2;
-        let name = format!("文本框 {}", i + 1);
-        let y = 685800 + i as i64 * 914400;
-        body.push_str(&text_box_xml(
-            id,
-            &name,
-            838200,
-            y,
-            &sh.text,
-            sh.format.as_ref(),
+        let piece = if custom {
+            custom_shape_xml(i, sh)
+        } else {
+            let id = i as u32 + 2;
+            let name = format!("文本框 {}", i + 1);
+            let y = 685800 + i as i64 * 914400;
+            text_box_xml(id, &name, 838200, y, &sh.text, sh.format.as_ref())
+        };
+        let at = match sh.index {
+            None => frags.len(),
+            Some(n) if n <= frags.len() => n,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::CreateIndexOutOfRange {
+                        field: "index".into(),
+                        max: frags.len() as i64,
+                    },
+                    format!("{path}[{i}].index"),
+                ));
+            }
+        };
+        frags.insert(at, piece);
+    }
+    let body = frags.concat();
+    Ok(format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="{DML_NS}" xmlns:r="{REL_NS}" xmlns:p="{PML_NS}"><p:cSld><p:spTree>{tree}{body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#
+    ))
+}
+
+fn custom_shape_xml(i: usize, sh: &NewShape) -> String {
+    let id = i as u32 + 2;
+    let prst = sh.prst.as_deref().unwrap_or("rect");
+    let is_box = sh.geom.is_none() && prst == "rect";
+    let name = if is_box {
+        format!("文本框 {}", i + 1)
+    } else {
+        format!("形状 {id}")
+    };
+    let x = sh.x.unwrap_or(838_200);
+    let y = sh.y.unwrap_or(685_800 + i as i64 * 914_400);
+    let (cx, cy) = if let (Some(cx), Some(cy)) = (sh.cx, sh.cy) {
+        (cx, cy)
+    } else if prst != "rect" || sh.geom.is_some() {
+        (1_828_800, 914_400)
+    } else {
+        (10_515_600, 800_100)
+    };
+    let tx = if is_box { r#" txBox="1""# } else { "" };
+    let geom = if sh.geom.is_some() {
+        r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>"#.to_string()
+    } else {
+        format!(r#"<a:prstGeom prst="{prst}"><a:avLst/></a:prstGeom>"#)
+    };
+    let paras = text_paragraphs(&sh.text, sh.format.as_ref());
+    let body_anchor = match sh.format.as_ref().and_then(|f| f.text_anchor.as_ref()) {
+        Some(Some(v)) => format!(r#" anchor="{v}""#),
+        _ => String::new(),
+    };
+    format!(
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{}"/><p:cNvSpPr{tx}/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="{cx}" cy="{cy}"/></a:xfrm>{geom}{}{}</p:spPr><p:txBody><a:bodyPr wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720"{body_anchor}/><a:lstStyle/>{paras}</p:txBody></p:sp>"#,
+        xml::escape_attr(&name),
+        fill_markup(sh, is_box),
+        line_markup(sh, is_box),
+    )
+}
+
+fn fill_markup(sh: &NewShape, is_box: bool) -> String {
+    match &sh.fill {
+        None if is_box => "<a:noFill/>".into(),
+        None => r#"<a:solidFill><a:srgbClr val="5B9BD5"/></a:solidFill>"#.into(),
+        Some(ShapePaint::None) | Some(ShapePaint::Blip { .. }) => "<a:noFill/>".into(),
+        Some(ShapePaint::Solid { color, alpha }) => solid_markup(color, *alpha),
+        Some(ShapePaint::Grad { ang, stops, alpha }) => grad_markup(*ang, stops, *alpha),
+    }
+}
+
+fn line_markup(sh: &NewShape, is_box: bool) -> String {
+    match &sh.line {
+        None if is_box => "<a:ln><a:noFill/></a:ln>".into(),
+        None => {
+            r#"<a:ln w="12700"><a:solidFill><a:srgbClr val="2E75B6"/></a:solidFill></a:ln>"#.into()
+        }
+        Some(ShapeLine { color: None, width }) => match width {
+            Some(w) => format!(r#"<a:ln w="{w}"><a:noFill/></a:ln>"#),
+            None => "<a:ln><a:noFill/></a:ln>".into(),
+        },
+        Some(ShapeLine {
+            color: Some(color),
+            width,
+        }) => {
+            let w = width.unwrap_or(12700);
+            format!(
+                r#"<a:ln w="{w}"><a:solidFill><a:srgbClr val="{}"/></a:solidFill></a:ln>"#,
+                color.to_ascii_uppercase()
+            )
+        }
+    }
+}
+
+fn solid_markup(color: &str, alpha: Option<u32>) -> String {
+    format!(
+        r#"<a:solidFill>{}</a:solidFill>"#,
+        srgb_markup(color, alpha)
+    )
+}
+
+fn srgb_markup(color: &str, alpha: Option<u32>) -> String {
+    match alpha {
+        Some(a) => format!(
+            r#"<a:srgbClr val="{}"><a:alpha val="{a}"/></a:srgbClr>"#,
+            color.to_ascii_uppercase()
+        ),
+        None => format!(r#"<a:srgbClr val="{}"/>"#, color.to_ascii_uppercase()),
+    }
+}
+
+fn grad_markup(ang: i64, stops: &[(i64, String)], alpha: Option<u32>) -> String {
+    let mut gs = String::new();
+    for (pos, color) in stops {
+        gs.push_str(&format!(
+            r#"<a:gs pos="{pos}">{}</a:gs>"#,
+            srgb_markup(color, alpha)
         ));
     }
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="{DML_NS}" xmlns:r="{REL_NS}" xmlns:p="{PML_NS}"><p:cSld><p:spTree>{tree}{body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#
+        r#"<a:gradFill flip="none" rotWithShape="1"><a:gsLst>{gs}</a:gsLst><a:lin ang="{ang}" scaled="1"/><a:tileRect/></a:gradFill>"#
     )
 }
 

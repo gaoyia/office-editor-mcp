@@ -92,6 +92,11 @@ fn apply_pkg(bytes: &[u8], ops: &[PptxOp]) -> Result<crate::opc::Package, Error>
             PptxOp::SetShapeFill(op) => {
                 shape::op_set_shape_fill(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }
+            PptxOp::SetPageBackground(op) => {
+                super::page_bg::op_set_page_background(
+                    &mut pkg, &pres_part, &mut pres, &slides, op, i,
+                )?;
+            }
             PptxOp::SetShapeLine(op) => {
                 shape::op_set_shape_line(&mut pkg, &pres_part, &pres, &slides, op, i)?;
             }

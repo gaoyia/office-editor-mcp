@@ -84,6 +84,11 @@ pub(super) fn parse_insert_shape(
             "spc",
             "kern",
             "geom",
+            "fill",
+            "line",
+            "index",
+            "before",
+            "after",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -140,8 +145,8 @@ pub(super) fn parse_insert_shape(
             }
         }
     };
-    let x = parse_off_field(obj.get("x"), i, "x")?;
-    let y = parse_off_field(obj.get("y"), i, "y")?;
+    let x = parse_signed_off_field(obj.get("x"), i, "x")?;
+    let y = parse_signed_off_field(obj.get("y"), i, "y")?;
     if x.is_some() != y.is_some() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
@@ -162,6 +167,15 @@ pub(super) fn parse_insert_shape(
             format!("ops[{i}]"),
         ));
     }
+    let fill = match obj.get("fill") {
+        None => None,
+        Some(v) => Some(parse_paint_value(v, &format!("ops[{i}].fill"), None)?),
+    };
+    let line = match obj.get("line") {
+        None => None,
+        Some(v) => Some(parse_shape_line(v, &format!("ops[{i}].line"))?),
+    };
+    let place = parse_sp_tree_place(obj, &format!("ops[{i}]"))?;
     Ok(InsertShapeOp {
         host,
         text,
@@ -172,6 +186,9 @@ pub(super) fn parse_insert_shape(
         prst,
         geom,
         format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
+        fill,
+        line,
+        place,
     })
 }
 
@@ -386,8 +403,17 @@ pub(super) fn parse_set_shape_pos(
     deny_keys(obj, i, &["op", "id", "x", "y"])?;
     let id = require_id(obj, i)?;
     let (target, placeholder, cxn) = parse_shape_pos_host(&id, i)?;
-    let x = parse_off_field(obj.get("x"), i, "x")?;
-    let y = parse_off_field(obj.get("y"), i, "y")?;
+    let (x, y) = if cxn.is_some() {
+        (
+            parse_off_field(obj.get("x"), i, "x")?,
+            parse_off_field(obj.get("y"), i, "y")?,
+        )
+    } else {
+        (
+            parse_signed_off_field(obj.get("x"), i, "x")?,
+            parse_signed_off_field(obj.get("y"), i, "y")?,
+        )
+    };
     if x.is_none() && y.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
@@ -439,15 +465,93 @@ pub(super) fn parse_set_shape_fill(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetShapeFillOp, Error> {
-    deny_keys(obj, i, &["op", "id", "color"])?;
+    deny_keys(obj, i, &["op", "id", "color", "fill", "alpha"])?;
     let id = require_id(obj, i)?;
     let (target, placeholder) = parse_slide_or_master_shape(&id, i)?;
-    let color = parse_color_field(obj, i, true, "setShapeFill")?;
+    let has_color = obj.contains_key("color");
+    let has_fill = obj.contains_key("fill");
+    if has_color == has_fill {
+        if has_color {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "color".into(),
+                    b: "fill".into(),
+                },
+                format!("ops[{i}]"),
+            ));
+        }
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeFill".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    let alpha = parse_alpha_at(obj.get("alpha"), &format!("ops[{i}].alpha"))?;
+    let paint = if has_color {
+        let color = parse_color_field(obj, i, true, "setShapeFill")?;
+        paint_from_color(color, alpha, &format!("ops[{i}].alpha"))?
+    } else {
+        parse_paint_value(
+            obj.get("fill").expect("已检查"),
+            &format!("ops[{i}].fill"),
+            alpha,
+        )?
+    };
     Ok(SetShapeFillOp {
         id,
         target,
         placeholder,
+        paint,
+    })
+}
+
+pub(super) fn parse_set_page_background(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetPageBackgroundOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color", "fill", "alpha"])?;
+    let id = require_id(obj, i)?;
+    let host = picture::parse_insert_host(&id, i, crate::error::IdReason::PageBackgroundHost)?;
+    if !obj.contains_key("color") {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setPageBackground".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    let color = parse_rgb_value(obj.get("color"), &format!("ops[{i}].color"), true)?;
+    let alpha = parse_alpha_at(obj.get("alpha"), &format!("ops[{i}].alpha"))?;
+    let fill = match obj.get("fill") {
+        None => None,
+        Some(v) => Some(parse_page_fill(v, &format!("ops[{i}].fill"))?),
+    };
+    if color.is_none() && (alpha.is_some() || fill.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "color".into(),
+                b: "fill/alpha".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    if alpha.is_some() && matches!(fill, Some(PageFill::Picture { .. })) {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alpha".into(),
+                b: "picture".into(),
+            },
+            format!("ops[{i}].alpha"),
+        ));
+    }
+    Ok(SetPageBackgroundOp {
+        host,
         color,
+        alpha,
+        fill,
     })
 }
 
@@ -1012,4 +1116,600 @@ pub(super) fn parse_create_cxn_bind(
         }
     };
     Ok(Some(CreateCxnBind { shape, site }))
+}
+
+const ALPHA_MAX: i64 = 100_000;
+
+pub(super) fn parse_sp_tree_place(
+    obj: &Map<String, Value>,
+    path: &str,
+) -> Result<SpTreePlace, Error> {
+    let has_index = obj.contains_key("index");
+    let has_before = obj.contains_key("before");
+    let has_after = obj.contains_key("after");
+    if has_before && has_after {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "before".into(),
+                b: "after".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    if has_index && (has_before || has_after) {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "index".into(),
+                b: "before/after".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    if has_index {
+        let n = parse_layer_index(obj.get("index").expect("已检查"), &format!("{path}.index"))?;
+        return Ok(SpTreePlace::Index(n));
+    }
+    if has_before {
+        let id = parse_anchor_id(
+            obj.get("before").expect("已检查"),
+            &format!("{path}.before"),
+        )?;
+        return Ok(SpTreePlace::Before(id));
+    }
+    if has_after {
+        let id = parse_anchor_id(obj.get("after").expect("已检查"), &format!("{path}.after"))?;
+        return Ok(SpTreePlace::After(id));
+    }
+    Ok(SpTreePlace::End)
+}
+
+pub(super) fn parse_layer_index(v: &Value, path: &str) -> Result<usize, Error> {
+    let Value::Number(n) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "index".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        ));
+    };
+    if let Some(i) = n.as_i64() {
+        if i < 0 {
+            return Err(Error::with_path(
+                ErrorKind::MinValue {
+                    field: "index".into(),
+                    min: 0,
+                },
+                path.to_string(),
+            ));
+        }
+        return Ok(i as usize);
+    }
+    if let Some(u) = n.as_u64() {
+        if u > usize::MAX as u64 {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "index".into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            ));
+        }
+        return Ok(u as usize);
+    }
+    Err(Error::with_path(
+        ErrorKind::WrongType {
+            field: "index".into(),
+            expected: TypeName::Integer,
+        },
+        path.to_string(),
+    ))
+}
+
+fn parse_anchor_id(v: &Value, path: &str) -> Result<String, Error> {
+    match v {
+        Value::String(s) if !s.is_empty() => Ok(s.clone()),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: path.rsplit('.').next().unwrap_or("id").into(),
+                expected: TypeName::NonEmptyString,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+pub(super) fn parse_alpha_at(v: Option<&Value>, path: &str) -> Result<Option<u32>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let Value::Number(n) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "alpha".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        ));
+    };
+    let Some(i) = n
+        .as_i64()
+        .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+    else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "alpha".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        ));
+    };
+    if i < 0 {
+        return Err(Error::with_path(
+            ErrorKind::MinValue {
+                field: "alpha".into(),
+                min: 0,
+            },
+            path.to_string(),
+        ));
+    }
+    if i > ALPHA_MAX {
+        return Err(Error::with_path(
+            ErrorKind::CreateIndexOutOfRange {
+                field: "alpha".into(),
+                max: ALPHA_MAX,
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(Some(i as u32))
+}
+
+fn paint_from_color(
+    color: Option<String>,
+    alpha: Option<u32>,
+    alpha_path: &str,
+) -> Result<ShapePaint, Error> {
+    match color {
+        None => {
+            if alpha.is_some() {
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "alpha".into(),
+                        b: "color".into(),
+                    },
+                    alpha_path.to_string(),
+                ));
+            }
+            Ok(ShapePaint::None)
+        }
+        Some(c) => Ok(ShapePaint::Solid { color: c, alpha }),
+    }
+}
+
+/// `fill` 可以是六位色、`null`，或 `{type, ...}`。`outer_alpha` 来自与 `fill` 同级的 `alpha`。
+pub(super) fn parse_paint_value(
+    v: &Value,
+    path: &str,
+    outer_alpha: Option<u32>,
+) -> Result<ShapePaint, Error> {
+    match v {
+        Value::Null => paint_from_color(None, outer_alpha, path),
+        Value::String(s) => {
+            let color = parse_rgb_str(s, path)?;
+            Ok(ShapePaint::Solid {
+                color,
+                alpha: outer_alpha,
+            })
+        }
+        Value::Object(obj) => parse_paint_object(obj, path, outer_alpha),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "fill".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_paint_object(
+    obj: &Map<String, Value>,
+    path: &str,
+    outer_alpha: Option<u32>,
+) -> Result<ShapePaint, Error> {
+    deny_keys_at(
+        obj,
+        path,
+        &["type", "color", "alpha", "stops", "ang", "file"],
+    )?;
+    let kind = match obj.get("type") {
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{path}.type"),
+            ));
+        }
+    };
+    let inner = parse_alpha_at(obj.get("alpha"), &format!("{path}.alpha"))?;
+    if inner.is_some() && outer_alpha.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alpha".into(),
+                b: "fill.alpha".into(),
+            },
+            format!("{path}.alpha"),
+        ));
+    }
+    let alpha = inner.or(outer_alpha);
+    match kind {
+        "solid" => {
+            deny_unused(obj, path, &["type", "color", "alpha"])?;
+            let color = require_rgb(obj.get("color"), &format!("{path}.color"))?;
+            Ok(ShapePaint::Solid { color, alpha })
+        }
+        "grad" => {
+            deny_unused(obj, path, &["type", "stops", "ang", "alpha"])?;
+            let stops = parse_grad_stops(obj.get("stops"), &format!("{path}.stops"))?;
+            let ang = parse_ang_at(obj.get("ang"), &format!("{path}.ang"))?;
+            Ok(ShapePaint::Grad { ang, stops, alpha })
+        }
+        "blip" => {
+            if alpha.is_some() {
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "alpha".into(),
+                        b: "blip".into(),
+                    },
+                    format!("{path}.alpha"),
+                ));
+            }
+            deny_unused(obj, path, &["type", "file"])?;
+            let file = match obj.get("file") {
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                Some(Value::String(_)) | None => {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "file".into(),
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "file".into(),
+                            expected: TypeName::NonEmptyString,
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+            };
+            Ok(ShapePaint::Blip { file })
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidShapeFillType,
+            format!("{path}.type"),
+        )),
+    }
+}
+
+fn deny_unused(obj: &Map<String, Value>, path: &str, allow: &[&str]) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allow.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_grad_stops(v: Option<&Value>, path: &str) -> Result<Vec<(i64, String)>, Error> {
+    let Some(Value::Array(items)) = v else {
+        return Err(Error::with_path(
+            if v.is_none() {
+                ErrorKind::NeedGradientStops
+            } else {
+                ErrorKind::WrongType {
+                    field: "stops".into(),
+                    expected: TypeName::Array,
+                }
+            },
+            path.to_string(),
+        ));
+    };
+    if items.len() < 2 {
+        return Err(Error::with_path(
+            ErrorKind::NeedGradientStops,
+            path.to_string(),
+        ));
+    }
+    let mut out = Vec::new();
+    let mut seen = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let prefix = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "stops".into(),
+                    expected: TypeName::Object,
+                },
+                prefix.clone(),
+            )
+        })?;
+        deny_keys_at(obj, &prefix, &["pos", "color"])?;
+        let pos = match obj.get("pos") {
+            Some(Value::Number(n)) => n
+                .as_i64()
+                .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "pos".into(),
+                            expected: TypeName::Integer,
+                        },
+                        format!("{prefix}.pos"),
+                    )
+                })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "pos".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{prefix}.pos"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "pos".into(),
+                    },
+                    format!("{prefix}.pos"),
+                ));
+            }
+        };
+        if pos < 0 {
+            return Err(Error::with_path(
+                ErrorKind::MinValue {
+                    field: "pos".into(),
+                    min: 0,
+                },
+                format!("{prefix}.pos"),
+            ));
+        }
+        if pos > crate::drawing_text::POS_MAX {
+            return Err(Error::with_path(
+                ErrorKind::CreateIndexOutOfRange {
+                    field: "pos".into(),
+                    max: crate::drawing_text::POS_MAX,
+                },
+                format!("{prefix}.pos"),
+            ));
+        }
+        if seen.contains(&pos) {
+            return Err(Error::with_path(
+                ErrorKind::DuplicateGradientPos,
+                format!("{prefix}.pos"),
+            ));
+        }
+        seen.push(pos);
+        let color = require_rgb(obj.get("color"), &format!("{prefix}.color"))?;
+        out.push((pos, color));
+    }
+    Ok(out)
+}
+
+fn parse_ang_at(v: Option<&Value>, path: &str) -> Result<i64, Error> {
+    let Some(v) = v else {
+        return Ok(crate::drawing_text::ANG_DEFAULT);
+    };
+    let Value::Number(n) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ang".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        ));
+    };
+    let Some(i) = n
+        .as_i64()
+        .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+    else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ang".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        ));
+    };
+    if i < 0 {
+        return Err(Error::with_path(
+            ErrorKind::MinValue {
+                field: "ang".into(),
+                min: 0,
+            },
+            path.to_string(),
+        ));
+    }
+    if i > crate::drawing_text::ANG_MAX {
+        return Err(Error::with_path(
+            ErrorKind::CreateIndexOutOfRange {
+                field: "ang".into(),
+                max: crate::drawing_text::ANG_MAX,
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(i)
+}
+
+pub(super) fn parse_shape_line(v: &Value, path: &str) -> Result<ShapeLine, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "line".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, path, &["color", "width"])?;
+    if !obj.contains_key("color") {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "color".into(),
+            },
+            format!("{path}.color"),
+        ));
+    }
+    let color = parse_rgb_value(obj.get("color"), &format!("{path}.color"), true)?;
+    let width = parse_emu_at(obj.get("width"), &format!("{path}.width"), "width")?;
+    Ok(ShapeLine { color, width })
+}
+
+fn parse_page_fill(v: &Value, path: &str) -> Result<PageFill, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "fill".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, path, &["kind", "color", "file"])?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "kind".into(),
+                },
+                format!("{path}.kind"),
+            ));
+        }
+    };
+    match kind.as_str() {
+        "gradient" => {
+            let color2 = match obj.get("color") {
+                None => None,
+                Some(v) => Some(
+                    parse_rgb_value(Some(v), &format!("{path}.color"), false)?.expect("非空色"),
+                ),
+            };
+            if obj.contains_key("file") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField {
+                        field: "file".into(),
+                    },
+                    format!("{path}.file"),
+                ));
+            }
+            Ok(PageFill::Gradient { color2 })
+        }
+        "picture" => {
+            if obj.contains_key("color") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField {
+                        field: "color".into(),
+                    },
+                    format!("{path}.color"),
+                ));
+            }
+            let file = match obj.get("file") {
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                Some(Value::String(_)) | None => {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "file".into(),
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "file".into(),
+                            expected: TypeName::NonEmptyString,
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+            };
+            Ok(PageFill::Picture { file })
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidPageBackgroundFill,
+            format!("{path}.kind"),
+        )),
+    }
+}
+
+fn require_rgb(v: Option<&Value>, path: &str) -> Result<String, Error> {
+    match parse_rgb_value(v, path, false)? {
+        Some(c) => Ok(c),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "color".into(),
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+/// `allow_null` 为真时，JSON `null` 得到 `None`。缺字段也是 `None`。
+fn parse_rgb_value(
+    v: Option<&Value>,
+    path: &str,
+    allow_null: bool,
+) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) if allow_null => Ok(None),
+        Some(Value::String(s)) => Ok(Some(parse_rgb_str(s, path)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "color".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_rgb_str(s: &str, path: &str) -> Result<String, Error> {
+    if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+        Ok(s.to_ascii_uppercase())
+    } else {
+        Err(Error::with_path(
+            ErrorKind::InvalidHexColor,
+            path.to_string(),
+        ))
+    }
 }

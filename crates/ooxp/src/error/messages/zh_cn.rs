@@ -131,6 +131,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertShapeHost => {
                 "pptx 的 insertShape 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
+            IdReason::PageBackgroundHost => {
+                "pptx 的 setPageBackground 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
+            }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
@@ -1120,6 +1123,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTableCellFillType => {
             "表单元格 fill.type 必须是 solid、grad、patt 或 blip".into()
         }
+        ErrorKind::InvalidShapeFillType => "fill.type 必须是 solid、grad 或 blip".into(),
+        ErrorKind::AnchorNotFound { id } => format!("找不到图层对象：{id}"),
+        ErrorKind::CommentPicNoTree => "批注内图不能指定 index、before 或 after".into(),
         ErrorKind::InvalidPresetPatternVal => "prst 必须是 ST_PresetPatternVal".into(),
         ErrorKind::NeedSetTableCellPrField => {
             "setTableCellPr 至少要给 vert、anchorCtr、horzOverflow、cell3D 或 headers 之一".into()

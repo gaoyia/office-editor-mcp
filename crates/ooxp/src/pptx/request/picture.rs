@@ -31,6 +31,12 @@ pub(super) fn parse_insert_pic(
     if id.contains("/comment:") {
         deny_keys(obj, i, &["op", "id", "file"])?;
         let target = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+        if obj.contains_key("index") || obj.contains_key("before") || obj.contains_key("after") {
+            return Err(Error::with_path(
+                ErrorKind::CommentPicNoTree,
+                format!("ops[{i}]"),
+            ));
+        }
         let file = require_file(obj, i, "insertPicture")?;
         return Ok(InsertPictureOp {
             slide: target.slide,
@@ -42,9 +48,16 @@ pub(super) fn parse_insert_pic(
             y: None,
             cx: None,
             cy: None,
+            place: SpTreePlace::End,
         });
     }
-    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "file", "x", "y", "cx", "cy", "index", "before", "after",
+        ],
+    )?;
     let host = picture::parse_insert_host(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
     let (slide, on_notes, master) = host.parts();
     let file = require_file(obj, i, "insertPicture")?;
@@ -80,6 +93,7 @@ pub(super) fn parse_insert_pic(
         y,
         cx,
         cy,
+        place: super::parse_sp_tree_place(obj, &format!("ops[{i}]"))?,
     })
 }
 
@@ -160,7 +174,10 @@ pub(crate) fn parse_create_picture(
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "file" | "x" | "y" | "cx" | "cy" | "hyperlink") {
+        if !matches!(
+            k.as_str(),
+            "file" | "x" | "y" | "cx" | "cy" | "hyperlink" | "index"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -219,6 +236,10 @@ pub(crate) fn parse_create_picture(
         y,
         cx,
         cy,
+        place: match obj.get("index") {
+            None => SpTreePlace::End,
+            Some(v) => SpTreePlace::Index(super::parse_layer_index(v, &format!("{prefix}.index"))?),
+        },
     };
     let link = parse_create_opt_hyperlink(obj, prefix)?;
     Ok(CreatePicture { op, link })

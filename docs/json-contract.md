@@ -372,7 +372,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
-`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
+`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、`setPageBackground`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
 `insertCol`、`deleteCol`、`setTableCellText`、`setTableCellFill`、`setTableCellBorders`、`setTableCellInset`、`setTableCellPr`、`setTableStyleRef`、`setTablePos`、`setTableSize`、`setTableColWidths`、`setTableTrHeight`；
 不含 `mergeCells`、`splitCells`）、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
 `setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、
@@ -738,6 +738,11 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
   - pptx 可选
   - 画布纵坐标，EMU，非负整数
   - docx / xlsx 上出现报 `InvalidField`
+- **`index` / `before` / `after`**
+  - 仅 pptx
+  - 三者至多一个，规则与 `insertShape` 的图层位置相同
+  - 批注内图带这三项报 `InvalidField`
+  - docx / xlsx 上出现报未知字段
 - **`from`**
   - xlsx 往工作表插图时必填
   - 左上角单元格，A1

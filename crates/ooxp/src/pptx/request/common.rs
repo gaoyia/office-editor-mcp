@@ -8,7 +8,7 @@ use super::types::*;
 pub(super) use crate::op_fields::{
     deny_keys, deny_keys_at, parse_bool_field, parse_color_field, parse_emu_at, parse_emu_field,
     parse_off_at, parse_off_field, parse_opt_bool, parse_optional_date, parse_optional_text,
-    parse_required_bool, require_file, require_id,
+    parse_required_bool, parse_signed_off_at, parse_signed_off_field, require_file, require_id,
 };
 
 pub(super) fn parse_anim_sound(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {

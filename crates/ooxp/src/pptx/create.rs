@@ -89,6 +89,14 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
                 format: None,
                 geom: None,
                 fields: Vec::new(),
+                prst: None,
+                x: None,
+                y: None,
+                cx: None,
+                cy: None,
+                fill: None,
+                line: None,
+                index: None,
             });
         }
     }
@@ -218,7 +226,11 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
         let n = i + 1;
         pkg.set(
             &format!("/ppt/slides/slide{n}.xml"),
-            super::create_xml::slide_xml(&slide.shapes).into_bytes(),
+            super::create_xml::slide_xml(
+                &slide.shapes,
+                &format!("presentation.slides[{i}].shapes"),
+            )?
+            .into_bytes(),
         )?;
         let mut slide_rels = Relationships { rels: Vec::new() };
         slide_rels.push(rel(
@@ -243,6 +255,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_tables(&mut pkg, &slides)?;
     attach_fields(&mut pkg, &slides)?;
     attach_geom(&mut pkg, &slides)?;
+    attach_shape_paint(&mut pkg, &slides)?;
     attach_ole(&mut pkg, &slides)?;
     attach_connectors(&mut pkg, &slides)?;
     attach_notes(&mut pkg, &slides)?;
@@ -393,6 +406,52 @@ fn attach_fields(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                 };
                 field::apply_insert(&mut doc.root, &op, k)?;
             }
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_shape_paint(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    use super::request::{SetShapeFillOp, ShapePaint};
+    if slides.iter().all(|s| {
+        s.shapes
+            .iter()
+            .all(|sh| !matches!(sh.fill, Some(ShapePaint::Blip { .. })))
+    }) {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        if slide
+            .shapes
+            .iter()
+            .all(|sh| !matches!(sh.fill, Some(ShapePaint::Blip { .. })))
+        {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, sh) in slide.shapes.iter().enumerate() {
+            let Some(paint) = &sh.fill else {
+                continue;
+            };
+            if !matches!(paint, ShapePaint::Blip { .. }) {
+                continue;
+            }
+            let cnv = (j as u32 + 2).to_string();
+            let op = SetShapeFillOp {
+                id: format!("slide:{n}/shape:{cnv}"),
+                target: Some(ShapeTarget {
+                    slide: n,
+                    on_notes: false,
+                    master: None,
+                    key: ShapeKey::Id(cnv),
+                }),
+                placeholder: None,
+                paint: paint.clone(),
+            };
+            shape::set_shape_fill(pkg, &part, &mut doc, &op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }

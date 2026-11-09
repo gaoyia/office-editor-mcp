@@ -3733,9 +3733,11 @@ id 不是 `font:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidFiel
 `kind` 为 `gradient`：写入 `w:drawing` / `wp:anchor` / `wps:wsp` 矩形，`a:gradFill` 两停点为 `color`（第一停）与 `fill.color`（第二停，省略为 `FFFFFF`）。
 `kind` 为 `picture`：必须给 `file`（本地路径），写入 VML `v:background` / `v:fill`（`type="frame"`）与主文档 image 关系。
 `color` 为 `null` 时不能带 `fill`，并删掉 `w:background`、填充与 `displayBackgroundShape`。
-出现 `art` 或其它未知字段报 `UnknownField`。
+出现 `art`、`alpha` 或其它未知字段报 `UnknownField`。
 不新建 footnotes / theme / webSettings / fontTable。没有 settings 且要写成显示时新建 `/word/settings.xml` 与主文档 settings 关系。
-id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.pageBackground` 时按同一套规则写入。
+id 不是 `docx:document` 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。
+pptx 同名 op 写 `p:bg`，见 [pptx 分册](json-contract-pptx.md#setpagebackground)。
+create 给了 `document.pageBackground` 时按同一套规则写入。
 
 示例见 `docs/examples/docx-apply-page-bg.json`、`docs/examples/docx-apply-page-bg-fill.json`。
 

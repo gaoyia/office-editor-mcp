@@ -251,6 +251,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setShapePos" => PptxOp::SetShapePos(parse_set_shape_pos(obj, i)?),
             "setShapeSize" => PptxOp::SetShapeSize(parse_set_shape_size(obj, i)?),
             "setShapeFill" => PptxOp::SetShapeFill(parse_set_shape_fill(obj, i)?),
+            "setPageBackground" => PptxOp::SetPageBackground(parse_set_page_background(obj, i)?),
             "setShapeFormat" => PptxOp::SetShapeFormat(parse_set_shape_format(obj, i)?),
             "setShapeLine" => PptxOp::SetShapeLine(parse_set_shape_line(obj, i)?),
             "setShapeGeom" => PptxOp::SetShapeGeom(parse_set_shape_geom(obj, i)?),
@@ -523,7 +524,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertEmbeddedFont"
             | "deleteEmbeddedFont"
             | "setFontEmbed"
-            | "setPageBackground"
             | "setPageBorders"
             | "setFormProt"
             | "insertEditRange"

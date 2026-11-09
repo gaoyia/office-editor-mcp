@@ -1114,6 +1114,14 @@ pub(crate) fn parse_create_shape(v: &Value, prefix: &str) -> Result<CreateShape,
             "kern",
             "geom",
             "fields",
+            "prst",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "fill",
+            "line",
+            "index",
         ],
     )?;
     let text = match obj.get("text") {
@@ -1263,12 +1271,89 @@ pub(crate) fn parse_create_shape(v: &Value, prefix: &str) -> Result<CreateShape,
         )?),
     };
     let fields = parse_create_fields(obj.get("fields"), &format!("{prefix}.fields"))?;
+    if obj.contains_key("geom") && obj.contains_key("prst") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "prst".into(),
+                b: "geom".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let prst = match obj.get("prst") {
+        None => None,
+        Some(Value::String(s)) => {
+            if crate::drawing_geom::is_writable_shape_prst(s) {
+                Some(s.clone())
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidShapePrst,
+                    format!("{prefix}.prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.prst"),
+            ));
+        }
+    };
+    let x = parse_signed_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_signed_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let fill = match obj.get("fill") {
+        None => None,
+        Some(v) => Some(super::parse_paint_value(
+            v,
+            &format!("{prefix}.fill"),
+            None,
+        )?),
+    };
+    let line = match obj.get("line") {
+        None => None,
+        Some(v) => Some(super::parse_shape_line(v, &format!("{prefix}.line"))?),
+    };
+    let index = match obj.get("index") {
+        None => None,
+        Some(v) => Some(super::parse_layer_index(v, &format!("{prefix}.index"))?),
+    };
     Ok(CreateShape {
         text,
         link,
         format,
         geom,
         fields,
+        prst,
+        x,
+        y,
+        cx,
+        cy,
+        fill,
+        line,
+        index,
     })
 }
 

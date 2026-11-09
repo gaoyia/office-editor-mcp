@@ -81,6 +81,8 @@ pub(crate) enum IdReason {
     InsertNeedsSlide,
     /// pptx 的 insertShape 必须用 slide:N、slide:N/notes、master:N 或 master:N/layout:K
     InsertShapeHost,
+    /// pptx 的 setPageBackground 必须用页、备注、母版或版式 id
+    PageBackgroundHost,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
     SetNotesTextNeedsSlide,
     /// pptx 批注 id 必须是 slide:N/comment:…
@@ -1002,6 +1004,9 @@ define_error_kinds! {
     NeedShapeFormatField => vec![Self::NeedShapeFormatField],
     InvalidTextFillType => vec![Self::InvalidTextFillType],
     InvalidTableCellFillType => vec![Self::InvalidTableCellFillType],
+    InvalidShapeFillType => vec![Self::InvalidShapeFillType],
+    AnchorNotFound { id: String } => vec![Self::AnchorNotFound { id: "slide:1/shape:2".into() }],
+    CommentPicNoTree => vec![Self::CommentPicNoTree],
     InvalidPresetPatternVal => vec![Self::InvalidPresetPatternVal],
     NeedSetTableCellPrField => vec![Self::NeedSetTableCellPrField],
     InvalidTextVerticalType => vec![Self::InvalidTextVerticalType],
@@ -1394,6 +1399,7 @@ impl IdReason {
             Self::InsertMediaNeedsSlide,
             Self::InsertNeedsSlide,
             Self::InsertShapeHost,
+            Self::PageBackgroundHost,
             Self::InsertConnectorNeedsSlide,
             Self::SlideCxnForm,
             Self::SetNotesTextNeedsSlide,
@@ -2123,6 +2129,8 @@ impl ErrorKind {
             | Self::NeedShapeFormatField
             | Self::InvalidTextFillType
             | Self::InvalidTableCellFillType
+            | Self::InvalidShapeFillType
+            | Self::CommentPicNoTree
             | Self::InvalidPresetPatternVal
             | Self::NeedSetTableCellPrField
             | Self::InvalidTextVerticalType
@@ -2213,6 +2221,7 @@ impl ErrorKind {
             | Self::HandoutMasterNotFound
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
+            | Self::AnchorNotFound { .. }
             | Self::ConnectorNotFound { .. }
             | Self::AnimNotFound { .. }
             | Self::AnimHostNotFound { .. }

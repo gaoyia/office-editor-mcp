@@ -73,6 +73,76 @@ pub enum InsertShapeHost {
     },
 }
 
+impl InsertShapeHost {
+    pub fn prefix(&self) -> String {
+        match self {
+            Self::Slide {
+                slide,
+                on_notes: false,
+            } => format!("slide:{slide}"),
+            Self::Slide {
+                slide,
+                on_notes: true,
+            } => format!("slide:{slide}/notes"),
+            Self::Master {
+                master,
+                layout: None,
+            } => format!("master:{master}"),
+            Self::Master {
+                master,
+                layout: Some(k),
+            } => format!("master:{master}/layout:{k}"),
+        }
+    }
+}
+
+/// `p:spTree` 里内容子元素的插入位置。0 是最底层。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpTreePlace {
+    End,
+    Index(usize),
+    Before(String),
+    After(String),
+}
+
+/// 形状填充。`alpha` 是 `a:alpha`，0 到 100000，省略表示不写。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShapePaint {
+    None,
+    Solid {
+        color: String,
+        alpha: Option<u32>,
+    },
+    Grad {
+        ang: i64,
+        stops: Vec<(i64, String)>,
+        alpha: Option<u32>,
+    },
+    Blip {
+        file: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShapeLine {
+    pub color: Option<String>,
+    pub width: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PageFill {
+    Gradient { color2: Option<String> },
+    Picture { file: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct SetPageBackgroundOp {
+    pub host: picture::TreeHost,
+    pub color: Option<String>,
+    pub alpha: Option<u32>,
+    pub fill: Option<PageFill>,
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertShapeOp {
     pub host: InsertShapeHost,
@@ -84,6 +154,9 @@ pub struct InsertShapeOp {
     pub prst: String,
     pub geom: Option<Vec<super::super::geom::Path>>,
     pub format: Option<crate::drawing_text::TextFormat>,
+    pub fill: Option<ShapePaint>,
+    pub line: Option<ShapeLine>,
+    pub place: SpTreePlace,
 }
 
 #[derive(Debug, Clone)]
@@ -118,7 +191,7 @@ pub struct SetShapeFillOp {
     pub id: String,
     pub target: Option<super::super::shape::ShapeTarget>,
     pub placeholder: Option<super::super::master::PlaceholderId>,
-    pub color: Option<String>,
+    pub paint: ShapePaint,
 }
 
 #[derive(Debug, Clone)]
@@ -592,6 +665,7 @@ pub struct InsertPictureOp {
     pub y: Option<i64>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub place: SpTreePlace,
 }
 
 #[derive(Debug, Clone)]
@@ -740,6 +814,14 @@ pub struct CreateShape {
     pub format: Option<crate::drawing_text::TextFormat>,
     pub geom: Option<Vec<super::super::geom::Path>>,
     pub fields: Vec<CreateField>,
+    pub prst: Option<String>,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub fill: Option<ShapePaint>,
+    pub line: Option<ShapeLine>,
+    pub index: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -1376,6 +1458,7 @@ pub enum PptxOp {
     SetShapePos(SetShapePosOp),
     SetShapeSize(SetShapeSizeOp),
     SetShapeFill(SetShapeFillOp),
+    SetPageBackground(SetPageBackgroundOp),
     SetShapeFormat(SetShapeFormatOp),
     SetShapeLine(SetShapeLineOp),
     SetShapeGeom(SetShapeGeomOp),

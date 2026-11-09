@@ -213,12 +213,10 @@
           "type": "string"
         },
         "x": {
-          "type": "integer",
-          "minimum": 0
+          "type": "integer"
         },
         "y": {
-          "type": "integer",
-          "minimum": 0
+          "type": "integer"
         },
         "cx": {
           "type": "integer",
@@ -311,6 +309,24 @@
         },
         "geom": {
           "$ref": "#/$defs/shapeGeom"
+        },
+        "fill": {
+          "$ref": "#/$defs/shapePaint"
+        },
+        "line": {
+          "$ref": "#/$defs/shapeLine"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "before": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "string",
+          "minLength": 1
         },
         "from": {
           "type": "string",
@@ -534,12 +550,10 @@
           "minLength": 1
         },
         "x": {
-          "type": "integer",
-          "minimum": 0
+          "type": "integer"
         },
         "y": {
-          "type": "integer",
-          "minimum": 0
+          "type": "integer"
         }
       },
       "anyOf": [
@@ -596,16 +610,105 @@
         }
       ]
     },
+    "shapePaint": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        {
+          "$ref": "#/$defs/shapePaintObject"
+        }
+      ]
+    },
+    "shapePaintObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "solid",
+            "grad",
+            "blip"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "ang": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 21600000
+        },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pos",
+              "color"
+            ],
+            "properties": {
+              "pos": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^[0-9A-Fa-f]{6}$"
+              }
+            }
+          }
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "shapeLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "color"
+      ],
+      "properties": {
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
     "setShapeFillOp": {
-      "description": "写入 p:spPr 的 a:solidFill/a:srgbClr；null 则写成 a:noFill，并去掉原有填充。",
-      "descriptionEn": "Writes a:solidFill/a:srgbClr on p:spPr. null is written as a:noFill, and the previous fill is removed.",
-      "limits": "缺 color 或非法十六进制报 InvalidField。找不到报 IdNotFound。id 不是形状 id 报 InvalidId。对母版或版式占位符 id 发本 op 报 InvalidId。对 sldImg 占位符报 InvalidField。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx / xlsx 上发此 op 报 InvalidField。",
-      "limitsEn": "A missing color, or an illegal hexadecimal value, returns InvalidField. A missing id returns IdNotFound. An id that is not a shape id returns InvalidId. A master or layout placeholder id returns InvalidId for this op. An sldImg placeholder returns InvalidField. Decorative shapes on a master or layout are changed only in the matching slideMaster or slideLayout part, not in each slide's XML. This op on docx / xlsx returns InvalidField.",
+      "description": "写入形状填充：纯色、无填充、渐变或图片。",
+      "descriptionEn": "Writes a shape fill: solid, none, gradient, or picture.",
+      "limits": "color 与 fill 恰好一个。alpha 为 0 到 100000。blip 不能带 alpha。找不到报 IdNotFound。docx / xlsx 上发此 op 报 InvalidField。",
+      "limitsEn": "color and fill are mutually exclusive and one is required. alpha is 0 to 100000. blip cannot take alpha. A missing id returns IdNotFound. This op on docx / xlsx returns InvalidField.",
       "type": "object",
       "required": [
         "op",
-        "id",
-        "color"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -621,6 +724,14 @@
             "string",
             "null"
           ]
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "fill": {
+          "$ref": "#/$defs/shapePaint"
         }
       }
     },

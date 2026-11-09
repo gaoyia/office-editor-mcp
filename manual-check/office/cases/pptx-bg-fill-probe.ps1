@@ -21,7 +21,7 @@ try {
     $slide = $slides.Item(1)
 
     # 第 6 项：页背景。FollowMasterBackground = msoFalse(0) 才让 p:bg 落到本页。
-    # RGB 是 OLE BGR，0x2B5CFF 对应 srgbClr 5CFF2B。
+    # RGB 是 OLE BGR，低字节是红。0x2B5CFF 对应 srgbClr FF5C2B。
     $slide.FollowMasterBackground = 0
     $bg = $slide.Background
     $bgFill = $bg.Fill

@@ -216,6 +216,58 @@ pub(crate) fn parse_off_field(
     parse_off_at(v, &format!("ops[{i}].{field}"), field)
 }
 
+/// 画布坐标，允许负值。只给幻灯片形状的 `a:off` 用。
+pub(crate) fn parse_signed_off_field(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<i64>, Error> {
+    parse_signed_off_at(v, &format!("ops[{i}].{field}"), field)
+}
+
+pub(crate) fn parse_signed_off_at(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    match v {
+        Value::Number(n) => {
+            if let Some(i64v) = n.as_i64() {
+                return Ok(Some(i64v));
+            }
+            if let Some(u) = n.as_u64() {
+                if u > i64::MAX as u64 {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: field.into(),
+                            expected: TypeName::Integer,
+                        },
+                        path.to_string(),
+                    ));
+                }
+                return Ok(Some(u as i64));
+            }
+            Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            ))
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
 pub(crate) fn parse_off_at(
     v: Option<&Value>,
     path: &str,

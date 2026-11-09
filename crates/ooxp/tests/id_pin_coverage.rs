@@ -2616,6 +2616,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "pptx",
+        op: "setPageBackground",
+        family: "slide:{n}",
+        test: "-",
+    },
+    Row {
+        format: "pptx",
         op: "setNotesText",
         family: "slide:{n}",
         test: "入口同 delete_then_edit_uses_original_slide",

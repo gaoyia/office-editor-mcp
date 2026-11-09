@@ -200,6 +200,7 @@ $order = @(
     'pptx-apply'
     'pptx-slides'
     'pptx-shapes'
+    'pptx-paint'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'
@@ -278,6 +279,7 @@ $order = @(
 # 不进默认全跑，只有 -Case 里点名带 probe 才选，免得把没出结果的探测混进日常验收。
 $probeOrder = @(
     'pptx-bg-fill-probe'
+    'pptx-blip-fill-probe'
     'pptx-zorder-probe'
     'pptx-offslide-geom-probe'
 )

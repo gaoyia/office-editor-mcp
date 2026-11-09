@@ -9,7 +9,7 @@ use crate::xml::{Document, Element, Node};
 use super::picture;
 use super::request::{
     InsertShapeOp, SetShapeFillOp, SetShapeFormatOp, SetShapeGeomOp, SetShapeLineOp, SetShapePosOp,
-    SetShapeSizeOp,
+    SetShapeSizeOp, ShapeLine, ShapePaint,
 };
 use super::DML_NS;
 
@@ -492,9 +492,12 @@ fn grp_has_member(grp: &Element) -> bool {
 }
 
 pub fn insert_shape(
+    pkg: &mut Package,
+    part: &str,
     doc: &mut Document,
     canvas: (i64, i64),
     op: &InsertShapeOp,
+    path: &str,
 ) -> Result<(), Error> {
     let cx = op.cx.unwrap_or(DEFAULT_SHAPE_CX);
     let cy = op.cy.unwrap_or(DEFAULT_SHAPE_CY);
@@ -520,6 +523,8 @@ pub fn insert_shape(
         y,
         cx,
         cy,
+        op.fill.as_ref(),
+        op.line.as_ref(),
     );
     if let Some(tx) = sp.child_by_local_mut("txBody") {
         crate::drawing_text::set_txbody_text(tx, &op.text);
@@ -527,7 +532,12 @@ pub fn insert_shape(
             crate::drawing_text::apply(tx, fmt);
         }
     }
-    picture::insert_into_sp_tree(&mut doc.root, sp)?;
+    if let Some(ShapePaint::Blip { file }) = &op.fill {
+        picture::ensure_xmlns(&mut doc.root, "r", super::REL_NS);
+        let el = blip_fill(pkg, part, file)?;
+        install_paint(&mut sp, el);
+    }
+    picture::insert_into_sp_tree_at(&mut doc.root, &op.host.prefix(), &op.place, path, sp)?;
     Ok(())
 }
 
@@ -541,6 +551,8 @@ fn build_sp(
     y: i64,
     cx: i64,
     cy: i64,
+    fill: Option<&ShapePaint>,
+    line: Option<&ShapeLine>,
 ) -> Element {
     let mut sp = Element::new("p:sp");
     let mut nv = Element::new("p:nvSpPr");
@@ -577,21 +589,8 @@ fn build_sp(
         geom_el.push_element(Element::new("a:avLst"));
         sp_pr.push_element(geom_el);
     }
-    if is_box {
-        sp_pr.push_element(Element::new("a:noFill"));
-        let mut ln = Element::new("a:ln");
-        ln.push_element(Element::new("a:noFill"));
-        sp_pr.push_element(ln);
-    } else {
-        let mut fill = Element::new("a:solidFill");
-        fill.push_element(Element::new("a:srgbClr").with_attr("val", "5B9BD5"));
-        sp_pr.push_element(fill);
-        let mut ln = Element::new("a:ln").with_attr("w", "12700");
-        let mut ln_fill = Element::new("a:solidFill");
-        ln_fill.push_element(Element::new("a:srgbClr").with_attr("val", "2E75B6"));
-        ln.push_element(ln_fill);
-        sp_pr.push_element(ln);
-    }
+    sp_pr.push_element(fill_or_default(is_box, fill));
+    sp_pr.push_element(line_or_default(is_box, line));
     sp.push_element(sp_pr);
 
     let mut tx = Element::new("p:txBody");
@@ -659,10 +658,15 @@ pub(crate) fn set_sp_size(sp: &mut Element, cx: Option<i64>, cy: Option<i64>) {
 }
 
 pub fn set_shape_fill(
+    pkg: &mut Package,
+    part: &str,
     doc: &mut Document,
     op: &SetShapeFillOp,
     op_index: usize,
 ) -> Result<(), Error> {
+    if matches!(op.paint, ShapePaint::Blip { .. }) {
+        picture::ensure_xmlns(&mut doc.root, "r", super::REL_NS);
+    }
     let target = op.target.as_ref().expect("幻灯片形状");
     let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
@@ -670,11 +674,32 @@ pub fn set_shape_fill(
             format!("ops[{op_index}].id"),
         )
     })?;
-    apply_fill(sp, op.color.as_deref());
+    apply_paint(pkg, part, sp, &op.paint)
+}
+
+pub(crate) fn apply_paint(
+    pkg: &mut Package,
+    part: &str,
+    sp: &mut Element,
+    paint: &ShapePaint,
+) -> Result<(), Error> {
+    let el = paint_element(pkg, part, paint)?;
+    install_paint(sp, el);
     Ok(())
 }
 
-pub(crate) fn apply_fill(sp: &mut Element, color: Option<&str>) {
+pub(crate) fn apply_paint_local(sp: &mut Element, paint: &ShapePaint) -> Result<(), Error> {
+    let el = match paint {
+        ShapePaint::Blip { .. } => {
+            return Err(Error::new(ErrorKind::InvalidShapeFillType));
+        }
+        other => fill_or_default(false, Some(other)),
+    };
+    install_paint(sp, el);
+    Ok(())
+}
+
+pub(crate) fn install_paint(sp: &mut Element, fill: Element) {
     let sp_pr = picture::ensure_child(sp, "spPr");
     remove_named(
         sp_pr,
@@ -687,14 +712,111 @@ pub(crate) fn apply_fill(sp: &mut Element, color: Option<&str>) {
             "grpFill",
         ],
     );
-    match color {
-        Some(c) => {
-            let mut fill = Element::new("a:solidFill");
-            fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
-            sp_pr.push_element(fill);
+    sp_pr.push_element(fill);
+}
+
+pub(crate) fn paint_for_page(
+    pkg: &mut Package,
+    part: &str,
+    paint: &ShapePaint,
+) -> Result<Element, Error> {
+    paint_element(pkg, part, paint)
+}
+
+fn paint_element(pkg: &mut Package, part: &str, paint: &ShapePaint) -> Result<Element, Error> {
+    Ok(match paint {
+        ShapePaint::Blip { file } => blip_fill(pkg, part, file)?,
+        other => fill_or_default(false, Some(other)),
+    })
+}
+
+fn fill_or_default(is_box: bool, fill: Option<&ShapePaint>) -> Element {
+    match fill {
+        None if is_box => Element::new("a:noFill"),
+        None | Some(ShapePaint::Blip { .. }) => {
+            if is_box || matches!(fill, Some(ShapePaint::Blip { .. })) {
+                Element::new("a:noFill")
+            } else {
+                solid_fill("5B9BD5", None)
+            }
         }
-        None => sp_pr.push_element(Element::new("a:noFill")),
+        Some(ShapePaint::None) => Element::new("a:noFill"),
+        Some(ShapePaint::Solid { color, alpha }) => solid_fill(color, *alpha),
+        Some(ShapePaint::Grad { ang, stops, alpha }) => grad_fill(*ang, stops, *alpha),
     }
+}
+
+fn line_or_default(is_box: bool, line: Option<&ShapeLine>) -> Element {
+    match line {
+        None if is_box => {
+            let mut ln = Element::new("a:ln");
+            ln.push_element(Element::new("a:noFill"));
+            ln
+        }
+        None => {
+            let mut ln = Element::new("a:ln").with_attr("w", "12700");
+            ln.push_element(solid_fill("2E75B6", None));
+            ln
+        }
+        Some(line) => {
+            let mut ln = Element::new("a:ln");
+            if let Some(w) = line.width {
+                ln.set_attr("w", w.to_string());
+            } else if line.color.is_some() {
+                ln.set_attr("w", "12700");
+            }
+            match &line.color {
+                Some(c) => ln.push_element(solid_fill(c, None)),
+                None => ln.push_element(Element::new("a:noFill")),
+            }
+            ln
+        }
+    }
+}
+
+fn solid_fill(color: &str, alpha: Option<u32>) -> Element {
+    let mut fill = Element::new("a:solidFill");
+    fill.push_element(srgb_clr(color, alpha));
+    fill
+}
+
+fn srgb_clr(color: &str, alpha: Option<u32>) -> Element {
+    let mut c = Element::new("a:srgbClr").with_attr("val", color.to_ascii_uppercase());
+    if let Some(a) = alpha {
+        c.push_element(Element::new("a:alpha").with_attr("val", a.to_string()));
+    }
+    c
+}
+
+fn grad_fill(ang: i64, stops: &[(i64, String)], alpha: Option<u32>) -> Element {
+    let mut fill = Element::new("a:gradFill")
+        .with_attr("flip", "none")
+        .with_attr("rotWithShape", "1");
+    let mut gs = Element::new("a:gsLst");
+    for (pos, color) in stops {
+        let mut stop = Element::new("a:gs").with_attr("pos", pos.to_string());
+        stop.push_element(srgb_clr(color, alpha));
+        gs.push_element(stop);
+    }
+    fill.push_element(gs);
+    fill.push_element(
+        Element::new("a:lin")
+            .with_attr("ang", ang.to_string())
+            .with_attr("scaled", "1"),
+    );
+    fill.push_element(Element::new("a:tileRect"));
+    fill
+}
+
+fn blip_fill(pkg: &mut Package, part: &str, file: &str) -> Result<Element, Error> {
+    let image = picture::read_image(file)?;
+    let (rid, _) = picture::write_picture_media(pkg, part, &image)?;
+    let mut fill = Element::new("a:blipFill");
+    fill.push_element(Element::new("a:blip").with_attr("r:embed", rid));
+    let mut stretch = Element::new("a:stretch");
+    stretch.push_element(Element::new("a:fillRect"));
+    fill.push_element(stretch);
+    Ok(fill)
 }
 
 pub fn set_shape_line(
@@ -999,7 +1121,7 @@ pub(crate) fn op_insert_shape(
             } else {
                 super::picture::canvas_size(&pres.root)
             };
-            insert_shape(&mut doc, canvas, op)?;
+            insert_shape(pkg, &part, &mut doc, canvas, op, &format!("ops[{i}]"))?;
             super::list_pin::write_part(pkg, &part, &doc)?;
         }
     };
@@ -1126,25 +1248,27 @@ pub(crate) fn op_set_shape_fill(
     i: usize,
 ) -> Result<(), crate::error::Error> {
     if let Some(ph) = &op.placeholder {
-        super::master::set_fill(
-            pkg,
-            pres_part,
-            &pres.root,
-            ph,
-            &op.id,
-            op.color.as_deref(),
-            i,
-        )?;
+        super::master::set_fill(pkg, pres_part, &pres.root, ph, &op.id, &op.paint, i)?;
         return Ok(());
     }
     let target = op.target.as_ref().expect("幻灯片形状");
-    let mut doc =
-        super::apply::open_shape_host(pkg, pres_part, &pres.root, slides, target, &op.id, i)?;
+    let part = super::apply::host_xml_part(
+        pkg,
+        pres_part,
+        &pres.root,
+        slides,
+        target.slide,
+        target.on_notes,
+        target.master,
+        ErrorKind::ShapeNotFound { id: op.id.clone() },
+        format!("ops[{i}].id"),
+    )?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
     if target.on_notes {
         reject_notes_image(&doc.root, &target.key, i)?;
     }
-    set_shape_fill(&mut doc, op, i)?;
-    super::apply::write_shape_host(pkg, pres_part, &pres.root, slides, target, doc)?;
+    set_shape_fill(pkg, &part, &mut doc, op, i)?;
+    super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }
 

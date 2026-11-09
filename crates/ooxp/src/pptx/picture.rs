@@ -8,7 +8,7 @@ use crate::xml::{Document, Element, Node};
 
 use super::request::{
     DeletePictureOp, InsertPictureOp, PicGeomTarget, ReplacePictureOp, SetPicturePosOp,
-    SetPictureSizeOp,
+    SetPictureSizeOp, SpTreePlace,
 };
 use super::shape::{self, first_alt_child_index};
 use super::{ExportedMedia, DML_NS, REL_NS};
@@ -1034,7 +1034,9 @@ pub fn insert_picture(
     if let Some(svg) = svg_rid {
         crate::svg::set_svg_blip(&mut pic, &svg);
     }
-    insert_into_sp_tree(&mut slide_doc.root, pic)?;
+    let host = TreeHost::from_parts(op.slide, op.on_notes, op.master);
+    let prefix = file_field.strip_suffix(".file").unwrap_or(file_field);
+    insert_into_sp_tree_at(&mut slide_doc.root, &host.prefix(), &op.place, prefix, pic)?;
     Ok(())
 }
 
@@ -1162,6 +1164,17 @@ pub(crate) fn sp_tree_mut(root: &mut Element) -> Option<&mut Element> {
 }
 
 pub(crate) fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<(), Error> {
+    insert_into_sp_tree_at(root, "", &SpTreePlace::End, "", pic)
+}
+
+/// `index` 从 0 起，只数 `spTree` 的内容子元素，不含 `nvGrpSpPr`、`grpSpPr`、`extLst`。
+pub(crate) fn insert_into_sp_tree_at(
+    root: &mut Element,
+    host_prefix: &str,
+    place: &SpTreePlace,
+    path: &str,
+    el: Element,
+) -> Result<(), Error> {
     let parent = root.name.clone();
     let tree = root
         .child_by_local_mut("cSld")
@@ -1172,16 +1185,118 @@ pub(crate) fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<()
                 child: "p:spTree".into(),
             })
         })?;
-    if let Some(i) = tree
-        .children
+    let content = sp_tree_content_indices(tree);
+    let at = match place {
+        SpTreePlace::End => ext_lst_or_end(tree),
+        SpTreePlace::Index(i) => {
+            if *i > content.len() {
+                return Err(Error::with_path(
+                    ErrorKind::CreateIndexOutOfRange {
+                        field: "index".into(),
+                        max: content.len() as i64,
+                    },
+                    format!("{path}.index"),
+                ));
+            }
+            if *i == content.len() {
+                ext_lst_or_end(tree)
+            } else {
+                content[*i]
+            }
+        }
+        SpTreePlace::Before(id) => {
+            let pos = anchor_pos(tree, &content, host_prefix, id, path, "before")?;
+            content[pos]
+        }
+        SpTreePlace::After(id) => {
+            let pos = anchor_pos(tree, &content, host_prefix, id, path, "after")?;
+            content[pos] + 1
+        }
+    };
+    tree.children.insert(at, Node::Element(el));
+    Ok(())
+}
+
+fn ext_lst_or_end(tree: &Element) -> usize {
+    tree.children
         .iter()
         .position(|n| matches!(n, Node::Element(e) if e.local_name() == "extLst"))
-    {
-        tree.children.insert(i, Node::Element(pic));
-    } else {
-        tree.push_element(pic);
+        .unwrap_or(tree.children.len())
+}
+
+fn sp_tree_content_indices(tree: &Element) -> Vec<usize> {
+    tree.children
+        .iter()
+        .enumerate()
+        .filter_map(|(i, n)| {
+            let Node::Element(el) = n else {
+                return None;
+            };
+            if matches!(el.local_name(), "nvGrpSpPr" | "grpSpPr" | "extLst") {
+                None
+            } else {
+                Some(i)
+            }
+        })
+        .collect()
+}
+
+fn anchor_pos(
+    tree: &Element,
+    content: &[usize],
+    host_prefix: &str,
+    id: &str,
+    path: &str,
+    field: &str,
+) -> Result<usize, Error> {
+    let want = anchor_cnv(host_prefix, id, path, field)?;
+    for (pos, idx) in content.iter().enumerate() {
+        if let Node::Element(el) = &tree.children[*idx] {
+            if direct_cnv_id(el) == Some(want) {
+                return Ok(pos);
+            }
+        }
     }
-    Ok(())
+    Err(Error::with_path(
+        ErrorKind::AnchorNotFound { id: id.to_string() },
+        format!("{path}.{field}"),
+    ))
+}
+
+fn anchor_cnv(host_prefix: &str, id: &str, path: &str, field: &str) -> Result<u32, Error> {
+    let bad = || {
+        Error::with_path(
+            ErrorKind::AnchorNotFound { id: id.to_string() },
+            format!("{path}.{field}"),
+        )
+    };
+    let Some(rest) = id
+        .strip_prefix(host_prefix)
+        .and_then(|r| r.strip_prefix('/'))
+    else {
+        return Err(bad());
+    };
+    if rest.is_empty() || rest.contains('/') || rest.starts_with("index:") {
+        return Err(bad());
+    }
+    let Some((_, num)) = rest.rsplit_once(':') else {
+        return Err(bad());
+    };
+    if num.is_empty() || !num.chars().all(|c| c.is_ascii_digit()) {
+        return Err(bad());
+    }
+    num.parse().map_err(|_| bad())
+}
+
+fn direct_cnv_id(el: &Element) -> Option<u32> {
+    el.child_by_local("nvSpPr")
+        .or_else(|| el.child_by_local("nvPicPr"))
+        .or_else(|| el.child_by_local("nvCxnSpPr"))
+        .or_else(|| el.child_by_local("nvGrpSpPr"))
+        .or_else(|| el.child_by_local("nvGraphicFramePr"))
+        .and_then(|nv| nv.child_by_local("cNvPr"))
+        .and_then(|c| c.attr("id"))
+        .and_then(|s| s.parse().ok())
 }
 
 fn build_pic(cnv: u32, name: &str, rid: &str, x: i64, y: i64, cx: i64, cy: i64) -> Element {

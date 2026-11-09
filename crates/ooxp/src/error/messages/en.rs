@@ -144,6 +144,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertShapeHost => {
                 "pptx insertShape id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
+            IdReason::PageBackgroundHost => {
+                "pptx setPageBackground id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
+            }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText id must be slide:N or slide:N/notes".into()
             }
@@ -1240,6 +1243,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTextFillType => "textFill.type must be none or gradient".into(),
         ErrorKind::InvalidTableCellFillType => {
             "table cell fill.type must be solid, grad, patt or blip".into()
+        }
+        ErrorKind::InvalidShapeFillType => "fill.type must be solid, grad, or blip".into(),
+        ErrorKind::AnchorNotFound { id } => format!("layer object not found: {id}"),
+        ErrorKind::CommentPicNoTree => {
+            "a picture inside a comment cannot take index, before, or after".into()
         }
         ErrorKind::InvalidPresetPatternVal => "prst must be ST_PresetPatternVal".into(),
         ErrorKind::NeedSetTableCellPrField => {

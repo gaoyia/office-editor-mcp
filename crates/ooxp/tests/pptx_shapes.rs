@@ -516,3 +516,141 @@ fn set_shape_runs_cuts_between_two_anchors() {
         ["这里是很长的中间，包括全部直接损失以及因此产生的合理费用"]
     );
 }
+
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+#[test]
+fn page_background_fill_order_and_offslide() {
+    let src = create_deck("paint");
+    let png = tmp_dir().join("dot.png");
+    std::fs::write(&png, PNG_1X1).unwrap();
+    let out = tmp("paint-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "setPageBackground",
+                "id": "slide:1",
+                "color": "FF5C2B",
+                "alpha": 65000
+            },
+            {
+                "op": "setShapeFill",
+                "id": "slide:1/shape:2",
+                "fill": {
+                    "type": "grad",
+                    "alpha": 50000,
+                    "stops": [
+                        { "pos": 0, "color": "FF0000" },
+                        { "pos": 100000, "color": "0000FF" }
+                    ]
+                }
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "prst": "ellipse",
+                "x": -457200,
+                "y": -228600,
+                "index": 0,
+                "fill": "2B5CFF",
+                "line": { "color": "334455", "width": 25400 }
+            },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png.to_string_lossy(),
+                "index": 0
+            }
+        ]),
+    )
+    .unwrap();
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains(
+        r#"<p:bg><p:bgPr><a:solidFill><a:srgbClr val="FF5C2B"><a:alpha val="65000"/></a:srgbClr></a:solidFill><a:effectLst/></p:bgPr></p:bg>"#
+    ));
+    assert!(xml.contains(r#"<a:gradFill flip="none" rotWithShape="1">"#));
+    assert!(xml.contains(r#"<a:alpha val="50000"/>"#));
+    assert!(xml.contains(r#"<a:off x="-457200" y="-228600"/>"#));
+    assert!(xml.contains(r#"<a:ln w="25400">"#));
+    let pic_at = xml.find("<p:pic>").unwrap();
+    let ellipse_at = xml.find(r#"prst="ellipse""#).unwrap();
+    let box_at = xml.find(r#"name="文本框 1""#).unwrap();
+    assert!(pic_at < ellipse_at);
+    assert!(ellipse_at < box_at);
+
+    let err = apply(
+        &src,
+        &tmp("overflow"),
+        json!([{ "op": "insertShape", "id": "slide:1", "index": 9 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &src,
+        &tmp("anchor"),
+        json!([{
+            "op": "insertShape",
+            "id": "slide:1",
+            "before": "slide:1/index:0"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    let err = apply(
+        &src,
+        &tmp("blip-alpha"),
+        json!([{
+            "op": "setShapeFill",
+            "id": "slide:1/shape:2",
+            "fill": { "type": "blip", "file": png.to_string_lossy(), "alpha": 1 }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn create_shape_geometry_and_default_box() {
+    let plain = tmp("plain-box");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": plain.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "甲" }] }] }
+    })
+    .to_string())
+    .unwrap();
+    let xml = part(&plain, "ppt/slides/slide1.xml");
+    assert!(xml.contains(r#"<p:cNvPr id="2" name="文本框 1"/>"#));
+    assert!(xml.contains(r#"<a:off x="838200" y="685800"/>"#));
+    assert!(xml.contains(r#"<a:ext cx="10515600" cy="800100"/>"#));
+    assert!(xml.contains("<a:noFill/><a:ln><a:noFill/></a:ln>"));
+
+    let custom = tmp("custom-box");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": custom.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{
+            "text": "圆",
+            "prst": "ellipse",
+            "x": -100,
+            "y": -200
+        }] }] }
+    })
+    .to_string())
+    .unwrap();
+    let xml = part(&custom, "ppt/slides/slide1.xml");
+    assert!(xml.contains(r#"<a:off x="-100" y="-200"/>"#));
+    assert!(xml.contains(r#"prst="ellipse""#));
+    assert!(xml.contains(r#"<a:srgbClr val="5B9BD5"/>"#));
+    assert!(xml.contains(r#"<a:ext cx="1828800" cy="914400"/>"#));
+}

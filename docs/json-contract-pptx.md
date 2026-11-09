@@ -1391,6 +1391,14 @@ pptx 认 23 个键：`slide`、`maxShapes`，以及下列 21 个开关。
   - 可选
   - 自定义几何，规则与 `insertShape` 的 `geom` 相同
   - 不要给矩形补 `geom`
+- **`shapes[].prst` / `x` / `y` / `cx` / `cy` / `fill` / `line` / `index`**
+  - 可选
+  - 规则与 `insertShape` 相同
+  - `x` / `y` 允许负数，必须成对
+  - `cx` / `cy` 必须成对
+  - 这些字段都省略时，文本框字节与原来一致
+  - `index` 是该页形状写出时的图层序号，0 为最底层
+  - 非矩形且省略尺寸时，默认 `1828800` × `914400`
 - **`shapes[].fields`**
   - 可选
   - 写入该文本框的 `a:fld` 列表
@@ -1416,6 +1424,11 @@ pptx 认 23 个键：`slide`、`maxShapes`，以及下列 21 个开关。
   - 可选，EMU，正整数
   - 都省则与 `insertPicture` 相同
   - 只给一个时报 `InvalidField`
+- **`pictures[].index`**
+  - 可选，从 0 起
+  - 插到当时 `spTree` 内容子元素的这个位置
+  - 0 放在已经写出的形状之下
+  - 超过当前内容个数报 `InvalidField`
 - **`pictures[].hyperlink`**
   - 可选对象
   - 字段与 `insertHyperlink` 相同：`url` / `file` / `slide` 恰好一个
@@ -1684,7 +1697,7 @@ OLE、Zoom、域、连接线、自定义放映、讲义、备注动画与放映 
 备注页公式 / 3D 与图 / 表 / 图表 / SmartArt 链合在一起的示例见 `docs/examples/pptx-create-round5.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 `comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
-`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `spcBef` / `spcAft` / `lnSpc` / `spc` / `kern` / `geom` / `fields` 以外的键报未知字段。
+`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `spcBef` / `spcAft` / `lnSpc` / `spc` / `kern` / `geom` / `fields` / `prst` / `x` / `y` / `cx` / `cy` / `fill` / `line` / `index` 以外的键报未知字段。
 `text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。
 `pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 上出现 `text` / `on` / `op` / `id` 报未知字段。
 `tables[].cells` 对象上出现 `on` / `hyperlink` 报未知字段。
@@ -1706,6 +1719,9 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
 给了 `slides[].inks` 时按 `insertInk` 同一套规则写 InkML、海报 PNG 与 `p14` AlternateContent。不写进 `pictures`。
 给了 `shapes[].geom` 时按 `setShapeGeom` 同一套规则把该文本框改成 `a:custGeom`。不要另写一套 XML。
+`shapes[].prst`、坐标、尺寸、`fill`、`line`、`index` 都省略时，缺省文本框 XML 与原来逐字节相同。
+给了其中任一项时，该页形状按 `insertShape` 的几何与填充写出。`cNvPr/@id` 仍按数组顺序从 2 起，方便随后的 `geom` 按这个 id 找到形状。
+`fill.type` 为 `blip` 时再写 `/ppt/media` 与图片关系，`a:blipFill` 为 `a:blip` 加 `a:stretch/a:fillRect`。
 给了 `shapes[].fields` 时按 `insertField` 同一套规则往该文本框写 `a:fld`。
 给了 `slides[].oleObjects` 时按 `insertOle` 同一套规则写 embedding 与 `p:oleObj`。
 给了 `slides[].connectors` 时按 `insertConnector` 同一套规则写 `p:cxnSp`。
@@ -2600,13 +2616,29 @@ docx 见 [docx 分册](json-contract-docx.md#setthemeoverride)。xlsx 见 [xlsx 
   - `\\n` 写成 `a:br`
 - **`x` / `y`**
   - 可选
-  - 画布坐标，EMU，非负整数
+  - 画布坐标，EMU，整数，可以为负（画布外）
   - 必须成对出现或成对省略
 - **`cx` / `cy`**
   - 可选
   - 尺寸，EMU，正整数
   - 必须成对出现或成对省略
   - 都省略时默认 `1828800` × `914400`（2 英寸 × 1 英寸）
+- **`fill`**
+  - 可选
+  - 字符串、`null` 或对象，规则与 `setShapeFill` 的 `color` / `fill` 相同
+  - 省略则矩形文本框为 `a:noFill`，其它预设为实心 `5B9BD5`
+- **`line`**
+  - 可选对象
+  - `color` 必填，六位 RGB 或 `null`
+  - `width` 可选，EMU，正整数；有颜色而省略时为 `12700`
+  - 省略则矩形文本框为 `a:ln/a:noFill`，其它预设为线宽 `12700` 的 `2E75B6`
+- **`index` / `before` / `after`**
+  - 可选，至多一个
+  - `index` 从 0 起，只数该宿主 `spTree` 的内容子元素，不含 `nvGrpSpPr`、`grpSpPr`、`extLst`
+  - 0 是最底层。省略则仍插在 `extLst` 之前（最前）
+  - `index` 等于当前内容个数时追加；更大报 `InvalidField`
+  - `before` / `after` 必须是同一宿主上 `spTree` 直接子对象的 inspect id
+  - `index:` 形式和组合内子对象不能当锚点，报 `IdNotFound`
 - **`prst`**
   - 可选
   - `a:prstGeom/@prst`
@@ -2634,7 +2666,7 @@ pptx：`id` 不是页 id、备注容器 id、母版 id 或版式 id 报 `Invalid
 只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。缺坐标时在画布上找空位（幻灯片与母版 / 版式读 `p:sldSz`，备注读 `p:notesSz`），不要叠在 `(0,0)`。
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
 
-写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。
+写入该宿主 `p:spTree` 一个新 `p:sp`。省略 `index` / `before` / `after` 时插在 `extLst` 之前。
 `prst` 为 `rect`（或缺省）且没有 `geom` 时：`p:cNvSpPr/@txBox` 为 `1`，默认 `a:noFill` 与 `a:ln/a:noFill`，
 `cNvPr/@name` 写成「文本框 {该 id}」，写 `a:prstGeom`。
 其它可写 `prst`：不写 `txBox`，默认实心填充 `5B9BD5` 与线宽 `12700` 的描边 `2E75B6`，
@@ -2787,10 +2819,10 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | --- | --- |
 | `op` | 必须是 `"setShapePos"` |
 | `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，备注母版 `notesMaster/shape:…`，讲义 `handout/shape:…`，或连接线 `slide:…/cxn:…`） |
-| `x` / `y` | 至少给一个。EMU，非负整数 |
+| `x` / `y` | 至少给一个。EMU。形状与占位符可以为负；连接线仍须非负 |
 
 写入该 `p:sp` 或 `p:cxnSp` 的 `p:spPr/a:xfrm/a:off`。没有 `xfrm` 则补。找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。
-`x` 与 `y` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
+`x` 与 `y` 一个都不给报 `InvalidField`。连接线上的负数报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
 备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。
 对已组合的子对象只改该子 `xfrm`，不重算父 `p:grpSp` 的包围盒。docx / xlsx 上发此 op 报 `InvalidField`。
 
@@ -2813,11 +2845,64 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | --- | --- |
 | `op` | 必须是 `"setShapeFill"` |
 | `id` | 形状 id |
-| `color` | 必填。六位 RGB 十六进制，或 `null` 表示无填充。不写 theme 色 |
+| `color` | 与 `fill` 恰好一个。六位 RGB 十六进制，或 `null` 表示无填充 |
+| `fill` | 与 `color` 恰好一个。字符串、`null`，或对象 |
+| `alpha` | 可选。`a:alpha`，0 到 100000。省略则不写。100000 为不透明 |
 
-写入 `p:spPr` 的 `a:solidFill/a:srgbClr`；`null` 则写成 `a:noFill`，并去掉原有填充。缺 `color` 或非法十六进制报 `InvalidField`。找不到报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
+`fill` 为字符串时当作纯色。`null` 为无填充。对象的 `type` 只能是 `solid`、`grad` 或 `blip`。
+
+- `solid` 必须有 `color`，可选对象内 `alpha`
+- `grad` 必须有至少两项 `stops`（`pos` 与 `color`，`pos` 为 0 到 100000 且不重复），可选 `ang`（省略为 `5400000`，最大 `21600000`）
+- `blip` 必须有 `file`。写出 `a:blipFill/a:blip/@r:embed` 与 `a:stretch/a:fillRect`，并新增 `/ppt/media` 与图片关系
+- 不写 `pattFill`，不写 theme 色
+
+`alpha` 写在纯色上，或渐变的每一个停点上。`color` 为 `null`、或 `blip` 时不能带 `alpha`。
+只给原来的 `{ "color": "…" }` 仍然是纯色，且不写 `a:alpha`。
+去掉原有 `noFill` / `solidFill` / `gradFill` / `blipFill` / `pattFill` / `grpFill`。
+缺 `color` 和 `fill`、两者都给、或非法十六进制，报 `InvalidField`。找不到报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
 母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
 docx / xlsx 上发此 op 报 `InvalidField`。pptx 上发 `setTextBoxFill` 仍报 `InvalidField`。
+
+### setPageBackground
+
+写幻灯片、备注页、母版或版式的 `p:bg`。`color` 为 `null` 时删掉 `p:bg`，改回跟随母版。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setPageBackground",
+      "id": "slide:1",
+      "color": "FF5C2B",
+      "alpha": 65000
+    }
+  ]
+}
+```
+
+- **`op`**
+  - 必须是 `"setPageBackground"`
+- **`id`**
+  - 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- **`color`**
+  - 必填
+  - 六位 RGB，或 `null`
+- **`alpha`**
+  - 可选，0 到 100000
+  - 省略则不写 `a:alpha`
+- **`fill`**
+  - 可选对象
+  - 字段只认 `kind`、`color`、`file`
+  - `kind` 为 `gradient` 或 `picture`
+
+`color` 为字符串且省略 `fill` 时，写 `p:bg/p:bgPr/a:solidFill`，并带空的 `a:effectLst`。
+`kind` 为 `gradient` 时写两停点：停点 0 用 `color`，停点 100000 用 `fill.color`，省略则为 `FFFFFF`。角度固定 `5400000`。给了 `alpha` 则两个停点都写。
+`kind` 为 `picture` 时必须给 `file`。`color` 仍然必填，但不写进 `a:blip`。图片填充不能带 `alpha`。
+`color` 为 `null` 时不能带 `fill` 或 `alpha`。
+不写 theme 色，不写 `p:style`。docx 不认 `alpha`。xlsx 上发此 op 报 `InvalidField`。id 不是上述宿主报 `InvalidId`。
 
 ### setShapeLine
 

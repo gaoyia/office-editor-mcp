@@ -630,13 +630,51 @@ pub fn set_fill(
     pres_root: &Element,
     ph: &PlaceholderId,
     id: &str,
-    color: Option<&str>,
+    paint: &super::request::ShapePaint,
     op_index: usize,
 ) -> Result<(), Error> {
+    if matches!(paint, super::request::ShapePaint::Blip { .. }) {
+        return set_deco_blip(pkg, pres_part, pres_root, ph, id, paint, op_index);
+    }
     apply_on_deco(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
-        shape::apply_fill(sp, color);
-        Ok(())
+        shape::apply_paint_local(sp, paint)
     })
+}
+
+fn set_deco_blip(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    paint: &super::request::ShapePaint,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
+    let mut doc = super::list_pin::parse_part(pkg, &part)?;
+    if find_master_shape_mut(&mut doc.root, &ph.key).is_none() {
+        return Err(Error::with_path(
+            ErrorKind::ShapeNotFound { id: id.to_string() },
+            json_path,
+        ));
+    }
+    let locked = {
+        let sp = find_master_shape_mut(&mut doc.root, &ph.key).expect("形状还在");
+        is_placeholder(sp)
+    };
+    if locked {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::MasterPlaceholderLocked,
+            },
+            json_path,
+        ));
+    }
+    super::picture::ensure_xmlns(&mut doc.root, "r", super::REL_NS);
+    let sp = find_master_shape_mut(&mut doc.root, &ph.key).expect("形状还在");
+    shape::apply_paint(pkg, &part, sp, paint)?;
+    super::list_pin::write_part(pkg, &part, &doc)
 }
 
 pub fn set_line(
@@ -682,7 +720,14 @@ pub fn insert_deco_shape(
     let json_path = format!("ops[{op_index}].id");
     let part = catalog(pkg, pres_part, pres_root)?.xml_part(master, layout, &json_path)?;
     let mut doc = super::list_pin::parse_part(pkg, &part)?;
-    shape::insert_shape(&mut doc, canvas_sz(pres_root), op)?;
+    shape::insert_shape(
+        pkg,
+        &part,
+        &mut doc,
+        canvas_sz(pres_root),
+        op,
+        &format!("ops[{op_index}]"),
+    )?;
     super::list_pin::write_part(pkg, &part, &doc)?;
     Ok(())
 }

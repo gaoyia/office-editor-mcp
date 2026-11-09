@@ -23,6 +23,7 @@ mod model3d;
 mod notes;
 mod ole;
 mod omml;
+mod page_bg;
 mod picture;
 mod protect;
 mod request;
