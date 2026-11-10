@@ -1129,6 +1129,10 @@
           "type": "string",
           "minLength": 1
         },
+        "dataTableRef": {
+          "type": "string",
+          "minLength": 1
+        },
         "numFmt": {
           "type": [
             "string",
@@ -1164,11 +1168,6 @@
           {
             "required": [
               "dataTable"
-            ]
-          },
-          {
-            "required": [
-              "dataTableRef"
             ]
           },
           {

@@ -25,6 +25,7 @@ pub(super) fn parse_set_cell(
             "sharedRef",
             "array",
             "arrayRef",
+            "dataTableRef",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -74,6 +75,7 @@ pub(super) fn parse_set_cell(
     let array = parse_opt_bool(obj, i, "array")?;
     let shared_ref = parse_opt_a1_range(obj, i, "sharedRef")?;
     let array_ref = parse_opt_a1_range(obj, i, "arrayRef")?;
+    let data_table_ref = parse_opt_a1_range(obj, i, "dataTableRef")?;
     if shared_ref.is_some() && array_ref.is_some() {
         return Err(Error::with_path(
             ErrorKind::MutuallyExclusive {
@@ -110,11 +112,23 @@ pub(super) fn parse_set_cell(
             format!("ops[{i}]"),
         ));
     }
+    if data_table_ref.is_some()
+        && (shared.is_some() || shared_ref.is_some() || array.is_some() || array_ref.is_some())
+    {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "dataTableRef".into(),
+                b: "shared".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
     if has_value
         && (shared == Some(true)
             || array == Some(true)
             || shared_ref.is_some()
-            || array_ref.is_some())
+            || array_ref.is_some()
+            || data_table_ref.is_some())
     {
         let b = if shared == Some(true) {
             "shared"
@@ -122,8 +136,10 @@ pub(super) fn parse_set_cell(
             "array"
         } else if shared_ref.is_some() {
             "sharedRef"
-        } else {
+        } else if array_ref.is_some() {
             "arrayRef"
+        } else {
+            "dataTableRef"
         };
         return Err(Error::with_path(
             ErrorKind::MutuallyExclusive {
@@ -133,7 +149,12 @@ pub(super) fn parse_set_cell(
             format!("ops[{i}]"),
         ));
     }
-    if (shared_ref.is_some() || array_ref.is_some() || array == Some(true)) && formula.is_none() {
+    if (shared_ref.is_some()
+        || array_ref.is_some()
+        || array == Some(true)
+        || data_table_ref.is_some())
+        && formula.is_none()
+    {
         return Err(Error::with_path(
             ErrorKind::MissingField {
                 field: "formula".into(),
@@ -149,6 +170,7 @@ pub(super) fn parse_set_cell(
         shared_ref,
         array,
         array_ref,
+        data_table_ref,
     })
 }
 

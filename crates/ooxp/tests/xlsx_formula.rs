@@ -571,3 +571,96 @@ fn inspect_row_and_two_d_data_table() {
     )
     .unwrap();
 }
+
+#[test]
+fn create_data_table_writes_empty_master() {
+    let path = tmp("dt-new");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "C1", "value": 10 },
+                    { "ref": "A2", "value": 1 },
+                    { "ref": "B2", "formula": "=TABLE(,C1)", "dataTableRef": "B2:B4" }
+                ]
+            }]
+        }
+    })
+    .to_string())
+    .unwrap();
+    let cells = inspect_cells_range(&path, "A1:D4");
+    let b2 = cell_of(&cells, "cell:Sheet1!B2");
+    let b3 = cell_of(&cells, "cell:Sheet1!B3");
+    assert_eq!(b2["formula"], json!("=TABLE(,C1)"));
+    assert_eq!(b2["dataTable"], json!(true));
+    assert_eq!(b2["dataTableRef"], json!("B2:B4"));
+    assert!(b2["value"].is_null());
+    assert_eq!(b3["dataTable"], json!(true));
+    assert!(b3["formula"].is_null());
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"t="dataTable""#), "{xml}");
+    assert!(xml.contains(r#"ref="B2:B4""#), "{xml}");
+    assert!(xml.contains(r#"r1="C1""#), "{xml}");
+    assert!(!xml.contains(">TABLE"), "{xml}");
+}
+
+#[test]
+fn create_row_and_two_d_data_table() {
+    let row = tmp("dt-new-row");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": row.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "B2", "formula": "=TABLE(C10,)", "dataTableRef": "B2:D2" }
+        ]}] }
+    })
+    .to_string())
+    .unwrap();
+    let row_cells = inspect_cells_range(&row, "A1:D2");
+    let b2 = cell_of(&row_cells, "cell:Sheet1!B2");
+    assert_eq!(b2["formula"], json!("=TABLE(C10,)"));
+    assert_eq!(b2["dataTableRef"], json!("B2:D2"));
+
+    let two = tmp("dt-new-2d");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": two.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "B2", "formula": "=TABLE(X1,Y1)", "dataTableRef": "B2:C3" }
+        ]}] }
+    })
+    .to_string())
+    .unwrap();
+    let two_cells = inspect_cells_range(&two, "A1:C3");
+    let master = cell_of(&two_cells, "cell:Sheet1!B2");
+    assert_eq!(master["formula"], json!("=TABLE(X1,Y1)"));
+    assert_eq!(master["dataTableRef"], json!("B2:C3"));
+    let xml = part_text(&two, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"dt2D="1""#), "{xml}");
+    assert!(xml.contains(r#"r2="Y1""#), "{xml}");
+}
+
+#[test]
+fn data_table_ref_cannot_resize() {
+    let src = with_col_table("dt-resize");
+    let out = tmp("dt-resize-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B2",
+            "formula": "=TABLE(,C1)",
+            "dataTableRef": "B2:B5"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert!(!out.exists());
+}

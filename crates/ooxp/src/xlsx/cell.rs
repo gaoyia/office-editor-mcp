@@ -191,7 +191,24 @@ fn apply_set_cell_with(
                 format!("ops[{op_index}].id"),
             ));
         }
+        if let Some((start, end)) = op.data_table_ref {
+            let same = index
+                .tables
+                .iter()
+                .find(|g| g.master == cell)
+                .is_some_and(|g| g.start == start && g.end == end);
+            if !same {
+                return Err(Error::with_path(
+                    ErrorKind::DataTableResize,
+                    format!("ops[{op_index}].dataTableRef"),
+                ));
+            }
+        }
         return write_data_table_inputs(worksheet, cell, op, op_index).map(|()| false);
+    }
+
+    if op.data_table_ref.is_some() || formula_is_table(op.formula.as_deref()) {
+        return write_new_data_table(worksheet, cell, op, index, op_index).map(|()| false);
     }
 
     let array_master = match formula::occupy_at(index, cell) {
@@ -282,6 +299,85 @@ fn apply_set_cell_with(
     Ok(true)
 }
 
+fn formula_is_table(formula: Option<&str>) -> bool {
+    formula.is_some_and(|f| formula::parse_table_formula(f).is_some())
+}
+
+fn write_new_data_table(
+    worksheet: &mut Element,
+    cell: a1::CellRef,
+    op: &SetCellOp,
+    index: &formula::FormulaIndex,
+    op_index: usize,
+) -> Result<(), Error> {
+    let Some((start, end)) = op.data_table_ref else {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "dataTableRef".into(),
+            },
+            format!("ops[{op_index}].dataTableRef"),
+        ));
+    };
+    let formula = op.formula.as_deref().unwrap_or("");
+    let Some((first, second)) = formula::parse_table_formula(formula) else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataTableFormula,
+            format!("ops[{op_index}].formula"),
+        ));
+    };
+    if cell != start {
+        return Err(Error::with_path(
+            ErrorKind::FormulaRangeNotTopLeft,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let (dt2d, dtr, r1, r2) = match (first, second) {
+        (Some(a), Some(b)) => (
+            true,
+            true,
+            a1::format_cell(a.col, a.row),
+            Some(a1::format_cell(b.col, b.row)),
+        ),
+        (Some(a), None) => (false, true, a1::format_cell(a.col, a.row), None),
+        (None, Some(b)) => (false, false, a1::format_cell(b.col, b.row), None),
+        (None, None) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidDataTableFormula,
+                format!("ops[{op_index}].formula"),
+            ));
+        }
+    };
+    reject_overlap(index, start, end, SkipGroup::Fresh, op_index)?;
+    let refer = a1::format_range(start, end);
+    {
+        let sheet_data = ensure_sheet_data(worksheet);
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                let here = a1::CellRef { col, row };
+                let c = ensure_cell(sheet_data, here);
+                if here == cell {
+                    write_formula_elem(
+                        c,
+                        "",
+                        FormulaWrite::DataTable {
+                            refer: &refer,
+                            dt2d,
+                            dtr,
+                            r1: &r1,
+                            r2: r2.as_deref(),
+                        },
+                    );
+                } else {
+                    strip_formula_and_value(c);
+                }
+            }
+        }
+    }
+    expand_dimension(worksheet, start);
+    expand_dimension(worksheet, end);
+    Ok(())
+}
+
 fn write_data_table_inputs(
     worksheet: &mut Element,
     cell: a1::CellRef,
@@ -353,6 +449,7 @@ pub(crate) fn write_json_cell(
             shared_ref: None,
             array: None,
             array_ref: None,
+            data_table_ref: None,
         },
         op_index,
     )
@@ -558,6 +655,7 @@ fn explode_shared_group(worksheet: &mut Element, si: &str, master: a1::CellRef, 
 enum SkipGroup<'a> {
     Shared(&'a str),
     Array(a1::CellRef),
+    Fresh,
 }
 
 fn reject_overlap(
@@ -610,8 +708,20 @@ fn reject_overlap(
 
 enum FormulaWrite<'a> {
     Normal,
-    Shared { si: &'a str, refer: Option<&'a str> },
-    Array { refer: &'a str },
+    Shared {
+        si: &'a str,
+        refer: Option<&'a str>,
+    },
+    Array {
+        refer: &'a str,
+    },
+    DataTable {
+        refer: &'a str,
+        dt2d: bool,
+        dtr: bool,
+        r1: &'a str,
+        r2: Option<&'a str>,
+    },
 }
 
 fn strip_formula_and_value(c: &mut Element) {
@@ -644,6 +754,22 @@ fn write_formula_elem(c: &mut Element, body: &str, kind: FormulaWrite<'_>) {
         FormulaWrite::Array { refer } => {
             f.set_attr("t", "array");
             f.set_attr("ref", refer);
+        }
+        FormulaWrite::DataTable {
+            refer,
+            dt2d,
+            dtr,
+            r1,
+            r2,
+        } => {
+            f.set_attr("t", "dataTable");
+            f.set_attr("ref", refer);
+            f.set_attr("dt2D", if dt2d { "1" } else { "0" });
+            f.set_attr("dtr", if dtr { "1" } else { "0" });
+            f.set_attr("r1", r1);
+            if let Some(r2) = r2 {
+                f.set_attr("r2", r2);
+            }
         }
     }
     if !body.is_empty() {

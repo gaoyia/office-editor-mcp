@@ -806,6 +806,7 @@ define_error_kinds! {
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     DataTableFormula { cell: String } => vec![Self::DataTableFormula { cell: "A1".into() }],
     InvalidDataTableFormula => vec![Self::InvalidDataTableFormula],
+    DataTableResize => vec![Self::DataTableResize],
     ArrayFormulaPart { cell: String } => vec![Self::ArrayFormulaPart { cell: "A1".into() }],
     FormulaGroupOverlap { cell: String } => vec![Self::FormulaGroupOverlap { cell: "A1".into() }],
     FormulaRangeNotTopLeft => vec![Self::FormulaRangeNotTopLeft],
@@ -2282,6 +2283,7 @@ impl ErrorKind {
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }
+            | Self::DataTableResize
             | Self::ArrayFormulaPart { .. }
             | Self::FormulaGroupOverlap { .. }
             | Self::InkComment { .. }

@@ -183,6 +183,7 @@ pub struct SetCellOp {
     pub shared_ref: Option<(a1::CellRef, a1::CellRef)>,
     pub array: Option<bool>,
     pub array_ref: Option<(a1::CellRef, a1::CellRef)>,
+    pub data_table_ref: Option<(a1::CellRef, a1::CellRef)>,
 }
 
 /// 省略 / `null` / 有值。`null` 表示把该分量重置为默认。

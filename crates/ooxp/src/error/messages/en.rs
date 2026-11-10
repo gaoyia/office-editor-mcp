@@ -1438,8 +1438,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} is part of a data table formula; change the master TABLE formula instead"
         ),
         ErrorKind::InvalidDataTableFormula => {
-            "data table master formula must be TABLE matching the existing row or column layout"
+            "a data table formula must be TABLE: column =TABLE(,cell), row =TABLE(cell,), two-dimensional =TABLE(cell1,cell2). An existing data table cannot change direction"
                 .into()
+        }
+        ErrorKind::DataTableResize => {
+            "cannot resize or move an existing data table range".into()
         }
         ErrorKind::ArrayFormulaPart { cell } => format!(
             "{cell} is inside an array formula; change the top-left master cell instead"
@@ -1448,7 +1451,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} already belongs to another shared, array, or data table formula"
         ),
         ErrorKind::FormulaRangeNotTopLeft => {
-            "id must be the top-left cell of sharedRef or arrayRef".into()
+            "id must be the top-left cell of sharedRef, arrayRef, or dataTableRef".into()
         }
         ErrorKind::SharedNeedsRef => {
             "shared: true on a cell that is not already a shared master requires sharedRef".into()

@@ -1282,8 +1282,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("{cell} 属于数据表公式，请改主格的 TABLE 公式")
         }
         ErrorKind::InvalidDataTableFormula => {
-            "数据表主格公式必须是与现有行列方向一致的 TABLE".into()
+            "数据表公式必须是 TABLE：列输入 =TABLE(,格子)，行输入 =TABLE(格子,)，二维 =TABLE(格子1,格子2)。已有数据表不能改变方向".into()
         }
+        ErrorKind::DataTableResize => "不能扩大、缩小或移动已有数据表的区域".into(),
         ErrorKind::ArrayFormulaPart { cell } => {
             format!("{cell} 落在数组公式范围内，请改左上角主格")
         }
@@ -1291,7 +1292,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("{cell} 已经属于另一组共享公式、数组公式或数据表公式")
         }
         ErrorKind::FormulaRangeNotTopLeft => {
-            "id 必须是 sharedRef 或 arrayRef 的左上角".into()
+            "id 必须是 sharedRef、arrayRef 或 dataTableRef 的左上角".into()
         }
         ErrorKind::SharedNeedsRef => {
             "对还不是共享主格的格子写 shared: true 时必须给 sharedRef".into()

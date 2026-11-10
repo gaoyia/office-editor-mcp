@@ -49,6 +49,7 @@ pub(crate) const CELL_REMAIN_KEYS: &[&str] = &[
     "sharedRef",
     "array",
     "arrayRef",
+    "dataTableRef",
     "numFmt",
     "font",
     "fill",
@@ -65,6 +66,7 @@ const CELL_SET_KEYS: &[&str] = &[
     "sharedRef",
     "array",
     "arrayRef",
+    "dataTableRef",
 ];
 
 const SKELETON_SHEET_KEYS: &[&str] = &[
@@ -391,6 +393,19 @@ fn collect_cells(
         };
         let parsed = a1::parse_cell(refer).map_err(|e| e.at(format!("{cp}.ref")))?;
         let id = format!("cell:{name}!{}", a1::format_cell(parsed.col, parsed.row));
+        if obj
+            .get("formula")
+            .and_then(Value::as_str)
+            .is_some_and(|f| super::super::formula::parse_table_formula(f).is_some())
+            && !obj.contains_key("dataTableRef")
+        {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "dataTableRef".into(),
+                },
+                format!("{cp}.dataTableRef"),
+            ));
+        }
         if cell_has_set_fields(obj) {
             let mut m = Map::new();
             for k in CELL_SET_KEYS {
@@ -454,6 +469,7 @@ fn cell_has_set_fields(obj: &Map<String, Value>) -> bool {
         || obj.contains_key("sharedRef")
         || obj.contains_key("array")
         || obj.contains_key("arrayRef")
+        || obj.contains_key("dataTableRef")
 }
 
 fn cell_has_style(obj: &Map<String, Value>) -> bool {

@@ -279,7 +279,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 插 SmartArt 再新建 `/xl/diagrams/` 四件套，关系写在 drawing `.rels`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。
 往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
 `setCellStyle` 可改 `styles.xml`，不求值公式。也可用 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 写 `cols`、`row/@ht` 与 `mergeCells`：只改被点名的列、行与合并区，不算最适列宽，不按列宽反推 `twoCell` 图尺寸。
-也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可改数据表主格的 `TABLE` 输入格。单元格公式里库能算的写入缓存；数据表不求值、不新建。
+也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可新建数据表或改已有主格的 `TABLE` 输入格。单元格公式里库能算的写入缓存；数据表不求值，也不改已有区域的大小。
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。
 也可用 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat` 读写工作表 `conditionalFormatting`。公式当字符串，颜色写入 `styles.xml` 的 `dxf`，并可写 `top10`、`aboveAverage` 与文本类规则。
 不渲染、不求值。`extLst` 里的扩展条件格式原样留下。
@@ -292,7 +292,7 @@ insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占
 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表 `<protectedRanges>`：只改 `worksheet`，不标重算，不新建部件。
 create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，也可按已有 apply 写出列宽、行高、合并、数据验证、条件格式、表格、透视、定义名、打印、视图、筛选、排序、分组、隐藏行列、拆分、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护、允许编辑区域、组合，以及单元格样式与共享 / 数组公式。
 给了 `workbook.theme` 时写 theme 部件。
-不新建数据表公式。细则见 create。
+可新建数据表公式。细则见 create。
 create 到 `.xlsm` 时 workbook Override 用 macroEnabled Content Type，不建空的 `vbaProject.bin`。
 
 ### docx

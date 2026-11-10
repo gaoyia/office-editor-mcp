@@ -1432,7 +1432,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 | `cells[].ref` | A1 地址 |
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格的值 |
 | `cells[].formula` | 以 `=` 开头的公式文本。能求值则写入缓存，规则见下文「公式缓存」 |
-| `cells[].shared` / `sharedRef` / `array` / `arrayRef` | 可选。与 `setCell` 相同。出现 `dataTable` / `dataTableRef` 报 `InvalidField` |
+| `cells[].shared` / `sharedRef` / `array` / `arrayRef` / `dataTableRef` | 可选。与 `setCell` 相同。出现 `dataTable` 报 `InvalidField` |
 | `cells[].numFmt` / `font` / `fill` / `border` / `align` | 可选。与 `setCellStyle` 相同 |
 | `cells[].namedStyle` | 可选。字符串。对应该工作簿 `cellStyles[]` 的 `name`（大小写不敏感），或内置 `Normal`。复用 `setCellNamedStyle`。不要与 `numFmt` / `font` / `fill` / `border` / `align` 同时给 |
 | `comments[].replies` | 可选。一层回复。每项字段与 `replyComment` 相同（不要 `op` / `id`）。不要再套 `replies`。省略或空数组则不写回复 |
@@ -1516,11 +1516,11 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 图表工作表的 `dataFrom` 在该数据表 `charts[]` 之后写入，会覆盖同一格。`workbook.xml` 的 `<sheet>` 顺序与 `sheets[]` 一致。
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。
-骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组公式，再列宽行高隐藏与合并，
+骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组 / 数据表公式，再列宽行高隐藏与合并，
 再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
-不要另写一套 XML。能求值的公式写入缓存 `<v>`，算不了的不写。不刷新透视，不刷新外部连接。不新建数据表公式。
-`cells[]` 出现 `dataTable` / `dataTableRef` 报 `InvalidField`。
+不要另写一套 XML。能求值的公式写入缓存 `<v>`，算不了的不写。不刷新透视，不刷新外部连接。数据表可以新建，但不求值。
+`cells[]` 出现 `dataTable` 报 `InvalidField`。`dataTableRef` 与 `formula` 一起用，规则与 `setCell` 相同。
 `cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
 `namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。
 `comments[].replies[]` 再套 `replies` 报 `InvalidField`。
@@ -1582,13 +1582,14 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 范围内其它格不写公式；还不存在则插入只有 `r` 的 `<c>`。对已有数组主格只给 `formula`、不给 `array: false`：保留 `t="array"` 与现有 `ref`，只改公式文本。
 对数组主格写 `value` / 清空 / `array: false`：主格改成普通值或普通公式，范围内其它格留下缓存值。对数组范围内非主格发 `setCell` 报 `NotImplemented`。
 
-数据表公式（`t="dataTable"`）：对主格只给 `formula`、不给 `shared` / `array`：保住 `t="dataTable"` 与现有 `ref` / `dt2D` / `dtr`，按 `TABLE` 改 `r1` / `r2`，不写 `<f>` 正文。
-Excel 16.0 主格正文为空；正文非空时打开会修复。
+数据表公式（`t="dataTable"`）：新建时主格同时给 `formula` 与 `dataTableRef`。`dataTableRef` 是结果区域，主格必须是它的左上角。区域内其它格不写公式；还不存在则插入只有 `r` 的 `<c>`。
+主格 `<f>` 正文为空，带 `t="dataTable"`、`ref`、`dt2D`、`dtr`，以及 `r1` / `r2`。Excel 16.0 看到正文非空会修复。
 列输入（`dt2D` 为假且 `dtr` 为假）必须是 `=TABLE(,格子)`；行输入（`dtr` 为真且 `dt2D` 为假）必须是 `=TABLE(格子,)`；二维（`dt2D` 为真）必须是 `=TABLE(格子1,格子2)`。
-格子只认 A1（可带 `$`），写入去掉 `$`。形状对不上、不是 `TABLE`、或缺逗号报 `InvalidField`。
-对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。本期不新建、不拆、不扩缩数据表。
+格子只认 A1（可带 `$`），写入去掉 `$`。不是 `TABLE`、缺逗号、或形状对不上报 `InvalidField`。
+对已有主格只给 `formula`、不给 `shared` / `array`：保住 `t="dataTable"` 与现有 `ref` / `dt2D` / `dtr`，按 `TABLE` 改 `r1` / `r2`。再给 `dataTableRef` 时必须与现有区域相同，不同则报 `NotImplemented`。
+对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。不拆、不扩缩已有数据表。库不求值。
 
-create 本期仍只在骨架里写普通 `<f>`；`cells[]` 上的 `shared` / `sharedRef` / `array` / `arrayRef` 随后按 `setCell` 同一套规则改写。不新建数据表公式。
+create 在骨架里写普通 `<f>`；`cells[]` 上的 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTableRef` 随后按 `setCell` 同一套规则改写。`dataTable` 不是 create 字段。
 
 ### setCellStyle
 
