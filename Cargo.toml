@@ -11,7 +11,7 @@ strip = true
 [workspace.package]
 version = "0.1.6"
 edition = "2021"
-repository = "https://github.com/gaoyia/ooxp"
+repository = "https://github.com/gaoyia/office-editor-mcp"
 
 [workspace.dependencies]
 zip = { version = "2", default-features = false }

@@ -491,19 +491,19 @@ function renderDownloads() {
     link.querySelector(".kind").textContent = plat.label ? t(plat.label) : plat.id;
     if (!releaseLoaded) {
       link.querySelector(".file").textContent = t("finding");
-      link.href = "https://github.com/gaoyia/ooxp/releases/latest";
+      link.href = "https://github.com/gaoyia/office-editor-mcp/releases/latest";
       link.setAttribute("aria-disabled", "true");
       continue;
     }
     link.removeAttribute("aria-disabled");
     if (!release) {
       link.querySelector(".file").textContent = t("unavailable");
-      link.href = "https://github.com/gaoyia/ooxp/releases";
+      link.href = "https://github.com/gaoyia/office-editor-mcp/releases";
       continue;
     }
     if (!asset) {
       link.querySelector(".file").textContent = (name || plat.id) + " · " + t("missing");
-      link.href = release.html_url || "https://github.com/gaoyia/ooxp/releases/latest";
+      link.href = release.html_url || "https://github.com/gaoyia/office-editor-mcp/releases/latest";
       continue;
     }
     link.querySelector(".file").textContent = asset.name;
@@ -1001,7 +1001,7 @@ async function boot() {
   }
 }
 
-fetch("https://api.github.com/repos/gaoyia/ooxp/releases/latest", {
+fetch("https://api.github.com/repos/gaoyia/office-editor-mcp/releases/latest", {
   headers: { Accept: "application/vnd.github+json" },
 })
   .then((response) => (response.ok ? response.json() : null))
