@@ -10,7 +10,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 - 排版引擎、与 PowerPoint 像素级一致
 - 放映引擎、任意时间轴树、与 PowerPoint 像素级一致（预设效果写入见已过 12）
-- 编辑 VML / `p:legacyDrawing`
+- 做一套 VML 绘图引擎。未点名的 VML / `p:legacyDrawing` 原样写回。PowerPoint 16.0 若不再把对象写在这里，C22 对本格式标 🚫
 - 默认把图片字节或 embedding 塞进 inspect 树
 - 把 `p:pic` 当成 `slide:…/shape:…`（形状只收带 `p:txBody` 的 `p:sp`，已验收契约不拆）
 - SmartArt 版式算法
@@ -113,7 +113,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 54 | `.plan/2026年-10月-19日-✅-三家OLE事后改尺寸.md` | OLE 已过。与 docx 68、xlsx 46 同一份计划。Office 16.0 打开无修复 |
 | 55 | `.plan/2026年-10月-31日-✅-pptx-插入更多占位符类型.md` | 母版写入剩余（15）已过。内容、图表、表格、图片、媒体和备注母版幻灯片图像。PowerPoint 16.0 无 Repair |
 | 56 | `.plan/2026年-10月-31日-✅-pptx-插入摘要缩放.md` | 幻灯片缩放（21）、幻灯片节（11）已过。已有节上写 summaryZm。PowerPoint 16.0 无 Repair |
-| 57 | `.plan/2026年-11月-9日-❌-MCP改进计划.md` | 页背景、形状填充、图层顺序、负坐标、create 几何。PowerPoint 16.0 打开无 Repair |
+| 57 | `.plan/2026年-11月-9日-✅-MCP改进计划.md` | 页背景、形状填充、图层顺序、负坐标、create 几何。PowerPoint 16.0 打开无 Repair |
 | C19 | `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` | 批注墨迹。PowerPoint 16.0 另存丢掉空 `ink`，回复和改字放弃 |
 | C20 | `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` | C17 已过。缺缓存时按 `cx:f` 读单元格。PowerPoint 不写定义名 |
 
@@ -125,6 +125,8 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 第七轮。标「先探测」的，计划第一步用 PowerPoint 16.0 另存探测；不支持就标 🚫 放弃。pptx 这一轮的待做已经做完。
 
+C22 `.plan/2026年-11月-11日-❌-三家-VML真源对象.md` 未过。与 xlsx 51、docx C22 同一份。先另存。PowerPoint 不写 `p:legacyDrawing` 对象则本格式 🚫。
+
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
@@ -135,8 +137,8 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 C4、C5、C6、C7、C8、C9、C10、C11、C12、C13、C14、C16、C15 见已过表。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9、C10、C14 与 xlsx 同一份，不改 Word。C11 三家同一份。41 保持 🚫。xlsx 主题见已过 xlsx 43，不要和 16 / 46 / 47 / 48 / 49 合成一份。
 第七轮跨格式：C19 `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` 已过，回复和改字 🚫。C17 `.plan/2026年-10月-31日-✅-三家-chartex改数据与地图图表.md` 已过，地图图表 🚫。C18 `.plan/2026年-10月-31日-✅-三家-旧版口令哈希.md` 已过。
-第八轮跨格式：C20 `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` 已过。PowerPoint 另存不改定义名，内嵌工作簿不认定义名。C21 `.plan/2026年-11月-2日-✅-三家-chartex认cx2与cx7.md` 已过。直方和帕累托另存是 `cx7`。
+第八轮跨格式：C20 `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` 已过。PowerPoint 另存不改定义名，内嵌工作簿不认定义名。C21 `.plan/2026年-11月-2日-✅-三家-chartex认cx2与cx7.md` 已过。直方和帕累托另存是 `cx7`。C22 `.plan/2026年-11月-11日-❌-三家-VML真源对象.md` 未过。
 
 ## 怎么算 PowerPoint 全量做完
 
-已过表保持 ✅。第五轮待做（39）已过。第六轮 40、42、43、44、45、46、47、48、49、50、51、52、C16、C15 已过（41 🚫）。53 幻灯片墨迹已过，PowerPoint 16.0 打开无修复。54 OLE 事后改尺寸已过，Office 16.0 打开无修复。57 页背景、形状填充、图层、负坐标和 create 几何已过，PowerPoint 16.0 打开无 Repair。永不做的条目不算欠账。放映引擎保持 🚫。
+已过表保持 ✅。第五轮待做（39）已过。第六轮 40、42、43、44、45、46、47、48、49、50、51、52、C16、C15 已过（41 🚫）。53 幻灯片墨迹已过，PowerPoint 16.0 打开无修复。54 OLE 事后改尺寸已过，Office 16.0 打开无修复。57 页背景、形状填充、图层、负坐标和 create 几何已过，PowerPoint 16.0 打开无 Repair。C22 未过。永不做的条目不算欠账。放映引擎保持 🚫。

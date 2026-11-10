@@ -9,12 +9,12 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 ## 永不做 🚫
 
 - 排版引擎、自动绕排、分页计算、与 Word 像素级一致
-- 编辑 VML / `w:pict`（现代文件走 DrawingML；删 AlternateContent 时整段带走 Fallback）
+- 做一套 VML 绘图引擎。未点名的 VML / `w:pict` 原样写回。删 AlternateContent 时整段带走 Fallback。Word 另存后真源变成 VML 的水印见 C22
 - 把页眉页脚图改挂到页眉段落上（已验收契约不拆）
 - 默认把图片、embedding、chart 部件字节塞进 inspect 树
 - 公式排版引擎、SmartArt 版式算法
 - 框内再套框：Word 16.0 另存只写出故事级兄弟框，不手写嵌套 XML（见已过 39）
-- 执行宏、邮件合并、打印本身
+- 执行宏、执行邮件合并、打印本身。`settings.xml` 里的 `w:mailMerge` 是文件记录，先探测再挂，不在这里禁掉
 - `.doc`
 - DrawingML 悬停链 `a:hlinkHover`。PowerPoint 16.0 另存写在形状 `cNvPr`；Word 只写单击链，不搬 `event`
 
@@ -140,11 +140,14 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 第八轮审计再查出的 78 已过，见已过表。第八轮待做已经做完。
 
+C22 `.plan/2026年-11月-11日-❌-三家-VML真源对象.md` 未过。与 xlsx 51、pptx C22 同一份。先用 Word 16.0 另存。DrawingML 水印（28）不重做。
+
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
 - 多份 theme 部件、把 theme 关系挂到页眉。空白另存只有主文档 `/word/theme/theme1.xml`。需要带页眉独立 theme 的另存样例后再挂
+- `w:mailMerge`。改设置时原样留下。要进树、要改数据源，先拿 Word 16.0 另存样例再挂
 
 不要把 Word 专用对象（水印、内容控件、编号、修订、参考文献、`wpc` 画布）搬到 xlsx / pptx。
 
@@ -152,8 +155,8 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11、C12、C16、C15 见已过表。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
 第七轮跨格式：C19 `.plan/2026年-10月-31日-🚫-docx-pptx-墨迹批注回复与改字.md` 已过，回复和改字 🚫（xlsx 没有墨迹批注，不套）。C17 `.plan/2026年-10月-31日-✅-三家-chartex改数据与地图图表.md` 已过，地图图表 🚫。C18 `.plan/2026年-10月-31日-✅-三家-旧版口令哈希.md` 已过。
-第八轮跨格式：C20 `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` 已过。Word 另存不改定义名，内嵌工作簿不认定义名。C21 `.plan/2026年-11月-2日-✅-三家-chartex认cx2与cx7.md` 已过。Word 漏斗另存是 `cx2`。
+第八轮跨格式：C20 `.plan/2026年-11月-1日-✅-三家-chartex缓存缺失时按引用取值.md` 已过。Word 另存不改定义名，内嵌工作簿不认定义名。C21 `.plan/2026年-11月-2日-✅-三家-chartex认cx2与cx7.md` 已过。Word 漏斗另存是 `cx2`。C22 `.plan/2026年-11月-11日-❌-三家-VML真源对象.md` 未过。只补另存后仍是 VML 的水印。
 
 ## 怎么算 Word 全量做完
 
-已过表保持 ✅。第五轮待做（53–56）已过。第六轮 57、58、59、60、61、62、63、64、65、66、67、68、C12、C16、C15 已过。第七轮 docx 待做已过。第八轮 75、76、77、78、C21 已过。39 保持 🚫。悬停链保持 🚫。永不做的条目不算欠账。排版引擎保持 🚫。68 OLE 事后改尺寸已过，Office 16.0 打开无修复。
+已过表保持 ✅。第五轮待做（53–56）已过。第六轮 57、58、59、60、61、62、63、64、65、66、67、68、C12、C16、C15 已过。第七轮 docx 待做已过。第八轮 75、76、77、78、C21 已过。C22 未过。39 保持 🚫。悬停链保持 🚫。永不做的条目不算欠账。排版引擎保持 🚫。68 OLE 事后改尺寸已过，Office 16.0 打开无修复。

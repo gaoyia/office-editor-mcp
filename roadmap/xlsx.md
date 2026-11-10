@@ -1,6 +1,6 @@
 # xlsx 编辑路线（不做渲染）
 
-只记账顺序，不验收。Excel 全量指包里能表达的对象都能进 inspect、能 apply、create 能按同一套 JSON 生成。不是复刻 Excel 运行时。公式只当字符串读写。
+只记账顺序，不验收。Excel 全量指包里能表达的对象都能进 inspect、能 apply、create 能按同一套 JSON 生成。不是复刻 Excel 运行时。公式现按字符串读写。求值对照见待做 50。
 
 docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。`ooxp mcp` 是命令行入口，不在本目录开切片。领域 JSON 原样交给库。
 
@@ -10,7 +10,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 - 图表渲染、与 Excel 像素级一致
 - 按列宽行高去反推 `twoCell` 的显示尺寸
-- 编辑 VML / `legacyDrawing`（批注框、旧式控件）
+- 做一套 VML 绘图引擎。未点名的 VML / `legacyDrawing` 原样写回。真源在 VML 的对象见待做 51
 - 默认把图片字节或 chart 部件塞进 inspect 树
 - xlsx 上的 `exportChartData`（数据在本工作簿单元格里）
 - SmartArt 版式算法
@@ -104,15 +104,21 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-公式求值改记长期计划 [`.plan/2026年-11月-10日-💤-xlsx公式求值对照.md`](../.plan/2026年-11月-10日-💤-xlsx公式求值对照.md)，状态 💤。挂机不要开这份，也不要把它插进待做序号。Power Query 一等公民仍不挂。
+Power Query 一等公民仍不挂。
 
-第七轮。改写引用只按记号改公式文本，不求值。xlsx 这一轮的待做已经做完。
+第七轮。改写引用只按记号改公式文本，不求值。第七轮待做已经做完。
+
+| 序 | 计划 | 前置 |
+| --- | --- | --- |
+| 49 | `.plan/2026年-11月-10日-❌-xlsx-工作表背景图.md` | 工作表图已过。不是页眉图，不算 `pictureCount` |
+| 50 | `.plan/2026年-11月-10日-❌-xlsx公式求值对照.md` | 公式结构已过。先记对照，一类记全再写该类求值 |
+| 51 | `.plan/2026年-11月-11日-❌-三家-VML真源对象.md` | 批注已过。与 docx / pptx 的 C22 同一份。先另存 |
 
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
-不要自动挂：Power Query / `queryTables` 结果区。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
+2026-11-10 探测过。Power Query / `queryTables` 结果区仍不挂。Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布不搬。工作表背景图见待做 49。
 
 ## 跨格式（本类型要跟）
 
@@ -138,4 +144,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第五轮待做（40）已过。第六轮 41–46、C16、C15 已过。永不做的条目不算欠账。公式求值是长期计划，暂缓，不算本期欠账。46 OLE 事后改尺寸已过，Office 16.0 打开无修复。
+已过表保持 ✅。第五轮待做（40）已过。第六轮 41–46、C16、C15 已过。第七轮待做已过。49、50、51 未过。永不做的条目不算欠账。50 先做对照，一类没记全之前不写该类求值代码。51 先另存，Office 不写的对象不手写。46 OLE 事后改尺寸已过，Office 16.0 打开无修复。
