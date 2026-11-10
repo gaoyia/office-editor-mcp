@@ -10,7 +10,7 @@
 [![last commit](https://img.shields.io/github/last-commit/gaoyia/ooxp)](https://github.com/gaoyia/ooxp/commits/main)
 [![stars](https://img.shields.io/github/stars/gaoyia/ooxp)](https://github.com/gaoyia/ooxp/stargazers)
 [![license](https://img.shields.io/badge/license-BSL%201.0-blue)](LICENSE)
-[![demo](https://img.shields.io/website?url=https%3A%2F%2Fgaoyia.github.io%2Fooxp%2F&label=demo)](https://gaoyia.github.io/ooxp/)
+[![demo](https://img.shields.io/website?url=https%3A%2F%2Fgaoyia.github.io%2Fooxp%2F&label=demo)](https://gaoyia.github.io/office-editor-mcp/)
 
 `ooxp` is Office Open XML Patch. `oox` is Office Open XML, OOXML. `p` is Patch: it patches the XML inside the package by stable id, and writes every other part back as the original bytes. A whole package is generated only when creating a new file.
 
