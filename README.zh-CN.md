@@ -10,7 +10,7 @@
 [![最近提交](https://img.shields.io/github/last-commit/gaoyia/ooxp?label=%E6%9C%80%E8%BF%91%E6%8F%90%E4%BA%A4)](https://github.com/gaoyia/ooxp/commits/main)
 [![星标](https://img.shields.io/github/stars/gaoyia/ooxp?label=%E6%98%9F%E6%A0%87)](https://github.com/gaoyia/ooxp/stargazers)
 [![许可证](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-BSL%201.0-blue)](LICENSE)
-[![演示](https://img.shields.io/website?url=https%3A%2F%2Fgaoyia.github.io%2Fooxp%2F&label=%E6%BC%94%E7%A4%BA&up_message=%E5%9C%A8%E7%BA%BF&down_message=%E7%A6%BB%E7%BA%BF)](https://gaoyia.github.io/ooxp/)
+[![演示](https://img.shields.io/website?url=https%3A%2F%2Fgaoyia.github.io%2Foffice-editor-mcp%2F&label=%E6%BC%94%E7%A4%BA&up_message=%E5%9C%A8%E7%BA%BF&down_message=%E7%A6%BB%E7%BA%BF)](https://gaoyia.github.io/office-editor-mcp/)
 
 `ooxp` 是 Office Open XML Patch。`oox` 是 Office Open XML，也就是 OOXML。`p` 是 Patch：按稳定 id 给包里的 XML 打补丁，其余部件按原字节写回。只有新建文件才整包生成。
 
