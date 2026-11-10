@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use super::a1::{self, AbsCellRef, CellRef};
-use crate::xml::Element;
+use crate::xml::{Element, Node};
 
 #[derive(Debug, Clone)]
 pub struct SharedGroup {
@@ -348,6 +348,36 @@ pub fn shift_a1_formula(formula: &str, from: CellRef, to: CellRef) -> String {
         }
     }
     out
+}
+
+pub(crate) fn for_each_cell_mut(
+    sheet_data: &mut Element,
+    mut visit: impl FnMut(CellRef, &mut Element),
+) {
+    let mut prev_row = 0u32;
+    for row in sheet_data.children.iter_mut() {
+        let Node::Element(row) = row else {
+            continue;
+        };
+        if row.local_name() != "row" {
+            continue;
+        }
+        let row_num = a1::row_after(prev_row, row.attr("r"));
+        prev_row = row_num;
+        let mut prev_col = 0u32;
+        for c in row.children.iter_mut() {
+            let Node::Element(c) = c else {
+                continue;
+            };
+            if c.local_name() != "c" {
+                continue;
+            }
+            let place = a1::place_cell(row_num, prev_col, c.attr("r"));
+            let cell = place.cell();
+            prev_col = cell.col;
+            visit(cell, c);
+        }
+    }
 }
 
 pub(crate) fn for_each_cell(sheet_data: &Element, mut visit: impl FnMut(CellRef, &Element)) {

@@ -52,6 +52,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
     let mut dirty_sheets: Vec<(String, Document)> = Vec::new();
     let mut styles_doc: Option<(String, Document)> = None;
     let mut touched_cells = false;
+    let mut eval_formulas = false;
     let mut workbook_dirty = false;
     let mut hot: Option<super::cell::SheetHot> = None;
 
@@ -62,6 +63,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
         match op {
             XlsxOp::SetCell(op) => {
                 touched_cells = true;
+                eval_formulas = true;
                 super::cell::apply_hot(&pkg, &sheet_index, &mut dirty_sheets, &mut hot, op, i)?;
             }
             XlsxOp::SetCellStyle(op) => {
@@ -191,6 +193,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                     i,
                 )?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::RenameSheet(op) => {
                 sheets::rename(
@@ -203,6 +206,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                     i,
                 )?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::MoveSheet(op) => {
                 sheets::move_sheet(&mut wb_doc, &mut sheet_index, op, i)?;
@@ -368,14 +372,17 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
             XlsxOp::InsertDefinedName(op) => {
                 super::names::apply_insert(&pkg, &mut wb_doc, &sheet_index, &dirty_sheets, op, i)?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::SetDefinedName(op) => {
                 super::names::apply_set(&pkg, &mut wb_doc, &sheet_index, &dirty_sheets, op, i)?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::DeleteDefinedName(op) => {
                 super::names::apply_delete(&mut wb_doc, op, i)?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::SetPrintSetup(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
@@ -1370,6 +1377,9 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
     }
     if workbook_dirty {
         pkg.set(&wb_part, wb_doc.to_bytes()?)?;
+    }
+    if eval_formulas {
+        super::eval::fill_formula_caches(&mut pkg)?;
     }
 
     Ok(pkg)

@@ -1,0 +1,1857 @@
+//! 单元格公式缓存。只算契约「公式缓存」里列出的那一类，算不了的不写 `<v>`。
+
+use std::collections::HashMap;
+
+use super::a1::{self, CellRef};
+use super::formula;
+use super::inspect;
+use crate::error::{Error, ErrorKind, RelSource};
+use crate::opc::{self, Package, Relationships};
+use crate::xml::{self, Element, Node};
+
+const DIV0: &str = "#DIV/0!";
+const VALUE: &str = "#VALUE!";
+const REF: &str = "#REF!";
+const NAME: &str = "#NAME?";
+const NUM: &str = "#NUM!";
+const NA: &str = "#N/A";
+const NULL: &str = "#NULL!";
+
+#[derive(Clone, Debug)]
+enum Scalar {
+    Num(f64),
+    Text(String),
+    Bool(bool),
+    Err(&'static str),
+}
+
+#[derive(Clone, Debug)]
+enum Loc {
+    Here,
+    At(usize),
+    Name(String),
+}
+
+#[derive(Clone, Debug)]
+struct Rect {
+    from: Loc,
+    to: Loc,
+    r1: CellRef,
+    r2: CellRef,
+}
+
+#[derive(Clone, Debug)]
+enum Value {
+    Scalar(Scalar),
+    Area(Rect),
+    Areas(Vec<Rect>),
+    Grid(Vec<Vec<Scalar>>),
+}
+
+#[derive(Clone, Debug)]
+enum Expr {
+    Value(Value),
+    Name(String),
+    TableCol { table: String, col: String },
+    Call(String, Vec<Expr>),
+    Neg(Box<Expr>),
+    Pct(Box<Expr>),
+    Bin(BinOp, Box<Expr>, Box<Expr>),
+    Union(Box<Expr>, Box<Expr>),
+    Cross(Box<Expr>, Box<Expr>),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum BinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Pow,
+    Cat,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+#[derive(Clone, Copy)]
+enum Mode {
+    Scalar,
+    Array,
+}
+
+enum Calc {
+    Ready(Value),
+    Skip,
+}
+
+struct CellRec {
+    formula: Option<String>,
+    cached: Option<Scalar>,
+    /// 数组从格指向主格。
+    array_master: Option<CellRef>,
+    array_ref: Option<(CellRef, CellRef)>,
+}
+
+struct Sheet {
+    name: String,
+    cells: HashMap<(u32, u32), CellRec>,
+}
+
+struct NameDef {
+    name: String,
+    local: Option<usize>,
+    body: String,
+}
+
+struct TableDef {
+    name: String,
+    sheet: usize,
+    start: CellRef,
+    columns: Vec<String>,
+    data_row: u32,
+    data_end: u32,
+}
+
+struct Book {
+    sheets: Vec<Sheet>,
+    names: Vec<NameDef>,
+    tables: Vec<TableDef>,
+    date1904: bool,
+    memo: HashMap<(usize, u32, u32), MemoSlot>,
+    stack: Vec<(usize, u32, u32)>,
+}
+
+enum MemoSlot {
+    Ready(Scalar),
+    Skip,
+}
+
+struct Lex<'a> {
+    s: &'a str,
+    i: usize,
+    space: bool,
+}
+
+#[derive(Clone, Debug)]
+enum Tok {
+    Num(f64),
+    Str(String),
+    Ident(String),
+    Err(&'static str),
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Caret,
+    Amp,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Pct,
+    LParen,
+    RParen,
+    Comma,
+    Colon,
+    LBrace,
+    RBrace,
+    LBrack,
+    RBrack,
+    Bang,
+    Semi,
+}
+
+/// 重新打开并写入缓存。没有写出新缓存时保留原来的字节，避免无公式文件被重打包。
+pub(crate) fn fill_saved(bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
+    let original = bytes.clone();
+    let mut pkg = Package::open_bytes(bytes)?;
+    if fill_formula_caches(&mut pkg)? {
+        pkg.save_to_vec()
+    } else {
+        Ok(original)
+    }
+}
+
+/// 写缓存。没有任何公式被写上缓存时返回 `false`。
+pub(crate) fn fill_formula_caches(pkg: &mut Package) -> Result<bool, Error> {
+    let wb_part = opc::office_document_part(pkg)?;
+    let wb_rels = Relationships::from_package(pkg, &wb_part)?;
+    let wb_doc = xml::parse(pkg.get(&wb_part)?)?;
+    let date1904 = wb_doc
+        .root
+        .child_by_local("workbookPr")
+        .and_then(|e| e.attr("date1904"))
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let sst = inspect::load_shared_strings(pkg, &wb_part, &wb_rels)?;
+    let listed = sheet_list(&wb_doc.root, &wb_rels, &wb_part)?;
+    let mut sheets = Vec::new();
+    let mut sheet_docs = Vec::new();
+    for (name, part, kind) in &listed {
+        if *kind != "worksheet" {
+            continue;
+        }
+        let doc = xml::parse(pkg.get(part)?)?;
+        let rec = load_sheet(&doc.root, &sst);
+        sheets.push(Sheet {
+            name: name.clone(),
+            cells: rec,
+        });
+        sheet_docs.push((part.clone(), doc));
+    }
+    let names = load_names(&wb_doc.root);
+    let tables = load_tables(pkg, &sheet_docs, &sheets)?;
+    let mut book = Book {
+        sheets,
+        names,
+        tables,
+        date1904,
+        memo: HashMap::new(),
+        stack: Vec::new(),
+    };
+    let mut writes: Vec<HashMap<(u32, u32), Scalar>> = Vec::new();
+    for si in 0..book.sheets.len() {
+        let keys: Vec<(u32, u32)> = book.sheets[si].cells.keys().copied().collect();
+        let mut out = HashMap::new();
+        for key in keys {
+            let rec = &book.sheets[si].cells[&key];
+            let interesting = rec.formula.is_some() || rec.array_master.is_some();
+            if !interesting {
+                continue;
+            }
+            match book.scalar_at(
+                si,
+                CellRef {
+                    col: key.0,
+                    row: key.1,
+                },
+            ) {
+                Calc::Ready(Value::Scalar(s)) => {
+                    out.insert(key, s);
+                }
+                Calc::Ready(_) | Calc::Skip => {}
+            }
+        }
+        writes.push(out);
+    }
+    let mut changed = false;
+    for (doc_i, (_part, doc)) in sheet_docs.iter_mut().enumerate() {
+        let Some(data) = doc.root.child_by_local_mut("sheetData") else {
+            continue;
+        };
+        let map = &writes[doc_i];
+        if map.is_empty() {
+            continue;
+        }
+        formula::for_each_cell_mut(data, |cell, el| {
+            if let Some(val) = map.get(&(cell.col, cell.row)) {
+                write_cache(el, val);
+                changed = true;
+            }
+        });
+    }
+    for (i, (part, doc)) in sheet_docs.into_iter().enumerate() {
+        if writes[i].is_empty() {
+            continue;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(changed)
+}
+
+fn sheet_list(
+    workbook: &Element,
+    rels: &Relationships,
+    wb_part: &str,
+) -> Result<Vec<(String, String, &'static str)>, Error> {
+    let sheets = workbook.child_by_local("sheets").ok_or_else(|| {
+        Error::new(ErrorKind::XmlMissing {
+            parent: "workbook.xml".into(),
+            child: "sheets".into(),
+        })
+    })?;
+    let mut out = Vec::new();
+    for sh in sheets.children_by_local("sheet") {
+        let name = sh.attr("name").unwrap_or("").to_string();
+        let rid = sh.attr_local("id").ok_or_else(|| {
+            Error::new(ErrorKind::XmlMissing {
+                parent: "sheet".into(),
+                child: "r:id".into(),
+            })
+        })?;
+        let rel = rels.find_by_id(rid).ok_or_else(|| {
+            Error::new(ErrorKind::RelNotFound {
+                source: RelSource::Unspecified,
+                rid: rid.to_string(),
+            })
+        })?;
+        let kind = inspect::sheet_kind(&rel.rel_type);
+        let part = opc::resolve_rel_target(wb_part, &rel.target)?;
+        out.push((name, part, kind));
+    }
+    Ok(out)
+}
+
+fn load_sheet(root: &Element, sst: &[String]) -> HashMap<(u32, u32), CellRec> {
+    let Some(data) = root.child_by_local("sheetData") else {
+        return HashMap::new();
+    };
+    let index = formula::index_sheet(data);
+    let mut cells = HashMap::new();
+    formula::for_each_cell(data, |here, el| {
+        let cached = read_cached(el, sst);
+        let mut formula = None;
+        let mut array_master = None;
+        let mut array_ref = None;
+        if let Some(f) = el.child_by_local("f") {
+            let kind = f.attr("t").unwrap_or("");
+            let body = f.text_content().trim().trim_start_matches('=').to_string();
+            if kind == "dataTable" {
+                // 数据表不求值。
+            } else if kind == "shared" && body.is_empty() {
+                if let Some(si) = f.attr("si") {
+                    if let Some(group) = index.shared.get(si) {
+                        formula = Some(formula::shift_a1_formula(
+                            &group.formula,
+                            group.master,
+                            here,
+                        ));
+                    }
+                }
+            } else if kind == "array" {
+                array_ref = f.attr("ref").and_then(|r| a1::parse_range(r).ok());
+                if !body.is_empty() {
+                    formula = Some(body);
+                }
+            } else if !body.is_empty() && !body.to_ascii_uppercase().starts_with("TABLE") {
+                formula = Some(body);
+            }
+        } else if let Some(formula::Occupied::Array { master }) = formula::occupy_at(&index, here) {
+            if master != here {
+                array_master = Some(master);
+            }
+        }
+        cells.insert(
+            (here.col, here.row),
+            CellRec {
+                formula,
+                cached,
+                array_master,
+                array_ref,
+            },
+        );
+    });
+    cells
+}
+
+fn read_cached(el: &Element, sst: &[String]) -> Option<Scalar> {
+    let t = el.attr("t").unwrap_or("");
+    let raw = el.child_by_local("v").map(|v| v.text_content());
+    match t {
+        "b" => Some(Scalar::Bool(raw.as_deref() == Some("1"))),
+        "e" => Some(Scalar::Err(canonical_err(raw.as_deref().unwrap_or("")))),
+        "str" | "inlineStr" => Some(Scalar::Text(
+            el.child_by_local("is")
+                .map(|e| e.text_content())
+                .or(raw)
+                .unwrap_or_default(),
+        )),
+        "s" => {
+            let idx = raw?.trim().parse::<usize>().ok()?;
+            Some(Scalar::Text(sst.get(idx).cloned().unwrap_or_default()))
+        }
+        _ => {
+            let raw = raw?;
+            if let Ok(n) = raw.trim().parse::<f64>() {
+                Some(Scalar::Num(n))
+            } else if raw.is_empty() {
+                None
+            } else {
+                Some(Scalar::Text(raw))
+            }
+        }
+    }
+}
+
+fn canonical_err(raw: &str) -> &'static str {
+    match raw.trim() {
+        "#DIV/0!" => DIV0,
+        "#VALUE!" => VALUE,
+        "#REF!" => REF,
+        "#NAME?" => NAME,
+        "#NUM!" => NUM,
+        "#N/A" => NA,
+        "#NULL!" => NULL,
+        _ => VALUE,
+    }
+}
+
+fn load_names(workbook: &Element) -> Vec<NameDef> {
+    let Some(names) = workbook.child_by_local("definedNames") else {
+        return Vec::new();
+    };
+    names
+        .children_by_local("definedName")
+        .into_iter()
+        .filter_map(|el| {
+            let name = el.attr("name")?.to_string();
+            let local = el.attr("localSheetId").and_then(|s| s.parse().ok());
+            let body = el.text_content().trim().trim_start_matches('=').to_string();
+            if body.is_empty() {
+                return None;
+            }
+            Some(NameDef { name, local, body })
+        })
+        .collect()
+}
+
+fn load_tables(
+    pkg: &Package,
+    docs: &[(String, xml::Document)],
+    sheets: &[Sheet],
+) -> Result<Vec<TableDef>, Error> {
+    let mut out = Vec::new();
+    for (si, (part, _)) in docs.iter().enumerate() {
+        let rels = Relationships::from_package(pkg, part)?;
+        for rel in &rels.rels {
+            if !rel.rel_type.ends_with("/table") || rel.is_external() {
+                continue;
+            }
+            let tpart = opc::resolve_rel_target(part, &rel.target)?;
+            let Ok(bytes) = pkg.get(&tpart) else {
+                continue;
+            };
+            let doc = xml::parse(bytes)?;
+            let Some(def) = table_def(&doc.root, si) else {
+                continue;
+            };
+            let _ = sheets;
+            out.push(def);
+        }
+    }
+    Ok(out)
+}
+
+fn table_def(root: &Element, sheet: usize) -> Option<TableDef> {
+    let name = root
+        .attr("displayName")
+        .or_else(|| root.attr("name"))?
+        .to_string();
+    let (start, end) = a1::parse_range(root.attr("ref")?).ok()?;
+    let mut columns = Vec::new();
+    if let Some(cols) = root.child_by_local("tableColumns") {
+        for col in cols.children_by_local("tableColumn") {
+            columns.push(col.attr("name").unwrap_or("").to_string());
+        }
+    }
+    let totals = root
+        .attr("totalsRowCount")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    let header = root
+        .attr("headerRowCount")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(1);
+    let data_row = start.row + header;
+    let data_end = end.row.saturating_sub(totals);
+    Some(TableDef {
+        name,
+        sheet,
+        start,
+        columns,
+        data_row,
+        data_end,
+    })
+}
+
+impl Book {
+    fn scalar_at(&mut self, sheet: usize, here: CellRef) -> Calc {
+        let key = (sheet, here.col, here.row);
+        if let Some(slot) = self.memo.get(&key) {
+            return match slot {
+                MemoSlot::Ready(s) => Calc::Ready(Value::Scalar(s.clone())),
+                MemoSlot::Skip => Calc::Skip,
+            };
+        }
+        if self.stack.contains(&key) {
+            return Calc::Skip;
+        }
+        let rec = match self
+            .sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(here.col, here.row)))
+        {
+            Some(rec) => rec.clone_rec(),
+            None => return Calc::Ready(Value::Scalar(Scalar::Num(0.0))),
+        };
+        self.stack.push(key);
+        let calc = if let Some(master) = rec.array_master {
+            self.eval_array_master(sheet, master);
+            self.memo
+                .get(&key)
+                .map(|slot| match slot {
+                    MemoSlot::Ready(s) => Calc::Ready(Value::Scalar(s.clone())),
+                    MemoSlot::Skip => Calc::Skip,
+                })
+                .unwrap_or(Calc::Skip)
+        } else if let Some(body) = rec.formula.clone() {
+            if rec.array_ref.is_some() {
+                self.eval_array_master(sheet, here);
+                self.memo
+                    .get(&key)
+                    .map(|slot| match slot {
+                        MemoSlot::Ready(s) => Calc::Ready(Value::Scalar(s.clone())),
+                        MemoSlot::Skip => Calc::Skip,
+                    })
+                    .unwrap_or(Calc::Skip)
+            } else {
+                match parse_expr(&body) {
+                    None => Calc::Skip,
+                    Some(expr) => match self.eval_expr(&expr, sheet, here, Mode::Scalar) {
+                        Calc::Ready(v) => self.coerce(v, sheet, here, Mode::Scalar),
+                        Calc::Skip => Calc::Skip,
+                    },
+                }
+            }
+        } else if let Some(cached) = rec.cached.clone() {
+            Calc::Ready(Value::Scalar(cached))
+        } else {
+            Calc::Ready(Value::Scalar(Scalar::Num(0.0)))
+        };
+        self.stack.pop();
+        match &calc {
+            Calc::Ready(Value::Scalar(s)) => {
+                self.memo.insert(key, MemoSlot::Ready(s.clone()));
+            }
+            Calc::Skip => {
+                self.memo.insert(key, MemoSlot::Skip);
+            }
+            Calc::Ready(_) => {}
+        }
+        calc
+    }
+
+    fn eval_array_master(&mut self, sheet: usize, master: CellRef) {
+        let key = (sheet, master.col, master.row);
+        if self.memo.contains_key(&key) {
+            return;
+        }
+        let Some(rec) = self
+            .sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(master.col, master.row)))
+            .map(|r| r.clone_rec())
+        else {
+            return;
+        };
+        let Some(body) = rec.formula.clone() else {
+            self.memo.insert(key, MemoSlot::Skip);
+            return;
+        };
+        let Some((start, end)) = rec.array_ref else {
+            self.memo.insert(key, MemoSlot::Skip);
+            return;
+        };
+        self.stack.push(key);
+        let grid = match parse_expr(&body) {
+            None => None,
+            Some(expr) => match self.eval_expr(&expr, sheet, master, Mode::Array) {
+                Calc::Ready(v) => Some(self.as_grid(v, sheet, master)),
+                Calc::Skip => None,
+            },
+        };
+        self.stack.pop();
+        let Some(grid) = grid else {
+            self.memo.insert(key, MemoSlot::Skip);
+            return;
+        };
+        let (r1, r2) = ordered(start, end);
+        for row in r1.row..=r2.row {
+            for col in r1.col..=r2.col {
+                let gr = (row - r1.row) as usize;
+                let gc = (col - r1.col) as usize;
+                let scalar = grid
+                    .get(gr)
+                    .and_then(|r| r.get(gc))
+                    .cloned()
+                    .unwrap_or(Scalar::Err(NA));
+                self.memo.insert((sheet, col, row), MemoSlot::Ready(scalar));
+            }
+        }
+    }
+
+    fn as_grid(&mut self, value: Value, sheet: usize, _here: CellRef) -> Vec<Vec<Scalar>> {
+        match value {
+            Value::Grid(g) => g,
+            Value::Scalar(s) => vec![vec![s]],
+            Value::Area(rect) => self.grid_from_rect(&rect, sheet),
+            Value::Areas(parts) => {
+                if parts.len() == 1 {
+                    self.grid_from_rect(&parts[0], sheet)
+                } else {
+                    vec![vec![Scalar::Err(VALUE)]]
+                }
+            }
+        }
+    }
+
+    fn resolve_span(&self, rect: &Rect, here: usize) -> Option<(usize, usize)> {
+        let a = self.resolve_loc(&rect.from, here)?;
+        let b = self.resolve_loc(&rect.to, here)?;
+        Some(ord_pair(a, b))
+    }
+
+    fn resolve_loc(&self, loc: &Loc, here: usize) -> Option<usize> {
+        match loc {
+            Loc::Here => Some(here),
+            Loc::At(i) => Some(*i),
+            Loc::Name(n) => self
+                .sheets
+                .iter()
+                .position(|s| s.name.eq_ignore_ascii_case(n)),
+        }
+    }
+
+    fn grid_from_rect(&mut self, rect: &Rect, sheet: usize) -> Vec<Vec<Scalar>> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return vec![vec![Scalar::Err(REF)]];
+        };
+        if s1 != s2 {
+            return vec![vec![Scalar::Err(VALUE)]];
+        }
+        let sheet = s1;
+        let mut rows = Vec::new();
+        for row in r1.row..=r2.row {
+            let mut cols = Vec::new();
+            for col in r1.col..=r2.col {
+                cols.push(self.cell_scalar(sheet, CellRef { col, row }));
+            }
+            rows.push(cols);
+        }
+        rows
+    }
+
+    fn cell_scalar(&mut self, sheet: usize, here: CellRef) -> Scalar {
+        match self.scalar_at(sheet, here) {
+            Calc::Ready(Value::Scalar(s)) => s,
+            Calc::Ready(_) => Scalar::Err(VALUE),
+            Calc::Skip => Scalar::Err(VALUE),
+        }
+    }
+
+    fn eval_expr(&mut self, expr: &Expr, sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        match expr {
+            Expr::Value(v) => Calc::Ready(v.clone()),
+            Expr::Name(name) => self.eval_name(name, sheet, here, mode),
+            Expr::TableCol { table, col } => Calc::Ready(self.table_area(table, col)),
+            Expr::Neg(inner) => self.map_scalar(inner, sheet, here, mode, |s| match s {
+                Scalar::Num(n) => Scalar::Num(-n),
+                Scalar::Bool(b) => Scalar::Num(if b { -1.0 } else { 0.0 }),
+                Scalar::Err(e) => Scalar::Err(e),
+                Scalar::Text(_) => Scalar::Err(VALUE),
+            }),
+            Expr::Pct(inner) => self.map_scalar(inner, sheet, here, mode, |s| match s {
+                Scalar::Num(n) => Scalar::Num(n / 100.0),
+                Scalar::Bool(b) => Scalar::Num(if b { 0.01 } else { 0.0 }),
+                Scalar::Err(e) => Scalar::Err(e),
+                Scalar::Text(_) => Scalar::Err(VALUE),
+            }),
+            Expr::Bin(op, l, r) => self.eval_bin(*op, l, r, sheet, here, mode),
+            Expr::Union(l, r) => match (
+                self.eval_expr(l, sheet, here, mode),
+                self.eval_expr(r, sheet, here, mode),
+            ) {
+                (Calc::Skip, _) | (_, Calc::Skip) => Calc::Skip,
+                (Calc::Ready(a), Calc::Ready(b)) => Calc::Ready(union_value(a, b)),
+            },
+            Expr::Cross(l, r) => match (
+                self.eval_expr(l, sheet, here, mode),
+                self.eval_expr(r, sheet, here, mode),
+            ) {
+                (Calc::Skip, _) | (_, Calc::Skip) => Calc::Skip,
+                (Calc::Ready(a), Calc::Ready(b)) => Calc::Ready(self.cross_value(a, b, sheet)),
+            },
+            Expr::Call(name, args) => self.eval_call(name, args, sheet, here, mode),
+        }
+    }
+
+    fn map_scalar(
+        &mut self,
+        inner: &Expr,
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+        f: impl Fn(Scalar) -> Scalar,
+    ) -> Calc {
+        match self.eval_expr(inner, sheet, here, mode) {
+            Calc::Skip => Calc::Skip,
+            Calc::Ready(v) => match self.coerce(v, sheet, here, mode) {
+                Calc::Skip => Calc::Skip,
+                Calc::Ready(Value::Scalar(s)) => Calc::Ready(Value::Scalar(f(s))),
+                Calc::Ready(Value::Grid(g)) => Calc::Ready(Value::Grid(
+                    g.into_iter()
+                        .map(|row| row.into_iter().map(&f).collect())
+                        .collect(),
+                )),
+                Calc::Ready(_) => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+            },
+        }
+    }
+
+    fn eval_name(&mut self, name: &str, sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        let body = self
+            .names
+            .iter()
+            .find(|n| n.local == Some(sheet) && n.name.eq_ignore_ascii_case(name))
+            .or_else(|| {
+                self.names
+                    .iter()
+                    .find(|n| n.local.is_none() && n.name.eq_ignore_ascii_case(name))
+            })
+            .map(|n| n.body.clone());
+        let Some(def) = body else {
+            return Calc::Ready(Value::Scalar(Scalar::Err(NAME)));
+        };
+        match parse_expr(&def) {
+            None => Calc::Skip,
+            Some(expr) => self.eval_expr(&expr, sheet, here, mode),
+        }
+    }
+
+    fn table_area(&self, table: &str, col: &str) -> Value {
+        let Some(def) = self
+            .tables
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(table))
+        else {
+            return Value::Scalar(Scalar::Err(NAME));
+        };
+        let Some(idx) = def.columns.iter().position(|c| c.eq_ignore_ascii_case(col)) else {
+            return Value::Scalar(Scalar::Err(REF));
+        };
+        if def.data_row > def.data_end {
+            return Value::Scalar(Scalar::Num(0.0));
+        }
+        let col = def.start.col + idx as u32;
+        Value::Area(Rect {
+            from: Loc::At(def.sheet),
+            to: Loc::At(def.sheet),
+            r1: CellRef {
+                col,
+                row: def.data_row,
+            },
+            r2: CellRef {
+                col,
+                row: def.data_end,
+            },
+        })
+    }
+
+    fn eval_call(
+        &mut self,
+        name: &str,
+        args: &[Expr],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Calc {
+        let upper = name.to_ascii_uppercase();
+        if upper == "NA" {
+            return Calc::Ready(Value::Scalar(Scalar::Err(NA)));
+        }
+        if upper == "NOW" {
+            return Calc::Ready(Value::Scalar(Scalar::Num(now_serial(self.date1904))));
+        }
+        let mut vals = Vec::new();
+        for arg in args {
+            match self.eval_expr(arg, sheet, here, mode) {
+                Calc::Skip => return Calc::Skip,
+                Calc::Ready(v) => vals.push(v),
+            }
+        }
+        match upper.as_str() {
+            "SUM" => Calc::Ready(Value::Scalar(self.sum_args(&vals, sheet))),
+            "ABS" => self.scalar_fn(&vals, sheet, here, mode, |s| match s {
+                Scalar::Num(n) => Scalar::Num(n.abs()),
+                Scalar::Bool(b) => Scalar::Num(if b { 1.0 } else { 0.0 }),
+                Scalar::Err(e) => Scalar::Err(e),
+                Scalar::Text(_) => Scalar::Err(VALUE),
+            }),
+            "SQRT" => self.scalar_fn(&vals, sheet, here, mode, |s| match num_of(s) {
+                Scalar::Num(n) if n < 0.0 => Scalar::Err(NUM),
+                other => other_map(other, |n| n.sqrt()),
+            }),
+            "DATE" => {
+                if vals.len() != 3 {
+                    return Calc::Skip;
+                }
+                let y = self.one_num(&vals[0], sheet, here);
+                let m = self.one_num(&vals[1], sheet, here);
+                let d = self.one_num(&vals[2], sheet, here);
+                match (y, m, d) {
+                    (Calc::Skip, _, _) | (_, Calc::Skip, _) | (_, _, Calc::Skip) => Calc::Skip,
+                    (
+                        Calc::Ready(Value::Scalar(a)),
+                        Calc::Ready(Value::Scalar(b)),
+                        Calc::Ready(Value::Scalar(c)),
+                    ) => Calc::Ready(Value::Scalar(date_serial(a, b, c, self.date1904))),
+                    _ => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+                }
+            }
+            "HYPERLINK" => {
+                let pick = vals.last();
+                match pick {
+                    None => Calc::Skip,
+                    Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
+                }
+            }
+            _ => Calc::Skip,
+        }
+    }
+
+    fn scalar_fn(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+        f: impl Fn(Scalar) -> Scalar,
+    ) -> Calc {
+        let Some(v) = vals.first() else {
+            return Calc::Skip;
+        };
+        self.map_ready(v.clone(), sheet, here, mode, f)
+    }
+
+    fn map_ready(
+        &mut self,
+        v: Value,
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+        f: impl Fn(Scalar) -> Scalar,
+    ) -> Calc {
+        match self.coerce(v, sheet, here, mode) {
+            Calc::Skip => Calc::Skip,
+            Calc::Ready(Value::Scalar(s)) => Calc::Ready(Value::Scalar(f(s))),
+            Calc::Ready(Value::Grid(g)) => Calc::Ready(Value::Grid(
+                g.into_iter()
+                    .map(|row| row.into_iter().map(&f).collect())
+                    .collect(),
+            )),
+            Calc::Ready(_) => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+        }
+    }
+
+    fn one_num(&mut self, v: &Value, sheet: usize, here: CellRef) -> Calc {
+        match self.coerce(v.clone(), sheet, here, Mode::Scalar) {
+            Calc::Ready(Value::Scalar(s)) => Calc::Ready(Value::Scalar(num_of(s))),
+            other => other,
+        }
+    }
+
+    fn eval_bin(
+        &mut self,
+        op: BinOp,
+        l: &Expr,
+        r: &Expr,
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Calc {
+        let left = match self.eval_expr(l, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        let right = match self.eval_expr(r, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        let left = match self.coerce(left, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        let right = match self.coerce(right, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        match (left, right) {
+            (Value::Scalar(a), Value::Scalar(b)) => Calc::Ready(Value::Scalar(apply_bin(op, a, b))),
+            (Value::Grid(g), Value::Scalar(s)) => {
+                Calc::Ready(Value::Grid(map_grid(g, |a| apply_bin(op, a, s.clone()))))
+            }
+            (Value::Scalar(s), Value::Grid(g)) => {
+                Calc::Ready(Value::Grid(map_grid(g, |b| apply_bin(op, s.clone(), b))))
+            }
+            (Value::Grid(a), Value::Grid(b)) => match zip_grid(a, b, |x, y| apply_bin(op, x, y)) {
+                Some(g) => Calc::Ready(Value::Grid(g)),
+                None => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+            },
+            _ => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+        }
+    }
+
+    fn coerce(&mut self, value: Value, sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        match mode {
+            Mode::Array => match value {
+                Value::Area(rect) => Calc::Ready(Value::Grid(self.grid_from_rect(&rect, sheet))),
+                Value::Areas(parts) if parts.len() == 1 => {
+                    Calc::Ready(Value::Grid(self.grid_from_rect(&parts[0], sheet)))
+                }
+                other => Calc::Ready(other),
+            },
+            Mode::Scalar => match value {
+                Value::Area(rect) => Calc::Ready(Value::Scalar(self.implicit(&rect, sheet, here))),
+                Value::Areas(parts) => {
+                    if parts.len() == 1 {
+                        Calc::Ready(Value::Scalar(self.implicit(&parts[0], sheet, here)))
+                    } else {
+                        Calc::Ready(Value::Scalar(Scalar::Err(VALUE)))
+                    }
+                }
+                Value::Grid(g) => {
+                    let s = g
+                        .first()
+                        .and_then(|r| r.first())
+                        .cloned()
+                        .unwrap_or(Scalar::Err(VALUE));
+                    Calc::Ready(Value::Scalar(s))
+                }
+                other => Calc::Ready(other),
+            },
+        }
+    }
+
+    fn implicit(&mut self, rect: &Rect, sheet: usize, here: CellRef) -> Scalar {
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Scalar::Err(REF);
+        };
+        if s1 != s2 {
+            return Scalar::Err(VALUE);
+        }
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        if r1 == r2 {
+            return self.cell_scalar(s1, r1);
+        }
+        if s1 != sheet {
+            return Scalar::Err(VALUE);
+        }
+        if r1.col == r2.col && here.row >= r1.row && here.row <= r2.row {
+            return self.cell_scalar(
+                s1,
+                CellRef {
+                    col: r1.col,
+                    row: here.row,
+                },
+            );
+        }
+        if r1.row == r2.row && here.col >= r1.col && here.col <= r2.col {
+            return self.cell_scalar(
+                s1,
+                CellRef {
+                    col: here.col,
+                    row: r1.row,
+                },
+            );
+        }
+        Scalar::Err(VALUE)
+    }
+
+    fn sum_args(&mut self, vals: &[Value], sheet: usize) -> Scalar {
+        let mut total = 0.0;
+        for v in vals {
+            match self.sum_value(v, sheet) {
+                Scalar::Num(n) => total += n,
+                Scalar::Err(e) => return Scalar::Err(e),
+                Scalar::Bool(_) | Scalar::Text(_) => {}
+            }
+        }
+        Scalar::Num(total)
+    }
+
+    fn sum_value(&mut self, v: &Value, sheet: usize) -> Scalar {
+        match v {
+            Value::Scalar(Scalar::Num(n)) => Scalar::Num(*n),
+            Value::Scalar(Scalar::Err(e)) => Scalar::Err(e),
+            Value::Scalar(Scalar::Bool(_) | Scalar::Text(_)) => Scalar::Num(0.0),
+            Value::Area(rect) => self.sum_rect(rect, sheet),
+            Value::Areas(parts) => {
+                let mut total = 0.0;
+                for part in parts {
+                    match self.sum_rect(part, sheet) {
+                        Scalar::Num(n) => total += n,
+                        Scalar::Err(e) => return Scalar::Err(e),
+                        _ => {}
+                    }
+                }
+                Scalar::Num(total)
+            }
+            Value::Grid(g) => {
+                let mut total = 0.0;
+                for row in g {
+                    for cell in row {
+                        match cell {
+                            Scalar::Num(n) => total += n,
+                            Scalar::Err(e) => return Scalar::Err(e),
+                            Scalar::Bool(_) | Scalar::Text(_) => {}
+                        }
+                    }
+                }
+                Scalar::Num(total)
+            }
+        }
+    }
+
+    fn sum_rect(&mut self, rect: &Rect, here: usize) -> Scalar {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, here) else {
+            return Scalar::Err(REF);
+        };
+        let mut total = 0.0;
+        for sheet in s1..=s2 {
+            for row in r1.row..=r2.row {
+                for col in r1.col..=r2.col {
+                    let key = (col, row);
+                    let present = self
+                        .sheets
+                        .get(sheet)
+                        .is_some_and(|s| s.cells.contains_key(&key));
+                    if !present {
+                        continue;
+                    }
+                    match self.cell_scalar(sheet, CellRef { col, row }) {
+                        Scalar::Num(n) => total += n,
+                        Scalar::Err(e) => return Scalar::Err(e),
+                        Scalar::Bool(_) | Scalar::Text(_) => {}
+                    }
+                }
+            }
+        }
+        Scalar::Num(total)
+    }
+
+    fn cross_value(&self, left: Value, right: Value, here: usize) -> Value {
+        let mut hits = Vec::new();
+        for a in flatten_areas(left) {
+            for b in flatten_areas(right.clone()) {
+                if let Some(hit) = self.cross_rect(&a, &b, here) {
+                    hits.push(hit);
+                }
+            }
+        }
+        match hits.len() {
+            0 => Value::Scalar(Scalar::Err(NULL)),
+            1 => Value::Area(hits.remove(0)),
+            _ => Value::Areas(hits),
+        }
+    }
+
+    fn cross_rect(&self, a: &Rect, b: &Rect, here: usize) -> Option<Rect> {
+        let (as1, as2) = self.resolve_span(a, here)?;
+        let (bs1, bs2) = self.resolve_span(b, here)?;
+        let s1 = as1.max(bs1);
+        let s2 = as2.min(bs2);
+        if s1 > s2 {
+            return None;
+        }
+        let (a1, a2) = ordered(a.r1, a.r2);
+        let (b1, b2) = ordered(b.r1, b.r2);
+        let c1 = a1.col.max(b1.col);
+        let c2 = a2.col.min(b2.col);
+        let r1 = a1.row.max(b1.row);
+        let r2 = a2.row.min(b2.row);
+        if c1 > c2 || r1 > r2 {
+            return None;
+        }
+        Some(Rect {
+            from: Loc::At(s1),
+            to: Loc::At(s2),
+            r1: CellRef { col: c1, row: r1 },
+            r2: CellRef { col: c2, row: r2 },
+        })
+    }
+}
+
+fn num_of(s: Scalar) -> Scalar {
+    match s {
+        Scalar::Num(n) => Scalar::Num(n),
+        Scalar::Bool(b) => Scalar::Num(if b { 1.0 } else { 0.0 }),
+        Scalar::Err(e) => Scalar::Err(e),
+        Scalar::Text(_) => Scalar::Err(VALUE),
+    }
+}
+
+fn other_map(s: Scalar, f: impl Fn(f64) -> f64) -> Scalar {
+    match s {
+        Scalar::Num(n) => Scalar::Num(f(n)),
+        other => other,
+    }
+}
+
+fn apply_bin(op: BinOp, left: Scalar, right: Scalar) -> Scalar {
+    if let Scalar::Err(e) = &left {
+        return Scalar::Err(e);
+    }
+    if let Scalar::Err(e) = &right {
+        return Scalar::Err(e);
+    }
+    if matches!(op, BinOp::Cat) {
+        return Scalar::Text(format!("{}{}", as_text(&left), as_text(&right)));
+    }
+    if matches!(
+        op,
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+    ) {
+        return cmp_bin(op, left, right);
+    }
+    let a = num_of(left);
+    let b = num_of(right);
+    let (a, b) = match (a, b) {
+        (Scalar::Num(a), Scalar::Num(b)) => (a, b),
+        (Scalar::Err(e), _) | (_, Scalar::Err(e)) => return Scalar::Err(e),
+        _ => return Scalar::Err(VALUE),
+    };
+    match op {
+        BinOp::Add => Scalar::Num(a + b),
+        BinOp::Sub => Scalar::Num(a - b),
+        BinOp::Mul => Scalar::Num(a * b),
+        BinOp::Div => {
+            if b == 0.0 {
+                Scalar::Err(DIV0)
+            } else {
+                Scalar::Num(a / b)
+            }
+        }
+        BinOp::Pow => Scalar::Num(a.powf(b)),
+        BinOp::Cat | BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+            Scalar::Err(VALUE)
+        }
+    }
+}
+
+fn cmp_bin(op: BinOp, left: Scalar, right: Scalar) -> Scalar {
+    let ord = match (&left, &right) {
+        (Scalar::Text(a), Scalar::Text(b)) => Some(a.cmp(b)),
+        (Scalar::Bool(a), Scalar::Bool(b)) => Some(a.cmp(b)),
+        _ => match (num_of(left), num_of(right)) {
+            (Scalar::Num(a), Scalar::Num(b)) => a.partial_cmp(&b),
+            (Scalar::Err(e), _) | (_, Scalar::Err(e)) => return Scalar::Err(e),
+            _ => return Scalar::Err(VALUE),
+        },
+    };
+    let Some(ord) = ord else {
+        return Scalar::Err(VALUE);
+    };
+    let ok = match op {
+        BinOp::Eq => ord.is_eq(),
+        BinOp::Ne => ord.is_ne(),
+        BinOp::Lt => ord.is_lt(),
+        BinOp::Le => ord.is_le(),
+        BinOp::Gt => ord.is_gt(),
+        BinOp::Ge => ord.is_ge(),
+        _ => false,
+    };
+    Scalar::Bool(ok)
+}
+
+fn as_text(s: &Scalar) -> String {
+    match s {
+        Scalar::Num(n) => fmt_num(*n),
+        Scalar::Text(t) => t.clone(),
+        Scalar::Bool(true) => "TRUE".to_string(),
+        Scalar::Bool(false) => "FALSE".to_string(),
+        Scalar::Err(e) => (*e).to_string(),
+    }
+}
+
+fn union_value(left: Value, right: Value) -> Value {
+    Value::Areas(
+        flatten_areas(left)
+            .into_iter()
+            .chain(flatten_areas(right))
+            .collect(),
+    )
+}
+
+fn flatten_areas(v: Value) -> Vec<Rect> {
+    match v {
+        Value::Area(r) => vec![r],
+        Value::Areas(v) => v,
+        Value::Scalar(_) | Value::Grid(_) => Vec::new(),
+    }
+}
+
+fn ordered(a: CellRef, b: CellRef) -> (CellRef, CellRef) {
+    (
+        CellRef {
+            col: a.col.min(b.col),
+            row: a.row.min(b.row),
+        },
+        CellRef {
+            col: a.col.max(b.col),
+            row: a.row.max(b.row),
+        },
+    )
+}
+
+fn ord_pair(a: usize, b: usize) -> (usize, usize) {
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+fn map_grid(grid: Vec<Vec<Scalar>>, f: impl Fn(Scalar) -> Scalar) -> Vec<Vec<Scalar>> {
+    grid.into_iter()
+        .map(|row| row.into_iter().map(&f).collect())
+        .collect()
+}
+
+fn zip_grid(
+    left: Vec<Vec<Scalar>>,
+    right: Vec<Vec<Scalar>>,
+    f: impl Fn(Scalar, Scalar) -> Scalar,
+) -> Option<Vec<Vec<Scalar>>> {
+    if left.len() != right.len() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for (a, b) in left.into_iter().zip(right) {
+        if a.len() != b.len() {
+            return None;
+        }
+        out.push(a.into_iter().zip(b).map(|(x, y)| f(x, y)).collect());
+    }
+    Some(out)
+}
+
+fn fmt_num(n: f64) -> String {
+    if !n.is_finite() {
+        return NUM.to_string();
+    }
+    if (n - n.round()).abs() < 1e-9 && n.abs() < 1e15 {
+        return format!("{}", n.round() as i64);
+    }
+    let s = format!("{n}");
+    s
+}
+
+fn now_serial(date1904: bool) -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let days = secs.div_euclid(86400);
+    let tod = secs.rem_euclid(86400) as f64 / 86400.0;
+    let unix_days = days_from_civil(1970, 1, 1);
+    let excel = if date1904 {
+        days_from_civil(1904, 1, 1)
+    } else {
+        days_from_civil(1899, 12, 30)
+    };
+    (unix_days + days - excel) as f64 + tod
+}
+
+fn date_serial(y: Scalar, m: Scalar, d: Scalar, date1904: bool) -> Scalar {
+    let y = num_of(y);
+    let m = num_of(m);
+    let d = num_of(d);
+    let (y, m, d) = match (y, m, d) {
+        (Scalar::Num(y), Scalar::Num(m), Scalar::Num(d)) => (y, m, d),
+        (Scalar::Err(e), _, _) | (_, Scalar::Err(e), _) | (_, _, Scalar::Err(e)) => {
+            return Scalar::Err(e)
+        }
+        _ => return Scalar::Err(VALUE),
+    };
+    let yi = y.round() as i32;
+    let mi = m.round() as i32;
+    let di = d.round() as i32;
+    if !(1..=9999).contains(&yi) || !(1..=12).contains(&mi) || !(1..=31).contains(&di) {
+        return Scalar::Err(NUM);
+    }
+    let epoch = if date1904 {
+        days_from_civil(1904, 1, 1)
+    } else {
+        days_from_civil(1899, 12, 30)
+    };
+    Scalar::Num((days_from_civil(yi, mi as u32, di as u32) - epoch) as f64)
+}
+
+fn days_from_civil(mut y: i32, m: u32, d: u32) -> i64 {
+    y -= i32::from(m <= 2);
+    let era = y.div_euclid(400);
+    let yoe = (y - era * 400) as u64;
+    let mp = if m > 2 { m - 3 } else { m + 9 };
+    let doy = (153 * mp as u64 + 2) / 5 + d as u64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era as i64 * 146097 + doe as i64 - 719468
+}
+
+fn parse_expr(src: &str) -> Option<Expr> {
+    let mut lex = Lex {
+        s: src,
+        i: 0,
+        space: false,
+    };
+    let expr = parse_cmp(&mut lex, false)?;
+    if lex.peek().is_some() {
+        return None;
+    }
+    Some(expr)
+}
+
+fn parse_cmp(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_concat(lex, union_ok)?;
+    loop {
+        let op = match lex.peek() {
+            Some(Tok::Eq) => BinOp::Eq,
+            Some(Tok::Ne) => BinOp::Ne,
+            Some(Tok::Lt) => BinOp::Lt,
+            Some(Tok::Le) => BinOp::Le,
+            Some(Tok::Gt) => BinOp::Gt,
+            Some(Tok::Ge) => BinOp::Ge,
+            _ => break,
+        };
+        lex.bump();
+        let right = parse_concat(lex, union_ok)?;
+        left = Expr::Bin(op, Box::new(left), Box::new(right));
+    }
+    if union_ok {
+        while matches!(lex.peek(), Some(Tok::Comma)) {
+            lex.bump();
+            let right = parse_cmp(lex, false)?;
+            left = Expr::Union(Box::new(left), Box::new(right));
+        }
+    }
+    Some(left)
+}
+
+fn parse_concat(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_add(lex, union_ok)?;
+    while matches!(lex.peek(), Some(Tok::Amp)) {
+        lex.bump();
+        let right = parse_add(lex, union_ok)?;
+        left = Expr::Bin(BinOp::Cat, Box::new(left), Box::new(right));
+    }
+    Some(left)
+}
+
+fn parse_add(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_mul(lex, union_ok)?;
+    loop {
+        let op = match lex.peek() {
+            Some(Tok::Plus) => BinOp::Add,
+            Some(Tok::Minus) => BinOp::Sub,
+            _ => break,
+        };
+        lex.bump();
+        let right = parse_mul(lex, union_ok)?;
+        left = Expr::Bin(op, Box::new(left), Box::new(right));
+    }
+    Some(left)
+}
+
+fn parse_mul(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_pow(lex, union_ok)?;
+    loop {
+        let op = match lex.peek() {
+            Some(Tok::Star) => BinOp::Mul,
+            Some(Tok::Slash) => BinOp::Div,
+            _ => break,
+        };
+        lex.bump();
+        let right = parse_pow(lex, union_ok)?;
+        left = Expr::Bin(op, Box::new(left), Box::new(right));
+    }
+    Some(left)
+}
+
+fn parse_pow(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_unary(lex, union_ok)?;
+    if matches!(lex.peek(), Some(Tok::Caret)) {
+        lex.bump();
+        let right = parse_pow(lex, union_ok)?;
+        left = Expr::Bin(BinOp::Pow, Box::new(left), Box::new(right));
+    }
+    Some(left)
+}
+
+fn parse_unary(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    if matches!(lex.peek(), Some(Tok::Minus)) {
+        lex.bump();
+        let inner = parse_unary(lex, union_ok)?;
+        return Some(Expr::Neg(Box::new(inner)));
+    }
+    if matches!(lex.peek(), Some(Tok::Plus)) {
+        lex.bump();
+        return parse_unary(lex, union_ok);
+    }
+    let mut expr = parse_cross(lex, union_ok)?;
+    while matches!(lex.peek(), Some(Tok::Pct)) {
+        lex.bump();
+        expr = Expr::Pct(Box::new(expr));
+    }
+    Some(expr)
+}
+
+fn parse_cross(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    let mut left = parse_primary(lex, union_ok)?;
+    while lex.has_gap() && starts_primary(lex) {
+        let right = parse_primary(lex, union_ok)?;
+        left = Expr::Cross(Box::new(left), Box::new(right));
+    }
+    Some(left)
+}
+
+fn starts_primary(lex: &Lex<'_>) -> bool {
+    matches!(
+        lex.peek(),
+        Some(Tok::Num(_) | Tok::Str(_) | Tok::Ident(_) | Tok::Err(_) | Tok::LParen | Tok::LBrace)
+    )
+}
+
+fn parse_primary(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
+    match lex.peek() {
+        Some(Tok::Num(n)) => {
+            lex.bump();
+            Some(Expr::Value(Value::Scalar(Scalar::Num(n))))
+        }
+        Some(Tok::Str(s)) => {
+            lex.bump();
+            Some(Expr::Value(Value::Scalar(Scalar::Text(s))))
+        }
+        Some(Tok::Err(e)) => {
+            lex.bump();
+            Some(Expr::Value(Value::Scalar(Scalar::Err(e))))
+        }
+        Some(Tok::LParen) => {
+            lex.bump();
+            let inner = parse_cmp(lex, true)?;
+            if !matches!(lex.peek(), Some(Tok::RParen)) {
+                return None;
+            }
+            lex.bump();
+            let _ = union_ok;
+            Some(inner)
+        }
+        Some(Tok::LBrace) => parse_array(lex),
+        Some(Tok::Ident(id)) => parse_ident(lex, id),
+        _ => None,
+    }
+}
+
+fn parse_ident(lex: &mut Lex<'_>, id: String) -> Option<Expr> {
+    lex.bump();
+    if matches!(lex.peek(), Some(Tok::LParen)) {
+        lex.bump();
+        let mut args = Vec::new();
+        if !matches!(lex.peek(), Some(Tok::RParen)) {
+            loop {
+                args.push(parse_cmp(lex, false)?);
+                if matches!(lex.peek(), Some(Tok::Comma)) {
+                    lex.bump();
+                    continue;
+                }
+                break;
+            }
+        }
+        if !matches!(lex.peek(), Some(Tok::RParen)) {
+            return None;
+        }
+        lex.bump();
+        return Some(Expr::Call(id, args));
+    }
+    if matches!(lex.peek(), Some(Tok::LBrack)) {
+        lex.bump();
+        let Tok::Ident(col) = lex.peek()? else {
+            return None;
+        };
+        lex.bump();
+        if !matches!(lex.peek(), Some(Tok::RBrack)) {
+            return None;
+        }
+        lex.bump();
+        return Some(Expr::TableCol { table: id, col });
+    }
+    if matches!(lex.peek(), Some(Tok::Bang)) {
+        lex.bump();
+        let rect = parse_cell_span(lex, None)?;
+        return Some(Expr::Value(Value::Area(named_rect(&id, &id, rect))));
+    }
+    if matches!(lex.peek(), Some(Tok::Colon)) {
+        let saved = lex.clone();
+        lex.bump();
+        if let Some(Tok::Ident(second)) = lex.peek() {
+            let second = second.clone();
+            let after = {
+                let mut look = lex.clone();
+                look.bump();
+                look.peek()
+            };
+            if matches!(after, Some(Tok::Bang)) && !is_cell(&id) {
+                lex.bump();
+                lex.bump();
+                let rect = parse_cell_span(lex, None)?;
+                return Some(Expr::Value(Value::Area(named_rect(&id, &second, rect))));
+            }
+        }
+        *lex = saved;
+    }
+    if is_cell(&id) {
+        let cell = a1::parse_cell(&id).ok()?;
+        if matches!(lex.peek(), Some(Tok::Colon)) {
+            let saved = lex.clone();
+            lex.bump();
+            if let Some(Tok::Ident(other)) = lex.peek() {
+                if is_cell(&other) {
+                    let other = other.clone();
+                    lex.bump();
+                    let end = a1::parse_cell(&other).ok()?;
+                    return Some(Expr::Value(Value::Area(here_rect(cell, end))));
+                }
+            }
+            *lex = saved;
+        }
+        return Some(Expr::Value(Value::Area(here_rect(cell, cell))));
+    }
+    if id.eq_ignore_ascii_case("TRUE") {
+        return Some(Expr::Value(Value::Scalar(Scalar::Bool(true))));
+    }
+    if id.eq_ignore_ascii_case("FALSE") {
+        return Some(Expr::Value(Value::Scalar(Scalar::Bool(false))));
+    }
+    Some(Expr::Name(id))
+}
+
+fn parse_cell_span(lex: &mut Lex<'_>, _sheet: Option<&str>) -> Option<(CellRef, CellRef)> {
+    let Tok::Ident(a) = lex.peek()? else {
+        return None;
+    };
+    if !is_cell(&a) {
+        return None;
+    }
+    let a = a.clone();
+    lex.bump();
+    let start = a1::parse_cell(&a).ok()?;
+    if matches!(lex.peek(), Some(Tok::Colon)) {
+        lex.bump();
+        let Tok::Ident(b) = lex.peek()? else {
+            return None;
+        };
+        if !is_cell(&b) {
+            return None;
+        }
+        let b = b.clone();
+        lex.bump();
+        let end = a1::parse_cell(&b).ok()?;
+        return Some((start, end));
+    }
+    Some((start, start))
+}
+
+fn parse_array(lex: &mut Lex<'_>) -> Option<Expr> {
+    lex.bump();
+    let mut rows = Vec::new();
+    loop {
+        let mut cols = Vec::new();
+        loop {
+            cols.push(parse_cmp(lex, false)?);
+            if matches!(lex.peek(), Some(Tok::Comma)) {
+                lex.bump();
+                continue;
+            }
+            break;
+        }
+        rows.push(cols);
+        if matches!(lex.peek(), Some(Tok::Semi)) {
+            lex.bump();
+            continue;
+        }
+        break;
+    }
+    if !matches!(lex.peek(), Some(Tok::RBrace)) {
+        return None;
+    }
+    lex.bump();
+    Some(Expr::Value(Value::Grid(eval_const_grid(rows)?)))
+}
+
+fn eval_const_grid(rows: Vec<Vec<Expr>>) -> Option<Vec<Vec<Scalar>>> {
+    let mut out = Vec::new();
+    for row in rows {
+        let mut cols = Vec::new();
+        for cell in row {
+            cols.push(match cell {
+                Expr::Value(Value::Scalar(s)) => s,
+                _ => return None,
+            });
+        }
+        out.push(cols);
+    }
+    Some(out)
+}
+
+fn is_cell(text: &str) -> bool {
+    a1::parse_cell(text).is_ok()
+}
+
+fn here_rect(r1: CellRef, r2: CellRef) -> Rect {
+    Rect {
+        from: Loc::Here,
+        to: Loc::Here,
+        r1,
+        r2,
+    }
+}
+
+fn named_rect(a: &str, b: &str, span: (CellRef, CellRef)) -> Rect {
+    Rect {
+        from: Loc::Name(a.to_string()),
+        to: Loc::Name(b.to_string()),
+        r1: span.0,
+        r2: span.1,
+    }
+}
+
+fn write_cache(el: &mut Element, val: &Scalar) {
+    el.children.retain(|n| match n {
+        Node::Element(e) => !matches!(e.local_name(), "v" | "is"),
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+    match val {
+        Scalar::Num(n) => {
+            el.remove_attr("t");
+            let mut v = Element::new("v");
+            v.set_text(fmt_num(*n));
+            el.push_element(v);
+        }
+        Scalar::Bool(b) => {
+            el.set_attr("t", "b");
+            let mut v = Element::new("v");
+            v.set_text(if *b { "1" } else { "0" });
+            el.push_element(v);
+        }
+        Scalar::Text(s) => {
+            el.set_attr("t", "str");
+            let mut v = Element::new("v");
+            v.set_text(s);
+            el.push_element(v);
+        }
+        Scalar::Err(e) => {
+            el.set_attr("t", "e");
+            let mut v = Element::new("v");
+            v.set_text(*e);
+            el.push_element(v);
+        }
+    }
+}
+
+impl CellRec {
+    fn clone_rec(&self) -> Self {
+        self.clone()
+    }
+}
+
+impl Clone for CellRec {
+    fn clone(&self) -> Self {
+        Self {
+            formula: self.formula.clone(),
+            cached: self.cached.clone(),
+            array_master: self.array_master,
+            array_ref: self.array_ref,
+        }
+    }
+}
+
+impl Lex<'_> {
+    fn peek(&self) -> Option<Tok> {
+        self.scan().map(|(tok, _, _)| tok)
+    }
+
+    fn has_gap(&self) -> bool {
+        self.scan().is_some_and(|(_, _, space)| space)
+    }
+
+    fn bump(&mut self) -> Option<Tok> {
+        let (tok, end, space) = self.scan()?;
+        self.space = space;
+        self.i = end;
+        Some(tok)
+    }
+
+    fn scan(&self) -> Option<(Tok, usize, bool)> {
+        let b = self.s.as_bytes();
+        let mut i = self.i;
+        let mut space = false;
+        while i < b.len() && b[i].is_ascii_whitespace() {
+            space = true;
+            i += 1;
+        }
+        if i >= b.len() {
+            return None;
+        }
+        let rest = &self.s[i..];
+        for lit in [
+            "#DIV/0!",
+            "#GETTING_DATA",
+            "#VALUE!",
+            "#NULL!",
+            "#NAME?",
+            "#NUM!",
+            "#REF!",
+            "#N/A",
+        ] {
+            if rest.starts_with(lit) {
+                let err = match lit {
+                    "#DIV/0!" => DIV0,
+                    "#NULL!" => NULL,
+                    "#NAME?" => NAME,
+                    "#NUM!" => NUM,
+                    "#REF!" => REF,
+                    "#N/A" => NA,
+                    _ => VALUE,
+                };
+                return Some((Tok::Err(err), i + lit.len(), space));
+            }
+        }
+        let two = rest.as_bytes();
+        if two.len() >= 2 && rest.is_char_boundary(2) {
+            let pair = &rest[..2];
+            let tok = match pair {
+                "<>" => Some(Tok::Ne),
+                "<=" => Some(Tok::Le),
+                ">=" => Some(Tok::Ge),
+                _ => None,
+            };
+            if let Some(tok) = tok {
+                return Some((tok, i + 2, space));
+            }
+        }
+        let ch = rest.chars().next().unwrap();
+        let simple = match ch {
+            '+' => Some(Tok::Plus),
+            '-' => Some(Tok::Minus),
+            '*' => Some(Tok::Star),
+            '/' => Some(Tok::Slash),
+            '^' => Some(Tok::Caret),
+            '&' => Some(Tok::Amp),
+            '=' => Some(Tok::Eq),
+            '<' => Some(Tok::Lt),
+            '>' => Some(Tok::Gt),
+            '%' => Some(Tok::Pct),
+            '(' => Some(Tok::LParen),
+            ')' => Some(Tok::RParen),
+            ',' => Some(Tok::Comma),
+            ':' => Some(Tok::Colon),
+            '{' => Some(Tok::LBrace),
+            '}' => Some(Tok::RBrace),
+            '[' => Some(Tok::LBrack),
+            ']' => Some(Tok::RBrack),
+            '!' => Some(Tok::Bang),
+            ';' => Some(Tok::Semi),
+            _ => None,
+        };
+        if let Some(tok) = simple {
+            return Some((tok, i + ch.len_utf8(), space));
+        }
+        if ch == '"' {
+            let mut j = i + 1;
+            let bytes = self.s.as_bytes();
+            let mut text = String::new();
+            while j < bytes.len() {
+                if bytes[j] == b'"' {
+                    if j + 1 < bytes.len() && bytes[j + 1] == b'"' {
+                        text.push('"');
+                        j += 2;
+                        continue;
+                    }
+                    return Some((Tok::Str(text), j + 1, space));
+                }
+                let c = self.s[j..].chars().next().unwrap();
+                text.push(c);
+                j += c.len_utf8();
+            }
+            return None;
+        }
+        if ch == '\'' {
+            let mut j = i + 1;
+            let bytes = self.s.as_bytes();
+            let mut text = String::new();
+            while j < bytes.len() {
+                if bytes[j] == b'\'' {
+                    if j + 1 < bytes.len() && bytes[j + 1] == b'\'' {
+                        text.push('\'');
+                        j += 2;
+                        continue;
+                    }
+                    return Some((Tok::Ident(text), j + 1, space));
+                }
+                let c = self.s[j..].chars().next().unwrap();
+                text.push(c);
+                j += c.len_utf8();
+            }
+            return None;
+        }
+        if ch.is_ascii_digit()
+            || (ch == '.' && rest.len() > 1 && rest.as_bytes()[1].is_ascii_digit())
+        {
+            let mut j = i;
+            let bytes = self.s.as_bytes();
+            while j < bytes.len() && (bytes[j].is_ascii_digit() || bytes[j] == b'.') {
+                j += 1;
+            }
+            let n: f64 = self.s[i..j].parse().ok()?;
+            return Some((Tok::Num(n), j, space));
+        }
+        let mut j = i;
+        let bytes = self.s.as_bytes();
+        while j < bytes.len() {
+            let c = self.s[j..].chars().next().unwrap();
+            if c.is_ascii_alphanumeric()
+                || c == '_'
+                || c == '.'
+                || c == '$'
+                || c == '\\'
+                || !c.is_ascii()
+            {
+                j += c.len_utf8();
+            } else {
+                break;
+            }
+        }
+        if j == i {
+            return None;
+        }
+        Some((Tok::Ident(self.s[i..j].to_string()), j, space))
+    }
+}
+
+impl Clone for Lex<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            s: self.s,
+            i: self.i,
+            space: self.space,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_expr;
+
+    #[test]
+    fn sheet_ref_parses() {
+        assert!(parse_expr("来源!A1").is_some());
+        assert!(parse_expr("SUM(数据:来源!A1)").is_some());
+        assert!(parse_expr("A1:B2 B1:C1").is_some());
+    }
+}

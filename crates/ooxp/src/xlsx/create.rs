@@ -264,7 +264,8 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
         super::theme::write_create(&mut pkg, &super::theme::parse_create(v)?)?;
     }
     let bytes = pkg.save_to_vec()?;
-    super::request::create_remain::apply_remain(bytes, obj)
+    let bytes = super::request::create_remain::apply_remain(bytes, obj)?;
+    super::eval::fill_saved(bytes)
 }
 
 fn each_worksheet(sheets: &[NewSheet]) -> impl Iterator<Item = (usize, String, &NewSheet)> {

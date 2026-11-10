@@ -279,7 +279,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 插 SmartArt 再新建 `/xl/diagrams/` 四件套，关系写在 drawing `.rels`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。
 往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
 `setCellStyle` 可改 `styles.xml`，不求值公式。也可用 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 写 `cols`、`row/@ht` 与 `mergeCells`：只改被点名的列、行与合并区，不算最适列宽，不按列宽反推 `twoCell` 图尺寸。
-也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可改数据表主格的 `TABLE` 输入格，不求值、不新建数据表。
+也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可改数据表主格的 `TABLE` 输入格。单元格公式里库能算的写入缓存；数据表不求值、不新建。
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。
 也可用 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat` 读写工作表 `conditionalFormatting`。公式当字符串，颜色写入 `styles.xml` 的 `dxf`，并可写 `top10`、`aboveAverage` 与文本类规则。
 不渲染、不求值。`extLst` 里的扩展条件格式原样留下。
@@ -440,7 +440,7 @@ xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点
 xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。
 xlsx 也可插入、删除、改名、重排与隐藏普通工作表，脏 workbook 的 `sheets`、worksheet 部件与关系。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。xlsx 也可用 `setCellStyle` 改被点名格子的样式，脏该表 XML 与 `styles.xml`。
-xlsx 也可设列宽、行高、合并与取消合并，脏该表 `cols` / `sheetData` / `mergeCells`，不标重算。xlsx 也可改共享公式主格、把主格迁到新区域左上角，或写成数组公式，仍标重算、仍不求值。
+xlsx 也可设列宽、行高、合并与取消合并，脏该表 `cols` / `sheetData` / `mergeCells`，不标重算。xlsx 也可改共享公式主格、把主格迁到新区域左上角，或写成数组公式，仍标重算。能算的单元格公式写入缓存，算不了的不写。
 xlsx 也可增删改数据验证，脏该表 `dataValidations`，不标重算。xlsx 也可增删改条件格式，脏该表 `conditionalFormatting` 与必要时 `styles.xml` 的 `dxfs`，不标重算。
 xlsx 也可增删改工作表表格，脏 `/xl/tables/…`、工作表 `tableParts`、关系与内容类型，必要时脏 `sheetData`，不标重算。
 xlsx 也可增删改透视表，脏 `/xl/pivotTables/…`、`/xl/pivotCache/…`、workbook 的 `pivotCaches`、关系与内容类型，不标重算，也不把合计写进 `sheetData`。

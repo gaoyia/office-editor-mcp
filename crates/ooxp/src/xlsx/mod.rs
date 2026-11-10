@@ -13,6 +13,7 @@ mod create;
 mod create_xml;
 mod custom_view;
 mod draw_pin;
+mod eval;
 mod extlink;
 mod formula;
 mod group;

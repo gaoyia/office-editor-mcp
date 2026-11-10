@@ -94,11 +94,11 @@ Invoke-OoxpRequest @{
 $before = Invoke-OoxpTree @{
     schemaVersion = 1; action = 'inspect'
     path = $book.Replace('\', '/'); format = 'xlsx'
-    scope = @{ sheet = '数据'; range = 'A1:AC1' }
+    scope = @{ sheet = '数据'; range = 'A1:AC3' }
 } 'xlsx-xfo-before'
 $c1before = Find-Cell $before.sheets[0].cells 'cell:数据!C1'
-$xfo0 = ($null -eq $c1before.value) -and ($c1before.formula -eq '=A1+B1')
-Add-Check 'xlsx-Xfo0' $xfo0 "库未求值 value=$($c1before.value) formula=$($c1before.formula)"
+$xfo0 = (Same-Number $c1before.value 5) -and ($c1before.formula -eq '=A1+B1')
+Add-Check 'xlsx-Xfo0' $xfo0 "库已写入缓存 value=$($c1before.value) formula=$($c1before.formula)"
 
 $excel = Ensure-MsExcel $book
 Close-AllWorkbooks $excel
@@ -127,8 +127,9 @@ $after = Invoke-OoxpTree @{
 
 function Want-Number([string]$id, [string]$addr, $expect) {
     $cell = Find-Cell $after.sheets[0].cells $id
-    $ok = ($cap -notmatch 'Repair') -and (Same-Number $live[$addr].value $expect) -and (Same-Number $cell.value $live[$addr].value)
-    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.value) expect=$expect caption=$cap"
+    $earlier = Find-Cell $before.sheets[0].cells $id
+    $ok = ($cap -notmatch 'Repair') -and (Same-Number $live[$addr].value $expect) -and (Same-Number $cell.value $live[$addr].value) -and (Same-Number $earlier.value $expect)
+    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.value) library=$($earlier.value) expect=$expect caption=$cap"
 }
 
 Want-Number 'cell:数据!C1' 'C1' 5
@@ -150,10 +151,12 @@ Want-Number 'cell:数据!AB1' 'AB1' 6
 
 function Want-Flag([string]$id, [string]$addr, [bool]$expect) {
     $cell = Find-Cell $after.sheets[0].cells $id
+    $earlier = Find-Cell $before.sheets[0].cells $id
     $excelFlag = [System.Convert]::ToBoolean($live[$addr].value)
     $inspectFlag = [System.Convert]::ToBoolean($cell.value)
-    $ok = ($cap -notmatch 'Repair') -and ($excelFlag -eq $expect) -and ($inspectFlag -eq $excelFlag) -and ($cell.type -eq 'boolean')
-    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.type):$($cell.value) expect=$expect"
+    $libraryFlag = [System.Convert]::ToBoolean($earlier.value)
+    $ok = ($cap -notmatch 'Repair') -and ($excelFlag -eq $expect) -and ($inspectFlag -eq $excelFlag) -and ($libraryFlag -eq $expect) -and ($cell.type -eq 'boolean')
+    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.type):$($cell.value) library=$($earlier.value) expect=$expect"
 }
 
 Want-Flag 'cell:数据!N1' 'N1' $true
@@ -161,16 +164,18 @@ Want-Flag 'cell:数据!V1' 'V1' $false
 
 function Want-Text([string]$id, [string]$addr, [string]$expect) {
     $cell = Find-Cell $after.sheets[0].cells $id
-    $ok = ($cap -notmatch 'Repair') -and ([string]$live[$addr].value -eq $expect) -and ([string]$cell.value -eq $expect) -and ($cell.type -eq 'text')
-    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.type):$($cell.value) expect=$expect"
+    $earlier = Find-Cell $before.sheets[0].cells $id
+    $ok = ($cap -notmatch 'Repair') -and ([string]$live[$addr].value -eq $expect) -and ([string]$cell.value -eq $expect) -and ([string]$earlier.value -eq $expect) -and ($cell.type -eq 'text')
+    Add-Check "xlsx-Xfo-$addr" $ok "excel=$($live[$addr].value) inspect=$($cell.type):$($cell.value) library=$($earlier.value) expect=$expect"
 }
 
 Want-Text 'cell:数据!W1' 'W1' '2x'
 
 function Want-Error([string]$id, [string]$addr, [string]$token) {
     $cell = Find-Cell $after.sheets[0].cells $id
-    $ok = ($cap -notmatch 'Repair') -and ($live[$addr].text -eq $token) -and ($cell.type -eq 'error') -and ($cell.value -eq $token)
-    Add-Check "xlsx-Xfo-$addr" $ok "excelText=$($live[$addr].text) inspect=$($cell.type):$($cell.value) expect=$token"
+    $earlier = Find-Cell $before.sheets[0].cells $id
+    $ok = ($cap -notmatch 'Repair') -and ($live[$addr].text -eq $token) -and ($cell.type -eq 'error') -and ($cell.value -eq $token) -and ($earlier.type -eq 'error') -and ($earlier.value -eq $token)
+    Add-Check "xlsx-Xfo-$addr" $ok "excelText=$($live[$addr].text) inspect=$($cell.type):$($cell.value) library=$($earlier.value) expect=$token"
 }
 
 Want-Error 'cell:数据!O1' 'O1' '#NAME?'
@@ -194,12 +199,14 @@ $rok = ($cap -notmatch 'Repair') -and ($r1c1 -eq '=RC[-2]+RC[-1]') -and ($c1f.fo
 Add-Check 'xlsx-Xfo-R1C1' $rok "r1c1=$r1c1 formula=$($c1f.formula)"
 
 $j = Find-Cell $after.sheets[0].cells 'cell:数据!J1'
-$jok = ($cap -notmatch 'Repair') -and (Same-Number $j.value 46024) -and (Same-Number $j.value $live['J1'].value) -and ($live['J1'].text -ne '46024')
-Add-Check 'xlsx-Xfo-J1' $jok "excel=$($live['J1'].value) inspect=$($j.value) text=$($live['J1'].text) numFmt=$($j.numFmt)"
+$jlib = Find-Cell $before.sheets[0].cells 'cell:数据!J1'
+$jok = ($cap -notmatch 'Repair') -and (Same-Number $j.value 46024) -and (Same-Number $jlib.value 46024) -and (Same-Number $j.value $live['J1'].value) -and ($live['J1'].text -ne '46024')
+Add-Check 'xlsx-Xfo-J1' $jok "excel=$($live['J1'].value) inspect=$($j.value) library=$($jlib.value) text=$($live['J1'].text) numFmt=$($j.numFmt)"
 
 $i = Find-Cell $after.sheets[0].cells 'cell:数据!I1'
-$iok = ($cap -notmatch 'Repair') -and $live['I1'].isError -and ($i.type -eq 'error') -and ($i.value -eq '#DIV/0!')
-Add-Check 'xlsx-Xfo-I1' $iok "excelText=$($live['I1'].text) inspect=$($i.type):$($i.value)"
+$ilib = Find-Cell $before.sheets[0].cells 'cell:数据!I1'
+$iok = ($cap -notmatch 'Repair') -and $live['I1'].isError -and ($i.type -eq 'error') -and ($i.value -eq '#DIV/0!') -and ($ilib.value -eq '#DIV/0!')
+Add-Check 'xlsx-Xfo-I1' $iok "excelText=$($live['I1'].text) inspect=$($i.type):$($i.value) library=$($ilib.value)"
 
 $refBook = Get-OutPath 'xlsx-formula-oracle-ref.xlsx'
 if (Test-Path $refBook) { Remove-Item -Force $refBook }

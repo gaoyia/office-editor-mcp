@@ -1267,7 +1267,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   格子自己的 `r` 能解析时，位置以它为准，不跟所在行的行号强行对齐。
 - 范围内有内容的格子超过 `maxCells` 时，按行优先、从左到右截断，`truncated` 为 `true`。未截断则为 `false`。
 - `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
-- `value` 是缓存显示值，不是库算出来的。公式格的 `value` 来自 `<v>`，可能过期。没有 `<v>` 时 `value` 为 `null`。
+- `value` 来自 `<v>`。库能求值时会把结果写入 `<v>`。算不了、或还没有 `<v>` 时为 `null`。已有 `<v>` 不会被改成 `null`。
 - `formula`：有公式则返回以 `=` 开头的字符串。XML 里 `<f>` 不含 `=`，由库补上。没有公式则为 `null`。
 - 共享公式（`<f t="shared"`，§18.3.1.40）：主格返回公式文本，并带 `"shared": true` 与 `"sharedRef"`（取主格 `f/@ref`，规范化成 `A1` 或 `A1:B2`）。
   从属格带 `"shared": true`；`formula` 按主格到该格的行列差展开成该格的 A1 文本（规则与下文 apply 的相对展开相同）。找不到主格或主格没有公式文本时，从属格 `formula` 仍为 `null`。
@@ -1431,7 +1431,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 | `sheets[].groups` | 可选。把该表 `textBoxes` / `shapes` / `connectors` 包进 `xdr:grpSp` |
 | `cells[].ref` | A1 地址 |
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格的值 |
-| `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
+| `cells[].formula` | 以 `=` 开头的公式文本。能求值则写入缓存，规则见下文「公式缓存」 |
 | `cells[].shared` / `sharedRef` / `array` / `arrayRef` | 可选。与 `setCell` 相同。出现 `dataTable` / `dataTableRef` 报 `InvalidField` |
 | `cells[].numFmt` / `font` / `fill` / `border` / `align` | 可选。与 `setCellStyle` 相同 |
 | `cells[].namedStyle` | 可选。字符串。对应该工作簿 `cellStyles[]` 的 `name`（大小写不敏感），或内置 `Normal`。复用 `setCellNamedStyle`。不要与 `numFmt` / `font` / `fill` / `border` / `align` 同时给 |
@@ -1491,7 +1491,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 带第五轮命名样式与批注回复的示例见 `docs/examples/xlsx-create-round5.json`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。
-公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
+能求值的公式写入缓存 `<v>`。算不了的公式格仍不写 `<v>`。两种都在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时再算一遍。
 
 文本写入共享字符串表（`t="s"`），这是 Office 新建文件的常见写法。每个文本值必须先进入该表再写索引；表里找不到对应项时 create 失败，不许退回索引 0。布尔写成 `t="b"`。数字不写 `t`（默认为 `n`）。
 
@@ -1519,7 +1519,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组公式，再列宽行高隐藏与合并，
 再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
-不要另写一套 XML。公式格仍不写缓存 `<v>`。不求值，不刷新透视，不刷新外部连接。不新建数据表公式。
+不要另写一套 XML。能求值的公式写入缓存 `<v>`，算不了的不写。不刷新透视，不刷新外部连接。不新建数据表公式。
 `cells[]` 出现 `dataTable` / `dataTableRef` 报 `InvalidField`。
 `cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
 `namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。
@@ -2439,7 +2439,27 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 1. 在 `/xl/workbook.xml` 的 `<calcPr>` 上设置 `fullCalcOnLoad="1"`。没有 `<calcPr>` 就建一个。其余 `calcPr` 属性保留。依据 ECMA-376 §18.2.2。
 2. 若存在 `/xl/calcChain.xml`，删除该部件、内容类型 Override、以及 workbook 关系里指向它的那条。过期计算链会让部分 Excel 版本沿用旧顺序。
 
-不在库里求值，不写新的缓存 `<v>`。
+能求值的公式写入新的缓存 `<v>`。算不了的不写新缓存，也不删掉格子上已有的 `<v>`。
+
+### 公式缓存
+
+`create` 和会改公式的 `apply` 在写完文件后求值。只写下面这些。用了别的函数、外部工作簿、数据表、图表公式、迷你图或条件格式时，该格不写新缓存。
+
+- 数字、字符串、`TRUE` / `FALSE`、错误常量
+- A1 引用、跨表引用、`表1:表2!格` 三维引用
+- `:` 区域、括号里的 `,` 并集、空格交集。空交集写入 `#NULL!`
+- 算术、比较、`&`、后缀 `%`、一元负号
+- 数组常量，例如 `{1,2,3}`
+- 函数只认 `SUM`、`ABS`、`DATE`、`NA`、`SQRT`、`HYPERLINK`、`NOW`
+- 工作簿级和表级定义名
+- 共享公式先按主格相对展开，再求值
+- 数组公式按元素铺进 `ref`
+- 结构化引用 `表[列]` 只含数据行，不含表头
+- 1900 日期系统是默认。`workbookPr` 的 `date1904="1"` 时改用 1904
+- 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
+- 屏幕上的数字格式不参与缓存。`1/3` 的 `<v>` 是完整小数
+
+`NOW()` 按求值当时的时间写缓存，打开 Excel 后会被重算。循环引用不写新缓存。
 
 ### 改动范围
 
