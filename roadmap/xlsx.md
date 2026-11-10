@@ -8,7 +8,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 永不做 🚫
 
-- Excel 公式求值、图表渲染、与 Excel 像素级一致
+- 图表渲染、与 Excel 像素级一致
 - 按列宽行高去反推 `twoCell` 的显示尺寸
 - 编辑 VML / `legacyDrawing`（批注框、旧式控件）
 - 默认把图片字节或 chart 部件塞进 inspect 树
@@ -104,7 +104,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-公式求值仍永不做。Power Query 一等公民仍不挂。
+公式求值改记长期计划 [`.plan/2026年-11月-10日-💤-xlsx公式求值对照.md`](../.plan/2026年-11月-10日-💤-xlsx公式求值对照.md)，状态 💤。挂机不要开这份，也不要把它插进待做序号。Power Query 一等公民仍不挂。
 
 第七轮。改写引用只按记号改公式文本，不求值。xlsx 这一轮的待做已经做完。
 
@@ -138,4 +138,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第五轮待做（40）已过。第六轮 41–46、C16、C15 已过。永不做的条目不算欠账。公式求值保持 🚫。46 OLE 事后改尺寸已过，Office 16.0 打开无修复。
+已过表保持 ✅。第五轮待做（40）已过。第六轮 41–46、C16、C15 已过。永不做的条目不算欠账。公式求值是长期计划，暂缓，不算本期欠账。46 OLE 事后改尺寸已过，Office 16.0 打开无修复。
