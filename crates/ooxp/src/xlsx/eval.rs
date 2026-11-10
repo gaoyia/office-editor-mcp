@@ -1,13 +1,15 @@
-//! 单元格公式缓存。只算契约「公式缓存」里列出的那一类，算不了的不写 `<v>`。
+//! 单元格公式缓存。算不了的不写 `<v>`。
+//! 另外写数据表结果、本机外部引用、图表连续区域缓存，以及只有行字段时的透视合计。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use super::a1::{self, CellRef};
 use super::formula;
 use super::inspect;
 use crate::error::{Error, ErrorKind, RelSource};
 use crate::opc::{self, Package, Relationships};
-use crate::xml::{self, Element, Node};
+use crate::xml::{self, Document, Element, Node};
 
 const DIV0: &str = "#DIV/0!";
 const VALUE: &str = "#VALUE!";
@@ -52,8 +54,17 @@ enum Value {
 enum Expr {
     Value(Value),
     Name(String),
-    TableCol { table: String, col: String },
+    TableCol {
+        table: String,
+        col: String,
+    },
     Call(String, Vec<Expr>),
+    External {
+        index: usize,
+        sheet: String,
+        r1: CellRef,
+        r2: CellRef,
+    },
     Neg(Box<Expr>),
     Pct(Box<Expr>),
     Bin(BinOp, Box<Expr>, Box<Expr>),
@@ -116,6 +127,22 @@ struct TableDef {
     data_end: u32,
 }
 
+struct ExtBook {
+    sheets: Vec<Sheet>,
+    /// 外部链 `sheetNames` 里的序号，从 0 起。文件里有、名单里没有的表不进这里。
+    sheet_ids: HashMap<String, u32>,
+}
+
+struct DataTableRec {
+    sheet: usize,
+    start: CellRef,
+    end: CellRef,
+    dt2d: bool,
+    dtr: bool,
+    r1: CellRef,
+    r2: Option<CellRef>,
+}
+
 struct Book {
     sheets: Vec<Sheet>,
     names: Vec<NameDef>,
@@ -123,6 +150,12 @@ struct Book {
     date1904: bool,
     memo: HashMap<(usize, u32, u32), MemoSlot>,
     stack: Vec<(usize, u32, u32)>,
+    overrides: HashMap<(usize, u32, u32), Scalar>,
+    cyclic: HashSet<(usize, u32, u32)>,
+    /// 下标 0 空着，`[1]` 用下标 1。
+    externals: Vec<Option<ExtBook>>,
+    /// `(链序号, sheetId, 列, 行)`。
+    ext_used: HashMap<(usize, u32, u32, u32), Scalar>,
 }
 
 enum MemoSlot {
@@ -168,18 +201,29 @@ enum Tok {
 }
 
 /// 重新打开并写入缓存。没有写出新缓存时保留原来的字节，避免无公式文件被重打包。
-pub(crate) fn fill_saved(bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
+pub(crate) fn fill_saved(bytes: Vec<u8>, base_dir: Option<&Path>) -> Result<Vec<u8>, Error> {
     let original = bytes.clone();
     let mut pkg = Package::open_bytes(bytes)?;
-    if fill_formula_caches(&mut pkg)? {
+    if fill_formula_caches(&mut pkg, base_dir)? {
         pkg.save_to_vec()
     } else {
         Ok(original)
     }
 }
 
-/// 写缓存。没有任何公式被写上缓存时返回 `false`。
-pub(crate) fn fill_formula_caches(pkg: &mut Package) -> Result<bool, Error> {
+/// 写缓存。没有任何新缓存时返回 `false`。
+pub(crate) fn fill_formula_caches(
+    pkg: &mut Package,
+    base_dir: Option<&Path>,
+) -> Result<bool, Error> {
+    fill_formula_caches_depth(pkg, base_dir, 1)
+}
+
+fn fill_formula_caches_depth(
+    pkg: &mut Package,
+    base_dir: Option<&Path>,
+    external_depth: u8,
+) -> Result<bool, Error> {
     let wb_part = opc::office_document_part(pkg)?;
     let wb_rels = Relationships::from_package(pkg, &wb_part)?;
     let wb_doc = xml::parse(pkg.get(&wb_part)?)?;
@@ -206,6 +250,12 @@ pub(crate) fn fill_formula_caches(pkg: &mut Package) -> Result<bool, Error> {
     }
     let names = load_names(&wb_doc.root);
     let tables = load_tables(pkg, &sheet_docs, &sheets)?;
+    let data_tables = load_data_tables(&sheet_docs);
+    let (externals, ext_parts) = if external_depth == 0 {
+        (vec![None], vec![String::new()])
+    } else {
+        load_externals(pkg, &wb_part, base_dir)?
+    };
     let mut book = Book {
         sheets,
         names,
@@ -213,6 +263,10 @@ pub(crate) fn fill_formula_caches(pkg: &mut Package) -> Result<bool, Error> {
         date1904,
         memo: HashMap::new(),
         stack: Vec::new(),
+        overrides: HashMap::new(),
+        cyclic: HashSet::new(),
+        externals,
+        ext_used: HashMap::new(),
     };
     let mut writes: Vec<HashMap<(u32, u32), Scalar>> = Vec::new();
     for si in 0..book.sheets.len() {
@@ -239,27 +293,66 @@ pub(crate) fn fill_formula_caches(pkg: &mut Package) -> Result<bool, Error> {
         }
         writes.push(out);
     }
-    let mut changed = false;
+    for (si, key, val) in book.eval_data_tables(&data_tables) {
+        writes[si].insert(key, val);
+    }
+    let mut cyclic_sheets = vec![HashSet::new(); writes.len()];
+    for (si, col, row) in &book.cyclic {
+        if let Some(set) = cyclic_sheets.get_mut(*si) {
+            set.insert((*col, *row));
+        }
+    }
+    let ext_used = book.ext_used.clone();
+    let mut dirty = vec![false; sheet_docs.len()];
     for (doc_i, (_part, doc)) in sheet_docs.iter_mut().enumerate() {
         let Some(data) = doc.root.child_by_local_mut("sheetData") else {
             continue;
         };
         let map = &writes[doc_i];
-        if map.is_empty() {
+        let cycles = &cyclic_sheets[doc_i];
+        if map.is_empty() && cycles.is_empty() {
             continue;
         }
         formula::for_each_cell_mut(data, |cell, el| {
-            if let Some(val) = map.get(&(cell.col, cell.row)) {
+            let key = (cell.col, cell.row);
+            if let Some(val) = map.get(&key) {
                 write_cache(el, val);
-                changed = true;
+                dirty[doc_i] = true;
+            }
+            if cycles.contains(&key) {
+                if let Some(f) = el.child_by_local_mut("f") {
+                    if f.attr("ca") != Some("1") {
+                        f.set_attr("ca", "1");
+                        dirty[doc_i] = true;
+                    }
+                }
             }
         });
     }
+    let sheet_names: Vec<String> = sheet_docs
+        .iter()
+        .enumerate()
+        .map(|(i, _)| {
+            book.sheets
+                .get(i)
+                .map(|s| s.name.clone())
+                .unwrap_or_default()
+        })
+        .collect();
+    for host in super::pivot::fill_row_sum_display(pkg, &mut sheet_docs, &sheet_names, &sst)? {
+        if let Some(flag) = dirty.get_mut(host) {
+            *flag = true;
+        }
+    }
+    let charts = refresh_chart_caches(pkg, &sheet_docs, &sheet_names, &sst)?;
+    let links = write_external_caches(pkg, &ext_parts, &ext_used)?;
+    let mut changed = charts || links || dirty.iter().any(|d| *d);
     for (i, (part, doc)) in sheet_docs.into_iter().enumerate() {
-        if writes[i].is_empty() {
+        if !dirty[i] {
             continue;
         }
         pkg.set(&part, doc.to_bytes()?)?;
+        changed = true;
     }
     Ok(changed)
 }
@@ -312,7 +405,7 @@ fn load_sheet(root: &Element, sst: &[String]) -> HashMap<(u32, u32), CellRec> {
             let kind = f.attr("t").unwrap_or("");
             let body = f.text_content().trim().trim_start_matches('=').to_string();
             if kind == "dataTable" {
-                // 数据表不求值。
+                // 结果由数据表求值另写，主格公式体是空的。
             } else if kind == "shared" && body.is_empty() {
                 if let Some(si) = f.attr("si") {
                     if let Some(group) = index.shared.get(si) {
@@ -478,8 +571,15 @@ impl Book {
                 MemoSlot::Skip => Calc::Skip,
             };
         }
+        if let Some(s) = self.overrides.get(&key) {
+            return Calc::Ready(Value::Scalar(s.clone()));
+        }
         if self.stack.contains(&key) {
-            return Calc::Skip;
+            for frame in &self.stack {
+                self.cyclic.insert(*frame);
+            }
+            self.cyclic.insert(key);
+            return Calc::Ready(Value::Scalar(Scalar::Err(VALUE)));
         }
         let rec = match self
             .sheets
@@ -637,6 +737,187 @@ impl Book {
         rows
     }
 
+    fn eval_data_tables(&mut self, tables: &[DataTableRec]) -> Vec<(usize, (u32, u32), Scalar)> {
+        let mut out = Vec::new();
+        for table in tables {
+            let (r1, r2) = ordered(table.start, table.end);
+            if table.dt2d {
+                let Some(col_input) = table.r2 else {
+                    continue;
+                };
+                let Some(formula) = outside_corner(r1) else {
+                    continue;
+                };
+                if !self.has_formula(table.sheet, formula) {
+                    continue;
+                }
+                for row in r1.row..=r2.row {
+                    for col in r1.col..=r2.col {
+                        let above = self.plain(
+                            table.sheet,
+                            CellRef {
+                                col,
+                                row: r1.row - 1,
+                            },
+                        );
+                        let left = self.plain(
+                            table.sheet,
+                            CellRef {
+                                col: r1.col - 1,
+                                row,
+                            },
+                        );
+                        if let Some(val) = self.subst_eval(
+                            table.sheet,
+                            formula,
+                            &[(table.r1, above), (col_input, left)],
+                        ) {
+                            out.push((table.sheet, (col, row), val));
+                        }
+                    }
+                }
+            } else if table.dtr {
+                if r1.col == 1 || r1.row == 1 {
+                    continue;
+                }
+                for row in r1.row..=r2.row {
+                    let formula = CellRef {
+                        col: r1.col - 1,
+                        row,
+                    };
+                    if !self.has_formula(table.sheet, formula) {
+                        continue;
+                    }
+                    for col in r1.col..=r2.col {
+                        let above = self.plain(
+                            table.sheet,
+                            CellRef {
+                                col,
+                                row: r1.row - 1,
+                            },
+                        );
+                        if let Some(val) =
+                            self.subst_eval(table.sheet, formula, &[(table.r1, above)])
+                        {
+                            out.push((table.sheet, (col, row), val));
+                        }
+                    }
+                }
+            } else {
+                if r1.col == 1 || r1.row == 1 {
+                    continue;
+                }
+                for col in r1.col..=r2.col {
+                    let formula = CellRef {
+                        col,
+                        row: r1.row - 1,
+                    };
+                    if !self.has_formula(table.sheet, formula) {
+                        continue;
+                    }
+                    for row in r1.row..=r2.row {
+                        let left = self.plain(
+                            table.sheet,
+                            CellRef {
+                                col: r1.col - 1,
+                                row,
+                            },
+                        );
+                        if let Some(val) =
+                            self.subst_eval(table.sheet, formula, &[(table.r1, left)])
+                        {
+                            out.push((table.sheet, (col, row), val));
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    fn has_formula(&self, sheet: usize, cell: CellRef) -> bool {
+        self.sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(cell.col, cell.row)))
+            .and_then(|c| c.formula.as_ref())
+            .is_some()
+    }
+
+    fn plain(&mut self, sheet: usize, cell: CellRef) -> Scalar {
+        match self.scalar_at(sheet, cell) {
+            Calc::Ready(Value::Scalar(s)) => s,
+            _ => Scalar::Num(0.0),
+        }
+    }
+
+    fn subst_eval(
+        &mut self,
+        sheet: usize,
+        formula: CellRef,
+        overs: &[(CellRef, Scalar)],
+    ) -> Option<Scalar> {
+        let saved_memo = std::mem::take(&mut self.memo);
+        let saved_over = std::mem::take(&mut self.overrides);
+        for (cell, val) in overs {
+            self.overrides
+                .insert((sheet, cell.col, cell.row), val.clone());
+        }
+        let got = match self.scalar_at(sheet, formula) {
+            Calc::Ready(Value::Scalar(s)) => Some(s),
+            _ => None,
+        };
+        self.memo = saved_memo;
+        self.overrides = saved_over;
+        got
+    }
+
+    fn external_value(
+        &mut self,
+        index: usize,
+        sheet: &str,
+        r1: CellRef,
+        r2: CellRef,
+    ) -> Option<Value> {
+        let (a, b) = ordered(r1, r2);
+        let (sheet_id, grid) = {
+            let book = self.externals.get(index)?.as_ref()?;
+            let si = book
+                .sheets
+                .iter()
+                .position(|s| s.name.eq_ignore_ascii_case(sheet))?;
+            let sheet_id = book.sheet_ids.get(&sheet.to_ascii_lowercase()).copied();
+            let mut grid = Vec::new();
+            for row in a.row..=b.row {
+                let mut line = Vec::new();
+                for col in a.col..=b.col {
+                    let scalar = book.sheets[si]
+                        .cells
+                        .get(&(col, row))
+                        .and_then(|c| c.cached.clone())
+                        .unwrap_or(Scalar::Num(0.0));
+                    line.push(scalar);
+                }
+                grid.push(line);
+            }
+            (sheet_id, grid)
+        };
+        if let Some(id) = sheet_id {
+            for (row_i, line) in grid.iter().enumerate() {
+                for (col_i, scalar) in line.iter().enumerate() {
+                    self.ext_used.insert(
+                        (index, id, a.col + col_i as u32, a.row + row_i as u32),
+                        scalar.clone(),
+                    );
+                }
+            }
+        }
+        if grid.len() == 1 && grid[0].len() == 1 {
+            Some(Value::Scalar(grid[0][0].clone()))
+        } else {
+            Some(Value::Grid(grid))
+        }
+    }
+
     fn cell_scalar(&mut self, sheet: usize, here: CellRef) -> Scalar {
         match self.scalar_at(sheet, here) {
             Calc::Ready(Value::Scalar(s)) => s,
@@ -648,6 +929,15 @@ impl Book {
     fn eval_expr(&mut self, expr: &Expr, sheet: usize, here: CellRef, mode: Mode) -> Calc {
         match expr {
             Expr::Value(v) => Calc::Ready(v.clone()),
+            Expr::External {
+                index,
+                sheet,
+                r1,
+                r2,
+            } => match self.external_value(*index, sheet, *r1, *r2) {
+                Some(v) => Calc::Ready(v),
+                None => Calc::Skip,
+            },
             Expr::Name(name) => self.eval_name(name, sheet, here, mode),
             Expr::TableCol { table, col } => Calc::Ready(self.table_area(table, col)),
             Expr::Neg(inner) => self.map_scalar(inner, sheet, here, mode, |s| match s {
@@ -1443,13 +1733,73 @@ fn parse_primary(lex: &mut Lex<'_>, union_ok: bool) -> Option<Expr> {
             Some(inner)
         }
         Some(Tok::LBrace) => parse_array(lex),
+        Some(Tok::LBrack) => parse_external_ref(lex),
         Some(Tok::Ident(id)) => parse_ident(lex, id),
         _ => None,
     }
 }
 
+fn parse_external_ref(lex: &mut Lex<'_>) -> Option<Expr> {
+    lex.bump();
+    let Tok::Num(n) = lex.peek()? else {
+        return None;
+    };
+    let index = n as usize;
+    if index == 0 || (n - index as f64).abs() > 0.0 {
+        return None;
+    }
+    lex.bump();
+    if !matches!(lex.peek(), Some(Tok::RBrack)) {
+        return None;
+    }
+    lex.bump();
+    let Tok::Ident(sheet) = lex.peek()? else {
+        return None;
+    };
+    let sheet = sheet.clone();
+    lex.bump();
+    if !matches!(lex.peek(), Some(Tok::Bang)) {
+        return None;
+    }
+    lex.bump();
+    let (r1, r2) = parse_cell_span(lex, None)?;
+    Some(Expr::External {
+        index,
+        sheet,
+        r1,
+        r2,
+    })
+}
+
+fn split_external_label(id: &str) -> Option<(usize, String)> {
+    let rest = id.strip_prefix('[')?;
+    let end = rest.find(']')?;
+    let index: usize = rest[..end].parse().ok()?;
+    if index == 0 {
+        return None;
+    }
+    let sheet = rest[end + 1..].trim();
+    if sheet.is_empty() {
+        return None;
+    }
+    Some((index, sheet.to_string()))
+}
+
 fn parse_ident(lex: &mut Lex<'_>, id: String) -> Option<Expr> {
     lex.bump();
+    if let Some((index, sheet)) = split_external_label(&id) {
+        if !matches!(lex.peek(), Some(Tok::Bang)) {
+            return None;
+        }
+        lex.bump();
+        let (r1, r2) = parse_cell_span(lex, None)?;
+        return Some(Expr::External {
+            index,
+            sheet,
+            r1,
+            r2,
+        });
+    }
     if matches!(lex.peek(), Some(Tok::LParen)) {
         lex.bump();
         let mut args = Vec::new();
@@ -1842,6 +2192,436 @@ impl Clone for Lex<'_> {
             space: self.space,
         }
     }
+}
+
+fn outside_corner(start: CellRef) -> Option<CellRef> {
+    if start.col <= 1 || start.row <= 1 {
+        None
+    } else {
+        Some(CellRef {
+            col: start.col - 1,
+            row: start.row - 1,
+        })
+    }
+}
+
+fn load_data_tables(docs: &[(String, Document)]) -> Vec<DataTableRec> {
+    let mut out = Vec::new();
+    for (si, (_, doc)) in docs.iter().enumerate() {
+        let Some(data) = doc.root.child_by_local("sheetData") else {
+            continue;
+        };
+        formula::for_each_cell(data, |here, el| {
+            let Some(f) = el.child_by_local("f") else {
+                return;
+            };
+            if f.attr("t") != Some("dataTable") {
+                return;
+            }
+            let Some((start, end)) = f.attr("ref").and_then(|r| a1::parse_range(r).ok()) else {
+                return;
+            };
+            if here != start {
+                return;
+            }
+            let Some(r1) = f.attr("r1").and_then(|s| a1::parse_cell(s).ok()) else {
+                return;
+            };
+            out.push(DataTableRec {
+                sheet: si,
+                start,
+                end,
+                dt2d: formula::xml_true(f.attr("dt2D")),
+                dtr: formula::xml_true(f.attr("dtr")),
+                r1,
+                r2: f.attr("r2").and_then(|s| a1::parse_cell(s).ok()),
+            });
+        });
+    }
+    out
+}
+
+fn load_externals(
+    pkg: &Package,
+    wb_part: &str,
+    base_dir: Option<&Path>,
+) -> Result<(Vec<Option<ExtBook>>, Vec<String>), Error> {
+    let links = super::extlink::list_books(pkg, wb_part)?;
+    let mut books = vec![None];
+    let mut parts = vec![String::new()];
+    for link in links {
+        parts.push(link.part.clone());
+        books.push(load_one_external(&link, base_dir));
+    }
+    Ok((books, parts))
+}
+
+fn load_one_external(
+    link: &super::extlink::ExtLinkInfo,
+    base_dir: Option<&Path>,
+) -> Option<ExtBook> {
+    let path = resolve_ext_path(&link.path, base_dir)?;
+    let bytes = read_ext_file(&path)?;
+    let mut pkg = Package::open_bytes(bytes).ok()?;
+    let _ = fill_formula_caches_depth(&mut pkg, path.parent(), 0);
+    let sheets = sheets_of(&pkg).ok()?;
+    let mut sheet_ids = HashMap::new();
+    for (i, name) in link.sheets.iter().enumerate() {
+        sheet_ids.insert(name.to_ascii_lowercase(), i as u32);
+    }
+    Some(ExtBook { sheets, sheet_ids })
+}
+
+fn sheets_of(pkg: &Package) -> Result<Vec<Sheet>, Error> {
+    let wb_part = opc::office_document_part(pkg)?;
+    let wb_rels = Relationships::from_package(pkg, &wb_part)?;
+    let wb_doc = xml::parse(pkg.get(&wb_part)?)?;
+    let sst = inspect::load_shared_strings(pkg, &wb_part, &wb_rels)?;
+    let listed = sheet_list(&wb_doc.root, &wb_rels, &wb_part)?;
+    let mut sheets = Vec::new();
+    for (name, part, kind) in &listed {
+        if *kind != "worksheet" {
+            continue;
+        }
+        let doc = xml::parse(pkg.get(part)?)?;
+        sheets.push(Sheet {
+            name: name.clone(),
+            cells: load_sheet(&doc.root, &sst),
+        });
+    }
+    Ok(sheets)
+}
+
+fn resolve_ext_path(target: &str, base_dir: Option<&Path>) -> Option<PathBuf> {
+    let t = target.trim();
+    if t.is_empty() {
+        return None;
+    }
+    let lower = t.to_ascii_lowercase();
+    if lower.starts_with("http:") || lower.starts_with("https:") {
+        return None;
+    }
+    let decoded = if lower.starts_with("file:///") {
+        percent_decode(&t["file:///".len()..])
+    } else {
+        percent_decode(t)
+    };
+    let path = PathBuf::from(decoded);
+    if path.is_absolute() {
+        Some(path)
+    } else {
+        base_dir.map(|dir| dir.join(path))
+    }
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(v) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn read_ext_file(path: &Path) -> Option<Vec<u8>> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::fs::read(path).ok()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = path;
+        None
+    }
+}
+
+fn write_external_caches(
+    pkg: &mut Package,
+    parts: &[String],
+    used: &HashMap<(usize, u32, u32, u32), Scalar>,
+) -> Result<bool, Error> {
+    let mut changed = false;
+    let indexes: HashSet<usize> = used.keys().map(|(index, _, _, _)| *index).collect();
+    for index in indexes {
+        let Some(part) = parts.get(index) else {
+            continue;
+        };
+        if part.is_empty() || !pkg.contains(part) {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(part)?)?;
+        let Some(book) = doc.root.child_by_local_mut("externalBook") else {
+            continue;
+        };
+        let Some(set) = book.child_by_local_mut("sheetDataSet") else {
+            continue;
+        };
+        let mut touched = false;
+        for data in set.children.iter_mut() {
+            let Node::Element(sheet) = data else {
+                continue;
+            };
+            if sheet.local_name() != "sheetData" {
+                continue;
+            }
+            let Some(id) = sheet.attr("sheetId").and_then(|s| s.parse::<u32>().ok()) else {
+                continue;
+            };
+            let mut cells: Vec<((u32, u32), &Scalar)> = used
+                .iter()
+                .filter(|(key, _)| key.0 == index && key.1 == id)
+                .map(|(key, val)| ((key.2, key.3), val))
+                .collect();
+            cells.sort_by_key(|(addr, _)| (addr.1, addr.0));
+            if cells.is_empty() {
+                continue;
+            }
+            if write_external_sheet(sheet, &cells) {
+                touched = true;
+            }
+        }
+        if touched {
+            pkg.set(part, doc.to_bytes()?)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn write_external_sheet(sheet: &mut Element, cells: &[((u32, u32), &Scalar)]) -> bool {
+    let mut changed = false;
+    for ((col, row), val) in cells {
+        let addr = a1::format_cell(*col, *row);
+        let row_s = row.to_string();
+        let has_row = sheet.children.iter().any(|child| match child {
+            Node::Element(el) => el.local_name() == "row" && el.attr("r") == Some(row_s.as_str()),
+            _ => false,
+        });
+        if !has_row {
+            let mut el = Element::new("row");
+            el.set_attr("r", &row_s);
+            sheet.push_element(el);
+            changed = true;
+        }
+        let row_el = sheet
+            .children
+            .iter_mut()
+            .find_map(|child| match child {
+                Node::Element(el)
+                    if el.local_name() == "row" && el.attr("r") == Some(row_s.as_str()) =>
+                {
+                    Some(el)
+                }
+                _ => None,
+            })
+            .expect("刚确保的 row");
+        let cell = if let Some(found) = row_el.children.iter_mut().find_map(|child| match child {
+            Node::Element(el)
+                if el.local_name() == "cell" && el.attr("r") == Some(addr.as_str()) =>
+            {
+                Some(el)
+            }
+            _ => None,
+        }) {
+            found
+        } else {
+            let mut el = Element::new("cell");
+            el.set_attr("r", addr);
+            row_el.push_element(el);
+            changed = true;
+            row_el
+                .children
+                .iter_mut()
+                .rev()
+                .find_map(|child| match child {
+                    Node::Element(el) => Some(el),
+                    _ => None,
+                })
+                .expect("刚插入的 cell")
+        };
+        changed |= write_external_cell(cell, val);
+    }
+    changed
+}
+
+fn write_external_cell(cell: &mut Element, val: &Scalar) -> bool {
+    let (ty, text) = match val {
+        Scalar::Num(n) => (None, fmt_num(*n)),
+        Scalar::Bool(b) => (
+            Some("b"),
+            if *b { "1".to_string() } else { "0".to_string() },
+        ),
+        Scalar::Text(s) => (Some("str"), s.clone()),
+        Scalar::Err(e) => (Some("e"), (*e).to_string()),
+    };
+    let same_ty = cell.attr("t") == ty;
+    let same_v = cell.child_by_local("v").map(|v| v.text_content()) == Some(text.clone());
+    if same_ty && same_v {
+        return false;
+    }
+    match ty {
+        Some(t) => cell.set_attr("t", t),
+        None => cell.remove_attr("t"),
+    }
+    cell.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "v",
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+    let mut v = Element::new("v");
+    v.set_text(text);
+    cell.push_element(v);
+    true
+}
+
+fn refresh_chart_caches(
+    pkg: &mut Package,
+    sheet_docs: &[(String, Document)],
+    names: &[String],
+    sst: &[String],
+) -> Result<bool, Error> {
+    let mut changed = false;
+    for part in pkg.part_names() {
+        if !part.starts_with("/xl/charts/chart") || !part.ends_with(".xml") {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        if refresh_chart_element(&mut doc.root, sheet_docs, names, sst) {
+            pkg.set(&part, doc.to_bytes()?)?;
+            changed = true;
+        }
+    }
+    Ok(changed)
+}
+
+fn refresh_chart_element(
+    el: &mut Element,
+    sheet_docs: &[(String, Document)],
+    names: &[String],
+    sst: &[String],
+) -> bool {
+    let mut changed = false;
+    if let Some(formula) = el.child_by_local("f").map(|f| f.text_content()) {
+        if let Some((si, start, end)) = parse_chart_ref(&formula, names) {
+            if let Some(values) = chart_values(&sheet_docs[si].1.root, start, end, sst) {
+                let cache = if el.child_by_local("numCache").is_some() {
+                    el.child_by_local_mut("numCache")
+                } else {
+                    el.child_by_local_mut("strCache")
+                };
+                if let Some(cache) = cache {
+                    changed |= replace_cache_pts(cache, &values);
+                }
+            }
+        }
+    }
+    for child in &mut el.children {
+        if let Node::Element(inner) = child {
+            changed |= refresh_chart_element(inner, sheet_docs, names, sst);
+        }
+    }
+    changed
+}
+
+fn parse_chart_ref(formula: &str, names: &[String]) -> Option<(usize, CellRef, CellRef)> {
+    let text = formula.trim().trim_start_matches('=');
+    let (sheet, range) = text.rsplit_once('!')?;
+    if sheet.contains(':') || sheet.contains('[') {
+        return None;
+    }
+    let sheet = sheet.trim().trim_matches('\'').replace("''", "'");
+    let si = names
+        .iter()
+        .position(|name| name.eq_ignore_ascii_case(&sheet))?;
+    let range = range.replace('$', "");
+    let (start, end) = a1::parse_range(&range).ok()?;
+    Some((si, start, end))
+}
+
+fn chart_values(
+    root: &Element,
+    start: CellRef,
+    end: CellRef,
+    sst: &[String],
+) -> Option<Vec<Scalar>> {
+    let (r1, r2) = ordered(start, end);
+    let data = root.child_by_local("sheetData");
+    let mut out = Vec::new();
+    let mut any = false;
+    for row in r1.row..=r2.row {
+        for col in r1.col..=r2.col {
+            let cell = CellRef { col, row };
+            if let Some(scalar) = data
+                .and_then(|sheet| super::cell::find_cell(sheet, cell))
+                .and_then(|el| read_cached(el, sst))
+            {
+                any = true;
+                out.push(scalar);
+            } else {
+                out.push(Scalar::Num(0.0));
+            }
+        }
+    }
+    if any {
+        Some(out)
+    } else {
+        None
+    }
+}
+
+fn cache_text(val: &Scalar) -> String {
+    match val {
+        Scalar::Num(n) => fmt_num(*n),
+        Scalar::Bool(b) => {
+            if *b {
+                "1".to_string()
+            } else {
+                "0".to_string()
+            }
+        }
+        Scalar::Text(s) => s.clone(),
+        Scalar::Err(e) => (*e).to_string(),
+    }
+}
+
+fn replace_cache_pts(cache: &mut Element, values: &[Scalar]) -> bool {
+    let existing: Vec<String> = cache
+        .children_by_local("pt")
+        .into_iter()
+        .map(|pt| {
+            pt.child_by_local("v")
+                .map(|v| v.text_content())
+                .unwrap_or_default()
+        })
+        .collect();
+    let next_text: Vec<String> = values.iter().map(cache_text).collect();
+    if existing == next_text {
+        return false;
+    }
+    cache.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "pt" && e.local_name() != "ptCount",
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+    let mut count = Element::new("c:ptCount");
+    count.set_attr("val", values.len().to_string());
+    cache.push_element(count);
+    for (i, text) in next_text.into_iter().enumerate() {
+        let mut v = Element::new("c:v");
+        v.set_text(text);
+        let mut pt = Element::new("c:pt");
+        pt.set_attr("idx", i.to_string());
+        pt.push_element(v);
+        cache.push_element(pt);
+    }
+    true
 }
 
 #[cfg(test)]

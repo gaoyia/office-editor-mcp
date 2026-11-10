@@ -282,10 +282,11 @@ fn create_bytes(req: &Request) -> Result<Vec<u8>, Error> {
                 .extension()
                 .and_then(|e| e.to_str())
                 .is_some_and(|e| e.eq_ignore_ascii_case("xlsm"));
+            let base = std::path::Path::new(path).parent();
             if xlsm {
-                xlsx::create_with_workbook_ct(workbook, xlsx::CT_WORKBOOK_MACRO)
+                xlsx::create_in(workbook, xlsx::CT_WORKBOOK_MACRO, base)
             } else {
-                xlsx::create(workbook)
+                xlsx::create_in(workbook, xlsx::CT_WORKBOOK, base)
             }
         },
         || {
@@ -339,7 +340,13 @@ fn apply_bytes(req: &Request, bytes: &[u8]) -> Result<(Vec<u8>, usize), Error> {
         fmt,
         || {
             let parsed = xlsx::parse_ops(ops)?;
-            Ok((xlsx::apply(bytes, &parsed)?, parsed.len()))
+            let base = req
+                .obj
+                .get("output")
+                .and_then(Value::as_str)
+                .or_else(|| req.obj.get("path").and_then(Value::as_str))
+                .and_then(|p| std::path::Path::new(p).parent());
+            Ok((xlsx::apply_in(bytes, &parsed, base)?, parsed.len()))
         },
         || {
             let parsed = docx::parse_ops(ops)?;

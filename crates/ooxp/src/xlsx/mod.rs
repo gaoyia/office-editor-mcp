@@ -44,8 +44,12 @@ mod theme;
 mod validation;
 mod view;
 
+pub(crate) use apply::apply_in;
 pub use apply::{apply, dry_run};
-pub use create::{create, create_with_workbook_ct};
+pub use create::create;
+pub(crate) use create::create_in;
+#[allow(unused_imports)]
+pub use create::create_with_workbook_ct;
 pub use inspect::inspect;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};

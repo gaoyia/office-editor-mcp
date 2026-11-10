@@ -1,4 +1,5 @@
-//! 工作表透视表：inspect 名单，apply 写缓存与透视表部件。不在库里聚合。
+//! 工作表透视表：inspect 名单，apply 写缓存与透视表部件。
+//! 只有行字段和求和时，求值把合计写进 `sheetData`。
 
 use serde_json::{json, Map, Value};
 
@@ -1616,6 +1617,271 @@ fn cell_val(root: &Element, cell: CellRef, sst: &[String]) -> CacheVal {
         }
     }
     CacheVal::Empty
+}
+
+struct RowSumPlan {
+    host: usize,
+    origin: CellRef,
+    row_name: String,
+    value_names: Vec<String>,
+    groups: Vec<(String, Vec<f64>)>,
+}
+
+/// 只有一个行字段、若干求和、没有列字段和筛选时，把表头、各组和总计写进工作表。
+pub(crate) fn fill_row_sum_display(
+    pkg: &Package,
+    sheet_docs: &mut [(String, Document)],
+    names: &[String],
+    sst: &[String],
+) -> Result<Vec<usize>, Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let caches = load_caches(pkg, &wb_part)?;
+    let mut plans = Vec::new();
+    for (host_i, (part, _)) in sheet_docs.iter().enumerate() {
+        let rels = Relationships::from_package(pkg, part)?;
+        for rel in &rels.rels {
+            if !rel.rel_type.ends_with("/pivotTable") {
+                continue;
+            }
+            let Ok(target) = resolve_rel_target(part, &rel.target) else {
+                continue;
+            };
+            let Ok(bytes) = pkg.get(&target) else {
+                continue;
+            };
+            let Ok(table) = xml::parse(bytes) else {
+                continue;
+            };
+            if let Some(plan) = plan_row_sum(&table.root, host_i, &caches, sheet_docs, names, sst) {
+                plans.push(plan);
+            }
+        }
+    }
+    let mut hosts = Vec::new();
+    for plan in plans {
+        let host_i = plan.host;
+        let host = &mut sheet_docs[host_i].1.root;
+        if paint_row_sum(host, &plan) {
+            hosts.push(host_i);
+        }
+    }
+    Ok(hosts)
+}
+
+fn plan_row_sum(
+    root: &Element,
+    host: usize,
+    caches: &[(u32, CacheInfo)],
+    sheet_docs: &[(String, Document)],
+    names: &[String],
+    sst: &[String],
+) -> Option<RowSumPlan> {
+    if root
+        .child_by_local("pageFields")
+        .is_some_and(|p| !p.children_by_local("pageField").is_empty())
+    {
+        return None;
+    }
+    if root.child_by_local("colFields").is_some_and(|p| {
+        p.children_by_local("field")
+            .iter()
+            .any(|f| f.attr("x") != Some("-2"))
+    }) {
+        return None;
+    }
+    let row_fields = root
+        .child_by_local("rowFields")
+        .map(|p| p.children_by_local("field"))
+        .unwrap_or_default();
+    if row_fields.len() != 1 {
+        return None;
+    }
+    let row_idx = row_fields[0]
+        .attr("x")
+        .and_then(|s| s.parse::<usize>().ok())?;
+    let data_fields = root
+        .child_by_local("dataFields")
+        .map(|p| p.children_by_local("dataField"))
+        .unwrap_or_default();
+    if data_fields.is_empty() {
+        return None;
+    }
+    let mut value_idxs = Vec::new();
+    let mut value_names = Vec::new();
+    for field in &data_fields {
+        if let Some(sub) = field.attr("subtotal") {
+            if !sub.eq_ignore_ascii_case("sum") {
+                return None;
+            }
+        }
+        let idx = field.attr("fld").and_then(|s| s.parse::<usize>().ok())?;
+        value_idxs.push(idx);
+        value_names.push(field.attr("name").unwrap_or("").to_string());
+    }
+    let cache_id = root.attr("cacheId").and_then(|s| s.parse::<u32>().ok())?;
+    let cache = caches
+        .iter()
+        .find(|(id, _)| *id == cache_id)
+        .map(|(_, c)| c)?;
+    let (src_sheet, src_ref) = cache.source.as_ref()?;
+    let src_i = names
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case(src_sheet))?;
+    let (start, end) = a1::parse_range(src_ref).ok()?;
+    if row_idx >= cache.fields.len() || value_idxs.iter().any(|i| *i >= cache.fields.len()) {
+        return None;
+    }
+    let (_headers, records) = read_source(&sheet_docs[src_i].1.root, start, end, sst);
+    let mut groups: Vec<(String, Vec<f64>)> = Vec::new();
+    for rec in &records {
+        if row_idx >= rec.len() || value_idxs.iter().any(|i| *i >= rec.len()) {
+            continue;
+        }
+        let label = cache_label(&rec[row_idx]);
+        let nums: Vec<f64> = value_idxs.iter().map(|i| cache_num(&rec[*i])).collect();
+        if let Some(found) = groups.iter_mut().find(|g| g.0 == label) {
+            for (slot, n) in found.1.iter_mut().zip(nums) {
+                *slot += n;
+            }
+        } else {
+            groups.push((label, nums));
+        }
+    }
+    let loc = root
+        .child_by_local("location")
+        .and_then(|l| l.attr("ref"))?;
+    let (origin, _) = a1::parse_range(loc).ok()?;
+    let row_name = cache.fields[row_idx].clone();
+    Some(RowSumPlan {
+        host,
+        origin,
+        row_name,
+        value_names,
+        groups,
+    })
+}
+
+fn paint_row_sum(host: &mut Element, plan: &RowSumPlan) -> bool {
+    let origin = plan.origin;
+    let mut changed = put_text(host, origin, &plan.row_name);
+    for (i, name) in plan.value_names.iter().enumerate() {
+        let cell = CellRef {
+            col: origin.col + 1 + i as u32,
+            row: origin.row,
+        };
+        changed |= put_text(host, cell, name);
+    }
+    let mut totals = vec![0.0; plan.value_names.len()];
+    for (offset, (label, nums)) in plan.groups.iter().enumerate() {
+        let row = origin.row + 1 + offset as u32;
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col,
+                row,
+            },
+            label,
+        );
+        for (i, n) in nums.iter().enumerate() {
+            totals[i] += n;
+            changed |= put_number(
+                host,
+                CellRef {
+                    col: origin.col + 1 + i as u32,
+                    row,
+                },
+                *n,
+            );
+        }
+    }
+    let total_row = origin.row + 1 + plan.groups.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: total_row,
+        },
+        "总计",
+    );
+    for (i, n) in totals.iter().enumerate() {
+        changed |= put_number(
+            host,
+            CellRef {
+                col: origin.col + 1 + i as u32,
+                row: total_row,
+            },
+            *n,
+        );
+    }
+    changed
+}
+
+fn cache_label(v: &CacheVal) -> String {
+    match v {
+        CacheVal::Text(s) | CacheVal::Number(s) => s.clone(),
+        CacheVal::Bool(true) => "TRUE".into(),
+        CacheVal::Bool(false) => "FALSE".into(),
+        CacheVal::Empty => String::new(),
+    }
+}
+
+fn cache_num(v: &CacheVal) -> f64 {
+    match v {
+        CacheVal::Number(s) => s.parse().unwrap_or(0.0),
+        _ => 0.0,
+    }
+}
+
+fn put_number(root: &mut Element, cell: CellRef, n: f64) -> bool {
+    let text = if (n - n.round()).abs() < 1e-9 && n.abs() < 1e15 {
+        format!("{}", n.round() as i64)
+    } else {
+        format!("{n}")
+    };
+    let sheet_data = super::cell::ensure_sheet_data(root);
+    let c = super::cell::ensure_cell(sheet_data, cell);
+    let same = c.attr("t").is_none()
+        && c.child_by_local("f").is_none()
+        && c.child_by_local("v").map(|v| v.text_content()) == Some(text.clone());
+    if same {
+        return false;
+    }
+    c.remove_attr("t");
+    c.children.retain(|n| match n {
+        Node::Element(e) => !matches!(e.local_name(), "v" | "is" | "f"),
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+    let mut v = Element::new("v");
+    v.set_text(text);
+    c.push_element(v);
+    true
+}
+
+fn put_text(root: &mut Element, cell: CellRef, text: &str) -> bool {
+    let sheet_data = super::cell::ensure_sheet_data(root);
+    let c = super::cell::ensure_cell(sheet_data, cell);
+    let cur = if c.attr("t") == Some("inlineStr") {
+        c.child_by_local("is").map(|is| is.text_content())
+    } else {
+        None
+    };
+    if cur.as_deref() == Some(text) && c.child_by_local("f").is_none() {
+        return false;
+    }
+    c.set_attr("t", "inlineStr");
+    c.children.retain(|n| match n {
+        Node::Element(e) => !matches!(e.local_name(), "v" | "is" | "f"),
+        Node::Text(_) | Node::Raw(_) => true,
+    });
+    let mut t = Element::new("t");
+    if text.starts_with(' ') || text.ends_with(' ') || text.contains('\n') {
+        t.set_attr("xml:space", "preserve");
+    }
+    t.set_text(text);
+    let mut inline = Element::new("is");
+    inline.push_element(t);
+    c.push_element(inline);
+    true
 }
 
 fn bad_field(field: &str, op_index: usize) -> Error {

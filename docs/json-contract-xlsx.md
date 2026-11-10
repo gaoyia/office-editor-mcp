@@ -400,7 +400,7 @@ pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映
 `insertPivotTable` 的 `id` 必须是工作表 id `sheet:{name}`。`setPivotTable` / `deletePivotTable` 的 `id` 必须是透视表 id。
 对单元格 id、图 id、数据验证 id、条件格式 id、表格 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。
 只读写工作表源（`cacheSource/@type="worksheet"`）。OLAP、外部连接与 consolidation 的缓存不进树、不接受 apply，原样留下。
-库按源格子抄缓存记录，并标 `refreshOnLoad`，不在库里聚合，也不把合计写进 `sheetData`。透视图表改数仍按已有 `flags.pivot` 拒绝。
+库按源格子抄缓存记录，并标 `refreshOnLoad`。只有行字段和求和时，求值另把合计写进 `sheetData`。其它形状不聚合。透视图表改数仍按已有 `flags.pivot` 拒绝。
 
 定义名是 workbook `<definedNames>/<definedName>`（ECMA-376 §18.2.5）。`{n}` 从 1 起，按该元素的文档顺序。
 增删之后旧的 `name:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 编树 id：同一工作簿里表级同名可以并存。
@@ -417,7 +417,7 @@ create 可写连接。不向数据源发请求，不把查询结果写进 `sheet
 按 `/xl/workbook.xml` 里 `<externalReferences>/<externalReference>` 的文档顺序（ECMA-376 §18.2.8 / §18.14）。
 与单元格公式里的 `[n]` 同一套下标。增删之后旧的 `extlink:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用关系 `r:id` 或目标文件名编树 id。
 `insertExternalLink` 的 `id` 必须是 `xlsx:workbook`。`setExternalLink` / `deleteExternalLink` 的 `id` 必须是 `extlink:{n}`。
-对不上的 id 形态报 `InvalidId`。create 可写外部引用。不打开目标文件，不求值。DDE / OLE 外部链只读进树，不接受改路径。
+对不上的 id 形态报 `InvalidId`。create 可写外部引用。求值时才打开本机目标文件。DDE / OLE 外部链只读进树，不接受改路径。
 不要和 `connections.xml` 混用。
 
 自定义视图挂在工作簿上。`{n}` 从 1 起，按 `<customWorkbookView>` 文档顺序（ECMA-376 §18.2.3 / §18.2.4）。
@@ -1276,7 +1276,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 - 数据表公式（`<f t="dataTable"`，§18.3.1.40）：主格带 `"dataTable": true` 与 `"dataTableRef"`（取 `f/@ref`，规范化成 `A1` 或 `A1:B2`；没有 `ref` 则当作该格自己）。
   `<f>` 正文为空时，`formula` 按 Excel 16.0 公式栏合成：列输入 `=TABLE(,r1)`，行输入 `=TABLE(r1,)`，二维 `=TABLE(r1,r2)`。
   `r1` / `r2` 能解析成 A1 的写成无 `$` 的格子，解析不了的原样留下。正文非空时仍报正文（由库补 `=`），不覆盖合成。
-  落在该 `ref` 内、自己没有公式的格子带 `"dataTable": true`，`formula` 为 `null`。库不求值。
+  落在该 `ref` 内、自己没有公式的格子带 `"dataTable": true`，`formula` 为 `null`。结果格的 `value` 来自求出的缓存。
 - 内联字符串（`t="inlineStr"`）和共享字符串（`t="s"`）在树上都是 `type: "text"`，`value` 为拼接后的可见纯文本，不含 run 级样式。
   `t="s"` 的 `<v>` 必须是共享字符串表里的合法非负整数索引。越界或无法解析报 `XmlBroken`，不要当成空串。
 - 单元格字段顺序：`id`、`ref`、`type`、`value`、`formula`，然后始终跟 `numFmt`，有非默认字体 / 填充 / 边框 / 对齐时再跟 `font`、`fill`、`border`、`align`，
@@ -1491,7 +1491,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 带第五轮命名样式与批注回复的示例见 `docs/examples/xlsx-create-round5.json`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。
-能求值的公式写入缓存 `<v>`。算不了的公式格仍不写 `<v>`。两种都在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时再算一遍。
+能求值的公式、数据表和本机外部引用写入缓存 `<v>`。算不了的公式格仍不写 `<v>`。两种都在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时再算一遍。
 
 文本写入共享字符串表（`t="s"`），这是 Office 新建文件的常见写法。每个文本值必须先进入该表再写索引；表里找不到对应项时 create 失败，不许退回索引 0。布尔写成 `t="b"`。数字不写 `t`（默认为 `n`）。
 
@@ -1519,7 +1519,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组 / 数据表公式，再列宽行高隐藏与合并，
 再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
-不要另写一套 XML。能求值的公式写入缓存 `<v>`，算不了的不写。不刷新透视，不刷新外部连接。数据表可以新建，但不求值。
+不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式和数据验证的公式仍不求值。只含行字段与求和的透视表会把合计写进 `sheetData`。不刷新外部连接。
 `cells[]` 出现 `dataTable` 报 `InvalidField`。`dataTableRef` 与 `formula` 一起用，规则与 `setCell` 相同。
 `cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
 `namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。
@@ -1587,7 +1587,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 列输入（`dt2D` 为假且 `dtr` 为假）必须是 `=TABLE(,格子)`；行输入（`dtr` 为真且 `dt2D` 为假）必须是 `=TABLE(格子,)`；二维（`dt2D` 为真）必须是 `=TABLE(格子1,格子2)`。
 格子只认 A1（可带 `$`），写入去掉 `$`。不是 `TABLE`、缺逗号、或形状对不上报 `InvalidField`。
 对已有主格只给 `formula`、不给 `shared` / `array`：保住 `t="dataTable"` 与现有 `ref` / `dt2D` / `dtr`，按 `TABLE` 改 `r1` / `r2`。再给 `dataTableRef` 时必须与现有区域相同，不同则报 `NotImplemented`。
-对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。不拆、不扩缩已有数据表。库不求值。
+对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。不拆、不扩缩已有数据表。求值见「公式缓存」。
 
 create 在骨架里写普通 `<f>`；`cells[]` 上的 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTableRef` 随后按 `setCell` 同一套规则改写。`dataTable` 不是 create 字段。
 
@@ -2213,7 +2213,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 ### insertPivotTable
 
-往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。库按源格子抄缓存记录，并标 `refreshOnLoad="1"`。不在库里聚合，也不把合计写进 `sheetData`。打开后由 Excel 刷新。
+往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。库按源格子抄缓存记录，并标 `refreshOnLoad="1"`。只有行字段和求和时，随后的求值把合计写进 `sheetData`。其它形状仍留给 Excel 刷新。
 
 ```json
 {
@@ -2444,7 +2444,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 
 ### 公式缓存
 
-`create` 和会改公式的 `apply` 在写完文件后求值。只写下面这些。用了别的函数、外部工作簿、数据表、图表公式、迷你图或条件格式时，该格不写新缓存。
+`create` 和会改公式的 `apply` 在写完文件后求值。认不出的函数、解析失败、打不开的外部文件，不写新缓存，也不删已有 `<v>`。条件格式、数据验证和迷你图没有结果缓存。计算链仍删除。
 
 - 数字、字符串、`TRUE` / `FALSE`、错误常量
 - A1 引用、跨表引用、`表1:表2!格` 三维引用
@@ -2460,7 +2460,19 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
 - 屏幕上的数字格式不参与缓存。`1/3` 的 `<v>` 是完整小数
 
-`NOW()` 按求值当时的时间写缓存，打开 Excel 后会被重算。循环引用不写新缓存。
+`NOW()` 按求值当时的时间写缓存，打开 Excel 后会被重算。
+
+另外这些也写缓存：
+
+- 循环引用在迭代关闭时写入 `#VALUE!`，公式带 `ca="1"`
+- 数据表三种形状都把结果写入区域内每个格子。计算式在区域外：列输入在区域上方，行输入在区域左侧，二维在左上角外侧那一格。区域内找不到计算式就不写
+- 外部引用只认 `[n]表!格`、`[n]表!区域`，以及 `'[n]表名'!格`
+- 外部引用打开本机文件，读目标格已有的值。公式格写入 `<v>`，并写入该链的 `sheetDataSet`
+- 外部引用的相对路径相对工作簿所在目录。网页地址和打不开的文件不写
+- 图表里指向本工作簿连续区域的 `c:f`，在该区域至少有一个格子有值时，按格子缓存重写旁边的 `numCache` 或 `strCache`
+- 图表公式指向的区域全空时，保留写入时的缓存
+- 透视表只有行字段、数据字段是求和、没有列字段和筛选字段时，把表头、各组求和和「总计」写进 `sheetData`
+- 其它形状的透视表不聚合
 
 ### 改动范围
 
@@ -3721,7 +3733,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写连接。不标重算
 
 ### insertExternalLink
 
-把对其他工作簿的外部引用写入 `/xl/externalLinks/…`。不打开目标文件，不把缓存值写进 `sheetDataSet`，也不改单元格公式。
+把对其他工作簿的外部引用写入 `/xl/externalLinks/…`。这一步不改单元格公式。随后的求值若打得开本机文件，再写 `sheetDataSet`。
 
 ```json
 {

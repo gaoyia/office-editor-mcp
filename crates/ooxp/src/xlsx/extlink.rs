@@ -1,5 +1,5 @@
 //! 工作簿外部引用：inspect 名单，apply 写 `/xl/externalLinks/…`。
-//! 不打开目标文件，不求值，不把缓存值写进 `sheetDataSet`。
+//! 求值阶段再打开本机目标文件，并把读到的格子写进 `sheetDataSet`。
 
 use serde_json::{json, Map, Value};
 
@@ -151,6 +151,93 @@ fn inspect_one(
     obj.insert("path".into(), json!(path));
     obj.insert("sheets".into(), Value::Array(sheets));
     Ok(Value::Object(obj))
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ExtLinkInfo {
+    pub part: String,
+    pub path: String,
+    pub sheets: Vec<String>,
+}
+
+/// 按 workbook `<externalReference>` 的顺序。打不开的链仍占一个位置，路径可能为空。
+pub(crate) fn list_books(pkg: &Package, wb_part: &str) -> Result<Vec<ExtLinkInfo>, Error> {
+    let wb = xml::parse(pkg.get(wb_part)?)?;
+    let Some(parent) = wb.root.child_by_local("externalReferences") else {
+        return Ok(Vec::new());
+    };
+    let wb_rels = Relationships::from_package(pkg, wb_part)?;
+    let mut out = Vec::new();
+    for el in parent.children_by_local("externalReference") {
+        let Some(rid) = el.attr_local("id") else {
+            out.push(ExtLinkInfo {
+                part: String::new(),
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        let Some(rel) = wb_rels.find_by_id(rid) else {
+            out.push(ExtLinkInfo {
+                part: String::new(),
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        if rel.is_external() {
+            out.push(ExtLinkInfo {
+                part: String::new(),
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        }
+        let Ok(part) = resolve_rel_target(wb_part, &rel.target) else {
+            out.push(ExtLinkInfo {
+                part: String::new(),
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        let Ok(bytes) = pkg.get(&part) else {
+            out.push(ExtLinkInfo {
+                part,
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        let Ok(doc) = xml::parse(bytes) else {
+            out.push(ExtLinkInfo {
+                part,
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        let Some(book) = doc.root.child_by_local("externalBook") else {
+            out.push(ExtLinkInfo {
+                part,
+                path: String::new(),
+                sheets: Vec::new(),
+            });
+            continue;
+        };
+        let path = path_of(pkg, &part, book)?.unwrap_or_default();
+        let sheets = book
+            .child_by_local("sheetNames")
+            .map(|p| {
+                p.children_by_local("sheetName")
+                    .into_iter()
+                    .map(|s| s.attr("val").unwrap_or("").to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.push(ExtLinkInfo { part, path, sheets });
+    }
+    Ok(out)
 }
 
 fn path_of(pkg: &Package, part: &str, book: &Element) -> Result<Option<String>, Error> {

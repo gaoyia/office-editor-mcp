@@ -29,14 +29,26 @@ use super::smartart;
 use super::style;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
-    apply_pkg(bytes, ops)?.save_to_vec()
+    apply_in(bytes, ops, None)
+}
+
+pub(crate) fn apply_in(
+    bytes: &[u8],
+    ops: &[XlsxOp],
+    base_dir: Option<&std::path::Path>,
+) -> Result<Vec<u8>, Error> {
+    apply_pkg(bytes, ops, base_dir)?.save_to_vec()
 }
 
 pub fn dry_run(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<String>, Error> {
-    Ok(apply_pkg(bytes, ops)?.dirty_part_names())
+    Ok(apply_pkg(bytes, ops, None)?.dirty_part_names())
 }
 
-fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error> {
+fn apply_pkg(
+    bytes: &[u8],
+    ops: &[XlsxOp],
+    base_dir: Option<&std::path::Path>,
+) -> Result<crate::opc::Package, Error> {
     let _pins = super::list_pin::PinGuard::enter();
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     opc::reject_strict(&pkg)?;
@@ -151,6 +163,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 chart::insert_chart(&mut pkg, &part, &op.sheet, &mut dirty_sheets, op, i)?;
                 touched_cells = true;
+                eval_formulas = true;
             }
             XlsxOp::InsertChartSheet(op) => {
                 chartsheet::insert(
@@ -165,6 +178,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                 )?;
                 workbook_dirty = true;
                 touched_cells = true;
+                eval_formulas = true;
             }
             XlsxOp::DeleteChartSheet(op) => {
                 chartsheet::delete(
@@ -339,6 +353,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                     i,
                 )?;
                 workbook_dirty = true;
+                eval_formulas = true;
             }
             XlsxOp::SetPivotTable(op) => {
                 let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
@@ -355,6 +370,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                 )? {
                     workbook_dirty = true;
                 }
+                eval_formulas = true;
             }
             XlsxOp::DeletePivotTable(op) => {
                 let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
@@ -1279,6 +1295,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                     i,
                 )? {
                     touched_cells = true;
+                    eval_formulas = true;
                 }
             }
             XlsxOp::AddChartSeries(op) => {
@@ -1293,6 +1310,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
                     i,
                 )? {
                     touched_cells = true;
+                    eval_formulas = true;
                 }
             }
             XlsxOp::DeleteChartSeries(op) => {
@@ -1379,7 +1397,7 @@ fn apply_pkg(bytes: &[u8], ops: &[XlsxOp]) -> Result<crate::opc::Package, Error>
         pkg.set(&wb_part, wb_doc.to_bytes()?)?;
     }
     if eval_formulas {
-        super::eval::fill_formula_caches(&mut pkg)?;
+        super::eval::fill_formula_caches(&mut pkg, base_dir)?;
     }
 
     Ok(pkg)

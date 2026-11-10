@@ -29,6 +29,14 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
 }
 
 pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Vec<u8>, Error> {
+    create_in(workbook, workbook_ct, None)
+}
+
+pub(crate) fn create_in(
+    workbook: &Value,
+    workbook_ct: &str,
+    base_dir: Option<&std::path::Path>,
+) -> Result<Vec<u8>, Error> {
     let obj = workbook.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -265,7 +273,7 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
     }
     let bytes = pkg.save_to_vec()?;
     let bytes = super::request::create_remain::apply_remain(bytes, obj)?;
-    super::eval::fill_saved(bytes)
+    super::eval::fill_saved(bytes, base_dir)
 }
 
 fn each_worksheet(sheets: &[NewSheet]) -> impl Iterator<Item = (usize, String, &NewSheet)> {

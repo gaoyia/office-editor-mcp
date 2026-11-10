@@ -156,6 +156,7 @@ $order = @(
     'xlsx-formula-master'
     'xlsx-formula-oracle'
     'xlsx-data-table'
+    'xlsx-formula-rest'
     'xlsx-validation'
     'xlsx-conditional-format'
     'xlsx-id-pin'
