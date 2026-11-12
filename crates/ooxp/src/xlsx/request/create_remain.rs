@@ -20,6 +20,7 @@ pub(crate) const WORKBOOK_REMAIN_KEYS: &[&str] = &[
 ];
 
 pub(crate) const SHEET_REMAIN_KEYS: &[&str] = &[
+    "background",
     "cols",
     "rows",
     "merges",
@@ -181,6 +182,7 @@ fn collect_all(
         if is_chartsheet(obj) {
             continue;
         }
+        collect_background(obj, &id, &prefix, ops, paths)?;
         collect_object_op(obj, "autoFilter", "setAutoFilter", &id, &prefix, ops, paths)?;
         collect_object_op(obj, "sortState", "setSortState", &id, &prefix, ops, paths)?;
         collect_string_ops(
@@ -625,6 +627,28 @@ fn collect_insert_array(
         push_op(ops, paths, obj.clone(), op, id, &cp)?;
     }
     Ok(())
+}
+
+fn collect_background(
+    sheet: &Map<String, Value>,
+    sheet_id: &str,
+    prefix: &str,
+    ops: &mut Vec<XlsxOp>,
+    paths: &mut Vec<String>,
+) -> Result<(), Error> {
+    let Some(file) = sheet.get("background") else {
+        return Ok(());
+    };
+    let mut item = Map::new();
+    item.insert("file".into(), file.clone());
+    push_op(
+        ops,
+        paths,
+        item,
+        "setSheetBackground",
+        sheet_id,
+        &format!("{prefix}.background"),
+    )
 }
 
 fn collect_object_op(

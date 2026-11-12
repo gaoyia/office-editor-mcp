@@ -8,6 +8,7 @@ use crate::opc::{self, Package, Relationships};
 use crate::xml::{self, Document, Element};
 
 use super::a1;
+use super::background;
 use super::chart;
 use super::chartsheet;
 use super::comments;
@@ -229,6 +230,24 @@ fn apply_pkg(
             XlsxOp::SetSheetHidden(op) => {
                 sheets::set_hidden(&mut wb_doc, &sheet_index, op, i)?;
                 workbook_dirty = true;
+            }
+            XlsxOp::SetSheetBackground(op) => {
+                let part = background::require_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                background::set(
+                    &mut pkg,
+                    &part,
+                    &mut doc.root,
+                    &op.file,
+                    &format!("ops[{i}].file"),
+                )?;
+            }
+            XlsxOp::DeleteSheetBackground(op) => {
+                let part = background::require_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                background::delete(&mut pkg, &part, &mut doc.root, i)?;
             }
             XlsxOp::SetColWidth(op) => {
                 let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;

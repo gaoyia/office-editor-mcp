@@ -39,6 +39,12 @@
     ],
     "setSheetHiddenOp": [
       "xlsx"
+    ],
+    "setSheetBackgroundOp": [
+      "xlsx"
+    ],
+    "deleteSheetBackgroundOp": [
+      "xlsx"
     ]
   },
   "$defs": {
@@ -714,6 +720,53 @@
         },
         "hidden": {
           "type": "boolean"
+        }
+      }
+    },
+    "setSheetBackgroundOp": {
+      "description": "设置或替换工作表背景图。",
+      "descriptionEn": "Set or replace a worksheet background.",
+      "limits": "id 必须是 sheet:工作表名。已有背景则换掉媒体，没有则新建 picture。对 chartsheet / dialogsheet / macrosheet 报 InvalidField。单元格 id、图 id 或页眉图 id 报 InvalidId。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "id must be sheet:name. An existing background replaces the media part; otherwise a picture element is created. chartsheet / dialogsheet / macrosheet returns InvalidField. A cell id, picture id, or header-picture id returns InvalidId. This op on docx / pptx returns InvalidField.",
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSheetBackground"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteSheetBackgroundOp": {
+      "description": "删除工作表背景图。",
+      "descriptionEn": "Delete a worksheet background.",
+      "limits": "id 必须是 sheet:工作表名/background。没有背景报 IdNotFound。对 chartsheet / dialogsheet / macrosheet 报 InvalidField。docx / pptx 上发此 op 报 InvalidField。",
+      "limitsEn": "id must be sheet:name/background. A sheet with no background returns IdNotFound. chartsheet / dialogsheet / macrosheet returns InvalidField. This op on docx / pptx returns InvalidField.",
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSheetBackground"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

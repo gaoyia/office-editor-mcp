@@ -67,6 +67,50 @@ pub(super) fn parse_move_sheet(
     })
 }
 
+pub(super) fn parse_set_sheet_background(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSheetBackgroundOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    Ok(SetSheetBackgroundOp {
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?,
+        file: crate::op_fields::require_file(obj, i, "setSheetBackground")?,
+    })
+}
+
+pub(super) fn parse_delete_sheet_background(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSheetBackgroundOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteSheetBackgroundOp {
+        sheet: parse_background_id(&id, i)?,
+    })
+}
+
+fn parse_background_id(id: &str, i: usize) -> Result<String, Error> {
+    let invalid = || {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetBackgroundPrefix,
+            },
+            format!("ops[{i}].id"),
+        )
+    };
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(invalid());
+    };
+    let Some(name) = rest.strip_suffix("/background") else {
+        return Err(invalid());
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(invalid());
+    }
+    Ok(name.to_string())
+}
+
 pub(super) fn parse_set_sheet_hidden(
     obj: &serde_json::Map<String, Value>,
     i: usize,

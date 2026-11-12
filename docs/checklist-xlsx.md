@@ -17,6 +17,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-01 重跑整套手测。公式还引用外部链接时 `deleteExternalLink` 断开链接，B1 留下 `0`，`LinkSources` 少一条，没有 Repair。`xlsx-svg` 与 `xlsx-emf` 曾因 Excel 的 Open 失败，清掉进程后通过。
 2026-11-01 补跑 `chartex-cache.ps1`。Excel 把瀑布图 B2 改成 42 另存后，inspect 读到 42。再 `setChartSeries` 后 Excel 打开没有 Repair，B2、B3 是 7 和 8。
 2026-11-02 补跑 `chartex-cache.ps1` 的 Cca3、Cca4。六种布局另存后 inspect 都在 `charts` 里，漏斗、直方、帕累托的第一个值是 42。再改这三张的系列，Excel 打开没有 Repair，源格是 7。
+2026-11-13 补跑 `xlsx-background.ps1`，Xbg1–Xbg4 通过。Excel 16.0 打开没有 Repair，另存后背景 id 仍是 `sheet:Sheet1/background`。删除后 inspect 为 `null`。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。

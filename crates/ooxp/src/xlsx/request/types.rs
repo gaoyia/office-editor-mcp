@@ -1438,6 +1438,17 @@ pub struct SetSheetHiddenOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetSheetBackgroundOp {
+    pub sheet: String,
+    pub file: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSheetBackgroundOp {
+    pub sheet: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct DeleteChartOp {
     pub id: String,
     pub target: SheetChartId,
@@ -1848,6 +1859,8 @@ pub enum XlsxOp {
     RenameSheet(RenameSheetOp),
     MoveSheet(MoveSheetOp),
     SetSheetHidden(SetSheetHiddenOp),
+    SetSheetBackground(SetSheetBackgroundOp),
+    DeleteSheetBackground(DeleteSheetBackgroundOp),
     SetColWidth(SetColWidthOp),
     SetRowHeight(SetRowHeightOp),
     MergeRange(MergeRangeOp),

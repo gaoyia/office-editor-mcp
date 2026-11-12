@@ -237,6 +237,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "renameSheet" => XlsxOp::RenameSheet(parse_rename_sheet(obj, i)?),
             "moveSheet" => XlsxOp::MoveSheet(parse_move_sheet(obj, i)?),
             "setSheetHidden" => XlsxOp::SetSheetHidden(parse_set_sheet_hidden(obj, i)?),
+            "setSheetBackground" => XlsxOp::SetSheetBackground(parse_set_sheet_background(obj, i)?),
+            "deleteSheetBackground" => {
+                XlsxOp::DeleteSheetBackground(parse_delete_sheet_background(obj, i)?)
+            }
             "setColWidth" => XlsxOp::SetColWidth(parse_set_col_width(obj, i)?),
             "setRowHeight" => XlsxOp::SetRowHeight(parse_set_row_height(obj, i)?),
             "mergeRange" => XlsxOp::MergeRange(parse_merge_range(obj, i)?),

@@ -8,6 +8,7 @@ use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
 use super::a1;
+use super::background;
 use super::cf;
 use super::chart;
 use super::comments;
@@ -127,6 +128,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
             picture_count += pics.len();
             obj.insert("pictureCount".into(), json!(pics.len()));
+            obj.insert(
+                "background".into(),
+                background::inspect_value(&pkg, &sh.part, &sheet_doc.root, &sh.name)?,
+            );
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));

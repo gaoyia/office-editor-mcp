@@ -144,6 +144,12 @@
             "$ref": "#/$defs/xlsxPictureCreate"
           }
         },
+        "background": {
+          "description": "工作表背景图的本地路径。只许 worksheet。图表工作表带这个字段会在解析时被拒绝。",
+          "descriptionEn": "Local path of the worksheet background. Worksheets only. A chart sheet that includes this field is rejected while parsing.",
+          "type": "string",
+          "minLength": 1
+        },
         "charts": {
           "type": "array",
           "items": {

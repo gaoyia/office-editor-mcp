@@ -134,6 +134,7 @@ fn summary_without_scope() {
             "kind",
             "hidden",
             "pictureCount",
+            "background",
             "chartCount",
             "textBoxCount",
             "mathCount",

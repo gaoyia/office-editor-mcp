@@ -46,6 +46,7 @@ $order = @(
     'pptx-create-round5'
     'xlsx-apply'
     'xlsx-pictures'
+    'xlsx-background'
     'xlsx-svg'
     'xlsx-emf'
     'xlsx-model3d'

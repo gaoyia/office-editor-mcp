@@ -174,6 +174,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "xlsx",
+        op: "deleteSheetBackground",
+        family: "无",
+        test: "create_set_replace_delete_and_export",
+    },
+    Row {
+        format: "xlsx",
         op: "deleteSheetTable",
         family: "table:{n}",
         test: "delete_table_then_original_third",
@@ -729,6 +735,12 @@ const ROWS: &[Row] = &[
         op: "setShapeText",
         family: "shape:index:{k}",
         test: "入口同 delete_pic_then_resize_original_third",
+    },
+    Row {
+        format: "xlsx",
+        op: "setSheetBackground",
+        family: "无",
+        test: "create_set_replace_delete_and_export",
     },
     Row {
         format: "xlsx",

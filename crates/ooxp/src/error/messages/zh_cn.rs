@@ -408,6 +408,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id 必须是 sheet:工作表名".into()
             }
+            IdReason::SheetBackgroundPrefix => {
+                "背景图 id 必须是 sheet:工作表名/background".into()
+            }
             IdReason::SetProtectionNeedsSheetOrWorkbook => {
                 "setProtection 的 id 必须是 sheet:工作表名 或 xlsx:workbook".into()
             }
@@ -1645,6 +1648,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::LayoutWorksheetOnly => {
             "只能对工作表改列宽、行高、合并、数据验证、条件格式、表格或透视表".into()
         }
+        ErrorKind::SheetBackgroundWorksheetOnly => "只能对工作表改背景图".into(),
+        ErrorKind::SheetBackgroundNotFound => "这张工作表没有背景图".into(),
         ErrorKind::NeedSetDataValidationField => {
             "setDataValidation 除 op 与 id 外至少要给一个字段".into()
         }

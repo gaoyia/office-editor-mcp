@@ -364,7 +364,7 @@ pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映
 对工作表 id、页眉槽位 id、单元格 id 或图表 id 发这四个 op 报 `InvalidId`。对 `dialogsheet` 上的页眉图发这四个 op 报 `InvalidField`。
 `chartsheet` 上 `relSize` 图的 `setPictureAnchor` 可改 `fromX` / `fromY` / `toX` / `toY`；禁止改成单元格锚点。
 `setPictureSize` 对 `relSize` 报 `InvalidField`（改 `toX` / `toY` 请用 `setPictureAnchor`）。
-`setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。`exportMedia` 认工作表图 id 与页眉图 id，写出 `/xl/media/…`。
+`setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。`exportMedia` 认工作表图 id、页眉图 id 与工作表背景图 id `sheet:{name}/background`，写出 `/xl/media/…`。
 `exportMedia` 也认工作表 OLE id，写出 `/xl/embeddings/…`，不是预览图。
 `exportMedia` 也认工作表 3D 模型 id，写出 GLB 原字节，不是海报。必须在解析图 id 之前分流 `/model3d:`。
 
@@ -913,7 +913,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   每张 `worksheet` 始终填 `outline`（对象，不另编 id）。每张 `worksheet` 与 `chartsheet` 始终填 `sheetProtection`（对象，不另编 id）。
   `dialogsheet` / `macrosheet` 没有 `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`。
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
-- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
+- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`background`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
@@ -922,7 +922,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有墨迹名单时再跟 `inks`，有切片器名单时再跟 `slicers`，
   有允许编辑区域名单时再跟 `protectedRanges`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
-  `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
+  `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图，也不含工作表背景 `<picture>`。没有图则为 `0`。
+  `background` 只在 `worksheet` 上出现。没有 `<picture>` 则为 `null`。有则为对象，字段顺序 `id`、`contentType`。`id` 固定为 `sheet:{name}/background`。`contentType` 取该关系指向的媒体部件；对不上则为 `null`。字节不进树。`chartsheet` / `dialogsheet` / `macrosheet` 不读背景。
   `chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`textBoxCount` 始终出现，是该表被收入的文本框个数（判定见上文 xlsx 文本框 id 那节）。
   没有则为 `0`。`mathCount` 始终出现，是该表被收入的公式框个数（判定见上文 xlsx 公式框 id 那节）。没有则为 `0`。`shapeCount` 始终出现，是该表被收入的形状个数（判定见上文 xlsx 形状 id 那节）。没有则为 `0`。
   `connectorCount` 始终出现，是该表被收入的连接线个数（判定见上文 xlsx 连接线 id 那节）。没有则为 `0`。
@@ -1499,6 +1500,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 
 最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。
 给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。
+给了 `sheets[].background` 时按 `setSheetBackground` 写工作表 `<picture>` 与 `/xl/media/`。只许 `worksheet`。省略则没有背景。图表工作表带这个字段报 `InvalidField`。
 给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。
 给了 `sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 时按对应 insert 同一套规则写入同一份 worksheet drawing：先写 `pictures`，
 再写 `model3ds`，再写 `inks`，再写 `charts`，再按 `textBoxes`、`maths`、`shapes`、`connectors`、`smartArts` 数组顺序写入。
@@ -1517,7 +1519,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。
 骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组 / 数据表公式，再列宽行高隐藏与合并，
-再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
+再背景图、打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
 不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式和数据验证的公式仍不求值。只含行字段与求和的透视表会把合计写进 `sheetData`。不刷新外部连接。
 `cells[]` 出现 `dataTable` 报 `InvalidField`。`dataTableRef` 与 `formula` 一起用，规则与 `setCell` 相同。
@@ -4039,6 +4041,29 @@ docx / pptx 上发此 op 报 `InvalidField`。
 
 找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 把最后一张可见表改成隐藏报 `InvalidField`。`true` 写 `state="hidden"`（若原先是 `veryHidden` 也改成 `hidden`）。`false` 去掉 `state`。已经是目标可见性则空操作。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+### setSheetBackground
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setSheetBackground"` |
+| `id` | `sheet:{name}`，且该表 `kind` 为 `worksheet` |
+| `file` | 本地图片路径。原字节写入 `/xl/media/imageN.ext`，工作表关系 Type 以 `/image` 结尾 |
+
+已有 `<picture>` 则换掉那一份媒体，没有则新建。一张表只有一张背景。不进 drawing，不计 `pictureCount`，不出现在 `pictures`。
+单元格 id、图 id 或页眉图 id 报 `InvalidId`。找不到该表报 `IdNotFound`。对 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteSheetBackground
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteSheetBackground"` |
+| `id` | `sheet:{name}/background` |
+
+去掉 `<picture>` 和对应关系。没有别的部件再引用这份媒体时，删掉该部件。这张表没有背景报 `IdNotFound`。
+单元格 id、图 id、页眉图 id 或工作表 id 报 `InvalidId`。对 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`。
 docx / pptx 上发此 op 报 `InvalidField`。
 
 ### setChartAnchor

@@ -128,7 +128,7 @@ apply 的 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSch
     - `headerFooters[].pictures`
   - 页眉图走 `drawingHF`，与工作表 drawing 不是同一部件
 - **`/xl/media/imageN.ext`**
-  - 仅当某张表声明了 `pictures` 或 `headerFooters[].pictures`
+  - 仅当某张表声明了 `pictures`、`headerFooters[].pictures` 或 `background`
 - **`/xl/charts/chartN.xml`**
   - 仅当某张表声明了 `charts`，或声明了 `kind: chartsheet`
 - **`/xl/charts/chartExN.xml`**

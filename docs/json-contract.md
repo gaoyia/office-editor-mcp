@@ -15,7 +15,7 @@ docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与�
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
 `font:{n}` 写出 `/word/fonts/…` 的 odttf 原字节（仍是混淆后的，不还原）。
-xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id、3D 模型 id 与工作表墨迹 id：图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件，
+xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、工作表背景图 id、OLE id、3D 模型 id 与工作表墨迹 id：图 id 与背景图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件，
 3D 模型 id 写出 `/xl/media/…` 的 GLB 原字节，墨迹 id 写出 `/xl/ink/…` 的 InkML 原字节。
 pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id、3D 模型 id 与幻灯片墨迹 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
 3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节，墨迹 id 写出 `/ppt/ink/…` 的 InkML 原字节。

@@ -236,7 +236,7 @@ pptx 母版和版式按开始时的 `sldMasterId/@id`、`sldLayoutId/@id` 认回
 给了 `scope.headerFooter` 时，这两类表再跟 `headerFooters`。
 不填单元格、图、保护、打印、视图。apply 仍拒写这两类表（`setHeaderFooterText` 对 `dialogsheet` 仍可改文本）。create 不生成这两类。
 `format` 认 `.xlsx` 与 `.xlsm`，inspect 树的 `format` 仍为 `xlsx`。不执行宏。
-按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。工作簿与每张 `worksheet` 始终带 `pictureCount`。
+按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。工作簿与每张 `worksheet` 始终带 `pictureCount`。每张 `worksheet` 始终带 `background`（没有则为 `null`）。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 始终带 `chartCount`。每张表始终带 `hasHeaderFooter`。
 每张 `worksheet` 与 `chartsheet` 始终带 `print` 与 `view`。每张 `worksheet` 始终带 `autoFilter`。每张 `worksheet` 始终带 `sortState`。
 每张 `worksheet` 始终带 `outline`。

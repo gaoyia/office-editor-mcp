@@ -216,6 +216,7 @@ fn inspect_lists_hidden() {
             "kind",
             "hidden",
             "pictureCount",
+            "background",
             "chartCount",
             "textBoxCount",
             "mathCount",

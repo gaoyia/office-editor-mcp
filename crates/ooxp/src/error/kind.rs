@@ -286,6 +286,8 @@ pub(crate) enum IdReason {
     DeleteSheetNeedsWorksheet,
     /// renameSheet / moveSheet / setSheetHidden / insertDataValidation / insertConditionalFormat / insertSheetTable 必须用 sheet:工作表名
     SheetOpNeedsSheet,
+    /// deleteSheetBackground 必须用 sheet:工作表名/background
+    SheetBackgroundPrefix,
     /// setProtection 必须用 sheet:工作表名 或 xlsx:workbook
     SetProtectionNeedsSheetOrWorkbook,
     /// insertProtectedRange 必须用 sheet:工作表名
@@ -1229,6 +1231,8 @@ define_error_kinds! {
     MergeNeedsMultipleCells => vec![Self::MergeNeedsMultipleCells],
     RowRangeReversed => vec![Self::RowRangeReversed],
     LayoutWorksheetOnly => vec![Self::LayoutWorksheetOnly],
+    SheetBackgroundWorksheetOnly => vec![Self::SheetBackgroundWorksheetOnly],
+    SheetBackgroundNotFound => vec![Self::SheetBackgroundNotFound],
     NeedSetDataValidationField => vec![Self::NeedSetDataValidationField],
     NeedDataValidationFormula { field: String } => {
         vec![Self::NeedDataValidationFormula { field: "formula1".into() }]
@@ -1519,6 +1523,7 @@ impl IdReason {
             Self::DeleteChartSheetNeedsChartsheet,
             Self::DeleteSheetNeedsWorksheet,
             Self::SheetOpNeedsSheet,
+            Self::SheetBackgroundPrefix,
             Self::SetProtectionNeedsSheetOrWorkbook,
             Self::InsertProtectedRangeNeedsSheet,
             Self::SheetEditRangePrefix,
@@ -2010,6 +2015,7 @@ impl ErrorKind {
             | Self::MergeNeedsMultipleCells
             | Self::RowRangeReversed
             | Self::LayoutWorksheetOnly
+            | Self::SheetBackgroundWorksheetOnly
             | Self::NeedSetDataValidationField
             | Self::NeedDataValidationFormula { .. }
             | Self::InvalidDataValidation { .. }
@@ -2279,7 +2285,8 @@ impl ErrorKind {
             | Self::SheetTableNotFound { .. }
             | Self::PivotTableNotFound { .. }
             | Self::DefinedNameNotFound { .. }
-            | Self::ProtectedRangeNotFound { .. } => IdNotFound,
+            | Self::ProtectedRangeNotFound { .. }
+            | Self::SheetBackgroundNotFound => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

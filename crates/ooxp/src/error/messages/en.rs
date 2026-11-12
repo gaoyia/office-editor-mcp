@@ -445,6 +445,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id must be sheet:name".into()
             }
+            IdReason::SheetBackgroundPrefix => {
+                "background id must be sheet:name/background".into()
+            }
             IdReason::SetProtectionNeedsSheetOrWorkbook => {
                 "setProtection id must be sheet:name or xlsx:workbook".into()
             }
@@ -1884,6 +1887,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "column width, row height, merge, data validation, conditional format, sheet table, and pivot table ops only apply to worksheets"
                 .into()
         }
+        ErrorKind::SheetBackgroundWorksheetOnly => {
+            "sheet background ops only apply to worksheets".into()
+        }
+        ErrorKind::SheetBackgroundNotFound => "this worksheet has no background".into(),
         ErrorKind::NeedSetDataValidationField => {
             "setDataValidation requires a field besides op and id".into()
         }

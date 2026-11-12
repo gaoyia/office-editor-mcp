@@ -226,6 +226,11 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - 序号不存在报 `IdNotFound`，不是定义名 id 报 `InvalidId`
 - 定义名缺 `name` / `formula`、名或公式不合法、同作用域重名、或与表格名冲突，是 `InvalidField`
 - `localSheet` 找不到对应表报 `IdNotFound`
+- `setSheetBackground` 的 id 是 `sheet:{name}`，且该表是 `worksheet`
+- 找不到工作表才是 `IdNotFound`，单元格 id、图 id 或页眉图 id 报 `InvalidId`
+- 对 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`
+- `deleteSheetBackground` 的 id 是 `sheet:{name}/background`
+- 这张表没有背景报 `IdNotFound`，不是背景图 id 报 `InvalidId`
 - `setPrintSetup` 的 id 是工作表
 - 找不到工作表才是 `IdNotFound`，不是工作表 id 报 `InvalidId`
 - 除 op 与 id 外一个字段都不给、边距为负、`orientation` 不是 `portrait`/`landscape`、`scale` 不在 10–400、`printArea` 不是单一 A1， 或对 `chartsheet` 发它没有的字段，是 `InvalidField`
