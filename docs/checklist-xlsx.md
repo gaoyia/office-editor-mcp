@@ -23,6 +23,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-13 补跑 `xlsx-math.ps1`，Xmh1–Xmh3 通过。Excel 16.0 打开没有 Repair。舍入、`SUBTOTAL` 的隐藏行和 `MMULT` 与库缓存一致。
 2026-11-13 补跑 `xlsx-text.ps1`，Xtx1–Xtx3 通过。Excel 16.0 打开没有 Repair。字符截取、字节截取和 `DOLLAR` / `BAHTTEXT` 与库缓存一致。
 2026-11-13 补跑 `xlsx-date.ps1`，Xdt1–Xdt3 通过。Excel 16.0 打开没有 Repair。假闰日、工作日和 `YEARFRAC` 与库缓存一致。`TODAY` 与当天序列一致。
+2026-11-13 补跑 `xlsx-stat.ps1`，Xst1–Xst3 通过。Excel 16.0 打开没有 Repair。计数、`PERCENTRANK` 和 `NORMDIST` 与库缓存一致。`ECMA.AVERAGE` 没有缓存。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -1181,6 +1182,16 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xdt1 | 闰日 | `DATE(1900,2,28)` 是 59，假闰日是 60，`DATE(1900,3,1)` 是 61。`YEAR` 与库缓存一致。Excel 无修复 |
 | Xdt2 | 推移 | `EDATE`、`WORKDAY`、假期、`DATEDIF` 的 `MD` 与库缓存一致。Excel 无修复 |
 | Xdt3 | 间隔 | `DAYS360`、`YEARFRAC` 与库缓存一致。`TODAY` 与 Excel 当天的序列一致。`ECMA.YEAR` 没有缓存，Excel 显示 `#NAME?` |
+
+## 统计函数
+
+用库 create 写出公式缓存，再交给 Excel 16.0 重算。脚本 `manual-check/office/cases/xlsx-stat.ps1`。编号用 Xst。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xst1 | 计数 | `COUNT`、`COUNTA`、`COUNTBLANK`、`COUNTIF` 的通配符、`AVERAGE` 与 `AVERAGEA` 和库缓存一致。Excel 无修复 |
+| Xst2 | 离散与分布 | `STDEV`、`PERCENTRANK`、`COVAR`、`NORMDIST`、`CHIDIST`、`MODE` 与库缓存一致。Excel 无修复 |
+| Xst3 | 错误 | 没有重复值的 `MODE` 是 `#N/A`。`LARGE` 位次超出是 `#NUM!`。`ECMA.AVERAGE` 没有缓存，Excel 显示 `#NAME?` |
 
 ## 共享公式改主格
 

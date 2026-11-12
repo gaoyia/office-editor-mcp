@@ -40,6 +40,7 @@ mod sheets;
 mod slicer;
 mod smartart;
 mod sparkline;
+mod stats;
 mod style;
 mod table;
 mod theme;

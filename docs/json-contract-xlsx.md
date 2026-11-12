@@ -2532,6 +2532,18 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - `DAYS360` 默认用美国法。第三参为真时用欧洲法。`YEARFRAC` 省略基数时是这个天数除以 360
 - `YEARFRAC` 的基数 1 用实际天数除以所跨公历年的平均长度。起止的月和日都相同则是整年。其它基数不写缓存
 - `TODAY` 与 `NOW` 按求值当时的本机本地时间写序列，公式带 `ca="1"`。测试不锁死具体数字
+- 另外认统计类。`ECMA.AVERAGE` 这种类目表里没有的带点名字不求值
+- `COUNT` 只数数字。`COUNTA` 数非空单元格。`COUNTBLANK` 数空单元格。`TRUE` 不进 `COUNT`，但进 `COUNTA`
+- `COUNTIF` 与 `COUNTIFS` 认比较符，也认不区分大小写的 `*` 和 `?`。`COUNTIF(F1:F3,"c*")` 在 `cat`、`car`、`dog` 上是 2
+- `MAX`、`MIN`、`AVERAGE`、`STDEV`、`VAR` 只取数字。名字以 `A` 结尾的把 `TRUE` 当成 1，把 `FALSE` 和文本当成 0
+- `AVERAGE(1,TRUE,"x")` 是 1。`AVERAGEA(1,TRUE,"x",FALSE)` 是 0.5。只有一个数字时 `STDEV` 是 `#DIV/0!`
+- `GEOMEAN`、`HARMEAN` 遇到非正数写入 `#NUM!`。`MEDIAN` 在偶数个时取中间两个的平均。`MODE` 没有重复值时是 `#N/A`
+- `TRIMMEAN` 先把要丢掉的个数收成偶数，再从两端各去一半。`PERCENTILE` 按 `(个数 - 1) × 分位` 插值。`QUARTILE` 的 0 到 4 对应 0、0.25、0.5、0.75、1
+- `PERCENTRANK` 默认保留 3 位有效数字。`PERCENTRANK({1,2,3,4,10},6)` 是 0.833。`RANK` 相同的数并列，省略第三参时从大到小
+- `COVAR` 除以个数，是总体协方差。`STDEV` 与 `VAR` 除以个数减 1。`STDEVP` 与 `VARP` 除以个数
+- `LINEST` 在一行里先写斜率再写截距。`TREND` 写回每个拟合值。`GROWTH` 与 `LOGEST` 按 `y = a × b^x`。这些多格结果只铺进已有的数组公式区域
+- `FREQUENCY` 按区间计数，最后一格是大于末档的个数。结果同样只铺进已有的数组公式区域
+- 分布与检验函数按 Excel 16.0 的样本写缓存。带累积参数的，`TRUE` 与 `FALSE` 都认。认不出的尾部或自由度不写缓存
 - 1900 日期系统是默认。`workbookPr` 的 `date1904="1"` 时改用 1904
 - 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
 - 屏幕上的数字格式不参与缓存。`1/3` 的 `<v>` 是完整小数

@@ -8,6 +8,7 @@ use super::a1::{self, CellRef};
 use super::dbcs;
 use super::formula;
 use super::inspect;
+use super::stats;
 use crate::error::{Error, ErrorKind, RelSource};
 use crate::opc::{self, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
@@ -619,6 +620,13 @@ enum Fact {
     Skip,
 }
 
+enum Obs {
+    Blank,
+    Num(f64),
+    Bool(bool),
+    Text,
+}
+
 enum Hit {
     Fact(Fact),
     Err(&'static str),
@@ -1212,9 +1220,1157 @@ impl Book {
                 Some(done) => done,
                 None => match self.eval_date(other, &vals, sheet, here) {
                     Some(done) => done,
-                    None => self.eval_math(other, &vals, sheet, here, mode),
+                    None => match self.eval_stat(other, &vals, sheet, here) {
+                        Some(done) => done,
+                        None => self.eval_math(other, &vals, sheet, here, mode),
+                    },
                 },
             },
+        }
+    }
+
+    /// 统计类。不是这类函数时返回 `None`。`ECMA.AVERAGE` 不在此列。
+    fn eval_stat(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let done = match name {
+            "COUNT" | "COUNTA" | "COUNTBLANK" | "MAX" | "MAXA" | "MIN" | "MINA" | "AVERAGE"
+            | "AVERAGEA" | "GEOMEAN" | "HARMEAN" | "MEDIAN" | "MODE" | "AVEDEV" | "DEVSQ"
+            | "STDEV" | "STDEVA" | "STDEVP" | "STDEVPA" | "VAR" | "VARA" | "VARP" | "VARPA"
+            | "SKEW" | "KURT" => self.eval_stat_list(name, vals, sheet),
+            "COUNTIF" => self.eval_countif(vals, sheet, here),
+            "COUNTIFS" => self.eval_countifs(vals, sheet, here),
+            "AVERAGEIF" => self.eval_averageif(vals, sheet, here),
+            "AVERAGEIFS" => self.eval_averageifs(vals, sheet, here),
+            "LARGE" => self.eval_order(vals, sheet, here, true),
+            "SMALL" => self.eval_order(vals, sheet, here, false),
+            "TRIMMEAN" => self.eval_trimmean(vals, sheet, here),
+            "PERCENTILE" => self.eval_percentile(vals, sheet, here),
+            "PERCENTRANK" => self.eval_percentrank(vals, sheet, here),
+            "QUARTILE" => self.eval_quartile(vals, sheet, here),
+            "RANK" => self.eval_rank(vals, sheet, here),
+            "CORREL" | "PEARSON" => self.eval_correl(vals, sheet),
+            "RSQ" => self.eval_rsq(vals, sheet),
+            "COVAR" => self.eval_covar(vals, sheet),
+            "SLOPE" => self.eval_slope(vals, sheet, true),
+            "INTERCEPT" => self.eval_slope(vals, sheet, false),
+            "STEYX" => self.eval_steyx(vals, sheet),
+            "FORECAST" => self.eval_forecast(vals, sheet, here),
+            "LINEST" => self.eval_linest(vals, sheet),
+            "LOGEST" => self.eval_logest(vals, sheet),
+            "TREND" => self.eval_trend(vals, sheet, false),
+            "GROWTH" => self.eval_trend(vals, sheet, true),
+            "FREQUENCY" => self.eval_frequency(vals, sheet),
+            "STANDARDIZE" => self.eval_standardize(vals, sheet, here),
+            "BETADIST" => self.eval_beta_dist(vals, sheet, here),
+            "BETAINV" => self.eval_beta_inv(vals, sheet, here),
+            "BINOMDIST" => self.eval_binom(vals, sheet, here),
+            "CRITBINOM" => self.eval_crit_binom(vals, sheet, here),
+            "CHIDIST" => self.eval_chi_dist(vals, sheet, here),
+            "CHIINV" => self.eval_chi_inv(vals, sheet, here),
+            "CHITEST" => self.eval_chi_test(vals, sheet),
+            "CONFIDENCE" => self.eval_confidence(vals, sheet, here),
+            "EXPONDIST" => self.eval_expon(vals, sheet, here),
+            "FDIST" => self.eval_f_dist(vals, sheet, here),
+            "FINV" => self.eval_f_inv(vals, sheet, here),
+            "FTEST" => self.eval_f_test(vals, sheet),
+            "FISHER" => self.eval_fisher(vals, sheet, here, false),
+            "FISHERINV" => self.eval_fisher(vals, sheet, here, true),
+            "GAMMADIST" => self.eval_gamma_dist(vals, sheet, here),
+            "GAMMAINV" => self.eval_gamma_inv(vals, sheet, here),
+            "GAMMALN" => self.eval_gamma_ln(vals, sheet, here),
+            "HYPGEOMDIST" => self.eval_hypgeom(vals, sheet, here),
+            "LOGINV" => self.eval_log_inv(vals, sheet, here),
+            "LOGNORMDIST" => self.eval_log_norm(vals, sheet, here),
+            "NEGBINOMDIST" => self.eval_neg_binom(vals, sheet, here),
+            "NORMDIST" => self.eval_norm_dist(vals, sheet, here),
+            "NORMINV" => self.eval_norm_inv(vals, sheet, here),
+            "NORMSDIST" => self.eval_norms_dist(vals, sheet, here),
+            "NORMSINV" => self.eval_norms_inv(vals, sheet, here),
+            "PERMUT" => self.eval_permut(vals, sheet, here),
+            "POISSON" => self.eval_poisson(vals, sheet, here),
+            "PROB" => self.eval_prob(vals, sheet, here),
+            "TDIST" => self.eval_t_dist(vals, sheet, here),
+            "TINV" => self.eval_t_inv(vals, sheet, here),
+            "TTEST" => self.eval_t_test(vals, sheet, here),
+            "WEIBULL" => self.eval_weibull(vals, sheet, here),
+            "ZTEST" => self.eval_z_test(vals, sheet, here),
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn eval_stat_list(&mut self, name: &str, vals: &[Value], sheet: usize) -> Calc {
+        if vals.is_empty() {
+            return Calc::Skip;
+        }
+        if matches!(name, "COUNT" | "COUNTA" | "COUNTBLANK") {
+            let obs = match self.gather(vals, sheet) {
+                Ok(obs) => obs,
+                Err(done) => return done,
+            };
+            let n = match name {
+                "COUNT" => obs.iter().filter(|o| matches!(o, Obs::Num(_))).count(),
+                "COUNTA" => obs.iter().filter(|o| !matches!(o, Obs::Blank)).count(),
+                _ => obs.iter().filter(|o| matches!(o, Obs::Blank)).count(),
+            };
+            return ready_num(n as f64);
+        }
+        let nums = if matches!(
+            name,
+            "MAXA" | "MINA" | "AVERAGEA" | "STDEVA" | "STDEVPA" | "VARA" | "VARPA"
+        ) {
+            match self.nums_a(vals, sheet) {
+                Ok(nums) => nums,
+                Err(done) => return done,
+            }
+        } else {
+            match self.nums_plain(vals, sheet) {
+                Ok(nums) => nums,
+                Err(done) => return done,
+            }
+        };
+        let result = match name {
+            "MAX" | "MAXA" => Ok(extreme(&nums, true)),
+            "MIN" | "MINA" => Ok(extreme(&nums, false)),
+            "AVERAGE" | "AVERAGEA" => stats::average(&nums),
+            "GEOMEAN" => stats::geomean(&nums),
+            "HARMEAN" => stats::harmean(&nums),
+            "MEDIAN" => stats::median(&nums),
+            "MODE" => stats::mode(&nums),
+            "AVEDEV" => stats::avedev(&nums),
+            "DEVSQ" => stats::devsq(&nums),
+            "STDEV" | "STDEVA" => stats::stdev(&nums, true),
+            "STDEVP" | "STDEVPA" => stats::stdev(&nums, false),
+            "VAR" | "VARA" => stats::variance(&nums, true),
+            "VARP" | "VARPA" => stats::variance(&nums, false),
+            "SKEW" => stats::skew(&nums),
+            "KURT" => stats::kurt(&nums),
+            _ => return Calc::Skip,
+        };
+        stat_ready(result)
+    }
+
+    fn eval_countif(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let criteria = match self.criteria_of(&vals[1], sheet, here) {
+            Ok(criteria) => criteria,
+            Err(done) => return done,
+        };
+        let cells = match self.facts(&vals[0], sheet) {
+            Ok(cells) => cells,
+            Err(done) => return done,
+        };
+        if cells.iter().any(|cell| matches!(cell, Fact::Skip)) {
+            return Calc::Skip;
+        }
+        let n = cells
+            .iter()
+            .filter(|cell| stat_criteria(cell, &criteria))
+            .count();
+        ready_num(n as f64)
+    }
+
+    fn eval_countifs(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 || !vals.len().is_multiple_of(2) {
+            return Calc::Skip;
+        }
+        let mut columns = Vec::new();
+        for pair in vals.chunks(2) {
+            let cells = match self.facts(&pair[0], sheet) {
+                Ok(cells) => cells,
+                Err(done) => return done,
+            };
+            let criteria = match self.criteria_of(&pair[1], sheet, here) {
+                Ok(criteria) => criteria,
+                Err(done) => return done,
+            };
+            columns.push((cells, criteria));
+        }
+        let width = columns[0].0.len();
+        if columns.iter().any(|(cells, _)| cells.len() != width) {
+            return ready_err(VALUE);
+        }
+        if columns
+            .iter()
+            .any(|(cells, _)| cells.iter().any(|cell| matches!(cell, Fact::Skip)))
+        {
+            return Calc::Skip;
+        }
+        let n = (0..width)
+            .filter(|i| {
+                columns
+                    .iter()
+                    .all(|(cells, criteria)| stat_criteria(&cells[*i], criteria))
+            })
+            .count();
+        ready_num(n as f64)
+    }
+
+    fn eval_averageif(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let criteria = match self.criteria_of(&vals[1], sheet, here) {
+            Ok(criteria) => criteria,
+            Err(done) => return done,
+        };
+        let sums = if vals.len() == 3 { &vals[2] } else { &vals[0] };
+        self.average_where(&vals[0], sums, &criteria, sheet)
+    }
+
+    fn eval_averageifs(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 3 || vals.len().is_multiple_of(2) {
+            return Calc::Skip;
+        }
+        let mut criteria = Vec::new();
+        for pair in vals[1..].chunks(2) {
+            let crit = match self.criteria_of(&pair[1], sheet, here) {
+                Ok(crit) => crit,
+                Err(done) => return done,
+            };
+            criteria.push((pair[0].clone(), crit));
+        }
+        let refs: Vec<(&Value, Scalar)> = criteria.iter().map(|(v, c)| (v, c.clone())).collect();
+        self.average_where_all(&vals[0], &refs, sheet)
+    }
+
+    fn eval_order(&mut self, vals: &[Value], sheet: usize, here: CellRef, large: bool) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let k = match self.take_num(&vals[1], sheet, here) {
+            Ok(k) => k,
+            Err(done) => return done,
+        };
+        stat_ready(if large {
+            stats::large(&nums, k)
+        } else {
+            stats::small(&nums, k)
+        })
+    }
+
+    fn eval_trimmean(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let percent = match self.take_num(&vals[1], sheet, here) {
+            Ok(percent) => percent,
+            Err(done) => return done,
+        };
+        stat_ready(stats::trimmean(&nums, percent))
+    }
+
+    fn eval_percentile(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let p = match self.take_num(&vals[1], sheet, here) {
+            Ok(p) => p,
+            Err(done) => return done,
+        };
+        stat_ready(stats::percentile(&nums, p))
+    }
+
+    fn eval_percentrank(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let x = match self.take_num(&vals[1], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        let digits = if vals.len() == 3 {
+            match self.take_signed(&vals[2], sheet, here) {
+                Ok(digits) => digits,
+                Err(done) => return done,
+            }
+        } else {
+            3
+        };
+        stat_ready(stats::percent_rank(&nums, x, digits))
+    }
+
+    fn eval_quartile(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let quart = match self.take_num(&vals[1], sheet, here) {
+            Ok(quart) => quart,
+            Err(done) => return done,
+        };
+        stat_ready(stats::quartile(&nums, quart))
+    }
+
+    fn eval_rank(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        let nums = match self.nums_plain(&vals[1..2], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let ascending = if vals.len() == 3 {
+            match self.take_num(&vals[2], sheet, here) {
+                Ok(order) => order != 0.0,
+                Err(done) => return done,
+            }
+        } else {
+            false
+        };
+        stat_ready(stats::rank(x, &nums, ascending))
+    }
+
+    fn eval_correl(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        let (xs, ys) = match self.paired_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(stats::correl(&xs, &ys))
+    }
+
+    fn eval_rsq(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        let (xs, ys) = match self.paired_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(stats::correl(&xs, &ys).map(|r| r * r))
+    }
+
+    fn eval_covar(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        let (xs, ys) = match self.paired_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(stats::covar(&xs, &ys))
+    }
+
+    fn eval_slope(&mut self, vals: &[Value], sheet: usize, slope: bool) -> Calc {
+        let (xs, ys) = match self.paired_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(
+            stats::lin_fit(&xs, &ys).map(|fit| if slope { fit.slope } else { fit.intercept }),
+        )
+    }
+
+    fn eval_steyx(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        let (xs, ys) = match self.paired_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(stats::steyx(&xs, &ys))
+    }
+
+    fn eval_forecast(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        let (xs, ys) = match self.paired(&vals[2], &vals[1], sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        stat_ready(stats::forecast(x, &xs, &ys))
+    }
+
+    fn eval_linest(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let (xs, ys) = match self.fit_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        match stats::lin_fit(&xs, &ys) {
+            Ok(fit) => Calc::Ready(Value::Grid(num_grid(vec![vec![fit.slope, fit.intercept]]))),
+            Err(token) => ready_err(token),
+        }
+    }
+
+    fn eval_logest(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let (xs, ys) = match self.fit_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        match stats::log_fit(&xs, &ys) {
+            Ok(fit) => Calc::Ready(Value::Grid(num_grid(vec![vec![fit.slope, fit.intercept]]))),
+            Err(token) => ready_err(token),
+        }
+    }
+
+    fn eval_trend(&mut self, vals: &[Value], sheet: usize, growth: bool) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let (xs, ys) = match self.fit_xy(vals, sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        let fitted = if growth {
+            match stats::log_fit(&xs, &ys) {
+                Ok(fit) => xs
+                    .iter()
+                    .map(|x| fit.intercept * fit.slope.powf(*x))
+                    .collect::<Vec<_>>(),
+                Err(token) => return ready_err(token),
+            }
+        } else {
+            match stats::lin_fit(&xs, &ys) {
+                Ok(fit) => xs
+                    .iter()
+                    .map(|x| fit.intercept + fit.slope * x)
+                    .collect::<Vec<_>>(),
+                Err(token) => return ready_err(token),
+            }
+        };
+        let rows = fitted.into_iter().map(|n| vec![n]).collect();
+        Calc::Ready(Value::Grid(num_grid(rows)))
+    }
+
+    fn eval_frequency(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let data = match self.nums_plain(&vals[..1], sheet) {
+            Ok(data) => data,
+            Err(done) => return done,
+        };
+        let bins = match self.nums_plain(&vals[1..], sheet) {
+            Ok(bins) => bins,
+            Err(done) => return done,
+        };
+        let mut counts = vec![0.0; bins.len() + 1];
+        for value in data {
+            let mut placed = false;
+            for (i, bin) in bins.iter().enumerate() {
+                if value <= *bin {
+                    counts[i] += 1.0;
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                let last = counts.len() - 1;
+                counts[last] += 1.0;
+            }
+        }
+        let rows = counts.into_iter().map(|n| vec![n]).collect();
+        Calc::Ready(Value::Grid(num_grid(rows)))
+    }
+
+    fn eval_standardize(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::standardize(got[0], got[1], got[2]))
+    }
+
+    fn eval_beta_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::beta_dist(got[0], got[1], got[2]))
+    }
+
+    fn eval_beta_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::beta_inv(got[0], got[1], got[2]))
+    }
+
+    fn eval_binom(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let got = match self.take_fixed(&vals[..3], 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        let cum = match self.take_flag(&vals[3], sheet, here) {
+            Ok(cum) => cum,
+            Err(done) => return done,
+        };
+        stat_ready(stats::binom_dist(got[0], got[1], got[2], cum))
+    }
+
+    fn eval_crit_binom(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::crit_binom(got[0], got[1], got[2]))
+    }
+
+    fn eval_chi_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 2, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::chi_dist(got[0], got[1]))
+    }
+
+    fn eval_chi_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 2, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::chi_inv(got[0], got[1]))
+    }
+
+    fn eval_chi_test(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let actual = match self.matrix_flat(&vals[0], sheet) {
+            Ok(grid) => grid,
+            Err(done) => return done,
+        };
+        let expected = match self.matrix_flat(&vals[1], sheet) {
+            Ok(grid) => grid,
+            Err(done) => return done,
+        };
+        if actual.0 != expected.0 || actual.1 != expected.1 {
+            return ready_err(NA);
+        }
+        let df = if actual.0 == 1 || actual.1 == 1 {
+            (actual.0 * actual.1) as f64 - 1.0
+        } else {
+            (actual.0 - 1) as f64 * (actual.1 - 1) as f64
+        };
+        stat_ready(stats::chi_test(&actual.2, &expected.2, df))
+    }
+
+    fn eval_confidence(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::confidence(got[0], got[1], got[2]))
+    }
+
+    fn eval_expon(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        self.eval_flag3(vals, sheet, here, stats::expon_dist)
+    }
+
+    fn eval_f_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::f_dist(got[0], got[1], got[2]))
+    }
+
+    fn eval_f_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::f_inv(got[0], got[1], got[2]))
+    }
+
+    fn eval_f_test(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let left = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let right = match self.nums_plain(&vals[1..], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let v1 = match stats::variance(&left, true) {
+            Ok(v) => v,
+            Err(token) => return ready_err(token),
+        };
+        let v2 = match stats::variance(&right, true) {
+            Ok(v) => v,
+            Err(token) => return ready_err(token),
+        };
+        stat_ready(stats::f_test(v1, left.len(), v2, right.len()))
+    }
+
+    fn eval_fisher(&mut self, vals: &[Value], sheet: usize, here: CellRef, inverse: bool) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        stat_ready(if inverse {
+            stats::fisher_inv(x)
+        } else {
+            stats::fisher(x)
+        })
+    }
+
+    fn eval_gamma_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let got = match self.take_fixed(&vals[..3], 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        let cum = match self.take_flag(&vals[3], sheet, here) {
+            Ok(cum) => cum,
+            Err(done) => return done,
+        };
+        stat_ready(stats::gamma_dist(got[0], got[1], got[2], cum))
+    }
+
+    fn eval_gamma_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::gamma_inv(got[0], got[1], got[2]))
+    }
+
+    fn eval_gamma_ln(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        stat_ready(stats::ln_gamma(x))
+    }
+
+    fn eval_hypgeom(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 4, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::hypgeom(got[0], got[1], got[2], got[3]))
+    }
+
+    fn eval_log_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::log_inv(got[0], got[1], got[2]))
+    }
+
+    fn eval_log_norm(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::log_norm(got[0], got[1], got[2]))
+    }
+
+    fn eval_neg_binom(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::neg_binom(got[0], got[1], got[2]))
+    }
+
+    fn eval_norm_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let got = match self.take_fixed(&vals[..3], 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        let cum = match self.take_flag(&vals[3], sheet, here) {
+            Ok(cum) => cum,
+            Err(done) => return done,
+        };
+        stat_ready(stats::norm_dist(got[0], got[1], got[2], cum))
+    }
+
+    fn eval_norm_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::norm_inv(got[0], got[1], got[2]))
+    }
+
+    fn eval_norms_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let z = match self.take_num(&vals[0], sheet, here) {
+            Ok(z) => z,
+            Err(done) => return done,
+        };
+        ready_num(stats::norms_dist(z))
+    }
+
+    fn eval_norms_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let p = match self.take_num(&vals[0], sheet, here) {
+            Ok(p) => p,
+            Err(done) => return done,
+        };
+        stat_ready(stats::norms_inv(p))
+    }
+
+    fn eval_permut(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 2, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::permut(got[0], got[1]))
+    }
+
+    fn eval_poisson(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        self.eval_flag3(vals, sheet, here, stats::poisson)
+    }
+
+    fn eval_prob(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 3 && vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let xs = match self.nums_plain(&vals[..1], sheet) {
+            Ok(xs) => xs,
+            Err(done) => return done,
+        };
+        let ps = match self.nums_plain(&vals[1..2], sheet) {
+            Ok(ps) => ps,
+            Err(done) => return done,
+        };
+        if xs.len() != ps.len() || xs.is_empty() {
+            return ready_err(NA);
+        }
+        let lower = match self.take_num(&vals[2], sheet, here) {
+            Ok(lower) => lower,
+            Err(done) => return done,
+        };
+        let upper = if vals.len() == 4 {
+            match self.take_num(&vals[3], sheet, here) {
+                Ok(upper) => upper,
+                Err(done) => return done,
+            }
+        } else {
+            lower
+        };
+        let total: f64 = ps.iter().sum();
+        if (total - 1.0).abs() > 1e-6 {
+            return ready_err(NUM);
+        }
+        let sum = xs
+            .iter()
+            .zip(ps)
+            .filter(|(x, _)| **x >= lower && **x <= upper)
+            .map(|(_, p)| p)
+            .sum();
+        ready_num(sum)
+    }
+
+    fn eval_t_dist(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::t_dist(got[0], got[1], got[2].trunc() as i32))
+    }
+
+    fn eval_t_inv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let got = match self.take_fixed(vals, 2, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        stat_ready(stats::t_inv(got[0], got[1]))
+    }
+
+    fn eval_t_test(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let (left, right) = match self.paired(&vals[0], &vals[1], sheet) {
+            Ok(pair) => pair,
+            Err(done) => return done,
+        };
+        let tails = match self.take_signed(&vals[2], sheet, here) {
+            Ok(tails) => tails,
+            Err(done) => return done,
+        };
+        let kind = match self.take_signed(&vals[3], sheet, here) {
+            Ok(kind) => kind,
+            Err(done) => return done,
+        };
+        if kind != 1 {
+            return Calc::Skip;
+        }
+        if left.len() < 2 {
+            return ready_err(DIV0);
+        }
+        let diffs: Vec<f64> = left.into_iter().zip(right).map(|(a, b)| a - b).collect();
+        let mean = match stats::average(&diffs) {
+            Ok(mean) => mean,
+            Err(token) => return ready_err(token),
+        };
+        let sd = match stats::stdev(&diffs, true) {
+            Ok(sd) => sd,
+            Err(token) => return ready_err(token),
+        };
+        let t = mean / (sd / (diffs.len() as f64).sqrt());
+        stat_ready(stats::t_dist(t, (diffs.len() - 1) as f64, tails))
+    }
+
+    fn eval_weibull(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let got = match self.take_fixed(&vals[..3], 3, sheet, here) {
+            Ok(got) => got,
+            Err(done) => return done,
+        };
+        let cum = match self.take_flag(&vals[3], sheet, here) {
+            Ok(cum) => cum,
+            Err(done) => return done,
+        };
+        stat_ready(stats::weibull(got[0], got[1], got[2], cum))
+    }
+
+    fn eval_z_test(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let nums = match self.nums_plain(&vals[..1], sheet) {
+            Ok(nums) => nums,
+            Err(done) => return done,
+        };
+        let mu = match self.take_num(&vals[1], sheet, here) {
+            Ok(mu) => mu,
+            Err(done) => return done,
+        };
+        let sigma = if vals.len() == 3 {
+            match self.take_num(&vals[2], sheet, here) {
+                Ok(sigma) => Some(sigma),
+                Err(done) => return done,
+            }
+        } else {
+            None
+        };
+        stat_ready(stats::z_test(&nums, mu, sigma))
+    }
+
+    fn eval_flag3(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        f: fn(f64, f64, bool) -> Result<f64, &'static str>,
+    ) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(x) => x,
+            Err(done) => return done,
+        };
+        let y = match self.take_num(&vals[1], sheet, here) {
+            Ok(y) => y,
+            Err(done) => return done,
+        };
+        let cum = match self.take_flag(&vals[2], sheet, here) {
+            Ok(cum) => cum,
+            Err(done) => return done,
+        };
+        stat_ready(f(x, y, cum))
+    }
+
+    fn gather(&mut self, vals: &[Value], sheet: usize) -> Result<Vec<Obs>, Calc> {
+        let mut out = Vec::new();
+        for value in vals {
+            for cell in self.facts(value, sheet)? {
+                match cell {
+                    Fact::Skip => return Err(Calc::Skip),
+                    Fact::Blank => out.push(Obs::Blank),
+                    Fact::Ready(Scalar::Num(n)) => out.push(Obs::Num(n)),
+                    Fact::Ready(Scalar::Bool(flag)) => out.push(Obs::Bool(flag)),
+                    Fact::Ready(Scalar::Text(_)) => out.push(Obs::Text),
+                    Fact::Ready(Scalar::Err(token)) => return Err(ready_err(token)),
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    fn nums_plain(&mut self, vals: &[Value], sheet: usize) -> Result<Vec<f64>, Calc> {
+        Ok(self
+            .gather(vals, sheet)?
+            .into_iter()
+            .filter_map(|obs| match obs {
+                Obs::Num(n) => Some(n),
+                _ => None,
+            })
+            .collect())
+    }
+
+    fn nums_a(&mut self, vals: &[Value], sheet: usize) -> Result<Vec<f64>, Calc> {
+        Ok(self
+            .gather(vals, sheet)?
+            .into_iter()
+            .filter_map(|obs| match obs {
+                Obs::Blank => None,
+                Obs::Num(n) => Some(n),
+                Obs::Bool(true) => Some(1.0),
+                Obs::Bool(false) | Obs::Text => Some(0.0),
+            })
+            .collect())
+    }
+
+    fn facts(&mut self, value: &Value, sheet: usize) -> Result<Vec<Fact>, Calc> {
+        match value {
+            Value::Areas(parts) => {
+                let mut all = Vec::new();
+                for part in parts {
+                    all.extend(self.facts(&Value::Area(part.clone()), sheet)?);
+                }
+                Ok(all)
+            }
+            other => self.rect_cells(other, sheet).ok_or(Calc::Skip),
+        }
+    }
+
+    fn criteria_of(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<Scalar, Calc> {
+        match self.coerce(value.clone(), sheet, here, Mode::Scalar) {
+            Calc::Skip => Err(Calc::Skip),
+            Calc::Ready(Value::Scalar(scalar)) => Ok(scalar),
+            _ => Err(ready_err(VALUE)),
+        }
+    }
+
+    fn average_where(
+        &mut self,
+        keys: &Value,
+        sums: &Value,
+        criteria: &Scalar,
+        sheet: usize,
+    ) -> Calc {
+        let key_cells = match self.facts(keys, sheet) {
+            Ok(cells) => cells,
+            Err(done) => return done,
+        };
+        let sum_cells = match self.facts(sums, sheet) {
+            Ok(cells) => cells,
+            Err(done) => return done,
+        };
+        if key_cells.len() != sum_cells.len() {
+            return ready_err(VALUE);
+        }
+        let mut total = 0.0;
+        let mut count = 0.0;
+        for (key, sum) in key_cells.into_iter().zip(sum_cells) {
+            if matches!(key, Fact::Skip) || matches!(sum, Fact::Skip) {
+                return Calc::Skip;
+            }
+            if !stat_criteria(&key, criteria) {
+                continue;
+            }
+            match sum {
+                Fact::Ready(Scalar::Num(n)) => {
+                    total += n;
+                    count += 1.0;
+                }
+                Fact::Ready(Scalar::Err(token)) => return ready_err(token),
+                _ => {}
+            }
+        }
+        if count == 0.0 {
+            ready_err(DIV0)
+        } else {
+            ready_num(total / count)
+        }
+    }
+
+    fn average_where_all(
+        &mut self,
+        sums: &Value,
+        criteria: &[(&Value, Scalar)],
+        sheet: usize,
+    ) -> Calc {
+        let sum_cells = match self.facts(sums, sheet) {
+            Ok(cells) => cells,
+            Err(done) => return done,
+        };
+        let mut masks = Vec::new();
+        for (keys, crit) in criteria {
+            let cells = match self.facts(keys, sheet) {
+                Ok(cells) => cells,
+                Err(done) => return done,
+            };
+            if cells.len() != sum_cells.len() {
+                return ready_err(VALUE);
+            }
+            masks.push((cells, crit));
+        }
+        let mut total = 0.0;
+        let mut count = 0.0;
+        for (i, sum) in sum_cells.into_iter().enumerate() {
+            if matches!(sum, Fact::Skip)
+                || masks
+                    .iter()
+                    .any(|(cells, _)| matches!(cells[i], Fact::Skip))
+            {
+                return Calc::Skip;
+            }
+            let ok = masks
+                .iter()
+                .all(|(cells, crit)| stat_criteria(&cells[i], crit));
+            if !ok {
+                continue;
+            }
+            match sum {
+                Fact::Ready(Scalar::Num(n)) => {
+                    total += n;
+                    count += 1.0;
+                }
+                Fact::Ready(Scalar::Err(token)) => return ready_err(token),
+                _ => {}
+            }
+        }
+        if count == 0.0 {
+            ready_err(DIV0)
+        } else {
+            ready_num(total / count)
+        }
+    }
+
+    fn paired(
+        &mut self,
+        x_value: &Value,
+        y_value: &Value,
+        sheet: usize,
+    ) -> Result<(Vec<f64>, Vec<f64>), Calc> {
+        let xs = self.facts(x_value, sheet)?;
+        let ys = self.facts(y_value, sheet)?;
+        if xs.len() != ys.len() {
+            return Err(ready_err(NA));
+        }
+        let mut xout = Vec::new();
+        let mut yout = Vec::new();
+        for (x, y) in xs.into_iter().zip(ys) {
+            if matches!(x, Fact::Skip) || matches!(y, Fact::Skip) {
+                return Err(Calc::Skip);
+            }
+            if let Fact::Ready(Scalar::Err(token)) = x {
+                return Err(ready_err(token));
+            }
+            if let Fact::Ready(Scalar::Err(token)) = y {
+                return Err(ready_err(token));
+            }
+            if let (Fact::Ready(Scalar::Num(x)), Fact::Ready(Scalar::Num(y))) = (x, y) {
+                xout.push(x);
+                yout.push(y);
+            }
+        }
+        Ok((xout, yout))
+    }
+
+    fn paired_xy(&mut self, vals: &[Value], sheet: usize) -> Result<(Vec<f64>, Vec<f64>), Calc> {
+        if vals.len() != 2 {
+            return Err(Calc::Skip);
+        }
+        self.paired(&vals[1], &vals[0], sheet)
+    }
+
+    fn fit_xy(&mut self, vals: &[Value], sheet: usize) -> Result<(Vec<f64>, Vec<f64>), Calc> {
+        let ys = self.nums_plain(&vals[..1], sheet)?;
+        let xs = if vals.len() == 2 {
+            self.nums_plain(&vals[1..], sheet)?
+        } else {
+            (1..=ys.len()).map(|i| i as f64).collect()
+        };
+        if xs.len() != ys.len() {
+            return Err(ready_err(NA));
+        }
+        Ok((xs, ys))
+    }
+
+    fn take_fixed(
+        &mut self,
+        vals: &[Value],
+        n: usize,
+        sheet: usize,
+        here: CellRef,
+    ) -> Result<Vec<f64>, Calc> {
+        if vals.len() != n {
+            return Err(Calc::Skip);
+        }
+        let mut got = Vec::new();
+        for value in vals {
+            got.push(self.take_num(value, sheet, here)?);
+        }
+        Ok(got)
+    }
+
+    fn matrix_flat(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+    ) -> Result<(usize, usize, Vec<f64>), Calc> {
+        match self.as_matrix(value, sheet) {
+            Mat::Skip => Err(Calc::Skip),
+            Mat::Err(token) => Err(ready_err(token)),
+            Mat::Ok(grid) => {
+                if grid.is_empty() || grid[0].is_empty() {
+                    return Err(ready_err(NA));
+                }
+                let rows = grid.len();
+                let cols = grid[0].len();
+                if grid.iter().any(|row| row.len() != cols) {
+                    return Err(ready_err(VALUE));
+                }
+                let flat = grid.into_iter().flatten().collect();
+                Ok((rows, cols, flat))
+            }
         }
     }
 
@@ -4700,6 +5856,56 @@ fn roman_classic(n: f64) -> Option<String> {
         }
     }
     Some(out)
+}
+
+fn stat_ready(result: Result<f64, &'static str>) -> Calc {
+    match result {
+        Ok(n) => ready_num(n),
+        Err(token) => ready_err(token),
+    }
+}
+
+fn extreme(nums: &[f64], max: bool) -> f64 {
+    if nums.is_empty() {
+        return 0.0;
+    }
+    if max {
+        nums.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+    } else {
+        nums.iter().copied().fold(f64::INFINITY, f64::min)
+    }
+}
+
+fn stat_criteria(cell: &Fact, criteria: &Scalar) -> bool {
+    if let Scalar::Text(text) = criteria {
+        let (op, rest) = criteria_op(text);
+        if (op.is_empty() || op == "=" || op == "<>") && rest.contains(['*', '?']) {
+            let matched = match cell {
+                Fact::Ready(Scalar::Text(value)) => wild_eq(value, rest.trim()),
+                _ => false,
+            };
+            return if op == "<>" { !matched } else { matched };
+        }
+    }
+    criteria_match(cell, criteria)
+}
+
+fn wild_eq(text: &str, pat: &str) -> bool {
+    fn rec(text: &[char], pat: &[char]) -> bool {
+        if pat.is_empty() {
+            return text.is_empty();
+        }
+        if pat[0] == '*' {
+            return rec(text, &pat[1..]) || (!text.is_empty() && rec(&text[1..], pat));
+        }
+        if text.is_empty() {
+            return false;
+        }
+        (pat[0] == '?' || pat[0] == text[0]) && rec(&text[1..], &pat[1..])
+    }
+    let text: Vec<char> = text.chars().flat_map(|ch| ch.to_lowercase()).collect();
+    let pat: Vec<char> = pat.chars().flat_map(|ch| ch.to_lowercase()).collect();
+    rec(&text, &pat)
 }
 
 fn criteria_match(cell: &Fact, criteria: &Scalar) -> bool {

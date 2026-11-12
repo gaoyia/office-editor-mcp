@@ -1340,3 +1340,175 @@ fn patch_date1904(path: &std::path::Path) {
     }
     writer.finish().unwrap();
 }
+
+#[test]
+fn stat_functions_match_excel_16() {
+    let path = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": 1}),
+        json!({"ref": "A2", "value": 2}),
+        json!({"ref": "A3", "value": 3}),
+        json!({"ref": "A4", "value": 4}),
+        json!({"ref": "A5", "value": 10}),
+        json!({"ref": "B1", "value": "x"}),
+        json!({"ref": "B2", "value": true}),
+        json!({"ref": "C1", "value": 2}),
+        json!({"ref": "C2", "value": 4}),
+        json!({"ref": "C3", "value": 6}),
+        json!({"ref": "C4", "value": 8}),
+        json!({"ref": "C5", "value": 20}),
+        json!({"ref": "F1", "value": "cat"}),
+        json!({"ref": "F2", "value": "car"}),
+        json!({"ref": "F3", "value": "dog"}),
+        json!({"ref": "G1", "value": 1}),
+        json!({"ref": "G2", "value": true}),
+        json!({"ref": "G3", "value": "x"}),
+        json!({"ref": "G4", "value": false}),
+        json!({"ref": "H1", "value": 1}),
+        json!({"ref": "H2", "value": 2}),
+        json!({"ref": "H3", "value": 2}),
+        json!({"ref": "H4", "value": 4}),
+        json!({"ref": "H5", "value": 10}),
+        json!({"ref": "P1", "value": 1}),
+        json!({"ref": "P2", "value": 2}),
+        json!({"ref": "P3", "value": 3}),
+        json!({"ref": "Q1", "value": 0.2}),
+        json!({"ref": "Q2", "value": 0.3}),
+        json!({"ref": "Q3", "value": 0.5}),
+        json!({"ref": "S1", "value": 2}),
+        json!({"ref": "S2", "value": 5}),
+        json!({"ref": "S3", "value": 9}),
+        json!({"ref": "T1", "value": 2}),
+        json!({"ref": "T2", "value": 2}),
+        json!({"ref": "T3", "value": 2}),
+    ];
+    let nums = [
+        ("E1", "=COUNT(A1:A5)", 5.0),
+        ("E2", "=COUNTA(A1:B3)", 5.0),
+        ("E3", "=COUNTBLANK(A1:B3)", 1.0),
+        ("E4", "=COUNTIF(A1:A5,\">3\")", 2.0),
+        ("E5", "=COUNTIF(F1:F3,\"C*\")", 2.0),
+        ("E6", "=COUNTIFS(A1:A5,\">1\",C1:C5,\">4\")", 3.0),
+        ("E7", "=MAX(A1:A5)", 10.0),
+        ("E8", "=MAXA(G1:G3)", 1.0),
+        ("E9", "=MIN(G1:G3)", 1.0),
+        ("E10", "=MINA(G1:G3)", 0.0),
+        ("E11", "=LARGE(A1:A5,2)", 4.0),
+        ("E12", "=SMALL(A1:A5,2)", 2.0),
+        ("E13", "=AVERAGE(A1:A5)", 4.0),
+        ("E14", "=AVERAGE(G1:G3)", 1.0),
+        ("E15", "=AVERAGEA(G1:G4)", 0.5),
+        ("E16", "=AVERAGEIF(A1:A5,\">3\")", 7.0),
+        ("E17", "=AVERAGEIFS(C1:C5,A1:A5,\">3\")", 14.0),
+        ("E18", "=GEOMEAN(A1:A4)", 2.2133638394006434),
+        ("E19", "=HARMEAN(A1:A4)", 1.92),
+        ("E20", "=MEDIAN(A1:A4)", 2.5),
+        ("E21", "=MODE(H1:H5)", 2.0),
+        ("E22", "=TRIMMEAN(A1:A5,0.4)", 3.0),
+        ("E23", "=AVEDEV(A1:A5)", 2.4),
+        ("E24", "=DEVSQ(A1:A5)", 50.0),
+        ("E25", "=STDEV(A1:A5)", 3.5355339059327378),
+        ("E26", "=STDEVA(G1:G3)", 0.5773502691896258),
+        ("E27", "=STDEVP(A1:A5)", 3.1622776601683795),
+        ("E28", "=STDEVPA(G1:G3)", 0.4714045207910317),
+        ("E29", "=VAR(A1:A5)", 12.5),
+        ("E30", "=VARA(G1:G3)", 0.33333333333333337),
+        ("E31", "=VARP(A1:A5)", 10.0),
+        ("E32", "=VARPA(G1:G3)", 0.2222222222222222),
+        ("E33", "=PERCENTILE(A1:A5,0.9)", 7.6),
+        ("E34", "=PERCENTRANK(A1:A5,6)", 0.833),
+        ("E35", "=QUARTILE(A1:A5,1)", 2.0),
+        ("E36", "=RANK(2,H1:H5)", 3.0),
+        ("E37", "=CORREL(A1:A5,C1:C5)", 1.0),
+        ("E38", "=COVAR(A1:A5,C1:C5)", 20.0),
+        ("E39", "=FORECAST(6,C1:C5,A1:A5)", 12.0),
+        ("E40", "=INTERCEPT(C1:C5,A1:A5)", 0.0),
+        ("E41", "=SLOPE(C1:C5,A1:A5)", 2.0),
+        ("E42", "=STEYX(C1:C5,A1:A5)", 0.0),
+        ("E43", "=BETADIST(0.5,2,3)", 0.6875),
+        ("E44", "=BINOMDIST(3,5,0.5,FALSE)", 0.3125),
+        ("E45", "=CHIDIST(3,2)", 0.22313016014842982),
+        ("E46", "=CHIINV(0.05,2)", 5.991464547107982),
+        ("E47", "=CHITEST(A1:A3,T1:T3)", 0.6065306597126334),
+        ("E48", "=CONFIDENCE(0.05,1.5,30)", 0.536758243115147),
+        ("E49", "=NORMDIST(1,0,1,FALSE)", 0.24197072451914337),
+        ("E50", "=TDIST(2,5,2)", 0.10193947882985836),
+        ("E51", "=TINV(0.05,5)", 2.570581835636315),
+        ("E52", "=TTEST(A1:A5,C1:C5,2,1)", 0.06467689395635304),
+        ("E53", "=ZTEST(A1:A5,4)", 0.5),
+        ("E54", "=PROB(P1:P3,Q1:Q3,1,2)", 0.5),
+        ("E55", "=FDIST(2,3,4)", 0.2563871975281761),
+        ("E56", "=FTEST(A1:A5,C1:C5)", 0.208),
+        ("E57", "=GAMMALN(3)", std::f64::consts::LN_2),
+        ("E58", "=SKEW(A1:A5)", 1.697056274847714),
+        ("E59", "=KURT(A1:A5)", 3.152),
+        ("E60", "=POISSON(2,1,TRUE)", 0.9196986029286058),
+        ("E61", "=WEIBULL(2,1,1,TRUE)", 0.8646647167633873),
+        ("E62", "=HYPGEOMDIST(1,4,4,12)", 0.45252525252525244),
+        ("E63", "=PERMUT(5,2)", 20.0),
+        ("E64", "=FISHER(0.5)", 0.5493061443340549),
+        ("E65", "=STANDARDIZE(10,4,2)", 3.0),
+        ("E66", "=COUNTIF(F1:F3,\"?a?\")", 2.0),
+    ];
+    for (cell_ref, formula, _) in nums {
+        cells.push(json!({"ref": cell_ref, "formula": formula}));
+    }
+    cells.push(json!({"ref": "E67", "formula": "=MODE(A1:A5)"}));
+    cells.push(json!({"ref": "E68", "formula": "=LARGE(A1:A5,9)"}));
+    cells.push(json!({"ref": "E69", "formula": "=STDEV(G1:G3)"}));
+    cells.push(json!({"ref": "E70", "formula": "=ECMA.AVERAGE(A1:A5)"}));
+    cells.push(json!({"ref": "J1", "formula": "=LINEST(C1:C5,A1:A5)", "arrayRef": "J1:K1"}));
+    cells.push(json!({"ref": "J3", "formula": "=TREND(C1:C5,A1:A5)", "arrayRef": "J3:J7"}));
+    cells.push(json!({"ref": "J9", "formula": "=GROWTH(C1:C5,A1:A5)", "arrayRef": "J9:J13"}));
+    cells.push(json!({"ref": "J15", "formula": "=FREQUENCY(A1:A5,S1:S3)", "arrayRef": "J15:J18"}));
+    cells.push(json!({"ref": "J20", "formula": "=LOGEST(C1:C5,A1:A5)", "arrayRef": "J20:K20"}));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:T70");
+    for (cell_ref, _, expect) in nums {
+        let got = cell(&tree, &format!("cell:Sheet1!{cell_ref}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{cell_ref}"));
+        assert!(
+            (got - expect).abs() < 1e-6,
+            "{cell_ref} got {got} expect {expect}"
+        );
+    }
+    let err = |id: &str, token: &str| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "error", "{id} {c}");
+        assert_eq!(c["value"], token, "{id}");
+    };
+    err("cell:Sheet1!E67", "#N/A");
+    err("cell:Sheet1!E68", "#NUM!");
+    err("cell:Sheet1!E69", "#DIV/0!");
+    let ecma = cell(&tree, "cell:Sheet1!E70");
+    assert!(ecma["value"].is_null(), "{ecma}");
+    let near = |id: &str, expect: f64| {
+        let got = cell(&tree, id)["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{id}"));
+        assert!(
+            (got - expect).abs() < 1e-6,
+            "{id} got {got} expect {expect}"
+        );
+    };
+    near("cell:Sheet1!J1", 2.0);
+    near("cell:Sheet1!K1", 0.0);
+    near("cell:Sheet1!J3", 2.0);
+    near("cell:Sheet1!J7", 20.0);
+    near("cell:Sheet1!J9", 3.0326557801954968);
+    near("cell:Sheet1!J13", 23.311514760097165);
+    near("cell:Sheet1!J15", 2.0);
+    near("cell:Sheet1!J16", 2.0);
+    near("cell:Sheet1!J17", 0.0);
+    near("cell:Sheet1!J18", 1.0);
+    near("cell:Sheet1!J20", 1.2543431864367391);
+    near("cell:Sheet1!K20", 2.417724122861845);
+}
