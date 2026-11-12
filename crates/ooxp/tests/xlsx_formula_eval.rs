@@ -1138,3 +1138,205 @@ fn text_functions_match_excel_16() {
         }
     }
 }
+
+#[test]
+fn date_functions_match_excel_16() {
+    let path = book();
+    let time = (13.0 * 3600.0 + 45.0 * 60.0 + 6.0) / 86400.0;
+    let mut cells = vec![
+        json!({"ref": "A1", "formula": "=DATE(2024,2,29)"}),
+        json!({"ref": "A2", "formula": "=DATE(1900,2,28)"}),
+        json!({"ref": "A3", "formula": "=DATE(1900,3,1)"}),
+        json!({"ref": "A4", "formula": "=DATE(1900,2,29)"}),
+        json!({"ref": "A5", "formula": "=DATE(2024,2,29)+TIME(13,45,6)"}),
+        json!({"ref": "A6", "formula": "=DATE(2024,3,4)"}),
+    ];
+    let nums = [
+        ("C1", "=YEAR(A1)", 2024.0),
+        ("C2", "=MONTH(A1)", 2.0),
+        ("C3", "=DAY(A1)", 29.0),
+        ("C4", "=HOUR(A5)", 13.0),
+        ("C5", "=MINUTE(A5)", 45.0),
+        ("C6", "=SECOND(A5)", 6.0),
+        ("C7", "=DATEVALUE(\"2024/2/29\")", 45351.0),
+        ("C8", "=DATEVALUE(\"2024-2-29\")", 45351.0),
+        ("C9", "=TIME(13,45,6)", time),
+        ("C10", "=TIMEVALUE(\"13:45:06\")", time),
+        ("C11", "=EDATE(A1,1)", 45380.0),
+        ("C12", "=EOMONTH(A1,1)", 45382.0),
+        ("C13", "=EDATE(DATE(2024,1,31),1)", 45351.0),
+        ("C14", "=EOMONTH(DATE(2024,1,31),1)", 45351.0),
+        ("C15", "=WEEKDAY(A1)", 5.0),
+        ("C16", "=WEEKDAY(A1,2)", 4.0),
+        ("C17", "=WEEKDAY(A1,3)", 3.0),
+        ("C18", "=WEEKNUM(A1)", 9.0),
+        ("C19", "=WEEKNUM(A1,21)", 9.0),
+        ("C20", "=WEEKNUM(DATE(2023,1,1),21)", 52.0),
+        ("C21", "=WORKDAY(DATE(2024,3,1),1)", 45355.0),
+        ("C22", "=WORKDAY(DATE(2024,3,1),-1)", 45351.0),
+        ("C23", "=WORKDAY(DATE(2024,3,1),1,A6)", 45356.0),
+        ("C24", "=NETWORKDAYS(DATE(2024,3,1),DATE(2024,3,4))", 2.0),
+        ("C25", "=NETWORKDAYS(DATE(2024,3,4),DATE(2024,3,1))", -2.0),
+        ("C26", "=NETWORKDAYS(DATE(2024,3,1),DATE(2024,3,8),A6)", 5.0),
+        ("C27", "=NETWORKDAYS(A1,EDATE(A1,1))", 22.0),
+        ("C28", "=WORKDAY.INTL(A1,1,\"0000011\")", 45352.0),
+        ("C29", "=DATEDIF(A1,DATE(2025,3,1),\"Y\")", 1.0),
+        ("C30", "=DATEDIF(A1,DATE(2025,3,1),\"M\")", 12.0),
+        ("C31", "=DATEDIF(A1,DATE(2025,3,1),\"D\")", 366.0),
+        (
+            "C32",
+            "=DATEDIF(DATE(2024,1,31),DATE(2024,3,1),\"MD\")",
+            -1.0,
+        ),
+        (
+            "C33",
+            "=DATEDIF(DATE(2024,1,31),DATE(2025,3,1),\"YM\")",
+            1.0,
+        ),
+        (
+            "C34",
+            "=DATEDIF(DATE(2024,2,29),DATE(2025,3,1),\"YD\")",
+            0.0,
+        ),
+        ("C35", "=DAYS360(A1,DATE(2025,3,1))", 361.0),
+        (
+            "C36",
+            "=DAYS360(DATE(2024,1,31),DATE(2024,2,29),TRUE)",
+            29.0,
+        ),
+        ("C37", "=YEARFRAC(A1,DATE(2025,3,1))", 361.0 / 360.0),
+        (
+            "C38",
+            "=YEARFRAC(DATE(2024,3,1),DATE(2024,7,1),1)",
+            122.0 / 366.0,
+        ),
+        (
+            "C39",
+            "=YEARFRAC(DATE(2023,1,1),DATE(2023,7,1),1)",
+            181.0 / 365.0,
+        ),
+        (
+            "C40",
+            "=YEARFRAC(DATE(2022,6,1),DATE(2024,9,1),1)",
+            2.252737226277372,
+        ),
+        (
+            "C41",
+            "=YEARFRAC(DATE(2024,2,29),DATE(2025,3,1),1)",
+            1.0013679890560876,
+        ),
+        ("C42", "=HOUR(1.5)", 12.0),
+        ("C43", "=TIME(0,0,0)", 0.0),
+        ("C44", "=YEAR(A4)", 1900.0),
+        ("C45", "=MONTH(A4)", 2.0),
+        ("C46", "=DAY(A4)", 29.0),
+        ("C47", "=NETWORKDAYS.INTL(A1,EDATE(A1,1),\"0000011\")", 22.0),
+    ];
+    for (cell_ref, formula, _) in nums {
+        cells.push(json!({"ref": cell_ref, "formula": formula}));
+    }
+    cells.push(json!({"ref": "C48", "formula": "=TODAY()"}));
+    cells.push(json!({"ref": "C49", "formula": "=NOW()"}));
+    cells.push(json!({"ref": "C50", "formula": "=ECMA.YEAR(A1)"}));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:C50");
+    assert!((cell(&tree, "cell:Sheet1!A1")["value"].as_f64().unwrap() - 45351.0).abs() < 1e-9);
+    assert!((cell(&tree, "cell:Sheet1!A2")["value"].as_f64().unwrap() - 59.0).abs() < 1e-9);
+    assert!((cell(&tree, "cell:Sheet1!A3")["value"].as_f64().unwrap() - 61.0).abs() < 1e-9);
+    assert!((cell(&tree, "cell:Sheet1!A4")["value"].as_f64().unwrap() - 60.0).abs() < 1e-9);
+    assert!(
+        (cell(&tree, "cell:Sheet1!A5")["value"].as_f64().unwrap() - (45351.0 + time)).abs() < 1e-9
+    );
+    for (cell_ref, _, expect) in nums {
+        let got = cell(&tree, &format!("cell:Sheet1!{cell_ref}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{cell_ref}"));
+        assert!(
+            (got - expect).abs() < 1e-8,
+            "{cell_ref} got {got} expect {expect}"
+        );
+    }
+    let today = cell(&tree, "cell:Sheet1!C48")["value"].as_f64().unwrap();
+    let now = cell(&tree, "cell:Sheet1!C49")["value"].as_f64().unwrap();
+    assert!((today - today.round()).abs() < 1e-9, "{today}");
+    assert!(now >= today && now < today + 1.0, "{now} {today}");
+    let ecma = cell(&tree, "cell:Sheet1!C50");
+    assert!(ecma["value"].is_null(), "{ecma}");
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(formula_marks_ca(&xml, "TODAY()"));
+    assert!(formula_marks_ca(&xml, "NOW()"));
+    assert!(!formula_marks_ca(&xml, "YEAR(A1)"));
+
+    let path1904 = book();
+    let cells1904 = vec![
+        json!({"ref": "A1", "formula": "=DATE(2024,2,29)"}),
+        json!({"ref": "A2", "formula": "=DATE(1904,2,29)"}),
+        json!({"ref": "A3", "formula": "=DATE(1904,3,1)"}),
+        json!({"ref": "A4", "formula": "=EDATE(A1,1)"}),
+        json!({"ref": "A5", "formula": "=YEAR(A1)"}),
+    ];
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path1904.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells1904 }] }
+    })
+    .to_string())
+    .unwrap();
+    patch_date1904(&path1904);
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path1904.to_string_lossy(),
+        "ops": [{ "op": "setCell", "id": "cell:Sheet1!A5", "formula": "=YEAR(A1)" }]
+    })
+    .to_string())
+    .unwrap();
+    let tree1904 = inspect_range(&path1904, "A1:A5");
+    let near = |id: &str, expect: f64| {
+        let got = cell(&tree1904, id)["value"].as_f64().unwrap();
+        assert!((got - expect).abs() < 1e-8, "{id} got {got}");
+    };
+    near("cell:Sheet1!A1", 43889.0);
+    near("cell:Sheet1!A2", 59.0);
+    near("cell:Sheet1!A3", 60.0);
+    near("cell:Sheet1!A4", 43918.0);
+    near("cell:Sheet1!A5", 2024.0);
+}
+
+fn patch_date1904(path: &std::path::Path) {
+    let file = std::fs::File::open(path).unwrap();
+    let mut archive = zip::ZipArchive::new(file).unwrap();
+    let mut parts = Vec::new();
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).unwrap();
+        let name = entry.name().to_string();
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut entry, &mut buf).unwrap();
+        if name == "xl/workbook.xml" {
+            let text = String::from_utf8(buf).unwrap();
+            buf = text
+                .replace("<sheets", "<workbookPr date1904=\"1\"/><sheets")
+                .into_bytes();
+        }
+        parts.push((name, buf));
+    }
+    drop(archive);
+    let file = std::fs::File::create(path).unwrap();
+    let mut writer = zip::ZipWriter::new(file);
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for (name, buf) in parts {
+        writer.start_file(name, opts).unwrap();
+        use std::io::Write;
+        writer.write_all(&buf).unwrap();
+    }
+    writer.finish().unwrap();
+}

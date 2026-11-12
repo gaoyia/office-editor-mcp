@@ -160,6 +160,7 @@ $order = @(
     'xlsx-info'
     'xlsx-math'
     'xlsx-text'
+    'xlsx-date'
     'xlsx-data-table'
     'xlsx-formula-rest'
     'xlsx-validation'

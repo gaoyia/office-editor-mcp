@@ -157,7 +157,7 @@ struct Book {
     stack: Vec<(usize, u32, u32)>,
     overrides: HashMap<(usize, u32, u32), Scalar>,
     cyclic: HashSet<(usize, u32, u32)>,
-    /// `CELL` / `INFO` 写出结果的格子。公式写 `ca="1"`。
+    /// `CELL`、`INFO`、`TODAY`、`NOW`、`RAND` 写出结果的格子。公式写 `ca="1"`。
     volatile: HashSet<(usize, u32, u32)>,
     /// `calcPr` 的 `calcMode="manual"`。
     manual: bool,
@@ -1129,7 +1129,14 @@ impl Book {
         match upper.as_str() {
             "NA" => return Calc::Ready(Value::Scalar(Scalar::Err(NA))),
             "NOW" => {
-                return Calc::Ready(Value::Scalar(Scalar::Num(now_serial(self.date1904))));
+                return self.volatile_ready(sheet, here, Scalar::Num(now_serial(self.date1904)));
+            }
+            "TODAY" => {
+                if !args.is_empty() {
+                    return Calc::Skip;
+                }
+                let day = now_serial(self.date1904).floor();
+                return self.volatile_ready(sheet, here, Scalar::Num(day));
             }
             // 逻辑类。ECMA. / ISO. 是函数名的一部分，不是可以套到 IF 上的前缀。
             "TRUE" => return logic_const(args, true),
@@ -1203,7 +1210,10 @@ impl Book {
             }
             other => match self.eval_text(other, &vals, sheet, here) {
                 Some(done) => done,
-                None => self.eval_math(other, &vals, sheet, here, mode),
+                None => match self.eval_date(other, &vals, sheet, here) {
+                    Some(done) => done,
+                    None => self.eval_math(other, &vals, sheet, here, mode),
+                },
             },
         }
     }
@@ -3545,6 +3555,382 @@ impl Book {
             Hit::Fact(Fact::Skip) => Err(Calc::Skip),
         }
     }
+
+    /// 日期与时间类。不是这类函数时返回 `None`。
+    fn eval_date(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let done = match name {
+            "YEAR" | "MONTH" | "DAY" | "HOUR" | "MINUTE" | "SECOND" => {
+                self.eval_date_part(name, vals, sheet, here)
+            }
+            "DATEVALUE" => self.eval_datevalue(vals, sheet, here),
+            "TIME" => self.eval_time(vals, sheet, here),
+            "TIMEVALUE" => self.eval_timevalue(vals, sheet, here),
+            "EDATE" => self.eval_edate(vals, sheet, here, false),
+            "EOMONTH" => self.eval_edate(vals, sheet, here, true),
+            "WEEKDAY" => self.eval_weekday(vals, sheet, here),
+            "WEEKNUM" => self.eval_weeknum(vals, sheet, here),
+            "WORKDAY" => self.eval_workday(vals, sheet, here, false),
+            "WORKDAY.INTL" => self.eval_workday(vals, sheet, here, true),
+            "NETWORKDAYS" => self.eval_network(vals, sheet, here, false),
+            "NETWORKDAYS.INTL" => self.eval_network(vals, sheet, here, true),
+            "DATEDIF" => self.eval_datedif(vals, sheet, here),
+            "DAYS360" => self.eval_days360(vals, sheet, here),
+            "YEARFRAC" => self.eval_yearfrac(vals, sheet, here),
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn eval_date_part(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let serial = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let value = match name {
+            "YEAR" | "MONTH" | "DAY" => date_part(name, serial, self.date1904),
+            _ => clock_part(name, serial),
+        };
+        match value {
+            Some(n) => ready_num(n),
+            None => ready_err(NUM),
+        }
+    }
+
+    fn eval_datevalue(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        match parse_date_text(&text, self.date1904) {
+            Some(serial) => ready_num(serial),
+            None => ready_err(VALUE),
+        }
+    }
+
+    fn eval_time(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let hour = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let minute = match self.take_num(&vals[1], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let second = match self.take_num(&vals[2], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        match time_fraction(hour, minute, second) {
+            Ok(n) => ready_num(n),
+            Err(token) => ready_err(token),
+        }
+    }
+
+    fn eval_timevalue(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let parts: Vec<&str> = text.trim().split(':').collect();
+        if parts.len() != 3 {
+            return ready_err(VALUE);
+        }
+        let parsed: Option<Vec<f64>> = parts.iter().map(|part| part.trim().parse().ok()).collect();
+        let Some(parsed) = parsed else {
+            return ready_err(VALUE);
+        };
+        match time_fraction(parsed[0], parsed[1], parsed[2]) {
+            Ok(n) => ready_num(n),
+            Err(token) => ready_err(token),
+        }
+    }
+
+    fn eval_edate(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        end_of_month: bool,
+    ) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let serial = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let months = match self.take_signed(&vals[1], sheet, here) {
+            Ok(months) => months,
+            Err(done) => return done,
+        };
+        match shift_months(serial, months, end_of_month, self.date1904) {
+            Some(n) => ready_num(n),
+            None => ready_err(NUM),
+        }
+    }
+
+    fn eval_weekday(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let serial = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let kind = if vals.len() == 1 {
+            1
+        } else {
+            match self.take_signed(&vals[1], sheet, here) {
+                Ok(kind) => kind,
+                Err(done) => return done,
+            }
+        };
+        match weekday_number(serial, kind, self.date1904) {
+            Some(n) => ready_num(n),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_weeknum(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let serial = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let kind = if vals.len() == 1 {
+            1
+        } else {
+            match self.take_signed(&vals[1], sheet, here) {
+                Ok(kind) => kind,
+                Err(done) => return done,
+            }
+        };
+        match week_number(serial, kind, self.date1904) {
+            Some(n) => ready_num(n),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_workday(&mut self, vals: &[Value], sheet: usize, here: CellRef, intl: bool) -> Calc {
+        let max = if intl { 4 } else { 3 };
+        if vals.len() < 2 || vals.len() > max {
+            return Calc::Skip;
+        }
+        let serial = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let steps = match self.take_signed(&vals[1], sheet, here) {
+            Ok(steps) => steps,
+            Err(done) => return done,
+        };
+        let (mask, holiday_at) = if intl {
+            let mask = if vals.len() >= 3 {
+                match self.weekend_arg(&vals[2], sheet, here) {
+                    Ok(mask) => mask,
+                    Err(done) => return done,
+                }
+            } else {
+                DEFAULT_WEEKEND
+            };
+            (mask, 3)
+        } else {
+            (DEFAULT_WEEKEND, 2)
+        };
+        let holidays = if vals.len() > holiday_at {
+            match self.holiday_days(&vals[holiday_at], sheet) {
+                Ok(days) => days,
+                Err(done) => return done,
+            }
+        } else {
+            HashSet::new()
+        };
+        match shift_workday(
+            serial.floor() as i64,
+            steps,
+            &mask,
+            &holidays,
+            self.date1904,
+        ) {
+            Some(day) => ready_num(day as f64),
+            None => ready_err(NUM),
+        }
+    }
+
+    fn eval_network(&mut self, vals: &[Value], sheet: usize, here: CellRef, intl: bool) -> Calc {
+        let max = if intl { 4 } else { 3 };
+        if vals.len() < 2 || vals.len() > max {
+            return Calc::Skip;
+        }
+        let start = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let end = match self.take_serial(&vals[1], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let (mask, holiday_at) = if intl {
+            let mask = if vals.len() >= 3 {
+                match self.weekend_arg(&vals[2], sheet, here) {
+                    Ok(mask) => mask,
+                    Err(done) => return done,
+                }
+            } else {
+                DEFAULT_WEEKEND
+            };
+            (mask, 3)
+        } else {
+            (DEFAULT_WEEKEND, 2)
+        };
+        let holidays = if vals.len() > holiday_at {
+            match self.holiday_days(&vals[holiday_at], sheet) {
+                Ok(days) => days,
+                Err(done) => return done,
+            }
+        } else {
+            HashSet::new()
+        };
+        ready_num(count_workdays(
+            start.floor() as i64,
+            end.floor() as i64,
+            &mask,
+            &holidays,
+            self.date1904,
+        ) as f64)
+    }
+
+    fn eval_datedif(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let start = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let end = match self.take_serial(&vals[1], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let unit = match self.take_text(&vals[2], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        match date_diff(start, end, &unit, self.date1904) {
+            Some(n) => ready_num(n),
+            None => ready_err(NUM),
+        }
+    }
+
+    fn eval_days360(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 || vals.len() > 3 {
+            return Calc::Skip;
+        }
+        let start = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let end = match self.take_serial(&vals[1], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let european = if vals.len() == 3 {
+            match self.take_flag(&vals[2], sheet, here) {
+                Ok(flag) => flag,
+                Err(done) => return done,
+            }
+        } else {
+            false
+        };
+        match days_360(start, end, european, self.date1904) {
+            Some(n) => ready_num(n),
+            None => ready_err(NUM),
+        }
+    }
+
+    fn eval_yearfrac(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 || vals.len() > 3 {
+            return Calc::Skip;
+        }
+        let start = match self.take_serial(&vals[0], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let end = match self.take_serial(&vals[1], sheet, here) {
+            Ok(serial) => serial,
+            Err(done) => return done,
+        };
+        let basis = if vals.len() == 3 {
+            match self.take_signed(&vals[2], sheet, here) {
+                Ok(basis) => basis,
+                Err(done) => return done,
+            }
+        } else {
+            0
+        };
+        match year_frac(start, end, basis, self.date1904) {
+            Some(n) => ready_num(n),
+            None => Calc::Skip,
+        }
+    }
+
+    fn take_serial(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<f64, Calc> {
+        let number = self.take_num(value, sheet, here)?;
+        if !number.is_finite() || number < 0.0 {
+            return Err(ready_err(NUM));
+        }
+        Ok(number)
+    }
+
+    fn weekend_arg(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+        here: CellRef,
+    ) -> Result<[bool; 7], Calc> {
+        let text = self.take_text(value, sheet, here)?;
+        weekend_mask(&text).ok_or_else(|| ready_err(VALUE))
+    }
+
+    fn holiday_days(&mut self, value: &Value, sheet: usize) -> Result<HashSet<i64>, Calc> {
+        let Some(cells) = self.rect_cells(value, sheet) else {
+            return Err(Calc::Skip);
+        };
+        let mut days = HashSet::new();
+        for fact in cells {
+            match fact {
+                Fact::Blank => {}
+                Fact::Skip => return Err(Calc::Skip),
+                Fact::Ready(Scalar::Num(n)) if n.is_finite() && n >= 0.0 => {
+                    days.insert(n.floor() as i64);
+                }
+                Fact::Ready(Scalar::Num(_)) => return Err(ready_err(NUM)),
+                Fact::Ready(Scalar::Err(token)) => return Err(ready_err(token)),
+                Fact::Ready(_) => {}
+            }
+        }
+        Ok(days)
+    }
 }
 
 enum CaseKind {
@@ -4786,6 +5172,15 @@ fn fmt_num(n: f64) -> String {
 }
 
 fn now_serial(date1904: bool) -> f64 {
+    if let Some((year, month, day, hour, minute, second, milli)) = local_now() {
+        let day_serial = excel_serial(year, month, day, date1904);
+        let frac = (f64::from(hour) * 3600.0
+            + f64::from(minute) * 60.0
+            + f64::from(second)
+            + f64::from(milli) / 1000.0)
+            / 86400.0;
+        return day_serial + frac;
+    }
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -4794,12 +5189,56 @@ fn now_serial(date1904: bool) -> f64 {
     let days = secs.div_euclid(86400);
     let tod = secs.rem_euclid(86400) as f64 / 86400.0;
     let unix_days = days_from_civil(1970, 1, 1);
-    let excel = if date1904 {
-        days_from_civil(1904, 1, 1)
-    } else {
-        days_from_civil(1899, 12, 30)
+    (unix_days + days - excel_epoch(date1904)) as f64 + tod
+}
+
+/// Excel 的 `NOW` 用本机本地时间。非 Windows 没有这套时钟，调用方改走 UTC。
+#[cfg(windows)]
+fn local_now() -> Option<(i32, u32, u32, u32, u32, u32, u32)> {
+    let mut time = SystemTime {
+        year: 0,
+        month: 0,
+        day_of_week: 0,
+        day: 0,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        milliseconds: 0,
     };
-    (unix_days + days - excel) as f64 + tod
+    unsafe { GetLocalTime(&mut time) };
+    Some((
+        i32::from(time.year),
+        u32::from(time.month),
+        u32::from(time.day),
+        u32::from(time.hour),
+        u32::from(time.minute),
+        u32::from(time.second),
+        u32::from(time.milliseconds),
+    ))
+}
+
+#[cfg(not(windows))]
+fn local_now() -> Option<(i32, u32, u32, u32, u32, u32, u32)> {
+    None
+}
+
+#[cfg(windows)]
+#[repr(C)]
+struct SystemTime {
+    year: u16,
+    month: u16,
+    day_of_week: u16,
+    day: u16,
+    hour: u16,
+    minute: u16,
+    second: u16,
+    milliseconds: u16,
+}
+
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetLocalTime(time: *mut SystemTime);
 }
 
 fn date_serial(y: Scalar, m: Scalar, d: Scalar, date1904: bool) -> Scalar {
@@ -4819,12 +5258,429 @@ fn date_serial(y: Scalar, m: Scalar, d: Scalar, date1904: bool) -> Scalar {
     if !(1..=9999).contains(&yi) || !(1..=12).contains(&mi) || !(1..=31).contains(&di) {
         return Scalar::Err(NUM);
     }
-    let epoch = if date1904 {
+    Scalar::Num(excel_serial(yi, mi as u32, di as u32, date1904))
+}
+
+fn excel_epoch(date1904: bool) -> i64 {
+    if date1904 {
         days_from_civil(1904, 1, 1)
     } else {
         days_from_civil(1899, 12, 30)
+    }
+}
+
+/// 1900 系统在 3 月 1 日之前比公历少一天。假闰日 1900-02-29 的序列是 60。
+fn excel_serial(y: i32, m: u32, d: u32, date1904: bool) -> f64 {
+    if !date1904 && y == 1900 && m == 2 && d == 29 {
+        return 60.0;
+    }
+    let civil = days_from_civil(y, m, d);
+    let mut serial = civil - excel_epoch(date1904);
+    if !date1904 {
+        let (yy, mm, _) = civil_from_days(civil);
+        if yy < 1900 || (yy == 1900 && mm < 3) {
+            serial -= 1;
+        }
+    }
+    serial as f64
+}
+
+fn excel_ymd(serial: f64, date1904: bool) -> Option<(i32, u32, u32)> {
+    if !serial.is_finite() || serial < 0.0 {
+        return None;
+    }
+    let day = serial.floor() as i64;
+    if !date1904 && day == 60 {
+        return Some((1900, 2, 29));
+    }
+    let shift = if !date1904 && day < 60 { 1 } else { 0 };
+    Some(civil_from_days(excel_epoch(date1904) + day + shift))
+}
+
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719468;
+    let era = z.div_euclid(146097);
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i32 + era as i32 * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m as u32, d)
+}
+
+fn leap_year(year: i32, date1904: bool) -> bool {
+    let real = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    real || (!date1904 && year == 1900)
+}
+
+fn days_in_month(year: i32, month: u32, date1904: bool) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => {
+            if leap_year(year, date1904) {
+                29
+            } else {
+                28
+            }
+        }
+        _ => 30,
+    }
+}
+
+fn year_len(year: i32, date1904: bool) -> u32 {
+    if leap_year(year, date1904) {
+        366
+    } else {
+        365
+    }
+}
+
+fn shift_months(serial: f64, months: i32, end_of_month: bool, date1904: bool) -> Option<f64> {
+    let (y, m, d) = excel_ymd(serial, date1904)?;
+    let idx = (m as i32 - 1) + months;
+    let y2 = y + idx.div_euclid(12);
+    let m2 = idx.rem_euclid(12) as u32 + 1;
+    if !(1..=9999).contains(&y2) {
+        return None;
+    }
+    let dim = days_in_month(y2, m2, date1904);
+    let d2 = if end_of_month { dim } else { d.min(dim) };
+    Some(excel_serial(y2, m2, d2, date1904))
+}
+
+/// 2024-02-29 是周四。用它当锚，1900 与 1904 的序列差不会把星期算错。
+fn weekday_type1(serial: f64, date1904: bool) -> i32 {
+    let anchor = if date1904 { 43889.0 } else { 45351.0 };
+    let delta = serial.floor() as i64 - anchor as i64;
+    (4 + delta).rem_euclid(7) as i32 + 1
+}
+
+fn weekday_number(serial: f64, kind: i32, date1904: bool) -> Option<f64> {
+    let sun = weekday_type1(serial, date1904);
+    let n = match kind {
+        1 => sun,
+        2 => {
+            if sun == 1 {
+                7
+            } else {
+                sun - 1
+            }
+        }
+        3 => (sun + 5) % 7,
+        _ => return None,
     };
-    Scalar::Num((days_from_civil(yi, mi as u32, di as u32) - epoch) as f64)
+    Some(f64::from(n))
+}
+
+fn week_number(serial: f64, kind: i32, date1904: bool) -> Option<f64> {
+    match kind {
+        1 => Some(weeknum_sunday(serial, date1904)),
+        21 => Some(iso_week(serial, date1904)),
+        _ => None,
+    }
+}
+
+fn weeknum_sunday(serial: f64, date1904: bool) -> f64 {
+    let Some((year, _, _)) = excel_ymd(serial, date1904) else {
+        return 0.0;
+    };
+    let jan1 = excel_serial(year, 1, 1, date1904);
+    let offset = i64::from(weekday_type1(jan1, date1904) - 1);
+    let index = (serial.floor() - jan1) as i64;
+    ((index + offset) / 7 + 1) as f64
+}
+
+fn iso_week(serial: f64, date1904: bool) -> f64 {
+    let mon0 = weekday_mon0(serial, date1904);
+    let thursday = serial.floor() - f64::from(mon0) + 3.0;
+    let Some((year, _, _)) = excel_ymd(thursday, date1904) else {
+        return 0.0;
+    };
+    let jan4 = excel_serial(year, 1, 4, date1904);
+    let week1_monday = jan4 - f64::from(weekday_mon0(jan4, date1904));
+    let this_monday = thursday - 3.0;
+    ((this_monday - week1_monday) / 7.0).round() + 1.0
+}
+
+fn weekday_mon0(serial: f64, date1904: bool) -> i32 {
+    let sun = weekday_type1(serial, date1904);
+    if sun == 1 {
+        6
+    } else {
+        sun - 2
+    }
+}
+
+fn date_part(name: &str, serial: f64, date1904: bool) -> Option<f64> {
+    let (y, m, d) = excel_ymd(serial, date1904)?;
+    Some(match name {
+        "YEAR" => f64::from(y),
+        "MONTH" => f64::from(m),
+        "DAY" => f64::from(d),
+        _ => return None,
+    })
+}
+
+fn clock_part(name: &str, serial: f64) -> Option<f64> {
+    let (hour, minute, second) = clock_hms(serial)?;
+    Some(match name {
+        "HOUR" => f64::from(hour),
+        "MINUTE" => f64::from(minute),
+        "SECOND" => f64::from(second),
+        _ => return None,
+    })
+}
+
+fn clock_hms(serial: f64) -> Option<(i32, i32, i32)> {
+    if !serial.is_finite() || serial < 0.0 {
+        return None;
+    }
+    let frac = serial - serial.floor();
+    let mut secs = (frac * 86400.0).round() as i64;
+    if secs >= 86400 {
+        secs = 0;
+    }
+    let hour = (secs / 3600) as i32;
+    let minute = ((secs % 3600) / 60) as i32;
+    let second = (secs % 60) as i32;
+    Some((hour, minute, second))
+}
+
+fn time_fraction(hour: f64, minute: f64, second: f64) -> Result<f64, &'static str> {
+    if ![hour, minute, second].iter().all(|n| n.is_finite()) {
+        return Err(VALUE);
+    }
+    if hour < 0.0 || minute < 0.0 || second < 0.0 || hour >= 32768.0 {
+        return Err(NUM);
+    }
+    let total = (hour.trunc() as i64) * 3600 + (minute.trunc() as i64) * 60 + second.trunc() as i64;
+    Ok((total.rem_euclid(86400) as f64) / 86400.0)
+}
+
+fn parse_date_text(text: &str, date1904: bool) -> Option<f64> {
+    let text = text.trim();
+    let parts: Vec<&str> = if text.contains('/') {
+        text.split('/').collect()
+    } else if text.contains('-') {
+        text.split('-').collect()
+    } else {
+        return None;
+    };
+    if parts.len() != 3 {
+        return None;
+    }
+    let year: i32 = parts[0].trim().parse().ok()?;
+    let month: u32 = parts[1].trim().parse().ok()?;
+    let day: u32 = parts[2].trim().parse().ok()?;
+    if !(1..=9999).contains(&year) || !(1..=12).contains(&month) {
+        return None;
+    }
+    let dim = days_in_month(year, month, date1904);
+    if day < 1 || day > dim {
+        return None;
+    }
+    Some(excel_serial(year, month, day, date1904))
+}
+
+const DEFAULT_WEEKEND: [bool; 7] = [false, false, false, false, false, true, true];
+
+fn weekend_mask(text: &str) -> Option<[bool; 7]> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() != 7 {
+        return None;
+    }
+    let mut mask = [false; 7];
+    for (i, ch) in chars.iter().enumerate() {
+        match ch {
+            '0' => {}
+            '1' => mask[i] = true,
+            _ => return None,
+        }
+    }
+    if mask.iter().all(|rest| *rest) {
+        return None;
+    }
+    Some(mask)
+}
+
+fn is_workday(day: i64, mask: &[bool; 7], holidays: &HashSet<i64>, date1904: bool) -> bool {
+    if holidays.contains(&day) {
+        return false;
+    }
+    let sun = weekday_type1(day as f64, date1904);
+    let index = if sun == 1 { 6 } else { (sun - 2) as usize };
+    !mask[index]
+}
+
+fn shift_workday(
+    start: i64,
+    steps: i32,
+    mask: &[bool; 7],
+    holidays: &HashSet<i64>,
+    date1904: bool,
+) -> Option<i64> {
+    if steps == 0 {
+        return Some(start);
+    }
+    let dir = if steps > 0 { 1 } else { -1 };
+    let mut left = steps.unsigned_abs();
+    let mut day = start;
+    let mut guard = 0u32;
+    while left > 0 {
+        guard += 1;
+        if guard > 2_000_000 {
+            return None;
+        }
+        day += dir;
+        if !(0..=2_958_465).contains(&day) {
+            return None;
+        }
+        if is_workday(day, mask, holidays, date1904) {
+            left -= 1;
+        }
+    }
+    Some(day)
+}
+
+fn count_workdays(
+    start: i64,
+    end: i64,
+    mask: &[bool; 7],
+    holidays: &HashSet<i64>,
+    date1904: bool,
+) -> i64 {
+    let sign = if start <= end { 1 } else { -1 };
+    let (lo, hi) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let mut count = 0i64;
+    let mut day = lo;
+    while day <= hi {
+        if is_workday(day, mask, holidays, date1904) {
+            count += 1;
+        }
+        day += 1;
+    }
+    count * sign
+}
+
+fn date_diff(start: f64, end: f64, unit: &str, date1904: bool) -> Option<f64> {
+    let start_day = start.floor();
+    let end_day = end.floor();
+    if end_day < start_day {
+        return None;
+    }
+    let (y1, m1, d1) = excel_ymd(start_day, date1904)?;
+    let (y2, m2, d2) = excel_ymd(end_day, date1904)?;
+    let unit = unit.trim().to_ascii_uppercase();
+    let n = match unit.as_str() {
+        "Y" => {
+            let mut years = y2 - y1;
+            if (m2, d2) < (m1, d1) {
+                years -= 1;
+            }
+            f64::from(years)
+        }
+        "M" => {
+            let mut months = (y2 - y1) * 12 + m2 as i32 - m1 as i32;
+            if d2 < d1 {
+                months -= 1;
+            }
+            f64::from(months)
+        }
+        "D" => end_day - start_day,
+        "MD" => {
+            if d2 >= d1 {
+                f64::from(d2 - d1)
+            } else {
+                let (py, pm) = if m2 == 1 { (y2 - 1, 12) } else { (y2, m2 - 1) };
+                let dim = days_in_month(py, pm, date1904) as i32;
+                f64::from(dim - d1 as i32 + d2 as i32)
+            }
+        }
+        "YM" => {
+            let mut months = m2 as i32 - m1 as i32;
+            if d2 < d1 {
+                months -= 1;
+            }
+            if months < 0 {
+                months += 12;
+            }
+            f64::from(months)
+        }
+        "YD" => {
+            let mut year = y2;
+            let mut anniversary = excel_serial(year, m1, d1, date1904);
+            if anniversary > end_day {
+                year -= 1;
+                anniversary = excel_serial(year, m1, d1, date1904);
+            }
+            end_day - anniversary
+        }
+        _ => return None,
+    };
+    Some(n)
+}
+
+fn days_360(start: f64, end: f64, european: bool, date1904: bool) -> Option<f64> {
+    let (y1, m1, d1) = excel_ymd(start, date1904)?;
+    let (y2, m2, d2) = excel_ymd(end, date1904)?;
+    let mut sd = d1 as i32;
+    let mut ed = d2 as i32;
+    if european {
+        if sd == 31 {
+            sd = 30;
+        }
+        if ed == 31 {
+            ed = 30;
+        }
+    } else {
+        if m1 == 2 && d1 == days_in_month(y1, 2, date1904) {
+            sd = 30;
+        }
+        if sd == 31 {
+            sd = 30;
+        }
+        if ed == 31 && sd >= 30 {
+            ed = 30;
+        }
+    }
+    let days = (y2 - y1) * 360 + (m2 as i32 - m1 as i32) * 30 + (ed - sd);
+    Some(f64::from(days))
+}
+
+fn year_frac(start: f64, end: f64, basis: i32, date1904: bool) -> Option<f64> {
+    match basis {
+        0 => days_360(start, end, false, date1904).map(|days| days / 360.0),
+        1 => year_frac_actual(start, end, date1904),
+        _ => None,
+    }
+}
+
+fn year_frac_actual(start: f64, end: f64, date1904: bool) -> Option<f64> {
+    let (early, late) = if start <= end {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    let days = late.floor() - early.floor();
+    let (y1, m1, d1) = excel_ymd(early, date1904)?;
+    let (y2, m2, d2) = excel_ymd(late, date1904)?;
+    if (m1, d1) == (m2, d2) {
+        return Some(f64::from(y2 - y1));
+    }
+    let mut sum = 0.0;
+    for year in y1..=y2 {
+        sum += f64::from(year_len(year, date1904));
+    }
+    let count = f64::from(y2 - y1 + 1);
+    Some(days / (sum / count))
 }
 
 fn days_from_civil(mut y: i32, m: u32, d: u32) -> i64 {
