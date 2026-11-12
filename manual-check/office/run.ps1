@@ -162,6 +162,7 @@ $order = @(
     'xlsx-text'
     'xlsx-date'
     'xlsx-stat'
+    'xlsx-lookup'
     'xlsx-data-table'
     'xlsx-formula-rest'
     'xlsx-validation'

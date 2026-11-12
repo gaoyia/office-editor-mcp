@@ -1512,3 +1512,210 @@ fn stat_functions_match_excel_16() {
     near("cell:Sheet1!J20", 1.2543431864367391);
     near("cell:Sheet1!K20", 2.417724122861845);
 }
+
+/// 查找与引用对照 Excel 16.0 样本。库自己算，不启动电子表格。
+#[test]
+fn lookup_functions_match_excel_16() {
+    let src = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": "产品"}),
+        json!({"ref": "B1", "value": "金额"}),
+        json!({"ref": "A2", "value": "甲"}),
+        json!({"ref": "B2", "value": 10}),
+        json!({"ref": "A3", "value": "甲"}),
+        json!({"ref": "B3", "value": 5}),
+        json!({"ref": "A4", "value": "乙"}),
+        json!({"ref": "B4", "value": 7}),
+        json!({"ref": "M1", "value": 1}),
+        json!({"ref": "N1", "value": 3}),
+        json!({"ref": "O1", "value": 5}),
+        json!({"ref": "M2", "value": "a"}),
+        json!({"ref": "N2", "value": "b"}),
+        json!({"ref": "O2", "value": "c"}),
+        json!({"ref": "P1", "value": 9}),
+        json!({"ref": "P2", "value": 5}),
+        json!({"ref": "P3", "value": 1}),
+        json!({"ref": "U1", "value": 1}),
+        json!({"ref": "V1", "value": "a"}),
+        json!({"ref": "U2", "value": 3}),
+        json!({"ref": "V2", "value": "b"}),
+        json!({"ref": "U3", "value": 5}),
+        json!({"ref": "V3", "value": "c"}),
+        json!({"ref": "W1", "value": "Cat"}),
+        json!({"ref": "X1", "value": 1}),
+        json!({"ref": "W2", "value": "Dog"}),
+        json!({"ref": "X2", "value": 2}),
+        json!({"ref": "F40", "value": 8}),
+    ];
+    let formulas = [
+        ("E1", r#"=VLOOKUP("乙",A2:B4,2,FALSE)"#),
+        ("E2", r#"=VLOOKUP("丁",A2:B4,2,FALSE)"#),
+        ("E3", "=VLOOKUP(4,U1:V3,2,TRUE)"),
+        ("E4", "=VLOOKUP(0,U1:V3,2,TRUE)"),
+        ("E9", r#"=MATCH("乙",A2:A4,0)"#),
+        ("E10", "=MATCH(4,U1:U3,1)"),
+        ("E11", "=MATCH(4,P1:P3,-1)"),
+        ("E12", r#"=MATCH("c*",W1:W2,0)"#),
+        ("E13", r#"=VLOOKUP("dog",W1:X2,2,FALSE)"#),
+        ("E14", "=INDEX(B2:B4,3)"),
+        ("E15", "=ROW(INDEX(A2:A4,2))"),
+        ("E16", "=ROW(INDEX(U1:V3,0,2))"),
+        ("E17", r#"=CHOOSE(2,"a","b","c")"#),
+        ("E18", r#"=CHOOSE(1.9,"a","b")"#),
+        ("E19", r#"=CHOOSE(4,"a","b")"#),
+        ("E20", "=ADDRESS(2,3)"),
+        ("E21", "=ADDRESS(2,3,4)"),
+        ("E22", "=ADDRESS(2,3,1,FALSE)"),
+        ("E23", "=ADDRESS(2,3,4,FALSE)"),
+        ("E24", r#"=ADDRESS(2,3,1,TRUE,"My Sheet")"#),
+        ("E25", "=COLUMN()"),
+        ("E26", "=COLUMN(C2)"),
+        ("E27", "=ROW()"),
+        ("E28", "=COLUMNS(A2:C4)"),
+        ("E29", "=ROWS(A2:C4)"),
+        ("E30", "=AREAS((A1:A2,C1))"),
+        ("E31", "=OFFSET(A1,3,1)"),
+        ("E32", "=SUM(OFFSET(B2,0,0,2,1))"),
+        ("E33", "=OFFSET(B2,0,0,2,1)"),
+        ("E34", "=OFFSET(A1,-1,0)"),
+        ("E35", r#"=INDIRECT("B4")"#),
+        ("E36", r#"=INDIRECT("R4C2",FALSE)"#),
+        ("E37", r#"=INDIRECT("nope")"#),
+        ("E38", r#"=SUM(INDIRECT("B2:B3"))"#),
+        ("E41", r#"=GETPIVOTDATA("金额",R1,"产品","甲")"#),
+        ("E42", r#"=GETPIVOTDATA("金额",R1)"#),
+        ("E43", r#"=GETPIVOTDATA("金额",R1,"产品","丁")"#),
+        ("E44", r#"=GETPIVOTDATA("金额",S2,"产品","乙")"#),
+        ("E45", r#"=GETPIVOTDATA("金额",A1)"#),
+        ("E46", r#"=RTD("No.Such.Server","", "x")"#),
+        ("E47", r#"=ECMA.VLOOKUP("乙",A2:B4,2,FALSE)"#),
+        ("E48", "=TRANSPOSE(A2:B3)"),
+        ("E49", "=VLOOKUP(3,U1:V3,0,FALSE)"),
+        ("E50", "=VLOOKUP(3,U1:V3,3,FALSE)"),
+        ("E52", "=HLOOKUP(3,M1:O2,2,FALSE)"),
+        ("E53", "=MATCH(4,U1:U3)"),
+        ("E54", "=ADDRESS(2,3,2)"),
+        ("E55", "=ADDRESS(2,3,3)"),
+        ("E56", "=ADDRESS(2,3,2,FALSE)"),
+        ("E57", "=ADDRESS(2,3,3,FALSE)"),
+        ("E58", "=ADDRESS(0,1)"),
+        ("E59", "=COLUMN(U1:V3)"),
+        ("E60", "=ROW(U1:V3)"),
+        ("E61", "=INDEX(B2:B4,9)"),
+        ("E62", "=OFFSET(U1,0,0,0,1)"),
+        ("F39", r#"=INDIRECT("R[1]C",FALSE)"#),
+    ];
+    for (addr, formula) in formulas {
+        cells.push(json!({"ref": addr, "formula": formula}));
+    }
+    cells.push(json!({"ref": "J1", "formula": "=TRANSPOSE(A2:B3)", "arrayRef": "J1:K2"}));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let out = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [{
+            "op": "insertPivotTable",
+            "id": "sheet:Sheet1",
+            "source": { "sheet": "Sheet1", "ref": "A1:B4" },
+            "location": "R1",
+            "rows": ["产品"],
+            "values": ["金额"]
+        }]
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&out, "A1:X62");
+    let num = |addr: &str, expect: f64| {
+        let got = cell(&tree, &format!("cell:Sheet1!{addr}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{addr}"));
+        assert!((got - expect).abs() < 1e-9, "{addr} got {got}");
+    };
+    let text = |addr: &str, expect: &str| {
+        assert_eq!(
+            cell(&tree, &format!("cell:Sheet1!{addr}"))["value"],
+            expect,
+            "{addr}"
+        );
+    };
+    let err = |addr: &str, token: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "error", "{addr} {c}");
+        assert_eq!(c["value"], token, "{addr}");
+    };
+    num("E1", 7.0);
+    err("E2", "#N/A");
+    text("E3", "b");
+    err("E4", "#N/A");
+    num("E9", 3.0);
+    num("E10", 2.0);
+    num("E11", 2.0);
+    num("E12", 1.0);
+    num("E13", 2.0);
+    num("E14", 7.0);
+    num("E15", 3.0);
+    num("E16", 1.0);
+    text("E17", "b");
+    text("E18", "a");
+    err("E19", "#VALUE!");
+    text("E20", "$C$2");
+    text("E21", "C2");
+    text("E22", "R2C3");
+    text("E23", "R[2]C[3]");
+    text("E24", "'My Sheet'!$C$2");
+    num("E25", 5.0);
+    num("E26", 3.0);
+    num("E27", 27.0);
+    num("E28", 3.0);
+    num("E29", 3.0);
+    num("E30", 2.0);
+    num("E31", 7.0);
+    num("E32", 15.0);
+    err("E33", "#VALUE!");
+    err("E34", "#REF!");
+    num("E35", 7.0);
+    num("E36", 7.0);
+    err("E37", "#REF!");
+    num("E38", 15.0);
+    num("F39", 8.0);
+    num("E41", 15.0);
+    num("E42", 22.0);
+    err("E43", "#REF!");
+    num("E44", 7.0);
+    err("E45", "#REF!");
+    err("E46", "#N/A");
+    assert!(cell(&tree, "cell:Sheet1!E47")["value"].is_null());
+    err("E48", "#VALUE!");
+    err("E49", "#VALUE!");
+    err("E50", "#REF!");
+    text("E52", "b");
+    num("E53", 2.0);
+    text("E54", "C$2");
+    text("E55", "$C2");
+    text("E56", "R2C[3]");
+    text("E57", "R[2]C3");
+    err("E58", "#VALUE!");
+    num("E59", 21.0);
+    num("E60", 1.0);
+    err("E61", "#REF!");
+    err("E62", "#REF!");
+    text("J1", "甲");
+    text("K1", "甲");
+    num("J2", 10.0);
+    num("K2", 5.0);
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"ca="1">OFFSET(A1,3,1)</f>"#), "{xml}");
+    assert!(xml.contains(r#"ca="1">INDIRECT("#), "{xml}");
+    assert!(!xml.contains(r#"ca="1">GETPIVOTDATA"#), "{xml}");
+    assert!(!xml.contains(r#"ca="1">RTD"#), "{xml}");
+}

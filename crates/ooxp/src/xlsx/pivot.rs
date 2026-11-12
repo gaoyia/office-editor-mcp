@@ -1627,6 +1627,76 @@ struct RowSumPlan {
     groups: Vec<(String, Vec<f64>)>,
 }
 
+/// 透视区域。行字段求和时带上各组，其它版式只有范围。
+pub(crate) struct PivotCover {
+    pub host: usize,
+    pub start: CellRef,
+    pub end: CellRef,
+    pub row_sum: Option<RowSumView>,
+}
+
+/// 一个行字段、求和、没有列字段和筛选时的分组。
+#[derive(Clone)]
+pub(crate) struct RowSumView {
+    pub row_name: String,
+    pub value_names: Vec<String>,
+    pub groups: Vec<(String, Vec<f64>)>,
+}
+
+/// 每张透视的位置。求值用它判断 `GETPIVOTDATA`，不改工作表。
+pub(crate) fn pivot_covers(
+    pkg: &Package,
+    sheet_docs: &[(String, Document)],
+    names: &[String],
+    sst: &[String],
+) -> Result<Vec<PivotCover>, Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let caches = load_caches(pkg, &wb_part)?;
+    let mut out = Vec::new();
+    for (host_i, (part, _)) in sheet_docs.iter().enumerate() {
+        let rels = Relationships::from_package(pkg, part)?;
+        for rel in &rels.rels {
+            if !rel.rel_type.ends_with("/pivotTable") {
+                continue;
+            }
+            let Ok(target) = resolve_rel_target(part, &rel.target) else {
+                continue;
+            };
+            let Ok(bytes) = pkg.get(&target) else {
+                continue;
+            };
+            let Ok(table) = xml::parse(bytes) else {
+                continue;
+            };
+            let Some(loc) = table
+                .root
+                .child_by_local("location")
+                .and_then(|l| l.attr("ref"))
+            else {
+                continue;
+            };
+            let Ok((start, end)) = a1::parse_range(loc) else {
+                continue;
+            };
+            let row_sum =
+                plan_row_sum(&table.root, host_i, &caches, sheet_docs, names, sst).map(|plan| {
+                    RowSumView {
+                        row_name: plan.row_name,
+                        value_names: plan.value_names,
+                        groups: plan.groups,
+                    }
+                });
+            out.push(PivotCover {
+                host: host_i,
+                start,
+                end,
+                row_sum,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// 只有一个行字段、若干求和、没有列字段和筛选时，把表头、各组和总计写进工作表。
 pub(crate) fn fill_row_sum_display(
     pkg: &Package,

@@ -20,6 +20,8 @@ const NAME: &str = "#NAME?";
 const NUM: &str = "#NUM!";
 const NA: &str = "#N/A";
 const NULL: &str = "#NULL!";
+const MAX_ROW: u32 = 1_048_576;
+const MAX_COL: u32 = 16_384;
 
 #[derive(Clone, Debug)]
 enum Scalar {
@@ -158,7 +160,7 @@ struct Book {
     stack: Vec<(usize, u32, u32)>,
     overrides: HashMap<(usize, u32, u32), Scalar>,
     cyclic: HashSet<(usize, u32, u32)>,
-    /// `CELL`、`INFO`、`TODAY`、`NOW`、`RAND` 写出结果的格子。公式写 `ca="1"`。
+    /// `CELL`、`INFO`、`TODAY`、`NOW`、`RAND`、`OFFSET`、`INDIRECT` 写出结果的格子。公式写 `ca="1"`。
     volatile: HashSet<(usize, u32, u32)>,
     /// `calcPr` 的 `calcMode="manual"`。
     manual: bool,
@@ -166,6 +168,8 @@ struct Book {
     externals: Vec<Option<ExtBook>>,
     /// `(链序号, sheetId, 列, 行)`。
     ext_used: HashMap<(usize, u32, u32, u32), Scalar>,
+    /// 透视区域。`GETPIVOTDATA` 只对行字段求和这种形状取值。
+    pivots: Vec<super::pivot::PivotCover>,
 }
 
 enum MemoSlot {
@@ -267,6 +271,8 @@ fn fill_formula_caches_depth(
     }
     let names = load_names(&wb_doc.root);
     let tables = load_tables(pkg, &sheet_docs, &sheets)?;
+    let sheet_names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
+    let pivots = super::pivot::pivot_covers(pkg, &sheet_docs, &sheet_names, &sst)?;
     let data_tables = load_data_tables(&sheet_docs);
     let (externals, ext_parts) = if external_depth == 0 {
         (vec![None], vec![String::new()])
@@ -286,6 +292,7 @@ fn fill_formula_caches_depth(
         manual,
         externals,
         ext_used: HashMap::new(),
+        pivots,
     };
     let mut writes: Vec<HashMap<(u32, u32), Scalar>> = Vec::new();
     for si in 0..book.sheets.len() {
@@ -1216,17 +1223,638 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => match self.eval_text(other, &vals, sheet, here) {
+            other => match self.eval_lookup(other, &vals, sheet, here, mode) {
                 Some(done) => done,
-                None => match self.eval_date(other, &vals, sheet, here) {
+                None => match self.eval_text(other, &vals, sheet, here) {
                     Some(done) => done,
-                    None => match self.eval_stat(other, &vals, sheet, here) {
+                    None => match self.eval_date(other, &vals, sheet, here) {
                         Some(done) => done,
-                        None => self.eval_math(other, &vals, sheet, here, mode),
+                        None => match self.eval_stat(other, &vals, sheet, here) {
+                            Some(done) => done,
+                            None => self.eval_math(other, &vals, sheet, here, mode),
+                        },
                     },
                 },
             },
         }
+    }
+
+    /// 查找与引用。不是这类函数时返回 `None`。`ECMA.VLOOKUP` 不在此列。
+    fn eval_lookup(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Option<Calc> {
+        let done = match name {
+            "CHOOSE" => self.eval_choose(vals, sheet, here),
+            "VLOOKUP" => self.eval_vlookup(vals, sheet, here, true),
+            "HLOOKUP" => self.eval_vlookup(vals, sheet, here, false),
+            "LOOKUP" => self.eval_lookup_fn(vals, sheet, here),
+            "MATCH" => self.eval_match(vals, sheet, here),
+            "INDEX" => self.eval_index(vals, sheet, here),
+            "ADDRESS" => self.eval_address(vals, sheet, here),
+            "COLUMN" => self.eval_col_row(vals, here, true),
+            "ROW" => self.eval_col_row(vals, here, false),
+            "COLUMNS" => self.eval_cols_rows(vals, true),
+            "ROWS" => self.eval_cols_rows(vals, false),
+            "AREAS" => eval_areas(vals),
+            "OFFSET" => self.eval_offset(vals, sheet, here),
+            "INDIRECT" => self.eval_indirect(vals, sheet, here),
+            "TRANSPOSE" => self.eval_transpose(vals, sheet, mode),
+            "GETPIVOTDATA" => self.eval_getpivotdata(vals, sheet, here),
+            "RTD" => ready_err(NA),
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn eval_choose(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 {
+            return Calc::Skip;
+        }
+        let n = match self.int_arg(&vals[0], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => return ready_err(token),
+            None => return Calc::Skip,
+        };
+        if n < 1 || n as usize >= vals.len() {
+            return ready_err(VALUE);
+        }
+        Calc::Ready(vals[n as usize].clone())
+    }
+
+    fn eval_vlookup(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        vertical: bool,
+    ) -> Calc {
+        if vals.len() != 3 && vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let lookup = match self.scalar_of(&vals[0], sheet, here) {
+            Ok(s) => s,
+            Err(done) => return done,
+        };
+        let approx = if vals.len() == 3 {
+            true
+        } else {
+            match self.flag_arg(&vals[3], sheet, here) {
+                Ok(v) => v,
+                Err(done) => return done,
+            }
+        };
+        let grid = match self.table_of(&vals[1], sheet) {
+            Ok(g) => g,
+            Err(done) => return done,
+        };
+        if grid.is_empty() || grid[0].is_empty() {
+            return ready_err(NA);
+        }
+        let keys = if vertical {
+            grid.iter().map(|row| row[0].clone()).collect::<Vec<_>>()
+        } else {
+            grid[0].clone()
+        };
+        let index = match self.int_arg(&vals[2], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => return ready_err(token),
+            None => return Calc::Skip,
+        };
+        let found = match lookup_pos(&keys, &lookup, if approx { Some(true) } else { None }) {
+            Ok(v) => v,
+            Err(token) => return ready_err(token),
+        };
+        let Some(at) = found else {
+            return ready_err(NA);
+        };
+        let span = if vertical {
+            grid[0].len() as i64
+        } else {
+            grid.len() as i64
+        };
+        if index < 1 {
+            return ready_err(VALUE);
+        }
+        if index > span {
+            return ready_err(REF);
+        }
+        let cell = if vertical {
+            &grid[at][(index as usize) - 1]
+        } else {
+            &grid[(index as usize) - 1][at]
+        };
+        scalar_calc(cell)
+    }
+
+    fn eval_lookup_fn(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let lookup = match self.scalar_of(&vals[0], sheet, here) {
+            Ok(s) => s,
+            Err(done) => return done,
+        };
+        if vals.len() == 3 {
+            let keys = match self.vector_of(&vals[1], sheet) {
+                Ok(v) => v,
+                Err(done) => return done,
+            };
+            let results = match self.vector_of(&vals[2], sheet) {
+                Ok(v) => v,
+                Err(done) => return done,
+            };
+            return pick_approx(&keys, &results, &lookup);
+        }
+        let grid = match self.table_of(&vals[1], sheet) {
+            Ok(g) => g,
+            Err(done) => return done,
+        };
+        if grid.is_empty() || grid[0].is_empty() {
+            return ready_err(NA);
+        }
+        let height = grid.len();
+        let width = grid[0].len();
+        if width > height {
+            let keys = grid[0].clone();
+            let results = grid[height - 1].clone();
+            pick_approx(&keys, &results, &lookup)
+        } else {
+            let keys: Vec<Scalar> = grid.iter().map(|row| row[0].clone()).collect();
+            let results: Vec<Scalar> = grid.iter().map(|row| row[row.len() - 1].clone()).collect();
+            pick_approx(&keys, &results, &lookup)
+        }
+    }
+
+    fn eval_match(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let lookup = match self.scalar_of(&vals[0], sheet, here) {
+            Ok(s) => s,
+            Err(done) => return done,
+        };
+        let kind = if vals.len() == 2 {
+            1
+        } else {
+            match self.int_arg(&vals[2], sheet, here) {
+                Some(Ok(n)) => n,
+                Some(Err(token)) => return ready_err(token),
+                None => return Calc::Skip,
+            }
+        };
+        let keys = match self.vector_of(&vals[1], sheet) {
+            Ok(v) => v,
+            Err(done) => return done,
+        };
+        let mode = if kind == 0 { None } else { Some(kind > 0) };
+        match lookup_pos(&keys, &lookup, mode) {
+            Ok(Some(i)) => ready_num((i + 1) as f64),
+            Ok(None) => ready_err(NA),
+            Err(token) => ready_err(token),
+        }
+    }
+
+    fn eval_index(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let rect = match single_rect(&vals[0]) {
+            Some(r) => r,
+            None => return ready_err(VALUE),
+        };
+        let row_n = match self.int_arg(&vals[1], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => return ready_err(token),
+            None => return Calc::Skip,
+        };
+        let col_n = if vals.len() == 2 {
+            None
+        } else {
+            match self.int_arg(&vals[2], sheet, here) {
+                Some(Ok(n)) => Some(n),
+                Some(Err(token)) => return ready_err(token),
+                None => return Calc::Skip,
+            }
+        };
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let height = i64::from(r2.row - r1.row + 1);
+        let width = i64::from(r2.col - r1.col + 1);
+        let (row_n, col_n) = match col_n {
+            None if width == 1 => (row_n, 1),
+            None if height == 1 => (1, row_n),
+            None => (row_n, 0),
+            Some(c) => (row_n, c),
+        };
+        let row = match index_span(row_n, r1.row, height) {
+            Ok(v) => v,
+            Err(token) => return ready_err(token),
+        };
+        let col = match index_span(col_n, r1.col, width) {
+            Ok(v) => v,
+            Err(token) => return ready_err(token),
+        };
+        Calc::Ready(Value::Area(Rect {
+            from: rect.from.clone(),
+            to: rect.to.clone(),
+            r1: CellRef {
+                col: col.0,
+                row: row.0,
+            },
+            r2: CellRef {
+                col: col.1,
+                row: row.1,
+            },
+        }))
+    }
+
+    fn eval_address(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if !(2..=5).contains(&vals.len()) {
+            return Calc::Skip;
+        }
+        let row = match self.int_arg(&vals[0], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => return ready_err(token),
+            None => return Calc::Skip,
+        };
+        let col = match self.int_arg(&vals[1], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => return ready_err(token),
+            None => return Calc::Skip,
+        };
+        if row < 1 || col < 1 || row > i64::from(MAX_ROW) || col > i64::from(MAX_COL) {
+            return ready_err(VALUE);
+        }
+        let abs = if vals.len() < 3 {
+            1
+        } else {
+            match self.int_arg(&vals[2], sheet, here) {
+                Some(Ok(n)) => n,
+                Some(Err(token)) => return ready_err(token),
+                None => return Calc::Skip,
+            }
+        };
+        if !(1..=4).contains(&abs) {
+            return ready_err(VALUE);
+        }
+        let a1 = if vals.len() < 4 {
+            true
+        } else {
+            match self.flag_arg(&vals[3], sheet, here) {
+                Ok(v) => v,
+                Err(done) => return done,
+            }
+        };
+        let sheet_name = if vals.len() < 5 {
+            None
+        } else {
+            match self.text_of(&vals[4], sheet, here) {
+                Ok(s) => Some(s),
+                Err(done) => return done,
+            }
+        };
+        ready_text(format_address(
+            row as u32,
+            col as u32,
+            abs,
+            a1,
+            sheet_name.as_deref(),
+        ))
+    }
+
+    fn eval_col_row(&self, vals: &[Value], here: CellRef, column: bool) -> Calc {
+        if vals.len() > 1 {
+            return Calc::Skip;
+        }
+        let cell = if vals.is_empty() {
+            here
+        } else {
+            match single_rect(&vals[0]) {
+                Some(rect) => ordered(rect.r1, rect.r2).0,
+                None => return ready_err(VALUE),
+            }
+        };
+        ready_num(f64::from(if column { cell.col } else { cell.row }))
+    }
+
+    fn eval_cols_rows(&self, vals: &[Value], columns: bool) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let Some(rect) = single_rect(&vals[0]) else {
+            return ready_err(VALUE);
+        };
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let n = if columns {
+            r2.col - r1.col + 1
+        } else {
+            r2.row - r1.row + 1
+        };
+        ready_num(f64::from(n))
+    }
+
+    fn eval_offset(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if !(3..=5).contains(&vals.len()) {
+            return Calc::Skip;
+        }
+        let Some(base) = single_rect(&vals[0]) else {
+            self.mark_volatile(sheet, here);
+            return ready_err(VALUE);
+        };
+        let drow = match self.int_arg(&vals[1], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => {
+                self.mark_volatile(sheet, here);
+                return ready_err(token);
+            }
+            None => return Calc::Skip,
+        };
+        let dcol = match self.int_arg(&vals[2], sheet, here) {
+            Some(Ok(n)) => n,
+            Some(Err(token)) => {
+                self.mark_volatile(sheet, here);
+                return ready_err(token);
+            }
+            None => return Calc::Skip,
+        };
+        let (r1, r2) = ordered(base.r1, base.r2);
+        let height = if vals.len() >= 4 {
+            match self.int_arg(&vals[3], sheet, here) {
+                Some(Ok(n)) => n,
+                Some(Err(token)) => {
+                    self.mark_volatile(sheet, here);
+                    return ready_err(token);
+                }
+                None => return Calc::Skip,
+            }
+        } else {
+            i64::from(r2.row - r1.row + 1)
+        };
+        let width = if vals.len() == 5 {
+            match self.int_arg(&vals[4], sheet, here) {
+                Some(Ok(n)) => n,
+                Some(Err(token)) => {
+                    self.mark_volatile(sheet, here);
+                    return ready_err(token);
+                }
+                None => return Calc::Skip,
+            }
+        } else {
+            i64::from(r2.col - r1.col + 1)
+        };
+        if height < 1 || width < 1 {
+            self.mark_volatile(sheet, here);
+            return ready_err(REF);
+        }
+        let row0 = i64::from(r1.row) + drow;
+        let col0 = i64::from(r1.col) + dcol;
+        let row1 = row0 + height - 1;
+        let col1 = col0 + width - 1;
+        if row0 < 1 || col0 < 1 || row1 > i64::from(MAX_ROW) || col1 > i64::from(MAX_COL) {
+            self.mark_volatile(sheet, here);
+            return ready_err(REF);
+        }
+        self.mark_volatile(sheet, here);
+        Calc::Ready(Value::Area(Rect {
+            from: base.from.clone(),
+            to: base.to.clone(),
+            r1: CellRef {
+                col: col0 as u32,
+                row: row0 as u32,
+            },
+            r2: CellRef {
+                col: col1 as u32,
+                row: row1 as u32,
+            },
+        }))
+    }
+
+    fn eval_indirect(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(s) => s,
+            Err(Calc::Skip) => return Calc::Skip,
+            Err(done) => {
+                self.mark_volatile(sheet, here);
+                return done;
+            }
+        };
+        let a1 = if vals.len() == 1 {
+            true
+        } else {
+            match self.flag_arg(&vals[1], sheet, here) {
+                Ok(v) => v,
+                Err(Calc::Skip) => return Calc::Skip,
+                Err(done) => {
+                    self.mark_volatile(sheet, here);
+                    return done;
+                }
+            }
+        };
+        let Some(rect) = parse_indirect(&text, a1, here) else {
+            self.mark_volatile(sheet, here);
+            return ready_err(REF);
+        };
+        if let Loc::Name(name) = &rect.from {
+            if !self
+                .sheets
+                .iter()
+                .any(|s| s.name.eq_ignore_ascii_case(name))
+            {
+                self.mark_volatile(sheet, here);
+                return ready_err(REF);
+            }
+        }
+        self.mark_volatile(sheet, here);
+        Calc::Ready(Value::Area(rect))
+    }
+
+    fn eval_transpose(&mut self, vals: &[Value], sheet: usize, mode: Mode) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        if matches!(mode, Mode::Scalar) {
+            return ready_err(VALUE);
+        }
+        let grid = match self.table_of(&vals[0], sheet) {
+            Ok(g) => g,
+            Err(done) => return done,
+        };
+        if grid.is_empty() {
+            return ready_err(VALUE);
+        }
+        let width = grid.iter().map(Vec::len).max().unwrap_or(0);
+        let mut out = vec![Vec::new(); width];
+        for row in grid {
+            for (col, cell) in row.into_iter().enumerate() {
+                out[col].push(cell);
+            }
+        }
+        Calc::Ready(Value::Grid(out))
+    }
+
+    fn eval_getpivotdata(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 || !(vals.len() - 2).is_multiple_of(2) {
+            return Calc::Skip;
+        }
+        let data_field = match self.text_of(&vals[0], sheet, here) {
+            Ok(s) => s,
+            Err(done) => return done,
+        };
+        let Some(rect) = single_rect(&vals[1]) else {
+            return ready_err(REF);
+        };
+        let Some((host, _)) = self.resolve_span(rect, sheet) else {
+            return ready_err(REF);
+        };
+        let at = ordered(rect.r1, rect.r2).0;
+        let Some(cover) = self.pivots.iter().find(|p| {
+            p.host == host
+                && at.col >= p.start.col
+                && at.col <= p.end.col
+                && at.row >= p.start.row
+                && at.row <= p.end.row
+        }) else {
+            return ready_err(REF);
+        };
+        let Some(sum) = cover.row_sum.clone() else {
+            return Calc::Skip;
+        };
+        let Some(vi) = sum
+            .value_names
+            .iter()
+            .position(|n| n.eq_ignore_ascii_case(&data_field))
+        else {
+            return ready_err(REF);
+        };
+        if vals.len() == 2 {
+            let total = sum
+                .groups
+                .iter()
+                .map(|g| g.1.get(vi).copied().unwrap_or(0.0))
+                .sum();
+            return ready_num(total);
+        }
+        let row_name = sum.row_name.clone();
+        let groups = sum.groups.clone();
+        let mut item: Option<String> = None;
+        for pair in vals[2..].chunks(2) {
+            let field = match self.text_of(&pair[0], sheet, here) {
+                Ok(s) => s,
+                Err(done) => return done,
+            };
+            let next = match self.text_of(&pair[1], sheet, here) {
+                Ok(s) => s,
+                Err(done) => return done,
+            };
+            if !field.eq_ignore_ascii_case(&row_name) {
+                return ready_err(REF);
+            }
+            if let Some(prev) = &item {
+                if !prev.eq_ignore_ascii_case(&next) {
+                    return ready_err(REF);
+                }
+            } else {
+                item = Some(next);
+            }
+        }
+        let Some(item) = item else {
+            return ready_err(REF);
+        };
+        let Some(group) = groups.iter().find(|g| g.0.eq_ignore_ascii_case(&item)) else {
+            return ready_err(REF);
+        };
+        ready_num(group.1.get(vi).copied().unwrap_or(0.0))
+    }
+
+    fn int_arg(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Result<i64, &'static str>> {
+        match self.scalar_of(value, sheet, here) {
+            Err(Calc::Skip) => None,
+            Err(Calc::Ready(Value::Scalar(Scalar::Err(e)))) => Some(Err(e)),
+            Err(_) => Some(Err(VALUE)),
+            Ok(Scalar::Err(e)) => Some(Err(e)),
+            Ok(s) => match num_of(s) {
+                Scalar::Num(n) if n.is_finite() && n.abs() < 1e15 => Some(Ok(n as i64)),
+                Scalar::Err(e) => Some(Err(e)),
+                _ => Some(Err(VALUE)),
+            },
+        }
+    }
+
+    fn flag_arg(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<bool, Calc> {
+        match self.scalar_of(value, sheet, here)? {
+            Scalar::Bool(b) => Ok(b),
+            Scalar::Num(n) => Ok(n != 0.0),
+            Scalar::Err(e) => Err(ready_err(e)),
+            Scalar::Text(_) => Err(ready_err(VALUE)),
+        }
+    }
+
+    fn text_of(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<String, Calc> {
+        match self.scalar_of(value, sheet, here)? {
+            Scalar::Text(s) => Ok(s),
+            Scalar::Err(e) => Err(ready_err(e)),
+            Scalar::Num(n) => Ok(fmt_num(n)),
+            Scalar::Bool(true) => Ok("TRUE".to_string()),
+            Scalar::Bool(false) => Ok("FALSE".to_string()),
+        }
+    }
+
+    fn scalar_of(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<Scalar, Calc> {
+        match self.coerce(value.clone(), sheet, here, Mode::Scalar) {
+            Calc::Skip => Err(Calc::Skip),
+            Calc::Ready(Value::Scalar(s)) => Ok(s),
+            Calc::Ready(_) => Err(ready_err(VALUE)),
+        }
+    }
+
+    fn table_of(&mut self, value: &Value, sheet: usize) -> Result<Vec<Vec<Scalar>>, Calc> {
+        match value {
+            Value::Grid(g) => Ok(g.clone()),
+            Value::Scalar(s) => Ok(vec![vec![s.clone()]]),
+            Value::Area(rect) => self.rect_table(rect, sheet),
+            Value::Areas(parts) if parts.len() == 1 => self.rect_table(&parts[0], sheet),
+            Value::Areas(_) => Err(ready_err(VALUE)),
+        }
+    }
+
+    fn vector_of(&mut self, value: &Value, sheet: usize) -> Result<Vec<Scalar>, Calc> {
+        let grid = self.table_of(value, sheet)?;
+        vector_from(&grid).ok_or_else(|| ready_err(NA))
+    }
+
+    fn rect_table(&mut self, rect: &Rect, sheet: usize) -> Result<Vec<Vec<Scalar>>, Calc> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Err(ready_err(REF));
+        };
+        if s1 != s2 {
+            return Err(ready_err(VALUE));
+        }
+        let mut rows = Vec::new();
+        for row in r1.row..=r2.row {
+            let mut line = Vec::new();
+            for col in r1.col..=r2.col {
+                match self.cell_fact(s1, CellRef { col, row }) {
+                    Fact::Skip => return Err(Calc::Skip),
+                    Fact::Blank => line.push(Scalar::Num(0.0)),
+                    Fact::Ready(s) => line.push(s),
+                }
+            }
+            rows.push(line);
+        }
+        Ok(rows)
     }
 
     /// 统计类。不是这类函数时返回 `None`。`ECMA.AVERAGE` 不在此列。
@@ -6302,6 +6930,308 @@ fn as_text(s: &Scalar) -> String {
         Scalar::Bool(false) => "FALSE".to_string(),
         Scalar::Err(e) => (*e).to_string(),
     }
+}
+
+fn single_rect(value: &Value) -> Option<&Rect> {
+    match value {
+        Value::Area(rect) => Some(rect),
+        Value::Areas(parts) if parts.len() == 1 => parts.first(),
+        _ => None,
+    }
+}
+
+fn eval_areas(vals: &[Value]) -> Calc {
+    if vals.len() != 1 {
+        return Calc::Skip;
+    }
+    match &vals[0] {
+        Value::Area(_) => ready_num(1.0),
+        Value::Areas(parts) => ready_num(parts.len() as f64),
+        _ => ready_err(VALUE),
+    }
+}
+
+fn scalar_calc(value: &Scalar) -> Calc {
+    match value {
+        Scalar::Err(token) => ready_err(token),
+        other => Calc::Ready(Value::Scalar(other.clone())),
+    }
+}
+
+fn vector_from(grid: &[Vec<Scalar>]) -> Option<Vec<Scalar>> {
+    if grid.is_empty() {
+        return None;
+    }
+    if grid.len() == 1 {
+        return Some(grid[0].clone());
+    }
+    if grid.iter().all(|row| row.len() == 1) {
+        return Some(grid.iter().map(|row| row[0].clone()).collect());
+    }
+    None
+}
+
+fn index_span(index: i64, start: u32, len: i64) -> Result<(u32, u32), &'static str> {
+    if index == 0 {
+        return Ok((start, start + len as u32 - 1));
+    }
+    if index < 1 {
+        return Err(VALUE);
+    }
+    if index > len {
+        return Err(REF);
+    }
+    let at = start + index as u32 - 1;
+    Ok((at, at))
+}
+
+enum SortKey {
+    Num(f64),
+    Text(String),
+}
+
+fn fold_text(text: &str) -> String {
+    text.chars().flat_map(|ch| ch.to_lowercase()).collect()
+}
+
+fn sort_key(value: &Scalar) -> Result<SortKey, &'static str> {
+    match value {
+        Scalar::Err(token) => Err(token),
+        Scalar::Num(n) => Ok(SortKey::Num(*n)),
+        Scalar::Bool(b) => Ok(SortKey::Num(if *b { 1.0 } else { 0.0 })),
+        Scalar::Text(text) => Ok(SortKey::Text(fold_text(text))),
+    }
+}
+
+fn cmp_lookup(key: &Scalar, lookup: &Scalar) -> Result<std::cmp::Ordering, &'static str> {
+    match (sort_key(key)?, sort_key(lookup)?) {
+        (SortKey::Num(a), SortKey::Num(b)) => {
+            Ok(a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal))
+        }
+        (SortKey::Text(a), SortKey::Text(b)) => Ok(a.cmp(&b)),
+        (SortKey::Num(_), SortKey::Text(_)) => Ok(std::cmp::Ordering::Less),
+        (SortKey::Text(_), SortKey::Num(_)) => Ok(std::cmp::Ordering::Greater),
+    }
+}
+
+fn exact_eq(cell: &Scalar, lookup: &Scalar) -> bool {
+    if let (Scalar::Text(left), Scalar::Text(right)) = (cell, lookup) {
+        if right.contains(['*', '?']) {
+            return wild_eq(left, right);
+        }
+        return fold_text(left) == fold_text(right);
+    }
+    match (sort_key(cell), sort_key(lookup)) {
+        (Ok(SortKey::Num(a)), Ok(SortKey::Num(b))) => a == b,
+        (Ok(SortKey::Text(a)), Ok(SortKey::Text(b))) => a == b,
+        _ => false,
+    }
+}
+
+/// `approx` 为 `None` 时精确匹配。`Some(true)` 升序近似，`Some(false)` 降序近似。
+fn lookup_pos(
+    keys: &[Scalar],
+    lookup: &Scalar,
+    approx: Option<bool>,
+) -> Result<Option<usize>, &'static str> {
+    if let Scalar::Err(token) = lookup {
+        return Err(token);
+    }
+    let Some(asc) = approx else {
+        for (i, key) in keys.iter().enumerate() {
+            if let Scalar::Err(token) = key {
+                return Err(token);
+            }
+            if exact_eq(key, lookup) {
+                return Ok(Some(i));
+            }
+        }
+        return Ok(None);
+    };
+    let mut found = None;
+    for (i, key) in keys.iter().enumerate() {
+        if let Scalar::Err(token) = key {
+            return Err(token);
+        }
+        match cmp_lookup(key, lookup) {
+            Err(token) => return Err(token),
+            Ok(std::cmp::Ordering::Greater) if asc => break,
+            Ok(std::cmp::Ordering::Less) if !asc => break,
+            _ => found = Some(i),
+        }
+    }
+    Ok(found)
+}
+
+fn pick_approx(keys: &[Scalar], results: &[Scalar], lookup: &Scalar) -> Calc {
+    match lookup_pos(keys, lookup, Some(true)) {
+        Ok(Some(i)) => results
+            .get(i)
+            .map(scalar_calc)
+            .unwrap_or_else(|| ready_err(NA)),
+        Ok(None) => ready_err(NA),
+        Err(token) => ready_err(token),
+    }
+}
+
+fn format_address(row: u32, col: u32, abs: i64, a1: bool, sheet: Option<&str>) -> String {
+    let body = if a1 {
+        let col_abs = abs == 1 || abs == 3;
+        let row_abs = abs == 1 || abs == 2;
+        format!(
+            "{}{}{}{}",
+            if col_abs { "$" } else { "" },
+            a1::col_to_letters(col),
+            if row_abs { "$" } else { "" },
+            row
+        )
+    } else {
+        let row_abs = abs == 1 || abs == 2;
+        let col_abs = abs == 1 || abs == 3;
+        format!(
+            "R{}C{}",
+            if row_abs {
+                row.to_string()
+            } else {
+                format!("[{row}]")
+            },
+            if col_abs {
+                col.to_string()
+            } else {
+                format!("[{col}]")
+            }
+        )
+    };
+    match sheet {
+        Some(name) if !name.is_empty() => format!("{}!{body}", quote_sheet(name)),
+        _ => body,
+    }
+}
+
+fn quote_sheet(name: &str) -> String {
+    let simple = name
+        .chars()
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '.');
+    if simple {
+        name.to_string()
+    } else {
+        format!("'{}'", name.replace('\'', "''"))
+    }
+}
+
+fn parse_indirect(text: &str, a1_style: bool, here: CellRef) -> Option<Rect> {
+    let (sheet, body) = split_sheet_ref(text.trim())?;
+    let loc = match sheet {
+        Some(name) => Loc::Name(name),
+        None => Loc::Here,
+    };
+    let (r1, r2) = if a1_style {
+        a1::parse_range(body).ok()?
+    } else {
+        parse_r1c1_range(body, here)?
+    };
+    Some(Rect {
+        from: loc.clone(),
+        to: loc,
+        r1,
+        r2,
+    })
+}
+
+fn split_sheet_ref(text: &str) -> Option<(Option<String>, &str)> {
+    if let Some(rest) = text.strip_prefix('\'') {
+        let mut name = String::new();
+        let mut chars = rest.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '\'' {
+                if chars.as_str().starts_with('\'') {
+                    name.push('\'');
+                    chars.next();
+                    continue;
+                }
+                let body = chars.as_str().strip_prefix('!')?;
+                return Some((Some(name), body));
+            }
+            name.push(ch);
+        }
+        return None;
+    }
+    if let Some((name, body)) = text.rsplit_once('!') {
+        if name.is_empty() || body.is_empty() {
+            return None;
+        }
+        return Some((Some(name.to_string()), body));
+    }
+    Some((None, text))
+}
+
+fn parse_r1c1_range(body: &str, here: CellRef) -> Option<(CellRef, CellRef)> {
+    if let Some((left, right)) = body.split_once(':') {
+        Some((parse_r1c1_cell(left, here)?, parse_r1c1_cell(right, here)?))
+    } else {
+        let cell = parse_r1c1_cell(body, here)?;
+        Some((cell, cell))
+    }
+}
+
+fn parse_r1c1_cell(text: &str, here: CellRef) -> Option<CellRef> {
+    let bytes = text.trim().as_bytes();
+    let mut i = 0;
+    if i >= bytes.len() || !bytes[i].eq_ignore_ascii_case(&b'R') {
+        return None;
+    }
+    i += 1;
+    let row = parse_rc_axis(bytes, &mut i, here.row)?;
+    if i >= bytes.len() || !bytes[i].eq_ignore_ascii_case(&b'C') {
+        return None;
+    }
+    i += 1;
+    let col = parse_rc_axis(bytes, &mut i, here.col)?;
+    if i != bytes.len() || row < 1 || col < 1 || row > MAX_ROW || col > MAX_COL {
+        return None;
+    }
+    Some(CellRef { col, row })
+}
+
+fn parse_rc_axis(bytes: &[u8], i: &mut usize, current: u32) -> Option<u32> {
+    if *i < bytes.len() && bytes[*i] == b'[' {
+        *i += 1;
+        let neg = *i < bytes.len() && bytes[*i] == b'-';
+        if neg {
+            *i += 1;
+        }
+        let start = *i;
+        while *i < bytes.len() && bytes[*i].is_ascii_digit() {
+            *i += 1;
+        }
+        if start == *i || *i >= bytes.len() || bytes[*i] != b']' {
+            return None;
+        }
+        let n: i64 = std::str::from_utf8(&bytes[start..*i]).ok()?.parse().ok()?;
+        *i += 1;
+        let delta = if neg { -n } else { n };
+        let value = i64::from(current) + delta;
+        if value < 1 {
+            return None;
+        }
+        return Some(value as u32);
+    }
+    if *i < bytes.len() && bytes[*i].is_ascii_digit() {
+        let start = *i;
+        while *i < bytes.len() && bytes[*i].is_ascii_digit() {
+            *i += 1;
+        }
+        let n: u32 = std::str::from_utf8(&bytes[start..*i]).ok()?.parse().ok()?;
+        if n == 0 {
+            return None;
+        }
+        return Some(n);
+    }
+    Some(current)
 }
 
 fn union_value(left: Value, right: Value) -> Value {
