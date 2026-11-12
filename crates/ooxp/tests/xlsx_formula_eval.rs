@@ -621,3 +621,221 @@ fn logical_functions_match_excel_16() {
     flag("cell:Sheet1!C13", false);
     err("cell:Sheet1!C14", "#VALUE!");
 }
+
+fn formula_marks_ca(xml: &str, body: &str) -> bool {
+    let needle = format!(">{body}</f>");
+    let Some(idx) = xml.find(&needle) else {
+        panic!("没有公式 {body}");
+    };
+    let start = xml[..idx].rfind("<f").unwrap_or(idx);
+    xml[start..idx].contains("ca=")
+}
+
+#[test]
+fn information_functions_match_excel_16() {
+    let path = book();
+    let cells = vec![
+        json!({"ref": "A2", "value": 0}),
+        json!({"ref": "A3", "value": ""}),
+        json!({"ref": "A4", "value": "hi"}),
+        json!({"ref": "A5", "value": true}),
+        json!({"ref": "A6", "formula": "=1/0"}),
+        json!({"ref": "A7", "value": 8}),
+        json!({"ref": "A8", "value": 2.9}),
+        json!({"ref": "A9", "value": 3}),
+        json!({"ref": "B1", "formula": "=ISBLANK(A1:A3)"}),
+        json!({"ref": "B2", "formula": "=ISBLANK(A2)"}),
+        json!({"ref": "B3", "formula": "=ISBLANK(A3)"}),
+        json!({"ref": "B4", "formula": "=ISNUMBER(A4:A6)"}),
+        json!({"ref": "B5", "formula": "=ISLOGICAL(A4:A6)"}),
+        json!({"ref": "B6", "formula": "=ISERR(A4:A6)"}),
+        json!({"ref": "B7", "formula": "=ISNUMBER(A7:A9)"}),
+        json!({"ref": "B10", "formula": "=ISEVEN(A7:A9)"}),
+        json!({"ref": "B11", "formula": "=ERROR.TYPE(A7:A9)"}),
+        json!({"ref": "B12", "formula": "=ISERR(A7:A9)"}),
+        json!({"ref": "B13", "formula": "=ISNUMBER(A7:A9)"}),
+        json!({"ref": "B14", "formula": "=ISBLANK(A1)"}),
+        json!({"ref": "B15", "formula": "=ISEVEN(A8)"}),
+        json!({"ref": "B16", "formula": "=ISEVEN(A9)"}),
+        json!({"ref": "B17", "formula": "=ISEVEN(-2.9)"}),
+        json!({"ref": "B18", "formula": "=ISODD(-3)"}),
+        json!({"ref": "B19", "formula": "=ISEVEN(A5)"}),
+        json!({"ref": "B20", "formula": "=ISODD(A1)"}),
+        json!({"ref": "B21", "formula": "=ISLOGICAL({TRUE,2})"}),
+        json!({"ref": "B22", "formula": "=ISLOGICAL({2,TRUE})"}),
+        json!({"ref": "B23", "formula": "=ISNA(NA())"}),
+        json!({"ref": "B24", "formula": "=ISNA(A6)"}),
+        json!({"ref": "B25", "formula": "=ISNONTEXT(A6)"}),
+        json!({"ref": "B26", "formula": "=ISREF(A1)"}),
+        json!({"ref": "B27", "formula": "=ISREF(1)"}),
+        json!({"ref": "B28", "formula": "=ISREF(#REF!)"}),
+        json!({"ref": "B29", "formula": "=ISREF(Sheet1:Sheet2!A1)"}),
+        json!({"ref": "B30", "formula": "=ISREF(Sheet2!A1)"}),
+        json!({"ref": "C2", "formula": "=N(A7:A9)"}),
+        json!({"ref": "C3", "formula": "=N(A4:A5)"}),
+        json!({"ref": "C4", "formula": "=TYPE(A4:A6)"}),
+        json!({"ref": "C5", "formula": "=TYPE(A5)"}),
+        json!({"ref": "C6", "formula": "=TYPE(A6)"}),
+        json!({"ref": "C7", "formula": "=N(A5)"}),
+        json!({"ref": "C8", "formula": "=TYPE(A4:A6)"}),
+        json!({"ref": "C9", "formula": "=TYPE({1,2})"}),
+        json!({"ref": "C10", "formula": "=N({12.5,13.6})"}),
+        json!({"ref": "C11", "formula": "=N(A6)"}),
+        json!({"ref": "C12", "formula": "=N(A1)"}),
+        json!({"ref": "C13", "formula": "=TYPE(A1)"}),
+        json!({"ref": "C14", "formula": "=ERROR.TYPE(A6)"}),
+        json!({"ref": "C15", "formula": "=ERROR.TYPE(1)"}),
+        json!({"ref": "C16", "formula": "=ERROR.TYPE(#NULL!)"}),
+        json!({"ref": "C17", "formula": "=ERROR.TYPE(#NUM!)"}),
+        json!({"ref": "C18", "formula": "=ERROR.TYPE(NA())"}),
+        json!({"ref": "D1", "formula": "=CELL(\"address\",A4)"}),
+        json!({"ref": "D2", "formula": "=CELL(\"address\",A1:B2)"}),
+        json!({"ref": "D3", "formula": "=CELL(\"col\",A4)"}),
+        json!({"ref": "D4", "formula": "=CELL(\"row\",A8)"}),
+        json!({"ref": "D5", "formula": "=CELL(\"contents\",A4)"}),
+        json!({"ref": "D6", "formula": "=CELL(\"contents\",A5)"}),
+        json!({"ref": "D7", "formula": "=CELL(\"contents\",A6)"}),
+        json!({"ref": "D8", "formula": "=CELL(\"contents\",A1)"}),
+        json!({"ref": "D9", "formula": "=CELL(\"type\",A1)"}),
+        json!({"ref": "D10", "formula": "=CELL(\"type\",A4)"}),
+        json!({"ref": "D11", "formula": "=CELL(\"type\",A7)"}),
+        json!({"ref": "D12", "formula": "=CELL(\"type\",A5)"}),
+        json!({"ref": "D13", "formula": "=CELL(\"type\",A6)"}),
+        json!({"ref": "D14", "formula": "=CELL(\"filename\",A1)"}),
+        json!({"ref": "D15", "formula": "=INFO(\"system\")"}),
+        json!({"ref": "D16", "formula": "=INFO(\"recalc\")"}),
+        json!({"ref": "D17", "formula": "=INFO(\"release\")"}),
+        json!({"ref": "D18", "formula": "=INFO(\"numfile\")"}),
+        json!({"ref": "D19", "formula": "=INFO(\"origin\")"}),
+        json!({"ref": "D20", "formula": "=INFO(\"nope\")"}),
+        json!({"ref": "D21", "formula": "=INFO(\"directory\")"}),
+        json!({"ref": "D22", "formula": "=ECMA.ISBLANK(A1)"}),
+        json!({"ref": "D23", "formula": "=ISBLANK()"}),
+        json!({"ref": "D24", "formula": "=ISTEXT(A4)"}),
+        json!({"ref": "D25", "formula": "=ISTEXT(A1)"}),
+        json!({"ref": "D26", "formula": "=ISERROR(A6)"}),
+        json!({"ref": "D27", "formula": "=ISERROR(0)"}),
+    ];
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [
+            { "name": "Sheet1", "cells": cells },
+            { "name": "Sheet2", "cells": [{ "ref": "A1", "value": 9 }] }
+        ] }
+    })
+    .to_string())
+    .unwrap();
+
+    let tree = inspect_range(&path, "A1:D30");
+    let num = |id: &str, expect: f64| {
+        let c = cell(&tree, id);
+        let got = c["value"].as_f64().unwrap_or_else(|| panic!("{id} {c}"));
+        assert!((got - expect).abs() < 1e-9, "{id} {got}");
+    };
+    let flag = |id: &str, expect: bool| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "boolean", "{id} {c}");
+        assert_eq!(c["value"], expect, "{id}");
+    };
+    let err = |id: &str, token: &str| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "error", "{id} {c}");
+        assert_eq!(c["value"], token, "{id}");
+    };
+    let text = |id: &str, expect: &str| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "text", "{id} {c}");
+        assert_eq!(c["value"], expect, "{id}");
+    };
+    let blank = |id: &str| {
+        let c = cell(&tree, id);
+        assert!(c["value"].is_null(), "{id} {c}");
+    };
+
+    flag("cell:Sheet1!B1", true);
+    flag("cell:Sheet1!B2", false);
+    flag("cell:Sheet1!B3", false);
+    flag("cell:Sheet1!B4", false);
+    flag("cell:Sheet1!B5", true);
+    flag("cell:Sheet1!B6", true);
+    flag("cell:Sheet1!B7", true);
+    err("cell:Sheet1!B10", "#VALUE!");
+    num("cell:Sheet1!B11", 3.0);
+    flag("cell:Sheet1!B12", true);
+    flag("cell:Sheet1!B13", false);
+    flag("cell:Sheet1!B14", true);
+    flag("cell:Sheet1!B15", true);
+    flag("cell:Sheet1!B16", false);
+    flag("cell:Sheet1!B17", true);
+    flag("cell:Sheet1!B18", true);
+    err("cell:Sheet1!B19", "#VALUE!");
+    flag("cell:Sheet1!B20", false);
+    flag("cell:Sheet1!B21", true);
+    flag("cell:Sheet1!B22", false);
+    flag("cell:Sheet1!B23", true);
+    flag("cell:Sheet1!B24", false);
+    flag("cell:Sheet1!B25", true);
+    flag("cell:Sheet1!B26", true);
+    flag("cell:Sheet1!B27", false);
+    flag("cell:Sheet1!B28", false);
+    flag("cell:Sheet1!B29", false);
+    flag("cell:Sheet1!B30", true);
+    num("cell:Sheet1!C2", 8.0);
+    num("cell:Sheet1!C3", 0.0);
+    num("cell:Sheet1!C4", 2.0);
+    num("cell:Sheet1!C5", 4.0);
+    num("cell:Sheet1!C6", 16.0);
+    num("cell:Sheet1!C7", 1.0);
+    num("cell:Sheet1!C8", 16.0);
+    num("cell:Sheet1!C9", 64.0);
+    num("cell:Sheet1!C10", 12.5);
+    err("cell:Sheet1!C11", "#DIV/0!");
+    num("cell:Sheet1!C12", 0.0);
+    num("cell:Sheet1!C13", 1.0);
+    num("cell:Sheet1!C14", 2.0);
+    err("cell:Sheet1!C15", "#N/A");
+    num("cell:Sheet1!C16", 1.0);
+    num("cell:Sheet1!C17", 6.0);
+    num("cell:Sheet1!C18", 7.0);
+    text("cell:Sheet1!D1", "$A$4");
+    text("cell:Sheet1!D2", "$A$1");
+    num("cell:Sheet1!D3", 1.0);
+    num("cell:Sheet1!D4", 8.0);
+    text("cell:Sheet1!D5", "hi");
+    flag("cell:Sheet1!D6", true);
+    err("cell:Sheet1!D7", "#DIV/0!");
+    num("cell:Sheet1!D8", 0.0);
+    text("cell:Sheet1!D9", "b");
+    text("cell:Sheet1!D10", "l");
+    text("cell:Sheet1!D11", "v");
+    text("cell:Sheet1!D12", "v");
+    text("cell:Sheet1!D13", "v");
+    blank("cell:Sheet1!D14");
+    if cfg!(windows) {
+        text("cell:Sheet1!D15", "pcdos");
+    } else {
+        blank("cell:Sheet1!D15");
+    }
+    text("cell:Sheet1!D16", "Automatic");
+    text("cell:Sheet1!D17", "16.0");
+    num("cell:Sheet1!D18", 2.0);
+    text("cell:Sheet1!D19", "$A:$A$1");
+    err("cell:Sheet1!D20", "#VALUE!");
+    blank("cell:Sheet1!D21");
+    blank("cell:Sheet1!D22");
+    blank("cell:Sheet1!D23");
+    flag("cell:Sheet1!D24", true);
+    flag("cell:Sheet1!D25", false);
+    flag("cell:Sheet1!D26", true);
+    flag("cell:Sheet1!D27", false);
+
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(formula_marks_ca(&xml, "CELL(&quot;address&quot;,A4)"));
+    assert!(formula_marks_ca(&xml, "INFO(&quot;recalc&quot;)"));
+    assert!(formula_marks_ca(&xml, "INFO(&quot;nope&quot;)"));
+    assert!(!formula_marks_ca(&xml, "ISBLANK(A1)"));
+    assert!(!formula_marks_ca(&xml, "INFO(&quot;directory&quot;)"));
+    assert!(!formula_marks_ca(&xml, "ECMA.ISBLANK(A1)"));
+}

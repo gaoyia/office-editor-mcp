@@ -110,6 +110,8 @@ struct CellRec {
 struct Sheet {
     name: String,
     cells: HashMap<(u32, u32), CellRec>,
+    /// `sheetView` 的 `topLeftCell`。没有时是 A1。
+    origin: CellRef,
 }
 
 struct NameDef {
@@ -152,6 +154,10 @@ struct Book {
     stack: Vec<(usize, u32, u32)>,
     overrides: HashMap<(usize, u32, u32), Scalar>,
     cyclic: HashSet<(usize, u32, u32)>,
+    /// `CELL` / `INFO` 写出结果的格子。公式写 `ca="1"`。
+    volatile: HashSet<(usize, u32, u32)>,
+    /// `calcPr` 的 `calcMode="manual"`。
+    manual: bool,
     /// 下标 0 空着，`[1]` 用下标 1。
     externals: Vec<Option<ExtBook>>,
     /// `(链序号, sheetId, 列, 行)`。
@@ -232,6 +238,11 @@ fn fill_formula_caches_depth(
         .child_by_local("workbookPr")
         .and_then(|e| e.attr("date1904"))
         .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let manual = wb_doc
+        .root
+        .child_by_local("calcPr")
+        .and_then(|e| e.attr("calcMode"))
+        .is_some_and(|v| v.eq_ignore_ascii_case("manual"));
     let sst = inspect::load_shared_strings(pkg, &wb_part, &wb_rels)?;
     let listed = sheet_list(&wb_doc.root, &wb_rels, &wb_part)?;
     let mut sheets = Vec::new();
@@ -245,6 +256,7 @@ fn fill_formula_caches_depth(
         sheets.push(Sheet {
             name: name.clone(),
             cells: rec,
+            origin: sheet_origin(&doc.root),
         });
         sheet_docs.push((part.clone(), doc));
     }
@@ -265,6 +277,8 @@ fn fill_formula_caches_depth(
         stack: Vec::new(),
         overrides: HashMap::new(),
         cyclic: HashSet::new(),
+        volatile: HashSet::new(),
+        manual,
         externals,
         ext_used: HashMap::new(),
     };
@@ -302,6 +316,12 @@ fn fill_formula_caches_depth(
             set.insert((*col, *row));
         }
     }
+    let mut volatile_sheets = vec![HashSet::new(); writes.len()];
+    for (si, col, row) in &book.volatile {
+        if let Some(set) = volatile_sheets.get_mut(*si) {
+            set.insert((*col, *row));
+        }
+    }
     let ext_used = book.ext_used.clone();
     let mut dirty = vec![false; sheet_docs.len()];
     for (doc_i, (_part, doc)) in sheet_docs.iter_mut().enumerate() {
@@ -310,7 +330,8 @@ fn fill_formula_caches_depth(
         };
         let map = &writes[doc_i];
         let cycles = &cyclic_sheets[doc_i];
-        if map.is_empty() && cycles.is_empty() {
+        let volatile = &volatile_sheets[doc_i];
+        if map.is_empty() && cycles.is_empty() && volatile.is_empty() {
             continue;
         }
         formula::for_each_cell_mut(data, |cell, el| {
@@ -319,7 +340,7 @@ fn fill_formula_caches_depth(
                 write_cache(el, val);
                 dirty[doc_i] = true;
             }
-            if cycles.contains(&key) {
+            if cycles.contains(&key) || volatile.contains(&key) {
                 if let Some(f) = el.child_by_local_mut("f") {
                     if f.attr("ca") != Some("1") {
                         f.set_attr("ca", "1");
@@ -388,6 +409,13 @@ fn sheet_list(
         out.push((name, part, kind));
     }
     Ok(out)
+}
+
+fn sheet_origin(root: &Element) -> CellRef {
+    super::view::first_sheet_view(root)
+        .and_then(|view| view.attr("topLeftCell"))
+        .and_then(|raw| a1::parse_cell(raw).ok())
+        .unwrap_or(CellRef { col: 1, row: 1 })
 }
 
 fn load_sheet(root: &Element, sst: &[String]) -> HashMap<(u32, u32), CellRec> {
@@ -560,6 +588,17 @@ fn table_def(root: &Element, sheet: usize) -> Option<TableDef> {
         data_row,
         data_end,
     })
+}
+
+enum Fact {
+    Blank,
+    Ready(Scalar),
+    Skip,
+}
+
+enum Hit {
+    Fact(Fact),
+    Err(&'static str),
 }
 
 impl Book {
@@ -1065,6 +1104,23 @@ impl Book {
             "NOT" => return self.eval_not(args, sheet, here, mode),
             "AND" => return self.eval_and_or(args, sheet, here, mode, true),
             "OR" => return self.eval_and_or(args, sheet, here, mode, false),
+            // 信息类。`ERROR.TYPE` 的点是名字的一部分。
+            "ISBLANK" => return self.eval_isblank(args, sheet, here),
+            "ISERR" => return self.eval_iserr(args, sheet, here, false),
+            "ISERROR" => return self.eval_iserr(args, sheet, here, true),
+            "ISEVEN" => return self.eval_even_odd(args, sheet, here, true),
+            "ISLOGICAL" => return self.eval_islogical(args, sheet, here),
+            "ISNA" => return self.eval_isna(args, sheet, here),
+            "ISNONTEXT" => return self.eval_isnontext(args, sheet, here),
+            "ISNUMBER" => return self.eval_isnumber(args, sheet, here),
+            "ISODD" => return self.eval_even_odd(args, sheet, here, false),
+            "ISREF" => return self.eval_isref(args, sheet, here),
+            "ISTEXT" => return self.eval_istext(args, sheet, here),
+            "N" => return self.eval_n(args, sheet, here),
+            "TYPE" => return self.eval_type(args, sheet, here),
+            "ERROR.TYPE" => return self.eval_error_type(args, sheet, here),
+            "CELL" => return self.eval_cell(args, sheet, here),
+            "INFO" => return self.eval_info(args, sheet, here),
             _ => {}
         }
         let mut vals = Vec::new();
@@ -1112,6 +1168,393 @@ impl Book {
             }
             _ => Calc::Skip,
         }
+    }
+
+    fn mark_volatile(&mut self, sheet: usize, here: CellRef) {
+        self.volatile.insert((sheet, here.col, here.row));
+    }
+
+    fn volatile_ready(&mut self, sheet: usize, here: CellRef, scalar: Scalar) -> Calc {
+        self.mark_volatile(sheet, here);
+        Calc::Ready(Value::Scalar(scalar))
+    }
+
+    fn cell_fact(&mut self, sheet: usize, cell: CellRef) -> Fact {
+        let kind = self
+            .sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(cell.col, cell.row)))
+            .map(|rec| {
+                if rec.formula.is_some() || rec.array_master.is_some() {
+                    1u8
+                } else if rec.cached.is_some() {
+                    2
+                } else {
+                    0
+                }
+            });
+        match kind {
+            None | Some(0) => Fact::Blank,
+            Some(2) => {
+                let cached = self.sheets[sheet].cells[&(cell.col, cell.row)]
+                    .cached
+                    .clone()
+                    .expect("有缓存");
+                Fact::Ready(cached)
+            }
+            Some(1) => match self.scalar_at(sheet, cell) {
+                Calc::Ready(Value::Scalar(s)) => Fact::Ready(s),
+                _ => Fact::Skip,
+            },
+            _ => Fact::Blank,
+        }
+    }
+
+    /// 普通格子里的区域按隐式交集。对不上时是 `#VALUE!`，表名对不上时是 `#REF!`。
+    fn hit_rect(&mut self, rect: &Rect, sheet: usize, here: CellRef) -> Hit {
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Hit::Err(REF);
+        };
+        if s1 != s2 {
+            return Hit::Err(VALUE);
+        }
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        if r1 == r2 {
+            return Hit::Fact(self.cell_fact(s1, r1));
+        }
+        if s1 != sheet {
+            return Hit::Err(VALUE);
+        }
+        if r1.col == r2.col && here.row >= r1.row && here.row <= r2.row {
+            return Hit::Fact(self.cell_fact(
+                s1,
+                CellRef {
+                    col: r1.col,
+                    row: here.row,
+                },
+            ));
+        }
+        if r1.row == r2.row && here.col >= r1.col && here.col <= r2.col {
+            return Hit::Fact(self.cell_fact(
+                s1,
+                CellRef {
+                    col: here.col,
+                    row: r1.row,
+                },
+            ));
+        }
+        Hit::Err(VALUE)
+    }
+
+    fn hit_value(&mut self, value: Value, sheet: usize, here: CellRef) -> Hit {
+        match value {
+            Value::Scalar(s) => Hit::Fact(Fact::Ready(s)),
+            Value::Grid(g) => match g.first().and_then(|row| row.first()) {
+                Some(s) => Hit::Fact(Fact::Ready(s.clone())),
+                None => Hit::Err(VALUE),
+            },
+            Value::Area(rect) => self.hit_rect(&rect, sheet, here),
+            Value::Areas(mut parts) => {
+                if parts.len() == 1 {
+                    self.hit_rect(&parts.remove(0), sheet, here)
+                } else {
+                    Hit::Err(VALUE)
+                }
+            }
+        }
+    }
+
+    fn reduce_arg(&mut self, expr: &Expr, sheet: usize, here: CellRef) -> Option<Hit> {
+        match self.eval_expr(expr, sheet, here, Mode::Scalar) {
+            Calc::Skip => None,
+            Calc::Ready(v) => Some(self.hit_value(v, sheet, here)),
+        }
+    }
+
+    fn arg_scalar(&mut self, expr: &Expr, sheet: usize, here: CellRef) -> Option<Scalar> {
+        let value = match self.eval_expr(expr, sheet, here, Mode::Scalar) {
+            Calc::Skip => return None,
+            Calc::Ready(v) => v,
+        };
+        match self.coerce(value, sheet, here, Mode::Scalar) {
+            Calc::Ready(Value::Scalar(s)) => Some(s),
+            _ => None,
+        }
+    }
+
+    fn eval_isblank(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let Some(hit) = self.reduce_arg(&args[0], sheet, here) else {
+            return Calc::Skip;
+        };
+        let blank = matches!(hit, Hit::Fact(Fact::Blank));
+        ready_bool(blank)
+    }
+
+    fn eval_iserr(&mut self, args: &[Expr], sheet: usize, here: CellRef, any: bool) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let flag = match error_of(&hit) {
+            Some(e) => any || e != NA,
+            None => false,
+        };
+        ready_bool(flag)
+    }
+
+    fn eval_isna(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        ready_bool(error_of(&hit) == Some(NA))
+    }
+
+    fn eval_islogical(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let flag = matches!(hit, Hit::Fact(Fact::Ready(Scalar::Bool(_))));
+        ready_bool(flag)
+    }
+
+    fn eval_isnumber(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let flag = matches!(hit, Hit::Fact(Fact::Ready(Scalar::Num(_))));
+        ready_bool(flag)
+    }
+
+    fn eval_istext(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let flag = matches!(hit, Hit::Fact(Fact::Ready(Scalar::Text(_))));
+        ready_bool(flag)
+    }
+
+    fn eval_isnontext(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let flag = !matches!(hit, Hit::Fact(Fact::Ready(Scalar::Text(_))));
+        ready_bool(flag)
+    }
+
+    fn eval_even_odd(&mut self, args: &[Expr], sheet: usize, here: CellRef, even: bool) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        let scalar = match hit {
+            Hit::Fact(Fact::Skip) => return Calc::Skip,
+            Hit::Fact(Fact::Blank) => Scalar::Num(0.0),
+            Hit::Fact(Fact::Ready(s)) => s,
+            Hit::Err(e) => return ready_err(e),
+        };
+        match scalar {
+            Scalar::Num(n) if n.is_finite() => {
+                let odd = n.trunc() % 2.0 != 0.0;
+                ready_bool(if even { !odd } else { odd })
+            }
+            Scalar::Err(e) => ready_err(e),
+            Scalar::Num(_) | Scalar::Bool(_) | Scalar::Text(_) => ready_err(VALUE),
+        }
+    }
+
+    fn eval_isref(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let value = match self.eval_expr(&args[0], sheet, here, Mode::Scalar) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        let flag = match &value {
+            Value::Area(rect) => self.same_sheet_ref(rect, sheet),
+            Value::Areas(parts) => {
+                !parts.is_empty() && parts.iter().all(|rect| self.same_sheet_ref(rect, sheet))
+            }
+            Value::Scalar(_) | Value::Grid(_) => false,
+        };
+        ready_bool(flag)
+    }
+
+    fn same_sheet_ref(&self, rect: &Rect, sheet: usize) -> bool {
+        match self.resolve_span(rect, sheet) {
+            Some((a, b)) => a == b,
+            None => true,
+        }
+    }
+
+    fn eval_n(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let value = match self.eval_expr(&args[0], sheet, here, Mode::Scalar) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        match value {
+            Value::Scalar(s) => Calc::Ready(Value::Scalar(n_convert(s))),
+            Value::Grid(g) => match g.first().and_then(|row| row.first()).cloned() {
+                Some(s) => Calc::Ready(Value::Scalar(n_convert(s))),
+                None => ready_err(VALUE),
+            },
+            Value::Area(rect) => self.n_corner(&rect, sheet),
+            Value::Areas(parts) => {
+                if parts.len() == 1 {
+                    self.n_corner(&parts[0], sheet)
+                } else {
+                    ready_err(VALUE)
+                }
+            }
+        }
+    }
+
+    fn n_corner(&mut self, rect: &Rect, sheet: usize) -> Calc {
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return ready_err(REF);
+        };
+        if s1 != s2 {
+            return ready_err(VALUE);
+        }
+        let (r1, _) = ordered(rect.r1, rect.r2);
+        match self.cell_fact(s1, r1) {
+            Fact::Skip => Calc::Skip,
+            Fact::Blank => ready_num(0.0),
+            Fact::Ready(s) => Calc::Ready(Value::Scalar(n_convert(s))),
+        }
+    }
+
+    fn eval_type(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let value = match self.eval_expr(&args[0], sheet, here, Mode::Scalar) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        if matches!(&value, Value::Grid(_)) {
+            return ready_num(64.0);
+        }
+        match self.hit_value(value, sheet, here) {
+            Hit::Fact(Fact::Skip) => Calc::Skip,
+            Hit::Fact(Fact::Blank) => ready_num(1.0),
+            Hit::Fact(Fact::Ready(s)) => ready_num(type_code(&s)),
+            Hit::Err(_) => ready_num(16.0),
+        }
+    }
+
+    fn eval_error_type(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        let Some(hit) = self.one_hit(args, sheet, here) else {
+            return Calc::Skip;
+        };
+        match error_of(&hit) {
+            Some(e) => match error_type_code(e) {
+                Some(n) => ready_num(n),
+                None => ready_err(NA),
+            },
+            None => ready_err(NA),
+        }
+    }
+
+    fn one_hit(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Option<Hit> {
+        if args.len() != 1 {
+            return None;
+        }
+        match self.reduce_arg(&args[0], sheet, here) {
+            None => None,
+            Some(Hit::Fact(Fact::Skip)) => None,
+            Some(hit) => Some(hit),
+        }
+    }
+
+    fn eval_cell(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 2 {
+            return Calc::Skip;
+        }
+        let cat = match self.arg_scalar(&args[0], sheet, here) {
+            None => return Calc::Skip,
+            Some(Scalar::Text(s)) => s,
+            Some(Scalar::Err(e)) => return self.volatile_ready(sheet, here, Scalar::Err(e)),
+            Some(_) => return self.volatile_ready(sheet, here, Scalar::Err(VALUE)),
+        };
+        let value = match self.eval_expr(&args[1], sheet, here, Mode::Scalar) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        let rect = match value {
+            Value::Area(rect) => rect,
+            Value::Areas(parts) => match parts.first() {
+                Some(rect) if parts.len() == 1 => rect.clone(),
+                _ => return self.volatile_ready(sheet, here, Scalar::Err(VALUE)),
+            },
+            _ => return self.volatile_ready(sheet, here, Scalar::Err(VALUE)),
+        };
+        let Some((s1, _)) = self.resolve_span(&rect, sheet) else {
+            return self.volatile_ready(sheet, here, Scalar::Err(REF));
+        };
+        let (corner, _) = ordered(rect.r1, rect.r2);
+        match cat.to_ascii_lowercase().as_str() {
+            "address" => {
+                let text = format!("${}${}", a1::col_to_letters(corner.col), corner.row);
+                self.volatile_ready(sheet, here, Scalar::Text(text))
+            }
+            "col" => self.volatile_ready(sheet, here, Scalar::Num(corner.col as f64)),
+            "row" => self.volatile_ready(sheet, here, Scalar::Num(corner.row as f64)),
+            "contents" => match self.cell_fact(s1, corner) {
+                Fact::Skip => Calc::Skip,
+                Fact::Blank => self.volatile_ready(sheet, here, Scalar::Num(0.0)),
+                Fact::Ready(s) => self.volatile_ready(sheet, here, s),
+            },
+            "type" => {
+                let kind = match self.cell_fact(s1, corner) {
+                    Fact::Skip => return Calc::Skip,
+                    Fact::Blank => "b",
+                    Fact::Ready(Scalar::Text(_)) => "l",
+                    Fact::Ready(_) => "v",
+                };
+                self.volatile_ready(sheet, here, Scalar::Text(kind.to_string()))
+            }
+            _ => Calc::Skip,
+        }
+    }
+
+    fn eval_info(&mut self, args: &[Expr], sheet: usize, here: CellRef) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let cat = match self.arg_scalar(&args[0], sheet, here) {
+            None => return Calc::Skip,
+            Some(Scalar::Text(s)) => s,
+            Some(Scalar::Err(e)) => return self.volatile_ready(sheet, here, Scalar::Err(e)),
+            Some(_) => return self.volatile_ready(sheet, here, Scalar::Err(VALUE)),
+        };
+        let scalar = match cat.to_ascii_lowercase().as_str() {
+            "system" => {
+                if cfg!(windows) {
+                    Scalar::Text("pcdos".to_string())
+                } else {
+                    return Calc::Skip;
+                }
+            }
+            "recalc" => Scalar::Text(if self.manual { "Manual" } else { "Automatic" }.to_string()),
+            "release" => Scalar::Text("16.0".to_string()),
+            "numfile" => Scalar::Num(self.sheets.len() as f64),
+            "origin" => {
+                let cell = self
+                    .sheets
+                    .get(sheet)
+                    .map(|s| s.origin)
+                    .unwrap_or(CellRef { col: 1, row: 1 });
+                Scalar::Text(format!("$A:${}${}", a1::col_to_letters(cell.col), cell.row))
+            }
+            "directory" | "memavail" | "memused" | "osversion" | "totmem" => return Calc::Skip,
+            _ => Scalar::Err(VALUE),
+        };
+        self.volatile_ready(sheet, here, scalar)
     }
 
     /// `IF` 只算被选中的分支。条件不是逻辑值时直接 `#VALUE!`，两个分支都不算。
@@ -1687,6 +2130,57 @@ impl Book {
             r1: CellRef { col: c1, row: r1 },
             r2: CellRef { col: c2, row: r2 },
         })
+    }
+}
+
+fn ready_bool(value: bool) -> Calc {
+    Calc::Ready(Value::Scalar(Scalar::Bool(value)))
+}
+
+fn ready_num(value: f64) -> Calc {
+    Calc::Ready(Value::Scalar(Scalar::Num(value)))
+}
+
+fn ready_err(token: &'static str) -> Calc {
+    Calc::Ready(Value::Scalar(Scalar::Err(token)))
+}
+
+fn error_of(hit: &Hit) -> Option<&'static str> {
+    match hit {
+        Hit::Fact(Fact::Ready(Scalar::Err(e))) | Hit::Err(e) => Some(*e),
+        _ => None,
+    }
+}
+
+fn error_type_code(token: &str) -> Option<f64> {
+    match token {
+        NULL => Some(1.0),
+        DIV0 => Some(2.0),
+        VALUE => Some(3.0),
+        REF => Some(4.0),
+        NAME => Some(5.0),
+        NUM => Some(6.0),
+        NA => Some(7.0),
+        _ => None,
+    }
+}
+
+fn n_convert(value: Scalar) -> Scalar {
+    match value {
+        Scalar::Num(n) => Scalar::Num(n),
+        Scalar::Bool(true) => Scalar::Num(1.0),
+        Scalar::Bool(false) => Scalar::Num(0.0),
+        Scalar::Text(_) => Scalar::Num(0.0),
+        Scalar::Err(e) => Scalar::Err(e),
+    }
+}
+
+fn type_code(value: &Scalar) -> f64 {
+    match value {
+        Scalar::Num(_) => 1.0,
+        Scalar::Text(_) => 2.0,
+        Scalar::Bool(_) => 4.0,
+        Scalar::Err(_) => 16.0,
     }
 }
 
@@ -2733,6 +3227,7 @@ fn sheets_of(pkg: &Package) -> Result<Vec<Sheet>, Error> {
         sheets.push(Sheet {
             name: name.clone(),
             cells: load_sheet(&doc.root, &sst),
+            origin: sheet_origin(&doc.root),
         });
     }
     Ok(sheets)

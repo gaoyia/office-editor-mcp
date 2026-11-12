@@ -2470,6 +2470,25 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 放下之后一个逻辑值都没有，写入 `#VALUE!`
 - 参数个数对不上时不写缓存。Excel 16.0 拒收 `AND()`、`OR()`、`NOT()`，以及参数不够的 `IF` / `IFERROR`
 - `ECMA.IF`、`ISO.NOT` 这种带点的名字不求值，也不写成 `#NAME?`。Excel 16.0 打开后显示 `#NAME?`
+- 另外认信息类 `CELL`、`ERROR.TYPE`、`INFO`、`ISBLANK`、`ISERR`、`ISERROR`、`ISEVEN`、`ISLOGICAL`、`ISNA`、`ISNONTEXT`、`ISNUMBER`、`ISODD`、`ISREF`、`ISTEXT`、`N`、`TYPE`
+- 这些函数除 `CELL` 要 2 个参数外，都要恰好 1 个参数。个数不对不写缓存
+- 空单元格仍是空，不当成 0。`ISBLANK` 在隐式交集落到空单元格时才是 `TRUE`
+- 普通格子里，区域按隐式交集。对不上时参数是 `#VALUE!`
+- 因此对不上时 `ISNUMBER` 为 `FALSE`，`ISERR` 为 `TRUE`，`TYPE` 为 16，`ERROR.TYPE` 为 3，`ISEVEN` 仍是 `#VALUE!`
+- 单格引用不要求跟公式同一行。数组常量除 `TYPE` 外只取左上角。`TYPE` 对数组常量是 64
+- `ISEVEN` 与 `ISODD` 把数字向 0 取整。空单元格当 0。逻辑值和文本写入 `#VALUE!`
+- `ISREF` 对同一张表上的单元格或区域为 `TRUE`。三维引用为 `FALSE`。`#REF!` 和数组常量为 `FALSE`
+- `N` 取区域或数组常量的左上角，不按隐式交集。数字原样，`TRUE` 为 1，`FALSE` 为 0，文本为 0，错误原样返回，空单元格为 0
+- `ERROR.TYPE` 把 `#NULL!`、`#DIV/0!`、`#VALUE!`、`#REF!`、`#NAME?`、`#NUM!`、`#N/A` 记成 1 到 7。不是错误时写入 `#N/A`。不实现 `#GETTING_DATA`
+- `CELL` 认 `address`、`col`、`contents`、`row`、`type`，大小写不限。区域取左上角，不按隐式交集
+- `address` 写成 `$A$1`。`contents` 里空单元格是 0。`type` 对空单元格是 `b`，对文本是 `l`，对其余值是 `v`
+- 其它 `CELL` 类别不写缓存。省略引用也不写
+- `INFO` 的 `system` 在 Windows 上是 `pcdos`。`recalc` 在 `calcMode="manual"` 时是 `Manual`，否则是 `Automatic`
+- `release` 写成 `16.0`。这是 Excel 16.0 的样本，不是本库版本号
+- `numfile` 是本工作簿的工作表数。`origin` 没有 `topLeftCell` 时是 `$A:$A$1`。有该属性时写成 `$A:$D$9` 这种形式
+- `directory`、`memavail`、`memused`、`osversion`、`totmem` 不写缓存。不编造路径或内存数。其它类别写入 `#VALUE!`
+- 写出 `CELL` 或 `INFO` 的结果时，该公式带 `ca="1"`。`IS` 系列不写
+- `ECMA.ISBLANK` 这种带点的名字不求值，也不写成 `#NAME?`
 - 工作簿级和表级定义名
 - 共享公式先按主格相对展开，再求值
 - 数组公式按元素铺进 `ref`
