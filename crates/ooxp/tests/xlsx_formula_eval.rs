@@ -839,3 +839,178 @@ fn information_functions_match_excel_16() {
     assert!(!formula_marks_ca(&xml, "INFO(&quot;directory&quot;)"));
     assert!(!formula_marks_ca(&xml, "ECMA.ISBLANK(A1)"));
 }
+
+#[test]
+fn math_functions_match_excel_16() {
+    let path = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": 1}),
+        json!({"ref": "B1", "value": 2}),
+        json!({"ref": "A2", "value": 3}),
+        json!({"ref": "B2", "value": 4}),
+        json!({"ref": "E1", "value": 1}),
+        json!({"ref": "E2", "value": 2}),
+        json!({"ref": "E3", "value": 1}),
+        json!({"ref": "E4", "value": 3}),
+        json!({"ref": "F1", "value": 10}),
+        json!({"ref": "F2", "value": 20}),
+        json!({"ref": "F3", "value": 30}),
+        json!({"ref": "F4", "value": 40}),
+        json!({"ref": "H1", "value": 1}),
+        json!({"ref": "H2", "value": 2}),
+        json!({"ref": "H3", "value": 3}),
+        json!({"ref": "G1", "formula": "=SUBTOTAL(9,F1)"}),
+        json!({"ref": "G2", "value": 5}),
+    ];
+    let formulas = [
+        ("C1", "=ACOS(0)", std::f64::consts::FRAC_PI_2),
+        ("C2", "=ACOSH(1)", 0.0),
+        ("C3", "=ASIN(0)", 0.0),
+        ("C4", "=ASINH(0)", 0.0),
+        ("C5", "=ATAN(1)", std::f64::consts::FRAC_PI_4),
+        ("C6", "=ATAN2(1,1)", std::f64::consts::FRAC_PI_4),
+        ("C7", "=ATANH(0)", 0.0),
+        ("C8", "=COS(0)", 1.0),
+        ("C9", "=COSH(0)", 1.0),
+        ("C10", "=SIN(0)", 0.0),
+        ("C11", "=SINH(0)", 0.0),
+        ("C12", "=TAN(0)", 0.0),
+        ("C13", "=TANH(0)", 0.0),
+        ("C14", "=CEILING(2.5,1)", 3.0),
+        ("C15", "=CEILING(-2.5,-1)", -3.0),
+        ("C16", "=CEILING(-2.5,1)", -2.0),
+        ("C17", "=ECMA.CEILING(2.5,1)", 3.0),
+        ("C18", "=ISO.CEILING(-2.5,-1)", -2.0),
+        ("C19", "=FLOOR(2.5,1)", 2.0),
+        ("C20", "=FLOOR(-2.5,-1)", -2.0),
+        ("C21", "=FLOOR(-2.5,1)", -3.0),
+        ("C22", "=INT(-8.9)", -9.0),
+        ("C23", "=EVEN(3)", 4.0),
+        ("C24", "=EVEN(-3)", -4.0),
+        ("C25", "=ODD(2)", 3.0),
+        ("C26", "=ODD(-2)", -3.0),
+        ("C27", "=MROUND(10,3)", 9.0),
+        ("C28", "=MROUND(-10,-3)", -9.0),
+        ("C29", "=ROUND(2.15,1)", 2.2),
+        ("C30", "=ROUND(1.25,1)", 1.3),
+        ("C31", "=ROUND(-1.5,0)", -2.0),
+        ("C32", "=ROUNDDOWN(2.15,1)", 2.1),
+        ("C33", "=ROUNDUP(2.15,1)", 2.2),
+        ("C34", "=TRUNC(-2.9)", -2.0),
+        ("C35", "=TRUNC(1.29,1)", 1.2),
+        ("C36", "=EXP(1)", std::f64::consts::E),
+        ("C37", "=LN(1)", 0.0),
+        ("C38", "=LOG(8,2)", 3.0),
+        ("C39", "=LOG10(100)", 2.0),
+        ("C40", "=POWER(-2,3)", -8.0),
+        ("C41", "=SQRTPI(1)", 1.772453850905516),
+        ("C42", "=COMBIN(5,2)", 10.0),
+        ("C43", "=FACT(5)", 120.0),
+        ("C44", "=FACTDOUBLE(5)", 15.0),
+        ("C45", "=GCD(12,8,20)", 4.0),
+        ("C46", "=LCM(4,6)", 12.0),
+        ("C47", "=MOD(10,3)", 1.0),
+        ("C48", "=MULTINOMIAL(2,3,4)", 1260.0),
+        ("C49", "=QUOTIENT(5,2)", 2.0),
+        ("C50", "=SIGN(-5)", -1.0),
+        ("C51", "=SIGN(0)", 0.0),
+        ("C52", "=DEGREES(PI())", 180.0),
+        ("C53", "=PI()", std::f64::consts::PI),
+        ("C54", "=MDETERM(A1:B2)", -2.0),
+        ("C55", "=PRODUCT(2,3,4)", 24.0),
+        ("C56", "=SUMIF(E1:E4,1,F1:F4)", 40.0),
+        ("C57", "=SUMIFS(F1:F4,E1:E4,1)", 40.0),
+        ("C58", "=SUMPRODUCT(E1:E2,F1:F2)", 50.0),
+        ("C59", "=SUMSQ(3,4)", 25.0),
+        ("C60", "=SUMX2MY2(E1:E2,F1:F2)", -495.0),
+        ("C61", "=SUMX2PY2(E1:E2,F1:F2)", 505.0),
+        ("C62", "=SUMXMY2(E1:E2,F1:F2)", 405.0),
+        ("C63", "=SERIESSUM(2,0,1,H1:H3)", 17.0),
+        ("C64", "=SUBTOTAL(9,F1:F4)", 100.0),
+        ("C65", "=SUBTOTAL(109,F1:F4)", 80.0),
+        ("C66", "=SUBTOTAL(9,G1:G2)", 5.0),
+        ("C67", "=MMULT(A1:B2,A1:B2)", 7.0),
+    ];
+    for (cell, formula, _) in formulas {
+        cells.push(json!({"ref": cell, "formula": formula}));
+    }
+    cells.push(json!({"ref": "J1", "formula": "=MMULT(A1:B2,A1:B2)", "arrayRef": "J1:K2"}));
+    cells.push(json!({"ref": "M1", "formula": "=MINVERSE(A1:B2)", "arrayRef": "M1:N2"}));
+    cells.push(json!({"ref": "C68", "formula": "=RAND()"}));
+    cells.push(json!({"ref": "C69", "formula": "=RANDBETWEEN(1,10)"}));
+    cells.push(json!({"ref": "C70", "formula": "=ROMAN(12)"}));
+    cells.push(json!({"ref": "C71", "formula": "=ROMAN(1999)"}));
+    cells.push(json!({"ref": "C72", "formula": "=ACOS(2)"}));
+    cells.push(json!({"ref": "C73", "formula": "=CEILING(2.5,-1)"}));
+    cells.push(json!({"ref": "C74", "formula": "=FLOOR(2.5,-1)"}));
+    cells.push(json!({"ref": "C75", "formula": "=FLOOR(1,0)"}));
+    cells.push(json!({"ref": "C76", "formula": "=CEILING(1,0)"}));
+    cells.push(json!({"ref": "C77", "formula": "=MOD(1,0)"}));
+    cells.push(json!({"ref": "C78", "formula": "=COMBIN(5,6)"}));
+    cells.push(json!({"ref": "C79", "formula": "=ECMA.SIN(0)"}));
+    cells.push(json!({"ref": "C80", "formula": "=RADIANS(180)"}));
+    cells.push(json!({"ref": "C81", "formula": "=LOG(8)"}));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{
+            "name": "Sheet1",
+            "rows": [{ "row": 2, "hidden": true }],
+            "cells": cells
+        }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:N4");
+    let wide = inspect_range(&path, "C1:C81");
+    let near = |tree: &Value, id: &str, expect: f64| {
+        let c = cell(tree, id);
+        let got = c["value"].as_f64().unwrap_or_else(|| panic!("{id} {c}"));
+        assert!(
+            (got - expect).abs() < 1e-8,
+            "{id} got {got} expect {expect}"
+        );
+    };
+    for (cell_ref, _, expect) in formulas {
+        near(&wide, &format!("cell:Sheet1!{cell_ref}"), expect);
+    }
+    near(&tree, "cell:Sheet1!J1", 7.0);
+    near(&tree, "cell:Sheet1!K1", 10.0);
+    near(&tree, "cell:Sheet1!J2", 15.0);
+    near(&tree, "cell:Sheet1!K2", 22.0);
+    near(&tree, "cell:Sheet1!M1", -2.0);
+    near(&tree, "cell:Sheet1!N1", 1.0);
+    near(&tree, "cell:Sheet1!M2", 1.5);
+    near(&tree, "cell:Sheet1!N2", -0.5);
+    let text = |id: &str, expect: &str| {
+        let c = cell(&wide, id);
+        assert_eq!(c["value"], expect, "{id} {c}");
+    };
+    let err = |id: &str, token: &str| {
+        let c = cell(&wide, id);
+        assert_eq!(c["type"], "error", "{id} {c}");
+        assert_eq!(c["value"], token, "{id}");
+    };
+    text("cell:Sheet1!C70", "XII");
+    text("cell:Sheet1!C71", "MCMXCIX");
+    err("cell:Sheet1!C72", "#NUM!");
+    err("cell:Sheet1!C73", "#NUM!");
+    err("cell:Sheet1!C74", "#NUM!");
+    err("cell:Sheet1!C75", "#DIV/0!");
+    near(&wide, "cell:Sheet1!C76", 0.0);
+    err("cell:Sheet1!C77", "#DIV/0!");
+    err("cell:Sheet1!C78", "#NUM!");
+    let ecma = cell(&wide, "cell:Sheet1!C79");
+    assert!(ecma["value"].is_null(), "{ecma}");
+    near(&wide, "cell:Sheet1!C80", std::f64::consts::PI);
+    near(&wide, "cell:Sheet1!C81", 8.0_f64.log10());
+    let rand = cell(&wide, "cell:Sheet1!C68")["value"].as_f64().unwrap();
+    assert!((0.0..1.0).contains(&rand), "{rand}");
+    let between = cell(&wide, "cell:Sheet1!C69")["value"].as_f64().unwrap();
+    assert!((1.0..=10.0).contains(&between), "{between}");
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(formula_marks_ca(&xml, "RAND()"));
+    assert!(formula_marks_ca(&xml, "RANDBETWEEN(1,10)"));
+    assert!(!formula_marks_ca(&xml, "COS(0)"));
+}

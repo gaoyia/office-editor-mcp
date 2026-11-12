@@ -2489,6 +2489,17 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - `directory`、`memavail`、`memused`、`osversion`、`totmem` 不写缓存。不编造路径或内存数。其它类别写入 `#VALUE!`
 - 写出 `CELL` 或 `INFO` 的结果时，该公式带 `ca="1"`。`IS` 系列不写
 - `ECMA.ISBLANK` 这种带点的名字不求值，也不写成 `#NAME?`
+- 另外认数学与三角类。`ABS`、`SQRT`、`SUM` 仍按原来的规则。`ECMA.SIN`、`ISO.COS` 这种类目表里没有的带点名字不求值
+- `CEILING` 与 `ECMA.CEILING` 同一算法。正数配负的舍入基数写入 `#NUM!`。基数为 0 时结果是 0
+- `ISO.CEILING` 用基数的绝对值，朝正无穷取整。`FLOOR` 在正数配负基数时写入 `#NUM!`。`FLOOR` 的非零数配基数 0 时写入 `#DIV/0!`，两个都是 0 时结果是 0
+- `MROUND` 的两个参数正负不同时写入 `#NUM!`。基数为 0 时结果是 0。`ROUND` 的 5 朝远离 0 的方向进位
+- `EVEN` 与 `ODD` 朝远离 0 的方向取到偶数或奇数。`INT` 朝负无穷取整。`TRUNC` 朝 0 取整
+- `LOG` 只给一个参数时按底数 10。`PI` 不带参数
+- `RAND` 与 `RANDBETWEEN` 按求值当时写一个数，公式带 `ca="1"`。测试只核对范围，不锁死具体数字
+- `MMULT` 与 `MINVERSE` 在普通格子里取结果的左上角。数组公式按 `ref` 铺开。`MDETERM` 是一个数
+- `SUMIF` 与 `SUMIFS` 的条件支持数字、文本和比较运算符。不认通配符
+- `SUBTOTAL` 的 1 到 11 包含手工隐藏行。101 到 111 跳过 `hidden="1"` 的行。区域内的 `SUBTOTAL` 不重复计入
+- `ROMAN` 只写形式 0。`SERIESSUM` 按系数区域从左到右、从上到下累加
 - 工作簿级和表级定义名
 - 共享公式先按主格相对展开，再求值
 - 数组公式按元素铺进 `ref`

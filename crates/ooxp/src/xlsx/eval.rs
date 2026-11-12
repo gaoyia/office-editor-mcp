@@ -112,6 +112,8 @@ struct Sheet {
     cells: HashMap<(u32, u32), CellRec>,
     /// `sheetView` 的 `topLeftCell`。没有时是 A1。
     origin: CellRef,
+    /// `row/@hidden="1"` 的行号。
+    hidden_rows: HashSet<u32>,
 }
 
 struct NameDef {
@@ -257,6 +259,7 @@ fn fill_formula_caches_depth(
             name: name.clone(),
             cells: rec,
             origin: sheet_origin(&doc.root),
+            hidden_rows: hidden_rows(&doc.root),
         });
         sheet_docs.push((part.clone(), doc));
     }
@@ -409,6 +412,25 @@ fn sheet_list(
         out.push((name, part, kind));
     }
     Ok(out)
+}
+
+fn hidden_rows(root: &Element) -> HashSet<u32> {
+    let mut rows = HashSet::new();
+    let Some(data) = root.child_by_local("sheetData") else {
+        return rows;
+    };
+    for row in data.children_by_local("row") {
+        let hidden = row
+            .attr("hidden")
+            .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        if !hidden {
+            continue;
+        }
+        if let Some(n) = row.attr("r").and_then(|s| s.parse().ok()) {
+            rows.insert(n);
+        }
+    }
+    rows
 }
 
 fn sheet_origin(root: &Element) -> CellRef {
@@ -599,6 +621,18 @@ enum Fact {
 enum Hit {
     Fact(Fact),
     Err(&'static str),
+}
+
+enum SumX {
+    X2My2,
+    X2Py2,
+    Xmy2,
+}
+
+enum Mat {
+    Ok(Vec<Vec<f64>>),
+    Err(&'static str),
+    Skip,
 }
 
 impl Book {
@@ -1166,8 +1200,830 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
+            other => self.eval_math(other, &vals, sheet, here, mode),
+        }
+    }
+
+    fn eval_math(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Calc {
+        match name {
+            "ACOS" => self.unary_num(vals, sheet, here, acos_of),
+            "ACOSH" => self.unary_num(vals, sheet, here, acosh_of),
+            "ASIN" => self.unary_num(vals, sheet, here, asin_of),
+            "ASINH" => self.unary_num(vals, sheet, here, asinh_of),
+            "ATAN" => self.unary_num(vals, sheet, here, atan_of),
+            "ATANH" => self.unary_num(vals, sheet, here, atanh_of),
+            "COS" => self.unary_num(vals, sheet, here, cos_of),
+            "COSH" => self.unary_num(vals, sheet, here, cosh_of),
+            "SIN" => self.unary_num(vals, sheet, here, sin_of),
+            "SINH" => self.unary_num(vals, sheet, here, sinh_of),
+            "TAN" => self.unary_num(vals, sheet, here, tan_of),
+            "TANH" => self.unary_num(vals, sheet, here, tanh_of),
+            "EXP" => self.unary_num(vals, sheet, here, exp_of),
+            "LN" => self.unary_num(vals, sheet, here, ln_of),
+            "LOG10" => self.unary_num(vals, sheet, here, log10_of),
+            "SQRTPI" => self.unary_num(vals, sheet, here, sqrtpi_of),
+            "DEGREES" => self.unary_num(vals, sheet, here, degrees_of),
+            "RADIANS" => self.unary_num(vals, sheet, here, radians_of),
+            "SIGN" => self.unary_num(vals, sheet, here, sign_of),
+            "EVEN" => self.unary_num(vals, sheet, here, even_of),
+            "ODD" => self.unary_num(vals, sheet, here, odd_of),
+            "INT" => self.unary_num(vals, sheet, here, int_of),
+            "FACT" => self.unary_num(vals, sheet, here, fact_of),
+            "FACTDOUBLE" => self.unary_num(vals, sheet, here, fact_double_of),
+            "ROMAN" => self.eval_roman(vals, sheet, here),
+            "PI" => {
+                if vals.is_empty() {
+                    ready_num(std::f64::consts::PI)
+                } else {
+                    Calc::Skip
+                }
+            }
+            "ATAN2" => self.binary_num(vals, sheet, here, atan2_of),
+            "POWER" => self.binary_num(vals, sheet, here, power_of),
+            "MOD" => self.binary_num(vals, sheet, here, mod_of),
+            "QUOTIENT" => self.binary_num(vals, sheet, here, quotient_of),
+            "COMBIN" => self.binary_num(vals, sheet, here, combin_of),
+            "CEILING" | "ECMA.CEILING" => self.binary_num(vals, sheet, here, ceiling_of),
+            "ISO.CEILING" => self.binary_num(vals, sheet, here, iso_ceiling_of),
+            "FLOOR" => self.binary_num(vals, sheet, here, floor_of),
+            "MROUND" => self.binary_num(vals, sheet, here, mround_of),
+            "ROUND" => self.binary_num(vals, sheet, here, |n, d| round_of(n, d, 0)),
+            "ROUNDDOWN" => self.binary_num(vals, sheet, here, |n, d| round_of(n, d, -1)),
+            "ROUNDUP" => self.binary_num(vals, sheet, here, |n, d| round_of(n, d, 1)),
+            "LOG" => self.eval_log(vals, sheet, here),
+            "TRUNC" => self.eval_trunc(vals, sheet, here),
+            "GCD" => self.eval_gcd_lcm(vals, sheet, here, true),
+            "LCM" => self.eval_gcd_lcm(vals, sheet, here, false),
+            "MULTINOMIAL" => self.eval_multinomial(vals, sheet, here),
+            "RAND" => self.eval_rand(vals, sheet, here),
+            "RANDBETWEEN" => self.eval_randbetween(vals, sheet, here),
+            "PRODUCT" => Calc::Ready(Value::Scalar(self.product_args(vals, sheet))),
+            "SUMSQ" => Calc::Ready(Value::Scalar(self.sumsq_args(vals, sheet))),
+            "SUMIF" => self.eval_sumif(vals, sheet, here),
+            "SUMIFS" => self.eval_sumifs(vals, sheet, here),
+            "SUMPRODUCT" => self.eval_sumproduct(vals, sheet),
+            "SUMX2MY2" => self.eval_sumx(vals, sheet, SumX::X2My2),
+            "SUMX2PY2" => self.eval_sumx(vals, sheet, SumX::X2Py2),
+            "SUMXMY2" => self.eval_sumx(vals, sheet, SumX::Xmy2),
+            "SERIESSUM" => self.eval_series(vals, sheet, here),
+            "SUBTOTAL" => self.eval_subtotal(vals, sheet, here),
+            "MDETERM" => self.eval_mdeterm(vals, sheet),
+            "MMULT" => self.eval_mmult(vals, sheet, mode),
+            "MINVERSE" => self.eval_minverse(vals, sheet, mode),
             _ => Calc::Skip,
         }
+    }
+
+    fn number_of(&mut self, value: &Value, sheet: usize, here: CellRef) -> Calc {
+        match self.coerce(value.clone(), sheet, here, Mode::Scalar) {
+            Calc::Skip => Calc::Skip,
+            Calc::Ready(Value::Scalar(s)) => match num_of(s) {
+                Scalar::Num(n) => ready_num(n),
+                Scalar::Err(e) => ready_err(e),
+                _ => ready_err(VALUE),
+            },
+            Calc::Ready(_) => ready_err(VALUE),
+        }
+    }
+
+    fn unary_num(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        map: fn(f64) -> Scalar,
+    ) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.number_of(&vals[0], sheet, here) {
+            Calc::Ready(Value::Scalar(Scalar::Num(n))) => Calc::Ready(Value::Scalar(map(n))),
+            other => other,
+        }
+    }
+
+    fn binary_num(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        map: fn(f64, f64) -> Scalar,
+    ) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let a = self.number_of(&vals[0], sheet, here);
+        let b = self.number_of(&vals[1], sheet, here);
+        match (a, b) {
+            (Calc::Skip, _) | (_, Calc::Skip) => Calc::Skip,
+            (
+                Calc::Ready(Value::Scalar(Scalar::Num(x))),
+                Calc::Ready(Value::Scalar(Scalar::Num(y))),
+            ) => Calc::Ready(Value::Scalar(map(x, y))),
+            (Calc::Ready(Value::Scalar(Scalar::Err(e))), _)
+            | (_, Calc::Ready(Value::Scalar(Scalar::Err(e)))) => ready_err(e),
+            _ => ready_err(VALUE),
+        }
+    }
+
+    fn eval_log(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() == 1 {
+            return self.unary_num(vals, sheet, here, log10_of);
+        }
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        self.binary_num(vals, sheet, here, log_of)
+    }
+
+    fn eval_trunc(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() == 1 {
+            return self.unary_num(vals, sheet, here, |n| trunc_digits(n, 0.0));
+        }
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        self.binary_num(vals, sheet, here, trunc_digits)
+    }
+
+    fn eval_roman(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        if vals.len() == 2 {
+            match self.number_of(&vals[1], sheet, here) {
+                Calc::Ready(Value::Scalar(Scalar::Num(0.0))) => {}
+                Calc::Ready(Value::Scalar(Scalar::Err(e))) => return ready_err(e),
+                Calc::Skip => return Calc::Skip,
+                _ => return Calc::Skip,
+            }
+        }
+        match self.number_of(&vals[0], sheet, here) {
+            Calc::Ready(Value::Scalar(Scalar::Num(n))) => match roman_classic(n) {
+                Some(text) => Calc::Ready(Value::Scalar(Scalar::Text(text))),
+                None => ready_err(VALUE),
+            },
+            other => other,
+        }
+    }
+
+    fn eval_rand(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if !vals.is_empty() {
+            return Calc::Skip;
+        }
+        self.volatile_ready(sheet, here, Scalar::Num(unit_random()))
+    }
+
+    fn eval_randbetween(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let bottom = self.number_of(&vals[0], sheet, here);
+        let top = self.number_of(&vals[1], sheet, here);
+        let (lo, hi) = match (bottom, top) {
+            (Calc::Skip, _) | (_, Calc::Skip) => return Calc::Skip,
+            (
+                Calc::Ready(Value::Scalar(Scalar::Num(a))),
+                Calc::Ready(Value::Scalar(Scalar::Num(b))),
+            ) => (a, b),
+            (Calc::Ready(Value::Scalar(Scalar::Err(e))), _)
+            | (_, Calc::Ready(Value::Scalar(Scalar::Err(e)))) => {
+                return self.volatile_ready(sheet, here, Scalar::Err(e));
+            }
+            _ => return self.volatile_ready(sheet, here, Scalar::Err(VALUE)),
+        };
+        if !lo.is_finite() || !hi.is_finite() {
+            return self.volatile_ready(sheet, here, Scalar::Err(NUM));
+        }
+        let lo = lo.trunc() as i64;
+        let hi = hi.trunc() as i64;
+        if lo > hi {
+            return self.volatile_ready(sheet, here, Scalar::Err(NUM));
+        }
+        let span = (hi as i128 - lo as i128) as u64 + 1;
+        let pick = lo + (random_u64() % span) as i64;
+        self.volatile_ready(sheet, here, Scalar::Num(pick as f64))
+    }
+
+    fn eval_gcd_lcm(&mut self, vals: &[Value], sheet: usize, here: CellRef, gcd: bool) -> Calc {
+        if vals.is_empty() {
+            return Calc::Skip;
+        }
+        let mut acc: Option<u64> = None;
+        for value in vals {
+            match self.int_abs(value, sheet, here) {
+                None => return Calc::Skip,
+                Some(Err(e)) => return ready_err(e),
+                Some(Ok(n)) => {
+                    acc = Some(match acc {
+                        None => n,
+                        Some(prev) if gcd => gcd_u64(prev, n),
+                        Some(prev) => lcm_u64(prev, n),
+                    });
+                }
+            }
+        }
+        ready_num(acc.unwrap_or(0) as f64)
+    }
+
+    fn int_abs(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Result<u64, &'static str>> {
+        match self.number_of(value, sheet, here) {
+            Calc::Skip => None,
+            Calc::Ready(Value::Scalar(Scalar::Num(n))) if n.is_finite() => {
+                let t = n.trunc().abs();
+                if t > u64::MAX as f64 {
+                    Some(Err(NUM))
+                } else {
+                    Some(Ok(t as u64))
+                }
+            }
+            Calc::Ready(Value::Scalar(Scalar::Num(_))) => Some(Err(NUM)),
+            Calc::Ready(Value::Scalar(Scalar::Err(e))) => Some(Err(e)),
+            _ => Some(Err(VALUE)),
+        }
+    }
+
+    fn eval_multinomial(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() {
+            return Calc::Skip;
+        }
+        let mut parts = Vec::new();
+        let mut total = 0u64;
+        for value in vals {
+            match self.int_abs(value, sheet, here) {
+                None => return Calc::Skip,
+                Some(Err(e)) => return ready_err(e),
+                Some(Ok(n)) => {
+                    total = total.saturating_add(n);
+                    parts.push(n);
+                }
+            }
+        }
+        if total > 170 {
+            return ready_err(NUM);
+        }
+        ready_num(multinomial_f64(total, &parts))
+    }
+
+    fn product_args(&mut self, vals: &[Value], sheet: usize) -> Scalar {
+        let mut acc = 1.0;
+        let mut seen = false;
+        for value in vals {
+            if let Some(e) = self.fold_nums(value, sheet, |n| {
+                acc *= n;
+                seen = true;
+                None
+            }) {
+                return Scalar::Err(e);
+            }
+        }
+        if seen {
+            Scalar::Num(acc)
+        } else {
+            Scalar::Num(0.0)
+        }
+    }
+
+    fn sumsq_args(&mut self, vals: &[Value], sheet: usize) -> Scalar {
+        let mut acc = 0.0;
+        for value in vals {
+            if let Some(e) = self.fold_nums(value, sheet, |n| {
+                acc += n * n;
+                None
+            }) {
+                return Scalar::Err(e);
+            }
+        }
+        Scalar::Num(acc)
+    }
+
+    /// 把数字交给 `step`。`step` 返回 `Some` 时立刻停。
+    fn fold_nums(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+        mut step: impl FnMut(f64) -> Option<&'static str>,
+    ) -> Option<&'static str> {
+        match value {
+            Value::Scalar(Scalar::Num(n)) => step(*n),
+            Value::Scalar(Scalar::Err(e)) => Some(e),
+            Value::Scalar(Scalar::Bool(_) | Scalar::Text(_)) => None,
+            Value::Area(rect) => self.fold_num_rect(rect, sheet, &mut step),
+            Value::Areas(parts) => {
+                for part in parts {
+                    if let Some(e) = self.fold_num_rect(part, sheet, &mut step) {
+                        return Some(e);
+                    }
+                }
+                None
+            }
+            Value::Grid(g) => {
+                for row in g {
+                    for cell in row {
+                        match cell {
+                            Scalar::Num(n) => {
+                                if let Some(e) = step(*n) {
+                                    return Some(e);
+                                }
+                            }
+                            Scalar::Err(e) => return Some(e),
+                            Scalar::Bool(_) | Scalar::Text(_) => {}
+                        }
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    fn fold_num_rect(
+        &mut self,
+        rect: &Rect,
+        sheet: usize,
+        step: &mut impl FnMut(f64) -> Option<&'static str>,
+    ) -> Option<&'static str> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Some(REF);
+        };
+        if s1 != s2 {
+            return Some(VALUE);
+        }
+        for row in r1.row..=r2.row {
+            for col in r1.col..=r2.col {
+                match self.cell_fact(s1, CellRef { col, row }) {
+                    Fact::Skip => return Some(VALUE),
+                    Fact::Blank => {}
+                    Fact::Ready(Scalar::Num(n)) => {
+                        if let Some(e) = step(n) {
+                            return Some(e);
+                        }
+                    }
+                    Fact::Ready(Scalar::Err(e)) => return Some(e),
+                    Fact::Ready(Scalar::Bool(_) | Scalar::Text(_)) => {}
+                }
+            }
+        }
+        None
+    }
+
+    fn eval_sumif(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 && vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let criteria = match self.coerce(vals[1].clone(), sheet, here, Mode::Scalar) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(Value::Scalar(s)) => s,
+            _ => return ready_err(VALUE),
+        };
+        let sum_range = if vals.len() == 3 { &vals[2] } else { &vals[0] };
+        match self.sum_where(&vals[0], sum_range, &criteria, sheet) {
+            None => Calc::Skip,
+            Some(s) => Calc::Ready(Value::Scalar(s)),
+        }
+    }
+
+    fn eval_sumifs(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 3 || vals.len().is_multiple_of(2) {
+            return Calc::Skip;
+        }
+        let mut criteria = Vec::new();
+        for pair in vals[1..].chunks(2) {
+            match self.coerce(pair[1].clone(), sheet, here, Mode::Scalar) {
+                Calc::Skip => return Calc::Skip,
+                Calc::Ready(Value::Scalar(s)) => criteria.push((&pair[0], s)),
+                _ => return ready_err(VALUE),
+            }
+        }
+        match self.sum_where_all(&vals[0], &criteria, sheet) {
+            None => Calc::Skip,
+            Some(s) => Calc::Ready(Value::Scalar(s)),
+        }
+    }
+
+    fn sum_where(
+        &mut self,
+        keys: &Value,
+        sums: &Value,
+        criteria: &Scalar,
+        sheet: usize,
+    ) -> Option<Scalar> {
+        let key_cells = self.rect_cells(keys, sheet)?;
+        let sum_cells = self.rect_cells(sums, sheet)?;
+        if key_cells.len() != sum_cells.len() {
+            return Some(Scalar::Err(VALUE));
+        }
+        let mut total = 0.0;
+        for (key, sum) in key_cells.into_iter().zip(sum_cells) {
+            if !criteria_match(&key, criteria) {
+                continue;
+            }
+            match sum {
+                Fact::Skip => return None,
+                Fact::Blank => {}
+                Fact::Ready(Scalar::Num(n)) => total += n,
+                Fact::Ready(Scalar::Err(e)) => return Some(Scalar::Err(e)),
+                Fact::Ready(Scalar::Bool(_) | Scalar::Text(_)) => {}
+            }
+        }
+        Some(Scalar::Num(total))
+    }
+
+    fn sum_where_all(
+        &mut self,
+        sums: &Value,
+        criteria: &[(&Value, Scalar)],
+        sheet: usize,
+    ) -> Option<Scalar> {
+        let sum_cells = self.rect_cells(sums, sheet)?;
+        let mut masks = Vec::new();
+        for (keys, crit) in criteria {
+            let cells = self.rect_cells(keys, sheet)?;
+            if cells.len() != sum_cells.len() {
+                return Some(Scalar::Err(VALUE));
+            }
+            masks.push((cells, crit));
+        }
+        let mut total = 0.0;
+        for (i, sum) in sum_cells.into_iter().enumerate() {
+            let ok = masks
+                .iter()
+                .all(|(cells, crit)| criteria_match(&cells[i], crit));
+            if !ok {
+                continue;
+            }
+            match sum {
+                Fact::Skip => return None,
+                Fact::Blank => {}
+                Fact::Ready(Scalar::Num(n)) => total += n,
+                Fact::Ready(Scalar::Err(e)) => return Some(Scalar::Err(e)),
+                Fact::Ready(_) => {}
+            }
+        }
+        Some(Scalar::Num(total))
+    }
+
+    fn rect_cells(&mut self, value: &Value, sheet: usize) -> Option<Vec<Fact>> {
+        match value {
+            Value::Area(rect) => self.cells_of_rect(rect, sheet),
+            Value::Areas(parts) if parts.len() == 1 => self.cells_of_rect(&parts[0], sheet),
+            Value::Scalar(s) => Some(vec![Fact::Ready(s.clone())]),
+            Value::Grid(g) => Some(
+                g.iter()
+                    .flat_map(|row| row.iter().cloned().map(Fact::Ready))
+                    .collect(),
+            ),
+            Value::Areas(_) => Some(vec![Fact::Ready(Scalar::Err(VALUE))]),
+        }
+    }
+
+    fn cells_of_rect(&mut self, rect: &Rect, sheet: usize) -> Option<Vec<Fact>> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Some(vec![Fact::Ready(Scalar::Err(REF))]);
+        };
+        if s1 != s2 {
+            return Some(vec![Fact::Ready(Scalar::Err(VALUE))]);
+        }
+        let mut out = Vec::new();
+        for row in r1.row..=r2.row {
+            for col in r1.col..=r2.col {
+                out.push(self.cell_fact(s1, CellRef { col, row }));
+            }
+        }
+        Some(out)
+    }
+
+    fn eval_sumproduct(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.is_empty() {
+            return Calc::Skip;
+        }
+        let mut grids = Vec::new();
+        for value in vals {
+            match self.as_matrix(value, sheet) {
+                Mat::Skip => return Calc::Skip,
+                Mat::Err(e) => return ready_err(e),
+                Mat::Ok(g) => grids.push(g),
+            }
+        }
+        let rows = grids[0].len();
+        let cols = grids[0].first().map(|r| r.len()).unwrap_or(0);
+        if grids
+            .iter()
+            .any(|g| g.len() != rows || g.iter().any(|r| r.len() != cols))
+        {
+            return ready_err(VALUE);
+        }
+        let mut total = 0.0;
+        for r in 0..rows {
+            for c in 0..cols {
+                let mut term = 1.0;
+                for grid in &grids {
+                    term *= grid[r][c];
+                }
+                total += term;
+            }
+        }
+        ready_num(total)
+    }
+
+    fn eval_sumx(&mut self, vals: &[Value], sheet: usize, kind: SumX) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let (left, right) = match (
+            self.as_matrix(&vals[0], sheet),
+            self.as_matrix(&vals[1], sheet),
+        ) {
+            (Mat::Skip, _) | (_, Mat::Skip) => return Calc::Skip,
+            (Mat::Err(e), _) | (_, Mat::Err(e)) => return ready_err(e),
+            (Mat::Ok(a), Mat::Ok(b)) => (a, b),
+        };
+        if left.len() != right.len() || left.iter().zip(&right).any(|(a, b)| a.len() != b.len()) {
+            return ready_err(VALUE);
+        }
+        let mut total = 0.0;
+        for (row_a, row_b) in left.iter().zip(&right) {
+            for (x, y) in row_a.iter().zip(row_b) {
+                total += match kind {
+                    SumX::X2My2 => x * x - y * y,
+                    SumX::X2Py2 => x * x + y * y,
+                    SumX::Xmy2 => (x - y) * (x - y),
+                };
+            }
+        }
+        ready_num(total)
+    }
+
+    fn eval_series(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let x = self.number_of(&vals[0], sheet, here);
+        let n = self.number_of(&vals[1], sheet, here);
+        let m = self.number_of(&vals[2], sheet, here);
+        let (x, n, m) = match (x, n, m) {
+            (Calc::Skip, _, _) | (_, Calc::Skip, _) | (_, _, Calc::Skip) => return Calc::Skip,
+            (
+                Calc::Ready(Value::Scalar(Scalar::Num(x))),
+                Calc::Ready(Value::Scalar(Scalar::Num(n))),
+                Calc::Ready(Value::Scalar(Scalar::Num(m))),
+            ) => (x, n, m),
+            (Calc::Ready(Value::Scalar(Scalar::Err(e))), _, _)
+            | (_, Calc::Ready(Value::Scalar(Scalar::Err(e))), _)
+            | (_, _, Calc::Ready(Value::Scalar(Scalar::Err(e)))) => return ready_err(e),
+            _ => return ready_err(VALUE),
+        };
+        let coeffs = match self.as_matrix(&vals[3], sheet) {
+            Mat::Skip => return Calc::Skip,
+            Mat::Err(e) => return ready_err(e),
+            Mat::Ok(g) => g.into_iter().flatten().collect::<Vec<_>>(),
+        };
+        let mut total = 0.0;
+        for (i, coeff) in coeffs.iter().enumerate() {
+            let exp = n + i as f64 * m;
+            if x < 0.0 && exp.fract() != 0.0 {
+                return ready_err(NUM);
+            }
+            let term = coeff * x.powf(exp);
+            if !term.is_finite() {
+                return ready_err(NUM);
+            }
+            total += term;
+        }
+        ready_num(total)
+    }
+
+    fn eval_subtotal(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 2 {
+            return Calc::Skip;
+        }
+        let code = match self.number_of(&vals[0], sheet, here) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(Value::Scalar(Scalar::Num(n))) => n,
+            Calc::Ready(Value::Scalar(Scalar::Err(e))) => return ready_err(e),
+            _ => return ready_err(VALUE),
+        };
+        if code.fract() != 0.0 {
+            return ready_err(VALUE);
+        }
+        let skip_hidden = code >= 100.0;
+        let kind = if skip_hidden { code - 100.0 } else { code };
+        if !(1.0..=11.0).contains(&kind) {
+            return ready_err(VALUE);
+        }
+        let mut nums = Vec::new();
+        let mut count_a = 0.0;
+        for value in &vals[1..] {
+            match self.collect_subtotal(value, sheet, skip_hidden, &mut nums, &mut count_a) {
+                None => return Calc::Skip,
+                Some(Some(e)) => return ready_err(e),
+                Some(None) => {}
+            }
+        }
+        Calc::Ready(Value::Scalar(subtotal_finish(kind, &nums, count_a)))
+    }
+
+    fn collect_subtotal(
+        &mut self,
+        value: &Value,
+        sheet: usize,
+        skip_hidden: bool,
+        nums: &mut Vec<f64>,
+        count_a: &mut f64,
+    ) -> Option<Option<&'static str>> {
+        match value {
+            Value::Area(rect) => self.collect_rect(rect, sheet, skip_hidden, nums, count_a),
+            Value::Areas(parts) => {
+                for part in parts {
+                    if let Some(e) = self.collect_rect(part, sheet, skip_hidden, nums, count_a)? {
+                        return Some(Some(e));
+                    }
+                }
+                Some(None)
+            }
+            Value::Scalar(Scalar::Err(e)) => Some(Some(e)),
+            Value::Scalar(Scalar::Num(n)) => {
+                nums.push(*n);
+                *count_a += 1.0;
+                Some(None)
+            }
+            Value::Scalar(_) => {
+                *count_a += 1.0;
+                Some(None)
+            }
+            Value::Grid(_) => Some(Some(VALUE)),
+        }
+    }
+
+    fn collect_rect(
+        &mut self,
+        rect: &Rect,
+        sheet: usize,
+        skip_hidden: bool,
+        nums: &mut Vec<f64>,
+        count_a: &mut f64,
+    ) -> Option<Option<&'static str>> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Some(Some(REF));
+        };
+        if s1 != s2 {
+            return Some(Some(VALUE));
+        }
+        let hidden = self
+            .sheets
+            .get(s1)
+            .map(|s| s.hidden_rows.clone())
+            .unwrap_or_default();
+        for row in r1.row..=r2.row {
+            if skip_hidden && hidden.contains(&row) {
+                continue;
+            }
+            for col in r1.col..=r2.col {
+                let cell = CellRef { col, row };
+                if self.subtotal_formula(s1, cell) {
+                    continue;
+                }
+                match self.cell_fact(s1, cell) {
+                    Fact::Skip => return None,
+                    Fact::Blank => {}
+                    Fact::Ready(Scalar::Num(n)) => {
+                        nums.push(n);
+                        *count_a += 1.0;
+                    }
+                    Fact::Ready(Scalar::Bool(_) | Scalar::Text(_)) => *count_a += 1.0,
+                    Fact::Ready(Scalar::Err(e)) => return Some(Some(e)),
+                }
+            }
+        }
+        Some(None)
+    }
+
+    fn subtotal_formula(&self, sheet: usize, cell: CellRef) -> bool {
+        self.sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(cell.col, cell.row)))
+            .and_then(|rec| rec.formula.as_ref())
+            .is_some_and(|body| body.trim().to_ascii_uppercase().starts_with("SUBTOTAL("))
+    }
+
+    fn eval_mdeterm(&mut self, vals: &[Value], sheet: usize) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.as_matrix(&vals[0], sheet) {
+            Mat::Skip => Calc::Skip,
+            Mat::Err(e) => ready_err(e),
+            Mat::Ok(grid) => {
+                if !square(&grid) {
+                    ready_err(VALUE)
+                } else {
+                    ready_num(mat_det(grid))
+                }
+            }
+        }
+    }
+
+    fn eval_mmult(&mut self, vals: &[Value], sheet: usize, _mode: Mode) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let left = self.as_matrix(&vals[0], sheet);
+        let right = self.as_matrix(&vals[1], sheet);
+        match (left, right) {
+            (Mat::Skip, _) | (_, Mat::Skip) => Calc::Skip,
+            (Mat::Err(e), _) | (_, Mat::Err(e)) => ready_err(e),
+            (Mat::Ok(a), Mat::Ok(b)) => match mat_mul(&a, &b) {
+                Some(grid) => Calc::Ready(Value::Grid(num_grid(grid))),
+                None => ready_err(VALUE),
+            },
+        }
+    }
+
+    fn eval_minverse(&mut self, vals: &[Value], sheet: usize, _mode: Mode) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.as_matrix(&vals[0], sheet) {
+            Mat::Skip => Calc::Skip,
+            Mat::Err(e) => ready_err(e),
+            Mat::Ok(grid) => {
+                if !square(&grid) {
+                    return ready_err(VALUE);
+                }
+                match mat_inv(grid) {
+                    Some(grid) => Calc::Ready(Value::Grid(num_grid(grid))),
+                    None => ready_err(NUM),
+                }
+            }
+        }
+    }
+
+    fn as_matrix(&mut self, value: &Value, sheet: usize) -> Mat {
+        match value {
+            Value::Scalar(Scalar::Num(n)) => Mat::Ok(vec![vec![*n]]),
+            Value::Scalar(Scalar::Bool(b)) => Mat::Ok(vec![vec![if *b { 1.0 } else { 0.0 }]]),
+            Value::Scalar(Scalar::Err(e)) => Mat::Err(e),
+            Value::Scalar(Scalar::Text(_)) => Mat::Err(VALUE),
+            Value::Grid(g) => {
+                let mut rows = Vec::new();
+                for row in g {
+                    let mut line = Vec::new();
+                    for cell in row {
+                        match cell {
+                            Scalar::Num(n) => line.push(*n),
+                            Scalar::Bool(b) => line.push(if *b { 1.0 } else { 0.0 }),
+                            Scalar::Err(e) => return Mat::Err(e),
+                            Scalar::Text(_) => return Mat::Err(VALUE),
+                        }
+                    }
+                    rows.push(line);
+                }
+                Mat::Ok(rows)
+            }
+            Value::Area(rect) => self.matrix_rect(rect, sheet),
+            Value::Areas(parts) if parts.len() == 1 => self.matrix_rect(&parts[0], sheet),
+            Value::Areas(_) => Mat::Err(VALUE),
+        }
+    }
+
+    fn matrix_rect(&mut self, rect: &Rect, sheet: usize) -> Mat {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Mat::Err(REF);
+        };
+        if s1 != s2 {
+            return Mat::Err(VALUE);
+        }
+        let mut rows = Vec::new();
+        for row in r1.row..=r2.row {
+            let mut line = Vec::new();
+            for col in r1.col..=r2.col {
+                match self.cell_fact(s1, CellRef { col, row }) {
+                    Fact::Skip => return Mat::Skip,
+                    Fact::Blank => line.push(0.0),
+                    Fact::Ready(Scalar::Num(n)) => line.push(n),
+                    Fact::Ready(Scalar::Bool(b)) => line.push(if b { 1.0 } else { 0.0 }),
+                    Fact::Ready(Scalar::Err(e)) => return Mat::Err(e),
+                    Fact::Ready(Scalar::Text(_)) => return Mat::Err(VALUE),
+                }
+            }
+            rows.push(line);
+        }
+        Mat::Ok(rows)
     }
 
     fn mark_volatile(&mut self, sheet: usize, here: CellRef) {
@@ -2131,6 +2987,618 @@ impl Book {
             r2: CellRef { col: c2, row: r2 },
         })
     }
+}
+
+fn acos_of(n: f64) -> Scalar {
+    if (-1.0..=1.0).contains(&n) {
+        Scalar::Num(n.acos())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn asin_of(n: f64) -> Scalar {
+    if (-1.0..=1.0).contains(&n) {
+        Scalar::Num(n.asin())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn atan_of(n: f64) -> Scalar {
+    finite_or(n.atan())
+}
+
+fn atan2_of(x: f64, y: f64) -> Scalar {
+    if x == 0.0 && y == 0.0 {
+        Scalar::Err(DIV0)
+    } else {
+        finite_or(y.atan2(x))
+    }
+}
+
+fn cos_of(n: f64) -> Scalar {
+    finite_or(n.cos())
+}
+
+fn sin_of(n: f64) -> Scalar {
+    finite_or(n.sin())
+}
+
+fn tan_of(n: f64) -> Scalar {
+    let v = n.tan();
+    if v.is_finite() {
+        Scalar::Num(v)
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn acosh_of(n: f64) -> Scalar {
+    if n >= 1.0 {
+        finite_or(n.acosh())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn asinh_of(n: f64) -> Scalar {
+    finite_or(n.asinh())
+}
+
+fn atanh_of(n: f64) -> Scalar {
+    if n > -1.0 && n < 1.0 {
+        finite_or(n.atanh())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn cosh_of(n: f64) -> Scalar {
+    finite_or(n.cosh())
+}
+
+fn sinh_of(n: f64) -> Scalar {
+    finite_or(n.sinh())
+}
+
+fn tanh_of(n: f64) -> Scalar {
+    finite_or(n.tanh())
+}
+
+fn exp_of(n: f64) -> Scalar {
+    finite_or(n.exp())
+}
+
+fn ln_of(n: f64) -> Scalar {
+    if n > 0.0 {
+        finite_or(n.ln())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn log10_of(n: f64) -> Scalar {
+    if n > 0.0 {
+        finite_or(n.log10())
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn log_of(n: f64, base: f64) -> Scalar {
+    if n <= 0.0 || base <= 0.0 || base == 1.0 {
+        Scalar::Err(NUM)
+    } else {
+        finite_or(n.log(base))
+    }
+}
+
+fn sqrtpi_of(n: f64) -> Scalar {
+    if n < 0.0 {
+        Scalar::Err(NUM)
+    } else {
+        finite_or((n * std::f64::consts::PI).sqrt())
+    }
+}
+
+fn degrees_of(n: f64) -> Scalar {
+    Scalar::Num(n * 180.0 / std::f64::consts::PI)
+}
+
+fn radians_of(n: f64) -> Scalar {
+    Scalar::Num(n * std::f64::consts::PI / 180.0)
+}
+
+fn sign_of(n: f64) -> Scalar {
+    Scalar::Num(if n > 0.0 {
+        1.0
+    } else if n < 0.0 {
+        -1.0
+    } else {
+        0.0
+    })
+}
+
+fn power_of(base: f64, exp: f64) -> Scalar {
+    if base < 0.0 && exp.fract() != 0.0 {
+        return Scalar::Err(NUM);
+    }
+    if base == 0.0 && exp < 0.0 {
+        return Scalar::Err(DIV0);
+    }
+    let exp_i = exp as i32;
+    let value = if base < 0.0 && exp == f64::from(exp_i) {
+        base.powi(exp_i)
+    } else {
+        base.powf(exp)
+    };
+    finite_or(value)
+}
+
+fn mod_of(n: f64, d: f64) -> Scalar {
+    if d == 0.0 {
+        return Scalar::Err(DIV0);
+    }
+    let q = (n / d).floor();
+    finite_or(n - d * q)
+}
+
+fn quotient_of(n: f64, d: f64) -> Scalar {
+    if d == 0.0 {
+        Scalar::Err(DIV0)
+    } else {
+        finite_or((n / d).trunc())
+    }
+}
+
+fn ceiling_of(number: f64, significance: f64) -> Scalar {
+    if significance == 0.0 {
+        return Scalar::Num(0.0);
+    }
+    if number > 0.0 && significance < 0.0 {
+        return Scalar::Err(NUM);
+    }
+    finite_or(significance * (number / significance).ceil())
+}
+
+fn iso_ceiling_of(number: f64, significance: f64) -> Scalar {
+    if significance == 0.0 {
+        return Scalar::Num(0.0);
+    }
+    let step = significance.abs();
+    finite_or(step * (number / step).ceil())
+}
+
+fn floor_of(number: f64, significance: f64) -> Scalar {
+    if significance == 0.0 {
+        return if number == 0.0 {
+            Scalar::Num(0.0)
+        } else {
+            Scalar::Err(DIV0)
+        };
+    }
+    if number > 0.0 && significance < 0.0 {
+        return Scalar::Err(NUM);
+    }
+    finite_or(significance * (number / significance).floor())
+}
+
+fn mround_of(number: f64, significance: f64) -> Scalar {
+    if number == 0.0 || significance == 0.0 {
+        return Scalar::Num(0.0);
+    }
+    if number.signum() != significance.signum() {
+        return Scalar::Err(NUM);
+    }
+    finite_or(significance * (number / significance).round())
+}
+
+fn round_of(number: f64, digits: f64, mode: i32) -> Scalar {
+    let factor = 10_f64.powf(digits.trunc());
+    if factor == 0.0 || !factor.is_finite() {
+        return Scalar::Err(NUM);
+    }
+    let scaled = number * factor;
+    // 二进制小数会略小于十进制边界，补一个很小的量才和 Excel 的 5 进位一致。
+    let scaled = scaled + scaled.signum() * 1e-10;
+    let whole = match mode {
+        1 => scaled.signum() * scaled.abs().ceil(),
+        -1 => scaled.signum() * scaled.abs().floor(),
+        _ => scaled.signum() * scaled.abs().round(),
+    };
+    finite_or(whole / factor)
+}
+
+fn trunc_digits(number: f64, digits: f64) -> Scalar {
+    round_of(number, digits, -1)
+}
+
+fn int_of(n: f64) -> Scalar {
+    finite_or(n.floor())
+}
+
+fn even_of(n: f64) -> Scalar {
+    if n == 0.0 {
+        return Scalar::Num(0.0);
+    }
+    let mag = (n.abs() / 2.0).ceil() * 2.0;
+    finite_or(n.signum() * mag)
+}
+
+fn odd_of(n: f64) -> Scalar {
+    if n == 0.0 {
+        return Scalar::Num(1.0);
+    }
+    let mag = n.abs();
+    let next = if mag.ceil() == mag && mag % 2.0 != 0.0 {
+        mag
+    } else {
+        (mag / 2.0).floor() * 2.0 + 1.0
+    };
+    let next = if next < mag { next + 2.0 } else { next };
+    finite_or(n.signum() * next)
+}
+
+fn fact_of(n: f64) -> Scalar {
+    if n < 0.0 || n.fract() != 0.0 || n > 170.0 {
+        return Scalar::Err(NUM);
+    }
+    let mut acc = 1.0;
+    for k in 2..=(n as i32) {
+        acc *= f64::from(k);
+    }
+    finite_or(acc)
+}
+
+fn fact_double_of(n: f64) -> Scalar {
+    if n < 0.0 || n.fract() != 0.0 {
+        return Scalar::Err(NUM);
+    }
+    let mut acc = 1.0;
+    let mut k = n as i32;
+    while k > 0 {
+        acc *= f64::from(k);
+        k -= 2;
+    }
+    finite_or(acc)
+}
+
+fn combin_of(n: f64, k: f64) -> Scalar {
+    if n < 0.0 || k < 0.0 || n.fract() != 0.0 || k.fract() != 0.0 || k > n {
+        return Scalar::Err(NUM);
+    }
+    let n = n as u64;
+    let k = k as u64;
+    let k = k.min(n - k);
+    let mut acc = 1.0;
+    for i in 0..k {
+        acc *= (n - i) as f64;
+        acc /= (i + 1) as f64;
+    }
+    finite_or(acc)
+}
+
+fn finite_or(n: f64) -> Scalar {
+    if n.is_finite() {
+        Scalar::Num(n)
+    } else {
+        Scalar::Err(NUM)
+    }
+}
+
+fn gcd_u64(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
+}
+
+fn lcm_u64(a: u64, b: u64) -> u64 {
+    if a == 0 || b == 0 {
+        0
+    } else {
+        a / gcd_u64(a, b) * b
+    }
+}
+
+fn multinomial_f64(total: u64, parts: &[u64]) -> f64 {
+    let mut acc = 1.0;
+    let mut used = 0u64;
+    for part in parts {
+        for i in 1..=*part {
+            used += 1;
+            acc *= used as f64;
+            acc /= i as f64;
+        }
+    }
+    let _ = total;
+    acc
+}
+
+fn roman_classic(n: f64) -> Option<String> {
+    if !(1.0..4000.0).contains(&n) || n.fract() != 0.0 {
+        return None;
+    }
+    let mut n = n as i32;
+    const PARTS: &[(i32, &str)] = &[
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, glyph) in PARTS {
+        while n >= *value {
+            out.push_str(glyph);
+            n -= value;
+        }
+    }
+    Some(out)
+}
+
+fn criteria_match(cell: &Fact, criteria: &Scalar) -> bool {
+    let value = match cell {
+        Fact::Ready(s) => s,
+        Fact::Blank | Fact::Skip => return false,
+    };
+    match criteria {
+        Scalar::Num(n) => matches!(value, Scalar::Num(v) if (*v - n).abs() < 1e-9),
+        Scalar::Bool(b) => matches!(value, Scalar::Bool(v) if v == b),
+        Scalar::Err(e) => matches!(value, Scalar::Err(v) if v == e),
+        Scalar::Text(text) => text_criteria(value, text),
+    }
+}
+
+fn text_criteria(value: &Scalar, text: &str) -> bool {
+    let (op, rest) = criteria_op(text);
+    if op.is_empty() {
+        return match value {
+            Scalar::Text(v) => v.eq_ignore_ascii_case(text),
+            Scalar::Num(n) => text
+                .parse::<f64>()
+                .ok()
+                .is_some_and(|c| (n - c).abs() < 1e-9),
+            _ => false,
+        };
+    }
+    let rest = rest.trim();
+    match value {
+        Scalar::Num(n) => rest.parse::<f64>().ok().is_some_and(|c| cmp_num(op, *n, c)),
+        Scalar::Text(v) => cmp_text(op, v, rest),
+        _ => false,
+    }
+}
+
+fn criteria_op(text: &str) -> (&str, &str) {
+    if let Some(rest) = text.strip_prefix(">=") {
+        (">=", rest)
+    } else if let Some(rest) = text.strip_prefix("<=") {
+        ("<=", rest)
+    } else if let Some(rest) = text.strip_prefix("<>") {
+        ("<>", rest)
+    } else if let Some(rest) = text.strip_prefix('>') {
+        (">", rest)
+    } else if let Some(rest) = text.strip_prefix('<') {
+        ("<", rest)
+    } else if let Some(rest) = text.strip_prefix('=') {
+        ("=", rest)
+    } else {
+        ("", text)
+    }
+}
+
+fn cmp_num(op: &str, left: f64, right: f64) -> bool {
+    match op {
+        ">" => left > right,
+        ">=" => left >= right,
+        "<" => left < right,
+        "<=" => left <= right,
+        "<>" => (left - right).abs() >= 1e-9,
+        _ => (left - right).abs() < 1e-9,
+    }
+}
+
+fn cmp_text(op: &str, left: &str, right: &str) -> bool {
+    let order = left.to_ascii_lowercase().cmp(&right.to_ascii_lowercase());
+    match op {
+        ">" => order.is_gt(),
+        ">=" => order.is_ge(),
+        "<" => order.is_lt(),
+        "<=" => order.is_le(),
+        "<>" => order.is_ne(),
+        _ => order.is_eq(),
+    }
+}
+
+fn subtotal_finish(kind: f64, nums: &[f64], count_a: f64) -> Scalar {
+    let count = nums.len() as f64;
+    match kind as i32 {
+        1 => {
+            if count == 0.0 {
+                Scalar::Err(DIV0)
+            } else {
+                finite_or(nums.iter().sum::<f64>() / count)
+            }
+        }
+        2 => Scalar::Num(count),
+        3 => Scalar::Num(count_a),
+        4 => nums
+            .iter()
+            .copied()
+            .reduce(f64::max)
+            .map_or(Scalar::Num(0.0), finite_or),
+        5 => nums
+            .iter()
+            .copied()
+            .reduce(f64::min)
+            .map_or(Scalar::Num(0.0), finite_or),
+        6 => {
+            if nums.is_empty() {
+                Scalar::Num(0.0)
+            } else {
+                finite_or(nums.iter().product())
+            }
+        }
+        7 => stat_or(stdev(nums, true)),
+        8 => stat_or(stdev(nums, false)),
+        9 => finite_or(nums.iter().sum()),
+        10 => stat_or(variance(nums, true)),
+        11 => stat_or(variance(nums, false)),
+        _ => Scalar::Err(VALUE),
+    }
+}
+
+fn stat_or(n: f64) -> Scalar {
+    if n.is_finite() {
+        Scalar::Num(n)
+    } else {
+        Scalar::Err(DIV0)
+    }
+}
+
+fn variance(nums: &[f64], sample: bool) -> f64 {
+    let denom = nums.len() as f64 - if sample { 1.0 } else { 0.0 };
+    if denom <= 0.0 {
+        return f64::NAN;
+    }
+    let mean = nums.iter().sum::<f64>() / nums.len() as f64;
+    nums.iter().map(|n| (n - mean).powi(2)).sum::<f64>() / denom
+}
+
+fn stdev(nums: &[f64], sample: bool) -> f64 {
+    variance(nums, sample).sqrt()
+}
+
+fn square(grid: &[Vec<f64>]) -> bool {
+    !grid.is_empty() && grid.iter().all(|row| row.len() == grid.len())
+}
+
+fn num_grid(grid: Vec<Vec<f64>>) -> Vec<Vec<Scalar>> {
+    grid.into_iter()
+        .map(|row| row.into_iter().map(Scalar::Num).collect())
+        .collect()
+}
+
+fn mat_mul(left: &[Vec<f64>], right: &[Vec<f64>]) -> Option<Vec<Vec<f64>>> {
+    if left.is_empty() || right.is_empty() {
+        return None;
+    }
+    let n = left[0].len();
+    if right.len() != n || left.iter().any(|row| row.len() != n) {
+        return None;
+    }
+    let p = right[0].len();
+    if right.iter().any(|row| row.len() != p) {
+        return None;
+    }
+    let mut out = vec![vec![0.0; p]; left.len()];
+    for (i, row) in left.iter().enumerate() {
+        for (k, &a) in row.iter().enumerate() {
+            for j in 0..p {
+                out[i][j] += a * right[k][j];
+            }
+        }
+    }
+    Some(out)
+}
+
+#[allow(clippy::needless_range_loop)]
+fn mat_det(mut grid: Vec<Vec<f64>>) -> f64 {
+    let n = grid.len();
+    let mut sign = 1.0;
+    for i in 0..n {
+        let mut pivot = i;
+        for row in i + 1..n {
+            if grid[row][i].abs() > grid[pivot][i].abs() {
+                pivot = row;
+            }
+        }
+        if grid[pivot][i].abs() < 1e-12 {
+            return 0.0;
+        }
+        if pivot != i {
+            grid.swap(i, pivot);
+            sign = -sign;
+        }
+        for row in i + 1..n {
+            let factor = grid[row][i] / grid[i][i];
+            for col in i..n {
+                let next = grid[row][col] - factor * grid[i][col];
+                grid[row][col] = next;
+            }
+        }
+    }
+    let mut det = sign;
+    for i in 0..n {
+        det *= grid[i][i];
+    }
+    det
+}
+
+#[allow(clippy::needless_range_loop)]
+fn mat_inv(mut grid: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
+    let n = grid.len();
+    let mut inv = vec![vec![0.0; n]; n];
+    for (i, row) in inv.iter_mut().enumerate() {
+        row[i] = 1.0;
+    }
+    for i in 0..n {
+        let mut pivot = i;
+        for row in i + 1..n {
+            if grid[row][i].abs() > grid[pivot][i].abs() {
+                pivot = row;
+            }
+        }
+        if grid[pivot][i].abs() < 1e-12 {
+            return None;
+        }
+        if pivot != i {
+            grid.swap(i, pivot);
+            inv.swap(i, pivot);
+        }
+        let div = grid[i][i];
+        for col in 0..n {
+            grid[i][col] /= div;
+            inv[i][col] /= div;
+        }
+        for row in 0..n {
+            if row == i {
+                continue;
+            }
+            let factor = grid[row][i];
+            for col in 0..n {
+                grid[row][col] -= factor * grid[i][col];
+                inv[row][col] -= factor * inv[i][col];
+            }
+        }
+    }
+    Some(inv)
+}
+
+fn unit_random() -> f64 {
+    (random_u64() >> 11) as f64 / ((1u64 << 53) as f64)
+}
+
+fn random_u64() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static STATE: AtomicU64 = AtomicU64::new(0x6a09_e667_f3bc_c909);
+    let mut x = STATE.fetch_add(0x9e37_79b9_7f4a_7c15, Ordering::Relaxed);
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x ^= x >> 27;
+    x.wrapping_mul(0x94d0_49bb_1331_11eb)
 }
 
 fn ready_bool(value: bool) -> Calc {
@@ -3228,6 +4696,7 @@ fn sheets_of(pkg: &Package) -> Result<Vec<Sheet>, Error> {
             name: name.clone(),
             cells: load_sheet(&doc.root, &sst),
             origin: sheet_origin(&doc.root),
+            hidden_rows: hidden_rows(&doc.root),
         });
     }
     Ok(sheets)
