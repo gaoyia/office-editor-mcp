@@ -1052,11 +1052,20 @@ impl Book {
         mode: Mode,
     ) -> Calc {
         let upper = name.to_ascii_uppercase();
-        if upper == "NA" {
-            return Calc::Ready(Value::Scalar(Scalar::Err(NA)));
-        }
-        if upper == "NOW" {
-            return Calc::Ready(Value::Scalar(Scalar::Num(now_serial(self.date1904))));
+        match upper.as_str() {
+            "NA" => return Calc::Ready(Value::Scalar(Scalar::Err(NA))),
+            "NOW" => {
+                return Calc::Ready(Value::Scalar(Scalar::Num(now_serial(self.date1904))));
+            }
+            // 逻辑类。ECMA. / ISO. 是函数名的一部分，不是可以套到 IF 上的前缀。
+            "TRUE" => return logic_const(args, true),
+            "FALSE" => return logic_const(args, false),
+            "IF" => return self.eval_if(args, sheet, here, mode),
+            "IFERROR" => return self.eval_iferror(args, sheet, here, mode),
+            "NOT" => return self.eval_not(args, sheet, here, mode),
+            "AND" => return self.eval_and_or(args, sheet, here, mode, true),
+            "OR" => return self.eval_and_or(args, sheet, here, mode, false),
+            _ => {}
         }
         let mut vals = Vec::new();
         for arg in args {
@@ -1103,6 +1112,319 @@ impl Book {
             }
             _ => Calc::Skip,
         }
+    }
+
+    /// `IF` 只算被选中的分支。条件不是逻辑值时直接 `#VALUE!`，两个分支都不算。
+    fn eval_if(&mut self, args: &[Expr], sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        if args.len() != 2 && args.len() != 3 {
+            return Calc::Skip;
+        }
+        let Some(cond) = ready_value(self.eval_expr(&args[0], sheet, here, mode)) else {
+            return Calc::Skip;
+        };
+        if matches!(mode, Mode::Scalar) {
+            let Some(flag) = self.scalar_flag(cond, sheet, here) else {
+                return Calc::Skip;
+            };
+            return self.if_branch(flag, args, sheet, here, mode);
+        }
+        let cond = match self.coerce(cond, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        match cond {
+            Value::Scalar(s) => self.if_branch(if_flag(&s), args, sheet, here, mode),
+            Value::Grid(g) => self.eval_if_grid(&g, args, sheet, here, mode),
+            _ => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+        }
+    }
+
+    fn if_branch(
+        &mut self,
+        flag: Result<bool, &'static str>,
+        args: &[Expr],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Calc {
+        match flag {
+            Err(e) => Calc::Ready(Value::Scalar(Scalar::Err(e))),
+            Ok(true) => self.eval_expr(&args[1], sheet, here, mode),
+            Ok(false) => {
+                if args.len() == 3 {
+                    self.eval_expr(&args[2], sheet, here, mode)
+                } else {
+                    Calc::Ready(Value::Scalar(Scalar::Bool(false)))
+                }
+            }
+        }
+    }
+
+    fn eval_if_grid(
+        &mut self,
+        grid: &[Vec<Scalar>],
+        args: &[Expr],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Calc {
+        let mut need_true = false;
+        let mut need_false = false;
+        for cell in grid.iter().flatten() {
+            match if_flag(cell) {
+                Ok(true) => need_true = true,
+                Ok(false) => need_false = true,
+                Err(_) => {}
+            }
+        }
+        let yes = if need_true {
+            match self.logic_branch(&args[1], sheet, here, mode) {
+                None => return Calc::Skip,
+                Some(b) => Some(b),
+            }
+        } else {
+            None
+        };
+        let no = if need_false {
+            if args.len() == 3 {
+                match self.logic_branch(&args[2], sheet, here, mode) {
+                    None => return Calc::Skip,
+                    Some(b) => Some(b),
+                }
+            } else {
+                Some(Branch::Scalar(Scalar::Bool(false)))
+            }
+        } else {
+            None
+        };
+        let yes = yes.unwrap_or(Branch::Scalar(Scalar::Err(VALUE)));
+        let no = no.unwrap_or(Branch::Scalar(Scalar::Bool(false)));
+        let out = grid
+            .iter()
+            .enumerate()
+            .map(|(r, row)| {
+                row.iter()
+                    .enumerate()
+                    .map(|(c, cell)| match if_flag(cell) {
+                        Err(e) => Scalar::Err(e),
+                        Ok(true) => pick_branch(&yes, r, c),
+                        Ok(false) => pick_branch(&no, r, c),
+                    })
+                    .collect()
+            })
+            .collect();
+        Calc::Ready(Value::Grid(out))
+    }
+
+    /// 第一支不是错误就不算第二支。普通格子里多格数组常量 Excel 16.0 打不开，不写缓存。
+    fn eval_iferror(&mut self, args: &[Expr], sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        if args.len() != 2 {
+            return Calc::Skip;
+        }
+        let Some(value) = ready_value(self.eval_expr(&args[0], sheet, here, mode)) else {
+            return Calc::Skip;
+        };
+        if matches!(mode, Mode::Scalar) {
+            if let Value::Grid(g) = &value {
+                if grid_multi(g) {
+                    return Calc::Skip;
+                }
+            }
+        }
+        let value = match self.coerce(value, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        match value {
+            Value::Scalar(Scalar::Err(_)) => self.eval_expr(&args[1], sheet, here, mode),
+            Value::Scalar(s) => Calc::Ready(Value::Scalar(s)),
+            Value::Grid(g) => {
+                let needs = g.iter().flatten().any(|s| matches!(s, Scalar::Err(_)));
+                if !needs {
+                    return Calc::Ready(Value::Grid(g));
+                }
+                let Some(alt) = self.logic_branch(&args[1], sheet, here, mode) else {
+                    return Calc::Skip;
+                };
+                let out = g
+                    .iter()
+                    .enumerate()
+                    .map(|(r, row)| {
+                        row.iter()
+                            .enumerate()
+                            .map(|(c, cell)| {
+                                if matches!(cell, Scalar::Err(_)) {
+                                    pick_branch(&alt, r, c)
+                                } else {
+                                    cell.clone()
+                                }
+                            })
+                            .collect()
+                    })
+                    .collect();
+                Calc::Ready(Value::Grid(out))
+            }
+            _ => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+        }
+    }
+
+    fn eval_not(&mut self, args: &[Expr], sheet: usize, here: CellRef, mode: Mode) -> Calc {
+        if args.len() != 1 {
+            return Calc::Skip;
+        }
+        let Some(value) = ready_value(self.eval_expr(&args[0], sheet, here, mode)) else {
+            return Calc::Skip;
+        };
+        let value = match self.coerce(value, sheet, here, mode) {
+            Calc::Skip => return Calc::Skip,
+            Calc::Ready(v) => v,
+        };
+        match value {
+            Value::Scalar(s) => match if_flag(&s) {
+                Ok(b) => Calc::Ready(Value::Scalar(Scalar::Bool(!b))),
+                Err(e) => Calc::Ready(Value::Scalar(Scalar::Err(e))),
+            },
+            Value::Grid(g) => Calc::Ready(Value::Grid(
+                g.into_iter()
+                    .map(|row| {
+                        row.into_iter()
+                            .map(|s| match if_flag(&s) {
+                                Ok(b) => Scalar::Bool(!b),
+                                Err(e) => Scalar::Err(e),
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            )),
+            _ => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
+        }
+    }
+
+    /// `AND` / `OR` 把参数全部算完。错误按从左到右留第一个，不因为已经能确定真假就停。
+    fn eval_and_or(
+        &mut self,
+        args: &[Expr],
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+        and: bool,
+    ) -> Calc {
+        if args.is_empty() {
+            return Calc::Skip;
+        }
+        let mut vals = Vec::new();
+        for arg in args {
+            match self.eval_expr(arg, sheet, here, mode) {
+                Calc::Skip => return Calc::Skip,
+                Calc::Ready(v) => vals.push(v),
+            }
+        }
+        let mut fold = LogicFold::new();
+        for value in vals {
+            if self.fold_logic(value, sheet, &mut fold).is_err() {
+                return Calc::Skip;
+            }
+        }
+        Calc::Ready(Value::Scalar(fold.finish(and)))
+    }
+
+    fn fold_logic(&mut self, value: Value, sheet: usize, fold: &mut LogicFold) -> Result<(), ()> {
+        match value {
+            Value::Scalar(s) => {
+                fold.push_direct(&s);
+                Ok(())
+            }
+            Value::Grid(g) => {
+                for cell in g.into_iter().flatten() {
+                    fold.push_ref(&cell);
+                }
+                Ok(())
+            }
+            Value::Area(rect) => self.fold_rect(&rect, sheet, fold),
+            Value::Areas(parts) => {
+                for part in parts {
+                    self.fold_rect(&part, sheet, fold)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn fold_rect(&mut self, rect: &Rect, here: usize, fold: &mut LogicFold) -> Result<(), ()> {
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, here) else {
+            fold.note_err(REF);
+            return Ok(());
+        };
+        for sheet in s1..=s2 {
+            for row in r1.row..=r2.row {
+                for col in r1.col..=r2.col {
+                    match self.logic_ref(sheet, CellRef { col, row }) {
+                        LogicRef::Skip => return Err(()),
+                        LogicRef::Ignore => {}
+                        LogicRef::Value(s) => fold.push_ref(&s),
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// 引用里的空格子和文本不参加 `AND` / `OR`。没有公式、也没有缓存的格子当空。
+    fn logic_ref(&mut self, sheet: usize, here: CellRef) -> LogicRef {
+        let rec = self
+            .sheets
+            .get(sheet)
+            .and_then(|s| s.cells.get(&(here.col, here.row)))
+            .map(|r| r.clone_rec());
+        let Some(rec) = rec else {
+            return LogicRef::Ignore;
+        };
+        let has_formula =
+            rec.formula.is_some() || rec.array_master.is_some() || rec.array_ref.is_some();
+        if !has_formula {
+            return match rec.cached {
+                Some(s) => LogicRef::Value(s),
+                None => LogicRef::Ignore,
+            };
+        }
+        match self.scalar_at(sheet, here) {
+            Calc::Skip => LogicRef::Skip,
+            Calc::Ready(Value::Scalar(s)) => LogicRef::Value(s),
+            Calc::Ready(_) => LogicRef::Value(Scalar::Err(VALUE)),
+        }
+    }
+
+    fn scalar_flag(
+        &mut self,
+        value: Value,
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Result<bool, &'static str>> {
+        match self.coerce(value, sheet, here, Mode::Scalar) {
+            Calc::Skip => None,
+            Calc::Ready(Value::Scalar(s)) => Some(if_flag(&s)),
+            Calc::Ready(_) => Some(Err(VALUE)),
+        }
+    }
+
+    fn logic_branch(
+        &mut self,
+        expr: &Expr,
+        sheet: usize,
+        here: CellRef,
+        mode: Mode,
+    ) -> Option<Branch> {
+        let value = ready_value(self.eval_expr(expr, sheet, here, mode))?;
+        let value = match self.coerce(value, sheet, here, mode) {
+            Calc::Skip => return None,
+            Calc::Ready(v) => v,
+        };
+        Some(match value {
+            Value::Scalar(s) => Branch::Scalar(s),
+            Value::Grid(g) => Branch::Grid(g),
+            _ => Branch::Scalar(Scalar::Err(VALUE)),
+        })
     }
 
     fn scalar_fn(
@@ -1968,6 +2290,130 @@ fn named_rect(a: &str, b: &str, span: (CellRef, CellRef)) -> Rect {
         to: Loc::Name(b.to_string()),
         r1: span.0,
         r2: span.1,
+    }
+}
+
+fn logic_const(args: &[Expr], value: bool) -> Calc {
+    if !args.is_empty() {
+        return Calc::Skip;
+    }
+    Calc::Ready(Value::Scalar(Scalar::Bool(value)))
+}
+
+fn ready_value(calc: Calc) -> Option<Value> {
+    match calc {
+        Calc::Skip => None,
+        Calc::Ready(v) => Some(v),
+    }
+}
+
+/// 公式里直接写下的 `TRUE` / `FALSE` 文本。前后有空格不算。大小写不敏感。
+fn bool_word(text: &str) -> Option<bool> {
+    if text.eq_ignore_ascii_case("TRUE") {
+        Some(true)
+    } else if text.eq_ignore_ascii_case("FALSE") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn if_flag(value: &Scalar) -> Result<bool, &'static str> {
+    match value {
+        Scalar::Bool(b) => Ok(*b),
+        Scalar::Num(n) => Ok(*n != 0.0),
+        Scalar::Err(e) => Err(*e),
+        Scalar::Text(t) => bool_word(t).ok_or(VALUE),
+    }
+}
+
+fn grid_multi(grid: &[Vec<Scalar>]) -> bool {
+    grid.len() > 1 || grid.first().is_some_and(|row| row.len() > 1)
+}
+
+enum LogicRef {
+    Skip,
+    Ignore,
+    Value(Scalar),
+}
+
+struct LogicFold {
+    saw: bool,
+    all_true: bool,
+    any_true: bool,
+    err: Option<&'static str>,
+}
+
+impl LogicFold {
+    fn new() -> Self {
+        Self {
+            saw: false,
+            all_true: true,
+            any_true: false,
+            err: None,
+        }
+    }
+
+    fn note_err(&mut self, err: &'static str) {
+        if self.err.is_none() {
+            self.err = Some(err);
+        }
+    }
+
+    fn note_bool(&mut self, value: bool) {
+        self.saw = true;
+        self.all_true &= value;
+        self.any_true |= value;
+    }
+
+    /// 直接写在参数位置上的值。`TRUE` / `FALSE` 文本算逻辑值，其它文本先放下。
+    fn push_direct(&mut self, value: &Scalar) {
+        match value {
+            Scalar::Err(e) => self.note_err(e),
+            Scalar::Bool(b) => self.note_bool(*b),
+            Scalar::Num(n) => self.note_bool(*n != 0.0),
+            Scalar::Text(t) => {
+                if let Some(b) = bool_word(t) {
+                    self.note_bool(b);
+                }
+            }
+        }
+    }
+
+    /// 引用和数组常量里的文本一律不参加，包括写成 `TRUE` 的文本。
+    fn push_ref(&mut self, value: &Scalar) {
+        match value {
+            Scalar::Err(e) => self.note_err(e),
+            Scalar::Bool(b) => self.note_bool(*b),
+            Scalar::Num(n) => self.note_bool(*n != 0.0),
+            Scalar::Text(_) => {}
+        }
+    }
+
+    fn finish(&self, and: bool) -> Scalar {
+        if let Some(err) = self.err {
+            return Scalar::Err(err);
+        }
+        if !self.saw {
+            return Scalar::Err(VALUE);
+        }
+        Scalar::Bool(if and { self.all_true } else { self.any_true })
+    }
+}
+
+enum Branch {
+    Scalar(Scalar),
+    Grid(Vec<Vec<Scalar>>),
+}
+
+fn pick_branch(branch: &Branch, row: usize, col: usize) -> Scalar {
+    match branch {
+        Branch::Scalar(s) => s.clone(),
+        Branch::Grid(g) => g
+            .get(row)
+            .and_then(|line| line.get(col))
+            .cloned()
+            .unwrap_or(Scalar::Err(NA)),
     }
 }
 

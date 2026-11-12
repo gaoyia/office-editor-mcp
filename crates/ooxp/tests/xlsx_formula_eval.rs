@@ -463,3 +463,161 @@ fn pivot_row_sum_writes_display() {
     assert_eq!(cell(&tree, "cell:Sheet1!E4")["value"], json!("总计"));
     assert!((num_at(&tree, "cell:Sheet1!F4") - 22.0).abs() < 1e-9);
 }
+
+/// 逻辑函数对照 Excel 16.0 样本。库自己算，不启动电子表格。
+#[test]
+fn logical_functions_match_excel_16() {
+    let path = book();
+    let cells = vec![
+        json!({"ref": "A1", "formula": "=IF(TRUE,1,1/0)"}),
+        json!({"ref": "A2", "formula": "=IF(FALSE,1/0,2)"}),
+        json!({"ref": "A3", "formula": "=IFERROR(1/0,7)"}),
+        json!({"ref": "A4", "formula": "=IFERROR(3,1/0)"}),
+        json!({"ref": "A5", "formula": "=AND(TRUE,TRUE)"}),
+        json!({"ref": "A6", "formula": "=AND(TRUE,FALSE)"}),
+        json!({"ref": "A7", "formula": "=AND(FALSE,1/0)"}),
+        json!({"ref": "A8", "formula": "=OR(TRUE,1/0)"}),
+        json!({"ref": "A9", "formula": "=OR(FALSE,1/0)"}),
+        json!({"ref": "A10", "formula": "=NOT(TRUE)"}),
+        json!({"ref": "A11", "formula": "=NOT(0)"}),
+        json!({"ref": "A12", "formula": "=NOT(\"a\")"}),
+        json!({"ref": "A13", "formula": "=TRUE()"}),
+        json!({"ref": "A14", "formula": "=FALSE()"}),
+        json!({"ref": "A15", "formula": "=IF(TRUE,5)"}),
+        json!({"ref": "A16", "formula": "=IF(FALSE,5)"}),
+        json!({"ref": "A17", "formula": "=AND(1,2)"}),
+        json!({"ref": "A18", "formula": "=OR(0,0)"}),
+        json!({"ref": "A19", "formula": "=if(true,1,1/0)"}),
+        json!({"ref": "A20", "formula": "=AND(TRUE,\"x\")"}),
+        json!({"ref": "A21", "formula": "=AND(\"x\")"}),
+        json!({"ref": "A22", "formula": "=AND(\"TRUE\")"}),
+        json!({"ref": "A23", "formula": "=IF(\"TRUE\",1,2)"}),
+        json!({"ref": "A24", "formula": "=IF(\" TRUE \",1,2)"}),
+        json!({"ref": "A25", "formula": "=IF(\"a\",1/0,2)"}),
+        json!({"ref": "A26", "formula": "=IF(-1,8,9)"}),
+        json!({"ref": "A27", "formula": "=AND(-1)"}),
+        json!({"ref": "A28", "formula": "=AND({0,1})"}),
+        json!({"ref": "A29", "formula": "=AND({TRUE,\"x\"})"}),
+        json!({"ref": "A30", "formula": "=AND({\"TRUE\"})"}),
+        json!({"ref": "A31", "formula": "=NOT({FALSE,TRUE})"}),
+        json!({"ref": "A32", "formula": "=IF({TRUE,FALSE},1,0)"}),
+        json!({"ref": "A33", "formula": "=ECMA.IF(TRUE,4,1/0)"}),
+        json!({"ref": "A34", "formula": "=AND()"}),
+        json!({"ref": "A35", "formula": "=IF(TRUE,1,NOSUCH())"}),
+        json!({"ref": "A36", "formula": "=IF(TRUE,NOSUCH(),1)"}),
+        json!({"ref": "A37", "formula": "=AND(FALSE,NOSUCH())"}),
+        json!({"ref": "A38", "formula": "=AND(1/0,NA())"}),
+        json!({"ref": "A39", "formula": "=AND(NA(),1/0)"}),
+        json!({"ref": "A40", "formula": "=IFERROR(1,\"e\")"}),
+        json!({"ref": "A41", "formula": "=NOT(\"FALSE\")"}),
+        json!({"ref": "A42", "formula": "=OR(\"false\",\"x\")"}),
+        json!({"ref": "B1", "value": true}),
+        json!({"ref": "B2", "value": "x"}),
+        json!({"ref": "B3", "value": 0}),
+        json!({"ref": "B4", "value": false}),
+        json!({"ref": "B5", "formula": "=1/0"}),
+        json!({"ref": "B7", "value": "FALSE"}),
+        json!({"ref": "C1", "formula": "=AND(B1:B4)"}),
+        json!({"ref": "C2", "formula": "=AND(B1:B2)"}),
+        json!({"ref": "C3", "formula": "=AND(B2)"}),
+        json!({"ref": "C4", "formula": "=AND(B6)"}),
+        json!({"ref": "C5", "formula": "=IF(B6,1,2)"}),
+        json!({"ref": "C6", "formula": "=IFERROR(B6,\"e\")"}),
+        json!({"ref": "C7", "formula": "=NOT(B6)"}),
+        json!({"ref": "C8", "formula": "=AND(B1:B5)"}),
+        json!({"ref": "C9", "formula": "=IF(B1,\"yes\",\"no\")"}),
+        json!({"ref": "C10", "formula": "=NOT(B7)"}),
+        json!({"ref": "C11", "formula": "=AND(B7)"}),
+        json!({"ref": "C12", "formula": "=IF(B7,3,4)"}),
+        json!({"ref": "C13", "formula": "=OR(B3:B4)"}),
+        json!({"ref": "C14", "formula": "=AND(B8:B9)"}),
+    ];
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+
+    let tree = inspect_range(&path, "A1:C42");
+    let num = |id: &str, expect: f64| {
+        let c = cell(&tree, id);
+        let got = c["value"].as_f64().unwrap_or_else(|| panic!("{id} {c}"));
+        assert!((got - expect).abs() < 1e-9, "{id} {got}");
+    };
+    let flag = |id: &str, expect: bool| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "boolean", "{id} {c}");
+        assert_eq!(c["value"], expect, "{id}");
+    };
+    let err = |id: &str, token: &str| {
+        let c = cell(&tree, id);
+        assert_eq!(c["type"], "error", "{id} {c}");
+        assert_eq!(c["value"], token, "{id}");
+    };
+    let blank = |id: &str| {
+        let c = cell(&tree, id);
+        assert!(c["value"].is_null(), "{id} {c}");
+    };
+
+    num("cell:Sheet1!A1", 1.0);
+    num("cell:Sheet1!A2", 2.0);
+    num("cell:Sheet1!A3", 7.0);
+    num("cell:Sheet1!A4", 3.0);
+    flag("cell:Sheet1!A5", true);
+    flag("cell:Sheet1!A6", false);
+    err("cell:Sheet1!A7", "#DIV/0!");
+    err("cell:Sheet1!A8", "#DIV/0!");
+    err("cell:Sheet1!A9", "#DIV/0!");
+    flag("cell:Sheet1!A10", false);
+    flag("cell:Sheet1!A11", true);
+    err("cell:Sheet1!A12", "#VALUE!");
+    flag("cell:Sheet1!A13", true);
+    flag("cell:Sheet1!A14", false);
+    num("cell:Sheet1!A15", 5.0);
+    flag("cell:Sheet1!A16", false);
+    flag("cell:Sheet1!A17", true);
+    flag("cell:Sheet1!A18", false);
+    num("cell:Sheet1!A19", 1.0);
+    flag("cell:Sheet1!A20", true);
+    err("cell:Sheet1!A21", "#VALUE!");
+    flag("cell:Sheet1!A22", true);
+    num("cell:Sheet1!A23", 1.0);
+    err("cell:Sheet1!A24", "#VALUE!");
+    err("cell:Sheet1!A25", "#VALUE!");
+    num("cell:Sheet1!A26", 8.0);
+    flag("cell:Sheet1!A27", true);
+    flag("cell:Sheet1!A28", false);
+    flag("cell:Sheet1!A29", true);
+    err("cell:Sheet1!A30", "#VALUE!");
+    flag("cell:Sheet1!A31", true);
+    num("cell:Sheet1!A32", 1.0);
+    blank("cell:Sheet1!A33");
+    blank("cell:Sheet1!A34");
+    num("cell:Sheet1!A35", 1.0);
+    blank("cell:Sheet1!A36");
+    blank("cell:Sheet1!A37");
+    err("cell:Sheet1!A38", "#DIV/0!");
+    err("cell:Sheet1!A39", "#N/A");
+    num("cell:Sheet1!A40", 1.0);
+    flag("cell:Sheet1!A41", true);
+    flag("cell:Sheet1!A42", false);
+    flag("cell:Sheet1!C1", false);
+    flag("cell:Sheet1!C2", true);
+    err("cell:Sheet1!C3", "#VALUE!");
+    err("cell:Sheet1!C4", "#VALUE!");
+    num("cell:Sheet1!C5", 2.0);
+    num("cell:Sheet1!C6", 0.0);
+    flag("cell:Sheet1!C7", true);
+    err("cell:Sheet1!C8", "#DIV/0!");
+    let yes = cell(&tree, "cell:Sheet1!C9");
+    assert_eq!(yes["type"], "text");
+    assert_eq!(yes["value"], "yes");
+    flag("cell:Sheet1!C10", true);
+    err("cell:Sheet1!C11", "#VALUE!");
+    num("cell:Sheet1!C12", 4.0);
+    flag("cell:Sheet1!C13", false);
+    err("cell:Sheet1!C14", "#VALUE!");
+}

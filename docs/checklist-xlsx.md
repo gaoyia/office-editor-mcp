@@ -18,6 +18,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-01 补跑 `chartex-cache.ps1`。Excel 把瀑布图 B2 改成 42 另存后，inspect 读到 42。再 `setChartSeries` 后 Excel 打开没有 Repair，B2、B3 是 7 和 8。
 2026-11-02 补跑 `chartex-cache.ps1` 的 Cca3、Cca4。六种布局另存后 inspect 都在 `charts` 里，漏斗、直方、帕累托的第一个值是 42。再改这三张的系列，Excel 打开没有 Repair，源格是 7。
 2026-11-13 补跑 `xlsx-background.ps1`，Xbg1–Xbg4 通过。Excel 16.0 打开没有 Repair，另存后背景 id 仍是 `sheet:Sheet1/background`。删除后 inspect 为 `null`。
+2026-11-13 补跑 `xlsx-logic.ps1`，Xlg1–Xlg3 通过。Excel 16.0 打开没有 Repair。`IF` 短路与 `AND` / `OR` 的错误和库缓存一致。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -1126,6 +1127,16 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xf3 | 拆组 | `shared: false` 后各格都是独立公式，Excel 无修复 |
 | Xf4 | 数组公式 | `arrayRef` 写入后 Excel 认数组、无修复 |
 | Xf5 | 数组从属格 | 对非主格 `setCell` 得 `NotImplemented`，未写文件。不强制开 Excel |
+
+## 逻辑函数
+
+用库 create 写出公式缓存，再交给 Excel 16.0 重算。脚本 `manual-check/office/cases/xlsx-logic.ps1`。编号用 Xlg。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xlg1 | 短路 | `IF(TRUE,1,1/0)` 为 1，`IF(FALSE,1/0,2)` 为 2，`IFERROR` 只在第一支出错时取第二支。Excel 无修复，与 inspect 缓存一致 |
+| Xlg2 | 与或非 | `AND(FALSE,1/0)` 与 `OR(TRUE,1/0)` 为 `#DIV/0!`。文本和空格子按样本放下。Excel 无修复 |
+| Xlg3 | 不认的名字 | `ECMA.IF(...)` 的 inspect 没有缓存。Excel 打开后显示 `#NAME?`，无修复 |
 
 ## 共享公式改主格
 
