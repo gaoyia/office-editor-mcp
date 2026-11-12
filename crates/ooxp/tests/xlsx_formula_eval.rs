@@ -1014,3 +1014,127 @@ fn math_functions_match_excel_16() {
     assert!(formula_marks_ca(&xml, "RANDBETWEEN(1,10)"));
     assert!(!formula_marks_ca(&xml, "COS(0)"));
 }
+
+#[test]
+fn text_functions_match_excel_16() {
+    let path = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": "AbC 中文"}),
+        json!({"ref": "A2", "value": "  hi  "}),
+        json!({"ref": "A3", "value": 1234.5}),
+        json!({"ref": "A4", "value": "ＡＢ１２"}),
+    ];
+    let texts = [
+        ("C1", "=LEFT(A1,3)", "AbC"),
+        ("C2", "=RIGHT(A1,2)", "中文"),
+        ("C3", "=MID(A1,4,2)", " 中"),
+        ("C4", "=LOWER(A1)", "abc 中文"),
+        ("C5", "=UPPER(A1)", "ABC 中文"),
+        ("C6", "=PROPER(A1)", "Abc 中文"),
+        ("C7", "=TRIM(A2)", "hi"),
+        ("C8", "=REPT(\"ab\",3)", "ababab"),
+        ("C9", "=CONCATENATE(A1,\"!\",1)", "AbC 中文!1"),
+        ("C10", "=T(A1)", "AbC 中文"),
+        ("C11", "=T(A3)", ""),
+        ("C12", "=CHAR(65)", "A"),
+        ("C13", "=TEXT(A3,\"0.00\")", "1234.50"),
+        ("C14", "=TEXT(0.5,\"0%\")", "50%"),
+        ("C15", "=DOLLAR(A3)", "¥1,234.50"),
+        ("C16", "=DOLLAR(-1234.5)", "¥-1,234.50"),
+        ("C17", "=FIXED(A3,1)", "1,234.5"),
+        ("C18", "=FIXED(A3,1,TRUE)", "1234.5"),
+        ("C19", "=SUBSTITUTE(A1,\"中文\",\"文\")", "AbC 文"),
+        ("C20", "=SUBSTITUTE(\"a-a-a\",\"a\",\"b\",2)", "a-b-a"),
+        ("C21", "=REPLACE(A1,1,2,\"x\")", "xC 中文"),
+        ("C22", "=ASC(A4)", "AB12"),
+        ("C23", "=BAHTTEXT(1234)", "หนึ่งพันสองร้อยสามสิบสี่บาทถ้วน"),
+        ("C24", "=BAHTTEXT(1)", "หนึ่งบาทถ้วน"),
+        ("C25", "=BAHTTEXT(21)", "ยี่สิบเอ็ดบาทถ้วน"),
+        ("C26", "=BAHTTEXT(0)", "ศูนย์บาทถ้วน"),
+        ("C27", "=PHONETIC(A1)", "AbC 中文"),
+        ("C28", "=CLEAN(\"hi\"&CHAR(7)&\"x\")", "hix"),
+    ];
+    let nums = [
+        ("C29", "=LEN(A1)", 6.0),
+        ("C30", "=FIND(\"C\",A1)", 3.0),
+        ("C31", "=SEARCH(\"c\",A1)", 3.0),
+        ("C32", "=SEARCH(\"中?\",A1)", 5.0),
+        ("C33", "=SEARCH(\"A*\",A1)", 1.0),
+        ("C34", "=VALUE(\"1,234.5\")", 1234.5),
+        ("C35", "=CODE(\"A\")", 65.0),
+    ];
+    let dbcs_text = [
+        ("C40", "=LEFTB(A1,5)", "AbC  "),
+        ("C41", "=RIGHTB(A1,3)", " 文"),
+        ("C42", "=MIDB(A1,4,2)", "  "),
+        ("C43", "=REPLACEB(A1,5,2,\"X\")", "AbC X文"),
+        ("C44", "=REPLACEB(A1,4,2,\"Z\")", "AbCZ 文"),
+        ("C45", "=LEFTB(A4,3)", "Ａ "),
+        ("C46", "=CHAR(54992)", "中"),
+    ];
+    let dbcs_num = [
+        ("C47", "=LENB(A1)", 8.0),
+        ("C48", "=LENB(A4)", 8.0),
+        ("C49", "=FINDB(\"中\",A1)", 5.0),
+        ("C50", "=SEARCHB(\"文\",A1)", 7.0),
+        ("C51", "=CODE(\"中\")", 54992.0),
+        ("C52", "=CODE(A4)", 41921.0),
+    ];
+    for (cell_ref, formula, _) in texts.iter().chain(dbcs_text.iter()) {
+        cells.push(json!({"ref": cell_ref, "formula": formula}));
+    }
+    for (cell_ref, formula, _) in nums.iter().chain(dbcs_num.iter()) {
+        cells.push(json!({"ref": cell_ref, "formula": formula}));
+    }
+    cells.push(json!({"ref": "C36", "formula": "=FIND(\"c\",A1)"}));
+    cells.push(json!({"ref": "C37", "formula": "=EXACT(\"Ab\",\"ab\")"}));
+    cells.push(json!({"ref": "C38", "formula": "=ECMA.LEFT(A1,1)"}));
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:C52");
+    let text = |id: &str, expect: &str| {
+        let c = cell(&tree, id);
+        assert_eq!(c["value"], expect, "{id} {c}");
+    };
+    let num = |id: &str, expect: f64| {
+        let c = cell(&tree, id);
+        let got = c["value"].as_f64().unwrap_or_else(|| panic!("{id} {c}"));
+        assert!((got - expect).abs() < 1e-8, "{id} got {got}");
+    };
+    for (cell_ref, _, expect) in texts {
+        text(&format!("cell:Sheet1!{cell_ref}"), expect);
+    }
+    for (cell_ref, _, expect) in nums {
+        num(&format!("cell:Sheet1!{cell_ref}"), expect);
+    }
+    let missed = cell(&tree, "cell:Sheet1!C36");
+    assert_eq!(missed["type"], "error", "{missed}");
+    assert_eq!(missed["value"], "#VALUE!");
+    let exact = cell(&tree, "cell:Sheet1!C37");
+    assert_eq!(exact["type"], "boolean", "{exact}");
+    assert_eq!(exact["value"], false);
+    let ecma = cell(&tree, "cell:Sheet1!C38");
+    assert!(ecma["value"].is_null(), "{ecma}");
+    #[cfg(windows)]
+    {
+        for (cell_ref, _, expect) in dbcs_text {
+            text(&format!("cell:Sheet1!{cell_ref}"), expect);
+        }
+        for (cell_ref, _, expect) in dbcs_num {
+            num(&format!("cell:Sheet1!{cell_ref}"), expect);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        for (cell_ref, _, _) in dbcs_text.iter().chain(dbcs_num.iter()) {
+            let c = cell(&tree, &format!("cell:Sheet1!{cell_ref}"));
+            assert!(c["value"].is_null(), "{cell_ref} {c}");
+        }
+    }
+}

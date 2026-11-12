@@ -2500,6 +2500,20 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - `SUMIF` 与 `SUMIFS` 的条件支持数字、文本和比较运算符。不认通配符
 - `SUBTOTAL` 的 1 到 11 包含手工隐藏行。101 到 111 跳过 `hidden="1"` 的行。区域内的 `SUBTOTAL` 不重复计入
 - `ROMAN` 只写形式 0。`SERIESSUM` 按系数区域从左到右、从上到下累加
+- 另外认文本类。`ECMA.LEFT` 这种类目表里没有的带点名字不求值。`JIS` 在这台中文 Excel 16.0 上是 `#NAME?`，不实现
+- `LEFT`、`RIGHT`、`MID`、`LEN`、`FIND`、`REPLACE` 按 UTF-16 码元。`LEFT` 与 `RIGHT` 省略个数时取 1 个
+- `LENB`、`LEFTB`、`RIGHTB`、`MIDB`、`FINDB`、`SEARCHB`、`REPLACEB`、`CODE`、`CHAR` 按 Windows ANSI 代码页。这台中文 Windows 上汉字是 2 字节，`CODE("中")` 是 54992
+- 截取或替换若落在双字节中间，缺的那一字节换成空格。非 Windows 上这些函数只处理 ASCII，写不进代码页的字符不写缓存
+- `FIND` 与 `FINDB` 区分大小写。`SEARCH` 与 `SEARCHB` 不区分。`?` 匹配一个码元，`*` 匹配任意长度。找不到写入 `#VALUE!`
+- `SUBSTITUTE` 省略第四个参数时替换全部。给了序号只替换那一次
+- `TRIM` 只收 `U+0020`，并收成单词间一个空格。`CLEAN` 删掉码元 0 到 31
+- `T` 只留下文本。数字、逻辑值和空单元格写成空字符串
+- `VALUE` 认千分位逗号。`TEXT` 只认样本里的 `0.00` 和 `0%`。其它格式串不写缓存
+- `DOLLAR` 按这台中文 Excel 16.0 写成 `¥1,234.50`。负数是 `¥-1,234.50`。默认两位小数
+- `FIXED` 默认两位小数并加千分位。第三参为真时不加千分位
+- `ASC` 把全角 ASCII 和全角空格转成半角。`BAHTTEXT` 只写非负整数。`BAHTTEXT(1234)` 是 `หนึ่งพันสองร้อยสามสิบสี่บาทถ้วน`。小数和负数不写缓存
+- `PHONETIC` 没有拼音数据时返回格子原文，不编读音
+- 结果里若有 XML 不允许的控制字符，不写该格缓存
 - 工作簿级和表级定义名
 - 共享公式先按主格相对展开，再求值
 - 数组公式按元素铺进 `ref`

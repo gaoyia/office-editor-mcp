@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::a1::{self, CellRef};
+use super::dbcs;
 use super::formula;
 use super::inspect;
 use crate::error::{Error, ErrorKind, RelSource};
@@ -1200,7 +1201,10 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => self.eval_math(other, &vals, sheet, here, mode),
+            other => match self.eval_text(other, &vals, sheet, here) {
+                Some(done) => done,
+                None => self.eval_math(other, &vals, sheet, here, mode),
+            },
         }
     }
 
@@ -2987,6 +2991,970 @@ impl Book {
             r2: CellRef { col: c2, row: r2 },
         })
     }
+
+    /// 文本类。不是文本函数时返回 `None`，交给数学类。
+    fn eval_text(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let done = match name {
+            "LEFT" => self.eval_side(vals, sheet, here, false, true),
+            "RIGHT" => self.eval_side(vals, sheet, here, false, false),
+            "LEFTB" => self.eval_side(vals, sheet, here, true, true),
+            "RIGHTB" => self.eval_side(vals, sheet, here, true, false),
+            "MID" => self.eval_mid(vals, sheet, here, false),
+            "MIDB" => self.eval_mid(vals, sheet, here, true),
+            "LEN" => self.eval_len(vals, sheet, here, false),
+            "LENB" => self.eval_len(vals, sheet, here, true),
+            "FIND" => self.eval_find(vals, sheet, here, false, false),
+            "FINDB" => self.eval_find(vals, sheet, here, true, false),
+            "SEARCH" => self.eval_find(vals, sheet, here, false, true),
+            "SEARCHB" => self.eval_find(vals, sheet, here, true, true),
+            "REPLACE" => self.eval_replace(vals, sheet, here, false),
+            "REPLACEB" => self.eval_replace(vals, sheet, here, true),
+            "SUBSTITUTE" => self.eval_substitute(vals, sheet, here),
+            "LOWER" => self.eval_case(vals, sheet, here, CaseKind::Lower),
+            "UPPER" => self.eval_case(vals, sheet, here, CaseKind::Upper),
+            "PROPER" => self.eval_case(vals, sheet, here, CaseKind::Proper),
+            "TRIM" => self.eval_trim(vals, sheet, here),
+            "CLEAN" => self.eval_clean(vals, sheet, here),
+            "REPT" => self.eval_rept(vals, sheet, here),
+            "CONCATENATE" => self.eval_concatenate(vals, sheet, here),
+            "EXACT" => self.eval_exact(vals, sheet, here),
+            "T" => self.eval_t(vals, sheet, here),
+            "VALUE" => self.eval_value_fn(vals, sheet, here),
+            "CHAR" => self.eval_char(vals, sheet, here),
+            "CODE" => self.eval_code(vals, sheet, here),
+            "TEXT" => self.eval_text_fn(vals, sheet, here),
+            "DOLLAR" => self.eval_dollar(vals, sheet, here),
+            "FIXED" => self.eval_fixed(vals, sheet, here),
+            "BAHTTEXT" => self.eval_baht(vals, sheet, here),
+            "ASC" => self.eval_asc(vals, sheet, here),
+            "PHONETIC" => self.eval_phonetic(vals, sheet, here),
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn eval_side(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        bytes: bool,
+        from_left: bool,
+    ) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let count = if vals.len() == 1 {
+            1
+        } else {
+            match self.take_count(&vals[1], sheet, here) {
+                Ok(count) => count,
+                Err(done) => return done,
+            }
+        };
+        if bytes {
+            return side_bytes(&text, count, from_left);
+        }
+        ready_text(side_chars(&text, count, from_left))
+    }
+
+    fn eval_mid(&mut self, vals: &[Value], sheet: usize, here: CellRef, bytes: bool) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let start = match self.take_count(&vals[1], sheet, here) {
+            Ok(start) => start,
+            Err(done) => return done,
+        };
+        let count = match self.take_count(&vals[2], sheet, here) {
+            Ok(count) => count,
+            Err(done) => return done,
+        };
+        if start == 0 {
+            return ready_err(VALUE);
+        }
+        let start0 = start - 1;
+        if bytes {
+            return mid_bytes(&text, start0, count);
+        }
+        ready_text(mid_chars(&text, start0, count))
+    }
+
+    fn eval_len(&mut self, vals: &[Value], sheet: usize, here: CellRef, bytes: bool) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        if bytes {
+            let Some(units) = dbcs::encode(&text) else {
+                return Calc::Skip;
+            };
+            return ready_num(units.len() as f64);
+        }
+        ready_num(text.encode_utf16().count() as f64)
+    }
+
+    fn eval_find(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        bytes: bool,
+        wild: bool,
+    ) -> Calc {
+        if vals.len() < 2 || vals.len() > 3 {
+            return Calc::Skip;
+        }
+        let needle = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let hay = match self.take_text(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let start = if vals.len() == 2 {
+            1
+        } else {
+            match self.take_count(&vals[2], sheet, here) {
+                Ok(start) => start,
+                Err(done) => return done,
+            }
+        };
+        if start == 0 {
+            return ready_err(VALUE);
+        }
+        let hay_units: Vec<u16> = hay.encode_utf16().collect();
+        let needle_units: Vec<u16> = needle.encode_utf16().collect();
+        let start0 = start - 1;
+        if start0 > hay_units.len() {
+            return ready_err(VALUE);
+        }
+        let found = if wild {
+            find_wild(&hay_units, &needle_units, start0)
+        } else {
+            find_literal(&hay_units, &needle_units, start0)
+        };
+        let Some(index) = found else {
+            return ready_err(VALUE);
+        };
+        if !bytes {
+            return ready_num((index + 1) as f64);
+        }
+        match byte_index_at(&hay, index) {
+            Some(pos) => ready_num((pos + 1) as f64),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_replace(&mut self, vals: &[Value], sheet: usize, here: CellRef, bytes: bool) -> Calc {
+        if vals.len() != 4 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let start = match self.take_count(&vals[1], sheet, here) {
+            Ok(start) => start,
+            Err(done) => return done,
+        };
+        let count = match self.take_count(&vals[2], sheet, here) {
+            Ok(count) => count,
+            Err(done) => return done,
+        };
+        let new_text = match self.take_text(&vals[3], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        if start == 0 {
+            return ready_err(VALUE);
+        }
+        let start0 = start - 1;
+        if bytes {
+            return replace_bytes(&text, start0, count, &new_text);
+        }
+        ready_text(replace_chars(&text, start0, count, &new_text))
+    }
+
+    fn eval_substitute(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() < 3 || vals.len() > 4 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let old = match self.take_text(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let new_text = match self.take_text(&vals[2], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let instance = if vals.len() == 3 {
+            None
+        } else {
+            match self.take_count(&vals[3], sheet, here) {
+                Ok(0) => return ready_err(VALUE),
+                Ok(n) => Some(n),
+                Err(done) => return done,
+            }
+        };
+        ready_text(substitute_text(&text, &old, &new_text, instance))
+    }
+
+    fn eval_case(&mut self, vals: &[Value], sheet: usize, here: CellRef, kind: CaseKind) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        ready_text(match kind {
+            CaseKind::Lower => text.to_lowercase(),
+            CaseKind::Upper => text.to_uppercase(),
+            CaseKind::Proper => proper_case(&text),
+        })
+    }
+
+    fn eval_trim(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let parts: Vec<&str> = text.split(' ').filter(|part| !part.is_empty()).collect();
+        ready_text(parts.join(" "))
+    }
+
+    fn eval_clean(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        ready_text(text.chars().filter(|ch| (*ch as u32) >= 32).collect())
+    }
+
+    fn eval_rept(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let count = match self.take_count(&vals[1], sheet, here) {
+            Ok(count) => count,
+            Err(done) => return done,
+        };
+        let units = text.encode_utf16().count();
+        if units.saturating_mul(count) > 32767 {
+            return ready_err(VALUE);
+        }
+        ready_text(text.repeat(count))
+    }
+
+    fn eval_concatenate(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() {
+            return Calc::Skip;
+        }
+        let mut out = String::new();
+        for value in vals {
+            match self.take_text(value, sheet, here) {
+                Ok(text) => out.push_str(&text),
+                Err(done) => return done,
+            }
+        }
+        ready_text(out)
+    }
+
+    fn eval_exact(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let left = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let right = match self.take_text(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        ready_bool(left == right)
+    }
+
+    fn eval_t(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.text_hit(&vals[0], sheet, here) {
+            Hit::Fact(Fact::Ready(Scalar::Text(text))) => ready_text(text),
+            Hit::Fact(Fact::Ready(Scalar::Err(token))) | Hit::Err(token) => ready_err(token),
+            Hit::Fact(Fact::Skip) => Calc::Skip,
+            Hit::Fact(Fact::Blank | Fact::Ready(_)) => ready_text(String::new()),
+        }
+    }
+
+    fn eval_value_fn(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.text_hit(&vals[0], sheet, here) {
+            Hit::Fact(Fact::Blank) => ready_num(0.0),
+            Hit::Fact(Fact::Ready(Scalar::Num(n))) => ready_num(n),
+            Hit::Fact(Fact::Ready(Scalar::Text(text))) => parse_excel_number(&text),
+            Hit::Fact(Fact::Ready(Scalar::Bool(_))) => ready_err(VALUE),
+            Hit::Fact(Fact::Ready(Scalar::Err(token))) | Hit::Err(token) => ready_err(token),
+            Hit::Fact(Fact::Skip) => Calc::Skip,
+        }
+    }
+
+    fn eval_char(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let code = match self.take_count(&vals[0], sheet, here) {
+            Ok(code) => code,
+            Err(done) => return done,
+        };
+        if !(1..=65535).contains(&code) {
+            return ready_err(VALUE);
+        }
+        match dbcs::char_of(code as u32) {
+            Some(text) => ready_text(text),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_code(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        if text.is_empty() {
+            return ready_err(VALUE);
+        }
+        match dbcs::code_of(&text) {
+            Some(code) => ready_num(code as f64),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_text_fn(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 2 {
+            return Calc::Skip;
+        }
+        let number = match self.take_num(&vals[0], sheet, here) {
+            Ok(number) => number,
+            Err(done) => return done,
+        };
+        let format = match self.take_text(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        match format_sample(number, &format) {
+            Some(text) => ready_text(text),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_dollar(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 2 {
+            return Calc::Skip;
+        }
+        let number = match self.take_num(&vals[0], sheet, here) {
+            Ok(number) => number,
+            Err(done) => return done,
+        };
+        let decimals = if vals.len() == 1 {
+            2
+        } else {
+            match self.take_signed(&vals[1], sheet, here) {
+                Ok(decimals) => decimals,
+                Err(done) => return done,
+            }
+        };
+        if !(0..=10).contains(&decimals) {
+            return Calc::Skip;
+        }
+        let (neg, body) = format_fixed(number, decimals as usize, true);
+        let text = if neg {
+            format!("¥-{body}")
+        } else {
+            format!("¥{body}")
+        };
+        ready_text(text)
+    }
+
+    fn eval_fixed(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.is_empty() || vals.len() > 3 {
+            return Calc::Skip;
+        }
+        let number = match self.take_num(&vals[0], sheet, here) {
+            Ok(number) => number,
+            Err(done) => return done,
+        };
+        let decimals = if vals.len() == 1 {
+            2
+        } else {
+            match self.take_signed(&vals[1], sheet, here) {
+                Ok(decimals) => decimals,
+                Err(done) => return done,
+            }
+        };
+        if !(0..=10).contains(&decimals) {
+            return Calc::Skip;
+        }
+        let no_comma = if vals.len() == 3 {
+            match self.take_flag(&vals[2], sheet, here) {
+                Ok(flag) => flag,
+                Err(done) => return done,
+            }
+        } else {
+            false
+        };
+        let (neg, body) = format_fixed(number, decimals as usize, !no_comma);
+        let text = if neg { format!("-{body}") } else { body };
+        ready_text(text)
+    }
+
+    fn eval_baht(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let number = match self.take_num(&vals[0], sheet, here) {
+            Ok(number) => number,
+            Err(done) => return done,
+        };
+        match baht_text(number) {
+            Some(text) => ready_text(text),
+            None => Calc::Skip,
+        }
+    }
+
+    fn eval_asc(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        let text = match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        ready_text(asc_text(&text))
+    }
+
+    fn eval_phonetic(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 1 {
+            return Calc::Skip;
+        }
+        match self.take_text(&vals[0], sheet, here) {
+            Ok(text) => ready_text(text),
+            Err(done) => done,
+        }
+    }
+
+    fn text_hit(&mut self, value: &Value, sheet: usize, here: CellRef) -> Hit {
+        self.hit_value(value.clone(), sheet, here)
+    }
+
+    fn take_text(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<String, Calc> {
+        match self.text_hit(value, sheet, here) {
+            Hit::Fact(Fact::Blank) => Ok(String::new()),
+            Hit::Fact(Fact::Ready(Scalar::Text(text))) => Ok(text),
+            Hit::Fact(Fact::Ready(Scalar::Num(n))) => Ok(fmt_num(n)),
+            Hit::Fact(Fact::Ready(Scalar::Bool(flag))) => {
+                Ok(if flag { "TRUE" } else { "FALSE" }.to_string())
+            }
+            Hit::Fact(Fact::Ready(Scalar::Err(token))) | Hit::Err(token) => Err(ready_err(token)),
+            Hit::Fact(Fact::Skip) => Err(Calc::Skip),
+        }
+    }
+
+    fn take_num(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<f64, Calc> {
+        match self.text_hit(value, sheet, here) {
+            Hit::Fact(Fact::Blank) => Ok(0.0),
+            Hit::Fact(Fact::Ready(scalar)) => match num_of(scalar) {
+                Scalar::Num(n) => Ok(n),
+                Scalar::Err(token) => Err(ready_err(token)),
+                _ => Err(ready_err(VALUE)),
+            },
+            Hit::Err(token) => Err(ready_err(token)),
+            Hit::Fact(Fact::Skip) => Err(Calc::Skip),
+        }
+    }
+
+    fn take_count(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<usize, Calc> {
+        let number = self.take_num(value, sheet, here)?;
+        if !(0.0..=1_000_000.0).contains(&number) {
+            return Err(ready_err(VALUE));
+        }
+        Ok(number.trunc() as usize)
+    }
+
+    fn take_signed(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<i32, Calc> {
+        let number = self.take_num(value, sheet, here)?;
+        if !number.is_finite() || !(0.0..=1_000_000.0).contains(&number.abs()) {
+            return Err(ready_err(VALUE));
+        }
+        Ok(number.trunc() as i32)
+    }
+
+    fn take_flag(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<bool, Calc> {
+        match self.text_hit(value, sheet, here) {
+            Hit::Fact(Fact::Blank) => Ok(false),
+            Hit::Fact(Fact::Ready(Scalar::Bool(flag))) => Ok(flag),
+            Hit::Fact(Fact::Ready(Scalar::Num(n))) => Ok(n != 0.0),
+            Hit::Fact(Fact::Ready(Scalar::Text(text))) => {
+                if text.eq_ignore_ascii_case("TRUE") {
+                    Ok(true)
+                } else if text.eq_ignore_ascii_case("FALSE") {
+                    Ok(false)
+                } else {
+                    Err(ready_err(VALUE))
+                }
+            }
+            Hit::Fact(Fact::Ready(Scalar::Err(token))) | Hit::Err(token) => Err(ready_err(token)),
+            Hit::Fact(Fact::Skip) => Err(Calc::Skip),
+        }
+    }
+}
+
+enum CaseKind {
+    Lower,
+    Upper,
+    Proper,
+}
+
+fn ready_text(text: String) -> Calc {
+    Calc::Ready(Value::Scalar(Scalar::Text(text)))
+}
+
+fn xml_text_ok(text: &str) -> bool {
+    text.chars().all(|ch| {
+        let code = ch as u32;
+        code == 0x9 || code == 0xA || code == 0xD || code >= 0x20
+    })
+}
+
+fn side_chars(text: &str, count: usize, from_left: bool) -> String {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let count = count.min(units.len());
+    let slice = if from_left {
+        &units[..count]
+    } else {
+        &units[units.len() - count..]
+    };
+    String::from_utf16_lossy(slice)
+}
+
+fn side_bytes(text: &str, count: usize, from_left: bool) -> Calc {
+    let Some(units) = dbcs::encode(text) else {
+        return Calc::Skip;
+    };
+    let count = count.min(units.len());
+    let start = if from_left { 0 } else { units.len() - count };
+    match dbcs::decode(&dbcs::slice(&units, start, count)) {
+        Some(text) => ready_text(text),
+        None => Calc::Skip,
+    }
+}
+
+fn mid_chars(text: &str, start0: usize, count: usize) -> String {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    if start0 >= units.len() || count == 0 {
+        return String::new();
+    }
+    let end = start0.saturating_add(count).min(units.len());
+    String::from_utf16_lossy(&units[start0..end])
+}
+
+fn mid_bytes(text: &str, start0: usize, count: usize) -> Calc {
+    let Some(units) = dbcs::encode(text) else {
+        return Calc::Skip;
+    };
+    if start0 >= units.len() || count == 0 {
+        return ready_text(String::new());
+    }
+    match dbcs::decode(&dbcs::slice(&units, start0, count)) {
+        Some(text) => ready_text(text),
+        None => Calc::Skip,
+    }
+}
+
+fn find_literal(hay: &[u16], needle: &[u16], start0: usize) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(start0);
+    }
+    hay[start0..]
+        .windows(needle.len())
+        .position(|window| window == needle)
+        .map(|pos| pos + start0)
+}
+
+fn find_wild(hay: &[u16], needle: &[u16], start0: usize) -> Option<usize> {
+    (start0..=hay.len()).find(|&index| wild_prefix(&hay[index..], needle))
+}
+
+fn wild_prefix(hay: &[u16], pat: &[u16]) -> bool {
+    if pat.is_empty() {
+        return true;
+    }
+    let mut hi = 0;
+    let mut pi = 0;
+    let mut star_p: Option<usize> = None;
+    let mut star_h = 0;
+    loop {
+        if pi == pat.len() {
+            return true;
+        }
+        if pat[pi] == u16::from(b'*') {
+            star_p = Some(pi);
+            star_h = hi;
+            pi += 1;
+            if pi == pat.len() {
+                return true;
+            }
+            continue;
+        }
+        if hi < hay.len() && (pat[pi] == u16::from(b'?') || eq_ci(hay[hi], pat[pi])) {
+            hi += 1;
+            pi += 1;
+            continue;
+        }
+        let Some(sp) = star_p else {
+            return false;
+        };
+        if star_h >= hay.len() {
+            return false;
+        }
+        star_h += 1;
+        hi = star_h;
+        pi = sp + 1;
+    }
+}
+
+fn eq_ci(left: u16, right: u16) -> bool {
+    if left == right {
+        return true;
+    }
+    if left < 128 && right < 128 {
+        return (left as u8).eq_ignore_ascii_case(&(right as u8));
+    }
+    let Some(a) = char::from_u32(u32::from(left)) else {
+        return false;
+    };
+    let Some(b) = char::from_u32(u32::from(right)) else {
+        return false;
+    };
+    a.to_lowercase().to_string() == b.to_lowercase().to_string()
+}
+
+fn byte_index_at(text: &str, utf16_index: usize) -> Option<usize> {
+    let mut bytes = 0usize;
+    let mut seen = 0usize;
+    for ch in text.chars() {
+        if seen == utf16_index {
+            return Some(bytes);
+        }
+        let part = dbcs::encode(&ch.to_string())?;
+        bytes += part.len();
+        seen += ch.len_utf16();
+    }
+    if seen == utf16_index {
+        Some(bytes)
+    } else {
+        None
+    }
+}
+
+fn replace_chars(text: &str, start0: usize, count: usize, new_text: &str) -> String {
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let new_units: Vec<u16> = new_text.encode_utf16().collect();
+    let mut out = Vec::new();
+    if start0 >= units.len() {
+        out.extend_from_slice(&units);
+        out.extend_from_slice(&new_units);
+    } else {
+        out.extend_from_slice(&units[..start0]);
+        out.extend_from_slice(&new_units);
+        let end = start0.saturating_add(count).min(units.len());
+        out.extend_from_slice(&units[end..]);
+    }
+    String::from_utf16_lossy(&out)
+}
+
+fn replace_bytes(text: &str, start0: usize, count: usize, new_text: &str) -> Calc {
+    let Some(units) = dbcs::encode(text) else {
+        return Calc::Skip;
+    };
+    let Some(new_units) = dbcs::encode(new_text) else {
+        return Calc::Skip;
+    };
+    let replaced = if start0 >= units.len() {
+        let mut out = units;
+        out.extend(new_units);
+        out
+    } else {
+        dbcs::replace(&units, start0, count, &new_units)
+    };
+    match dbcs::decode(&replaced) {
+        Some(text) => ready_text(text),
+        None => Calc::Skip,
+    }
+}
+
+fn substitute_text(text: &str, old: &str, new_text: &str, instance: Option<usize>) -> String {
+    if old.is_empty() {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    let mut rest = text;
+    let mut seen = 0usize;
+    while let Some(pos) = rest.find(old) {
+        seen += 1;
+        let replace_this = match instance {
+            None => true,
+            Some(n) => n == seen,
+        };
+        out.push_str(&rest[..pos]);
+        if replace_this {
+            out.push_str(new_text);
+        } else {
+            out.push_str(old);
+        }
+        rest = &rest[pos + old.len()..];
+        if instance == Some(seen) {
+            out.push_str(rest);
+            return out;
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn proper_case(text: &str) -> String {
+    let mut out = String::new();
+    let mut cap = true;
+    for ch in text.chars() {
+        if ch.is_alphabetic() {
+            if cap {
+                out.extend(ch.to_uppercase());
+                cap = false;
+            } else {
+                out.extend(ch.to_lowercase());
+            }
+        } else {
+            out.push(ch);
+            cap = true;
+        }
+    }
+    out
+}
+
+fn parse_excel_number(text: &str) -> Calc {
+    let trimmed = text.trim().replace(',', "");
+    if trimmed.is_empty() {
+        return ready_err(VALUE);
+    }
+    match trimmed.parse::<f64>() {
+        Ok(n) if n.is_finite() => ready_num(n),
+        _ => ready_err(VALUE),
+    }
+}
+
+fn format_sample(number: f64, format: &str) -> Option<String> {
+    if format.is_empty()
+        || !format
+            .chars()
+            .all(|ch| matches!(ch, '0' | '#' | ',' | '.' | '%'))
+    {
+        return None;
+    }
+    let percent = format.contains('%');
+    let body: String = format.chars().filter(|ch| *ch != '%').collect();
+    if body.is_empty() {
+        return None;
+    }
+    let (int_part, decimals) = match body.split_once('.') {
+        Some((int_part, frac)) => {
+            if !frac.chars().all(|ch| ch == '0' || ch == '#') {
+                return None;
+            }
+            (int_part, frac.len())
+        }
+        None => (body.as_str(), 0),
+    };
+    let shown = if percent { number * 100.0 } else { number };
+    let (neg, text) = format_fixed(shown, decimals, int_part.contains(','));
+    let mut out = if neg { format!("-{text}") } else { text };
+    if percent {
+        out.push('%');
+    }
+    Some(out)
+}
+
+fn format_fixed(number: f64, decimals: usize, comma: bool) -> (bool, String) {
+    let rounded = match round_of(number, decimals as f64, 0) {
+        Scalar::Num(n) => n,
+        _ => number,
+    };
+    let neg = rounded < 0.0;
+    let abs = rounded.abs();
+    let raw = if decimals == 0 {
+        format!("{}", abs.round() as u64)
+    } else {
+        format!("{abs:.decimals$}")
+    };
+    let body = if comma { with_commas(&raw) } else { raw };
+    (neg, body)
+}
+
+fn with_commas(raw: &str) -> String {
+    let (int_part, frac) = match raw.split_once('.') {
+        Some((int_part, frac)) => (int_part, Some(frac)),
+        None => (raw, None),
+    };
+    let digits: Vec<char> = int_part.chars().collect();
+    let mut grouped = String::new();
+    for (i, ch) in digits.iter().rev().enumerate() {
+        if i > 0 && i.is_multiple_of(3) {
+            grouped.push(',');
+        }
+        grouped.push(*ch);
+    }
+    let grouped: String = grouped.chars().rev().collect();
+    match frac {
+        Some(frac) => format!("{grouped}.{frac}"),
+        None => grouped,
+    }
+}
+
+fn baht_text(number: f64) -> Option<String> {
+    if !number.is_finite() || number < 0.0 {
+        return None;
+    }
+    let rounded = number.round();
+    if (number - rounded).abs() > 1e-9 || rounded > 1e15 {
+        return None;
+    }
+    let whole = rounded as u64;
+    if whole == 0 {
+        return Some("ศูนย์บาทถ้วน".to_string());
+    }
+    Some(format!("{}บาทถ้วน", baht_int(whole)))
+}
+
+fn baht_int(mut number: u64) -> String {
+    let mut groups = Vec::new();
+    while number > 0 {
+        groups.push(number % 1_000_000);
+        number /= 1_000_000;
+    }
+    let mut parts = Vec::new();
+    for (i, group) in groups.iter().enumerate().rev() {
+        if *group == 0 {
+            continue;
+        }
+        let mut text = baht_group(*group);
+        for _ in 0..i {
+            text.push_str("ล้าน");
+        }
+        parts.push(text);
+    }
+    parts.concat()
+}
+
+fn baht_group(number: u64) -> String {
+    const DIGIT: [&str; 10] = [
+        "ศูนย์",
+        "หนึ่ง",
+        "สอง",
+        "สาม",
+        "สี่",
+        "ห้า",
+        "หก",
+        "เจ็ด",
+        "แปด",
+        "เก้า",
+    ];
+    let d = [
+        (number / 100_000) % 10,
+        (number / 10_000) % 10,
+        (number / 1_000) % 10,
+        (number / 100) % 10,
+        (number / 10) % 10,
+        number % 10,
+    ];
+    let place = ["แสน", "หมื่น", "พัน", "ร้อย", "สิบ", ""];
+    let mut text = String::new();
+    for i in 0..6 {
+        let digit = d[i] as usize;
+        if digit == 0 {
+            continue;
+        }
+        if i == 4 {
+            if digit == 1 {
+                text.push_str("สิบ");
+            } else if digit == 2 {
+                text.push_str("ยี่สิบ");
+            } else {
+                text.push_str(DIGIT[digit]);
+                text.push_str("สิบ");
+            }
+        } else if i == 5 {
+            if digit == 1 && d[4] != 0 {
+                text.push_str("เอ็ด");
+            } else {
+                text.push_str(DIGIT[digit]);
+            }
+        } else {
+            text.push_str(DIGIT[digit]);
+            text.push_str(place[i]);
+        }
+    }
+    text
+}
+
+fn asc_text(text: &str) -> String {
+    text.chars()
+        .map(|ch| {
+            if ch == '\u{3000}' {
+                ' '
+            } else if ('\u{FF01}'..='\u{FF5E}').contains(&ch) {
+                char::from_u32(ch as u32 - 0xFEE0).unwrap_or(ch)
+            } else {
+                ch
+            }
+        })
+        .collect()
 }
 
 fn acos_of(n: f64) -> Scalar {
@@ -4398,6 +5366,9 @@ fn write_cache(el: &mut Element, val: &Scalar) {
             el.push_element(v);
         }
         Scalar::Text(s) => {
+            if !xml_text_ok(s) {
+                return;
+            }
             el.set_attr("t", "str");
             let mut v = Element::new("v");
             v.set_text(s);
