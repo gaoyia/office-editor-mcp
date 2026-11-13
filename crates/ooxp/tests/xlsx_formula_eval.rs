@@ -1719,3 +1719,138 @@ fn lookup_functions_match_excel_16() {
     assert!(!xml.contains(r#"ca="1">GETPIVOTDATA"#), "{xml}");
     assert!(!xml.contains(r#"ca="1">RTD"#), "{xml}");
 }
+
+/// 数据库函数对照 Excel 16.0 样本。库自己算，不启动电子表格。
+#[test]
+fn database_functions_match_excel_16() {
+    let path = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": "树"}),
+        json!({"ref": "B1", "value": "高度"}),
+        json!({"ref": "C1", "value": "年龄"}),
+        json!({"ref": "D1", "value": "产量"}),
+        json!({"ref": "A2", "value": "Apple"}),
+        json!({"ref": "B2", "value": 18}),
+        json!({"ref": "C2", "value": 20}),
+        json!({"ref": "D2", "value": 3}),
+        json!({"ref": "A3", "value": "Pear"}),
+        json!({"ref": "B3", "value": 12}),
+        json!({"ref": "C3", "value": 12}),
+        json!({"ref": "D3", "value": 5}),
+        json!({"ref": "A4", "value": "Apple"}),
+        json!({"ref": "B4", "value": 14}),
+        json!({"ref": "C4", "value": 15}),
+        json!({"ref": "D4", "value": 2}),
+        json!({"ref": "A5", "value": "Cherry"}),
+        json!({"ref": "B5", "value": 9}),
+        json!({"ref": "C5", "value": 8}),
+        json!({"ref": "D5", "value": 1}),
+        json!({"ref": "G1", "value": "树"}),
+        json!({"ref": "G2", "value": "Apple"}),
+        json!({"ref": "I1", "value": "高度"}),
+        json!({"ref": "J1", "value": "树"}),
+        json!({"ref": "J2", "value": "A*"}),
+        json!({"ref": "K1", "value": "树"}),
+        json!({"ref": "L1", "value": "高度"}),
+        json!({"ref": "K2", "value": "Apple"}),
+        json!({"ref": "K3", "value": "Pear"}),
+        json!({"ref": "M1", "value": "树"}),
+        json!({"ref": "N1", "value": "高度"}),
+        json!({"ref": "M2", "value": "Apple"}),
+        json!({"ref": "N2", "value": ">15"}),
+        json!({"ref": "O1", "value": "树"}),
+        json!({"ref": "O2", "value": "None"}),
+        json!({"ref": "P1", "value": "树"}),
+        json!({"ref": "P2", "value": "Pear"}),
+        json!({"ref": "Q1", "value": "高度"}),
+        json!({"ref": "Q2", "value": ">=14"}),
+        json!({"ref": "R1", "value": "树"}),
+        json!({"ref": "R2", "value": "<>Apple"}),
+        json!({"ref": "S1", "value": "树"}),
+        json!({"ref": "S2", "value": "?ear"}),
+        json!({"ref": "T1", "value": "高度"}),
+        json!({"ref": "T2", "value": 14}),
+    ];
+    let formulas = [
+        ("E1", r#"=DSUM(A1:D5,"高度",G1:G2)"#),
+        ("E2", "=DSUM(A1:D5,2,G1:G2)"),
+        ("E3", r#"=DCOUNT(A1:D5,"高度",G1:G2)"#),
+        ("E4", r#"=DCOUNTA(A1:D5,"树",G1:G2)"#),
+        ("E5", r#"=DAVERAGE(A1:D5,"高度",G1:G2)"#),
+        ("E6", r#"=DMAX(A1:D5,"高度",G1:G2)"#),
+        ("E7", r#"=DMIN(A1:D5,"高度",G1:G2)"#),
+        ("E8", r#"=DPRODUCT(A1:D5,"产量",G1:G2)"#),
+        ("E9", r#"=DSTDEV(A1:D5,"高度",G1:G2)"#),
+        ("E10", r#"=DSTDEVP(A1:D5,"高度",G1:G2)"#),
+        ("E11", r#"=DVAR(A1:D5,"高度",G1:G2)"#),
+        ("E12", r#"=DVARP(A1:D5,"高度",G1:G2)"#),
+        ("E13", r#"=DGET(A1:D5,"高度",G1:G2)"#),
+        ("E14", r#"=DGET(A1:D5,"高度",P1:P2)"#),
+        ("E15", r#"=DGET(A1:D5,"高度",O1:O2)"#),
+        ("E16", r#"=DSUM(A1:D5,"高度",M1:N2)"#),
+        ("E17", r#"=DSUM(A1:D5,"高度",K1:L3)"#),
+        ("E18", r#"=DSUM(A1:D5,"高度",J1:J2)"#),
+        ("E19", r#"=DSUM(A1:D5,"高度",I1:I1)"#),
+        ("E20", r#"=DSUM(A1:D5,"没有",G1:G2)"#),
+        ("E21", r#"=ECMA.DSUM(A1:D5,"高度",G1:G2)"#),
+        ("E22", r#"=DCOUNT(A1:D5,"树",G1:G2)"#),
+        ("E23", r#"=DAVERAGE(A1:D5,"高度",O1:O2)"#),
+        ("E24", r#"=DSUM(A1:D5,"高度",Q1:Q2)"#),
+        ("E25", r#"=DSUM(A1:D5,"高度",R1:R2)"#),
+        ("E26", r#"=DSUM(A1:D5,"高度",S1:S2)"#),
+        ("E27", r#"=DSUM(A1:D5,"高度",T1:T2)"#),
+    ];
+    for (addr, formula) in formulas {
+        cells.push(json!({"ref": addr, "formula": formula}));
+    }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:T30");
+    let num = |addr: &str, expect: f64| {
+        let got = cell(&tree, &format!("cell:Sheet1!{addr}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{addr}"));
+        assert!(
+            (got - expect).abs() < 1e-6,
+            "{addr} got {got} expect {expect}"
+        );
+    };
+    let err = |addr: &str, token: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "error", "{addr} {c}");
+        assert_eq!(c["value"], token, "{addr}");
+    };
+    num("E1", 32.0);
+    num("E2", 32.0);
+    num("E3", 2.0);
+    num("E4", 2.0);
+    num("E5", 16.0);
+    num("E6", 18.0);
+    num("E7", 14.0);
+    num("E8", 6.0);
+    num("E9", 2.8284271247461903);
+    num("E10", 2.0);
+    num("E11", 8.0);
+    num("E12", 4.0);
+    err("E13", "#NUM!");
+    num("E14", 12.0);
+    err("E15", "#VALUE!");
+    num("E16", 18.0);
+    num("E17", 44.0);
+    num("E18", 32.0);
+    err("E19", "#VALUE!");
+    err("E20", "#VALUE!");
+    assert!(cell(&tree, "cell:Sheet1!E21")["value"].is_null());
+    num("E22", 0.0);
+    err("E23", "#DIV/0!");
+    num("E24", 32.0);
+    num("E25", 21.0);
+    num("E26", 12.0);
+    num("E27", 14.0);
+}

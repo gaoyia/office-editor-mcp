@@ -2566,6 +2566,14 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 只给数据字段时返回总计。再给行字段和项时返回该组。对不上或引用不在透视里，写入 `#REF!`。其它版式不写缓存。不带 `ca="1"`
 - `RTD` 不连接服务器，写出 `#N/A`，不带 `ca="1"`
 - 不实现 `XLOOKUP`、`XMATCH`、`FILTER`、`UNIQUE`、`SORT`
+- 另外认数据库类 `DAVERAGE`、`DCOUNT`、`DCOUNTA`、`DGET`、`DMAX`、`DMIN`、`DPRODUCT`、`DSTDEV`、`DSTDEVP`、`DSUM`、`DVAR`、`DVARP`
+- 这三个参数都是区域：数据库、字段、条件区。个数不对不写缓存。`ECMA.DSUM` 这种带点的名字不求值
+- 数据库和条件区都要有表头，并且至少再有一行。字段可以是列名或从 1 起的列号。对不上写入 `#VALUE!`
+- 条件区同一行是并且，下一行是或者。空单元格不限制这一列。整行都空则这一行匹配全部记录
+- 条件认 `>`、`>=`、`<`、`<=`、`<>`、`=`，也认不区分大小写的 `*` 和 `?`。数字条件按相等比较
+- `DCOUNT` 只数数字。`DCOUNTA` 数非空。`DSUM`、`DMAX`、`DMIN`、`DPRODUCT` 在没有数字时写成 0
+- `DAVERAGE`、`DSTDEV`、`DVAR` 没有足够的数字时是 `#DIV/0!`。`DSTDEVP` 与 `DVARP` 按总体
+- `DGET` 恰好一条时返回该格。没有是 `#VALUE!`，多于一条是 `#NUM!`
 - 1900 日期系统是默认。`workbookPr` 的 `date1904="1"` 时改用 1904
 - 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
 - 屏幕上的数字格式不参与缓存。`1/3` 的 `<v>` 是完整小数

@@ -621,6 +621,7 @@ fn table_def(root: &Element, sheet: usize) -> Option<TableDef> {
     })
 }
 
+#[derive(Clone)]
 enum Fact {
     Blank,
     Ready(Scalar),
@@ -1223,20 +1224,146 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => match self.eval_lookup(other, &vals, sheet, here, mode) {
+            other => match self.eval_database(other, &vals, sheet, here) {
                 Some(done) => done,
-                None => match self.eval_text(other, &vals, sheet, here) {
+                None => match self.eval_lookup(other, &vals, sheet, here, mode) {
                     Some(done) => done,
-                    None => match self.eval_date(other, &vals, sheet, here) {
+                    None => match self.eval_text(other, &vals, sheet, here) {
                         Some(done) => done,
-                        None => match self.eval_stat(other, &vals, sheet, here) {
+                        None => match self.eval_date(other, &vals, sheet, here) {
                             Some(done) => done,
-                            None => self.eval_math(other, &vals, sheet, here, mode),
+                            None => match self.eval_stat(other, &vals, sheet, here) {
+                                Some(done) => done,
+                                None => self.eval_math(other, &vals, sheet, here, mode),
+                            },
                         },
                     },
                 },
             },
         }
+    }
+
+    /// 数据库类。不是这类函数时返回 `None`。`ECMA.DSUM` 不在此列。
+    fn eval_database(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let kind = match name {
+            "DSUM" => DbFn::Sum,
+            "DCOUNT" => DbFn::Count,
+            "DCOUNTA" => DbFn::CountA,
+            "DAVERAGE" => DbFn::Average,
+            "DMAX" => DbFn::Max,
+            "DMIN" => DbFn::Min,
+            "DPRODUCT" => DbFn::Product,
+            "DSTDEV" => DbFn::Stdev(true),
+            "DSTDEVP" => DbFn::Stdev(false),
+            "DVAR" => DbFn::Var(true),
+            "DVARP" => DbFn::Var(false),
+            "DGET" => DbFn::Get,
+            _ => return None,
+        };
+        Some(self.eval_db(kind, vals, sheet, here))
+    }
+
+    fn eval_db(&mut self, kind: DbFn, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        if vals.len() != 3 {
+            return Calc::Skip;
+        }
+        let db = match self.fact_table(&vals[0], sheet) {
+            Ok(g) => g,
+            Err(done) => return done,
+        };
+        let criteria = match self.fact_table(&vals[2], sheet) {
+            Ok(g) => g,
+            Err(done) => return done,
+        };
+        if db.len() < 2 || criteria.len() < 2 || db[0].is_empty() || criteria[0].is_empty() {
+            return ready_err(VALUE);
+        }
+        let headers: Vec<String> = db[0].iter().map(fact_header).collect();
+        let field = match self.scalar_of(&vals[1], sheet, here) {
+            Ok(Scalar::Err(token)) => return ready_err(token),
+            Ok(s) => s,
+            Err(done) => return done,
+        };
+        let Some(col) = db_field(&headers, &field) else {
+            return ready_err(VALUE);
+        };
+        let mut crit_cols = Vec::new();
+        for cell in &criteria[0] {
+            let name = fact_header(cell);
+            let Some(idx) = headers.iter().position(|h| h.eq_ignore_ascii_case(&name)) else {
+                return ready_err(VALUE);
+            };
+            crit_cols.push(idx);
+        }
+        if let Some(token) = db_criteria_error(&criteria[1..]) {
+            return ready_err(token);
+        }
+        let mut picked = Vec::new();
+        for record in db.iter().skip(1) {
+            if !db_row_matches(record, &criteria[1..], &crit_cols) {
+                continue;
+            }
+            let cell = record.get(col).cloned().unwrap_or(Fact::Blank);
+            if let Fact::Ready(Scalar::Err(token)) = cell {
+                return ready_err(token);
+            }
+            picked.push(cell);
+        }
+        match kind {
+            DbFn::Get => db_get(&picked),
+            DbFn::Count => {
+                ready_num(picked.iter().filter(|c| fact_num(c).is_some()).count() as f64)
+            }
+            DbFn::CountA => {
+                ready_num(picked.iter().filter(|c| !matches!(c, Fact::Blank)).count() as f64)
+            }
+            DbFn::Sum => ready_num(db_nums(&picked).into_iter().sum()),
+            DbFn::Product => {
+                let nums = db_nums(&picked);
+                if nums.is_empty() {
+                    ready_num(0.0)
+                } else {
+                    ready_num(nums.into_iter().product())
+                }
+            }
+            DbFn::Max => ready_num(extreme(&db_nums(&picked), true)),
+            DbFn::Min => ready_num(extreme(&db_nums(&picked), false)),
+            DbFn::Average => stat_ready(stats::average(&db_nums(&picked))),
+            DbFn::Stdev(sample) => stat_ready(stats::stdev(&db_nums(&picked), sample)),
+            DbFn::Var(sample) => stat_ready(stats::variance(&db_nums(&picked), sample)),
+        }
+    }
+
+    fn fact_table(&mut self, value: &Value, sheet: usize) -> Result<Vec<Vec<Fact>>, Calc> {
+        let rect = match single_rect(value) {
+            Some(r) => r,
+            None => return Err(ready_err(VALUE)),
+        };
+        let (r1, r2) = ordered(rect.r1, rect.r2);
+        let Some((s1, s2)) = self.resolve_span(rect, sheet) else {
+            return Err(ready_err(REF));
+        };
+        if s1 != s2 {
+            return Err(ready_err(VALUE));
+        }
+        let mut rows = Vec::new();
+        for row in r1.row..=r2.row {
+            let mut line = Vec::new();
+            for col in r1.col..=r2.col {
+                match self.cell_fact(s1, CellRef { col, row }) {
+                    Fact::Skip => return Err(Calc::Skip),
+                    other => line.push(other),
+                }
+            }
+            rows.push(line);
+        }
+        Ok(rows)
     }
 
     /// 查找与引用。不是这类函数时返回 `None`。`ECMA.VLOOKUP` 不在此列。
@@ -6534,6 +6661,119 @@ fn wild_eq(text: &str, pat: &str) -> bool {
     let text: Vec<char> = text.chars().flat_map(|ch| ch.to_lowercase()).collect();
     let pat: Vec<char> = pat.chars().flat_map(|ch| ch.to_lowercase()).collect();
     rec(&text, &pat)
+}
+
+#[derive(Clone, Copy)]
+enum DbFn {
+    Sum,
+    Count,
+    CountA,
+    Average,
+    Max,
+    Min,
+    Product,
+    Stdev(bool),
+    Var(bool),
+    Get,
+}
+
+fn fact_header(cell: &Fact) -> String {
+    match cell {
+        Fact::Ready(Scalar::Text(text)) => text.clone(),
+        Fact::Ready(Scalar::Num(n)) => fmt_num(*n),
+        Fact::Ready(Scalar::Bool(true)) => "TRUE".to_string(),
+        Fact::Ready(Scalar::Bool(false)) => "FALSE".to_string(),
+        Fact::Ready(Scalar::Err(token)) => (*token).to_string(),
+        Fact::Blank | Fact::Skip => String::new(),
+    }
+}
+
+fn db_field(headers: &[String], field: &Scalar) -> Option<usize> {
+    match field {
+        Scalar::Num(n) if n.is_finite() && n.abs() < 1e15 => {
+            let index = *n as i64;
+            if index < 1 {
+                return None;
+            }
+            let index = index as usize;
+            if index > headers.len() {
+                None
+            } else {
+                Some(index - 1)
+            }
+        }
+        Scalar::Text(name) => headers
+            .iter()
+            .position(|header| header.eq_ignore_ascii_case(name)),
+        _ => None,
+    }
+}
+
+fn db_criteria_error(rows: &[Vec<Fact>]) -> Option<&'static str> {
+    for row in rows {
+        for cell in row {
+            if let Fact::Ready(Scalar::Err(token)) = cell {
+                return Some(*token);
+            }
+        }
+    }
+    None
+}
+
+fn db_row_matches(record: &[Fact], criteria: &[Vec<Fact>], cols: &[usize]) -> bool {
+    criteria.iter().any(|row| {
+        row.iter().enumerate().all(|(i, crit)| {
+            let Fact::Ready(criteria) = crit else {
+                return true;
+            };
+            let cell = cols
+                .get(i)
+                .and_then(|col| record.get(*col))
+                .unwrap_or(&Fact::Blank);
+            db_hit(cell, criteria)
+        })
+    })
+}
+
+fn db_hit(cell: &Fact, criteria: &Scalar) -> bool {
+    if let Scalar::Text(text) = criteria {
+        let (op, rest) = criteria_op(text);
+        let pat = if op.is_empty() {
+            text.as_str()
+        } else {
+            rest.trim()
+        };
+        if (op.is_empty() || op == "=" || op == "<>") && pat.contains(['*', '?']) {
+            let matched = match cell {
+                Fact::Ready(Scalar::Text(value)) => wild_eq(value, pat),
+                _ => false,
+            };
+            return if op == "<>" { !matched } else { matched };
+        }
+    }
+    criteria_match(cell, criteria)
+}
+
+fn fact_num(cell: &Fact) -> Option<f64> {
+    match cell {
+        Fact::Ready(Scalar::Num(n)) => Some(*n),
+        _ => None,
+    }
+}
+
+fn db_nums(cells: &[Fact]) -> Vec<f64> {
+    cells.iter().filter_map(fact_num).collect()
+}
+
+fn db_get(cells: &[Fact]) -> Calc {
+    match cells {
+        [] => ready_err(VALUE),
+        [cell] => match cell {
+            Fact::Blank | Fact::Skip => ready_num(0.0),
+            Fact::Ready(value) => scalar_calc(value),
+        },
+        _ => ready_err(NUM),
+    }
 }
 
 fn criteria_match(cell: &Fact, criteria: &Scalar) -> bool {

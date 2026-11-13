@@ -25,6 +25,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-13 补跑 `xlsx-date.ps1`，Xdt1–Xdt3 通过。Excel 16.0 打开没有 Repair。假闰日、工作日和 `YEARFRAC` 与库缓存一致。`TODAY` 与当天序列一致。
 2026-11-13 补跑 `xlsx-stat.ps1`，Xst1–Xst3 通过。Excel 16.0 打开没有 Repair。计数、`PERCENTRANK` 和 `NORMDIST` 与库缓存一致。`ECMA.AVERAGE` 没有缓存。
 2026-11-13 补跑 `xlsx-lookup.ps1`，Xlk1–Xlk3 通过。Excel 16.0 打开没有 Repair。精确与近似查找、`OFFSET` 和行字段求和透视与库缓存一致。`ECMA.VLOOKUP` 没有缓存。
+2026-11-13 补跑 `xlsx-db.ps1`，Xdb1–Xdb3 通过。Excel 16.0 打开没有 Repair。`DSUM`、并且与或者、`DGET` 与库缓存一致。`ECMA.DSUM` 没有缓存。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -1203,6 +1204,16 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xlk1 | 查找 | `VLOOKUP` 精确与近似、`MATCH`、`INDEX`、`CHOOSE` 与库缓存一致。Excel 无修复 |
 | Xlk2 | 位置 | `ADDRESS`、`OFFSET` 的求和、`INDIRECT`、`COLUMN` 和数组公式里的 `TRANSPOSE` 与库缓存一致。Excel 无修复 |
 | Xlk3 | 错误 | 找不到是 `#N/A`。移出工作表是 `#REF!`。`GETPIVOTDATA` 对上甲是 15，对不上是 `#REF!`。`RTD` 是 `#N/A`。`ECMA.VLOOKUP` 没有缓存，Excel 显示 `#NAME?` |
+
+## 数据库函数
+
+用库 create 写出公式缓存，再交给 Excel 16.0 重算。脚本 `manual-check/office/cases/xlsx-db.ps1`。编号用 Xdb。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xdb1 | 聚合 | `DSUM`、`DCOUNT`、`DAVERAGE`、`DMAX` 与库缓存一致。Excel 无修复 |
+| Xdb2 | 条件 | 并且、或者、通配符和恰好一条的 `DGET` 与库缓存一致。Excel 无修复 |
+| Xdb3 | 错误 | 多条 `DGET` 是 `#NUM!`。没有记录是 `#VALUE!`。没有数字的平均是 `#DIV/0!`。`ECMA.DSUM` 没有缓存，Excel 显示 `#NAME?` |
 
 ## 共享公式改主格
 
