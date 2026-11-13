@@ -1309,7 +1309,10 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 - `merges` 是与 inspect 范围有交集的 `<mergeCell/@ref>`，规范化成 `A1:B2` 这种闭区间字符串，按左上角行列升序。报完整合并区，不裁到 inspect 范围。没有则为 `[]`。
 - `dataValidations` 列出该表全部 `<dataValidation>`（ECMA-376 §18.3.1.32），不按 inspect 范围过滤。条数通常少，点名该表单元格切片时就要能拿到规则 id。
   每项字段顺序：`id`、`sqref`、`type`，然后按需跟 `operator`、`formula1`、`formula2`、`allowBlank`、`dropdown`、`showInputMessage`、
-  `showErrorMessage`、`errorStyle`、`errorTitle`、`error`、`promptTitle`、`prompt`。
+  `showErrorMessage`、`errorStyle`、`errorTitle`、`error`、`promptTitle`、`prompt`，能展开时再跟 `items`，能判断时最后是 `results`。
+  `items` 只在 `list` 上出现：公式是引号里的逗号列表，或本表一块连续区域时，按这个顺序给出每一项。别的公式不给 `items`。
+  `results` 每项是 `ref`、`ok`。`ok` 表示这个格子按已保存的值是否通过这条规则。空格子看 `allowBlank`。
+  `whole` / `decimal` / `date` / `time` / `textLength` 只在公式是纯数字时给 `results`。`custom` 和 `none` 不给。不写回文件。
   `sqref` 是字符串数组：把 XML `sqref`（`ST_Sqref`，空格分隔）拆开，能解析成 A1 的规范化成 `A1` 或 `A1:B2`，解析不了的段落原样留下；按 XML 原文顺序，不排序。
   `type` 取 `ST_DataValidationType`（`none` / `whole` / `decimal` / `list` / `date` / `time` / `textLength` / `custom`），缺属性当作 `none`。
   `operator` 仅在 XML 有该属性时出现。`formula1` / `formula2` 是对应子元素的原文，当字符串，不求值、不补 `=`；没有该子元素则省略。
@@ -1609,7 +1612,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组 / 数据表公式，再列宽行高隐藏与合并，
 再背景图、打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
-不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式和数据验证的公式仍不求值。只含行字段与求和的透视表会把合计写进 `sheetData`。不刷新外部连接。
+不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式命中和数据验证是否通过只出现在 inspect，不写进文件。公式文本仍不改。只含行字段与求和的透视表会把合计写进 `sheetData`。不刷新外部连接。
 `cells[]` 出现 `dataTable` 报 `InvalidField`。`dataTableRef` 与 `formula` 一起用，规则与 `setCell` 相同。
 `cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
 `namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。

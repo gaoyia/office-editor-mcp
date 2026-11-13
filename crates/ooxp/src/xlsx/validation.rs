@@ -17,7 +17,7 @@ pub(crate) fn count(root: &Element) -> usize {
         .unwrap_or(0)
 }
 
-pub(crate) fn inspect(root: &Element, sheet: &str) -> Value {
+pub(crate) fn inspect(root: &Element, sheet: &str, sst: &[String]) -> Value {
     let Some(parent) = root.child_by_local("dataValidations") else {
         return json!([]);
     };
@@ -27,12 +27,12 @@ pub(crate) fn inspect(root: &Element, sheet: &str) -> Value {
         .into_iter()
         .enumerate()
     {
-        out.push(inspect_one(el, sheet, i + 1));
+        out.push(inspect_one(el, sheet, i + 1, root, sst));
     }
     Value::Array(out)
 }
 
-fn inspect_one(el: &Element, sheet: &str, n: usize) -> Value {
+fn inspect_one(el: &Element, sheet: &str, n: usize, root: &Element, sst: &[String]) -> Value {
     let mut obj = Map::new();
     obj.insert("id".into(), json!(format!("sheet:{sheet}/dv:{n}")));
     obj.insert(
@@ -84,7 +84,204 @@ fn inspect_one(el: &Element, sheet: &str, n: usize) -> Value {
     if let Some(v) = el.attr("prompt") {
         obj.insert("prompt".into(), json!(v));
     }
+    if let Some(items) = list_items(el, root, sst) {
+        obj.insert("items".into(), json!(items));
+    }
+    if let Some(results) = rule_results(el, root, sst) {
+        obj.insert("results".into(), json!(results));
+    }
     Value::Object(obj)
+}
+
+const RESULT_CAP: u64 = 4096;
+
+fn list_items(el: &Element, root: &Element, sst: &[String]) -> Option<Vec<String>> {
+    if el.attr("type").unwrap_or("none") != "list" {
+        return None;
+    }
+    let formula = el.child_by_local("formula1")?.text_content();
+    let text = formula.trim().trim_start_matches('=').trim();
+    if let Some(inner) = quoted_list(text) {
+        return Some(inner);
+    }
+    let (a, b) = local_range(text)?;
+    let mut items = Vec::new();
+    for cell in span_cells(a, b)? {
+        if let Some(text) = cell_text(root, cell, sst) {
+            items.push(text);
+        }
+    }
+    Some(items)
+}
+
+fn quoted_list(text: &str) -> Option<Vec<String>> {
+    let inner = text.strip_prefix('"')?.strip_suffix('"')?;
+    Some(inner.split(',').map(|s| s.replace("\"\"", "\"")).collect())
+}
+
+fn local_range(text: &str) -> Option<(CellRef, CellRef)> {
+    if text.contains('"') || text.contains('(') {
+        return None;
+    }
+    let body = match text.rsplit_once('!') {
+        Some((sheet, rest)) if !sheet.is_empty() && !rest.is_empty() => rest,
+        Some(_) => return None,
+        None => text,
+    };
+    a1::parse_range(&body.replace('$', "")).ok()
+}
+
+fn span_cells(a: CellRef, b: CellRef) -> Option<Vec<CellRef>> {
+    let rows = u64::from(a.row.abs_diff(b.row)) + 1;
+    let cols = u64::from(a.col.abs_diff(b.col)) + 1;
+    if rows.saturating_mul(cols) > RESULT_CAP {
+        return None;
+    }
+    let mut out = Vec::new();
+    for row in a.row.min(b.row)..=a.row.max(b.row) {
+        for col in a.col.min(b.col)..=a.col.max(b.col) {
+            out.push(CellRef { col, row });
+        }
+    }
+    Some(out)
+}
+
+fn rule_results(el: &Element, root: &Element, sst: &[String]) -> Option<Vec<Value>> {
+    let kind = el.attr("type").unwrap_or("none");
+    if kind == "none" || kind == "custom" {
+        return None;
+    }
+    let sqref = inspect_sqref(el.attr("sqref").unwrap_or(""));
+    let cells = sqref_cells(&sqref)?;
+    let allow_blank = crate::xml::attr_is_true_trimmed(el, "allowBlank");
+    let items = list_items(el, root, sst);
+    if kind == "list" && items.is_none() {
+        return None;
+    }
+    let op = el.attr("operator").unwrap_or("between");
+    let f1 = el
+        .child_by_local("formula1")
+        .map(|f| f.text_content())
+        .unwrap_or_default();
+    let f2 = el.child_by_local("formula2").map(|f| f.text_content());
+    let limit = if kind == "list" {
+        None
+    } else {
+        Some((plain_num(&f1)?, f2.as_deref().and_then(plain_num)))
+    };
+    if kind != "list"
+        && (op == "between" || op == "notBetween")
+        && limit.and_then(|p| p.1).is_none()
+    {
+        return None;
+    }
+    let mut out = Vec::new();
+    for cell in cells {
+        let text = cell_text(root, cell, sst);
+        let blank = text.as_deref().is_none_or(str::is_empty);
+        let ok = if blank {
+            allow_blank
+        } else {
+            let text = text.unwrap_or_default();
+            match kind {
+                "list" => items
+                    .as_ref()
+                    .is_some_and(|items| items.iter().any(|item| same_item(&text, item))),
+                "whole" => text
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|n| n.fract() == 0.0)
+                    .is_some_and(|n| num_ok(op, n, limit)),
+                "decimal" | "date" | "time" => text
+                    .parse::<f64>()
+                    .ok()
+                    .is_some_and(|n| num_ok(op, n, limit)),
+                "textLength" => num_ok(op, text.chars().count() as f64, limit),
+                _ => return None,
+            }
+        };
+        out.push(json!({ "ref": a1::format_cell(cell.col, cell.row), "ok": ok }));
+    }
+    Some(out)
+}
+
+fn num_ok(op: &str, n: f64, limit: Option<(f64, Option<f64>)>) -> bool {
+    let Some((a, b)) = limit else {
+        return false;
+    };
+    match op {
+        "lessThan" => n < a,
+        "lessThanOrEqual" => n <= a,
+        "equal" => n == a,
+        "notEqual" => n != a,
+        "greaterThan" => n > a,
+        "greaterThanOrEqual" => n >= a,
+        "between" => {
+            let Some(b) = b else { return false };
+            n >= a.min(b) && n <= a.max(b)
+        }
+        "notBetween" => {
+            let Some(b) = b else { return false };
+            n < a.min(b) || n > a.max(b)
+        }
+        _ => false,
+    }
+}
+
+fn same_item(value: &str, item: &str) -> bool {
+    if value.eq_ignore_ascii_case(item) {
+        return true;
+    }
+    matches!(
+        (value.parse::<f64>(), item.parse::<f64>()),
+        (Ok(a), Ok(b)) if a == b
+    )
+}
+
+fn plain_num(text: &str) -> Option<f64> {
+    let text = text.trim().trim_start_matches('=');
+    if text.is_empty()
+        || text.contains(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-' | '+')))
+    {
+        return None;
+    }
+    text.parse().ok()
+}
+
+fn sqref_cells(sqref: &Value) -> Option<Vec<CellRef>> {
+    let parts = sqref.as_array()?;
+    let mut out = Vec::new();
+    for part in parts {
+        let (a, b) = a1::parse_range(part.as_str()?).ok()?;
+        out.extend(span_cells(a, b)?);
+    }
+    Some(out)
+}
+
+fn cell_text(root: &Element, cell: CellRef, sst: &[String]) -> Option<String> {
+    let data = root.child_by_local("sheetData")?;
+    let el = super::cell::find_cell(data, cell)?;
+    let t = el.attr("t").unwrap_or("");
+    let raw = el.child_by_local("v").map(|v| v.text_content());
+    match t {
+        "s" => {
+            let idx = raw?.trim().parse::<usize>().ok()?;
+            Some(sst.get(idx).cloned().unwrap_or_default())
+        }
+        "inlineStr" | "str" => Some(
+            el.child_by_local("is")
+                .map(|e| e.text_content())
+                .or(raw)
+                .unwrap_or_default(),
+        ),
+        "b" => Some(if raw.as_deref() == Some("1") {
+            "TRUE".to_string()
+        } else {
+            "FALSE".to_string()
+        }),
+        "e" => None,
+        _ => raw.filter(|s| !s.trim().is_empty()),
+    }
 }
 
 fn inspect_sqref(raw: &str) -> Value {

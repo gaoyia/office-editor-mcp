@@ -1312,6 +1312,7 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xv3 | 多区域 | `sqref` 为 `A1 C1` 时 inspect 的 `sqref` 为 `["A1","C1"]`，两条都能看见下拉 |
 | Xv4 | 删除 | `deleteDataValidation` 后该格不再有校验，Excel 无修复 |
 | Xv5 | 缺字段 | 只给 `op` 与 `id` 的 `insertDataValidation` 得 `InvalidField`，未写文件。不强制开 Excel |
+| Xv6 | 是否通过 | ✅ 列表 `1,2,3`。A1 为 1 通过，B1 为 9 不通过。Excel 16.0 无修复，`Validation.Value` 与 `ok` 一致 |
 
 ## 条件格式
 

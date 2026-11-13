@@ -325,7 +325,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert("merges".into(), merges);
                     obj.insert(
                         "dataValidations".into(),
-                        validation::inspect(&sheet_doc.root, &sh.name),
+                        validation::inspect(&sheet_doc.root, &sh.name, &sst),
                     );
                     obj.insert(
                         "conditionalFormats".into(),

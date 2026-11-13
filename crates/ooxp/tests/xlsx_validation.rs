@@ -151,6 +151,8 @@ fn insert_list_and_inspect() {
     assert_eq!(dv["formula1"], json!("\"1,2,3\""));
     assert_eq!(dv["dropdown"], json!(true));
     assert_eq!(dv["allowBlank"], json!(true));
+    assert_eq!(dv["items"], json!(["1", "2", "3"]));
+    assert_eq!(dv["results"], json!([{ "ref": "A1", "ok": true }]));
     assert_eq!(object_keys(dv)[0..3], ["id", "sqref", "type"]);
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(xml.contains("dataValidations"), "{xml}");

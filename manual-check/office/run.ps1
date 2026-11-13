@@ -173,6 +173,7 @@ $order = @(
     'xlsx-data-table'
     'xlsx-formula-rest'
     'xlsx-validation'
+    'xlsx-dv-result'
     'xlsx-conditional-format'
     'xlsx-cf-hits'
     'xlsx-id-pin'
