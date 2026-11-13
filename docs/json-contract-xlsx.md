@@ -1325,8 +1325,9 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   每项字段顺序：`id`、`sqref`、`type`、`priority`，然后按需跟 `operator`、`formulas`、`text`、`timePeriod`、`rank`、`percent`、`bottom`、
   `aboveAverage`、`equalAverage`、`stdDev`、`stopIfTrue`、`dxf`、`colorScale`、`dataBar`、`iconSet`，能判断时最后是 `hits`。
   `hits` 是按格子里已经保存的值，这条规则自己命中的 A1。不看优先级，也不看 `stopIfTrue`。不写回单元格。
-  能判断的类型：`cellIs`（公式是纯数字）、文本四类、`top10`、`aboveAverage`。空格子在比较里当 0，但 `equal` 不算命中，`notEqual` 算命中。
-  `expression`、`colorScale`、`dataBar`、`iconSet`，以及公式不是纯数字的 `cellIs`，不给 `hits`。区域超过 4096 格时只看文件里已经有的格子。
+  能判断的类型：`cellIs`、`expression`、文本四类、`top10`、`aboveAverage`。空格子在比较里当 0，但 `equal` 不算命中，`notEqual` 算命中。
+  `expression` 和不是纯数字的 `cellIs` 用公式引擎，公式相对区域左上角平移。结果为真或非 0 算命中。求不了的公式不给 `hits`。
+  `colorScale`、`dataBar`、`iconSet` 不给 `hits`。区域超过 4096 格时只看文件里已经有的格子。
   `sqref` 取所属 `<conditionalFormatting>/@sqref`，拆分数组规则与数据验证相同。同一块里多条规则重复同一份 `sqref`。
   `type` 取 `ST_CfType`（§18.18.12）原文；缺属性则省略该键。`priority` 取 XML 整数；缺属性则省略。
   `operator` 仅在 XML 有该属性时出现，取值 `ST_ConditionalFormattingOperator`（§18.18.15）。

@@ -221,6 +221,107 @@ enum Tok {
 }
 
 /// 重新打开并写入缓存。没有写出新缓存时保留原来的字节，避免无公式文件被重打包。
+/// 条件格式公式的求值结果。`Unknown` 表示这格算不了。
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum FormulaOutcome {
+    Num(f64),
+    Bool(bool),
+    Text,
+    Err,
+    Unknown,
+}
+
+/// 用现有公式引擎看一条公式在指定格子上的结果。不写回文件。
+pub(crate) struct FormulaSession {
+    book: Book,
+    sheet: usize,
+}
+
+impl FormulaSession {
+    pub(crate) fn open(pkg: &Package, sheet_name: &str) -> Result<Option<Self>, Error> {
+        let wb_part = opc::office_document_part(pkg)?;
+        let wb_rels = Relationships::from_package(pkg, &wb_part)?;
+        let wb_doc = xml::parse(pkg.get(&wb_part)?)?;
+        let date1904 = wb_doc
+            .root
+            .child_by_local("workbookPr")
+            .and_then(|e| e.attr("date1904"))
+            .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+        let manual = wb_doc
+            .root
+            .child_by_local("calcPr")
+            .and_then(|e| e.attr("calcMode"))
+            .is_some_and(|v| v.eq_ignore_ascii_case("manual"));
+        let sst = inspect::load_shared_strings(pkg, &wb_part, &wb_rels)?;
+        let listed = sheet_list(&wb_doc.root, &wb_rels, &wb_part)?;
+        let mut sheets = Vec::new();
+        let mut sheet_docs = Vec::new();
+        for (name, part, kind) in &listed {
+            if *kind != "worksheet" {
+                continue;
+            }
+            let doc = xml::parse(pkg.get(part)?)?;
+            let rec = load_sheet(&doc.root, &sst);
+            sheets.push(Sheet {
+                name: name.clone(),
+                cells: rec,
+                origin: sheet_origin(&doc.root),
+                hidden_rows: hidden_rows(&doc.root),
+            });
+            sheet_docs.push((part.clone(), doc));
+        }
+        let Some(sheet) = sheets
+            .iter()
+            .position(|s| s.name.eq_ignore_ascii_case(sheet_name))
+        else {
+            return Ok(None);
+        };
+        let names = load_names(&wb_doc.root);
+        let tables = load_tables(pkg, &sheet_docs, &sheets)?;
+        let sheet_names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
+        let pivots = super::pivot::pivot_covers(pkg, &sheet_docs, &sheet_names, &sst)?;
+        let (externals, _) = load_externals(pkg, &wb_part, None)?;
+        let book = Book {
+            sheets,
+            names,
+            tables,
+            date1904,
+            memo: HashMap::new(),
+            stack: Vec::new(),
+            overrides: HashMap::new(),
+            cyclic: HashSet::new(),
+            volatile: HashSet::new(),
+            manual,
+            externals,
+            ext_used: HashMap::new(),
+            pivots,
+        };
+        Ok(Some(Self { book, sheet }))
+    }
+
+    pub(crate) fn eval(&mut self, formula: &str, here: CellRef) -> FormulaOutcome {
+        let body = formula.trim().trim_start_matches('=');
+        if body.is_empty() {
+            return FormulaOutcome::Unknown;
+        }
+        let Some(expr) = parse_expr(body) else {
+            return FormulaOutcome::Unknown;
+        };
+        let calc = match self.book.eval_expr(&expr, self.sheet, here, Mode::Scalar) {
+            Calc::Ready(v) => self.book.coerce(v, self.sheet, here, Mode::Scalar),
+            Calc::Skip => return FormulaOutcome::Unknown,
+        };
+        match calc {
+            Calc::Ready(Value::Scalar(Scalar::Num(n))) if n.is_finite() => FormulaOutcome::Num(n),
+            Calc::Ready(Value::Scalar(Scalar::Bool(b))) => FormulaOutcome::Bool(b),
+            Calc::Ready(Value::Scalar(Scalar::Text(_))) => FormulaOutcome::Text,
+            Calc::Ready(Value::Scalar(Scalar::Err(_)))
+            | Calc::Ready(Value::Scalar(Scalar::Num(_))) => FormulaOutcome::Err,
+            Calc::Ready(_) | Calc::Skip => FormulaOutcome::Unknown,
+        }
+    }
+}
+
 pub(crate) fn fill_saved(bytes: Vec<u8>, base_dir: Option<&Path>) -> Result<Vec<u8>, Error> {
     let original = bytes.clone();
     let mut pkg = Package::open_bytes(bytes)?;

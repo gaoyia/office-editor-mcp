@@ -1340,6 +1340,10 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - Excel 16.0：`xlsx-cf-hits.ps1`，1 PASS / 0 FAIL
   - `A1=2`、`A2=0`、`A1:A3` 大于 0。inspect `hits` 为 `A1`
   - 打开无 Repair。A1 有填充，A2 与区域外的 C1 没有
+- **Xn7** ✅
+  - Excel 16.0：`xlsx-cf-formula.ps1`，1 PASS / 0 FAIL
+  - `A1:A3` 公式 `A1>1` 的 `hits` 为 `A3`。`C1:C3` 大于 `B1` 的 `hits` 为 `C1`、`C3`
+  - 打开无 Repair。A3 有填充，A1 没有。C1 与 C3 同色，C2 没有
 
 ## 条件格式与迷你图字段
 

@@ -176,6 +176,7 @@ $order = @(
     'xlsx-dv-result'
     'xlsx-conditional-format'
     'xlsx-cf-hits'
+    'xlsx-cf-formula'
     'xlsx-id-pin'
     'xlsx-chart-id-pin'
     'xlsx-cf-spark-style'

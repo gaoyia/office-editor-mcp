@@ -437,3 +437,75 @@ fn text_without_text_and_top10_operator_rejected() {
     assert_eq!(err2.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+/// expression 与非常量 cellIs 的命中。对照 Excel 16.0：公式相对区域左上角平移。
+#[test]
+fn expression_and_formula_cell_is_hits() {
+    let src = tmp("expr-src");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": -1 },
+            { "ref": "A3", "value": 5 },
+            { "ref": "B1", "value": -5 },
+            { "ref": "B2", "value": 100 },
+            { "ref": "B3", "value": 0 }
+        ]}] }
+    })
+    .to_string())
+    .unwrap();
+    let out = tmp("expr-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A3",
+                "type": "expression",
+                "formulas": ["A1>1"]
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A3",
+                "type": "expression",
+                "formulas": ["B1>0"]
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A3",
+                "type": "cellIs",
+                "operator": "greaterThan",
+                "formulas": ["B1"]
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A3",
+                "type": "expression",
+                "formulas": ["1/0"]
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A3",
+                "type": "expression",
+                "formulas": ["SUM("]
+            }
+        ]),
+    )
+    .unwrap();
+    let sh = inspect_sheet(&out);
+    let rules = sh["conditionalFormats"].as_array().unwrap();
+    assert_eq!(rules[0]["hits"], json!(["A3"]));
+    assert_eq!(rules[1]["hits"], json!(["A2"]));
+    assert_eq!(rules[2]["hits"], json!(["A1", "A3"]));
+    assert_eq!(rules[3]["hits"], json!([]));
+    assert!(rules[4].get("hits").is_none(), "{}", rules[4]);
+}

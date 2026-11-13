@@ -3,6 +3,7 @@
 use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
+use super::eval::{FormulaOutcome, FormulaSession};
 use super::layout;
 use super::request::{
     check_cf_fields, icon_set_count, CfExtraCheck, CfOperator, CfType, CfvoSpec, ColorScaleSpec,
@@ -25,6 +26,7 @@ pub(crate) fn inspect(
     sheet: &str,
     styles: &style::Stylebook,
     sst: &[String],
+    eval: &mut Option<FormulaSession>,
 ) -> Value {
     let mut out = Vec::new();
     let mut n = 0usize;
@@ -40,6 +42,7 @@ pub(crate) fn inspect(
                 styles,
                 root,
                 sst,
+                eval,
             ));
         }
     }
@@ -54,8 +57,9 @@ fn inspect_one(
     styles: &style::Stylebook,
     root: &Element,
     sst: &[String],
+    eval: &mut Option<FormulaSession>,
 ) -> Value {
-    let hits = rule_hits(el, root, sst, &sqref);
+    let hits = rule_hits(el, root, sst, &sqref, eval);
     let mut obj = Map::new();
     obj.insert("id".into(), json!(format!("sheet:{sheet}/cf:{n}")));
     obj.insert("sqref".into(), sqref);
@@ -206,15 +210,23 @@ fn inspect_sqref(raw: &str) -> Value {
 
 const HIT_CAP: u64 = 4096;
 
-/// 按已保存的格子值判断这条规则命中哪些格。判断不了就返回 `None`，不写 `hits`。
-fn rule_hits(el: &Element, root: &Element, sst: &[String], sqref: &Value) -> Option<Vec<String>> {
+/// 按已保存的格子值和公式引擎判断这条规则命中哪些格。判断不了就返回 `None`，不写 `hits`。
+fn rule_hits(
+    el: &Element,
+    root: &Element,
+    sst: &[String],
+    sqref: &Value,
+    eval: &mut Option<FormulaSession>,
+) -> Option<Vec<String>> {
     let kind = el.attr("type")?;
     let cells = sqref_cells(root, sqref);
     if cells.is_empty() {
         return None;
     }
+    let anchor = sqref_anchor(sqref).unwrap_or(cells[0]);
     let hits = match kind {
-        "cellIs" => cell_is_hits(el, root, &cells)?,
+        "cellIs" => cell_is_hits(el, root, &cells, anchor, eval)?,
+        "expression" => expression_hits(el, &cells, anchor, eval)?,
         "containsText" | "notContainsText" | "beginsWith" | "endsWith" => {
             text_hits(kind, el, root, sst, &cells)
         }
@@ -223,6 +235,15 @@ fn rule_hits(el: &Element, root: &Element, sst: &[String], sqref: &Value) -> Opt
         _ => return None,
     };
     Some(hits)
+}
+
+fn sqref_anchor(sqref: &Value) -> Option<CellRef> {
+    let text = sqref.as_array()?.first()?.as_str()?;
+    let (a, b) = a1::parse_range(text).ok()?;
+    Some(CellRef {
+        col: a.col.min(b.col),
+        row: a.row.min(b.row),
+    })
 }
 
 fn sqref_cells(root: &Element, sqref: &Value) -> Vec<CellRef> {
@@ -330,36 +351,149 @@ fn plain_num(text: &str) -> Option<f64> {
     text.parse().ok()
 }
 
-fn cell_is_hits(el: &Element, root: &Element, cells: &[CellRef]) -> Option<Vec<String>> {
+fn cell_is_hits(
+    el: &Element,
+    root: &Element,
+    cells: &[CellRef],
+    anchor: CellRef,
+    eval: &mut Option<FormulaSession>,
+) -> Option<Vec<String>> {
     let op = el.attr("operator")?;
     let formulas: Vec<String> = el
         .children_by_local("formula")
         .into_iter()
         .map(|f| f.text_content())
         .collect();
-    let a = plain_num(formulas.first()?)?;
-    let b = if op == "between" || op == "notBetween" {
-        Some(plain_num(formulas.get(1)?)?)
+    let needs_engine = formulas.iter().any(|f| plain_num(f).is_none());
+    if !needs_engine {
+        let a = plain_num(formulas.first()?)?;
+        let b = if op == "between" || op == "notBetween" {
+            Some(plain_num(formulas.get(1)?)?)
+        } else {
+            None
+        };
+        return Some(cells_passing(root, cells, op, |_| Some((a, b))));
+    }
+    let eval = eval.as_mut()?;
+    let mut known = false;
+    let hits = cells_passing(root, cells, op, |cell| {
+        let a = formula_number(eval, formulas.first()?, anchor, cell);
+        let b = if op == "between" || op == "notBetween" {
+            formula_number(eval, formulas.get(1)?, anchor, cell)
+        } else {
+            Some(0.0)
+        };
+        match (a, b) {
+            (Some(a), Some(b)) => {
+                known = true;
+                let second = if op == "between" || op == "notBetween" {
+                    Some(b)
+                } else {
+                    None
+                };
+                Some((a, second))
+            }
+            _ => None,
+        }
+    });
+    if known {
+        Some(hits)
     } else {
         None
-    };
+    }
+}
+
+fn cells_passing(
+    root: &Element,
+    cells: &[CellRef],
+    op: &str,
+    mut threshold: impl FnMut(CellRef) -> Option<(f64, Option<f64>)>,
+) -> Vec<String> {
     let mut hits = Vec::new();
     for cell in cells {
-        let num = cached_num(root, *cell);
-        let blank =
-            sheet_cell(root, *cell).is_none() || num.is_none() && cached_is_blank(root, *cell);
-        let hit = match (blank, num) {
-            (true, _) if op == "equal" => false,
-            (true, _) if op == "notEqual" => true,
-            (true, _) => num_op(op, 0.0, a, b),
-            (_, Some(n)) => num_op(op, n, a, b),
-            _ => false,
+        let Some((a, b)) = threshold(*cell) else {
+            continue;
         };
-        if hit {
+        if cell_is_one(op, root, *cell, a, b) {
             hits.push(a1::format_cell(cell.col, cell.row));
         }
     }
-    Some(hits)
+    hits
+}
+
+fn cell_is_one(op: &str, root: &Element, cell: CellRef, a: f64, b: Option<f64>) -> bool {
+    let num = cached_num(root, cell);
+    let blank = sheet_cell(root, cell).is_none() || num.is_none() && cached_is_blank(root, cell);
+    match (blank, num) {
+        (true, _) if op == "equal" => false,
+        (true, _) if op == "notEqual" => true,
+        (true, _) => num_op(op, 0.0, a, b),
+        (_, Some(n)) => num_op(op, n, a, b),
+        _ => false,
+    }
+}
+
+fn formula_number(
+    eval: &mut FormulaSession,
+    formula: &str,
+    anchor: CellRef,
+    cell: CellRef,
+) -> Option<f64> {
+    if let Some(n) = plain_num(formula) {
+        return Some(n);
+    }
+    let shifted = super::formula::shift_a1_formula(formula, anchor, cell);
+    match eval.eval(&shifted, cell) {
+        FormulaOutcome::Num(n) if n.is_finite() => Some(n),
+        FormulaOutcome::Bool(true) => Some(1.0),
+        FormulaOutcome::Bool(false) => Some(0.0),
+        FormulaOutcome::Num(_)
+        | FormulaOutcome::Text
+        | FormulaOutcome::Err
+        | FormulaOutcome::Unknown => None,
+    }
+}
+
+fn expression_hits(
+    el: &Element,
+    cells: &[CellRef],
+    anchor: CellRef,
+    eval: &mut Option<FormulaSession>,
+) -> Option<Vec<String>> {
+    let formula = el
+        .children_by_local("formula")
+        .into_iter()
+        .next()?
+        .text_content();
+    let eval = eval.as_mut()?;
+    let mut known = false;
+    let mut hits = Vec::new();
+    for cell in cells {
+        let shifted = super::formula::shift_a1_formula(&formula, anchor, *cell);
+        let hit = match eval.eval(&shifted, *cell) {
+            FormulaOutcome::Unknown => None,
+            FormulaOutcome::Bool(b) => {
+                known = true;
+                Some(b)
+            }
+            FormulaOutcome::Num(n) if n.is_finite() => {
+                known = true;
+                Some(n != 0.0)
+            }
+            FormulaOutcome::Num(_) | FormulaOutcome::Text | FormulaOutcome::Err => {
+                known = true;
+                Some(false)
+            }
+        };
+        if hit == Some(true) {
+            hits.push(a1::format_cell(cell.col, cell.row));
+        }
+    }
+    if known {
+        Some(hits)
+    } else {
+        None
+    }
 }
 
 fn cached_is_blank(root: &Element, cell: CellRef) -> bool {
