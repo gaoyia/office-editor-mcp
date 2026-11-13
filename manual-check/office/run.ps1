@@ -166,6 +166,7 @@ $order = @(
     'xlsx-db'
     'xlsx-fin'
     'xlsx-eng'
+    'xlsx-cube'
     'xlsx-data-table'
     'xlsx-formula-rest'
     'xlsx-validation'

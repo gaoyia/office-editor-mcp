@@ -2594,6 +2594,9 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - `CONVERT` 只认 `lbm` 与 `kg`、`C` 与 `F`。其它单位是 `#N/A`。`CONVERT(1,"lbm","kg")` 是 0.45359237，`CONVERT(100,"C","F")` 是 212
 - `DELTA` 第二参省略当作 0，相等是 1。`GESTEP` 第二参省略当作 0，大于等于是 1
 - `ERF` 一个参数是该点的值，两个参数是两点之差。`ERFC(1)` 是 1 减 `ERF(1)`
+- 没有立方体连接时，`CUBEKPIMEMBER`、`CUBEMEMBERPROPERTY`、`CUBERANKEDMEMBER` 三个参数，`CUBEMEMBER`、`CUBESET`、`CUBEVALUE` 两个参数，`CUBESETCOUNT` 一个参数，都写入 `#N/A`，不带 `ca`
+- 参数个数和上面不一致时不写缓存。不连接立方体，不写 `volatileDependencies`，不写 `calcChain`。`ECMA.CUBEVALUE` 不求值
+- 少一个参数的 `CUBEMEMBER` 会让 Excel 16.0 在打开时要求修复。这种公式仍不写缓存，但不放进要交给 Excel 打开的工作簿
 - 1900 日期系统是默认。`workbookPr` 的 `date1904="1"` 时改用 1904
 - 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
 - 屏幕上的数字格式不参与缓存。`1/3` 的 `<v>` 是完整小数

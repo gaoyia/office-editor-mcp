@@ -1230,21 +1230,24 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => match self.eval_engineer(other, &vals, sheet, here) {
+            other => match self.eval_cube(other, &vals) {
                 Some(done) => done,
-                None => match self.eval_finance(other, &vals, sheet, here) {
+                None => match self.eval_engineer(other, &vals, sheet, here) {
                     Some(done) => done,
-                    None => match self.eval_database(other, &vals, sheet, here) {
+                    None => match self.eval_finance(other, &vals, sheet, here) {
                         Some(done) => done,
-                        None => match self.eval_lookup(other, &vals, sheet, here, mode) {
+                        None => match self.eval_database(other, &vals, sheet, here) {
                             Some(done) => done,
-                            None => match self.eval_text(other, &vals, sheet, here) {
+                            None => match self.eval_lookup(other, &vals, sheet, here, mode) {
                                 Some(done) => done,
-                                None => match self.eval_date(other, &vals, sheet, here) {
+                                None => match self.eval_text(other, &vals, sheet, here) {
                                     Some(done) => done,
-                                    None => match self.eval_stat(other, &vals, sheet, here) {
+                                    None => match self.eval_date(other, &vals, sheet, here) {
                                         Some(done) => done,
-                                        None => self.eval_math(other, &vals, sheet, here, mode),
+                                        None => match self.eval_stat(other, &vals, sheet, here) {
+                                            Some(done) => done,
+                                            None => self.eval_math(other, &vals, sheet, here, mode),
+                                        },
                                     },
                                 },
                             },
@@ -1253,6 +1256,22 @@ impl Book {
                 },
             },
         }
+    }
+
+    /// 没有立方体连接时，样本里的参数个数写成 `#N/A`，不带 `ca`。
+    /// 个数不对不写缓存。`ECMA.CUBEVALUE` 不在此列。
+    fn eval_cube(&mut self, name: &str, vals: &[Value]) -> Option<Calc> {
+        let done = match name {
+            "CUBEKPIMEMBER" | "CUBEMEMBERPROPERTY" | "CUBERANKEDMEMBER" if vals.len() == 3 => {
+                ready_err(NA)
+            }
+            "CUBEMEMBER" | "CUBESET" | "CUBEVALUE" if vals.len() == 2 => ready_err(NA),
+            "CUBESETCOUNT" if vals.len() == 1 => ready_err(NA),
+            "CUBEKPIMEMBER" | "CUBEMEMBER" | "CUBEMEMBERPROPERTY" | "CUBERANKEDMEMBER"
+            | "CUBESET" | "CUBESETCOUNT" | "CUBEVALUE" => Calc::Skip,
+            _ => return None,
+        };
+        Some(done)
     }
 
     /// 工程类。不是这类函数时返回 `None`。`ECMA.DEC2BIN` 不在此列。

@@ -2032,3 +2032,49 @@ fn engineering_functions_match_excel_16() {
     num("E30", -549755813888.0);
     err("E31", "#VALUE!");
 }
+
+#[test]
+fn cube_functions_without_connection_match_excel_16() {
+    let path = book();
+    let formulas = [
+        ("A1", "=CUBEKPIMEMBER(\"NoCube\",\"Sales\",\"2\")"),
+        ("A2", "=CUBEMEMBER(\"NoCube\",\"[Measures].[Sales]\")"),
+        (
+            "A3",
+            "=CUBEMEMBERPROPERTY(\"NoCube\",\"[Measures].[Sales]\",\"MEMBER_CAPTION\")",
+        ),
+        ("A4", "=CUBERANKEDMEMBER(\"NoCube\",\"[Product].[All]\",1)"),
+        ("A5", "=CUBESET(\"NoCube\",\"[Product].[All]\")"),
+        ("A6", "=CUBESETCOUNT(A5)"),
+        ("A7", "=CUBEVALUE(\"NoCube\",\"[Measures].[Sales]\")"),
+        ("A8", "=ECMA.CUBEVALUE(\"NoCube\",\"[Measures].[Sales]\")"),
+        ("A9", "=CUBEMEMBER(\"NoCube\")"),
+    ];
+    let cells: Vec<_> = formulas
+        .into_iter()
+        .map(|(addr, formula)| json!({"ref": addr, "formula": formula}))
+        .collect();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:A9");
+    for addr in ["A1", "A2", "A3", "A4", "A5", "A6", "A7"] {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "error", "{addr} {c}");
+        assert_eq!(c["value"], "#N/A", "{addr}");
+    }
+    assert!(cell(&tree, "cell:Sheet1!A8")["value"].is_null());
+    assert!(cell(&tree, "cell:Sheet1!A9")["value"].is_null());
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(!xml.contains("ca="), "{xml}");
+    assert!(!xml.contains("volatileDependencies"));
+    let file = std::fs::File::open(&path).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    assert!(zip.by_name("xl/volatileDependencies.xml").is_err());
+    assert!(zip.by_name("xl/calcChain.xml").is_err());
+}
