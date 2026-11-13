@@ -1004,7 +1004,7 @@ OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `man
 ## 页眉页脚
 
 准备一份 Excel 亲手另存的样例：某张 `worksheet` 上至少有奇数页页眉文字。不要用库 `create` 产物当唯一样例。
-Excel 16.0 亲手插入的页眉图通常只有 VML `legacyDrawingHF`。DrawingML 页眉图由 `insertPicture` 往槽位写入后再让 Excel 打开。Xh5 仍只换 DrawingML。只有旧式 VML、没有 `drawingHF` 的查看、换图和删除见 Xh6 到 Xh8。
+Excel 16.0 亲手插入的页眉图通常只有 VML `legacyDrawingHF`。DrawingML 页眉图由 `insertPicture` 往槽位写入后再让 Excel 打开。Xh5 仍只换 DrawingML。只有旧式 VML、没有 `drawingHF` 的查看、换图和删除见 Xh6 到 Xh11。
 手测脚本建议 `manual-check/office/cases/xlsx-headerfooter.ps1`。编号用 Xh。
 
 - **Xh1**
@@ -1034,6 +1034,17 @@ Excel 16.0 亲手插入的页眉图通常只有 VML `legacyDrawingHF`。DrawingM
 - **Xh8**
   - 检查：删旧式页眉图
   - 通过标准：`deleteLegacyPicture` 后 Excel 无修复，页眉原文仍含 `&G`，图片文件名为空
+- **Xh9**
+  - 检查：奇数页左、中、右和页脚
+  - 通过标准：Excel 亲手插入这六张旧式页眉图后，名单里有 `LH`、`CH`、`RH`、`LF`、`CF`、`RF`
+  - `legacyPictureCount` 为 6，这些图不进 `pictures`
+- **Xh10**
+  - 检查：换一张后 Excel 另存
+  - 通过标准：只换 `RH`。Excel 另存后无修复，没有 `drawingHF`
+  - `RH` 的字节是新图，其余槽位仍是旧图
+- **Xh11**
+  - 检查：删页脚旧式图
+  - 通过标准：`deleteLegacyPicture` 删 `LF` 后 Excel 无修复，左页脚原文仍含 `&G`，图片文件名为空
 
 ## 图表工作表
 

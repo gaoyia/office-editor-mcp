@@ -1,4 +1,4 @@
-# xlsx 页眉页脚：docs/checklist-xlsx.md 的 Xh1–Xh8。
+# xlsx 页眉页脚：docs/checklist-xlsx.md 的 Xh1–Xh11。
 # 源文件：Excel 亲手另存，奇数页页眉/页脚有字。DrawingML 页眉图由 insertPicture 写入。
 
 $ErrorActionPreference = 'Stop'
@@ -188,3 +188,127 @@ $fileL3 = [string]$wsL3.PageSetup.CenterHeaderPicture.Filename
 Close-AllWorkbooks $excel
 $xh8 = ($capL3 -notmatch 'Repair') -and ($headerL3 -match 'G') -and ([string]::IsNullOrEmpty($fileL3))
 Add-Check 'xlsx-Xh8' $xh8 "caption=$capL3 header=$headerL3 file=$fileL3"
+
+function Test-SameBytes([string]$left, [string]$right) {
+    $a = [IO.File]::ReadAllBytes($left)
+    $b = [IO.File]::ReadAllBytes($right)
+    if ($a.Length -ne $b.Length) { return $false }
+    for ($i = 0; $i -lt $a.Length; $i++) {
+        if ($a[$i] -ne $b[$i]) { return $false }
+    }
+    return $true
+}
+
+function Export-LegacyBytes([string]$book, [string]$id, [string]$out) {
+    if (Test-Path $out) { Remove-Item $out -Force }
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'exportMedia'
+        path = $book.Replace('\', '/')
+        id = $id
+        output = $out.Replace('\', '/')
+    } 'xlsx-hf-legacy-slot-export' | Out-Null
+}
+
+$slotsBook = Get-OutPath 'xlsx-hf-legacy-slots.xlsx'
+if (Test-Path $slotsBook) { Remove-Item $slotsBook -Force }
+$wbS = $excel.Workbooks.Add()
+$psS = $wbS.Worksheets.Item(1).PageSetup
+$psS.LeftHeaderPicture.Filename = $pngB
+$psS.CenterHeaderPicture.Filename = $pngB
+$psS.RightHeaderPicture.Filename = $pngB
+$psS.LeftFooterPicture.Filename = $pngB
+$psS.CenterFooterPicture.Filename = $pngB
+$psS.RightFooterPicture.Filename = $pngB
+$psS.LeftHeader = '&G'
+$psS.CenterHeader = '&G'
+$psS.RightHeader = '&G'
+$psS.LeftFooter = '&G'
+$psS.CenterFooter = '&G'
+$psS.RightFooter = '&G'
+$wbS.SaveAs($slotsBook, 51)
+Close-AllWorkbooks $excel
+
+$treeS = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $slotsBook.Replace('\', '/'); format = 'xlsx'
+    scope = @{ headerFooter = $true; legacyPictures = $true; pictures = $true }
+} 'xlsx-hf-legacy-slots'
+$sheetS = @($treeS.sheets) | Where-Object { $_.kind -eq 'worksheet' } | Select-Object -First 1
+$ids = @()
+$drawOnOdd = 0
+foreach ($slot in @($sheetS.headerFooters)) {
+    $drawOnOdd += @($slot.pictures).Count
+    foreach ($pic in @($slot.legacyPictures)) { $ids += [string]$pic.shapeId }
+}
+$need = @('LH', 'CH', 'RH', 'LF', 'CF', 'RF')
+$missing = @($need | Where-Object { $ids -notcontains $_ })
+$xh9 = ($sheetS.legacyPictureCount -eq 6) -and ($missing.Count -eq 0) -and ($drawOnOdd -eq 0)
+Add-Check 'xlsx-Xh9' $xh9 "count=$($sheetS.legacyPictureCount) ids=$($ids -join ',') missing=$($missing -join ',')"
+
+$rh = $null
+$lf = $null
+foreach ($slot in @($sheetS.headerFooters)) {
+    foreach ($pic in @($slot.legacyPictures)) {
+        if ($pic.shapeId -eq 'RH') { $rh = $pic }
+        if ($pic.shapeId -eq 'LF') { $lf = $pic }
+    }
+}
+$replacedS = Get-OutPath 'xlsx-hf-legacy-rh.xlsx'
+if (Test-Path $replacedS) { Remove-Item $replacedS -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $slotsBook.Replace('\', '/')
+    output = $replacedS.Replace('\', '/')
+    ops = @(@{
+        op = 'replaceLegacyPicture'
+        id = $rh.id
+        file = $pngA.Replace('\', '/')
+    })
+} 'xlsx-hf-legacy-replace-rh' | Out-Null
+$savedS = Get-OutPath 'xlsx-hf-legacy-rh-saved.xlsx'
+if (Test-Path $savedS) { Remove-Item $savedS -Force }
+$wbRh = Open-ExcelBook $excel $replacedS
+$wbRh.SaveAs($savedS, 51)
+Close-AllWorkbooks $excel
+$wbSaved = Open-ExcelBook $excel $savedS
+$capSaved = [string]$wbSaved.Windows.Item(1).Caption
+Close-AllWorkbooks $excel
+$treeSaved = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $savedS.Replace('\', '/'); format = 'xlsx'
+    scope = @{ headerFooter = $true; legacyPictures = $true }
+} 'xlsx-hf-legacy-saved'
+$sheetSaved = @($treeSaved.sheets) | Select-Object -First 1
+$savedCount = $sheetSaved.legacyPictureCount
+$expRh = Get-OutPath 'xlsx-hf-legacy-rh.png'
+$expLh = Get-OutPath 'xlsx-hf-legacy-lh.png'
+Export-LegacyBytes $savedS $rh.id $expRh
+$lhId = $null
+foreach ($slot in @($sheetSaved.headerFooters)) {
+    foreach ($pic in @($slot.legacyPictures)) {
+        if ($pic.shapeId -eq 'LH') { $lhId = [string]$pic.id }
+    }
+}
+Export-LegacyBytes $savedS $lhId $expLh
+$xh10 = ($capSaved -notmatch 'Repair') -and ($savedCount -eq 6) -and (Test-SameBytes $pngA $expRh) -and (Test-SameBytes $pngB $expLh)
+Add-Check 'xlsx-Xh10' $xh10 "caption=$capSaved count=$savedCount rh=$(Test-SameBytes $pngA $expRh) lh=$(Test-SameBytes $pngB $expLh)"
+
+$deletedF = Get-OutPath 'xlsx-hf-legacy-lf.xlsx'
+if (Test-Path $deletedF) { Remove-Item $deletedF -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $savedS.Replace('\', '/')
+    output = $deletedF.Replace('\', '/')
+    ops = @(@{
+        op = 'deleteLegacyPicture'
+        id = $lf.id
+    })
+} 'xlsx-hf-legacy-delete-lf' | Out-Null
+$wbF = Open-ExcelBook $excel $deletedF
+$capF = [string]$wbF.Windows.Item(1).Caption
+$psF = $wbF.Worksheets.Item(1).PageSetup
+$footerF = [string]$psF.LeftFooter
+$fileF = [string]$psF.LeftFooterPicture.Filename
+Close-AllWorkbooks $excel
+$xh11 = ($capF -notmatch 'Repair') -and ($footerF -match 'G') -and ([string]::IsNullOrEmpty($fileF))
+Add-Check 'xlsx-Xh11' $xh11 "caption=$capF footer=$footerF file=$fileF"

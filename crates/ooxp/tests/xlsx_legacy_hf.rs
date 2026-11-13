@@ -100,6 +100,24 @@ fn vml_rels() -> String {
 }
 
 fn inject(src: &Path, dest: &Path) {
+    let mut png_b = PNG_A.to_vec();
+    png_b.push(0x01);
+    inject_extra(
+        src,
+        dest,
+        vec![
+            ("xl/drawings/vmlDrawing1.vml".into(), vml_xml().into_bytes()),
+            (
+                "xl/drawings/_rels/vmlDrawing1.vml.rels".into(),
+                vml_rels().into_bytes(),
+            ),
+            ("xl/media/image9.png".into(), PNG_A.to_vec()),
+            ("xl/media/image10.png".into(), png_b),
+        ],
+    );
+}
+
+fn inject_extra(src: &Path, dest: &Path, extra: Vec<(String, Vec<u8>)>) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut entries = Vec::new();
@@ -183,15 +201,7 @@ fn inject(src: &Path, dest: &Path) {
                 .into_bytes(),
         ));
     }
-    let mut png_b = PNG_A.to_vec();
-    png_b.push(0x01);
-    entries.push(("xl/drawings/vmlDrawing1.vml".into(), vml_xml().into_bytes()));
-    entries.push((
-        "xl/drawings/_rels/vmlDrawing1.vml.rels".into(),
-        vml_rels().into_bytes(),
-    ));
-    entries.push(("xl/media/image9.png".into(), PNG_A.to_vec()));
-    entries.push(("xl/media/image10.png".into(), png_b));
+    entries.extend(extra);
 
     let mut out = Cursor::new(Vec::new());
     {
@@ -424,4 +434,150 @@ fn bad_id_and_svg_are_rejected() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+fn part_bytes(path: &Path, name: &str) -> Vec<u8> {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name(name).unwrap();
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).unwrap();
+    data
+}
+
+fn export_bytes(path: &Path, id: &str) -> Vec<u8> {
+    let exported = tmp("exp").with_extension("bin");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "exportMedia",
+        "path": path.to_string_lossy(),
+        "id": id,
+        "output": exported.to_string_lossy()
+    })
+    .to_string())
+    .unwrap();
+    std::fs::read(exported).unwrap()
+}
+
+fn shape_xml(id: &str) -> String {
+    format!(
+        r##"<v:shape id="{id}" o:spid="_x0000_s1025" type="#_x0000_t75"><v:imagedata o:relid="rId1" o:title="a"/></v:shape>"##
+    )
+}
+
+fn one_image_rels() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image9.png"/>
+</Relationships>"#
+        .to_string()
+}
+
+fn book_with(tag: &str, vml: &str, rels: &str, media: Vec<(String, Vec<u8>)>) -> PathBuf {
+    let src = create_book(tag);
+    let path = tmp(&format!("{tag}-vml")).with_extension("xlsx");
+    let mut extra = vec![
+        (
+            "xl/drawings/vmlDrawing1.vml".into(),
+            vml.as_bytes().to_vec(),
+        ),
+        (
+            "xl/drawings/_rels/vmlDrawing1.vml.rels".into(),
+            rels.as_bytes().to_vec(),
+        ),
+    ];
+    extra.extend(media);
+    inject_extra(&src, &path, extra);
+    path
+}
+
+#[test]
+fn lists_all_six_odd_shape_ids() {
+    let vml = format!(
+        r##"<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+{}{}{}{}{}{}
+</xml>"##,
+        shape_xml("LH"),
+        shape_xml("CH"),
+        shape_xml("RH"),
+        shape_xml("LF"),
+        shape_xml("CF"),
+        shape_xml("RF"),
+    );
+    let path = book_with(
+        "six",
+        &vml,
+        &one_image_rels(),
+        vec![("xl/media/image9.png".into(), PNG_A.to_vec())],
+    );
+    let tree = inspect(
+        &path,
+        json!({ "headerFooter": true, "legacyPictures": true }),
+    );
+    assert_eq!(tree["legacyPictureCount"], 6);
+    let slots = tree["sheets"][0]["headerFooters"].as_array().unwrap();
+    let header: Vec<&str> = slots[0]["legacyPictures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["shapeId"].as_str().unwrap())
+        .collect();
+    let footer: Vec<&str> = slots[1]["legacyPictures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["shapeId"].as_str().unwrap())
+        .collect();
+    assert_eq!(header, ["LH", "CH", "RH"]);
+    assert_eq!(footer, ["LF", "CF", "RF"]);
+    assert!(slots[2]["legacyPictures"].as_array().unwrap().is_empty());
+}
+
+#[test]
+fn shared_image_replace_leaves_the_other_shape() {
+    let vml = format!(
+        r##"<?xml version="1.0" encoding="UTF-8"?>
+<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+{}{}
+</xml>"##,
+        shape_xml("CH"),
+        shape_xml("LF"),
+    );
+    let src = book_with(
+        "share",
+        &vml,
+        &one_image_rels(),
+        vec![("xl/media/image9.png".into(), PNG_A.to_vec())],
+    );
+    let file = tmp("new").with_extension("png");
+    let mut bytes = PNG_A.to_vec();
+    bytes.push(0x02);
+    std::fs::write(&file, &bytes).unwrap();
+    let out = tmp("share-out").with_extension("xlsx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "replaceLegacyPicture",
+            "id": "sheet:Sheet1/hf:odd:header/legacyPic:CH",
+            "file": file.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    assert_eq!(
+        export_bytes(&out, "sheet:Sheet1/hf:odd:header/legacyPic:CH"),
+        bytes
+    );
+    assert_eq!(
+        export_bytes(&out, "sheet:Sheet1/hf:odd:footer/legacyPic:LF"),
+        PNG_A
+    );
+    let vml_after = part_text(&out, "xl/drawings/vmlDrawing1.vml");
+    assert_eq!(
+        vml_after.matches(r#"o:relid="rId1""#).count(),
+        1,
+        "{vml_after}"
+    );
+    assert_eq!(part_bytes(&out, "xl/media/image9.png"), PNG_A);
 }
