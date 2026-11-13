@@ -1,5 +1,7 @@
 //! 工作表 `x14:sparklineGroups`：inspect 名单，apply 写 `extLst`。
 
+use std::collections::HashMap;
+
 use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
@@ -11,6 +13,7 @@ use super::request::{
 use super::style;
 use crate::chart;
 use crate::error::{Error, ErrorKind};
+use crate::opc::Package;
 use crate::xml::{Element, Node};
 
 /// MS-XLSX §2.2.4.12。Excel 16.0 另存中间一段为小写 `4fd2`。
@@ -26,15 +29,63 @@ pub(crate) fn count(root: &Element) -> usize {
     groups(root).len()
 }
 
-pub(crate) fn inspect(root: &Element, sheet: &str) -> Value {
+pub(crate) struct CellCache {
+    sheets: HashMap<String, HashMap<(u32, u32), Value>>,
+}
+
+impl CellCache {
+    pub(crate) fn load(
+        pkg: &Package,
+        sheets: &[(&str, &str, &str)],
+        sst: &[String],
+    ) -> Result<Self, Error> {
+        let mut out = HashMap::new();
+        for (name, part, kind) in sheets {
+            if *kind != "worksheet" {
+                continue;
+            }
+            let doc = crate::xml::parse(pkg.get(part)?)?;
+            let mut cells = HashMap::new();
+            if let Some(data) = doc.root.child_by_local("sheetData") {
+                let mut err = None;
+                super::formula::for_each_cell(data, |here, el| {
+                    if err.is_some() {
+                        return;
+                    }
+                    let t = el.attr("t").unwrap_or("");
+                    match super::inspect::classify(
+                        t,
+                        el.child_by_local("v"),
+                        el.child_by_local("is"),
+                        el.child_by_local("f").is_some(),
+                        sst,
+                        &format!("{name}!{}", a1::format_cell(here.col, here.row)),
+                    ) {
+                        Ok((_, value)) => {
+                            cells.insert((here.col, here.row), value);
+                        }
+                        Err(e) => err = Some(e),
+                    }
+                });
+                if let Some(e) = err {
+                    return Err(e);
+                }
+            }
+            out.insert(name.to_ascii_lowercase(), cells);
+        }
+        Ok(Self { sheets: out })
+    }
+}
+
+pub(crate) fn inspect(root: &Element, sheet: &str, cells: &CellCache) -> Value {
     let mut out = Vec::new();
     for (i, g) in groups(root).into_iter().enumerate() {
-        out.push(inspect_one(g, sheet, i + 1));
+        out.push(inspect_one(g, sheet, i + 1, cells));
     }
     Value::Array(out)
 }
 
-fn inspect_one(g: &Element, sheet: &str, n: usize) -> Value {
+fn inspect_one(g: &Element, sheet: &str, n: usize, cells: &CellCache) -> Value {
     let mut obj = Map::new();
     obj.insert("id".into(), json!(format!("sheet:{sheet}/spark:{n}")));
     obj.insert("index".into(), json!(n));
@@ -81,7 +132,7 @@ fn inspect_one(g: &Element, sheet: &str, n: usize) -> Value {
     let mut items = Vec::new();
     if let Some(list) = g.child_by_local("sparklines") {
         for el in list.children_by_local("sparkline") {
-            items.push(inspect_sparkline(el));
+            items.push(inspect_sparkline(el, sheet, cells));
         }
     }
     obj.insert("sparklines".into(), Value::Array(items));
@@ -111,7 +162,7 @@ fn inspect_colors(g: &Element) -> Option<Value> {
     }
 }
 
-fn inspect_sparkline(el: &Element) -> Value {
+fn inspect_sparkline(el: &Element, sheet: &str, cells: &CellCache) -> Value {
     let refer = match child_text(el, "sqref") {
         Some(raw) => match a1::parse_range(&raw) {
             Ok((a, b)) if a == b => json!(a1::format_range(a, b)),
@@ -124,9 +175,63 @@ fn inspect_sparkline(el: &Element) -> Value {
         .map(Value::String)
         .unwrap_or(Value::Null);
     let mut obj = Map::new();
+    let values = if let Value::String(raw) = &formula {
+        range_values(raw, sheet, cells)
+    } else {
+        None
+    };
     obj.insert("ref".into(), refer);
     obj.insert("formula".into(), formula);
+    if let Some(values) = values {
+        obj.insert("values".into(), Value::Array(values));
+    }
     Value::Object(obj)
+}
+
+/// 公式必须是一张已知表上的连续区域。先按行，再从左到右。没有缓存的格子是 null。
+fn range_values(formula: &str, here: &str, cells: &CellCache) -> Option<Vec<Value>> {
+    let (named, body) = split_formula(formula)?;
+    let sheet = named.unwrap_or_else(|| here.to_string());
+    let map = cells.sheets.get(&sheet.to_ascii_lowercase())?;
+    let (start, end) = a1::parse_range(body).ok()?;
+    let mut out = Vec::new();
+    for row in start.row..=end.row {
+        for col in start.col..=end.col {
+            out.push(map.get(&(col, row)).cloned().unwrap_or(Value::Null));
+        }
+    }
+    Some(out)
+}
+
+fn split_formula(raw: &str) -> Option<(Option<String>, &str)> {
+    let text = raw.trim().trim_start_matches('=');
+    if text.is_empty() {
+        return None;
+    }
+    if let Some(rest) = text.strip_prefix('\'') {
+        let mut name = String::new();
+        let mut chars = rest.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '\'' {
+                if chars.as_str().starts_with('\'') {
+                    name.push('\'');
+                    chars.next();
+                    continue;
+                }
+                let body = chars.as_str().strip_prefix('!')?;
+                return Some((Some(name), body));
+            }
+            name.push(ch);
+        }
+        return None;
+    }
+    if let Some((name, body)) = text.split_once('!') {
+        if name.is_empty() || body.is_empty() || name.contains(':') {
+            return None;
+        }
+        return Some((Some(name.to_string()), body));
+    }
+    Some((None, text))
 }
 
 pub(crate) fn apply_insert(

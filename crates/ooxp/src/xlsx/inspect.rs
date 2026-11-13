@@ -105,6 +105,15 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         .iter()
         .map(|s| (s.name.clone(), s.part.clone()))
         .collect();
+    let spark_cells = if want_sparklines {
+        let refs: Vec<(&str, &str, &str)> = sheets
+            .iter()
+            .map(|s| (s.name.as_str(), s.part.as_str(), s.kind))
+            .collect();
+        super::sparkline::CellCache::load(&pkg, &refs, &sst)?
+    } else {
+        super::sparkline::CellCache::load(&pkg, &[], &sst)?
+    };
 
     let mut sheet_json = Vec::new();
     let mut picture_count = 0usize;
@@ -270,7 +279,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             if want_sparklines {
                 obj.insert(
                     "sparklines".into(),
-                    super::sparkline::inspect(&sheet_doc.root, &sh.name),
+                    super::sparkline::inspect(&sheet_doc.root, &sh.name, &spark_cells),
                 );
             }
             if want_ole {

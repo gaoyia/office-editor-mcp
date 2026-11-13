@@ -1167,7 +1167,11 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `colors` 字段顺序：`series`、`negative`、`axis`、`markers`、`first`、`last`、`high`、`low`。
   每项是颜色对象，规则与单元格 `color` 相同；没有对应子元素则省略该键。没有任一条颜色子元素则省略 `colors`。
   `sparklines` 是组内 `<x14:sparkline>` 数组，按文档顺序。
-  每项字段顺序：`ref`、`formula`。`ref` 取 `xm:sqref` 文本，能解析成单格则规范化成列字母加大写行号；解析不了或缺失则为 `null`。`formula` 取 `xm:f` 原文，缺则为 `null`。
+  每项字段顺序：`ref`、`formula`，能读到数据范围时再跟 `values`。
+  `ref` 取 `xm:sqref` 文本，能解析成单格则规范化成列字母加大写行号；解析不了或缺失则为 `null`。`formula` 取 `xm:f` 原文，缺则为 `null`。
+  `values` 来自该范围里已经写入的格子缓存，不新求值，也不写回迷你图。
+  范围先按行从上到下，同一行从左到右。空格和没有 `<v>` 的格子是 `null`。数字、布尔、文本和错误字符串与该格 `value` 相同。
+  公式不是一张表上的一块连续区域，或表名对不上，则省略 `values`。
   不把 `xr2:uid`、日期轴公式或折线画进树。docx / pptx 的 `scope` 里出现 `sparklines` 报 `InvalidField`。
 - `scope.oleObjects` 为 `true` 时，每张 `worksheet` 带 `oleObjects`。没有嵌入对象时为空数组。不依赖单元格切片。
   按该表 `<oleObjects>` 里被收入的 `oleObject` 文档顺序（`mc:AlternateContent` 只进第一个 `Choice`）。

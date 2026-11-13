@@ -118,10 +118,12 @@ $treeIns = Invoke-OoxpTree @{
     scope = @{ sparklines = $true }
 } 'xlsx-xsk-inspect-inserted'
 $g0 = @($treeIns.sheets[0].sparklines | Where-Object { $_ }) | Select-Object -First 1
+$insItem = @($g0.sparklines | Where-Object { $_ }) | Select-Object -First 1
 $insType = [string]$g0.type
-$insFormula = [string]((@($g0.sparklines | Where-Object { $_ }) | Select-Object -First 1).formula)
-$xsk2ok = ($cap -notmatch 'Repair') -and ($sk.Count -ge 1) -and ($sk.Type -eq 1) -and ($sk.Source -match 'B1:F1') -and ($insType -eq 'line') -and ($insFormula -match 'B1:F1')
-Add-Check 'xlsx-Xsk2' $xsk2ok "caption=$cap n=$($sk.Count) type=$($sk.Type) src=$($sk.Source) inspect=$insType $insFormula"
+$insFormula = [string]$insItem.formula
+$insValues = @($insItem.values | ForEach-Object { [string]$_ }) -join ','
+$xsk2ok = ($cap -notmatch 'Repair') -and ($sk.Count -ge 1) -and ($sk.Type -eq 1) -and ($sk.Source -match 'B1:F1') -and ($insType -eq 'line') -and ($insFormula -match 'B1:F1') -and ($insValues -eq '1,2,3,4,5')
+Add-Check 'xlsx-Xsk2' $xsk2ok "caption=$cap n=$($sk.Count) type=$($sk.Type) src=$($sk.Source) inspect=$insType $insFormula values=$insValues"
 Close-AllWorkbooks $excel
 
 $sid = [string]$g0.id

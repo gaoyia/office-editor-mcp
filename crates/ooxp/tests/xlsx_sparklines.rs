@@ -206,9 +206,10 @@ fn insert_line_inspect_set_delete() {
     assert_eq!(groups[0]["displayEmptyCellsAs"], "gap");
     let items = groups[0]["sparklines"].as_array().unwrap();
     assert_eq!(items.len(), 1);
-    assert_eq!(object_keys(&items[0]), ["ref", "formula"]);
+    assert_eq!(object_keys(&items[0]), ["ref", "formula", "values"]);
     assert_eq!(items[0]["ref"], "A1");
     assert_eq!(items[0]["formula"], "Sheet1!B1:F1");
+    assert_eq!(items[0]["values"], json!([1, 2, 3, 4, 5]));
 
     let set_out = tmp("set");
     apply(
@@ -226,6 +227,7 @@ fn insert_line_inspect_set_delete() {
     let g = &tree_set["sheets"][0]["sparklines"][0];
     assert_eq!(g["type"], "column");
     assert_eq!(g["sparklines"][0]["formula"], "Sheet1!B1:D1");
+    assert_eq!(g["sparklines"][0]["values"], json!([1, 2, 3]));
     let sheet_set = part_text(&set_out, "xl/worksheets/sheet1.xml");
     assert!(sheet_set.contains("type=\"column\""));
 
@@ -568,4 +570,55 @@ fn custom_axis_without_manual_rejected() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
+}
+
+#[test]
+fn sparkline_values_follow_cached_cells_and_stay_out_of_the_package() {
+    let path = tmp("values");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [
+            { "name": "Sheet1", "cells": [
+                { "ref": "B1", "value": 1 },
+                { "ref": "D1", "formula": "=1/0" }
+            ] },
+            { "name": "Sheet2", "cells": [] }
+        ] }
+    })
+    .to_string())
+    .unwrap();
+    let out = tmp("values-out");
+    apply(
+        &path,
+        &out,
+        json!([
+            { "op": "insertSparkline", "id": "sheet:Sheet1", "ref": "A1", "formula": "B1:D1" },
+            { "op": "insertSparkline", "id": "sheet:Sheet2", "ref": "A1", "formula": "Sheet1!B1" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_sparks(&out);
+    let g = &tree["sheets"][0]["sparklines"][0]["sparklines"][0];
+    assert_eq!(g["values"], json!([1, null, "#DIV/0!"]));
+    let other = &tree["sheets"][1]["sparklines"][0]["sparklines"][0];
+    assert_eq!(other["values"], json!([1]));
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(!xml.contains("values"), "{xml}");
+
+    let bad = tmp("values-bad");
+    apply(
+        &out,
+        &bad,
+        json!([{
+            "op": "setSparkline",
+            "id": "sheet:Sheet1/spark:1",
+            "formula": "SUM(B1)"
+        }]),
+    )
+    .unwrap();
+    let item = &inspect_sparks(&bad)["sheets"][0]["sparklines"][0]["sparklines"][0];
+    assert!(item.get("values").is_none(), "{item}");
+    assert_eq!(item["formula"], "SUM(B1)");
 }
