@@ -10120,8 +10120,23 @@ fn refresh_chart_element(
 ) -> bool {
     let mut changed = false;
     if let Some(formula) = el.child_by_local("f").map(|f| f.text_content()) {
-        if let Some((si, start, end)) = parse_chart_ref(&formula, names) {
-            if let Some(values) = chart_values(&sheet_docs[si].1.root, start, end, sst) {
+        if let Some((lo, hi, start, end)) = parse_chart_ref(&formula, names) {
+            let mut values = Vec::new();
+            let mut any = false;
+            for (_, doc) in sheet_docs.iter().take(hi + 1).skip(lo) {
+                match chart_values(&doc.root, start, end, sst) {
+                    Some(part) => {
+                        any = true;
+                        values.extend(part);
+                    }
+                    None => {
+                        for _ in 0..chart_span_len(start, end) {
+                            values.push(Scalar::Num(0.0));
+                        }
+                    }
+                }
+            }
+            if any {
                 let cache = if el.child_by_local("numCache").is_some() {
                     el.child_by_local_mut("numCache")
                 } else {
@@ -10141,19 +10156,47 @@ fn refresh_chart_element(
     changed
 }
 
-fn parse_chart_ref(formula: &str, names: &[String]) -> Option<(usize, CellRef, CellRef)> {
+fn parse_chart_ref(formula: &str, names: &[String]) -> Option<(usize, usize, CellRef, CellRef)> {
     let text = formula.trim().trim_start_matches('=');
     let (sheet, range) = text.rsplit_once('!')?;
-    if sheet.contains(':') || sheet.contains('[') {
+    if sheet.contains('[') {
         return None;
     }
-    let sheet = sheet.trim().trim_matches('\'').replace("''", "'");
-    let si = names
-        .iter()
-        .position(|name| name.eq_ignore_ascii_case(&sheet))?;
+    let (lo, hi) = chart_sheet_span(sheet, names)?;
     let range = range.replace('$', "");
     let (start, end) = a1::parse_range(&range).ok()?;
-    Some((si, start, end))
+    Some((lo, hi, start, end))
+}
+
+/// `表1:表2` 或 `'表1:表2'`。没有冒号时两端是同一张表。两端都要对上工作簿里的表名。
+fn chart_sheet_span(sheet: &str, names: &[String]) -> Option<(usize, usize)> {
+    let sheet = sheet.trim();
+    let (left, right) = if let Some(rest) = sheet.strip_prefix('\'') {
+        let end = rest.rfind('\'')?;
+        let inner = rest[..end].replace("''", "'");
+        match inner.split_once(':') {
+            Some((a, b)) => (a.to_string(), b.to_string()),
+            None => (inner.clone(), inner),
+        }
+    } else if let Some((a, b)) = sheet.split_once(':') {
+        (a.to_string(), b.to_string())
+    } else {
+        let one = sheet.to_string();
+        (one.clone(), one)
+    };
+    let find = |n: &str| {
+        names
+            .iter()
+            .position(|name| name.eq_ignore_ascii_case(n.trim()))
+    };
+    let s1 = find(&left)?;
+    let s2 = find(&right)?;
+    Some(if s1 <= s2 { (s1, s2) } else { (s2, s1) })
+}
+
+fn chart_span_len(start: CellRef, end: CellRef) -> usize {
+    let (r1, r2) = ordered(start, end);
+    ((r2.row - r1.row + 1) * (r2.col - r1.col + 1)) as usize
 }
 
 fn chart_values(

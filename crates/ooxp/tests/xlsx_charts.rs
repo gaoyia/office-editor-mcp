@@ -691,6 +691,52 @@ fn union_formula_and_3d_reject() {
 }
 
 #[test]
+fn chart_cache_rewrites_3d_ref() {
+    let src = create_book("3d-cache");
+    let with_sheet = tmp("3d-sheet");
+    apply(
+        &src,
+        &with_sheet,
+        json!([
+            { "op": "insertSheet", "id": "xlsx:workbook", "name": "Sheet2" },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "col",
+                "from": "E2",
+                "dataFrom": "A10",
+                "series": [{ "name": "Q1", "categories": ["甲"], "values": [1] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let three = tmp("3d-f");
+    rewrite_part(&with_sheet, &three, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11", "Sheet1:Sheet2!$B$11", 1)
+    });
+    let out = tmp("3d-cache-out");
+    apply(
+        &three,
+        &out,
+        json!([
+            { "op": "setCell", "id": "cell:Sheet1!B11", "value": 4 },
+            { "op": "setCell", "id": "cell:Sheet2!B11", "value": 7 }
+        ]),
+    )
+    .unwrap();
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains("Sheet1:Sheet2!$B$11"), "{xml}");
+    assert!(
+        xml.contains(r#"<c:pt idx="0"><c:v>4</c:v></c:pt>"#),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<c:pt idx="1"><c:v>7</c:v></c:pt>"#),
+        "{xml}"
+    );
+}
+
+#[test]
 fn insert_stock_surface_ofpie() {
     let src = create_book("rare");
     let out = tmp("ins-rare");

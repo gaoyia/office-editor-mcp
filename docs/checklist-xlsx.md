@@ -155,6 +155,10 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
   - COM `SpaceBefore=12`，`Font.Spacing=2`
   - `textAnchor=just`。`lnSpc.type=lines` 得 `InvalidField`
 - **Xc1–Xc7** ✅
+- **Xc8** ✅
+  - Excel 16.0：`xlsx-chart-3d.ps1`，1 PASS / 0 FAIL
+  - 系列公式 `Sheet1:Sheet2!$B$11`。两张表改成 4 和 7 后，缓存按表顺序是 4、7
+  - 打开无 Repair，系列值 4、7
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
   - 改系列为 100/200/300 无修复
