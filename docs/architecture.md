@@ -278,7 +278,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可插、删、改工作表文本框（`xdr:sp` `txBox`）、无 `txBox` 的形状、连接线（`xdr:cxnSp`）与 SmartArt（diagram `graphicFrame`）：改字只动 `xdr:txBody` 或 data 部件可见点；文字格式走 `setShapeFormat`；几何走锚点。
 也可插改删工作表 drawing 公式框（`a14:m`），并可改已有公式框的锚点与尺寸；`setMath` 仍只改字。不进 `textBoxes`。
 插 SmartArt 再新建 `/xl/diagrams/` 四件套，关系写在 drawing `.rels`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。
-往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
+往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算。依赖排得全时重写 `xl/calcChain.xml`，排不全就删掉。
 `setCellStyle` 可改 `styles.xml`，不求值公式。也可用 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 写 `cols`、`row/@ht` 与 `mergeCells`：只改被点名的列、行与合并区，不算最适列宽，不按列宽反推 `twoCell` 图尺寸。
 也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可新建数据表或改已有主格的 `TABLE` 输入格。单元格公式、数据表和本机外部引用里库能算的写入缓存。不改已有数据表区域的大小。
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。

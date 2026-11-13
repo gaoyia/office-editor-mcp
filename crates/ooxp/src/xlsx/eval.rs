@@ -1,7 +1,7 @@
 //! 单元格公式缓存。算不了的不写 `<v>`。
 //! 另外写数据表结果、本机外部引用、图表连续区域缓存，以及能确定的透视合计。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::a1::{self, CellRef};
@@ -10,7 +10,7 @@ use super::formula;
 use super::inspect;
 use super::stats;
 use crate::error::{Error, ErrorKind, RelSource};
-use crate::opc::{self, Package, Relationships};
+use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 const DIV0: &str = "#DIV/0!";
@@ -367,10 +367,12 @@ fn fill_formula_caches_depth(
     let listed = sheet_list(&wb_doc.root, &wb_rels, &wb_part)?;
     let mut sheets = Vec::new();
     let mut sheet_docs = Vec::new();
-    for (name, part, kind) in &listed {
+    let mut sheet_pos = Vec::new();
+    for (idx, (name, part, kind)) in listed.iter().enumerate() {
         if *kind != "worksheet" {
             continue;
         }
+        sheet_pos.push((idx as u32) + 1);
         let doc = xml::parse(pkg.get(part)?)?;
         let rec = load_sheet(&doc.root, &sst);
         sheets.push(Sheet {
@@ -491,6 +493,7 @@ fn fill_formula_caches_depth(
     }
     let charts = refresh_chart_caches(pkg, &sheet_docs, &sheet_names, &sst, &mut book)?;
     let links = write_external_caches(pkg, &ext_parts, &ext_used)?;
+    let block_chain = has_data_table(&sheet_docs);
     let mut changed = charts || links || dirty.iter().any(|d| *d);
     for (i, (part, doc)) in sheet_docs.into_iter().enumerate() {
         if !dirty[i] {
@@ -499,7 +502,271 @@ fn fill_formula_caches_depth(
         pkg.set(&part, doc.to_bytes()?)?;
         changed = true;
     }
+    if external_depth > 0 && sync_calc_chain(pkg, &wb_part, &book, &sheet_pos, block_chain)? {
+        changed = true;
+    }
     Ok(changed)
+}
+
+const CALC_CHAIN_PART: &str = "/xl/calcChain.xml";
+const CT_CALC_CHAIN: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.calcChain+xml";
+
+struct DepArea {
+    s1: usize,
+    s2: usize,
+    c1: u32,
+    c2: u32,
+    r1: u32,
+    r2: u32,
+}
+
+struct ChainCell {
+    pos: u32,
+    col: u32,
+    row: u32,
+    array: bool,
+    child: bool,
+}
+
+/// 依赖排得全就写出计算链，排不全就删掉。不写空链，也不关 `fullCalcOnLoad`。
+fn sync_calc_chain(
+    pkg: &mut Package,
+    wb_part: &str,
+    book: &Book,
+    sheet_pos: &[u32],
+    block: bool,
+) -> Result<bool, Error> {
+    let had = pkg.contains(CALC_CHAIN_PART);
+    let entries = if block || !book.cyclic.is_empty() {
+        None
+    } else {
+        order_calc_chain(book, sheet_pos)
+    };
+    super::cell::remove_calc_chain(pkg, wb_part)?;
+    let Some(entries) = entries else {
+        return Ok(had);
+    };
+    if entries.is_empty() {
+        return Ok(had);
+    }
+    let xml = render_calc_chain(&entries);
+    pkg.set(CALC_CHAIN_PART, xml.into_bytes())?;
+    let mut rels = Relationships::from_package(pkg, wb_part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid,
+        rel_type: super::REL_CALC_CHAIN.into(),
+        target: super::picture::rel_target_from(wb_part, CALC_CHAIN_PART),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, wb_part)?;
+    let mut types = ContentTypes::from_package(pkg)?;
+    types.set_override(CALC_CHAIN_PART, CT_CALC_CHAIN)?;
+    types.write_to(pkg)?;
+    Ok(true)
+}
+
+fn has_data_table(docs: &[(String, Document)]) -> bool {
+    docs.iter().any(|(_, doc)| {
+        let Some(data) = doc.root.child_by_local("sheetData") else {
+            return false;
+        };
+        let mut hit = false;
+        formula::for_each_cell(data, |_, el| {
+            if el
+                .child_by_local("f")
+                .is_some_and(|f| f.attr("t") == Some("dataTable"))
+            {
+                hit = true;
+            }
+        });
+        hit
+    })
+}
+
+fn order_calc_chain(book: &Book, sheet_pos: &[u32]) -> Option<Vec<ChainCell>> {
+    let mut cells = Vec::new();
+    for (si, sheet) in book.sheets.iter().enumerate() {
+        let pos = *sheet_pos.get(si)?;
+        let mut keys: Vec<(u32, u32)> = sheet
+            .cells
+            .iter()
+            .filter(|(_, rec)| rec.formula.is_some())
+            .map(|(key, _)| *key)
+            .collect();
+        keys.sort_unstable();
+        for (col, row) in keys {
+            let rec = &sheet.cells[&(col, row)];
+            let formula = rec.formula.as_deref()?;
+            let mut stack = HashSet::new();
+            let expr = parse_expr(formula)?;
+            let areas = dep_areas(book, &expr, si, &mut stack)?;
+            cells.push((si, pos, col, row, rec.array_ref.is_some(), areas));
+        }
+    }
+    let n = cells.len();
+    let mut incoming: Vec<HashSet<usize>> = vec![HashSet::new(); n];
+    for (i, (_, _, _, _, _, areas)) in cells.iter().enumerate() {
+        for (j, (sj, _, oc, orow, _, _)) in cells.iter().enumerate() {
+            if areas.iter().any(|area| area.covers(*sj, *oc, *orow)) {
+                incoming[i].insert(j);
+            }
+        }
+    }
+    let direct = incoming.clone();
+    let mut ready = BTreeSet::new();
+    for (i, (_, pos, col, row, _, _)) in cells.iter().enumerate() {
+        if incoming[i].is_empty() {
+            ready.insert((*pos, *row, *col, i));
+        }
+    }
+    let mut order = Vec::new();
+    while let Some((_, _, _, i)) = ready.pop_first() {
+        order.push(i);
+        for j in 0..n {
+            if incoming[j].remove(&i) && incoming[j].is_empty() {
+                ready.insert((cells[j].1, cells[j].3, cells[j].2, j));
+            }
+        }
+    }
+    if order.len() != n {
+        return None;
+    }
+    let mut out = Vec::with_capacity(n);
+    let mut prev = None;
+    for i in order {
+        let child = prev.is_some_and(|p: usize| direct[i].contains(&p));
+        prev = Some(i);
+        out.push(ChainCell {
+            pos: cells[i].1,
+            col: cells[i].2,
+            row: cells[i].3,
+            array: cells[i].4,
+            child,
+        });
+    }
+    Some(out)
+}
+
+fn dep_areas(
+    book: &Book,
+    expr: &Expr,
+    sheet: usize,
+    stack: &mut HashSet<String>,
+) -> Option<Vec<DepArea>> {
+    match expr {
+        Expr::Value(Value::Area(rect)) => Some(areas_from_rect(book, rect, sheet)),
+        Expr::Value(Value::Areas(parts)) => {
+            let mut out = Vec::new();
+            for rect in parts {
+                out.extend(areas_from_rect(book, rect, sheet));
+            }
+            Some(out)
+        }
+        Expr::Value(_) | Expr::External { .. } => Some(Vec::new()),
+        Expr::Name(name) => {
+            let Some((local, body)) = lookup_name(book, sheet, name) else {
+                return Some(Vec::new());
+            };
+            let key = format!("{local:?}:{name}").to_ascii_lowercase();
+            if !stack.insert(key.clone()) {
+                return None;
+            }
+            let parsed = parse_expr(&body)?;
+            let areas = dep_areas(book, &parsed, sheet, stack)?;
+            stack.remove(&key);
+            Some(areas)
+        }
+        Expr::TableCol { table, col } => match book.table_area(table, col) {
+            Value::Area(rect) => Some(areas_from_rect(book, &rect, sheet)),
+            _ => Some(Vec::new()),
+        },
+        Expr::Call(name, args) => {
+            if name.eq_ignore_ascii_case("INDIRECT") || name.eq_ignore_ascii_case("OFFSET") {
+                return None;
+            }
+            let mut out = Vec::new();
+            for arg in args {
+                out.extend(dep_areas(book, arg, sheet, stack)?);
+            }
+            Some(out)
+        }
+        Expr::Neg(inner) | Expr::Pct(inner) => dep_areas(book, inner, sheet, stack),
+        Expr::Bin(_, left, right) | Expr::Union(left, right) | Expr::Cross(left, right) => {
+            let mut out = dep_areas(book, left, sheet, stack)?;
+            out.extend(dep_areas(book, right, sheet, stack)?);
+            Some(out)
+        }
+    }
+}
+
+fn lookup_name(book: &Book, sheet: usize, name: &str) -> Option<(Option<usize>, String)> {
+    if let Some(def) = book
+        .names
+        .iter()
+        .find(|n| n.local == Some(sheet) && n.name.eq_ignore_ascii_case(name))
+    {
+        return Some((def.local, def.body.clone()));
+    }
+    book.names
+        .iter()
+        .find(|n| n.local.is_none() && n.name.eq_ignore_ascii_case(name))
+        .map(|n| (None, n.body.clone()))
+}
+
+fn areas_from_rect(book: &Book, rect: &Rect, sheet: usize) -> Vec<DepArea> {
+    let Some(a) = book.resolve_loc(&rect.from, sheet) else {
+        return Vec::new();
+    };
+    let Some(b) = book.resolve_loc(&rect.to, sheet) else {
+        return Vec::new();
+    };
+    let (s1, s2) = if a <= b { (a, b) } else { (b, a) };
+    vec![DepArea {
+        s1,
+        s2,
+        c1: rect.r1.col.min(rect.r2.col),
+        c2: rect.r1.col.max(rect.r2.col),
+        r1: rect.r1.row.min(rect.r2.row),
+        r2: rect.r1.row.max(rect.r2.row),
+    }]
+}
+
+fn render_calc_chain(entries: &[ChainCell]) -> String {
+    let mut body = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><calcChain xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">"#,
+    );
+    for (i, item) in entries.iter().enumerate() {
+        body.push_str(&format!(
+            r#"<c r="{}" i="{}""#,
+            a1::format_cell(item.col, item.row),
+            item.pos
+        ));
+        if item.array {
+            body.push_str(r#" a="1""#);
+        }
+        if i == 0 {
+            body.push_str(r#" l="1""#);
+        } else if item.child {
+            body.push_str(r#" s="1""#);
+        }
+        body.push_str("/>");
+    }
+    body.push_str("</calcChain>");
+    body
+}
+
+impl DepArea {
+    fn covers(&self, sheet: usize, col: u32, row: u32) -> bool {
+        sheet >= self.s1
+            && sheet <= self.s2
+            && col >= self.c1
+            && col <= self.c2
+            && row >= self.r1
+            && row <= self.r2
+    }
 }
 
 fn sheet_list(

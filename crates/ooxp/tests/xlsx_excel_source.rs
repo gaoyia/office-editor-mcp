@@ -173,14 +173,15 @@ fn apply_leaves_untouched_excel_parts() {
     assert!(sheet.contains(r#"width="20.625""#), "E 列宽被改了：{sheet}");
 }
 
-/// 清单 A7：库不改 D1，只标打开时重算并删掉 calcChain。
+/// 清单 A7：库不改 D1 的公式，标打开时重算，并按依赖重写计算链。
 #[test]
 fn apply_marks_recalc_for_dependent_formula() {
     let out = apply_out("recalc");
     let sheet = part(&out, "xl/worksheets/sheet1.xml");
     assert!(sheet.contains("<f>A1*2</f>"), "D1 公式丢了：{sheet}");
-    let names = part_names(&out);
-    assert!(!names.iter().any(|n| n == "xl/calcChain.xml"), "{names:?}");
+    let chain = part(&out, "xl/calcChain.xml");
+    assert!(chain.contains(r#"r="B1""#), "{chain}");
+    assert!(chain.contains(r#"r="D1""#), "{chain}");
     let wb = part(&out, "xl/workbook.xml");
     assert!(wb.contains(r#"fullCalcOnLoad="1""#), "{wb}");
 }

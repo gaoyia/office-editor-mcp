@@ -174,6 +174,7 @@ $order = @(
     'xlsx-form-control'
     'xlsx-data-table'
     'xlsx-formula-rest'
+    'xlsx-calc-chain'
     'xlsx-validation'
     'xlsx-dv-result'
     'xlsx-dv-custom'

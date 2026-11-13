@@ -2546,16 +2546,22 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 
 ### 重算标记
 
-任意一条 `setCell` 成功之后，必须让打开文件的 Excel 重算。第一期用这两步，两步都做：
+任意一条 `setCell` 成功之后，必须让打开文件的 Excel 重算。在 `/xl/workbook.xml` 的 `<calcPr>` 上设置 `fullCalcOnLoad="1"`。没有 `<calcPr>` 就建一个。其余 `calcPr` 属性保留。依据 ECMA-376 §18.2.2。不把 `fullCalcOnLoad` 改成关闭。
 
-1. 在 `/xl/workbook.xml` 的 `<calcPr>` 上设置 `fullCalcOnLoad="1"`。没有 `<calcPr>` 就建一个。其余 `calcPr` 属性保留。依据 ECMA-376 §18.2.2。
-2. 若存在 `/xl/calcChain.xml`，删除该部件、内容类型 Override、以及 workbook 关系里指向它的那条。过期计算链会让部分 Excel 版本沿用旧顺序。
+计算链记公式格的依赖顺序，不是格子上的显示值。依据 ECMA-376 §18.6。求值写完缓存之后：
+
+- 每个公式格都能排进依赖顺序时，写出 `/xl/calcChain.xml`、内容类型 Override，以及 workbook 关系
+- 顺序是依赖在前。不照抄 Excel 局部重算留下的历史顺序
+- 第一条写 `l="1"`。后一条直接依赖紧挨着的前一条时写 `s="1"`。`i` 是该表在 `sheets` 里的位置，从 1 起
+- 数组公式只记主格，并写 `a="1"`
+- 有环、有数据表、公式解析不了，或用了 `INDIRECT` / `OFFSET`，就删掉链。不写缺了格子的链
+- 没有公式格时不写空链
 
 能求值的公式写入新的缓存 `<v>`。算不了的不写新缓存，也不删掉格子上已有的 `<v>`。
 
 ### 公式缓存
 
-`create` 和会改公式的 `apply` 在写完文件后求值。认不出的函数、解析失败、打不开的外部文件，不写新缓存，也不删已有 `<v>`。条件格式、数据验证和迷你图没有结果缓存。计算链仍删除。
+`create` 和会改公式的 `apply` 在写完文件后求值。认不出的函数、解析失败、打不开的外部文件，不写新缓存，也不删已有 `<v>`。条件格式、数据验证和迷你图没有结果缓存。计算链按上一节写完整顺序，排不全就删掉。
 
 - 数字、字符串、`TRUE` / `FALSE`、错误常量
 - A1 引用、跨表引用、`表1:表2!格` 三维引用
@@ -2704,7 +2710,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - `DELTA` 第二参省略当作 0，相等是 1。`GESTEP` 第二参省略当作 0，大于等于是 1
 - `ERF` 一个参数是该点的值，两个参数是两点之差。`ERFC(1)` 是 1 减 `ERF(1)`
 - 没有立方体连接时，`CUBEKPIMEMBER`、`CUBEMEMBERPROPERTY`、`CUBERANKEDMEMBER` 三个参数，`CUBEMEMBER`、`CUBESET`、`CUBEVALUE` 两个参数，`CUBESETCOUNT` 一个参数，都写入 `#N/A`，不带 `ca`
-- 参数个数和上面不一致时不写缓存。不连接立方体，不写 `volatileDependencies`，不写 `calcChain`。`ECMA.CUBEVALUE` 不求值
+- 参数个数和上面不一致时不写缓存。不连接立方体，不写 `volatileDependencies`。计算链仍按重算标记处理。`ECMA.CUBEVALUE` 不求值
 - 少一个参数的 `CUBEMEMBER` 会让 Excel 16.0 在打开时要求修复。这种公式仍不写缓存，但不放进要交给 Excel 打开的工作簿
 - 1900 日期系统是默认。`workbookPr` 的 `date1904="1"` 时改用 1904
 - 数字不写 `t`。逻辑值写 `t="b"`。文本写 `t="str"`。错误写 `t="e"`
@@ -2736,7 +2742,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 
 - 目标工作表 XML
 - `/xl/workbook.xml`（仅 `calcPr`，以及给隐式编号补 `r` 这类语义等价的改写；`setCellStyle` 单独出现时不要为重算去改它）
-- 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
+- 可能重写或删除的 `/xl/calcChain.xml`，以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
 - `setCellStyle` / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
 
 未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。

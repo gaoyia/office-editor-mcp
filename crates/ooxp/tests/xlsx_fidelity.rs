@@ -360,7 +360,7 @@ fn untouched_parts_stay_byte_identical() {
 }
 
 #[test]
-fn calc_chain_and_its_traces_are_removed() {
+fn calc_chain_is_rewritten_from_formula_cells() {
     let src = write_sample("calcchain");
     let out = tmp_dir().join("calcchain-out.xlsx");
     apply(
@@ -371,9 +371,11 @@ fn calc_chain_and_its_traces_are_removed() {
     .unwrap();
 
     assert!(part_names(&src).iter().any(|n| n == "xl/calcChain.xml"));
-    assert!(!part_names(&out).iter().any(|n| n == "xl/calcChain.xml"));
-    assert!(!part(&out, "[Content_Types].xml").contains("calcChain"));
-    assert!(!part(&out, "xl/_rels/workbook.xml.rels").contains("calcChain"));
+    let chain = part(&out, "xl/calcChain.xml");
+    assert!(chain.contains(r#"r="B1""#), "{chain}");
+    assert!(chain.contains(r#"r="B2""#), "{chain}");
+    assert!(part(&out, "[Content_Types].xml").contains("calcChain"));
+    assert!(part(&out, "xl/_rels/workbook.xml.rels").contains("calcChain"));
     let wb = part(&out, "xl/workbook.xml");
     assert!(wb.contains(r#"fullCalcOnLoad="1""#));
     assert!(
@@ -401,7 +403,11 @@ fn zip_entry_order_is_preserved() {
         .into_iter()
         .filter(|n| n != "xl/calcChain.xml")
         .collect();
-    assert_eq!(before, part_names(&out));
+    let after: Vec<String> = part_names(&out)
+        .into_iter()
+        .filter(|n| n != "xl/calcChain.xml")
+        .collect();
+    assert_eq!(before, after);
 }
 
 #[test]

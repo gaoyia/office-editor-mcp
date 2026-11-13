@@ -2674,5 +2674,96 @@ fn cube_functions_without_connection_match_excel_16() {
     let file = std::fs::File::open(&path).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
     assert!(zip.by_name("xl/volatileDependencies.xml").is_err());
+    let chain = part_text(&path, "xl/calcChain.xml");
+    let a5 = chain.find(r#"r="A5""#).unwrap();
+    let a6 = chain.find(r#"r="A6""#).unwrap();
+    assert!(a5 < a6, "{chain}");
+}
+
+#[test]
+fn calc_chain_follows_dependencies_and_skips_when_unordered() {
+    let path = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{
+            "name": "Sheet1",
+            "cells": [
+                { "ref": "A1", "value": 1 },
+                { "ref": "B1", "formula": "=A1+1" },
+                { "ref": "C1", "formula": "=B1*2" }
+            ]
+        }] }
+    })
+    .to_string())
+    .unwrap();
+    let chain = part_text(&path, "xl/calcChain.xml");
+    assert!(chain.contains(r#"<c r="B1" i="1" l="1"/>"#), "{chain}");
+    assert!(chain.contains(r#"<c r="C1" i="1" s="1"/>"#), "{chain}");
+    let wb = part_text(&path, "xl/workbook.xml");
+    assert!(wb.contains(r#"fullCalcOnLoad="1""#), "{wb}");
+
+    let two = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": two.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [
+            { "name": "Sheet1", "cells": [
+                { "ref": "A1", "value": 1 },
+                { "ref": "B1", "formula": "=A1+1" }
+            ] },
+            { "name": "Sheet2", "cells": [
+                { "ref": "A1", "formula": "=Sheet1!B1+1" }
+            ] }
+        ] }
+    })
+    .to_string())
+    .unwrap();
+    let chain = part_text(&two, "xl/calcChain.xml");
+    assert!(chain.contains(r#"<c r="B1" i="1" l="1"/>"#), "{chain}");
+    assert!(chain.contains(r#"<c r="A1" i="2" s="1"/>"#), "{chain}");
+
+    let circ = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": circ.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{
+            "name": "Sheet1",
+            "cells": [
+                { "ref": "A1", "formula": "=B1+1" },
+                { "ref": "B1", "formula": "=A1+1" }
+            ]
+        }] }
+    })
+    .to_string())
+    .unwrap();
+    let file = std::fs::File::open(&circ).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    assert!(zip.by_name("xl/calcChain.xml").is_err());
+
+    let indirect = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": indirect.to_string_lossy(),
+        "format": "xlsx",
+        "workbook": { "sheets": [{
+            "name": "Sheet1",
+            "cells": [
+                { "ref": "A1", "value": 1 },
+                { "ref": "B1", "formula": "=INDIRECT(\"A1\")" }
+            ]
+        }] }
+    })
+    .to_string())
+    .unwrap();
+    let file = std::fs::File::open(&indirect).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
     assert!(zip.by_name("xl/calcChain.xml").is_err());
 }
