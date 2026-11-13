@@ -1254,7 +1254,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "这张图还不能画出 PNG。目前只画簇状柱形图，而且宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "这一页还不能画出 PNG。目前只画幻灯片自己的纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形，而且宽高要落在 1 到 4096 像素之间".into()
+            "这一页还不能画出 PNG。目前只画幻灯片自己的纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形（含 90 度倍数的旋转），而且宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),

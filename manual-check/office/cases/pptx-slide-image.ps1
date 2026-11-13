@@ -1,8 +1,27 @@
-﻿# pptx 纯色页底、等像素 PNG、实心矩形的叠放和出界裁剪。金样是 PowerPoint 16.0 的 Slide.Export。
+﻿# pptx 纯色页底、等像素 PNG、实心矩形的叠放、出界裁剪和 90 度旋转。金样是 PowerPoint 16.0 的 Slide.Export。
 # 像素差用 pixel-diff 标红。红区要回绘制引擎修，不要加大 MaxDelta。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
+
+function Set-QuarterTurn([string]$path, [string]$offX) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::Open($path, [System.IO.Compression.ZipArchiveMode]::Update)
+    try {
+        $entry = $zip.GetEntry('ppt/slides/slide1.xml')
+        $reader = New-Object System.IO.StreamReader($entry.Open())
+        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+        $needle = '<a:xfrm><a:off x="' + $offX + '"'
+        if (-not $text.Contains($needle)) { throw "找不到要转的矩形：$offX" }
+        $text = $text.Replace($needle, '<a:xfrm rot="5400000"><a:off x="' + $offX + '"')
+        $entry.Delete()
+        $created = $zip.CreateEntry('ppt/slides/slide1.xml')
+        $writer = New-Object System.IO.StreamWriter($created.Open())
+        try { $writer.Write($text) } finally { $writer.Dispose() }
+    }
+    finally { $zip.Dispose() }
+}
 if (-not $global:OoxpSuiteName) { Initialize-Suite -Name 'office' }
 
 Add-Type -AssemblyName System.Drawing
@@ -55,8 +74,13 @@ Invoke-OoxpRequest @{
             op = 'insertShape'; id = 'slide:1'; fill = '00FF00'
             x = -9525; y = 1828800; cx = 28575; cy = 457200
         }
+        @{
+            op = 'insertShape'; id = 'slide:1'; fill = 'EE4455'
+            x = 4572000; y = 2743200; cx = 914400; cy = 457200
+        }
     )
 } 'pptx-slide-image-apply' | Out-Null
+Set-QuarterTurn $deck '4572000'
 
 $lib = Get-OutPath 'pptx-slide-image-lib.png'
 if (Test-Path $lib) { Remove-Item -Force $lib }

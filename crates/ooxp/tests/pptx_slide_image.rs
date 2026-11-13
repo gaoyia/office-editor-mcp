@@ -1,6 +1,6 @@
 //! exportSlideImage：纯色页底、等像素 PNG，以及没有描边的实心矩形。文字不画。
 
-use std::io::Cursor;
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -310,4 +310,125 @@ fn later_rect_covers_earlier_and_the_page_clips() {
     assert_eq!(pixel(&rgb, w, 1, 239), [0x00, 0xFF, 0x00]);
     assert_eq!(pixel(&rgb, w, 2, 192), [0xAA, 0xBB, 0xCC]);
     assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+}
+
+#[test]
+fn quarter_turn_swaps_the_box_around_its_center() {
+    let src = tmp("turn-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("turn-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "EE4455",
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "112233",
+                "x": 3657600,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "00AA66",
+                "x": 5486400,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            }
+        ]
+    }));
+    let turned = tmp("turn-rot");
+    rewrite_slide(&deck, &turned, |xml| {
+        xml.replace(
+            "<a:xfrm><a:off x=\"1828800\"",
+            "<a:xfrm rot=\"5400000\"><a:off x=\"1828800\"",
+        )
+        .replace(
+            "<a:xfrm><a:off x=\"3657600\"",
+            "<a:xfrm rot=\"100\"><a:off x=\"3657600\"",
+        )
+        .replace(
+            "<a:xfrm><a:off x=\"5486400\"",
+            "<a:xfrm rot=\"10800000\"><a:off x=\"5486400\"",
+        )
+    });
+    let out = tmp("turn-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": turned.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 216, 72), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 263, 167), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 215, 72), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 216, 71), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 264, 120), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 216, 168), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 576, 96), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 671, 143), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 672, 96), [0xAA, 0xBB, 0xCC]);
+}
+
+fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
+    let bytes = std::fs::read(src).unwrap();
+    let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    let mut edit = Some(edit);
+    {
+        let mut zip_out = zip::ZipWriter::new(&mut out);
+        let opt = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "ppt/slides/slide1.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                data = edit.take().unwrap()(xml).into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(dst, out.into_inner()).unwrap();
 }

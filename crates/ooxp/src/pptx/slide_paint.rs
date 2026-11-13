@@ -1,5 +1,5 @@
 //! 幻灯片只读栅格化。先画本页纯色页底，再按文档顺序画 PNG 和没有描边的实心矩形。
-//! 不写回包，像素不进 inspect。文字、其它形状和图表留到后面。
+//! 矩形可以绕中心转 90 度的倍数。不写回包，像素不进 inspect。文字、其它形状和图表留到后面。
 
 use std::io::Cursor;
 
@@ -162,12 +162,6 @@ fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
     if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
         return None;
     }
-    if xfrm
-        .attr("rot")
-        .is_some_and(|raw| raw.parse::<i64>().ok().unwrap_or(1) != 0)
-    {
-        return None;
-    }
     let prst = sp_pr.child_by_local("prstGeom")?.attr("prst")?;
     if prst != "rect" {
         return None;
@@ -177,6 +171,7 @@ fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
     }
     let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
     let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = turned_box(x, y, cx, cy, xfrm.attr("rot"))?;
     let w = emu_px(cx);
     let h = emu_px(cy);
     if w <= 0 || h <= 0 {
@@ -216,6 +211,31 @@ fn xfrm_box(xfrm: &Element) -> (i64, i64, i64, i64) {
             .unwrap_or(0)
     };
     (num(off, "x"), num(off, "y"), num(ext, "cx"), num(ext, "cy"))
+}
+
+const RIGHT_ANGLE: i64 = 5_400_000;
+const FULL_TURN: i64 = 21_600_000;
+
+/// 绕矩形中心转 90 度的倍数。90 和 270 换成宽高对调后的外接矩形。
+/// 转完落不到整数 EMU，或角度不是直角，就跳过。
+fn turned_box(x: i64, y: i64, cx: i64, cy: i64, rot: Option<&str>) -> Option<(i64, i64, i64, i64)> {
+    let Some(raw) = rot else {
+        return Some((x, y, cx, cy));
+    };
+    let n: i64 = raw.parse().ok()?;
+    let wrapped = n.rem_euclid(FULL_TURN);
+    if wrapped % RIGHT_ANGLE != 0 {
+        return None;
+    }
+    if (wrapped / RIGHT_ANGLE) % 2 == 0 {
+        return Some((x, y, cx, cy));
+    }
+    let dx = cx - cy;
+    let dy = cy - cx;
+    if dx % 2 != 0 || dy % 2 != 0 {
+        return None;
+    }
+    Some((x + dx / 2, y + dy / 2, cy, cx))
 }
 
 fn transformed(pic: &Element) -> bool {
