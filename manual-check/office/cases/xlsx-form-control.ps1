@@ -137,6 +137,119 @@ $both = ($savedBtn.caption -eq '按钮改') -and ($drawing.Contains('按钮改')
     -and (-not $drawing.Contains('按钮 1')) -and (-not $vml.Contains('按钮 1'))
 Add-Check 'xlsx-Xfc3' ($noRepair -and $both) ("caption=$($savedBtn.caption)")
 
+$made = Get-OutPath 'xlsx-form-made.xlsx'
+$kept = Get-OutPath 'xlsx-form-kept.xlsx'
+$dropped = Get-OutPath 'xlsx-form-dropped.xlsx'
+foreach ($p in @($made, $kept, $dropped)) { if (Test-Path $p) { Remove-Item -Force $p } }
+
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'create'; format = 'xlsx'
+    path = $made.Replace('\', '/')
+    workbook = @{
+        sheets = @(@{
+            name = 'Sheet1'
+            cells = @(
+                @{ ref = 'A1'; value = '甲' }
+                @{ ref = 'A2'; value = '乙' }
+            )
+        })
+    }
+} 'xlsx-xfc-made' | Out-Null
+
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'; format = 'xlsx'
+    path = $made.Replace('\', '/')
+    output = $kept.Replace('\', '/')
+    ops = @(
+        @{ op = 'insertFormControl'; id = 'sheet:Sheet1'; objectType = 'Button'; caption = '按钮'; from = 'A1'; to = 'C2' }
+        @{ op = 'insertFormControl'; id = 'sheet:Sheet1'; objectType = 'CheckBox'; caption = '复选'; fmlaLink = '$C$1'; checked = $true; from = 'A3'; to = 'C4' }
+        @{ op = 'insertFormControl'; id = 'sheet:Sheet1'; objectType = 'Drop'; fmlaRange = '$A$1:$A$2'; sel = 2; from = 'A5'; to = 'C6' }
+    )
+} 'xlsx-xfc-insert' | Out-Null
+
+$wb = Open-ExcelBook $excel $kept
+$cap = [string]$wb.Windows.Item(1).Caption
+$ws = $wb.Worksheets.Item(1)
+$btnCount = [int]$ws.Buttons().Count
+$boxCount = [int]$ws.CheckBoxes().Count
+$dropCount = [int]$ws.DropDowns().Count
+$btn = $null
+$box = $null
+$drop = $null
+$btnText = ''
+$boxText = ''
+$link = ''
+$boxOn = 0
+$list = ''
+$index = 0
+if ($btnCount -ge 1) {
+    $btn = $ws.Buttons().Item(1)
+    $btnText = Get-Face $btn
+}
+if ($boxCount -ge 1) {
+    $box = $ws.CheckBoxes().Item(1)
+    $boxText = Get-Face $box
+    $link = [string]$box.LinkedCell
+    $boxOn = [int]$box.Value
+}
+if ($dropCount -ge 1) {
+    $drop = $ws.DropDowns().Item(1)
+    $list = [string]$drop.ListFillRange
+    $index = [int]$drop.ListIndex
+}
+$cell = [string]$ws.Range('C1').Text
+$noRepair4 = $cap -notmatch 'Repair'
+$insertOk = $noRepair4 -and ($btnCount -eq 1) -and ($boxCount -eq 1) -and ($dropCount -eq 1) `
+    -and ($btnText -eq '按钮') -and ($boxText -eq '复选') `
+    -and ($link -eq '$C$1') -and ($boxOn -eq 1) -and ($list -eq '$A$1:$A$2') `
+    -and ($index -eq 2) -and ($cell -eq 'TRUE')
+Add-Check 'xlsx-Xfc4' $insertOk ("caption=$cap btn=$btnCount/$btnText box=$boxCount/$boxText link=$link on=$boxOn drop=$dropCount list=$list index=$index cell=$cell")
+Close-AllWorkbooks $excel
+if ($btn) { Release-Com $btn }
+if ($box) { Release-Com $box }
+if ($drop) { Release-Com $drop }
+Release-Com $ws
+
+$madeTree = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'; format = 'xlsx'
+    path = $kept.Replace('\', '/')
+    scope = @{ formControls = $true }
+} 'xlsx-xfc-made-tree'
+$madeBtn = @($madeTree.sheets[0].formControls) | Where-Object { $_.objectType -eq 'Button' } | Select-Object -First 1
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'; format = 'xlsx'
+    path = $kept.Replace('\', '/')
+    output = $dropped.Replace('\', '/')
+    ops = @(@{ op = 'deleteFormControl'; id = $madeBtn.id })
+} 'xlsx-xfc-delete' | Out-Null
+
+$wb = Open-ExcelBook $excel $dropped
+$cap = [string]$wb.Windows.Item(1).Caption
+$ws = $wb.Worksheets.Item(1)
+$btnCount = [int]$ws.Buttons().Count
+$boxCount = [int]$ws.CheckBoxes().Count
+$dropCount = [int]$ws.DropDowns().Count
+$box = $null
+$drop = $null
+$boxText = ''
+$list = ''
+if ($boxCount -ge 1) {
+    $box = $ws.CheckBoxes().Item(1)
+    $boxText = Get-Face $box
+}
+if ($dropCount -ge 1) {
+    $drop = $ws.DropDowns().Item(1)
+    $list = [string]$drop.ListFillRange
+}
+$noRepair5 = $cap -notmatch 'Repair'
+$deleteOk = $noRepair5 -and ($btnCount -eq 0) -and ($boxCount -eq 1) -and ($dropCount -eq 1) `
+    -and ($boxText -eq '复选') -and ($list -eq '$A$1:$A$2')
+Add-Check 'xlsx-Xfc5' $deleteOk ("caption=$cap btn=$btnCount box=$boxCount/$boxText drop=$dropCount list=$list")
+Close-AllWorkbooks $excel
+if ($box) { Release-Com $box }
+if ($drop) { Release-Com $drop }
+Release-Com $ws
+
 if ($MyInvocation.InvocationName -ne '.') {
     Close-OfficeApps -Quit
 }

@@ -22246,6 +22246,102 @@
         }
       }
     },
+    "insertFormControlOp": {
+      "description": "在工作表上新建按钮、复选框或下拉。",
+      "descriptionEn": "Add a button, check box, or drop-down to a worksheet.",
+      "limits": "只插入按钮、复选框、下拉。四处一起写：工作表 control、drawing 里 Choice 的形状、VML 形状、ctrlProp。按钮和复选框必须给 caption，下拉不能给。fmlaLink 只用于复选框，fmlaRange 和 sel 只用于下拉。checked 只用于复选框。有本表链接格时同时把该格写成布尔值。sel 省略时写成 0。val 写成 0。from 和 to 是单元格。偏移是 EMU，省略为 0。VML 的 x:Anchor 只记单元格，偏移写 0。对象名按已有名字末尾数字加一。不改已有控件的锚点。不插入其他类型，不认 ActiveX。只能用于 worksheet。",
+      "limitsEn": "Only a button, check box, or drop-down can be inserted. The worksheet control, the Choice shape, the VML shape, and ctrlProp are written together. caption is required for a button or check box and rejected for a drop-down. fmlaLink is only for a check box. fmlaRange and sel are only for a drop-down. checked is only for a check box. A link on this sheet is also written as a boolean cell. Omitted sel is written as 0. val is written as 0. from and to are cells. Offsets are EMUs and default to 0. The VML x:Anchor records cells only, with zero inner offsets. The object name uses the next trailing number. Existing anchors are left unchanged. Other control types and ActiveX are not inserted. Only a worksheet is accepted.",
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "objectType",
+        "from",
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertFormControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "objectType": {
+          "type": "string",
+          "enum": [
+            "Button",
+            "CheckBox",
+            "Drop"
+          ]
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fmlaLink": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fmlaRange": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "sel": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "deleteFormControlOp": {
+      "description": "删掉一个已在树上的窗体控件。",
+      "descriptionEn": "Delete one form control that is already on the tree.",
+      "limits": "按窗体控件 id 摘掉工作表 control、drawing 里对应的 Choice 锚点、VML 形状，以及 ctrlProp 部件、关系和内容类型。不删 drawing 与 vmlDrawing 部件。控件删光后去掉 controls。对不上的 id 报 IdNotFound，部件原样。只能用于 worksheet。",
+      "limitsEn": "The worksheet control, the matching Choice anchor, the VML shape, and the ctrlProp part, relationship, and content type are removed together. The drawing and vmlDrawing parts stay. An empty controls element is removed. An id that does not match returns IdNotFound and leaves the parts unchanged. Only a worksheet is accepted.",
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteFormControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertDataValidationOp": {
       "description": "往工作表追加一条数据验证（ECMA-376 §18.3.1.32）。",
       "descriptionEn": "Append one data validation to the worksheet (ECMA-376 §18.3.1.32).",
@@ -25527,6 +25623,9 @@
           "$ref": "#/$defs/deleteFootnoteOp"
         },
         {
+          "$ref": "#/$defs/deleteFormControlOp"
+        },
+        {
           "$ref": "#/$defs/deleteHyperlinkOp"
         },
         {
@@ -25759,6 +25858,9 @@
         },
         {
           "$ref": "#/$defs/insertFootnoteOp"
+        },
+        {
+          "$ref": "#/$defs/insertFormControlOp"
         },
         {
           "$ref": "#/$defs/insertHeaderFooterOp"
@@ -26536,6 +26638,9 @@
           "$ref": "#/$defs/deleteExternalLinkOp"
         },
         {
+          "$ref": "#/$defs/deleteFormControlOp"
+        },
+        {
           "$ref": "#/$defs/deleteHyperlinkOp"
         },
         {
@@ -26633,6 +26738,9 @@
         },
         {
           "$ref": "#/$defs/insertExternalLinkOp"
+        },
+        {
+          "$ref": "#/$defs/insertFormControlOp"
         },
         {
           "$ref": "#/$defs/insertHyperlinkOp"

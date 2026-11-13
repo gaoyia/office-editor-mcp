@@ -399,6 +399,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setSmartArtStyle" => XlsxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
             "setSmartArtLayout" => XlsxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
             "setFormControl" => XlsxOp::SetFormControl(super::form_control::parse_set(obj, i)?),
+            "insertFormControl" => {
+                XlsxOp::InsertFormControl(super::form_control::parse_insert(obj, i)?)
+            }
+            "deleteFormControl" => {
+                XlsxOp::DeleteFormControl(super::form_control::parse_delete(obj, i)?)
+            }
             "setProps" => XlsxOp::SetProps(crate::props::parse_set_props(obj, i, "xlsx:workbook")?),
             "setCustomProp" => XlsxOp::SetCustomProp(crate::props::parse_set_custom_prop(
                 obj,

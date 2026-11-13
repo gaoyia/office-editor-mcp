@@ -372,6 +372,8 @@ pub(crate) enum IdReason {
     SheetControlPrefix,
     /// xlsx 工作表 id，缺少 /control:…
     SheetControlContainer,
+    /// xlsx 的 insertFormControl 必须用 sheet:工作表名
+    InsertFormControlNeedsSheet,
     /// xlsx 的 insertInk 必须用 sheet:工作表名
     InsertInkNeedsSheet,
     /// xlsx 墨迹 id 必须是 sheet:{name}/ink:…
@@ -1585,6 +1587,7 @@ impl IdReason {
             Self::SheetOleContainer,
             Self::SheetControlPrefix,
             Self::SheetControlContainer,
+            Self::InsertFormControlNeedsSheet,
             Self::InsertInkNeedsSheet,
             Self::SheetInkPrefix,
             Self::SheetInkContainer,

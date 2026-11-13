@@ -29,7 +29,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-13 补跑 `xlsx-fin.ps1`，Xfn1–Xfn3 通过。Excel 16.0 打开没有 Repair。借贷、债券和 `DOLLARDE` 与库缓存一致。`ECMA.PV` 没有缓存。
 2026-11-13 补跑 `xlsx-eng.ps1`，Xeg1–Xeg3 通过。Excel 16.0 打开没有 Repair。贝塞尔、进制补码和复数文本与库缓存一致。`ECMA.DEC2BIN` 没有缓存。
 2026-11-13 补跑 `xlsx-cube.ps1`，Xcu1–Xcu2 通过。Excel 16.0 打开没有 Repair。没有连接时七个立方体函数是 `#N/A`。`ECMA.CUBEVALUE` 没有缓存。
-2026-11-13 补跑 `xlsx-form-control.ps1`，Xfc1–Xfc3 通过。Excel 16.0 打开没有 Repair。标题、链接、勾选和选中项另存后仍在。
+2026-11-13 补跑 `xlsx-form-control.ps1`，Xfc1–Xfc5 通过。Excel 16.0 打开没有 Repair。插入的按钮、复选框、下拉能读到；删掉按钮后，复选框和下拉还在。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -1250,13 +1250,15 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 
 ## 窗体控件
 
-用 Excel 16.0 先放上按钮、复选框和下拉，再交给库查看和修改。脚本 `manual-check/office/cases/xlsx-form-control.ps1`。编号用 Xfc。不插入、不删除。
+用 Excel 16.0 查看、修改、插入和删除按钮、复选框、下拉。脚本 `manual-check/office/cases/xlsx-form-control.ps1`。编号用 Xfc。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
 | Xfc1 | 查看 | 三个控件都在 `formControls` 里。按钮和复选框有标题，下拉没有。链接和列表与放入时一致 |
 | Xfc2 | 修改 | 改标题、链接、勾选和选中项后，Excel 16.0 打开没有 Repair，读到的是改后的值 |
 | Xfc3 | 另存 | 另存后再 inspect，标题仍是改后的句子，drawing 与 VML 两处都有这句 |
+| Xfc4 | 插入 | 库插入三种控件后，Excel 16.0 打开没有 Repair，读到标题、链接、勾选和选中项 |
+| Xfc5 | 删除 | 删掉按钮后再打开，按钮没有了，复选框和下拉还在，没有 Repair |
 
 ## 共享公式改主格
 

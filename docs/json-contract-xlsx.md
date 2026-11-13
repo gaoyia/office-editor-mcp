@@ -3462,6 +3462,89 @@ docx / pptx 上发此 op 报 `InvalidField`。
 }
 ```
 
+### insertFormControl
+
+在工作表上新建按钮、复选框或下拉。四处一起写：工作表 `control`、drawing 里 Choice 的形状、VML 形状、ctrlProp。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertFormControl"` |
+| `id` | 必须是 `sheet:{name}` |
+| `objectType` | `Button`、`CheckBox` 或 `Drop` |
+| `caption` | 按钮和复选框必须给。下拉不能给 |
+| `fmlaLink` | 只用于复选框 |
+| `fmlaRange` | 只用于下拉 |
+| `checked` | 只用于复选框 |
+| `sel` | 只用于下拉。省略时写成 `0` |
+| `from` | 左上角单元格 |
+| `to` | 右下角单元格 |
+| `fromOffX` | 左上角水平偏移，EMU |
+| `fromOffY` | 左上角垂直偏移，EMU |
+| `toOffX` | 右下角水平偏移，EMU |
+| `toOffY` | 右下角垂直偏移，EMU |
+
+- 对象名按本表已有 `control/@name` 末尾的数字加一，写成 `Button N`、`Check Box N`、`Drop Down N`
+- 形状编号从 1025 起，取本表已有形状编号的最大值加一。窗体、批注和嵌入对象共用这一段编号
+- 锚点同时写 `controlPr/anchor` 和 drawing 的 `twoCellAnchor`
+- VML 的 `x:Anchor` 只记单元格，偏移写 `0`。不按列宽行高换算
+- `setFormControl` 仍不改已有控件的锚点
+- 勾选而且链接格在本表时，该格写成布尔值。别的工作表上的链接不写
+- 下拉的 `val` 写成 `0`。不把 `val` 当成选中项
+- 不插入单选、分组框、滚动条、微调、列表框、标签、编辑框。不认 ActiveX
+- 对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
+- docx / pptx 上发此 op 报 `InvalidField`
+- 四个偏移省略时都是 `0`
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "insertFormControl",
+      "id": "sheet:Sheet1",
+      "objectType": "Button",
+      "caption": "按钮",
+      "from": "A1",
+      "to": "C2"
+    }
+  ]
+}
+```
+
+### deleteFormControl
+
+按窗体控件 id 删掉一个已经在树上的控件。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteFormControl"` |
+| `id` | 必须是窗体控件 id |
+
+- 摘掉该条 `control`、drawing 里对应的 Choice 锚点、VML 里 `_x0000_s{shapeId}` 的 `v:shape`
+- 删掉对应 ctrlProp 的部件、关系和内容类型
+- 不删 drawing 部件和 vmlDrawing 部件，以免误伤同一张表上的图、批注或嵌入对象
+- 控件删光后去掉 `<controls>`
+- 对不上的 id 报 `IdNotFound`，部件原样
+- id 不是窗体控件 id 报 `InvalidId`
+- 对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
+- docx / pptx 上发此 op 报 `InvalidField`
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "deleteFormControl",
+      "id": "sheet:Sheet1/control:1025"
+    }
+  ]
+}
+```
+
 ### insertModel3d
 
 把本地 GLB 作为 3D 模型写入目标工作表。不进 `pictures`。不栅格化模型。海报用 1×1 PNG 占位。

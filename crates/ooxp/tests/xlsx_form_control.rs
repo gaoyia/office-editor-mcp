@@ -344,3 +344,150 @@ fn set_writes_both_copies_and_rejects_the_wrong_field() {
     let sheet = part_text(&cleared, "xl/worksheets/sheet1.xml");
     assert!(sheet.contains(r#"r="C1" t="b"><v>0</v>"#), "{sheet}");
 }
+
+#[test]
+fn insert_and_delete_keep_the_four_places_together() {
+    let path = create_book("insert-src");
+    let err = apply(
+        &path,
+        &tmp("no-caption"),
+        json!([{
+            "op": "insertFormControl",
+            "id": "sheet:Sheet1",
+            "objectType": "Button",
+            "from": "A1",
+            "to": "C2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(inspect(&path, json!({}))["formControlCount"], 0);
+
+    let err = apply(
+        &path,
+        &tmp("drop-caption"),
+        json!([{
+            "op": "insertFormControl",
+            "id": "sheet:Sheet1",
+            "objectType": "Drop",
+            "caption": "不能有",
+            "from": "A1",
+            "to": "C2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &path,
+        &tmp("bad-insert-id"),
+        json!([{
+            "op": "insertFormControl",
+            "id": "sheet:Sheet1/control:1",
+            "objectType": "Button",
+            "caption": "按钮",
+            "from": "A1",
+            "to": "C2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let out = tmp("inserted");
+    apply(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "insertFormControl",
+                "id": "sheet:Sheet1",
+                "objectType": "Button",
+                "caption": "按钮",
+                "from": "A1",
+                "to": "C2"
+            },
+            {
+                "op": "insertFormControl",
+                "id": "sheet:Sheet1",
+                "objectType": "CheckBox",
+                "caption": "复选",
+                "fmlaLink": "$C$1",
+                "checked": true,
+                "from": "A3",
+                "to": "C4"
+            },
+            {
+                "op": "insertFormControl",
+                "id": "sheet:Sheet1",
+                "objectType": "Drop",
+                "fmlaRange": "$A$1:$A$2",
+                "sel": 2,
+                "from": "A5",
+                "to": "C6"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "formControls": true }));
+    let items = tree["sheets"][0]["formControls"].as_array().unwrap();
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["shapeId"], "1025");
+    assert_eq!(items[0]["name"], "Button 1");
+    assert_eq!(items[0]["caption"], "按钮");
+    assert_eq!(items[1]["name"], "Check Box 2");
+    assert_eq!(items[1]["fmlaLink"], "$C$1");
+    assert_eq!(items[1]["checked"], true);
+    assert_eq!(items[2]["name"], "Drop Down 3");
+    assert!(items[2]["caption"].is_null());
+    assert_eq!(items[2]["fmlaRange"], "$A$1:$A$2");
+    assert_eq!(items[2]["sel"], 2);
+    let sheet = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains(r#"t="b""#), "{sheet}");
+    assert!(sheet.contains("<v>1</v>"), "{sheet}");
+    let drawing = part_text(&out, "xl/drawings/drawing1.xml");
+    let vml = part_text(&out, "xl/drawings/vmlDrawing1.vml");
+    assert!(drawing.contains("按钮"));
+    assert!(vml.contains("按钮"));
+    assert!(vml.contains(r#"ObjectType="Checkbox""#));
+    assert!(vml.contains(r#"ObjectType="Drop""#));
+    assert!(part_text(&out, "xl/ctrlProps/ctrlProp1.xml").contains(r#"objectType="Button""#));
+
+    let button = items[0]["id"].as_str().unwrap().to_string();
+    let edited = tmp("retitle");
+    apply(
+        &out,
+        &edited,
+        json!([{ "op": "setFormControl", "id": button, "caption": "按钮改" }]),
+    )
+    .unwrap();
+    assert!(part_text(&edited, "xl/drawings/drawing1.xml").contains("按钮改"));
+    assert!(part_text(&edited, "xl/drawings/vmlDrawing1.vml").contains("按钮改"));
+
+    let deleted = tmp("deleted");
+    apply(
+        &out,
+        &deleted,
+        json!([{ "op": "deleteFormControl", "id": button }]),
+    )
+    .unwrap();
+    let tree = inspect(&deleted, json!({ "formControls": true }));
+    let left = tree["sheets"][0]["formControls"].as_array().unwrap();
+    assert_eq!(left.len(), 2);
+    assert!(left.iter().all(|item| item["objectType"] != "Button"));
+    let sheet = part_text(&deleted, "xl/worksheets/sheet1.xml");
+    assert!(!sheet.contains("Button 1"));
+    assert!(sheet.contains("Check Box 2"));
+    let bytes = std::fs::read(&deleted).unwrap();
+    let zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let ctrl_count = zip
+        .file_names()
+        .filter(|name| name.contains("ctrlProp"))
+        .count();
+    assert_eq!(ctrl_count, 2);
+    let err = apply(
+        &deleted,
+        &tmp("missing-delete"),
+        json!([{ "op": "deleteFormControl", "id": button }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+}

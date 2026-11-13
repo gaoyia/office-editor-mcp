@@ -232,8 +232,13 @@ workbook `.rels` 的 person 关系 Type 为 `http://schemas.microsoft.com/office
 工作表 XML 写 `<legacyDrawing r:id="…"/>`。同一张表多条批注共用一个 threadedComments 部件。`create` 给了 `sheets[].comments` 时按同一套规则写这些部件。
 `setFormControl` 不新建部件。它只改已有 drawing 里 Choice 的 `a:t`、已有 vmlDrawing 文本框里的 `font`，
 以及 ctrlProp 的 `fmlaLink`、`fmlaRange`、`checked`、`sel` 和 VML 里对应的元素。
-ctrlProp 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/ctrlProp`。
 不改工作表 XML，不改对象名，不改锚点。
+`insertFormControl` 在工作表还没有 drawing 或 vmlDrawing 时，按工作表图和批注那一套新建这两份部件。
+同时新建 `/xl/ctrlProps/ctrlPropN.xml`。内容类型是 `application/vnd.ms-excel.controlproperties+xml`，根是 `formControlPr`。
+工作表 `.rels` 增加一条 ctrlProp 关系。工作表写入 `<controls>` 下的 `<control>`。
+锚点写进 `controlPr/anchor` 和 drawing 的 `twoCellAnchor`。VML 的 `x:Anchor` 只记单元格，偏移写 0。
+`deleteFormControl` 摘掉这四处，并删掉对应 ctrlProp 的部件、关系和内容类型。drawing 与 vmlDrawing 部件留下。
+ctrlProp 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/ctrlProp`。
 apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，
 以及 `/xl/media/imageN.*`。
 工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。

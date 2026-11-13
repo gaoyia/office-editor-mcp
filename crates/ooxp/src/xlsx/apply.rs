@@ -1304,6 +1304,28 @@ fn apply_pkg(
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 form_control::set(&mut pkg, &mut doc.root, &part, op, i)?;
             }
+            XlsxOp::InsertFormControl(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::FormControlWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                form_control::insert(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::DeleteFormControl(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::FormControlWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                form_control::delete(&mut pkg, &mut doc.root, &part, op, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

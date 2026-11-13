@@ -569,6 +569,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetControlContainer => {
                 "Sheet id must include /control:… (that id alone is not a form control)".into()
             }
+            IdReason::InsertFormControlNeedsSheet => {
+                "xlsx insertFormControl id must be sheet:name".into()
+            }
             IdReason::InsertInkNeedsSheet => "xlsx insertInk id must be sheet:name".into(),
             IdReason::SheetInkPrefix => "xlsx ink id must be sheet:name/ink:…".into(),
             IdReason::SheetInkContainer => {

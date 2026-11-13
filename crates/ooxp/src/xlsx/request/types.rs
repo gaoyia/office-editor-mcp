@@ -1993,6 +1993,8 @@ pub enum XlsxOp {
     SetSmartArtStyle(SetSmartArtStyleOp),
     SetSmartArtLayout(SetSmartArtLayoutOp),
     SetFormControl(form_control::SetFormControlOp),
+    InsertFormControl(form_control::InsertFormControlOp),
+    DeleteFormControl(form_control::DeleteFormControlOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),

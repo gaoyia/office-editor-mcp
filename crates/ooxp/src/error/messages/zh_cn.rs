@@ -524,6 +524,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetControlContainer => {
                 "工作表 id 必须带 /control:…（该 id 本身不是窗体控件）".into()
             }
+            IdReason::InsertFormControlNeedsSheet => {
+                "xlsx 的 insertFormControl 的 id 必须是 sheet:工作表名".into()
+            }
             IdReason::InsertInkNeedsSheet => {
                 "xlsx 的 insertInk 的 id 必须是 sheet:工作表名".into()
             }
