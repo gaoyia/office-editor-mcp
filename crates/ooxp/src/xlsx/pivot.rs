@@ -1759,21 +1759,106 @@ fn cell_val(root: &Element, cell: CellRef, sst: &[String]) -> CacheVal {
     CacheVal::Empty
 }
 
-/// 透视区域。一个行字段且没有列字段时带上各组。
+/// 透视区域。画出合计时带上 `GETPIVOTDATA` 要的数。
 pub(crate) struct PivotCover {
     pub host: usize,
     pub start: CellRef,
     pub end: CellRef,
-    pub row_sum: Option<RowSumView>,
+    pub answer: Option<PivotAnswer>,
 }
 
-/// 一个行字段、没有列字段时的分组。数字是已经写在格子上的结果。
+/// 已经写在格子上的透视数。空交叉记 0，不存在的组不放进来。
 #[derive(Clone)]
-pub(crate) struct RowSumView {
-    pub row_name: String,
+pub(crate) struct PivotAnswer {
     pub value_names: Vec<String>,
-    pub groups: Vec<(String, Vec<f64>)>,
+    pub row_fields: Vec<String>,
+    pub col_fields: Vec<String>,
     pub grand: Vec<f64>,
+    pub slots: Vec<PivotSlot>,
+}
+
+#[derive(Clone)]
+pub(crate) struct PivotSlot {
+    pub row: Vec<String>,
+    pub col: Vec<String>,
+    pub values: Vec<f64>,
+}
+
+impl PivotAnswer {
+    /// 按字段和项取已经写好的数。对不上返回 `None`，调用方写成 `#REF!`。
+    pub(crate) fn lookup(&self, data_field: &str, pairs: &[(String, String)]) -> Option<f64> {
+        let vi = self
+            .value_names
+            .iter()
+            .position(|name| name.eq_ignore_ascii_case(data_field))?;
+        if pairs.is_empty() {
+            return self.grand.get(vi).copied();
+        }
+        let mut row_pick = vec![None; self.row_fields.len()];
+        let mut col_pick = vec![None; self.col_fields.len()];
+        for (field, item) in pairs {
+            if let Some(i) = self
+                .row_fields
+                .iter()
+                .position(|name| name.eq_ignore_ascii_case(field))
+            {
+                if !put_pick(&mut row_pick, i, item) {
+                    return None;
+                }
+            } else if let Some(i) = self
+                .col_fields
+                .iter()
+                .position(|name| name.eq_ignore_ascii_case(field))
+            {
+                if !put_pick(&mut col_pick, i, item) {
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
+        let row_path = axis_prefix(&row_pick)?;
+        let col_path = axis_prefix(&col_pick)?;
+        if row_path.is_empty() && col_path.is_empty() {
+            return self.grand.get(vi).copied();
+        }
+        let slot = self
+            .slots
+            .iter()
+            .find(|slot| same_labels(&slot.row, &row_path) && same_labels(&slot.col, &col_path))?;
+        slot.values.get(vi).copied()
+    }
+}
+
+fn put_pick(pick: &mut [Option<String>], i: usize, item: &str) -> bool {
+    match &pick[i] {
+        Some(prev) => prev.eq_ignore_ascii_case(item),
+        None => {
+            pick[i] = Some(item.to_string());
+            true
+        }
+    }
+}
+
+fn axis_prefix(pick: &[Option<String>]) -> Option<Vec<String>> {
+    let mut path = Vec::new();
+    let mut closed = false;
+    for item in pick {
+        match item {
+            Some(text) if !closed => path.push(text.clone()),
+            Some(_) => return None,
+            None => closed = true,
+        }
+    }
+    Some(path)
+}
+
+fn same_labels(left: &[String], right: &[String]) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right)
+            .all(|(a, b)| a.eq_ignore_ascii_case(b))
 }
 
 /// 每张透视的位置。求值用它判断 `GETPIVOTDATA`，不改工作表。
@@ -1811,20 +1896,20 @@ pub(crate) fn pivot_covers(
             let Ok((start, end)) = a1::parse_range(loc) else {
                 continue;
             };
-            let row_sum = plan_display(&table.root, host_i, &caches, sheet_docs, names, sst)
+            let answer = plan_display(&table.root, host_i, &caches, sheet_docs, names, sst)
                 .and_then(|plan| plan.view);
             out.push(PivotCover {
                 host: host_i,
                 start,
                 end,
-                row_sum,
+                answer,
             });
         }
     }
     Ok(out)
 }
 
-/// 把能确定的透视合计写进工作表。多个列字段，或列字段再加多个行字段、多个值，跳过。
+/// 把能确定的透视合计写进工作表。没有样本的形状跳过。
 pub(crate) fn fill_row_sum_display(
     pkg: &Package,
     sheet_docs: &mut [(String, Document)],
@@ -2078,7 +2163,7 @@ struct DisplayPlan {
     origin: CellRef,
     pages: Vec<(String, String)>,
     body: DisplayBody,
-    view: Option<RowSumView>,
+    view: Option<PivotAnswer>,
 }
 
 struct PagePick {
@@ -2125,69 +2210,67 @@ fn plan_display(
     let page_labels = page_labels(&pages, cache);
     if col_idxs.is_empty() {
         let groups = row_groups(&kept, &row_idxs, &specs);
-        let view = if row_idxs.len() == 1 {
-            Some(row_view(&field_names, &groups, &specs))
-        } else {
-            None
+        let body = RowBody {
+            field_names,
+            groups,
+            specs,
         };
+        let view = Some(answer_rows(&body));
         return Some(DisplayPlan {
             host,
             origin,
             pages: page_labels,
-            body: DisplayBody::Rows(RowBody {
-                field_names,
-                groups,
-                specs,
-            }),
+            body: DisplayBody::Rows(body),
             view,
         });
     }
     let fields = &cache.fields;
     if col_idxs.len() >= 2 && row_idxs.len() == 1 && specs.len() == 1 {
         let spec = specs.into_iter().next()?;
+        let body = col_tree_body(&kept, row_idxs[0], &col_idxs, fields, spec);
+        let view = Some(answer_col_tree(&body));
         return Some(DisplayPlan {
             host,
             origin,
             pages: page_labels,
-            body: DisplayBody::ColTree(col_tree_body(&kept, row_idxs[0], &col_idxs, fields, spec)),
-            view: None,
+            body: DisplayBody::ColTree(body),
+            view,
         });
     }
     if col_idxs.len() == 1 && row_idxs.len() >= 2 && specs.len() == 1 {
         let spec = specs.into_iter().next()?;
+        let body = row_col_body(&kept, &row_idxs, col_idxs[0], fields, spec);
+        let view = Some(answer_row_col(&body));
         return Some(DisplayPlan {
             host,
             origin,
             pages: page_labels,
-            body: DisplayBody::RowCol(row_col_body(&kept, &row_idxs, col_idxs[0], fields, spec)),
-            view: None,
+            body: DisplayBody::RowCol(body),
+            view,
         });
     }
     if col_idxs.len() == 1 && row_idxs.len() == 1 && specs.len() >= 2 {
         let caption = root.attr("dataCaption").unwrap_or("Values").to_string();
+        let body = multi_value_body(&kept, row_idxs[0], col_idxs[0], fields, caption, specs);
+        let view = Some(answer_multi(&body));
         return Some(DisplayPlan {
             host,
             origin,
             pages: page_labels,
-            body: DisplayBody::MultiValue(multi_value_body(
-                &kept,
-                row_idxs[0],
-                col_idxs[0],
-                fields,
-                caption,
-                specs,
-            )),
-            view: None,
+            body: DisplayBody::MultiValue(body),
+            view,
         });
     }
     if col_idxs.len() == 1 && row_idxs.len() == 1 && specs.len() == 1 {
         let spec = specs.into_iter().next()?;
+        let body = cross_body(&kept, row_idxs[0], col_idxs[0], fields, spec);
+        let view = Some(answer_cross(&body));
         return Some(DisplayPlan {
             host,
             origin,
             pages: page_labels,
-            body: DisplayBody::Cross(cross_body(&kept, row_idxs[0], col_idxs[0], fields, spec)),
-            view: None,
+            body: DisplayBody::Cross(body),
+            view,
         });
     }
     None
@@ -2580,29 +2663,260 @@ fn multi_value_body(
     }
 }
 
-fn row_view(field_names: &[String], groups: &[RowGroup], specs: &[ValSpec]) -> RowSumView {
-    let grands = merged_measures(groups, 0, groups.len(), specs.len());
-    let grand = specs
+fn shown_or_zero(measure: &Measure, grand: &Measure, spec: &ValSpec) -> f64 {
+    if !measure.seen {
+        return 0.0;
+    }
+    shown(measure, grand, spec)
+}
+
+fn push_slot(slots: &mut Vec<PivotSlot>, row: Vec<String>, col: Vec<String>, values: Vec<f64>) {
+    slots.push(PivotSlot { row, col, values });
+}
+
+fn answer_rows(body: &RowBody) -> PivotAnswer {
+    let n = body.specs.len();
+    let grands = merged_measures(&body.groups, 0, body.groups.len(), n);
+    let grand = body
+        .specs
         .iter()
         .enumerate()
         .map(|(i, spec)| shown(&grands[i], &grands[i], spec))
         .collect();
-    let rows = groups
-        .iter()
-        .map(|group| {
-            let nums = specs
+    let mut prefixes = Vec::new();
+    for group in &body.groups {
+        for k in 1..=group.key.len() {
+            let prefix = group.key[..k].to_vec();
+            if !prefixes.iter().any(|item: &Vec<String>| item == &prefix) {
+                prefixes.push(prefix);
+            }
+        }
+    }
+    let mut slots = Vec::new();
+    for prefix in prefixes {
+        let mut acc = vec![Measure::new(); n];
+        for group in body.groups.iter().filter(|g| g.key.starts_with(&prefix)) {
+            for (slot, measure) in acc.iter_mut().zip(&group.measures) {
+                slot.merge(measure);
+            }
+        }
+        let values = body
+            .specs
+            .iter()
+            .enumerate()
+            .map(|(i, spec)| shown(&acc[i], &grands[i], spec))
+            .collect();
+        push_slot(&mut slots, prefix, Vec::new(), values);
+    }
+    PivotAnswer {
+        value_names: body.specs.iter().map(|s| s.name.clone()).collect(),
+        row_fields: body.field_names.clone(),
+        col_fields: Vec::new(),
+        grand,
+        slots,
+    }
+}
+
+fn answer_cross(body: &CrossBody) -> PivotAnswer {
+    let grand_m = grand_measure(&body.cells);
+    let grand_n = shown(&grand_m, &grand_m, &body.spec);
+    let mut slots = Vec::new();
+    for row in &body.row_labels {
+        let mut acc = Measure::new();
+        for cell in body.cells.iter().filter(|s| s.row == *row) {
+            acc.merge(&cell.measure);
+        }
+        push_slot(
+            &mut slots,
+            vec![row.clone()],
+            Vec::new(),
+            vec![shown_or_zero(&acc, &grand_m, &body.spec)],
+        );
+    }
+    for col in &body.col_labels {
+        let mut acc = Measure::new();
+        for cell in body.cells.iter().filter(|s| s.col == *col) {
+            acc.merge(&cell.measure);
+        }
+        push_slot(
+            &mut slots,
+            Vec::new(),
+            vec![col.clone()],
+            vec![shown_or_zero(&acc, &grand_m, &body.spec)],
+        );
+    }
+    for row in &body.row_labels {
+        for col in &body.col_labels {
+            let measure = body
+                .cells
                 .iter()
-                .enumerate()
-                .map(|(i, spec)| shown(&group.measures[i], &grands[i], spec))
-                .collect();
-            (group.key[0].clone(), nums)
+                .find(|s| s.row == *row && s.col == *col)
+                .map(|s| s.measure)
+                .unwrap_or_else(Measure::new);
+            push_slot(
+                &mut slots,
+                vec![row.clone()],
+                vec![col.clone()],
+                vec![shown_or_zero(&measure, &grand_m, &body.spec)],
+            );
+        }
+    }
+    PivotAnswer {
+        value_names: vec![body.spec.name.clone()],
+        row_fields: vec![body.row_name.clone()],
+        col_fields: vec![body.col_name.clone()],
+        grand: vec![grand_n],
+        slots,
+    }
+}
+
+fn answer_col_tree(body: &ColTreeBody) -> PivotAnswer {
+    let grand_m = merge_col_hits(&body.hits, None, &ColSlot::Grand);
+    let grand_n = shown(&grand_m, &grand_m, &body.spec);
+    let paths: Vec<Vec<String>> = body
+        .columns
+        .iter()
+        .filter_map(|slot| match slot {
+            ColSlot::Leaf { path } | ColSlot::Subtotal { path } => Some(path.clone()),
+            ColSlot::Grand => None,
         })
         .collect();
-    RowSumView {
-        row_name: field_names.first().cloned().unwrap_or_default(),
-        value_names: specs.iter().map(|s| s.name.clone()).collect(),
-        groups: rows,
+    let mut slots = Vec::new();
+    for row in &body.row_labels {
+        let total = merge_col_hits(&body.hits, Some(row), &ColSlot::Grand);
+        push_slot(
+            &mut slots,
+            vec![row.clone()],
+            Vec::new(),
+            vec![shown_or_zero(&total, &grand_m, &body.spec)],
+        );
+        for path in &paths {
+            let measure = merge_col_hits(&body.hits, Some(row), &path_slot(path));
+            push_slot(
+                &mut slots,
+                vec![row.clone()],
+                path.clone(),
+                vec![shown_or_zero(&measure, &grand_m, &body.spec)],
+            );
+        }
+    }
+    for path in &paths {
+        let measure = merge_col_hits(&body.hits, None, &path_slot(path));
+        push_slot(
+            &mut slots,
+            Vec::new(),
+            path.clone(),
+            vec![shown_or_zero(&measure, &grand_m, &body.spec)],
+        );
+    }
+    PivotAnswer {
+        value_names: vec![body.spec.name.clone()],
+        row_fields: vec![body.row_name.clone()],
+        col_fields: body.col_names.clone(),
+        grand: vec![grand_n],
+        slots,
+    }
+}
+
+fn path_slot(path: &[String]) -> ColSlot {
+    ColSlot::Subtotal {
+        path: path.to_vec(),
+    }
+}
+
+fn answer_row_col(body: &RowColBody) -> PivotAnswer {
+    let grand_m = merge_row_hits(&body.hits, None, None);
+    let grand_n = shown(&grand_m, &grand_m, &body.spec);
+    let mut prefixes = Vec::new();
+    for key in &body.row_keys {
+        for k in 1..=key.len() {
+            let prefix = key[..k].to_vec();
+            if !prefixes.iter().any(|item: &Vec<String>| item == &prefix) {
+                prefixes.push(prefix);
+            }
+        }
+    }
+    let mut slots = Vec::new();
+    for prefix in &prefixes {
+        let total = merge_row_hits(&body.hits, Some(prefix), None);
+        push_slot(
+            &mut slots,
+            prefix.clone(),
+            Vec::new(),
+            vec![shown_or_zero(&total, &grand_m, &body.spec)],
+        );
+        for col in &body.col_labels {
+            let measure = merge_row_hits(&body.hits, Some(prefix), Some(col));
+            push_slot(
+                &mut slots,
+                prefix.clone(),
+                vec![col.clone()],
+                vec![shown_or_zero(&measure, &grand_m, &body.spec)],
+            );
+        }
+    }
+    for col in &body.col_labels {
+        let measure = merge_row_hits(&body.hits, None, Some(col));
+        push_slot(
+            &mut slots,
+            Vec::new(),
+            vec![col.clone()],
+            vec![shown_or_zero(&measure, &grand_m, &body.spec)],
+        );
+    }
+    PivotAnswer {
+        value_names: vec![body.spec.name.clone()],
+        row_fields: body.field_names.clone(),
+        col_fields: vec![body.col_name.clone()],
+        grand: vec![grand_n],
+        slots,
+    }
+}
+
+fn answer_multi(body: &MultiValueBody) -> PivotAnswer {
+    let n = body.specs.len();
+    let grands: Vec<Measure> = (0..n)
+        .map(|j| value_measure(&body.hits, None, None, j))
+        .collect();
+    let grand = grands
+        .iter()
+        .zip(&body.specs)
+        .map(|(measure, spec)| shown(measure, measure, spec))
+        .collect();
+    let mut slots = Vec::new();
+    for row in &body.row_labels {
+        let values = (0..n)
+            .map(|j| {
+                let measure = value_measure(&body.hits, Some(row), None, j);
+                shown_or_zero(&measure, &grands[j], &body.specs[j])
+            })
+            .collect();
+        push_slot(&mut slots, vec![row.clone()], Vec::new(), values);
+        for col in &body.col_labels {
+            let values = (0..n)
+                .map(|j| {
+                    let measure = value_measure(&body.hits, Some(row), Some(col), j);
+                    shown_or_zero(&measure, &grands[j], &body.specs[j])
+                })
+                .collect();
+            push_slot(&mut slots, vec![row.clone()], vec![col.clone()], values);
+        }
+    }
+    for col in &body.col_labels {
+        let values = (0..n)
+            .map(|j| {
+                let measure = value_measure(&body.hits, None, Some(col), j);
+                shown_or_zero(&measure, &grands[j], &body.specs[j])
+            })
+            .collect();
+        push_slot(&mut slots, Vec::new(), vec![col.clone()], values);
+    }
+    PivotAnswer {
+        value_names: body.value_names.clone(),
+        row_fields: vec![body.row_name.clone()],
+        col_fields: vec![body.col_name.clone()],
         grand,
+        slots,
     }
 }
 

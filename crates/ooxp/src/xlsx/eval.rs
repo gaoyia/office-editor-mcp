@@ -174,7 +174,7 @@ struct Book {
     externals: Vec<Option<ExtBook>>,
     /// `(链序号, sheetId, 列, 行)`。
     ext_used: HashMap<(usize, u32, u32, u32), Scalar>,
-    /// 透视区域。`GETPIVOTDATA` 只对一个行字段、没有列字段的形状取值。
+    /// 透视区域。`GETPIVOTDATA` 按已经写进格子的数取值。
     pivots: Vec<super::pivot::PivotCover>,
 }
 
@@ -2877,52 +2877,25 @@ impl Book {
         }) else {
             return ready_err(REF);
         };
-        let Some(sum) = cover.row_sum.clone() else {
+        let Some(answer) = cover.answer.clone() else {
             return Calc::Skip;
         };
-        let Some(vi) = sum
-            .value_names
-            .iter()
-            .position(|n| n.eq_ignore_ascii_case(&data_field))
-        else {
-            return ready_err(REF);
-        };
-        if vals.len() == 2 {
-            let Some(total) = sum.grand.get(vi).copied() else {
-                return ready_err(REF);
-            };
-            return ready_num(total);
-        }
-        let row_name = sum.row_name.clone();
-        let groups = sum.groups.clone();
-        let mut item: Option<String> = None;
+        let mut pairs = Vec::new();
         for pair in vals[2..].chunks(2) {
             let field = match self.text_of(&pair[0], sheet, here) {
                 Ok(s) => s,
                 Err(done) => return done,
             };
-            let next = match self.text_of(&pair[1], sheet, here) {
+            let item = match self.text_of(&pair[1], sheet, here) {
                 Ok(s) => s,
                 Err(done) => return done,
             };
-            if !field.eq_ignore_ascii_case(&row_name) {
-                return ready_err(REF);
-            }
-            if let Some(prev) = &item {
-                if !prev.eq_ignore_ascii_case(&next) {
-                    return ready_err(REF);
-                }
-            } else {
-                item = Some(next);
-            }
+            pairs.push((field, item));
         }
-        let Some(item) = item else {
-            return ready_err(REF);
-        };
-        let Some(group) = groups.iter().find(|g| g.0.eq_ignore_ascii_case(&item)) else {
-            return ready_err(REF);
-        };
-        ready_num(group.1.get(vi).copied().unwrap_or(0.0))
+        match answer.lookup(&data_field, &pairs) {
+            Some(n) => ready_num(n),
+            None => ready_err(REF),
+        }
     }
 
     fn int_arg(

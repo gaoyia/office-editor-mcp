@@ -837,6 +837,217 @@ fn pivot_multi_layouts_match_excel_16() {
     assert_eq!(pivots[2]["location"], json!("G60:M65"));
 }
 
+/// GETPIVOTDATA 按已写入的格子回答。对照 Excel 16.0。
+#[test]
+fn pivot_getpivotdata_matches_excel_16() {
+    let src = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": "产品"}),
+        json!({"ref": "B1", "value": "地区"}),
+        json!({"ref": "C1", "value": "金额"}),
+        json!({"ref": "A2", "value": "甲"}),
+        json!({"ref": "B2", "value": "东"}),
+        json!({"ref": "C2", "value": 10}),
+        json!({"ref": "A3", "value": "甲"}),
+        json!({"ref": "B3", "value": "西"}),
+        json!({"ref": "C3", "value": 5}),
+        json!({"ref": "A4", "value": "乙"}),
+        json!({"ref": "B4", "value": "东"}),
+        json!({"ref": "C4", "value": 7}),
+        json!({"ref": "A10", "value": "渠道"}),
+        json!({"ref": "B10", "value": "产品"}),
+        json!({"ref": "C10", "value": "地区"}),
+        json!({"ref": "D10", "value": "金额"}),
+        json!({"ref": "E10", "value": "数量"}),
+        json!({"ref": "A11", "value": "线上"}),
+        json!({"ref": "B11", "value": "甲"}),
+        json!({"ref": "C11", "value": "东"}),
+        json!({"ref": "D11", "value": 10}),
+        json!({"ref": "E11", "value": 1}),
+        json!({"ref": "A12", "value": "线上"}),
+        json!({"ref": "B12", "value": "甲"}),
+        json!({"ref": "C12", "value": "西"}),
+        json!({"ref": "D12", "value": 5}),
+        json!({"ref": "E12", "value": 1}),
+        json!({"ref": "A13", "value": "线上"}),
+        json!({"ref": "B13", "value": "乙"}),
+        json!({"ref": "C13", "value": "东"}),
+        json!({"ref": "D13", "value": 7}),
+        json!({"ref": "E13", "value": 1}),
+        json!({"ref": "A14", "value": "线下"}),
+        json!({"ref": "B14", "value": "甲"}),
+        json!({"ref": "C14", "value": "东"}),
+        json!({"ref": "D14", "value": 3}),
+        json!({"ref": "E14", "value": 2}),
+    ];
+    let formulas = [
+        ("AA1", r#"=GETPIVOTDATA("金额",$E$1)"#),
+        ("AA2", r#"=GETPIVOTDATA("金额",$E$1,"产品","甲")"#),
+        (
+            "AA3",
+            r#"=GETPIVOTDATA("金额",$E$1,"产品","甲","地区","东")"#,
+        ),
+        (
+            "AA4",
+            r#"=GETPIVOTDATA("金额",$E$1,"地区","东","产品","甲")"#,
+        ),
+        (
+            "AA5",
+            r#"=GETPIVOTDATA("金额",$E$1,"产品","乙","地区","西")"#,
+        ),
+        ("AA6", r#"=GETPIVOTDATA("金额",$E$1,"地区","东")"#),
+        ("AA8", r#"=GETPIVOTDATA("金额",$E$16)"#),
+        ("AA9", r#"=GETPIVOTDATA("金额",$E$16,"产品","甲")"#),
+        ("AA10", r#"=GETPIVOTDATA("金额",$E$16,"地区","东")"#),
+        (
+            "AA11",
+            r#"=GETPIVOTDATA("金额",$E$16,"产品","乙","地区","西")"#,
+        ),
+        (
+            "AA12",
+            r#"=GETPIVOTDATA("金额",$E$16,"产品","甲","产品","甲")"#,
+        ),
+        ("AA13", r#"=GETPIVOTDATA("金额",$E$40)"#),
+        ("AA14", r#"=GETPIVOTDATA("金额",$E$40,"产品","甲")"#),
+        (
+            "AA15",
+            r#"=GETPIVOTDATA("金额",$E$40,"产品","甲","地区","东")"#,
+        ),
+        ("AA17", r#"=GETPIVOTDATA("金额",$I$1)"#),
+        ("AA18", r#"=GETPIVOTDATA("金额",$I$1,"产品","甲")"#),
+        ("AA19", r#"=GETPIVOTDATA("金额",$I$1,"地区","东")"#),
+        (
+            "AA20",
+            r#"=GETPIVOTDATA("金额",$I$1,"产品","甲","地区","东")"#,
+        ),
+        (
+            "AA21",
+            r#"=GETPIVOTDATA("金额",$I$1,"产品","甲","地区","东","渠道","线上")"#,
+        ),
+        ("AA22", r#"=GETPIVOTDATA("金额",$I$1,"渠道","线上")"#),
+        (
+            "AA23",
+            r#"=GETPIVOTDATA("金额",$I$1,"产品","乙","地区","西")"#,
+        ),
+        (
+            "AA24",
+            r#"=GETPIVOTDATA("金额",$I$1,"产品","乙","地区","西","渠道","线下")"#,
+        ),
+        ("AA25", r#"=GETPIVOTDATA("金额",$I$30)"#),
+        ("AA26", r#"=GETPIVOTDATA("金额",$I$30,"产品","甲")"#),
+        (
+            "AA27",
+            r#"=GETPIVOTDATA("金额",$I$30,"产品","甲","渠道","线上")"#,
+        ),
+        (
+            "AA28",
+            r#"=GETPIVOTDATA("金额",$I$30,"产品","甲","地区","东","渠道","线上")"#,
+        ),
+        ("AA29", r#"=GETPIVOTDATA("金额",$I$30,"渠道","线下")"#),
+        (
+            "AA30",
+            r#"=GETPIVOTDATA("金额",$I$30,"产品","乙","地区","西","渠道","线上")"#,
+        ),
+        ("AA31", r#"=GETPIVOTDATA("金额",$I$60)"#),
+        ("AA32", r#"=GETPIVOTDATA("数量",$I$60)"#),
+        ("AA33", r#"=GETPIVOTDATA("数量",$I$60,"产品","甲")"#),
+        (
+            "AA34",
+            r#"=GETPIVOTDATA("金额",$I$60,"产品","乙","地区","西")"#,
+        ),
+        ("AA35", r#"=GETPIVOTDATA("数量",$I$60,"地区","西")"#),
+    ];
+    for (addr, formula) in formulas {
+        cells.push(json!({"ref": addr, "formula": formula}));
+    }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let out = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A1:C4" }, "location": "E1", "rows": ["产品", "地区"], "values": ["金额"] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A1:C4" }, "location": "E16", "rows": ["产品"], "cols": ["地区"], "values": ["金额"] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A1:C4" }, "location": "E40", "rows": ["产品", "地区"], "values": [{ "field": "金额", "function": "average" }] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A10:E14" }, "location": "I1", "rows": ["产品"], "cols": ["地区", "渠道"], "values": ["金额"] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A10:E14" }, "location": "I30", "rows": ["产品", "地区"], "cols": ["渠道"], "values": ["金额"] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A10:E14" }, "location": "I60", "rows": ["产品"], "cols": ["地区"], "values": ["金额", "数量"] },
+            { "op": "insertPivotTable", "id": "sheet:Sheet1", "source": { "sheet": "Sheet1", "ref": "A10:E14" }, "location": "I80", "cols": ["地区", "渠道"], "values": ["金额"] }
+        ]
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&out, "A1:AA36");
+    let num = |addr: &str, expect: f64| {
+        let got = cell(&tree, &format!("cell:Sheet1!{addr}"))["value"]
+            .as_f64()
+            .unwrap();
+        assert!((got - expect).abs() < 1e-9, "{addr} got {got}");
+    };
+    let err = |addr: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["value"], "#REF!", "{addr} {c}");
+    };
+    num("AA1", 22.0);
+    num("AA2", 15.0);
+    num("AA3", 10.0);
+    num("AA4", 10.0);
+    err("AA5");
+    err("AA6");
+    num("AA8", 22.0);
+    num("AA9", 15.0);
+    num("AA10", 17.0);
+    num("AA11", 0.0);
+    num("AA12", 15.0);
+    num("AA13", 22.0 / 3.0);
+    num("AA14", 7.5);
+    num("AA15", 10.0);
+    num("AA17", 25.0);
+    num("AA18", 18.0);
+    num("AA19", 20.0);
+    num("AA20", 13.0);
+    num("AA21", 10.0);
+    err("AA22");
+    num("AA23", 0.0);
+    err("AA24");
+    num("AA25", 25.0);
+    num("AA26", 18.0);
+    num("AA27", 15.0);
+    num("AA28", 10.0);
+    num("AA29", 3.0);
+    err("AA30");
+    num("AA31", 25.0);
+    num("AA32", 5.0);
+    num("AA33", 4.0);
+    num("AA34", 0.0);
+    num("AA35", 1.0);
+    let skipped = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": out.to_string_lossy(),
+        "output": skipped.to_string_lossy(),
+        "ops": [{
+            "op": "setCell",
+            "id": "cell:Sheet1!AA36",
+            "formula": "=GETPIVOTDATA(\"金额\",I80)"
+        }]
+    })
+    .to_string())
+    .unwrap();
+    let again = inspect_range(&skipped, "AA36:AA36");
+    assert!(cell(&again, "cell:Sheet1!AA36")["value"].is_null());
+}
+
 fn pivot_xml(path: &std::path::Path) -> String {
     let file = std::fs::File::open(path).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();
