@@ -56,6 +56,7 @@ $order = @(
     'xlsx-math-geom'
     'xlsx-charts'
     'xlsx-chart-3d'
+    'xlsx-chart-name'
     'chartex-edit'
     'chartex-cache'
     'xlsx-charts-remain'

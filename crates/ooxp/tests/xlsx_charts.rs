@@ -737,6 +737,92 @@ fn chart_cache_rewrites_3d_ref() {
 }
 
 #[test]
+fn chart_cache_follows_offset_and_index_names() {
+    let src = create_book("dyn");
+    let charted = tmp("dyn-chart");
+    apply(
+        &src,
+        &charted,
+        json!([
+            {
+                "op": "insertDefinedName",
+                "id": "xlsx:workbook",
+                "name": "Dyn",
+                "formula": "OFFSET(Sheet1!$B$11,0,0,2,1)"
+            },
+            {
+                "op": "insertDefinedName",
+                "id": "xlsx:workbook",
+                "name": "At",
+                "formula": "INDEX(Sheet1!$B$11:$B$13,2)"
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "col",
+                "from": "E2",
+                "dataFrom": "A10",
+                "series": [{ "name": "Q1", "categories": ["甲"], "values": [1] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let named = tmp("dyn-f");
+    rewrite_part(&charted, &named, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$11", "Dyn", 1)
+    });
+    let out = tmp("dyn-out");
+    apply(
+        &named,
+        &out,
+        json!([
+            { "op": "setCell", "id": "cell:Sheet1!B11", "value": 4 },
+            { "op": "setCell", "id": "cell:Sheet1!B12", "value": 7 }
+        ]),
+    )
+    .unwrap();
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains(">Dyn<"), "{xml}");
+    assert!(
+        xml.contains(r#"<c:pt idx="0"><c:v>4</c:v></c:pt>"#),
+        "{xml}"
+    );
+    assert!(
+        xml.contains(r#"<c:pt idx="1"><c:v>7</c:v></c:pt>"#),
+        "{xml}"
+    );
+    let err = apply(
+        &out,
+        &tmp("dyn-bad"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [1, 2]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let indexed = tmp("idx-f");
+    rewrite_part(&charted, &indexed, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$11", "At", 1)
+    });
+    let out2 = tmp("idx-out");
+    apply(
+        &indexed,
+        &out2,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B12", "value": 8 }]),
+    )
+    .unwrap();
+    let xml2 = part_text(&out2, "xl/charts/chart1.xml");
+    assert!(
+        xml2.contains(r#"<c:pt idx="0"><c:v>8</c:v></c:pt>"#),
+        "{xml2}"
+    );
+    assert!(!xml2.contains(r#"<c:pt idx="1">"#), "{xml2}");
+}
+
+#[test]
 fn insert_stock_surface_ofpie() {
     let src = create_book("rare");
     let out = tmp("ins-rare");

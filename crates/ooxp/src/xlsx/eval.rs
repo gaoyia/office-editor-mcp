@@ -383,7 +383,7 @@ fn fill_formula_caches_depth(
             *flag = true;
         }
     }
-    let charts = refresh_chart_caches(pkg, &sheet_docs, &sheet_names, &sst)?;
+    let charts = refresh_chart_caches(pkg, &sheet_docs, &sheet_names, &sst, &mut book)?;
     let links = write_external_caches(pkg, &ext_parts, &ext_used)?;
     let mut changed = charts || links || dirty.iter().any(|d| *d);
     for (i, (part, doc)) in sheet_docs.into_iter().enumerate() {
@@ -1087,6 +1087,62 @@ impl Book {
                 )),
                 Calc::Ready(_) => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
             },
+        }
+    }
+
+    /// 系列公式是定义名，或名字里的 `OFFSET` / `INDEX` / 运算。求出的是格子区域才返回值。
+    fn chart_ref_values(&mut self, formula: &str) -> Option<Vec<Scalar>> {
+        let text = formula.trim().trim_start_matches('=').trim();
+        if text.is_empty() || self.sheets.is_empty() || text.contains('[') {
+            return None;
+        }
+        let (sheet, src) = match split_chart_name(text) {
+            Some((sheet_name, name)) => {
+                let si = self
+                    .sheets
+                    .iter()
+                    .position(|s| s.name.eq_ignore_ascii_case(&sheet_name))?;
+                (si, name)
+            }
+            None => (0, text.to_string()),
+        };
+        let expr = parse_expr(&src)?;
+        let here = CellRef { col: 0, row: 0 };
+        let value = match self.eval_expr(&expr, sheet, here, Mode::Scalar) {
+            Calc::Ready(v) => v,
+            Calc::Skip => return None,
+        };
+        self.volatile.remove(&(sheet, 0, 0));
+        let rects = match value {
+            Value::Area(r) => vec![r],
+            Value::Areas(rs) if !rs.is_empty() => rs,
+            _ => return None,
+        };
+        let mut out = Vec::new();
+        let mut any = false;
+        for rect in &rects {
+            let (r1, r2) = ordered(rect.r1, rect.r2);
+            let (s1, s2) = self.resolve_span(rect, sheet)?;
+            for si in s1..=s2 {
+                for row in r1.row..=r2.row {
+                    for col in r1.col..=r2.col {
+                        if self
+                            .sheets
+                            .get(si)
+                            .and_then(|s| s.cells.get(&(col, row)))
+                            .is_some()
+                        {
+                            any = true;
+                        }
+                        out.push(self.cell_scalar(si, CellRef { col, row }));
+                    }
+                }
+            }
+        }
+        if any {
+            Some(out)
+        } else {
+            None
         }
     }
 
@@ -10097,6 +10153,7 @@ fn refresh_chart_caches(
     sheet_docs: &[(String, Document)],
     names: &[String],
     sst: &[String],
+    book: &mut Book,
 ) -> Result<bool, Error> {
     let mut changed = false;
     for part in pkg.part_names() {
@@ -10104,7 +10161,7 @@ fn refresh_chart_caches(
             continue;
         }
         let mut doc = xml::parse(pkg.get(&part)?)?;
-        if refresh_chart_element(&mut doc.root, sheet_docs, names, sst) {
+        if refresh_chart_element(&mut doc.root, sheet_docs, names, sst, book) {
             pkg.set(&part, doc.to_bytes()?)?;
             changed = true;
         }
@@ -10117,10 +10174,11 @@ fn refresh_chart_element(
     sheet_docs: &[(String, Document)],
     names: &[String],
     sst: &[String],
+    book: &mut Book,
 ) -> bool {
     let mut changed = false;
     if let Some(formula) = el.child_by_local("f").map(|f| f.text_content()) {
-        if let Some((lo, hi, start, end)) = parse_chart_ref(&formula, names) {
+        let values = if let Some((lo, hi, start, end)) = parse_chart_ref(&formula, names) {
             let mut values = Vec::new();
             let mut any = false;
             for (_, doc) in sheet_docs.iter().take(hi + 1).skip(lo) {
@@ -10137,23 +10195,61 @@ fn refresh_chart_element(
                 }
             }
             if any {
-                let cache = if el.child_by_local("numCache").is_some() {
-                    el.child_by_local_mut("numCache")
-                } else {
-                    el.child_by_local_mut("strCache")
-                };
-                if let Some(cache) = cache {
-                    changed |= replace_cache_pts(cache, &values);
-                }
+                Some(values)
+            } else {
+                None
             }
+        } else {
+            book.chart_ref_values(&formula)
+        };
+        if let Some(values) = values {
+            changed |= store_chart_cache(el, &values);
         }
     }
     for child in &mut el.children {
         if let Node::Element(inner) = child {
-            changed |= refresh_chart_element(inner, sheet_docs, names, sst);
+            changed |= refresh_chart_element(inner, sheet_docs, names, sst, book);
         }
     }
     changed
+}
+
+fn store_chart_cache(el: &mut Element, values: &[Scalar]) -> bool {
+    let cache = if el.child_by_local("numCache").is_some() {
+        el.child_by_local_mut("numCache")
+    } else {
+        el.child_by_local_mut("strCache")
+    };
+    match cache {
+        Some(cache) => replace_cache_pts(cache, values),
+        None => false,
+    }
+}
+
+/// `表!名字`。后面必须是名字，不能是单元格或函数。
+fn split_chart_name(text: &str) -> Option<(String, String)> {
+    let (sheet, rest) = if let Some(rest) = text.strip_prefix('\'') {
+        let end = rest.find('\'')?;
+        let sheet = rest[..end].replace("''", "'");
+        let after = rest[end + 1..].trim();
+        let rest = after.strip_prefix('!')?.trim();
+        (sheet, rest.to_string())
+    } else {
+        let (sheet, rest) = text.split_once('!')?;
+        if sheet.contains(':') || sheet.contains('[') {
+            return None;
+        }
+        (sheet.to_string(), rest.trim().to_string())
+    };
+    if rest.is_empty()
+        || rest.contains(':')
+        || rest.contains('(')
+        || rest.contains(' ')
+        || a1::parse_range(&rest.replace('$', "")).is_ok()
+    {
+        return None;
+    }
+    Some((sheet, rest))
 }
 
 fn parse_chart_ref(formula: &str, names: &[String]) -> Option<(usize, usize, CellRef, CellRef)> {
