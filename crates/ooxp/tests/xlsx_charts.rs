@@ -322,6 +322,79 @@ fn rejects_wrap_and_export_chart_data() {
 }
 
 #[test]
+fn export_clustered_column_png() {
+    let src = create_book("png");
+    let charted = tmp("png-chart");
+    apply(
+        &src,
+        &charted,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "col",
+            "anchor": "oneCell",
+            "from": "E2",
+            "cx": 5_486_400,
+            "cy": 3_200_400,
+            "dataFrom": "A10",
+            "series": [
+                { "name": "S1", "categories": ["A", "B", "C", "D"], "values": [1, 4, 3, 2] },
+                { "name": "S2", "values": [2, 1, 4, 3] }
+            ]
+        }]),
+    )
+    .unwrap();
+    let before = std::fs::read(&charted).unwrap();
+    let png_path = tmp("png-out").with_extension("png");
+    let RunOutput::Written {
+        content_type,
+        ops_applied,
+        ..
+    } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartImage",
+        "path": charted.to_string_lossy(),
+        "id": "sheet:Sheet1/chart:1",
+        "output": png_path.to_string_lossy()
+    })
+    .to_string())
+    .unwrap()
+    else {
+        panic!("exportChartImage 应写出文件");
+    };
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert!(ops_applied.is_none());
+    assert_eq!(std::fs::read(&charted).unwrap(), before);
+    let png = std::fs::read(&png_path).unwrap();
+    assert_eq!(&png[0..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    let width = u32::from_be_bytes(png[16..20].try_into().unwrap());
+    let height = u32::from_be_bytes(png[20..24].try_into().unwrap());
+    assert_eq!((width, height), (576, 336));
+
+    let lined = tmp("png-line");
+    apply(
+        &charted,
+        &lined,
+        json!([{
+            "op": "setChartType",
+            "id": "sheet:Sheet1/chart:1",
+            "type": "line"
+        }]),
+    )
+    .unwrap();
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartImage",
+        "path": lined.to_string_lossy(),
+        "id": "sheet:Sheet1/chart:1",
+        "output": tmp("png-line-out").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
 fn two_cell_size_rejected() {
     let src = create_book("two");
     let out = tmp("two-out");

@@ -7,6 +7,8 @@ mod cell;
 mod cf;
 mod chart;
 mod chart_drawing;
+mod chart_gdi;
+mod chart_paint;
 mod chartsheet;
 mod comments;
 mod connection;
@@ -53,6 +55,7 @@ mod view;
 
 pub(crate) use apply::apply_in;
 pub use apply::{apply, dry_run};
+pub use chart::export_chart_image;
 pub use create::create;
 pub(crate) use create::create_in;
 #[allow(unused_imports)]

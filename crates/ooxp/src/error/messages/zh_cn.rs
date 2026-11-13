@@ -1249,6 +1249,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ChartFormulaNotA1 => {
             "系列公式落不到格子上，或新值个数和格子数不同".into()
         }
+        ErrorKind::ChartImageUnsupported => {
+            "这张图还不能画出 PNG。目前只画簇状柱形图，而且宽高要落在 1 到 4096 像素之间".into()
+        }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
         ErrorKind::NotesSlideImage => "不能改 type 为 sldImg 的占位符".into(),

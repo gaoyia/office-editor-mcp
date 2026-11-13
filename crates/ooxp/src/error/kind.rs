@@ -793,6 +793,7 @@ define_error_kinds! {
     TwoCellMathSize => vec![Self::TwoCellMathSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
+    ChartImageUnsupported => vec![Self::ChartImageUnsupported],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
@@ -2344,6 +2345,7 @@ impl ErrorKind {
             | Self::SmartArtLayoutNotConvertible
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1
+            | Self::ChartImageUnsupported
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple

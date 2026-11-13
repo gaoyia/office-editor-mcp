@@ -18,6 +18,7 @@
         "apply",
         "exportMedia",
         "exportChartData",
+        "exportChartImage",
         "layoutCheck",
         "help"
       ]
@@ -97,6 +98,21 @@
       },
       "then": {
         "$ref": "#/$defs/exportChartDataRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "exportChartImage"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exportChartImageRequest"
       }
     },
     {

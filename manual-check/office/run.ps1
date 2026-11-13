@@ -55,6 +55,7 @@ $order = @(
     'xlsx-omml'
     'xlsx-math-geom'
     'xlsx-charts'
+    'xlsx-chart-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'

@@ -35,6 +35,7 @@ pub enum Action {
     Apply,
     ExportMedia,
     ExportChartData,
+    ExportChartImage,
     LayoutCheck,
     Help,
 }
@@ -80,7 +81,7 @@ pub fn envelope_fields(action: Action) -> &'static [&'static str] {
             "locale",
         ],
         Action::LayoutCheck => &["schemaVersion", "action", "path", "format", "locale"],
-        Action::ExportMedia | Action::ExportChartData => &[
+        Action::ExportMedia | Action::ExportChartData | Action::ExportChartImage => &[
             "schemaVersion",
             "action",
             "path",
@@ -125,6 +126,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "apply" => Action::Apply,
         "exportMedia" => Action::ExportMedia,
         "exportChartData" => Action::ExportChartData,
+        "exportChartImage" => Action::ExportChartImage,
         "layoutCheck" => Action::LayoutCheck,
         "help" => Action::Help,
         other => {

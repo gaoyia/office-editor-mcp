@@ -1399,6 +1399,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "the series formula does not land on cells, or the new values do not match that cell count"
                 .into()
         }
+        ErrorKind::ChartImageUnsupported => {
+            "This chart cannot be drawn to PNG yet. Only clustered column charts are drawn, and the size must be 1 to 4096 pixels"
+                .into()
+        }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs must be twoCell, oneCell, or absolute".into(),
         ErrorKind::NotesSlideImage => {

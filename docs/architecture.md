@@ -7,7 +7,7 @@
 
 产品名是 `ooxp`，全称 Office Open XML Patch。一个 Rust 库，外加一个命令行工具。库只认领域 JSON。命令行把 stdin 或文件里的领域 JSON 交给库，再把结果写到 stdout 或磁盘。
 
-命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把七个动作登记成工具。七个动作是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`layoutCheck`、`help`。
+命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把八个动作登记成工具。八个动作是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`layoutCheck`、`help`。
 参数有两种形状：直接写领域 JSON，或只写 `requestPath` 指向一份领域 JSON 文件。命令行读完文件后，交给库的仍是领域 JSON。库不解析这一层信封。
 
 不许为了信封去改领域 JSON。`requestPath` 不是领域字段。也不许把动作拆扁成一套 MCP 专用字段。
@@ -15,7 +15,7 @@
 对齐 Transitional OOXML，也就是 Office 默认存出来的那种包。
 ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/...`）只作对照，create 不按 Strict 生成。
 根关系里 `officeDocument` 的类型，或主部件根元素的命名空间，以 `http://purl.oclc.org/ooxml/` 开头，就是 Strict 包。
-inspect、exportMedia、exportChartData 只读，照常执行。
+inspect、exportMedia、exportChartData、exportChartImage 只读，照常执行。
 apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件。
 请先用 Office 另存为 Transitional。本程序不实现 Strict 写入。
 
@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览，也不把页面画成图。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览，也不把页面画成图。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG，像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -44,6 +44,7 @@ pptx 的 `exportMedia` 认幻灯片图、备注图、批注内图、母版 / 版
 docx 的 `exportMedia` 认图、OLE、墨迹画布、3D 与嵌入字体。图写出 `/word/media/…`，OLE 写出 embeddings，墨迹写出 `/word/ink/…`，3D 写出 GLB，`font:{n}` 写出 `/word/fonts/…`。
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
+xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 
 ## 只读检查与试运行
 
@@ -568,6 +569,10 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 调用方给出源 docx 或 pptx、图表 id 和本地目标路径。库打开包，按图表关系找到 embedding 工作簿，把该部件原字节写出。包不写回。没有 embedding 则失败。xlsx 本期直接拒绝。
 
+### exportChartImage
+
+调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，读图形 `a:ext` 和图表缓存，把簇状柱形图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
+
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
@@ -580,13 +585,14 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 - 形状与文本框见 §19.3.1.45 / §19.3.1.51，图片 `p:pic` 见 §19.3.1.37，`cNvPr` 见 §19.3.1.12，`p:graphicFrame` 见 §19.3.1.21。
 - 嵌入对象 `p:oleObj` 见 §19.3.2.4，Zoom 见 MS-PPTX §2.2.15 / §2.9–2.11，备注页见 §13.3.5 与 §19.3.2，讲义母版见 §19.3.1.24。
 - 现代批注见 MS-PPTX 2018/8（`p188:cmLst` / `p188:authorLst`）。包结构见 §9 与 §12.2。
-- 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 放映引擎，也不实现图表渲染或 SmartArt 版式算法。不接受把整棵 `<p:timing>` 当 JSON 写入。
+- 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 放映引擎，也不实现 SmartArt 版式算法。只读 PNG 出图已放开：金样用 Office 16.0 导出，按实测容差比较，不把像素写回包，也不塞进 inspect。像素差在绘制引擎里修。对照脚本只标红区，不改输出，也不靠放宽容差过关。不接受把整棵 `<p:timing>` 当 JSON 写入。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。
 
 ## 实现时允许的依赖（文档约定，代码阶段再写入 Cargo.toml）
 
 库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx / docx 写保护哈希可用 `sha2`、`getrandom`、`base64`。
+簇状柱形图的 PNG 用 `png` 编码。Windows 上轴和图例的字形用 GDI 画 Calibri，别处用 `fontdue`。没有这套字体时仍画柱和网格，不调用 Office。
 禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
 
 ## 阶段边界

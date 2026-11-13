@@ -25,7 +25,7 @@ pub enum ByteOutput {
     },
 }
 
-/// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData` 必须带上包字节。
+/// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage` 必须带上包字节。
 pub fn run_bytes(
     input_json: &str,
     package: Option<&[u8]>,
@@ -91,6 +91,15 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
                 content_type: exported.content_type,
             })
         }
+        Action::ExportChartImage => {
+            let bytes = require_package(package)?;
+            let exported = export_chart_image_bytes(&req, bytes)?;
+            Ok(ByteOutput::Bytes {
+                bytes: exported.bytes,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
         Action::Help => Ok(ByteOutput::Help(help_value(&req)?)),
     }
 }
@@ -115,6 +124,7 @@ pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
         | Action::Apply
         | Action::ExportMedia
         | Action::ExportChartData
+        | Action::ExportChartImage
         | Action::LayoutCheck => {
             let path = str_field(&req.obj, "path")?;
             Some(fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?)
@@ -167,7 +177,7 @@ fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
                 .map(PathBuf::from)
                 .unwrap_or_else(|| PathBuf::from(path)))
         }
-        Action::ExportMedia | Action::ExportChartData => req
+        Action::ExportMedia | Action::ExportChartData | Action::ExportChartImage => req
             .obj
             .get("output")
             .and_then(Value::as_str)
@@ -190,7 +200,10 @@ fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
 
 fn screen(req: &Request) -> Result<(), Error> {
     deny_unknown(&req.obj, json::envelope_fields(req.action))?;
-    if matches!(req.action, Action::ExportMedia | Action::ExportChartData) {
+    if matches!(
+        req.action,
+        Action::ExportMedia | Action::ExportChartData | Action::ExportChartImage
+    ) {
         str_field(&req.obj, "output")?;
     }
     Ok(())
@@ -450,6 +463,39 @@ fn export_media_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
             })
+        },
+    )
+}
+
+fn export_chart_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
+    let fmt = format_of(req)?;
+    let id = str_field(&req.obj, "id")?;
+    for_format(
+        fmt,
+        || {
+            let exported = xlsx::export_chart_image(bytes, id)?;
+            Ok(Exported {
+                bytes: exported.bytes,
+                content_type: exported.content_type,
+            })
+        },
+        || {
+            Err(Error::with_path(
+                ErrorKind::ActionNotForFormat {
+                    format: "docx".into(),
+                    action: "exportChartImage".into(),
+                },
+                "action",
+            ))
+        },
+        || {
+            Err(Error::with_path(
+                ErrorKind::ActionNotForFormat {
+                    format: "pptx".into(),
+                    action: "exportChartImage".into(),
+                },
+                "action",
+            ))
         },
     )
 }

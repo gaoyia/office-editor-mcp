@@ -91,7 +91,12 @@ impl Host {
 fn needs_package(action: &str) -> bool {
     matches!(
         action,
-        "inspect" | "apply" | "exportMedia" | "exportChartData" | "layoutCheck"
+        "inspect"
+            | "apply"
+            | "exportMedia"
+            | "exportChartData"
+            | "exportChartImage"
+            | "layoutCheck"
     )
 }
 
@@ -100,7 +105,7 @@ fn output_name(value: &Value) -> String {
     let pick = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_string);
     match action {
         "apply" => pick("output").or_else(|| pick("path")),
-        "exportMedia" | "exportChartData" => pick("output"),
+        "exportMedia" | "exportChartData" | "exportChartImage" => pick("output"),
         _ => pick("path"),
     }
     .unwrap_or_else(|| "output.bin".to_string())

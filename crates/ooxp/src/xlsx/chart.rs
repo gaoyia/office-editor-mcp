@@ -2073,6 +2073,71 @@ fn update_two_cell_to(
     })
 }
 
+pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
+    let target = parse_chart_id_at(id, "id")?;
+    let pkg = Package::open_bytes(bytes.to_vec())?;
+    let sheet_part = picture::lookup_sheet_part(&pkg, &target.sheet, "id")?;
+    let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
+    let draw = super::list_pin::parse_part(&pkg, &drawing_part)?;
+    let (cx, cy) = find_chart_extent(&draw.root, &target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
+    let rid = find_chart_rid(&draw.root, &target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
+    let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
+    let space = super::list_pin::parse_part(&pkg, &chart_part)?;
+    let accents = super::chart_paint::theme_accents(pkg.get("/xl/theme/theme1.xml").ok());
+    let width = super::chart_paint::emu_to_px(cx)?;
+    let height = super::chart_paint::emu_to_px(cy)?;
+    let png = super::chart_paint::render_chart(
+        &space.root,
+        width,
+        height,
+        accents,
+        calibri_bytes().as_deref(),
+    )?;
+    Ok(super::ExportedMedia {
+        bytes: png,
+        content_type: Some("image/png".to_string()),
+    })
+}
+
+fn find_chart_extent(root: &Element, key: &ChartKey) -> Option<(i64, i64)> {
+    let mut index = 0usize;
+    let mut ext = None;
+    let _ = picture::walk_anchors(root, &mut |anchor, _| {
+        if ext.is_some() {
+            return Ok(());
+        }
+        let Some(frame) = direct_chart_frame(anchor) else {
+            return Ok(());
+        };
+        index += 1;
+        if chart_hit(frame, key, index) {
+            ext = frame_emu(frame);
+        }
+        Ok(())
+    });
+    ext
+}
+
+fn frame_emu(frame: &Element) -> Option<(i64, i64)> {
+    let ext = frame.child_by_local("xfrm")?.child_by_local("ext")?;
+    let cx: i64 = ext.attr_local("cx")?.parse().ok()?;
+    let cy: i64 = ext.attr_local("cy")?.parse().ok()?;
+    if cx <= 0 || cy <= 0 {
+        return None;
+    }
+    Some((cx, cy))
+}
+
+fn calibri_bytes() -> Option<Vec<u8>> {
+    let windir = std::env::var_os("WINDIR")?;
+    let path = std::path::Path::new(&windir)
+        .join("Fonts")
+        .join("calibri.ttf");
+    std::fs::read(path).ok()
+}
+
 trait FromLocalName {
     fn from_local_name(name: &str) -> Option<Self>
     where
