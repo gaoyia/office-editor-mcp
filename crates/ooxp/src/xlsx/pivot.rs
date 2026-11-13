@@ -1,5 +1,5 @@
 //! 工作表透视表：inspect 名单，apply 写缓存与透视表部件。
-//! 一个或多个行字段、一个列字段、筛选，以及计数、平均值和合计占比，求值把合计写进 `sheetData`。
+//! 行字段、列字段（见 `plan_display`）、筛选，以及计数、平均值和合计占比，求值把合计写进 `sheetData`。
 
 use serde_json::{json, Map, Value};
 
@@ -687,7 +687,12 @@ fn location_end(
     headers: &[String],
     unique_counts: &[usize],
 ) -> CellRef {
-    let header = if axes.cols.is_empty() { 1 } else { 2 };
+    let value_n = axes.values.len().max(1);
+    let header = if axes.cols.is_empty() {
+        1
+    } else {
+        axes.cols.len() as u32 + u32::from(value_n > 1) + 1
+    };
     let leaves = if axes.rows.is_empty() {
         1
     } else {
@@ -695,9 +700,11 @@ fn location_end(
     };
     let subs = subtotal_bound(&axes.rows, headers, unique_counts);
     let value_cols = if axes.cols.is_empty() {
-        axes.values.len().max(1) as u32
+        value_n as u32
     } else {
-        axis_unique_product(&axes.cols, headers, unique_counts) + 1
+        let slots = col_tree_slots(&axes.cols, headers, unique_counts);
+        let n = value_n as u32;
+        slots.saturating_mul(n).saturating_add(n)
     };
     let row_cols = if axes.rows.is_empty() {
         0
@@ -740,6 +747,27 @@ fn axis_unique_product(names: &[String], headers: &[String], unique_counts: &[us
         n = n.saturating_mul(u).min(256);
     }
     n as u32
+}
+
+/// 列轴占位的上界：末级只算项，非末级再加一列「某项 汇总」。
+fn col_tree_slots(names: &[String], headers: &[String], unique_counts: &[usize]) -> u32 {
+    fn walk(names: &[String], headers: &[String], unique_counts: &[usize], i: usize) -> u32 {
+        let u = header_index(headers, &names[i])
+            .and_then(|idx| unique_counts.get(idx).copied())
+            .unwrap_or(1)
+            .max(1) as u32;
+        let u = u.min(256);
+        if i + 1 == names.len() {
+            return u;
+        }
+        let child = walk(names, headers, unique_counts, i + 1);
+        u.saturating_mul(child.saturating_add(1)).min(256)
+    }
+    if names.is_empty() {
+        0
+    } else {
+        walk(names, headers, unique_counts, 0)
+    }
 }
 
 fn field_unique_count(headers: &[String], name: &str, unique_counts: &[usize]) -> usize {
@@ -1982,9 +2010,67 @@ struct CrossBody {
     spec: ValSpec,
 }
 
+enum ColSlot {
+    Leaf { path: Vec<String> },
+    Subtotal { path: Vec<String> },
+    Grand,
+}
+
+struct ColHit {
+    row: String,
+    path: Vec<String>,
+    measure: Measure,
+}
+
+struct ColTreeBody {
+    row_name: String,
+    col_names: Vec<String>,
+    value_name: String,
+    columns: Vec<ColSlot>,
+    row_labels: Vec<String>,
+    hits: Vec<ColHit>,
+    spec: ValSpec,
+}
+
+struct RowColHit {
+    key: Vec<String>,
+    col: String,
+    measure: Measure,
+}
+
+struct RowColBody {
+    field_names: Vec<String>,
+    col_name: String,
+    value_name: String,
+    col_labels: Vec<String>,
+    row_keys: Vec<Vec<String>>,
+    hits: Vec<RowColHit>,
+    spec: ValSpec,
+}
+
+struct ValueHit {
+    row: String,
+    col: String,
+    measures: Vec<Measure>,
+}
+
+struct MultiValueBody {
+    row_name: String,
+    col_name: String,
+    caption: String,
+    value_names: Vec<String>,
+    row_labels: Vec<String>,
+    col_labels: Vec<String>,
+    hits: Vec<ValueHit>,
+    specs: Vec<ValSpec>,
+}
+
 enum DisplayBody {
     Rows(RowBody),
     Cross(CrossBody),
+    ColTree(ColTreeBody),
+    RowCol(RowColBody),
+    MultiValue(MultiValueBody),
 }
 
 struct DisplayPlan {
@@ -2011,13 +2097,10 @@ fn plan_display(
 ) -> Option<DisplayPlan> {
     let row_idxs = axis_indexes(root.child_by_local("rowFields"))?;
     let col_idxs = axis_indexes(root.child_by_local("colFields"))?;
-    if row_idxs.is_empty() || col_idxs.len() > 1 {
+    if row_idxs.is_empty() {
         return None;
     }
     let specs = value_specs(root)?;
-    if col_idxs.len() == 1 && (row_idxs.len() != 1 || specs.len() != 1) {
-        return None;
-    }
     let cache_id = root.attr("cacheId")?.parse::<u32>().ok()?;
     let cache = caches
         .iter()
@@ -2059,20 +2142,55 @@ fn plan_display(
             view,
         });
     }
-    let spec = specs.into_iter().next()?;
-    Some(DisplayPlan {
-        host,
-        origin,
-        pages: page_labels,
-        body: DisplayBody::Cross(cross_body(
-            &kept,
-            row_idxs[0],
-            col_idxs[0],
-            &cache.fields,
-            spec,
-        )),
-        view: None,
-    })
+    let fields = &cache.fields;
+    if col_idxs.len() >= 2 && row_idxs.len() == 1 && specs.len() == 1 {
+        let spec = specs.into_iter().next()?;
+        return Some(DisplayPlan {
+            host,
+            origin,
+            pages: page_labels,
+            body: DisplayBody::ColTree(col_tree_body(&kept, row_idxs[0], &col_idxs, fields, spec)),
+            view: None,
+        });
+    }
+    if col_idxs.len() == 1 && row_idxs.len() >= 2 && specs.len() == 1 {
+        let spec = specs.into_iter().next()?;
+        return Some(DisplayPlan {
+            host,
+            origin,
+            pages: page_labels,
+            body: DisplayBody::RowCol(row_col_body(&kept, &row_idxs, col_idxs[0], fields, spec)),
+            view: None,
+        });
+    }
+    if col_idxs.len() == 1 && row_idxs.len() == 1 && specs.len() >= 2 {
+        let caption = root.attr("dataCaption").unwrap_or("Values").to_string();
+        return Some(DisplayPlan {
+            host,
+            origin,
+            pages: page_labels,
+            body: DisplayBody::MultiValue(multi_value_body(
+                &kept,
+                row_idxs[0],
+                col_idxs[0],
+                fields,
+                caption,
+                specs,
+            )),
+            view: None,
+        });
+    }
+    if col_idxs.len() == 1 && row_idxs.len() == 1 && specs.len() == 1 {
+        let spec = specs.into_iter().next()?;
+        return Some(DisplayPlan {
+            host,
+            origin,
+            pages: page_labels,
+            body: DisplayBody::Cross(cross_body(&kept, row_idxs[0], col_idxs[0], fields, spec)),
+            view: None,
+        });
+    }
+    None
 }
 
 fn axis_indexes(parent: Option<&Element>) -> Option<Vec<usize>> {
@@ -2246,6 +2364,222 @@ fn cross_body(
     }
 }
 
+fn col_tree_body(
+    records: &[Vec<CacheVal>],
+    row_idx: usize,
+    col_idxs: &[usize],
+    fields: &[String],
+    spec: ValSpec,
+) -> ColTreeBody {
+    let mut hits: Vec<ColHit> = Vec::new();
+    let mut row_labels = Vec::new();
+    let mut keys = Vec::new();
+    for rec in records {
+        if row_idx >= rec.len() || col_idxs.iter().any(|i| *i >= rec.len()) || spec.idx >= rec.len()
+        {
+            continue;
+        }
+        let row = cache_label(&rec[row_idx]);
+        let path: Vec<String> = col_idxs.iter().map(|i| cache_label(&rec[*i])).collect();
+        if !row_labels.iter().any(|s| s == &row) {
+            row_labels.push(row.clone());
+        }
+        if !keys.iter().any(|k| k == &path) {
+            keys.push(path.clone());
+        }
+        if let Some(hit) = hits.iter_mut().find(|h| h.row == row && h.path == path) {
+            hit.measure.add(&rec[spec.idx]);
+        } else {
+            let mut measure = Measure::new();
+            measure.add(&rec[spec.idx]);
+            hits.push(ColHit { row, path, measure });
+        }
+    }
+    let mut columns = layout_cols(&keys, 0, col_idxs.len(), &[]);
+    columns.push(ColSlot::Grand);
+    ColTreeBody {
+        row_name: fields.get(row_idx).cloned().unwrap_or_default(),
+        col_names: col_idxs
+            .iter()
+            .map(|i| fields.get(*i).cloned().unwrap_or_default())
+            .collect(),
+        value_name: spec.name.clone(),
+        columns,
+        row_labels,
+        hits,
+        spec,
+    }
+}
+
+fn layout_cols(
+    keys: &[Vec<String>],
+    level: usize,
+    depth: usize,
+    prefix: &[String],
+) -> Vec<ColSlot> {
+    if depth == 0 || level >= depth {
+        return Vec::new();
+    }
+    let mut order = Vec::new();
+    let mut buckets: Vec<Vec<Vec<String>>> = Vec::new();
+    for key in keys {
+        if level >= key.len() {
+            continue;
+        }
+        let label = &key[level];
+        if let Some(i) = order.iter().position(|s: &String| s == label) {
+            buckets[i].push(key.clone());
+        } else {
+            order.push(label.clone());
+            buckets.push(vec![key.clone()]);
+        }
+    }
+    let mut out = Vec::new();
+    for (label, bucket) in order.into_iter().zip(buckets) {
+        let mut path = prefix.to_vec();
+        path.push(label);
+        if level + 1 == depth {
+            out.push(ColSlot::Leaf { path });
+        } else {
+            out.extend(layout_cols(&bucket, level + 1, depth, &path));
+            out.push(ColSlot::Subtotal { path });
+        }
+    }
+    out
+}
+
+fn row_col_body(
+    records: &[Vec<CacheVal>],
+    row_idxs: &[usize],
+    col_idx: usize,
+    fields: &[String],
+    spec: ValSpec,
+) -> RowColBody {
+    let mut hits: Vec<RowColHit> = Vec::new();
+    let mut row_keys = Vec::new();
+    let mut col_labels = Vec::new();
+    for rec in records {
+        if row_idxs.iter().any(|i| *i >= rec.len()) || col_idx >= rec.len() || spec.idx >= rec.len()
+        {
+            continue;
+        }
+        let key: Vec<String> = row_idxs.iter().map(|i| cache_label(&rec[*i])).collect();
+        let col = cache_label(&rec[col_idx]);
+        if !row_keys.iter().any(|item: &Vec<String>| item == &key) {
+            row_keys.push(key.clone());
+        }
+        if !col_labels.iter().any(|s| s == &col) {
+            col_labels.push(col.clone());
+        }
+        if let Some(hit) = hits.iter_mut().find(|h| h.key == key && h.col == col) {
+            hit.measure.add(&rec[spec.idx]);
+        } else {
+            let mut measure = Measure::new();
+            measure.add(&rec[spec.idx]);
+            hits.push(RowColHit { key, col, measure });
+        }
+    }
+    RowColBody {
+        field_names: row_idxs
+            .iter()
+            .map(|i| fields.get(*i).cloned().unwrap_or_default())
+            .collect(),
+        col_name: fields.get(col_idx).cloned().unwrap_or_default(),
+        value_name: spec.name.clone(),
+        col_labels,
+        row_keys: grouped_keys(&row_keys),
+        hits,
+        spec,
+    }
+}
+
+fn grouped_keys(keys: &[Vec<String>]) -> Vec<Vec<String>> {
+    if keys.is_empty() {
+        return Vec::new();
+    }
+    fn walk(keys: &[Vec<String>], level: usize, depth: usize) -> Vec<Vec<String>> {
+        if level + 1 >= depth {
+            let mut out = Vec::new();
+            for key in keys {
+                if !out.iter().any(|item: &Vec<String>| item == key) {
+                    out.push(key.clone());
+                }
+            }
+            return out;
+        }
+        let mut order = Vec::new();
+        let mut buckets: Vec<Vec<Vec<String>>> = Vec::new();
+        for key in keys {
+            if level >= key.len() {
+                continue;
+            }
+            let label = &key[level];
+            if let Some(i) = order.iter().position(|s: &String| s == label) {
+                buckets[i].push(key.clone());
+            } else {
+                order.push(label.clone());
+                buckets.push(vec![key.clone()]);
+            }
+        }
+        let mut out = Vec::new();
+        for bucket in buckets {
+            out.extend(walk(&bucket, level + 1, depth));
+        }
+        out
+    }
+    walk(keys, 0, keys[0].len())
+}
+
+fn multi_value_body(
+    records: &[Vec<CacheVal>],
+    row_idx: usize,
+    col_idx: usize,
+    fields: &[String],
+    caption: String,
+    specs: Vec<ValSpec>,
+) -> MultiValueBody {
+    let mut hits: Vec<ValueHit> = Vec::new();
+    let mut row_labels = Vec::new();
+    let mut col_labels = Vec::new();
+    for rec in records {
+        if row_idx >= rec.len() || col_idx >= rec.len() || specs.iter().any(|s| s.idx >= rec.len())
+        {
+            continue;
+        }
+        let row = cache_label(&rec[row_idx]);
+        let col = cache_label(&rec[col_idx]);
+        if !row_labels.iter().any(|s| s == &row) {
+            row_labels.push(row.clone());
+        }
+        if !col_labels.iter().any(|s| s == &col) {
+            col_labels.push(col.clone());
+        }
+        if let Some(hit) = hits.iter_mut().find(|h| h.row == row && h.col == col) {
+            for (measure, spec) in hit.measures.iter_mut().zip(&specs) {
+                measure.add(&rec[spec.idx]);
+            }
+        } else {
+            let mut measures = Vec::new();
+            for spec in &specs {
+                let mut measure = Measure::new();
+                measure.add(&rec[spec.idx]);
+                measures.push(measure);
+            }
+            hits.push(ValueHit { row, col, measures });
+        }
+    }
+    MultiValueBody {
+        row_name: fields.get(row_idx).cloned().unwrap_or_default(),
+        col_name: fields.get(col_idx).cloned().unwrap_or_default(),
+        caption,
+        value_names: specs.iter().map(|s| s.name.clone()).collect(),
+        row_labels,
+        col_labels,
+        hits,
+        specs,
+    }
+}
+
 fn row_view(field_names: &[String], groups: &[RowGroup], specs: &[ValSpec]) -> RowSumView {
     let grands = merged_measures(groups, 0, groups.len(), specs.len());
     let grand = specs
@@ -2295,11 +2629,27 @@ fn shown(measure: &Measure, grand: &Measure, spec: &ValSpec) -> f64 {
     }
 }
 
+fn put_measure(
+    host: &mut Element,
+    cell: CellRef,
+    measure: &Measure,
+    grand: &Measure,
+    spec: &ValSpec,
+) -> bool {
+    if !measure.seen {
+        return false;
+    }
+    put_number(host, cell, shown(measure, grand, spec))
+}
+
 fn paint_display(host: &mut Element, plan: &DisplayPlan) -> bool {
     let mut changed = paint_pages(host, plan.origin, &plan.pages);
     changed |= match &plan.body {
         DisplayBody::Rows(body) => paint_row_body(host, plan.origin, body),
         DisplayBody::Cross(body) => paint_cross(host, plan.origin, body),
+        DisplayBody::ColTree(body) => paint_col_tree(host, plan.origin, body),
+        DisplayBody::RowCol(body) => paint_row_col(host, plan.origin, body),
+        DisplayBody::MultiValue(body) => paint_multi_value(host, plan.origin, body),
     };
     changed
 }
@@ -2597,6 +2947,506 @@ fn grand_measure(cells: &[CrossSlot]) -> Measure {
     let mut acc = Measure::new();
     for slot in cells {
         acc.merge(&slot.measure);
+    }
+    acc
+}
+
+fn paint_col_tree(host: &mut Element, origin: CellRef, body: &ColTreeBody) -> bool {
+    let depth = body.col_names.len();
+    let mut changed = put_text(host, origin, &body.value_name);
+    for (i, name) in body.col_names.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + 1 + i as u32,
+                row: origin.row,
+            },
+            name,
+        );
+    }
+    for level in 0..depth {
+        let row = origin.row + 1 + level as u32;
+        if level + 1 == depth {
+            changed |= put_text(
+                host,
+                CellRef {
+                    col: origin.col,
+                    row,
+                },
+                &body.row_name,
+            );
+        }
+        changed |= paint_col_header(host, origin, row, level, depth, &body.columns);
+    }
+    let grand = merge_col_hits(&body.hits, None, &ColSlot::Grand);
+    let data = origin.row + depth as u32 + 1;
+    for (r, label) in body.row_labels.iter().enumerate() {
+        let row = data + r as u32;
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col,
+                row,
+            },
+            label,
+        );
+        for (c, slot) in body.columns.iter().enumerate() {
+            let measure = merge_col_hits(&body.hits, Some(label), slot);
+            changed |= put_measure(
+                host,
+                CellRef {
+                    col: origin.col + 1 + c as u32,
+                    row,
+                },
+                &measure,
+                &grand,
+                &body.spec,
+            );
+        }
+    }
+    let total_row = data + body.row_labels.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: total_row,
+        },
+        "总计",
+    );
+    for (c, slot) in body.columns.iter().enumerate() {
+        let measure = merge_col_hits(&body.hits, None, slot);
+        changed |= put_measure(
+            host,
+            CellRef {
+                col: origin.col + 1 + c as u32,
+                row: total_row,
+            },
+            &measure,
+            &grand,
+            &body.spec,
+        );
+    }
+    changed
+}
+
+fn paint_col_header(
+    host: &mut Element,
+    origin: CellRef,
+    row: u32,
+    level: usize,
+    depth: usize,
+    columns: &[ColSlot],
+) -> bool {
+    let mut changed = false;
+    let mut seen: Option<Vec<String>> = None;
+    for (c, slot) in columns.iter().enumerate() {
+        let text = match slot {
+            ColSlot::Grand if level == 0 => Some("总计".to_string()),
+            ColSlot::Subtotal { path } if path.len() == level + 1 => {
+                seen = None;
+                path.last().map(|label| format!("{label} 汇总"))
+            }
+            ColSlot::Leaf { path } if level + 1 == depth => path.get(level).cloned(),
+            ColSlot::Leaf { path } => {
+                let prefix = path.get(..=level).map(|item| item.to_vec());
+                if prefix.is_some() && seen.as_ref() != prefix.as_ref() {
+                    let label = path.get(level).cloned();
+                    seen = prefix;
+                    label
+                } else {
+                    None
+                }
+            }
+            ColSlot::Grand | ColSlot::Subtotal { .. } => None,
+        };
+        let Some(text) = text else {
+            continue;
+        };
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + 1 + c as u32,
+                row,
+            },
+            &text,
+        );
+    }
+    changed
+}
+
+fn merge_col_hits(hits: &[ColHit], row: Option<&str>, slot: &ColSlot) -> Measure {
+    let mut acc = Measure::new();
+    for hit in hits {
+        if row.is_some_and(|name| hit.row != name) || !slot_covers(slot, &hit.path) {
+            continue;
+        }
+        acc.merge(&hit.measure);
+    }
+    acc
+}
+
+fn slot_covers(slot: &ColSlot, path: &[String]) -> bool {
+    match slot {
+        ColSlot::Leaf { path: leaf } => path == leaf.as_slice(),
+        ColSlot::Subtotal { path: prefix } => path.starts_with(prefix.as_slice()),
+        ColSlot::Grand => true,
+    }
+}
+
+fn paint_row_col(host: &mut Element, origin: CellRef, body: &RowColBody) -> bool {
+    let n = body.field_names.len() as u32;
+    let mut changed = put_text(host, origin, &body.value_name);
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col + n,
+            row: origin.row,
+        },
+        &body.col_name,
+    );
+    let head = origin.row + 1;
+    for (c, name) in body.field_names.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + c as u32,
+                row: head,
+            },
+            name,
+        );
+    }
+    for (i, label) in body.col_labels.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + n + i as u32,
+                row: head,
+            },
+            label,
+        );
+    }
+    let grand_col = origin.col + n + body.col_labels.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: grand_col,
+            row: head,
+        },
+        "总计",
+    );
+    let grand = merge_row_hits(&body.hits, None, None);
+    let (total_row, body_changed) = {
+        let mut cursor = RowColPaint {
+            host,
+            origin,
+            body,
+            grand,
+            changed: false,
+            row: origin.row + 2,
+        };
+        cursor.paint(0, 0, body.row_keys.len());
+        (cursor.row, cursor.changed)
+    };
+    changed |= body_changed;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: total_row,
+        },
+        "总计",
+    );
+    for (i, label) in body.col_labels.iter().enumerate() {
+        let measure = merge_row_hits(&body.hits, None, Some(label));
+        changed |= put_measure(
+            host,
+            CellRef {
+                col: origin.col + n + i as u32,
+                row: total_row,
+            },
+            &measure,
+            &grand,
+            &body.spec,
+        );
+    }
+    changed |= put_measure(
+        host,
+        CellRef {
+            col: grand_col,
+            row: total_row,
+        },
+        &grand,
+        &grand,
+        &body.spec,
+    );
+    changed
+}
+
+struct RowColPaint<'a> {
+    host: &'a mut Element,
+    origin: CellRef,
+    body: &'a RowColBody,
+    grand: Measure,
+    changed: bool,
+    row: u32,
+}
+
+impl RowColPaint<'_> {
+    fn paint(&mut self, level: usize, start: usize, end: usize) {
+        let n = self.body.field_names.len();
+        if n == 0 || start >= end {
+            return;
+        }
+        if level + 1 == n {
+            for i in start..end {
+                self.leaf(i);
+            }
+            return;
+        }
+        let mut s = start;
+        while s < end {
+            let label = self.body.row_keys[s][level].clone();
+            let mut e = s + 1;
+            while e < end && self.body.row_keys[e][level] == label {
+                e += 1;
+            }
+            self.paint(level + 1, s, e);
+            let prefix = self.body.row_keys[s][..=level].to_vec();
+            self.subtotal(level, &label, &prefix);
+            s = e;
+        }
+    }
+
+    fn leaf(&mut self, i: usize) {
+        let n = self.body.field_names.len();
+        for c in 0..n {
+            let show = c + 1 == n
+                || i == 0
+                || self.body.row_keys[i][..=c] != self.body.row_keys[i - 1][..=c];
+            if !show {
+                continue;
+            }
+            let text = self.body.row_keys[i][c].clone();
+            self.changed |= put_text(
+                self.host,
+                CellRef {
+                    col: self.origin.col + c as u32,
+                    row: self.row,
+                },
+                &text,
+            );
+        }
+        let key = self.body.row_keys[i].clone();
+        self.write_cols(Some(&key));
+        self.row += 1;
+    }
+
+    fn subtotal(&mut self, level: usize, label: &str, prefix: &[String]) {
+        self.changed |= put_text(
+            self.host,
+            CellRef {
+                col: self.origin.col + level as u32,
+                row: self.row,
+            },
+            &format!("{label} 汇总"),
+        );
+        self.write_cols(Some(prefix));
+        self.row += 1;
+    }
+
+    fn write_cols(&mut self, prefix: Option<&[String]>) {
+        let n = self.body.field_names.len() as u32;
+        for i in 0..self.body.col_labels.len() {
+            let label = self.body.col_labels[i].clone();
+            let measure = merge_row_hits(&self.body.hits, prefix, Some(&label));
+            self.changed |= put_measure(
+                self.host,
+                CellRef {
+                    col: self.origin.col + n + i as u32,
+                    row: self.row,
+                },
+                &measure,
+                &self.grand,
+                &self.body.spec,
+            );
+        }
+        let total = merge_row_hits(&self.body.hits, prefix, None);
+        self.changed |= put_measure(
+            self.host,
+            CellRef {
+                col: self.origin.col + n + self.body.col_labels.len() as u32,
+                row: self.row,
+            },
+            &total,
+            &self.grand,
+            &self.body.spec,
+        );
+    }
+}
+
+fn merge_row_hits(hits: &[RowColHit], prefix: Option<&[String]>, col: Option<&str>) -> Measure {
+    let mut acc = Measure::new();
+    for hit in hits {
+        if prefix.is_some_and(|key| !hit.key.starts_with(key))
+            || col.is_some_and(|name| hit.col != name)
+        {
+            continue;
+        }
+        acc.merge(&hit.measure);
+    }
+    acc
+}
+
+fn paint_multi_value(host: &mut Element, origin: CellRef, body: &MultiValueBody) -> bool {
+    let n = body.specs.len() as u32;
+    let mut changed = put_text(
+        host,
+        CellRef {
+            col: origin.col + 1,
+            row: origin.row,
+        },
+        &body.col_name,
+    );
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col + 2,
+            row: origin.row,
+        },
+        &body.caption,
+    );
+    let item_row = origin.row + 1;
+    for (i, label) in body.col_labels.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + 1 + (i as u32) * n,
+                row: item_row,
+            },
+            label,
+        );
+    }
+    let grand_base = origin.col + 1 + body.col_labels.len() as u32 * n;
+    for (j, name) in body.value_names.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: grand_base + j as u32,
+                row: item_row,
+            },
+            &format!("{name}汇总"),
+        );
+    }
+    let name_row = origin.row + 2;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: name_row,
+        },
+        &body.row_name,
+    );
+    for i in 0..body.col_labels.len() {
+        for (j, name) in body.value_names.iter().enumerate() {
+            changed |= put_text(
+                host,
+                CellRef {
+                    col: origin.col + 1 + (i as u32) * n + j as u32,
+                    row: name_row,
+                },
+                name,
+            );
+        }
+    }
+    let data = origin.row + 3;
+    for (r, label) in body.row_labels.iter().enumerate() {
+        let row = data + r as u32;
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col,
+                row,
+            },
+            label,
+        );
+        for (i, col) in body.col_labels.iter().enumerate() {
+            for j in 0..body.specs.len() {
+                let measure = value_measure(&body.hits, Some(label), Some(col), j);
+                changed |= put_measure(
+                    host,
+                    CellRef {
+                        col: origin.col + 1 + (i as u32) * n + j as u32,
+                        row,
+                    },
+                    &measure,
+                    &value_measure(&body.hits, None, None, j),
+                    &body.specs[j],
+                );
+            }
+        }
+        for j in 0..body.specs.len() {
+            let measure = value_measure(&body.hits, Some(label), None, j);
+            changed |= put_measure(
+                host,
+                CellRef {
+                    col: grand_base + j as u32,
+                    row,
+                },
+                &measure,
+                &value_measure(&body.hits, None, None, j),
+                &body.specs[j],
+            );
+        }
+    }
+    let total_row = data + body.row_labels.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: total_row,
+        },
+        "总计",
+    );
+    for (i, col) in body.col_labels.iter().enumerate() {
+        for j in 0..body.specs.len() {
+            let measure = value_measure(&body.hits, None, Some(col), j);
+            changed |= put_measure(
+                host,
+                CellRef {
+                    col: origin.col + 1 + (i as u32) * n + j as u32,
+                    row: total_row,
+                },
+                &measure,
+                &value_measure(&body.hits, None, None, j),
+                &body.specs[j],
+            );
+        }
+    }
+    for j in 0..body.specs.len() {
+        let measure = value_measure(&body.hits, None, None, j);
+        changed |= put_measure(
+            host,
+            CellRef {
+                col: grand_base + j as u32,
+                row: total_row,
+            },
+            &measure,
+            &measure,
+            &body.specs[j],
+        );
+    }
+    changed
+}
+
+fn value_measure(hits: &[ValueHit], row: Option<&str>, col: Option<&str>, j: usize) -> Measure {
+    let mut acc = Measure::new();
+    for hit in hits {
+        if row.is_some_and(|name| hit.row != name) || col.is_some_and(|name| hit.col != name) {
+            continue;
+        }
+        if let Some(measure) = hit.measures.get(j) {
+            acc.merge(measure);
+        }
     }
     acc
 }

@@ -643,6 +643,200 @@ fn pivot_layouts_match_excel_16() {
     assert!(xml.contains(r#"showDataAs="percentOfTotal""#), "{xml}");
 }
 
+/// 多个列字段、列字段加多个行字段、列字段加多个值，对照 Excel 16.0 采到的格子。
+#[test]
+fn pivot_multi_layouts_match_excel_16() {
+    let src = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "渠道" },
+            { "ref": "B1", "value": "产品" },
+            { "ref": "C1", "value": "地区" },
+            { "ref": "D1", "value": "金额" },
+            { "ref": "E1", "value": "数量" },
+            { "ref": "A2", "value": "线上" }, { "ref": "B2", "value": "甲" }, { "ref": "C2", "value": "东" }, { "ref": "D2", "value": 10 }, { "ref": "E2", "value": 1 },
+            { "ref": "A3", "value": "线上" }, { "ref": "B3", "value": "甲" }, { "ref": "C3", "value": "西" }, { "ref": "D3", "value": 5 }, { "ref": "E3", "value": 1 },
+            { "ref": "A4", "value": "线上" }, { "ref": "B4", "value": "乙" }, { "ref": "C4", "value": "东" }, { "ref": "D4", "value": 7 }, { "ref": "E4", "value": 1 },
+            { "ref": "A5", "value": "线下" }, { "ref": "B5", "value": "甲" }, { "ref": "C5", "value": "东" }, { "ref": "D5", "value": 3 }, { "ref": "E5", "value": 2 }
+        ]}] }
+    })
+    .to_string())
+    .unwrap();
+    let out = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:E5" },
+                "location": "G1",
+                "rows": ["产品"],
+                "cols": ["地区", "渠道"],
+                "values": ["金额"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:E5" },
+                "location": "G30",
+                "rows": ["产品", "地区"],
+                "cols": ["渠道"],
+                "values": ["金额"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:E5" },
+                "location": "G60",
+                "rows": ["产品"],
+                "cols": ["地区"],
+                "values": ["金额", "数量"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:E5" },
+                "location": "G70",
+                "cols": ["地区", "渠道"],
+                "values": ["金额"]
+            }
+        ]
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&out, "A1:N75");
+    let near = |id: &str, expect: f64| {
+        assert!((num_at(&tree, id) - expect).abs() < 1e-9, "{id}");
+    };
+    let text = |id: &str, expect: &str| {
+        assert_eq!(cell(&tree, id)["value"], json!(expect), "{id}");
+    };
+    let absent = |id: &str| {
+        let hit = tree["sheets"][0]["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == id);
+        assert!(!hit, "{id}");
+    };
+    text("cell:Sheet1!G1", "金额");
+    text("cell:Sheet1!H1", "地区");
+    text("cell:Sheet1!I1", "渠道");
+    text("cell:Sheet1!H2", "东");
+    text("cell:Sheet1!J2", "东 汇总");
+    text("cell:Sheet1!K2", "西");
+    text("cell:Sheet1!L2", "西 汇总");
+    text("cell:Sheet1!M2", "总计");
+    absent("cell:Sheet1!I2");
+    text("cell:Sheet1!G3", "产品");
+    text("cell:Sheet1!H3", "线上");
+    text("cell:Sheet1!I3", "线下");
+    text("cell:Sheet1!K3", "线上");
+    absent("cell:Sheet1!J3");
+    absent("cell:Sheet1!L3");
+    text("cell:Sheet1!G4", "甲");
+    near("cell:Sheet1!H4", 10.0);
+    near("cell:Sheet1!I4", 3.0);
+    near("cell:Sheet1!J4", 13.0);
+    near("cell:Sheet1!K4", 5.0);
+    near("cell:Sheet1!L4", 5.0);
+    near("cell:Sheet1!M4", 18.0);
+    text("cell:Sheet1!G5", "乙");
+    near("cell:Sheet1!H5", 7.0);
+    absent("cell:Sheet1!I5");
+    near("cell:Sheet1!J5", 7.0);
+    absent("cell:Sheet1!K5");
+    absent("cell:Sheet1!L5");
+    near("cell:Sheet1!M5", 7.0);
+    text("cell:Sheet1!G6", "总计");
+    near("cell:Sheet1!H6", 17.0);
+    near("cell:Sheet1!I6", 3.0);
+    near("cell:Sheet1!J6", 20.0);
+    near("cell:Sheet1!K6", 5.0);
+    near("cell:Sheet1!L6", 5.0);
+    near("cell:Sheet1!M6", 25.0);
+
+    text("cell:Sheet1!G30", "金额");
+    absent("cell:Sheet1!H30");
+    text("cell:Sheet1!I30", "渠道");
+    text("cell:Sheet1!G31", "产品");
+    text("cell:Sheet1!H31", "地区");
+    text("cell:Sheet1!I31", "线上");
+    text("cell:Sheet1!J31", "线下");
+    text("cell:Sheet1!K31", "总计");
+    text("cell:Sheet1!G32", "甲");
+    text("cell:Sheet1!H32", "东");
+    near("cell:Sheet1!I32", 10.0);
+    near("cell:Sheet1!J32", 3.0);
+    near("cell:Sheet1!K32", 13.0);
+    absent("cell:Sheet1!G33");
+    text("cell:Sheet1!H33", "西");
+    near("cell:Sheet1!I33", 5.0);
+    absent("cell:Sheet1!J33");
+    near("cell:Sheet1!K33", 5.0);
+    text("cell:Sheet1!G34", "甲 汇总");
+    near("cell:Sheet1!I34", 15.0);
+    near("cell:Sheet1!J34", 3.0);
+    near("cell:Sheet1!K34", 18.0);
+    text("cell:Sheet1!G35", "乙");
+    near("cell:Sheet1!I35", 7.0);
+    absent("cell:Sheet1!J35");
+    near("cell:Sheet1!K35", 7.0);
+    text("cell:Sheet1!G36", "乙 汇总");
+    near("cell:Sheet1!I36", 7.0);
+    absent("cell:Sheet1!J36");
+    text("cell:Sheet1!G37", "总计");
+    near("cell:Sheet1!I37", 22.0);
+    near("cell:Sheet1!J37", 3.0);
+    near("cell:Sheet1!K37", 25.0);
+
+    absent("cell:Sheet1!G60");
+    text("cell:Sheet1!H60", "地区");
+    text("cell:Sheet1!I60", "Values");
+    text("cell:Sheet1!H61", "东");
+    absent("cell:Sheet1!I61");
+    text("cell:Sheet1!J61", "西");
+    text("cell:Sheet1!L61", "金额汇总");
+    text("cell:Sheet1!M61", "数量汇总");
+    text("cell:Sheet1!G62", "产品");
+    text("cell:Sheet1!H62", "金额");
+    text("cell:Sheet1!I62", "数量");
+    text("cell:Sheet1!J62", "金额");
+    text("cell:Sheet1!K62", "数量");
+    near("cell:Sheet1!H63", 13.0);
+    near("cell:Sheet1!I63", 3.0);
+    near("cell:Sheet1!J63", 5.0);
+    near("cell:Sheet1!K63", 1.0);
+    near("cell:Sheet1!L63", 18.0);
+    near("cell:Sheet1!M63", 4.0);
+    near("cell:Sheet1!H64", 7.0);
+    near("cell:Sheet1!I64", 1.0);
+    absent("cell:Sheet1!J64");
+    absent("cell:Sheet1!K64");
+    near("cell:Sheet1!L64", 7.0);
+    near("cell:Sheet1!M64", 1.0);
+    text("cell:Sheet1!G65", "总计");
+    near("cell:Sheet1!H65", 20.0);
+    near("cell:Sheet1!I65", 4.0);
+    near("cell:Sheet1!J65", 5.0);
+    near("cell:Sheet1!K65", 1.0);
+    near("cell:Sheet1!L65", 25.0);
+    near("cell:Sheet1!M65", 5.0);
+    absent("cell:Sheet1!G70");
+
+    let pivots = tree["sheets"][0]["pivots"].as_array().unwrap();
+    assert_eq!(pivots[0]["location"], json!("G1:N6"));
+    assert_eq!(pivots[1]["location"], json!("G30:K38"));
+    assert_eq!(pivots[2]["location"], json!("G60:M65"));
+}
+
 fn pivot_xml(path: &std::path::Path) -> String {
     let file = std::fs::File::open(path).unwrap();
     let mut zip = zip::ZipArchive::new(file).unwrap();

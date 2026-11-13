@@ -24791,8 +24791,8 @@
     "insertPivotTableOp": {
       "description": "往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。",
       "descriptionEn": "Append one SpreadsheetML pivot table to the worksheet (ECMA-376 §18.10).",
-      "limits": "库抄缓存并标 refreshOnLoad。多个行字段、一个列字段、筛选、计数、平均值和合计占比会写入 sheetData。多个列字段仍留给 Excel。",
-      "limitsEn": "The library copies the cache and sets refreshOnLoad. Multiple row fields, one column field, filters, count, average, and percent of total are written into sheetData. Multiple column fields are left for Excel.",
+      "limits": "库抄缓存并标 refreshOnLoad。多个行字段、多个列字段（一个行字段和一个值）、一个列字段加多个行字段或值、筛选、计数、平均值和合计占比会写入 sheetData。列字段再同时加多个行字段或多个值仍留给 Excel。",
+      "limitsEn": "The library copies the cache and sets refreshOnLoad. Multiple row fields, multiple column fields with one row field and one value, one column field with several row fields or values, filters, count, average, and percent of total are written into sheetData. Column fields combined with both several row fields and several values are left for Excel.",
       "type": "object",
       "required": [
         "op",

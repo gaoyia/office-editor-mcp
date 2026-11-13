@@ -182,6 +182,7 @@ $order = @(
     'xlsx-table'
     'xlsx-pivot'
     'xlsx-pivot-layout'
+    'xlsx-pivot-cols'
     'xlsx-defined-name'
     'xlsx-print'
     'xlsx-view'

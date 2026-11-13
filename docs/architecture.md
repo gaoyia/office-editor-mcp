@@ -443,7 +443,7 @@ xlsx 也可插入、删除、改名、重排与隐藏普通工作表，脏 workb
 xlsx 也可设列宽、行高、合并与取消合并，脏该表 `cols` / `sheetData` / `mergeCells`，不标重算。xlsx 也可改共享公式主格、把主格迁到新区域左上角，或写成数组公式，仍标重算。能算的单元格公式写入缓存，算不了的不写。
 xlsx 也可增删改数据验证，脏该表 `dataValidations`，不标重算。xlsx 也可增删改条件格式，脏该表 `conditionalFormatting` 与必要时 `styles.xml` 的 `dxfs`，不标重算。
 xlsx 也可增删改工作表表格，脏 `/xl/tables/…`、工作表 `tableParts`、关系与内容类型，必要时脏 `sheetData`，不标重算。
-xlsx 也可增删改透视表，脏 `/xl/pivotTables/…`、`/xl/pivotCache/…`、workbook 的 `pivotCaches`、关系与内容类型，不标重算。一个或多个行字段、一个列字段、筛选，以及计数、平均值和合计占比，求值会把合计写进 `sheetData`。多个列字段，或列字段再加多个行字段或多个值，仍不写。
+xlsx 也可增删改透视表，脏 `/xl/pivotTables/…`、`/xl/pivotCache/…`、workbook 的 `pivotCaches`、关系与内容类型，不标重算。一个或多个行字段、筛选，以及计数、平均值和合计占比，求值会把合计写进 `sheetData`。多个列字段在只有一个行字段和一个值时也会写入。一个列字段加多个行字段，或一个列字段加多个值，也会写入。列字段再同时加多个行字段或多个值，仍不写。
 xlsx 也可增删改定义名，脏 workbook 的 `definedNames`，不新建部件，不标重算。
 xlsx 也可用 `setPrintSetup` 改工作表页边距、纸张、方向、缩放、网格线、打印区域与手工分页符，脏该表 XML，打印区域还脏 workbook 的 `definedNames`，不标重算。
 xlsx 也可用 `setSheetView` 改默认视图的缩放、冻结与拆分，脏该表 `sheetViews`，不标重算。
