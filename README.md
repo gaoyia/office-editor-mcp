@@ -42,7 +42,7 @@ Production use and commercial use require a commercial license from the author. 
 | `exportMedia` | Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to disk by id |
 | `exportChartData` | Write the original embedding workbook of a docx or pptx chart to disk by chart id |
 | `exportChartImage` | Draw an xlsx clustered column chart to PNG by chart id. The package is unchanged, and the pixels do not enter inspect |
-| `exportSlideImage` | Draw a slide's solid background and unrotated, uncropped PNG pictures by slide id. The package is unchanged, and the pixels do not enter inspect |
+| `exportSlideImage` | Draw a slide's solid background, unrotated PNG pictures, and solid rectangles without a stroke by slide id. The package is unchanged, and the pixels do not enter inspect |
 | `layoutCheck` | Read-only check of shape geometry on each pptx slide. It returns bounding boxes, overflow, overlap, and a text-overflow estimate. It does not write a file or render a picture |
 | `help` | Look up how to fill an action, an operation, or a field |
 

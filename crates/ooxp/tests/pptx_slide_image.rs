@@ -1,4 +1,4 @@
-//! exportSlideImage：纯色页底和等像素 PNG。形状不画。
+//! exportSlideImage：纯色页底、等像素 PNG，以及没有描边的实心矩形。文字不画。
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -168,4 +168,59 @@ fn missing_solid_background_and_other_formats_are_rejected() {
     .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn solid_rect_is_painted_and_stroke_or_text_is_not() {
+    let src = tmp("rect-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let deck = tmp("rect-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "EE4455",
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "112233",
+                "line": { "color": "000000" },
+                "x": 2743200,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            }
+        ]
+    }));
+    let out = tmp("rect-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 287, 143), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 191, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 300, 100), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 90, 80), [0xAA, 0xBB, 0xCC]);
 }

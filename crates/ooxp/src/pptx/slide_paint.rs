@@ -1,5 +1,5 @@
-//! 幻灯片只读栅格化。先画本页纯色页底，再画没有旋转和裁剪的 PNG。
-//! 不写回包，像素不进 inspect。形状、文字和图表留到后面。
+//! 幻灯片只读栅格化。先画本页纯色页底，再按文档顺序画 PNG 和没有描边的实心矩形。
+//! 不写回包，像素不进 inspect。文字、其它形状和图表留到后面。
 
 use std::io::Cursor;
 
@@ -30,12 +30,9 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let width = emu_span(cx)?;
     let height = emu_span(cy)?;
     let bg = page_color(&doc.root).ok_or_else(unsupported)?;
-    let pics = collect_pics(&doc.root)?;
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
     fill(&mut rgb, bg);
-    for pic in pics {
-        blit_pic(&pkg, &slide.part, pic, &mut rgb, width, height)?;
-    }
+    paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     let png = encode_png(width, height, &rgb)?;
     Ok(ExportedMedia {
         bytes: png,
@@ -98,37 +95,127 @@ fn page_color(root: &Element) -> Option<[u8; 3]> {
     parse_rgb(clr.attr("val")?)
 }
 
-fn collect_pics(root: &Element) -> Result<Vec<&Element>, Error> {
+fn paint_tree(
+    pkg: &Package,
+    slide_part: &str,
+    root: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
     let Some(tree) = root
         .child_by_local("cSld")
         .and_then(|c| c.child_by_local("spTree"))
     else {
-        return Ok(Vec::new());
+        return Ok(());
     };
-    let mut pics = Vec::new();
-    visit(tree, false, &mut pics)?;
-    Ok(pics)
+    visit(pkg, slide_part, tree, false, rgb, width, height)
 }
 
-fn visit<'a>(el: &'a Element, grouped: bool, pics: &mut Vec<&'a Element>) -> Result<(), Error> {
+fn visit(
+    pkg: &Package,
+    slide_part: &str,
+    el: &Element,
+    grouped: bool,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
     for child in el.element_children() {
         match child.local_name() {
             "pic" => {
                 if grouped || transformed(child) || is_media(child) {
                     return Err(unsupported());
                 }
-                pics.push(child);
+                blit_pic(pkg, slide_part, child, rgb, width, height)?;
             }
-            "grpSp" => visit(child, true, pics)?,
+            "sp" if !grouped => paint_solid_rect(child, rgb, width, height),
+            "grpSp" => visit(pkg, slide_part, child, true, rgb, width, height)?,
             "AlternateContent" => {
                 if let Some(choice) = child.child_by_local("Choice") {
-                    visit(choice, grouped, pics)?;
+                    visit(pkg, slide_part, choice, grouped, rgb, width, height)?;
                 }
             }
             _ => {}
         }
     }
     Ok(())
+}
+
+/// 只画轴对齐、不透明、没有描边的矩形。对不上的形状留空，留给后面的绘制。
+fn paint_solid_rect(sp: &Element, rgb: &mut [u8], width: u32, height: u32) {
+    let Some((color, x, y, w, h)) = plain_rect(sp) else {
+        return;
+    };
+    fill_rect(rgb, width, height, x, y, w, h, color);
+}
+
+fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
+    let sp_pr = sp.child_by_local("spPr")?;
+    if sp_pr.child_by_local("effectLst").is_some()
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return None;
+    }
+    let xfrm = sp_pr.child_by_local("xfrm")?;
+    if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
+        return None;
+    }
+    if xfrm
+        .attr("rot")
+        .is_some_and(|raw| raw.parse::<i64>().ok().unwrap_or(1) != 0)
+    {
+        return None;
+    }
+    let prst = sp_pr.child_by_local("prstGeom")?.attr("prst")?;
+    if prst != "rect" {
+        return None;
+    }
+    if !line_is_clear(sp_pr) {
+        return None;
+    }
+    let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let w = emu_px(cx);
+    let h = emu_px(cy);
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    Some((color, emu_px(x), emu_px(y), w, h))
+}
+
+fn line_is_clear(sp_pr: &Element) -> bool {
+    let Some(ln) = sp_pr.child_by_local("ln") else {
+        return true;
+    };
+    ln.element_children()
+        .all(|child| child.local_name() == "noFill")
+        && ln.child_by_local("noFill").is_some()
+}
+
+fn opaque_rgb(fill: &Element) -> Option<[u8; 3]> {
+    let clr = fill.child_by_local("srgbClr")?;
+    for child in clr.element_children() {
+        if child.local_name() != "alpha" {
+            return None;
+        }
+        if child.attr("val").unwrap_or("") != "100000" {
+            return None;
+        }
+    }
+    parse_rgb(clr.attr("val")?)
+}
+
+fn xfrm_box(xfrm: &Element) -> (i64, i64, i64, i64) {
+    let off = xfrm.child_by_local("off");
+    let ext = xfrm.child_by_local("ext");
+    let num = |el: Option<&Element>, name: &str| {
+        el.and_then(|node| node.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(0)
+    };
+    (num(off, "x"), num(off, "y"), num(ext, "cx"), num(ext, "cy"))
 }
 
 fn transformed(pic: &Element) -> bool {
@@ -206,17 +293,10 @@ fn blit_pic(
 }
 
 fn pic_box(pic: &Element) -> (i64, i64, i64, i64) {
-    let xfrm = pic
-        .child_by_local("spPr")
-        .and_then(|sp| sp.child_by_local("xfrm"));
-    let off = xfrm.and_then(|x| x.child_by_local("off"));
-    let ext = xfrm.and_then(|x| x.child_by_local("ext"));
-    let num = |el: Option<&Element>, name: &str| {
-        el.and_then(|node| node.attr(name))
-            .and_then(|raw| raw.parse().ok())
-            .unwrap_or(0)
-    };
-    (num(off, "x"), num(off, "y"), num(ext, "cx"), num(ext, "cy"))
+    pic.child_by_local("spPr")
+        .and_then(|sp| sp.child_by_local("xfrm"))
+        .map(xfrm_box)
+        .unwrap_or((0, 0, 0, 0))
 }
 
 struct Rgba {
@@ -314,6 +394,32 @@ fn over(dst: [u8; 3], src: [u8; 4]) -> [u8; 3] {
 fn fill(rgb: &mut [u8], color: [u8; 3]) {
     for px in rgb.chunks_exact_mut(3) {
         px.copy_from_slice(&color);
+    }
+}
+
+fn fill_rect(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    color: [u8; 3],
+) {
+    for row in 0..h {
+        let py = y + row;
+        if py < 0 || py >= height as i32 {
+            continue;
+        }
+        for col in 0..w {
+            let px = x + col;
+            if px < 0 || px >= width as i32 {
+                continue;
+            }
+            let i = (py as usize * width as usize + px as usize) * 3;
+            rgb[i..i + 3].copy_from_slice(&color);
+        }
     }
 }
 

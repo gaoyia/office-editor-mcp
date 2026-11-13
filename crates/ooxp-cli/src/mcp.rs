@@ -294,7 +294,7 @@ fn tools(lang: Lang) -> Value {
             ),
             tool(
                 "exportSlideImage",
-                say(lang, "按幻灯片 id 把纯色页底和没有旋转、裁剪的 PNG 写成图，写到 output。源文件保持不变，像素不进入 inspect 树。", "Draw a slide's solid background and unrotated, uncropped PNG pictures to output by slide id. The source file stays unchanged, and the pixels do not enter the inspect tree."),
+                say(lang, "按幻灯片 id 把纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图，写到 output。源文件保持不变，像素不进入 inspect 树。", "Draw a slide's solid background, unrotated uncropped PNG pictures, and solid rectangles without a stroke to output by slide id. The source file stays unchanged, and the pixels do not enter the inspect tree."),
                 domain_properties(Action::ExportSlideImage, lang),
                 &["path", "id", "output"],
                 lang,

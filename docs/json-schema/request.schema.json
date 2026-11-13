@@ -15872,10 +15872,10 @@
       }
     },
     "exportSlideImageRequest": {
-      "description": "把 pptx 一页的纯色页底和 PNG 图画成 PNG。",
-      "descriptionEn": "Draw a pptx slide's solid background and PNG pictures to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。只画幻灯片自己的不透明纯色页底，以及没有旋转、翻转、裁剪的 PNG。形状、文字和图表不画。组合里的图、视频和音频报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only the slide's own opaque solid background and unrotated, unflipped, uncropped PNG pictures are drawn. Shapes, text, and charts are not drawn. Pictures inside groups, video, and audio return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
+      "description": "把 pptx 一页的纯色页底、PNG 和没有描边的实心矩形画成 PNG。",
+      "descriptionEn": "Draw a pptx slide's solid background, PNG pictures, and solid rectangles without a stroke to a PNG.",
+      "limits": "只读。不改源包，像素不进 inspect。只画幻灯片自己的不透明纯色页底、没有旋转翻转裁剪的 PNG，以及没有旋转、没有描边的实心矩形。文字、其它形状和图表不画。组合里的图、视频和音频报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only the slide's own opaque solid background, unrotated unflipped uncropped PNG pictures, and unrotated solid rectangles without a stroke are drawn. Text, other shapes, and charts are not drawn. Pictures inside groups, video, and audio return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [
@@ -15945,8 +15945,8 @@
     "helpRequest": {
       "description": "查某个操作怎么填。",
       "descriptionEn": "Look up how to fill in an operation.",
-      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。本工具不支持预览。xlsx 的簇状柱形图可以按 exportChartImage 写成 PNG。pptx 可以按 exportSlideImage 把纯色页底和 PNG 写成图，形状、文字和图表还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：Word、Excel，以及 WPS 的 kwps、ket，用 ExportAsFixedFormat 写成 PDF；PowerPoint 和 WPS 的 kwpp 用幻灯片的 Export 写成 PNG。本工具不调用它们。",
-      "limitsEn": "Search first, then open one operation. Do not guess fields, and do not reuse fields from another format. This tool does not preview a whole page. An xlsx clustered column chart can be written to PNG with exportChartImage. A pptx slide's solid background and PNG pictures can be written with exportSlideImage. Those pixels do not enter inspect. Shapes, text, and charts are not drawn yet. If Microsoft Office or WPS is installed, export and then look: Word, Excel, and WPS kwps and ket use ExportAsFixedFormat to write a PDF; PowerPoint and WPS kwpp use the slide Export method to write a PNG. This tool does not call them.",
+      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。本工具不支持预览。xlsx 的簇状柱形图可以按 exportChartImage 写成 PNG。pptx 可以按 exportSlideImage 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：Word、Excel，以及 WPS 的 kwps、ket，用 ExportAsFixedFormat 写成 PDF；PowerPoint 和 WPS 的 kwpp 用幻灯片的 Export 写成 PNG。本工具不调用它们。",
+      "limitsEn": "Search first, then open one operation. Do not guess fields, and do not reuse fields from another format. This tool does not preview a whole page. An xlsx clustered column chart can be written to PNG with exportChartImage. A pptx slide's solid background, PNG pictures, and solid rectangles without a stroke can be written with exportSlideImage. Those pixels do not enter inspect. Text and other shapes are not drawn yet. If Microsoft Office or WPS is installed, export and then look: Word, Excel, and WPS kwps and ket use ExportAsFixedFormat to write a PDF; PowerPoint and WPS kwpp use the slide Export method to write a PNG. This tool does not call them.",
       "type": "object",
       "additionalProperties": false,
       "required": [

@@ -12,7 +12,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底和没有旋转、裁剪的 PNG 写成图。像素不进 inspect。形状、文字和图表还不画。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图。像素不进 inspect。文字、其它形状和图表还不画。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
@@ -131,7 +131,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底和 PNG 写成图，形状、文字和图表还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2386,10 +2386,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 宽高按 `p:sldSz` 的 EMU，96 dpi 四舍五入成像素
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 页底只认这一页自己的 `p:bg/p:bgPr/a:solidFill/a:srgbClr`。没有这层、带半透明、或是主题色、渐变、图片页底，报 `NotImplemented`
-- 然后按文档顺序画 `p:pic` 里的嵌入 PNG。位置和尺寸用 `a:off` 与 `a:ext`，同一套 96 dpi
-- 源图宽高和目标像素不同时，按最近邻取样。带透明通道的像素叠在页底上
+- 然后按文档顺序画两类对象。位置和尺寸都用 `a:off` 与 `a:ext`，同一套 96 dpi
+- `p:pic` 里的嵌入 PNG。源图宽高和目标像素不同时，按最近邻取样。带透明通道的像素叠在已画内容上
+- 没有旋转、没有描边的实心矩形：`prst` 为 `rect`，填充是不透明 `srgbClr`
 - 旋转、翻转、裁剪、组合里的图、视频和音频报 `NotImplemented`
-- 形状、文字和图表这一期不画
+- 有描边、旋转、翻转、效果，或不是矩形的形状先跳过，不报错
+- 文字、其它形状和图表这一期不画
 - xlsx 与 docx 报 `InvalidField`
 - id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 成功时 `contentType` 为 `image/png`。源包不写回

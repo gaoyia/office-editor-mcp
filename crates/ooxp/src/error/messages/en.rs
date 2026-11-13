@@ -1405,7 +1405,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "This slide cannot be drawn to PNG yet. Only the slide's own solid background and unrotated, uncropped PNG pictures are drawn, and the size must be 1 to 4096 pixels"
+            "This slide cannot be drawn to PNG yet. Only the slide's own solid background, unrotated uncropped PNG pictures, and solid rectangles without a stroke are drawn, and the size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
