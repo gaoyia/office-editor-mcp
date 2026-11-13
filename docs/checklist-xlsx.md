@@ -27,6 +27,7 @@ Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Exc
 2026-11-13 补跑 `xlsx-lookup.ps1`，Xlk1–Xlk3 通过。Excel 16.0 打开没有 Repair。精确与近似查找、`OFFSET` 和行字段求和透视与库缓存一致。`ECMA.VLOOKUP` 没有缓存。
 2026-11-13 补跑 `xlsx-db.ps1`，Xdb1–Xdb3 通过。Excel 16.0 打开没有 Repair。`DSUM`、并且与或者、`DGET` 与库缓存一致。`ECMA.DSUM` 没有缓存。
 2026-11-13 补跑 `xlsx-fin.ps1`，Xfn1–Xfn3 通过。Excel 16.0 打开没有 Repair。借贷、债券和 `DOLLARDE` 与库缓存一致。`ECMA.PV` 没有缓存。
+2026-11-13 补跑 `xlsx-eng.ps1`，Xeg1–Xeg3 通过。Excel 16.0 打开没有 Repair。贝塞尔、进制补码和复数文本与库缓存一致。`ECMA.DEC2BIN` 没有缓存。
 
 C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
@@ -1225,6 +1226,16 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xfn1 | 借贷 | `PV`、`PMT`、`RATE`、`IRR` 与库缓存一致。Excel 无修复 |
 | Xfn2 | 债券 | `PRICE`、`SLN`、`DOLLARDE`、`COUPNUM` 与库缓存一致。Excel 无修复 |
 | Xfn3 | 错误 | 期次颠倒的 `CUMIPMT` 是 `#NUM!`。寿命为 0 的 `SLN` 是 `#DIV/0!`。`ECMA.PV` 没有缓存，Excel 显示 `#NAME?` |
+
+## 工程函数
+
+用库 create 写出公式缓存，再交给 Excel 16.0 重算。脚本 `manual-check/office/cases/xlsx-eng.ps1`。编号用 Xeg。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xeg1 | 数值 | 贝塞尔、`ERF`、`CONVERT`、`DELTA`、`GESTEP` 与库缓存一致。Excel 无修复 |
+| Xeg2 | 文本 | `COMPLEX`、补码、`IMDIV`、`IMSQRT`、`IMCOS` 与库缓存一致。Excel 无修复 |
+| Xeg3 | 错误 | 溢出和非法数字是 `#NUM!`。未知单位是 `#N/A`。虚部后缀不一致是 `#VALUE!`。`ECMA.DEC2BIN` 没有缓存，Excel 显示 `#NAME?` |
 
 ## 共享公式改主格
 

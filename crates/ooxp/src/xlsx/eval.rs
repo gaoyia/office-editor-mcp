@@ -1230,19 +1230,22 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => match self.eval_finance(other, &vals, sheet, here) {
+            other => match self.eval_engineer(other, &vals, sheet, here) {
                 Some(done) => done,
-                None => match self.eval_database(other, &vals, sheet, here) {
+                None => match self.eval_finance(other, &vals, sheet, here) {
                     Some(done) => done,
-                    None => match self.eval_lookup(other, &vals, sheet, here, mode) {
+                    None => match self.eval_database(other, &vals, sheet, here) {
                         Some(done) => done,
-                        None => match self.eval_text(other, &vals, sheet, here) {
+                        None => match self.eval_lookup(other, &vals, sheet, here, mode) {
                             Some(done) => done,
-                            None => match self.eval_date(other, &vals, sheet, here) {
+                            None => match self.eval_text(other, &vals, sheet, here) {
                                 Some(done) => done,
-                                None => match self.eval_stat(other, &vals, sheet, here) {
+                                None => match self.eval_date(other, &vals, sheet, here) {
                                     Some(done) => done,
-                                    None => self.eval_math(other, &vals, sheet, here, mode),
+                                    None => match self.eval_stat(other, &vals, sheet, here) {
+                                        Some(done) => done,
+                                        None => self.eval_math(other, &vals, sheet, here, mode),
+                                    },
                                 },
                             },
                         },
@@ -1250,6 +1253,304 @@ impl Book {
                 },
             },
         }
+    }
+
+    /// 工程类。不是这类函数时返回 `None`。`ECMA.DEC2BIN` 不在此列。
+    fn eval_engineer(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let done = match name {
+            "BESSELI" | "BESSELJ" | "BESSELK" | "BESSELY" if vals.len() == 2 => {
+                self.eng_bessel(name, vals, sheet, here)
+            }
+            "BIN2DEC" | "HEX2DEC" | "OCT2DEC" if vals.len() == 1 => {
+                self.eng_to_dec(name, vals, sheet, here)
+            }
+            "BIN2HEX" | "BIN2OCT" | "HEX2BIN" | "HEX2OCT" | "OCT2BIN" | "OCT2HEX"
+                if vals.len() == 1 || vals.len() == 2 =>
+            {
+                self.eng_between(name, vals, sheet, here)
+            }
+            "DEC2BIN" | "DEC2HEX" | "DEC2OCT" if vals.len() == 1 || vals.len() == 2 => {
+                self.eng_from_dec(name, vals, sheet, here)
+            }
+            "COMPLEX" if vals.len() == 2 || vals.len() == 3 => self.eng_complex(vals, sheet, here),
+            "IMABS" | "IMAGINARY" | "IMARGUMENT" | "IMREAL" if vals.len() == 1 => {
+                self.eng_im_num(name, vals, sheet, here)
+            }
+            "IMCONJUGATE" | "IMCOS" | "IMEXP" | "IMLN" | "IMLOG10" | "IMLOG2" | "IMSIN"
+            | "IMSQRT"
+                if vals.len() == 1 =>
+            {
+                self.eng_im_one(name, vals, sheet, here)
+            }
+            "IMDIV" | "IMSUB" if vals.len() == 2 => self.eng_im_pair(name, vals, sheet, here),
+            "IMPOWER" if vals.len() == 2 => self.eng_im_power(vals, sheet, here),
+            "IMPRODUCT" | "IMSUM" if !vals.is_empty() => self.eng_im_fold(name, vals, sheet, here),
+            "CONVERT" if vals.len() == 3 => self.eng_convert(vals, sheet, here),
+            "DELTA" | "GESTEP" if vals.len() == 1 || vals.len() == 2 => {
+                self.eng_step(name, vals, sheet, here)
+            }
+            "ERF" if vals.len() == 1 || vals.len() == 2 => self.eng_erf(vals, sheet, here),
+            "ERFC" if vals.len() == 1 => self.eng_erfc(vals, sheet, here),
+            "BESSELI" | "BESSELJ" | "BESSELK" | "BESSELY" | "BIN2DEC" | "BIN2HEX" | "BIN2OCT"
+            | "DEC2BIN" | "DEC2HEX" | "DEC2OCT" | "HEX2BIN" | "HEX2DEC" | "HEX2OCT" | "OCT2BIN"
+            | "OCT2DEC" | "OCT2HEX" | "COMPLEX" | "IMABS" | "IMAGINARY" | "IMARGUMENT"
+            | "IMCONJUGATE" | "IMCOS" | "IMDIV" | "IMEXP" | "IMLN" | "IMLOG10" | "IMLOG2"
+            | "IMPOWER" | "IMPRODUCT" | "IMREAL" | "IMSIN" | "IMSQRT" | "IMSUB" | "IMSUM"
+            | "CONVERT" | "DELTA" | "GESTEP" | "ERF" | "ERFC" => Calc::Skip,
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn eng_bessel(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let order = match self.take_num(&vals[1], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "BESSELI" => super::engineer::besseli(x, order),
+            "BESSELJ" => super::engineer::besselj(x, order),
+            "BESSELK" => super::engineer::besselk(x, order),
+            "BESSELY" => super::engineer::bessely(x, order),
+            _ => return Calc::Skip,
+        };
+        from_num(result)
+    }
+
+    fn eng_to_dec(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "BIN2DEC" => super::engineer::bin2dec(&text),
+            "HEX2DEC" => super::engineer::hex2dec(&text),
+            "OCT2DEC" => super::engineer::oct2dec(&text),
+            _ => return Calc::Skip,
+        };
+        from_num(result)
+    }
+
+    fn eng_places(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Result<Option<f64>, Calc> {
+        if vals.len() == 2 {
+            Ok(Some(self.take_num(&vals[1], sheet, here)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn eng_between(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let places = match self.eng_places(vals, sheet, here) {
+            Ok(places) => places,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "BIN2HEX" => super::engineer::bin2hex(&text, places),
+            "BIN2OCT" => super::engineer::bin2oct(&text, places),
+            "HEX2BIN" => super::engineer::hex2bin(&text, places),
+            "HEX2OCT" => super::engineer::hex2oct(&text, places),
+            "OCT2BIN" => super::engineer::oct2bin(&text, places),
+            "OCT2HEX" => super::engineer::oct2hex(&text, places),
+            _ => return Calc::Skip,
+        };
+        from_text(result)
+    }
+
+    fn eng_from_dec(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let value = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let places = match self.eng_places(vals, sheet, here) {
+            Ok(places) => places,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "DEC2BIN" => super::engineer::dec2bin(value, places),
+            "DEC2HEX" => super::engineer::dec2hex(value, places),
+            "DEC2OCT" => super::engineer::dec2oct(value, places),
+            _ => return Calc::Skip,
+        };
+        from_text(result)
+    }
+
+    fn eng_complex(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let re = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let im = match self.take_num(&vals[1], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let suffix = if vals.len() == 3 {
+            match self.text_of(&vals[2], sheet, here) {
+                Ok(text) => Some(text),
+                Err(done) => return done,
+            }
+        } else {
+            None
+        };
+        from_text(super::engineer::complex(re, im, suffix.as_deref()))
+    }
+
+    fn eng_im_num(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "IMABS" => super::engineer::imabs(&text),
+            "IMAGINARY" => super::engineer::imaginary(&text),
+            "IMARGUMENT" => super::engineer::imargument(&text),
+            "IMREAL" => super::engineer::imreal(&text),
+            _ => return Calc::Skip,
+        };
+        from_num(result)
+    }
+
+    fn eng_im_one(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "IMCONJUGATE" => super::engineer::imconjugate(&text),
+            "IMCOS" => super::engineer::imcos(&text),
+            "IMEXP" => super::engineer::imexp(&text),
+            "IMLN" => super::engineer::imln(&text),
+            "IMLOG10" => super::engineer::imlog10(&text),
+            "IMLOG2" => super::engineer::imlog2(&text),
+            "IMSIN" => super::engineer::imsin(&text),
+            "IMSQRT" => super::engineer::imsqrt(&text),
+            _ => return Calc::Skip,
+        };
+        from_text(result)
+    }
+
+    fn eng_im_pair(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let left = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let right = match self.text_of(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let result = match name {
+            "IMDIV" => super::engineer::imdiv(&left, &right),
+            "IMSUB" => super::engineer::imsub(&left, &right),
+            _ => return Calc::Skip,
+        };
+        from_text(result)
+    }
+
+    fn eng_im_power(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let text = match self.text_of(&vals[0], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let power = match self.take_num(&vals[1], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        from_text(super::engineer::impower(&text, power))
+    }
+
+    fn eng_im_fold(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let mut parts = Vec::new();
+        for value in vals {
+            match self.text_of(value, sheet, here) {
+                Ok(text) => parts.push(text),
+                Err(done) => return done,
+            }
+        }
+        let refs: Vec<&str> = parts.iter().map(String::as_str).collect();
+        let result = match name {
+            "IMSUM" => super::engineer::imsum(&refs),
+            "IMPRODUCT" => super::engineer::improduct(&refs),
+            _ => return Calc::Skip,
+        };
+        from_text(result)
+    }
+
+    fn eng_convert(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let value = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let from = match self.text_of(&vals[1], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        let to = match self.text_of(&vals[2], sheet, here) {
+            Ok(text) => text,
+            Err(done) => return done,
+        };
+        from_num(super::engineer::convert(value, &from, &to))
+    }
+
+    fn eng_step(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let left = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        let right = if vals.len() == 2 {
+            match self.take_num(&vals[1], sheet, here) {
+                Ok(n) => n,
+                Err(done) => return done,
+            }
+        } else {
+            0.0
+        };
+        let result = match name {
+            "DELTA" => super::engineer::delta(left, right),
+            "GESTEP" => super::engineer::gestep(left, right),
+            _ => return Calc::Skip,
+        };
+        from_num(result)
+    }
+
+    fn eng_erf(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let first = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        if vals.len() == 1 {
+            return from_num(super::engineer::erf_at(first));
+        }
+        let second = match self.take_num(&vals[1], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        from_num(super::engineer::erf_between(first, second))
+    }
+
+    fn eng_erfc(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let x = match self.take_num(&vals[0], sheet, here) {
+            Ok(n) => n,
+            Err(done) => return done,
+        };
+        from_num(super::engineer::erfc_at(x))
     }
 
     /// 财务类。不是这类函数时返回 `None`。`ECMA.PV` 不在此列。
@@ -7693,6 +7994,20 @@ fn fin_calc(result: Result<f64, Calc>) -> Calc {
 
 fn ready_num(value: f64) -> Calc {
     Calc::Ready(Value::Scalar(Scalar::Num(value)))
+}
+
+fn from_num(result: Result<f64, &'static str>) -> Calc {
+    match result {
+        Ok(number) => ready_num(number),
+        Err(token) => ready_err(token),
+    }
+}
+
+fn from_text(result: Result<String, &'static str>) -> Calc {
+    match result {
+        Ok(text) => ready_text(text),
+        Err(token) => ready_err(token),
+    }
 }
 
 fn ready_err(token: &'static str) -> Calc {

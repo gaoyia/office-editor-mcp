@@ -15,6 +15,7 @@ mod create_xml;
 mod custom_view;
 mod dbcs;
 mod draw_pin;
+mod engineer;
 mod eval;
 mod extlink;
 mod finance;

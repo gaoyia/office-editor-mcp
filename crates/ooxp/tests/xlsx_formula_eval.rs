@@ -1931,3 +1931,104 @@ fn financial_functions_match_excel_16() {
     num("E17", 6.0);
     num("E18", 0.10381289062499977);
 }
+
+#[test]
+fn engineering_functions_match_excel_16() {
+    let path = book();
+    let mut cells = Vec::new();
+    let formulas = [
+        ("E1", "=BESSELI(1.5,1)"),
+        ("E2", "=BESSELJ(1.5,1)"),
+        ("E3", "=BESSELK(1.5,1)"),
+        ("E4", "=BESSELY(1.5,1)"),
+        ("E5", "=CONVERT(1,\"lbm\",\"kg\")"),
+        ("E6", "=CONVERT(100,\"C\",\"F\")"),
+        ("E7", "=DELTA(5,5)"),
+        ("E8", "=DELTA(5)"),
+        ("E9", "=GESTEP(5)"),
+        ("E10", "=ERF(1)"),
+        ("E11", "=ERF(-1,1)"),
+        ("E12", "=ERFC(1)"),
+        ("E13", "=IMABS(\"3+4i\")"),
+        ("E14", "=DEC2BIN(512)"),
+        ("E15", "=BIN2DEC(\"2\")"),
+        ("E16", "=CONVERT(1,\"m\",\"kg\")"),
+        ("E17", "=ECMA.DEC2BIN(10)"),
+        ("E18", "=COMPLEX(3,4)"),
+        ("E19", "=COMPLEX(0,1)"),
+        ("E20", "=COMPLEX(3,-1)"),
+        ("E21", "=COMPLEX(0,0)"),
+        ("E22", "=COMPLEX(3,4,\"j\")"),
+        ("E23", "=DEC2BIN(10,8)"),
+        ("E24", "=DEC2BIN(-1,4)"),
+        ("E25", "=DEC2HEX(-1)"),
+        ("E26", "=IMDIV(\"1+2i\",\"3+4i\")"),
+        ("E27", "=IMSUM(\"i\",\"i\")"),
+        ("E28", "=IMSQRT(\"3+4i\")"),
+        ("E29", "=IMCOS(\"3+4i\")"),
+        ("E30", "=HEX2DEC(\"8000000000\")"),
+        ("E31", "=IMSUM(\"i\",\"j\")"),
+    ];
+    for (addr, formula) in formulas {
+        cells.push(json!({"ref": addr, "formula": formula}));
+    }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:E31");
+    let num = |addr: &str, expect: f64| {
+        let got = cell(&tree, &format!("cell:Sheet1!{addr}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{addr}"));
+        assert!(
+            (got - expect).abs() < 1e-6,
+            "{addr} got {got} expect {expect}"
+        );
+    };
+    let err = |addr: &str, token: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "error", "{addr} {c}");
+        assert_eq!(c["value"], token, "{addr}");
+    };
+    let text = |addr: &str, expect: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "text", "{addr} {c}");
+        assert_eq!(c["value"], expect, "{addr}");
+    };
+    num("E1", 0.981666428475166);
+    num("E2", 0.5579365078908043);
+    num("E3", 0.2773878036322587);
+    num("E4", -0.41230862689590375);
+    num("E5", 0.45359237);
+    num("E6", 212.0);
+    num("E7", 1.0);
+    num("E8", 0.0);
+    num("E9", 1.0);
+    num("E10", 0.8427007929497149);
+    num("E11", 1.6854015858994298);
+    num("E12", 0.15729920705028513);
+    num("E13", 5.0);
+    err("E14", "#NUM!");
+    err("E15", "#NUM!");
+    err("E16", "#N/A");
+    assert!(cell(&tree, "cell:Sheet1!E17")["value"].is_null());
+    text("E18", "3+4i");
+    text("E19", "i");
+    text("E20", "3-i");
+    text("E21", "0");
+    text("E22", "3+4j");
+    text("E23", "00001010");
+    text("E24", "1111111111");
+    text("E25", "FFFFFFFFFF");
+    text("E26", "0.44+0.08i");
+    text("E27", "2i");
+    text("E28", "2+i");
+    text("E29", "-27.0349456030742-3.85115333481178i");
+    num("E30", -549755813888.0);
+    err("E31", "#VALUE!");
+}

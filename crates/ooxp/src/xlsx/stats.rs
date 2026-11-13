@@ -924,7 +924,7 @@ fn invert(
     finite(0.5 * (lo + hi))
 }
 
-fn erf(x: f64) -> f64 {
+pub(crate) fn erf(x: f64) -> f64 {
     let sign = x.signum();
     let x = x.abs();
     if x == 0.0 {
