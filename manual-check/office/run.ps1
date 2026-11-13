@@ -229,6 +229,7 @@ $order = @(
     'pptx-slides'
     'pptx-shapes'
     'pptx-paint'
+    'pptx-slide-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'

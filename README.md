@@ -41,6 +41,8 @@ Production use and commercial use require a commercial license from the author. 
 | `create` | Build a new file from JSON. This is the only action that may generate a whole package |
 | `exportMedia` | Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to disk by id |
 | `exportChartData` | Write the original embedding workbook of a docx or pptx chart to disk by chart id |
+| `exportChartImage` | Draw an xlsx clustered column chart to PNG by chart id. The package is unchanged, and the pixels do not enter inspect |
+| `exportSlideImage` | Draw a slide's solid background and unrotated, uncropped PNG pictures by slide id. The package is unchanged, and the pixels do not enter inspect |
 | `layoutCheck` | Read-only check of shape geometry on each pptx slide. It returns bounding boxes, overflow, overlap, and a text-overflow estimate. It does not write a file or render a picture |
 | `help` | Look up how to fill an action, an operation, or a field |
 
@@ -87,7 +89,7 @@ Use it as an MCP server for an editor. An IDE does not inherit the shell `PATH` 
 }
 ```
 
-The tools are `inspect`, `create`, `apply`, `exportMedia`, `exportChartData`, `layoutCheck`, and `help`. Call `help` to see how to fill an operation. Details are in `docs/cli.md`.
+The tools are `inspect`, `create`, `apply`, `exportMedia`, `exportChartData`, `exportChartImage`, `exportSlideImage`, `layoutCheck`, and `help`. Call `help` to see how to fill an operation. Details are in `docs/cli.md`.
 
 Arguments have two shapes.
 

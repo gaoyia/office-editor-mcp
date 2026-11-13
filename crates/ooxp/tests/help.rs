@@ -50,7 +50,7 @@ fn index_says_there_is_no_preview() {
 fn index_lists_all_actions() {
     let value = help(serde_json::json!({})).unwrap();
     let actions = value["actions"].as_array().unwrap();
-    assert_eq!(actions.len(), 8);
+    assert_eq!(actions.len(), 9);
     let names: Vec<&str> = actions
         .iter()
         .map(|item| item["action"].as_str().unwrap())
@@ -64,6 +64,7 @@ fn index_lists_all_actions() {
             "exportMedia",
             "exportChartData",
             "exportChartImage",
+            "exportSlideImage",
             "layoutCheck",
             "help",
         ]

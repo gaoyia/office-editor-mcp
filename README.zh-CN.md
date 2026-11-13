@@ -41,6 +41,8 @@
 | `create` | 从 JSON 生成一份新文件。只有这一步允许整包生成 |
 | `exportMedia` | 按 id 把图片、音视频、OLE、墨迹、3D 模型或嵌入字体的原字节写到本地 |
 | `exportChartData` | 按图表 id 把 docx / pptx 的 embedding 工作簿原字节写到本地 |
+| `exportChartImage` | 按图表 id 把 xlsx 簇状柱形图画成 PNG。不改包，像素不进 inspect |
+| `exportSlideImage` | 按幻灯片 id 把纯色页底和没有旋转、裁剪的 PNG 写成图。不改包，像素不进 inspect |
 | `layoutCheck` | 只读检查 pptx 每页形状的几何，返回包围盒、越界、重叠与文字溢出估算。不写文件，也不生成图片 |
 | `help` | 查动作、操作和字段怎么填 |
 
@@ -87,7 +89,7 @@ ooxp [--input <文件|->] [--lang <标签>] [--pretty]
 }
 ```
 
-工具是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`layoutCheck`、`help`。操作怎么填，调用 `help`。细节见 `docs/cli.md`。
+工具是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`layoutCheck`、`help`。操作怎么填，调用 `help`。细节见 `docs/cli.md`。
 
 参数有两种形状。
 

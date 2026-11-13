@@ -30,6 +30,7 @@ mod request;
 mod section;
 pub(crate) mod shape;
 mod show;
+mod slide_paint;
 mod slides;
 mod smartart;
 mod table;
@@ -46,6 +47,7 @@ pub use inspect::inspect;
 pub use layout_check::layout_check;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
+pub use slide_paint::export_slide_image;
 
 pub struct ExportedMedia {
     pub bytes: Vec<u8>,

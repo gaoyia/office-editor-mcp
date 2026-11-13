@@ -1,4 +1,4 @@
-//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia / exportChartData / exportChartImage / help。
+//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia / exportChartData / exportChartImage / exportSlideImage / help。
 // apply / inspect 会同时传入包、脏部件和领域字段，参数经常超过 7 个，不另包一层上下文结构。
 #![allow(clippy::too_many_arguments)]
 

@@ -213,6 +213,7 @@ fn index(lang: HelpLang) -> Value {
             action_row("exportMedia", "exportMediaRequest", lang),
             action_row("exportChartData", "exportChartDataRequest", lang),
             action_row("exportChartImage", "exportChartImageRequest", lang),
+            action_row("exportSlideImage", "exportSlideImageRequest", lang),
             action_row("layoutCheck", "layoutCheckRequest", lang),
             action_row("help", "helpRequest", lang),
         ],
@@ -270,6 +271,7 @@ const ACTIONS: &[(&str, &str)] = &[
     ("exportMedia", "exportMediaRequest"),
     ("exportChartData", "exportChartDataRequest"),
     ("exportChartImage", "exportChartImageRequest"),
+    ("exportSlideImage", "exportSlideImageRequest"),
     ("layoutCheck", "layoutCheckRequest"),
     ("help", "helpRequest"),
 ];

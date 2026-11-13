@@ -80,6 +80,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SlideIndexNotInt => "slide 序号必须是正整数".into(),
             IdReason::SlideIndexFromOne => "slide 序号从 1 起".into(),
+            IdReason::ExportSlideNeedsSlide => "出图 id 必须是 slide:N".into(),
             IdReason::ShapeEmpty => "shape 后面不能为空".into(),
             IdReason::ShapeIndexNotInt => "shape:index 后面必须是正整数".into(),
             IdReason::ShapeIndexFromOne => "shape:index 从 1 起".into(),
@@ -1251,6 +1252,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ChartImageUnsupported => {
             "这张图还不能画出 PNG。目前只画簇状柱形图，而且宽高要落在 1 到 4096 像素之间".into()
+        }
+        ErrorKind::SlideImageUnsupported => {
+            "这一页还不能画出 PNG。目前只画幻灯片自己的纯色页底和没有旋转、裁剪的 PNG，而且宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),

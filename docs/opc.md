@@ -78,7 +78,7 @@ Transitional 用 `http://schemas.openxmlformats.org/` 下面的 2006 那套。
 - 根关系里 `officeDocument` 的关系类型以 `http://purl.oclc.org/ooxml/` 开头
 - 或者主部件根元素自己声明的命名空间以这个前缀开头
 
-命中任一条就是 Strict 包。inspect、exportMedia、exportChartData、exportChartImage 照常读。
+命中任一条就是 Strict 包。inspect、exportMedia、exportChartData、exportChartImage、exportSlideImage 照常读。
 页边距、纸张、栏距若写成 `72pt` 这类通用长度，读的时候折成 twip，见 [docx 分册](json-contract-docx.md)。
 apply 报 `NotImplemented`，不写文件。create 仍只生成 Transitional。
 

@@ -43,6 +43,8 @@ pub(crate) enum IdReason {
     ShapeForm,
     SlideIndexNotInt,
     SlideIndexFromOne,
+    /// exportSlideImage 的 id 必须是 slide:N
+    ExportSlideNeedsSlide,
     ShapeEmpty,
     ShapeIndexNotInt,
     ShapeIndexFromOne,
@@ -794,6 +796,7 @@ define_error_kinds! {
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
     ChartImageUnsupported => vec![Self::ChartImageUnsupported],
+    SlideImageUnsupported => vec![Self::SlideImageUnsupported],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
@@ -1411,6 +1414,7 @@ impl IdReason {
             Self::ShapeForm,
             Self::SlideIndexNotInt,
             Self::SlideIndexFromOne,
+            Self::ExportSlideNeedsSlide,
             Self::ShapeEmpty,
             Self::ShapeIndexNotInt,
             Self::ShapeIndexFromOne,
@@ -2346,6 +2350,7 @@ impl ErrorKind {
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1
             | Self::ChartImageUnsupported
+            | Self::SlideImageUnsupported
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple

@@ -24,5 +24,6 @@ getrandom = { workspace = true }
 zip = { workspace = true, features = ["bzip2", "lzma", "zstd", "time"] }
 
 [dev-dependencies]
-# 集成测试要自己拆包核对字节，用得到 zip。
+# 集成测试要自己拆包核对字节，用得到 zip。出图测试要解码 PNG。
 zip = { workspace = true, features = ["deflate"] }
+png = { workspace = true }

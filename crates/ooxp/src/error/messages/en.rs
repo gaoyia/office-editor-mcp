@@ -90,6 +90,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SlideIndexNotInt => "Slide index must be a positive integer".into(),
             IdReason::SlideIndexFromOne => "Slide index starts at 1".into(),
+            IdReason::ExportSlideNeedsSlide => "exportSlideImage id must be slide:N".into(),
             IdReason::ShapeEmpty => "shape must not be empty".into(),
             IdReason::ShapeIndexNotInt => {
                 "shape:index must be followed by a positive integer".into()
@@ -1401,6 +1402,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ChartImageUnsupported => {
             "This chart cannot be drawn to PNG yet. Only clustered column charts are drawn, and the size must be 1 to 4096 pixels"
+                .into()
+        }
+        ErrorKind::SlideImageUnsupported => {
+            "This slide cannot be drawn to PNG yet. Only the slide's own solid background and unrotated, uncropped PNG pictures are drawn, and the size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
