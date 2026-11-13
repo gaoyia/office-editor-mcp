@@ -133,6 +133,7 @@ fn insert_cell_is_green_and_inspect() {
     assert_eq!(rule["priority"], json!(1));
     assert_eq!(rule["dxf"]["fill"]["pattern"], json!("solid"));
     assert_eq!(object_keys(rule)[0..4], ["id", "sqref", "type", "priority"]);
+    assert_eq!(rule["hits"], json!(["A1", "A3"]));
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(xml.contains("conditionalFormatting"), "{xml}");
     assert!(xml.contains(r#"type="cellIs""#), "{xml}");
@@ -217,6 +218,7 @@ fn insert_color_scale() {
     assert_eq!(rule["colorScale"]["colors"].as_array().unwrap().len(), 2);
     assert_eq!(rule["colorScale"]["cfvo"][0]["type"], json!("min"));
     assert_eq!(rule["colorScale"]["cfvo"][1]["type"], json!("max"));
+    assert!(rule.get("hits").is_none());
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(xml.contains("colorScale"), "{xml}");
 }
@@ -248,6 +250,7 @@ fn insert_data_bar_and_icon_set() {
     let sh = inspect_sheet(&out);
     assert_eq!(sh["conditionalFormatCount"], json!(2));
     assert_eq!(sh["conditionalFormats"][0]["type"], json!("dataBar"));
+    assert!(sh["conditionalFormats"][0].get("hits").is_none());
     assert_eq!(sh["conditionalFormats"][0]["priority"], json!(1));
     assert_eq!(sh["conditionalFormats"][1]["type"], json!("iconSet"));
     assert_eq!(
@@ -381,12 +384,15 @@ fn insert_top10_above_average_and_text() {
     assert_eq!(top["type"], json!("top10"));
     assert_eq!(top["rank"], json!(3));
     assert!(top.get("percent").is_none());
+    assert_eq!(top["hits"], json!(["A1", "A2", "A3"]));
     let avg = &sh["conditionalFormats"][1];
     assert_eq!(avg["type"], json!("aboveAverage"));
     assert_eq!(avg["aboveAverage"], json!(false));
+    assert_eq!(avg["hits"], json!(["A1", "A2"]));
     let text = &sh["conditionalFormats"][2];
     assert_eq!(text["type"], json!("containsText"));
     assert_eq!(text["text"], json!("foo"));
+    assert_eq!(text["hits"], json!([]));
     assert_eq!(text["operator"], json!("containsText"));
     assert_eq!(
         text["formulas"],

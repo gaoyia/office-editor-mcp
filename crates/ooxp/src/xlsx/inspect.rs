@@ -329,7 +329,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     );
                     obj.insert(
                         "conditionalFormats".into(),
-                        cf::inspect(&sheet_doc.root, &sh.name, &styles),
+                        cf::inspect(&sheet_doc.root, &sh.name, &styles, &sst),
                     );
                     obj.insert(
                         "tables".into(),

@@ -20,14 +20,27 @@ pub(crate) fn count(root: &Element) -> usize {
         .sum()
 }
 
-pub(crate) fn inspect(root: &Element, sheet: &str, styles: &style::Stylebook) -> Value {
+pub(crate) fn inspect(
+    root: &Element,
+    sheet: &str,
+    styles: &style::Stylebook,
+    sst: &[String],
+) -> Value {
     let mut out = Vec::new();
     let mut n = 0usize;
     for block in root.children_by_local("conditionalFormatting") {
         let sqref = inspect_sqref(block.attr("sqref").unwrap_or(""));
         for rule in block.children_by_local("cfRule") {
             n += 1;
-            out.push(inspect_one(rule, sheet, n, sqref.clone(), styles));
+            out.push(inspect_one(
+                rule,
+                sheet,
+                n,
+                sqref.clone(),
+                styles,
+                root,
+                sst,
+            ));
         }
     }
     Value::Array(out)
@@ -39,7 +52,10 @@ fn inspect_one(
     n: usize,
     sqref: Value,
     styles: &style::Stylebook,
+    root: &Element,
+    sst: &[String],
 ) -> Value {
+    let hits = rule_hits(el, root, sst, &sqref);
     let mut obj = Map::new();
     obj.insert("id".into(), json!(format!("sheet:{sheet}/cf:{n}")));
     obj.insert("sqref".into(), sqref);
@@ -100,6 +116,9 @@ fn inspect_one(
     }
     if let Some(is) = el.child_by_local("iconSet") {
         obj.insert("iconSet".into(), inspect_icon_set(is));
+    }
+    if let Some(hits) = hits {
+        obj.insert("hits".into(), json!(hits));
     }
     Value::Object(obj)
 }
@@ -183,6 +202,319 @@ fn inspect_sqref(raw: &str) -> Value {
         })
         .collect();
     Value::Array(parts)
+}
+
+const HIT_CAP: u64 = 4096;
+
+/// 按已保存的格子值判断这条规则命中哪些格。判断不了就返回 `None`，不写 `hits`。
+fn rule_hits(el: &Element, root: &Element, sst: &[String], sqref: &Value) -> Option<Vec<String>> {
+    let kind = el.attr("type")?;
+    let cells = sqref_cells(root, sqref);
+    if cells.is_empty() {
+        return None;
+    }
+    let hits = match kind {
+        "cellIs" => cell_is_hits(el, root, &cells)?,
+        "containsText" | "notContainsText" | "beginsWith" | "endsWith" => {
+            text_hits(kind, el, root, sst, &cells)
+        }
+        "top10" => top_hits(el, root, &cells),
+        "aboveAverage" => avg_hits(el, root, &cells),
+        _ => return None,
+    };
+    Some(hits)
+}
+
+fn sqref_cells(root: &Element, sqref: &Value) -> Vec<CellRef> {
+    let Some(parts) = sqref.as_array() else {
+        return Vec::new();
+    };
+    let mut ranges = Vec::new();
+    for part in parts {
+        let Some(text) = part.as_str() else {
+            continue;
+        };
+        if let Ok((a, b)) = a1::parse_range(text) {
+            ranges.push((a, b));
+        }
+    }
+    let mut too_big = false;
+    let mut enumerated = Vec::new();
+    for (a, b) in &ranges {
+        let rows = u64::from(a.row.abs_diff(b.row)) + 1;
+        let cols = u64::from(a.col.abs_diff(b.col)) + 1;
+        if rows.saturating_mul(cols) > HIT_CAP {
+            too_big = true;
+            break;
+        }
+        let r1 = a.row.min(b.row);
+        let r2 = a.row.max(b.row);
+        let c1 = a.col.min(b.col);
+        let c2 = a.col.max(b.col);
+        for row in r1..=r2 {
+            for col in c1..=c2 {
+                enumerated.push(CellRef { col, row });
+            }
+        }
+    }
+    if !too_big {
+        return enumerated;
+    }
+    let data = root.child_by_local("sheetData");
+    let mut out = Vec::new();
+    let Some(data) = data else {
+        return out;
+    };
+    for row in data.children_by_local("row") {
+        for cell in row.children_by_local("c") {
+            let Some(r) = cell.attr("r").and_then(|s| a1::parse_cell(s).ok()) else {
+                continue;
+            };
+            if ranges.iter().any(|(a, b)| in_span(r, *a, *b)) {
+                out.push(r);
+            }
+        }
+    }
+    out
+}
+
+fn in_span(cell: CellRef, a: CellRef, b: CellRef) -> bool {
+    let r1 = a.row.min(b.row);
+    let r2 = a.row.max(b.row);
+    let c1 = a.col.min(b.col);
+    let c2 = a.col.max(b.col);
+    cell.row >= r1 && cell.row <= r2 && cell.col >= c1 && cell.col <= c2
+}
+
+fn sheet_cell(root: &Element, cell: CellRef) -> Option<&Element> {
+    let data = root.child_by_local("sheetData")?;
+    super::cell::find_cell(data, cell)
+}
+
+fn cached_num(root: &Element, cell: CellRef) -> Option<f64> {
+    let el = sheet_cell(root, cell)?;
+    let t = el.attr("t").unwrap_or("");
+    if t == "s" || t == "inlineStr" || t == "str" || t == "e" || t == "b" {
+        return None;
+    }
+    el.child_by_local("v")?.text_content().trim().parse().ok()
+}
+
+fn cached_text(root: &Element, cell: CellRef, sst: &[String]) -> Option<String> {
+    let el = sheet_cell(root, cell)?;
+    let t = el.attr("t").unwrap_or("");
+    let raw = el.child_by_local("v").map(|v| v.text_content());
+    match t {
+        "s" => {
+            let idx = raw?.trim().parse::<usize>().ok()?;
+            Some(sst.get(idx).cloned().unwrap_or_default())
+        }
+        "inlineStr" | "str" => Some(
+            el.child_by_local("is")
+                .map(|e| e.text_content())
+                .or(raw)
+                .unwrap_or_default(),
+        ),
+        "b" | "e" => None,
+        _ => raw.filter(|s| !s.is_empty()),
+    }
+}
+
+fn plain_num(text: &str) -> Option<f64> {
+    let text = text.trim().trim_start_matches('=');
+    if text.is_empty()
+        || text.contains(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-' || c == '+'))
+    {
+        return None;
+    }
+    text.parse().ok()
+}
+
+fn cell_is_hits(el: &Element, root: &Element, cells: &[CellRef]) -> Option<Vec<String>> {
+    let op = el.attr("operator")?;
+    let formulas: Vec<String> = el
+        .children_by_local("formula")
+        .into_iter()
+        .map(|f| f.text_content())
+        .collect();
+    let a = plain_num(formulas.first()?)?;
+    let b = if op == "between" || op == "notBetween" {
+        Some(plain_num(formulas.get(1)?)?)
+    } else {
+        None
+    };
+    let mut hits = Vec::new();
+    for cell in cells {
+        let num = cached_num(root, *cell);
+        let blank =
+            sheet_cell(root, *cell).is_none() || num.is_none() && cached_is_blank(root, *cell);
+        let hit = match (blank, num) {
+            (true, _) if op == "equal" => false,
+            (true, _) if op == "notEqual" => true,
+            (true, _) => num_op(op, 0.0, a, b),
+            (_, Some(n)) => num_op(op, n, a, b),
+            _ => false,
+        };
+        if hit {
+            hits.push(a1::format_cell(cell.col, cell.row));
+        }
+    }
+    Some(hits)
+}
+
+fn cached_is_blank(root: &Element, cell: CellRef) -> bool {
+    match sheet_cell(root, cell) {
+        None => true,
+        Some(el) => {
+            let t = el.attr("t").unwrap_or("");
+            t != "s"
+                && t != "inlineStr"
+                && t != "str"
+                && t != "b"
+                && t != "e"
+                && cached_num(root, cell).is_none()
+        }
+    }
+}
+
+fn num_op(op: &str, n: f64, a: f64, b: Option<f64>) -> bool {
+    match op {
+        "lessThan" => n < a,
+        "lessThanOrEqual" => n <= a,
+        "equal" => n == a,
+        "notEqual" => n != a,
+        "greaterThan" => n > a,
+        "greaterThanOrEqual" => n >= a,
+        "between" => {
+            let Some(b) = b else { return false };
+            let lo = a.min(b);
+            let hi = a.max(b);
+            n >= lo && n <= hi
+        }
+        "notBetween" => {
+            let Some(b) = b else { return false };
+            let lo = a.min(b);
+            let hi = a.max(b);
+            n < lo || n > hi
+        }
+        _ => false,
+    }
+}
+
+fn text_hits(
+    kind: &str,
+    el: &Element,
+    root: &Element,
+    sst: &[String],
+    cells: &[CellRef],
+) -> Vec<String> {
+    let needle = el.attr("text").unwrap_or("").to_lowercase();
+    let mut hits = Vec::new();
+    for cell in cells {
+        let text = cached_text(root, *cell, sst)
+            .unwrap_or_default()
+            .to_lowercase();
+        let hit = match kind {
+            "containsText" => !needle.is_empty() && text.contains(&needle),
+            "notContainsText" => !text.contains(&needle),
+            "beginsWith" => text.starts_with(&needle),
+            "endsWith" => text.ends_with(&needle),
+            _ => false,
+        };
+        if hit {
+            hits.push(a1::format_cell(cell.col, cell.row));
+        }
+    }
+    hits
+}
+
+fn numeric_cells(root: &Element, cells: &[CellRef]) -> Vec<(CellRef, f64)> {
+    cells
+        .iter()
+        .filter_map(|cell| cached_num(root, *cell).map(|n| (*cell, n)))
+        .collect()
+}
+
+fn top_hits(el: &Element, root: &Element, cells: &[CellRef]) -> Vec<String> {
+    let mut nums = numeric_cells(root, cells);
+    if nums.is_empty() {
+        return Vec::new();
+    }
+    let rank = el
+        .attr("rank")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(10);
+    let count = if crate::xml::attr_is_true(el, "percent") {
+        ((nums.len() * rank).div_ceil(100)).max(1)
+    } else {
+        rank.max(1)
+    };
+    let bottom = crate::xml::attr_is_true(el, "bottom");
+    nums.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    let threshold = if bottom {
+        nums.get(count.saturating_sub(1).min(nums.len() - 1))
+            .map(|p| p.1)
+    } else {
+        let idx = nums.len().saturating_sub(count);
+        nums.get(idx).map(|p| p.1)
+    };
+    let Some(threshold) = threshold else {
+        return Vec::new();
+    };
+    let mut hits: Vec<CellRef> = nums
+        .into_iter()
+        .filter(|(_, n)| {
+            if bottom {
+                *n <= threshold
+            } else {
+                *n >= threshold
+            }
+        })
+        .map(|(cell, _)| cell)
+        .collect();
+    hits.sort_by_key(|c| (c.row, c.col));
+    hits.into_iter()
+        .map(|c| a1::format_cell(c.col, c.row))
+        .collect()
+}
+
+fn avg_hits(el: &Element, root: &Element, cells: &[CellRef]) -> Vec<String> {
+    let nums = numeric_cells(root, cells);
+    if nums.is_empty() {
+        return Vec::new();
+    }
+    let mean = nums.iter().map(|(_, n)| n).sum::<f64>() / nums.len() as f64;
+    let above = !attr_false(el, "aboveAverage");
+    let eq = crate::xml::attr_is_true(el, "equalAverage");
+    let k = el.attr("stdDev").and_then(|s| s.parse::<f64>().ok());
+    let spread = if let Some(k) = k {
+        if nums.len() < 2 {
+            return Vec::new();
+        }
+        let var =
+            nums.iter().map(|(_, n)| (n - mean).powi(2)).sum::<f64>() / (nums.len() - 1) as f64;
+        k * var.sqrt()
+    } else {
+        0.0
+    };
+    let mut hits = Vec::new();
+    for (cell, n) in nums {
+        let hit = if above {
+            if eq {
+                n >= mean + spread
+            } else {
+                n > mean + spread
+            }
+        } else if eq {
+            n <= mean - spread
+        } else {
+            n < mean - spread
+        };
+        if hit {
+            hits.push(a1::format_cell(cell.col, cell.row));
+        }
+    }
+    hits
 }
 
 pub(crate) fn apply_insert(

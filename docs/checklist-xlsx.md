@@ -1335,6 +1335,10 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - 检查：缺字段
   - 通过标准：只给 `op` 与 `id` 的 `insertConditionalFormat` 得 `InvalidField`，未写文件
   - 不强制开 Excel
+- **Xn6** ✅
+  - Excel 16.0：`xlsx-cf-hits.ps1`，1 PASS / 0 FAIL
+  - `A1=2`、`A2=0`、`A1:A3` 大于 0。inspect `hits` 为 `A1`
+  - 打开无 Repair。A1 有填充，A2 与区域外的 C1 没有
 
 ## 条件格式与迷你图字段
 

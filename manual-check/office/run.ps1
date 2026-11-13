@@ -174,6 +174,7 @@ $order = @(
     'xlsx-formula-rest'
     'xlsx-validation'
     'xlsx-conditional-format'
+    'xlsx-cf-hits'
     'xlsx-id-pin'
     'xlsx-chart-id-pin'
     'xlsx-cf-spark-style'
