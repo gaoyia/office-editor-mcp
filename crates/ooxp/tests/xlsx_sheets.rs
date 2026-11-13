@@ -231,6 +231,7 @@ fn inspect_lists_hidden() {
             "hyperlinkCount",
             "sparklineCount",
             "oleObjectCount",
+            "formControlCount",
             "model3dCount",
             "inkCount",
             "slicerCount",

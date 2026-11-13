@@ -11,6 +11,7 @@ use super::super::chart::SheetChartId;
 use super::super::connection;
 use super::super::custom_view;
 use super::super::extlink;
+use super::super::form_control;
 use super::super::ole;
 use super::super::picture::{self, SheetPicId};
 use super::super::shape::{DrawObjKind, SheetDrawId};
@@ -155,6 +156,7 @@ pub struct InspectScope {
     pub hyperlinks: bool,
     pub sparklines: bool,
     pub ole_objects: bool,
+    pub form_controls: bool,
     pub model3ds: bool,
     pub inks: bool,
     pub maths: bool,
@@ -1990,6 +1992,7 @@ pub enum XlsxOp {
     SetSmartArtColors(SetSmartArtColorsOp),
     SetSmartArtStyle(SetSmartArtStyleOp),
     SetSmartArtLayout(SetSmartArtLayoutOp),
+    SetFormControl(form_control::SetFormControlOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),

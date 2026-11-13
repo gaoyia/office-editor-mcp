@@ -368,6 +368,10 @@ pub(crate) enum IdReason {
     SheetOlePrefix,
     /// xlsx 工作表 id，缺少 /ole:…
     SheetOleContainer,
+    /// xlsx 窗体控件 id 必须是 sheet:{name}/control:…
+    SheetControlPrefix,
+    /// xlsx 工作表 id，缺少 /control:…
+    SheetControlContainer,
     /// xlsx 的 insertInk 必须用 sheet:工作表名
     InsertInkNeedsSheet,
     /// xlsx 墨迹 id 必须是 sheet:{name}/ink:…
@@ -1076,6 +1080,14 @@ define_error_kinds! {
         vec![Self::InvalidSparkline { field: "manualMin".into() }]
     },
     NeedSetSparklineField => vec![Self::NeedSetSparklineField],
+    FormControlNotFound { id: String } => {
+        vec![Self::FormControlNotFound { id: "sheet:Sheet1/control:1025".into() }]
+    },
+    InvalidFormControl { field: String } => {
+        vec![Self::InvalidFormControl { field: "caption".into() }]
+    },
+    NeedSetFormControlField => vec![Self::NeedSetFormControlField],
+    FormControlWorksheetOnly => vec![Self::FormControlWorksheetOnly],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
     CustomShowNameTooLong => vec![Self::CustomShowNameTooLong],
@@ -1571,6 +1583,8 @@ impl IdReason {
             Self::InsertOleNeedsSheet,
             Self::SheetOlePrefix,
             Self::SheetOleContainer,
+            Self::SheetControlPrefix,
+            Self::SheetControlContainer,
             Self::InsertInkNeedsSheet,
             Self::SheetInkPrefix,
             Self::SheetInkContainer,
@@ -2180,6 +2194,9 @@ impl ErrorKind {
             | Self::InvalidSparklineType
             | Self::InvalidSparkline { .. }
             | Self::NeedSetSparklineField
+            | Self::InvalidFormControl { .. }
+            | Self::NeedSetFormControlField
+            | Self::FormControlWorksheetOnly
             | Self::XlsxHyperlinkNeedTarget
             | Self::EmptyHyperlinkLocation
             | Self::NeedXlsxSetHyperlinkField
@@ -2245,6 +2262,7 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
+            | Self::FormControlNotFound { .. }
             | Self::InkNotFound { .. }
             | Self::Model3dNotFound { .. }
             | Self::MathDrawingNotFound { .. }

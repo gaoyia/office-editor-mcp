@@ -15,6 +15,7 @@ use super::comments;
 use super::connection;
 use super::custom_view;
 use super::extlink;
+use super::form_control;
 use super::formula;
 use super::hf;
 use super::ink;
@@ -87,6 +88,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
+    let want_form_controls = scope.as_ref().is_some_and(|s| s.form_controls);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let want_inks = scope.as_ref().is_some_and(|s| s.inks);
     let want_maths = scope.as_ref().is_some_and(|s| s.maths);
@@ -114,6 +116,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut hyperlink_count = 0usize;
     let mut sparkline_count = 0usize;
     let mut ole_object_count = 0usize;
+    let mut form_control_count = 0usize;
     let mut model3d_count = 0usize;
     let mut ink_count = 0usize;
     let mut slicer_count = 0usize;
@@ -170,6 +173,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_ole = ole::count(&pkg, &sh.part, &sheet_doc.root)?;
             ole_object_count += n_ole;
             obj.insert("oleObjectCount".into(), json!(n_ole));
+            let forms = form_control::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?;
+            form_control_count += forms.len();
+            obj.insert("formControlCount".into(), json!(forms.len()));
             let n_m3d = model3d::count(&pkg, &sh.part, &sheet_doc.root)?;
             model3d_count += n_m3d;
             obj.insert("model3dCount".into(), json!(n_m3d));
@@ -265,6 +271,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     "oleObjects".into(),
                     Value::Array(ole::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?),
                 );
+            }
+            if want_form_controls {
+                obj.insert("formControls".into(), Value::Array(forms));
             }
             if want_model3ds {
                 obj.insert(
@@ -464,6 +473,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
+    root.insert("formControlCount".into(), json!(form_control_count));
     root.insert("model3dCount".into(), json!(model3d_count));
     root.insert("inkCount".into(), json!(ink_count));
     root.insert("slicerCount".into(), json!(slicer_count));

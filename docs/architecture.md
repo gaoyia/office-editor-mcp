@@ -283,7 +283,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。
 也可用 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat` 读写工作表 `conditionalFormatting`。公式当字符串，颜色写入 `styles.xml` 的 `dxf`，并可写 `top10`、`aboveAverage` 与文本类规则。
 不渲染、不求值。`extLst` 里的扩展条件格式原样留下。
-不写 embedding，不对 xlsx 做 `exportChartData`。不编辑 `legacyDrawingHF` / 表单控件 VML。
+不写 embedding，不对 xlsx 做 `exportChartData`。`setFormControl` 同时改 drawing 正文里的标题、VML 文本框，以及 ctrlProp 的链接、列表、勾选和选中项。不编辑 `legacyDrawingHF`。不把窗体当成只有 VML。
 insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占位 `comments.xml`，不改已有框的几何。
 也可插、删、回复、改字、改作者与完成标记线程化批注（MS-XLSX `threadedComment`），脏 threadedComments、persons、占位 comments、VML、工作表 `legacyDrawing`、关系与内容类型。
 也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，可改颜色、标记与坐标轴，不新建部件，不标重算。

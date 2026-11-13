@@ -197,6 +197,12 @@
             "pptx"
           ]
         },
+        "formControls": {
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
+        },
         "watermarks": {
           "type": "boolean",
           "formats": [

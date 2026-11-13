@@ -230,6 +230,10 @@ VML 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relat
 `[Content_Types].xml` 补 Default `vml` 为 `application/vnd.openxmlformats-officedocument.vmlDrawing`。
 workbook `.rels` 的 person 关系 Type 为 `http://schemas.microsoft.com/office/2017/10/relationships/person`。
 工作表 XML 写 `<legacyDrawing r:id="…"/>`。同一张表多条批注共用一个 threadedComments 部件。`create` 给了 `sheets[].comments` 时按同一套规则写这些部件。
+`setFormControl` 不新建部件。它只改已有 drawing 里 Choice 的 `a:t`、已有 vmlDrawing 文本框里的 `font`，
+以及 ctrlProp 的 `fmlaLink`、`fmlaRange`、`checked`、`sel` 和 VML 里对应的元素。
+ctrlProp 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/ctrlProp`。
+不改工作表 XML，不改对象名，不改锚点。
 apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，
 以及 `/xl/media/imageN.*`。
 工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。

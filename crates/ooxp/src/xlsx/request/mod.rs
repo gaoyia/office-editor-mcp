@@ -78,6 +78,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "hyperlinks",
             "sparklines",
             "oleObjects",
+            "formControls",
             "model3ds",
             "inks",
             "maths",
@@ -100,6 +101,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let form_controls = parse_bool_field(obj.get("formControls"), "formControls")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let inks = parse_bool_field(obj.get("inks"), "inks")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
@@ -165,6 +167,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !hyperlinks
         && !sparklines
         && !ole_objects
+        && !form_controls
         && !model3ds
         && !inks
         && !maths
@@ -190,6 +193,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         hyperlinks,
         sparklines,
         ole_objects,
+        form_controls,
         model3ds,
         inks,
         maths,
@@ -394,6 +398,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setSmartArtColors" => XlsxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
             "setSmartArtStyle" => XlsxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
             "setSmartArtLayout" => XlsxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
+            "setFormControl" => XlsxOp::SetFormControl(super::form_control::parse_set(obj, i)?),
             "setProps" => XlsxOp::SetProps(crate::props::parse_set_props(obj, i, "xlsx:workbook")?),
             "setCustomProp" => XlsxOp::SetCustomProp(crate::props::parse_set_custom_prop(
                 obj,

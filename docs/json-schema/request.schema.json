@@ -15223,6 +15223,12 @@
             "pptx"
           ]
         },
+        "formControls": {
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
+        },
         "watermarks": {
           "type": "boolean",
           "formats": [
@@ -22186,6 +22192,60 @@
         }
       ]
     },
+    "setFormControlOp": {
+      "description": "改一个已有窗体控件的标题、链接、列表、勾选或选中项。",
+      "descriptionEn": "Change the caption, link, list, check state, or selected item of an existing form control.",
+      "limits": "只改已有的按钮、复选框、下拉。caption 同时写 Choice 的 a:t 和 VML 文本框，空字符串不合法。fmlaLink、fmlaRange 为 null 时两处一起去掉。checked 为 true 时写 checked=Checked 和 x:Checked 为 1，为 false 时两处一起去掉。有链接格时同时把该格写成布尔值。sel 同时写 formControlPr 和 x:Sel，不改 val。按钮不能设链接、列表、勾选、选中项。复选框不能设列表和选中项。下拉不能设链接和勾选。没有 a:t 或没有 VML 文本框时不能设 caption。一个字段都不给则报错。不改对象名和锚点。不插入、不删除。只能改 worksheet。",
+      "limitsEn": "Only an existing button, check box, or drop-down can be changed. caption is written to both the Choice a:t and the VML text box; an empty string is invalid. A null fmlaLink or fmlaRange removes both copies. checked true writes checked=Checked and x:Checked 1; false removes both. When a link cell exists, that cell is also written as a boolean. sel is written to both formControlPr and x:Sel, and val is left unchanged. A button cannot take a link, list, check state, or selected item. A check box cannot take a list or selected item. A drop-down cannot take a link or check state. caption is rejected when a:t or the VML text box is missing. Giving no field is an error. The object name and anchor are not changed. There is no insert or delete. Only a worksheet can be changed.",
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setFormControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fmlaLink": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fmlaRange": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "sel": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
     "insertDataValidationOp": {
       "description": "往工作表追加一条数据验证（ECMA-376 §18.3.1.32）。",
       "descriptionEn": "Append one data validation to the worksheet (ECMA-376 §18.3.1.32).",
@@ -26010,6 +26070,9 @@
           "$ref": "#/$defs/setFontEmbedOp"
         },
         {
+          "$ref": "#/$defs/setFormControlOp"
+        },
+        {
           "$ref": "#/$defs/setFormProtOp"
         },
         {
@@ -26711,6 +26774,9 @@
         },
         {
           "$ref": "#/$defs/setExternalLinkOp"
+        },
+        {
+          "$ref": "#/$defs/setFormControlOp"
         },
         {
           "$ref": "#/$defs/setHeaderFooterTextOp"

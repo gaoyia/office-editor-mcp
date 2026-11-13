@@ -518,6 +518,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "工作表 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
+            IdReason::SheetControlPrefix => {
+                "xlsx 窗体控件 id 必须是 sheet:工作表名/control:…".into()
+            }
+            IdReason::SheetControlContainer => {
+                "工作表 id 必须带 /control:…（该 id 本身不是窗体控件）".into()
+            }
             IdReason::InsertInkNeedsSheet => {
                 "xlsx 的 insertInk 的 id 必须是 sheet:工作表名".into()
             }
@@ -1399,6 +1405,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetSparklineField => {
             "setSparkline 除 op 与 id 外至少要给一个字段".into()
         }
+        ErrorKind::FormControlNotFound { id } => format!("找不到窗体控件：{id}"),
+        ErrorKind::InvalidFormControl { field } => format!("窗体控件字段不合法：{field}"),
+        ErrorKind::NeedSetFormControlField => {
+            "setFormControl 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::FormControlWorksheetOnly => "只能在工作表上修改窗体控件".into(),
         ErrorKind::InvalidBookmarkName => {
             "书签名不能为空、不能含空白、不能以下划线开头".into()
         }

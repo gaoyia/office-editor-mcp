@@ -200,6 +200,7 @@ fn inspect_default_props_on_three_formats() {
             "hyperlinkCount",
             "sparklineCount",
             "oleObjectCount",
+            "formControlCount",
             "model3dCount",
             "inkCount",
             "slicerCount",

@@ -15,6 +15,7 @@ use super::comments;
 use super::connection;
 use super::custom_view;
 use super::extlink;
+use super::form_control;
 use super::hf;
 use super::ink;
 use super::inspect;
@@ -1291,6 +1292,17 @@ fn apply_pkg(
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 smartart::apply_layout(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetFormControl(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::FormControlWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                form_control::set(&mut pkg, &mut doc.root, &part, op, i)?;
             }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;

@@ -147,7 +147,7 @@
 没有 `cNvPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 drawing 部件内从 1 计，计入该表所有被收入的图，不只是缺 id 的那些。
 
 只认锚点的直接子元素 `pic` 且带 `a:blip`。锚点可以是 `xdr:twoCellAnchor` / `xdr:oneCellAnchor` / `xdr:absoluteAnchor`，或 Chart Drawing 的 `cdr:relSizeAnchor` / `cdr:absSizeAnchor`。
-组合里的图、`graphicFrame`（图表、SmartArt）、`sp`、连接线不进 `pictures`。VML / `legacyDrawing`（批注框、旧式控件）不编。
+组合里的图、`graphicFrame`（图表、SmartArt）、`sp`、连接线不进 `pictures`。VML / `legacyDrawing`（批注框、旧式控件）不进 `pictures`。窗体控件另有名单，见下文。
 工作表图跟 `<drawing r:id>` 指向的 SpreadsheetDrawing，以及该表图表上的 Chart Drawing；不跟 `<drawingHF>`。`mc:AlternateContent` 只进第一个 `Choice`。
 一张表可以有多个 worksheet drawing 关系，按工作表 XML 里 `<drawing>` 的文档顺序拼接，再拼 Chart Drawing，然后再编号。
 有 DrawingML 链时节点带 `hyperlink`（见上文超链接）；没有则为 `null`。文本框与 SmartArt 见下文，不要把它们编进 `pictures`。
@@ -301,6 +301,42 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 页眉、`chartsheet`、组合里的 OLE 本期不进树。Excel 16.0 COM 在图表工作表与链接 OLE 上建对象失败，不另开 apply。
 预览图不进 `pictures`。`insertOle` 的 `id` 必须是 `sheet:{name}`。`deleteOle` / `setOleSize` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。
 不提供改尺寸、位置、图标或 ProgID 的 op。create 可写 OLE。docx / pptx 见各自分册。
+
+工作表窗体控件挂在该 `worksheet` 上。id 是 `sheet:{name}/control:{shapeId}`。
+`{shapeId}` 取 Choice 里 `xdr:cNvPr/@id` 的原文。
+这个数必须同时等于 `<control>/@shapeId`，以及 VML `v:shape/@id` 去掉前缀 `_x0000_s` 之后的原文。
+还要对上 `compatExt/@spid`，值是 `_x0000_s` 加上这个数。
+三处对不上的控件不进树，相关部件原样写回。
+只认 `formControlPr/@objectType` 为 `Button`、`CheckBox`、`Drop`。
+VML 的复选框写成 `Checkbox`，与 `CheckBox` 对应。对不上类型的不进树。
+带 `@link` 的 `controls` 不进树。
+不认单选、分组框、滚动条、微调、列表框、标签、编辑框。
+页眉、`chartsheet`、`dialogsheet`、`macrosheet` 不进树。
+同一 `shapeId` 出现多次时，inspect 只列文档顺序里第一处能对上的。
+
+名单里每个对象的字段顺序：`id`、`shapeId`、`name`、`objectType`、`caption`、`fmlaLink`、`fmlaRange`、`checked`、`sel`。
+
+- `name` 取 `<control>/@name`。没有则为 `""`。这是对象名，不是按钮上的字。这一刀不改对象名
+- `caption` 是 Choice 里 `txBody` 下全部 `a:t` 按文档顺序拼成的一句。没有 `a:t` 则为 `null`
+- `fmlaLink`、`fmlaRange` 取 `formControlPr` 上的同名属性。没有则为 `null`
+- `checked` 只在 `CheckBox` 上是布尔。`checked="Checked"` 并且 VML `x:Checked` 的文本为 `1` 时为 `true`，否则为 `false`。其它类型为 `null`
+- `sel` 只在 `Drop` 上读取。属性是非负整数则为该数，否则为 `null`。其它类型为 `null`
+- 不把 `val` 当成选中项。不读锚点。字节不进树
+- 不提供插入和删除
+
+```json
+{
+  "id": "sheet:Sheet1/control:1025",
+  "shapeId": "1025",
+  "name": "Button 1",
+  "objectType": "Button",
+  "caption": "按钮 1",
+  "fmlaLink": null,
+  "fmlaRange": null,
+  "checked": null,
+  "sel": null
+}
+```
 
 工作表 3D 模型挂在该 `worksheet` 上。`{cNvPrId}` 取 Choice 里 `xdr:graphicFrame` 的 `xdr:cNvPr/@id` 原文。
 没有该属性时用 `model3d:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的 3D 模型内从 1 计。
@@ -539,6 +575,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不把嵌入字节或预览图放进树
   - 页眉、`chartsheet`、组合里的 OLE 本期不进树
   - docx / pptx 见各自分册
+- **`scope.formControls`**（否）
+  - 为 `true` 时给每张 `worksheet` 填 `formControls`
+  - 没有对得上的窗体控件时为空数组
+  - 省略或 `false` 则只有 `formControlCount`，没有名单
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把控件画进树，也不把字节放进树
+  - 页眉、`chartsheet` 不进树
 - **`scope.model3ds`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `model3ds`
   - 没有 3D 模型时为空数组
@@ -601,10 +644,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，
 也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `comments`
- / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `inks` / `slicers` / `protectedRanges`。
+ / `hyperlinks` / `sparklines` / `oleObjects` / `formControls` / `model3ds` / `inks` / `slicers` / `protectedRanges`。
 工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
-工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount` 与 `slicerCount`。
+工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount` 与 `slicerCount`。
 每张 `worksheet` 仍有 `protectedRangeCount`。
 工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount`、`cellStyleCount` 与 `definedNames`。
 没有 `connections` / `externalLinks` / `customViews` / `cellStyles` 名单。每张表仍有 `hasHeaderFooter`。
@@ -615,7 +658,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 `scope.sheet` 点名 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`。只要想看工作表图名单，就给 `pictures: true`。
 只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看公式框名单，就给 `maths: true`。只要想看形状名单，就给 `shapes: true`。
 只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。
-只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。
+只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。只要想看窗体控件名单，就给 `formControls: true`。
 只要想看 3D 模型名单，就给 `model3ds: true`。只要想看工作表墨迹名单，就给 `inks: true`。
 只要想看切片器名单，就给 `slicers: true`。只要想看允许编辑区域名单，就给 `protectedRanges: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
 只要想看自定义视图名单，就给 `customViews: true`。只要想看命名单元格样式名单，就给 `cellStyles: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
@@ -639,6 +682,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "hyperlinkCount": 0,
   "sparklineCount": 0,
   "oleObjectCount": 0,
+  "formControlCount": 0,
   "model3dCount": 0,
   "inkCount": 0,
   "slicerCount": 0,
@@ -690,6 +734,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "hyperlinkCount": 0,
       "sparklineCount": 0,
       "oleObjectCount": 0,
+      "formControlCount": 0,
       "model3dCount": 0,
       "inkCount": 0,
       "slicerCount": 0,
@@ -807,6 +852,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "hyperlinkCount": 0,
       "sparklineCount": 0,
       "oleObjectCount": 0,
+      "formControlCount": 0,
       "model3dCount": 0,
       "inkCount": 0,
       "slicerCount": 0,
@@ -877,7 +923,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 规则：
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
   `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`theme`、`themeOverride`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`，
   有命名单元格样式名单时再跟 `cellStyles`。
@@ -887,6 +933,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `connectorCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。
   `commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。
   `sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。
+  `formControlCount` 始终出现，等于各 `worksheet` 的 `formControlCount` 之和。
   `model3dCount` 始终出现，等于各 `worksheet` 的 `model3dCount` 之和。
   `inkCount` 始终出现，等于各 `worksheet` 的 `inkCount` 之和。
   `slicerCount` 始终出现，等于各 `worksheet` 的 `slicerCount` 之和。
@@ -915,11 +962,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`background`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
-  有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有墨迹名单时再跟 `inks`，有切片器名单时再跟 `slicers`，
+  有嵌入对象名单时再跟 `oleObjects`，有窗体控件名单时再跟 `formControls`，有 3D 模型名单时再跟 `model3ds`，有墨迹名单时再跟 `inks`，有切片器名单时再跟 `slicers`，
   有允许编辑区域名单时再跟 `protectedRanges`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
   `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图，也不含工作表背景 `<picture>`。没有图则为 `0`。
@@ -937,6 +984,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `hyperlinkCount` 始终出现，是该表 `<hyperlinks>` 里 `<hyperlink>` 的个数。没有则为 `0`。
   `sparklineCount` 始终出现，是该表 `extLst` 里 `x14:sparklineGroup` 的组数。没有则为 `0`。
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
+  `formControlCount` 始终出现，是该表被收入的窗体控件个数（判定见上文工作表窗体控件）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
   `inkCount` 始终出现，是该表被收入的工作表墨迹个数（判定见上文工作表墨迹那节）。没有则为 `0`。
   `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。
@@ -944,7 +992,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `sheetProtection` 始终出现，规则见下文「工作表保护」。
   `chartsheet` 没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
-  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `inkCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
+  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `formControlCount`，也没有 `model3dCount`，也没有 `inkCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `hasHeaderFooter`、`print`、`view`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，
@@ -954,7 +1002,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
    / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
-   / `oleObjectCount` / `model3dCount` / `inkCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
+   / `oleObjectCount` / `formControlCount` / `model3dCount` / `inkCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。
   判定 `kind` 只看 workbook 关系 Type：以 `/chartsheet` 结尾为 `chartsheet`；以 `/dialogsheet` 结尾为 `dialogsheet`；
   以 `/macrosheet`、`/xlMacrosheet` 或 `/xlIntlMacrosheet` 结尾为 `macrosheet`（国际宏表不另开 `kind`）；其余为 `worksheet`。
@@ -3371,6 +3419,48 @@ pptx 见 [pptx 分册](json-contract-pptx.md#insertole)。
 同时改 dummy `xdr:twoCellAnchor` 的 `to`，以及 VML `x:Anchor` 的右下角单元格。不按列宽行高换算 EMU。
 没有 `objectPr`、锚点是 `oneCell` 或 `absolute` 时，改 `xdr:ext`。不启动 OLE 服务器，不改 embeddings。
 docx 见 [docx 分册](json-contract-docx.md#setolesize)。pptx 见 [pptx 分册](json-contract-pptx.md#setolesize)。
+
+### setFormControl
+
+改一个已经在树上的窗体控件。不新建部件，不插入，不删除，不改对象名，不改锚点，不改 `val`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setFormControl"` |
+| `id` | 必须是窗体控件 id |
+| `caption` | 标题。同时写 Choice 的 `a:t` 和 VML 文本框里的 `font` |
+| `fmlaLink` | 链接格。字符串写入两处，`null` 两处一起去掉 |
+| `fmlaRange` | 列表区域。字符串写入两处，`null` 两处一起去掉 |
+| `checked` | 只用于复选框。`true` 写 `checked="Checked"` 和 `x:Checked` 文本 `1`。`false` 两处一起去掉。有链接格时，同时把该格写成布尔值 |
+| `sel` | 只用于下拉。非负整数，同时写 `formControlPr/@sel` 和 `x:Sel` |
+
+除 `op` 与 `id` 外至少要给一个字段，否则报 `InvalidField`。
+空字符串的 `caption`、`fmlaLink`、`fmlaRange` 报 `InvalidField`。
+按钮不能设 `fmlaLink`、`fmlaRange`、`checked`、`sel`。
+复选框不能设 `fmlaRange`、`sel`。下拉不能设 `fmlaLink`、`checked`。
+没有 `a:t`，或 VML 文本框里没有 `font` 时，不能设 `caption`。
+多段 `a:t` 时，第一段写成整句，其余清空。`font` 同样处理。
+`checked` 而且当时有链接格时，该格写成 `TRUE` 或 `FALSE`（单元格类型 `b`，值 `1` 或 `0`）。
+链接格可以是本次写入的，也可以是原来就有的。本次把链接清掉时，仍按清掉之前的那一格来写。
+别的工作表上的链接不写。Excel 打开时以这一格为准：只改标记、格子是空的，打开后勾选会被清掉。
+找不到报 `IdNotFound`。id 不是窗体控件 id 报 `InvalidId`。
+对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "setFormControl",
+      "id": "sheet:Sheet1/control:1025",
+      "caption": "按钮改"
+    }
+  ]
+}
+```
 
 ### insertModel3d
 

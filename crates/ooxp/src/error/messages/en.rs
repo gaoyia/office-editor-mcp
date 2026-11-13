@@ -563,6 +563,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "Sheet id must include /ole:… (that id alone is not an embedded object)".into()
             }
+            IdReason::SheetControlPrefix => {
+                "xlsx form control id must be sheet:name/control:…".into()
+            }
+            IdReason::SheetControlContainer => {
+                "Sheet id must include /control:… (that id alone is not a form control)".into()
+            }
             IdReason::InsertInkNeedsSheet => "xlsx insertInk id must be sheet:name".into(),
             IdReason::SheetInkPrefix => "xlsx ink id must be sheet:name/ink:…".into(),
             IdReason::SheetInkContainer => {
@@ -1591,6 +1597,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedSetSparklineField => {
             "setSparkline requires at least one field besides op and id".into()
+        }
+        ErrorKind::FormControlNotFound { id } => format!("form control not found: {id}"),
+        ErrorKind::InvalidFormControl { field } => {
+            format!("invalid form control field: {field}")
+        }
+        ErrorKind::NeedSetFormControlField => {
+            "setFormControl requires at least one field besides op and id".into()
+        }
+        ErrorKind::FormControlWorksheetOnly => {
+            "form controls can only be changed on a worksheet".into()
         }
         ErrorKind::InvalidBookmarkName => {
             "bookmark name must not be empty, contain whitespace, or start with an underscore"
