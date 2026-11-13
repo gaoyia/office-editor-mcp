@@ -323,13 +323,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert("cols".into(), cols);
                     obj.insert("rows".into(), rows);
                     obj.insert("merges".into(), merges);
-                    obj.insert(
-                        "dataValidations".into(),
-                        validation::inspect(&sheet_doc.root, &sh.name, &sst),
-                    );
                     let mut formulas = super::eval::FormulaSession::open(&pkg, &sh.name)
                         .ok()
                         .flatten();
+                    obj.insert(
+                        "dataValidations".into(),
+                        validation::inspect(&sheet_doc.root, &sh.name, &sst, &mut formulas),
+                    );
                     obj.insert(
                         "conditionalFormats".into(),
                         cf::inspect(&sheet_doc.root, &sh.name, &styles, &sst, &mut formulas),

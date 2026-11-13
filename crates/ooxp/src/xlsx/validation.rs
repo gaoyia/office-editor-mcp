@@ -17,7 +17,12 @@ pub(crate) fn count(root: &Element) -> usize {
         .unwrap_or(0)
 }
 
-pub(crate) fn inspect(root: &Element, sheet: &str, sst: &[String]) -> Value {
+pub(crate) fn inspect(
+    root: &Element,
+    sheet: &str,
+    sst: &[String],
+    formulas: &mut Option<super::eval::FormulaSession>,
+) -> Value {
     let Some(parent) = root.child_by_local("dataValidations") else {
         return json!([]);
     };
@@ -27,12 +32,19 @@ pub(crate) fn inspect(root: &Element, sheet: &str, sst: &[String]) -> Value {
         .into_iter()
         .enumerate()
     {
-        out.push(inspect_one(el, sheet, i + 1, root, sst));
+        out.push(inspect_one(el, sheet, i + 1, root, sst, formulas));
     }
     Value::Array(out)
 }
 
-fn inspect_one(el: &Element, sheet: &str, n: usize, root: &Element, sst: &[String]) -> Value {
+fn inspect_one(
+    el: &Element,
+    sheet: &str,
+    n: usize,
+    root: &Element,
+    sst: &[String],
+    formulas: &mut Option<super::eval::FormulaSession>,
+) -> Value {
     let mut obj = Map::new();
     obj.insert("id".into(), json!(format!("sheet:{sheet}/dv:{n}")));
     obj.insert(
@@ -87,7 +99,7 @@ fn inspect_one(el: &Element, sheet: &str, n: usize, root: &Element, sst: &[Strin
     if let Some(items) = list_items(el, root, sst) {
         obj.insert("items".into(), json!(items));
     }
-    if let Some(results) = rule_results(el, root, sst) {
+    if let Some(results) = rule_results(el, root, sst, formulas) {
         obj.insert("results".into(), json!(results));
     }
     Value::Object(obj)
@@ -146,10 +158,18 @@ fn span_cells(a: CellRef, b: CellRef) -> Option<Vec<CellRef>> {
     Some(out)
 }
 
-fn rule_results(el: &Element, root: &Element, sst: &[String]) -> Option<Vec<Value>> {
+fn rule_results(
+    el: &Element,
+    root: &Element,
+    sst: &[String],
+    formulas: &mut Option<super::eval::FormulaSession>,
+) -> Option<Vec<Value>> {
     let kind = el.attr("type").unwrap_or("none");
-    if kind == "none" || kind == "custom" {
+    if kind == "none" {
         return None;
+    }
+    if kind == "custom" {
+        return custom_results(el, root, sst, formulas);
     }
     let sqref = inspect_sqref(el.attr("sqref").unwrap_or(""));
     let cells = sqref_cells(&sqref)?;
@@ -203,6 +223,61 @@ fn rule_results(el: &Element, root: &Element, sst: &[String]) -> Option<Vec<Valu
         out.push(json!({ "ref": a1::format_cell(cell.col, cell.row), "ok": ok }));
     }
     Some(out)
+}
+
+/// `custom` 按已经采样的 Excel 16.0 回答。公式相对第一块左上角平移。
+/// 真或非 0 通过，假、0、文本和错误不通过。允许空白时，空格子不再算公式。
+/// 有一格算不出来，整条都不给结果。
+fn custom_results(
+    el: &Element,
+    root: &Element,
+    sst: &[String],
+    formulas: &mut Option<super::eval::FormulaSession>,
+) -> Option<Vec<Value>> {
+    let sqref = inspect_sqref(el.attr("sqref").unwrap_or(""));
+    let cells = sqref_cells(&sqref)?;
+    if cells.is_empty() {
+        return None;
+    }
+    let anchor = sqref_anchor(&sqref).unwrap_or(cells[0]);
+    let formula = el
+        .child_by_local("formula1")
+        .map(|f| f.text_content())
+        .unwrap_or_default();
+    let allow_blank = crate::xml::attr_is_true_trimmed(el, "allowBlank");
+    let mut out = Vec::new();
+    for cell in cells {
+        let text = cell_text(root, cell, sst);
+        let blank = text.as_deref().is_none_or(str::is_empty);
+        let ok = if blank && allow_blank {
+            true
+        } else {
+            let eval = formulas.as_mut()?;
+            let shifted = super::formula::shift_a1_formula(&formula, anchor, cell);
+            match eval.eval(&shifted, cell) {
+                super::eval::FormulaOutcome::Unknown => return None,
+                super::eval::FormulaOutcome::Bool(pass) => pass,
+                super::eval::FormulaOutcome::Num(n) if n != 0.0 => true,
+                super::eval::FormulaOutcome::Num(_)
+                | super::eval::FormulaOutcome::Text
+                | super::eval::FormulaOutcome::Err => false,
+            }
+        };
+        out.push(json!({
+            "ref": a1::format_cell(cell.col, cell.row),
+            "ok": ok
+        }));
+    }
+    Some(out)
+}
+
+fn sqref_anchor(sqref: &Value) -> Option<CellRef> {
+    let text = sqref.as_array()?.first()?.as_str()?;
+    let (a, b) = a1::parse_range(text).ok()?;
+    Some(CellRef {
+        col: a.col.min(b.col),
+        row: a.row.min(b.row),
+    })
 }
 
 fn num_ok(op: &str, n: f64, limit: Option<(f64, Option<f64>)>) -> bool {

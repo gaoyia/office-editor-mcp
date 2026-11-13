@@ -1312,7 +1312,10 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `showErrorMessage`、`errorStyle`、`errorTitle`、`error`、`promptTitle`、`prompt`，能展开时再跟 `items`，能判断时最后是 `results`。
   `items` 只在 `list` 上出现：公式是引号里的逗号列表，或本表一块连续区域时，按这个顺序给出每一项。别的公式不给 `items`。
   `results` 每项是 `ref`、`ok`。`ok` 表示这个格子按已保存的值是否通过这条规则。空格子看 `allowBlank`。
-  `whole` / `decimal` / `date` / `time` / `textLength` 只在公式是纯数字时给 `results`。`custom` 和 `none` 不给。不写回文件。
+  `whole` / `decimal` / `date` / `time` / `textLength` 只在公式是纯数字时给 `results`。
+  `custom` 用现有公式引擎。公式相对 `sqref` 第一块左上角平移后再算。
+  真或非 0 算通过，假、0、文本和错误算不通过。`allowBlank` 为真时，空格子通过，不再算这条公式。
+  有格子算不出来时，整条不给 `results`。`none` 不给。不写回文件。
   `sqref` 是字符串数组：把 XML `sqref`（`ST_Sqref`，空格分隔）拆开，能解析成 A1 的规范化成 `A1` 或 `A1:B2`，解析不了的段落原样留下；按 XML 原文顺序，不排序。
   `type` 取 `ST_DataValidationType`（`none` / `whole` / `decimal` / `list` / `date` / `time` / `textLength` / `custom`），缺属性当作 `none`。
   `operator` 仅在 XML 有该属性时出现。`formula1` / `formula2` 是对应子元素的原文，当字符串，不求值、不补 `=`；没有该子元素则省略。

@@ -367,3 +367,94 @@ fn prompt_newline_survives_another_cell_edit() {
     );
     assert!(!written.contains("prompt=\"line1\n"), "{written}");
 }
+
+fn inspect_range(path: &Path, range: &str) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(&json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": range }
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree["sheets"][0].clone()
+}
+
+fn dv_ok(dv: &serde_json::Value, cell: &str) -> bool {
+    dv["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["ref"] == cell)
+        .unwrap()["ok"]
+        .as_bool()
+        .unwrap()
+}
+
+#[test]
+fn custom_formula_results_match_excel_16() {
+    let path = tmp("custom-src");
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": 1 }, { "ref": "A2", "value": -1 }, { "ref": "A3", "value": 5 },
+                    { "ref": "B1", "value": -5 }, { "ref": "B2", "value": 100 }, { "ref": "B3", "value": 0 },
+                    { "ref": "C1", "value": 1 }, { "ref": "C2", "value": -1 }, { "ref": "C3", "value": 5 },
+                    { "ref": "F2", "value": 1 },
+                    { "ref": "H1", "value": 1 }, { "ref": "K1", "value": 1 },
+                    { "ref": "L1", "value": 1 }, { "ref": "M1", "value": 1 },
+                    { "ref": "N1", "value": 1 }, { "ref": "P1", "value": 1 }
+                ]
+            }]
+        }
+    })
+    .to_string())
+    .unwrap();
+    let out = tmp("custom-out");
+    apply(
+        &path,
+        &out,
+        json!([
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "A1:A4", "type": "custom", "formula1": "A1>0" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "C1:C3", "type": "custom", "formula1": "B1>0" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "F1:F2", "type": "custom", "formula1": "F1>0", "allowBlank": false },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "G1", "type": "custom", "formula1": "TRUE", "allowBlank": false },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "H1", "type": "custom", "formula1": "1/0" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "J1", "type": "none" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "K1", "type": "custom", "formula1": "\"hello\"" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "L1", "type": "custom", "formula1": "1" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "M1", "type": "custom", "formula1": "0" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "N1", "type": "custom", "formula1": "A1>0" },
+            { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "P1", "type": "custom", "formula1": "SUM(" }
+        ]),
+    )
+    .unwrap();
+    let sh = inspect_range(&out, "A1:P1");
+    let rules = sh["dataValidations"].as_array().unwrap();
+    assert!(
+        dv_ok(&rules[0], "A1")
+            && !dv_ok(&rules[0], "A2")
+            && dv_ok(&rules[0], "A3")
+            && dv_ok(&rules[0], "A4")
+    );
+    assert!(!dv_ok(&rules[1], "C1") && dv_ok(&rules[1], "C2") && !dv_ok(&rules[1], "C3"));
+    assert!(!dv_ok(&rules[2], "F1") && dv_ok(&rules[2], "F2"));
+    assert!(dv_ok(&rules[3], "G1"));
+    assert!(!dv_ok(&rules[4], "H1"));
+    assert!(rules[5].get("results").is_none());
+    assert!(!dv_ok(&rules[6], "K1"));
+    assert!(dv_ok(&rules[7], "L1"));
+    assert!(!dv_ok(&rules[8], "M1"));
+    assert!(dv_ok(&rules[9], "N1"));
+    assert!(rules[10].get("results").is_none());
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains("A1&gt;0"), "{xml}");
+    assert!(!xml.contains("results"), "{xml}");
+}
