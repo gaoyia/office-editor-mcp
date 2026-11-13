@@ -447,6 +447,36 @@ fn read_formula_cells(
     Some(out)
 }
 
+/// 连续 A1、命名区域、并集走原来的解析。三维引用和能求成格子的定义名再问公式引擎。
+/// 求出来只是一个数时仍然没有目标。
+fn resolve_series_formula(
+    pkg: &Package,
+    raw: &str,
+    names: &[chart::DefinedName],
+    order: &[String],
+    default_sheet: &str,
+) -> Option<chart::FormulaTarget> {
+    if let Some(target) = chart::resolve_chart_formula(raw, names, order, default_sheet) {
+        return Some(target);
+    }
+    let mut session = super::eval::FormulaSession::open(pkg, default_sheet)
+        .ok()
+        .flatten()?;
+    let cells = session.formula_cells(raw)?;
+    if cells.is_empty() {
+        return None;
+    }
+    let parts = cells
+        .into_iter()
+        .map(|(sheet, cell)| chart::A1Ref {
+            sheet: Some(sheet),
+            start: cell,
+            end: cell,
+        })
+        .collect();
+    Some(chart::FormulaTarget::Union(parts))
+}
+
 fn formula_ctx(pkg: &Package) -> (Vec<chart::DefinedName>, Vec<String>) {
     let Ok(wb_part) = crate::opc::office_document_part(pkg) else {
         return (Vec::new(), Vec::new());
@@ -1332,7 +1362,7 @@ fn write_or_resize(
     };
     let (names, order) = formula_ctx(pkg);
     let target =
-        chart::resolve_chart_formula(raw, &names, &order, default_sheet).ok_or_else(|| {
+        resolve_series_formula(pkg, raw, &names, &order, default_sheet).ok_or_else(|| {
             Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
         })?;
     match target {
@@ -1393,7 +1423,7 @@ fn write_formula_values(
     };
     let (names, order) = formula_ctx(pkg);
     let target =
-        chart::resolve_chart_formula(raw, &names, &order, default_sheet).ok_or_else(|| {
+        resolve_series_formula(pkg, raw, &names, &order, default_sheet).ok_or_else(|| {
             Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
         })?;
     match target {

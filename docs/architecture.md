@@ -264,7 +264,7 @@ pptx 母版和版式按开始时的 `sldMasterId/@id`、`sldLayoutId/@id` 认回
 `scope.smartArt` 为 true 时列出 diagram URI 的 `xdr:graphicFrame`；四条关系从 drawing `.rels` 解到 `/xl/diagrams/`。
 `scope.headerFooter` 为 true 时展开六个页眉页脚槽位的原文；同时 `pictures: true` 时再列出 `drawingHF` 里的图。
 apply 可改目标单元格，也可换、插、删工作表图，并可改 `oneCell` / `absolute` 的尺寸与锚点。
-也可插、删、改工作表图表：改系列时写本表单元格并回写 cache（连续 A1、能解析成连续 A1 的命名区域、以及长度对得上的不连续并集），插图时在 `dataFrom` 写下数据表。也可增删趋势线、误差线，并把系列挂到次轴。
+也可插、删、改工作表图表：改系列时写格子并回写 cache（连续 A1、能落到格子上的命名区域与三维引用、以及长度对得上的不连续并集），插图时在 `dataFrom` 写下数据表。也可增删趋势线、误差线，并把系列挂到次轴。
 也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可插入、删除、改名、重排与隐藏普通工作表，脏 `workbook.xml` 的 `sheets` 与对应 worksheet 部件。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
 也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。

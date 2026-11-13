@@ -1247,7 +1247,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "不能删掉图表工作表上仅剩的图表，否则会留下空的图表工作表".into()
         }
         ErrorKind::ChartFormulaNotA1 => {
-            "系列公式不是连续 A1 区域（命名区域、三维引用或不连续区域本期不写）".into()
+            "系列公式落不到格子上，或新值个数和格子数不同".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),

@@ -161,7 +161,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
   - 对透视图表发 `setChartSeries` / `addChartSeries` / `deleteChartSeries` / `setChartType`
   - `setChartType` 不能无损转换
   - `regionMap` 地图 chartex
-  - xlsx 图表公式是三维引用、带运算符的定义名，或不连续引用长度对不上
+  - xlsx 图表公式落不到格子上，或新值个数和格子数不同。含长度对不上的并集，以及求成一个数的定义名
   - `setSmartArtLayout` 当前 uniqueId 不在库内 `list` / `org` / `cycle` 三族里
   - 对图表工作表上仅剩的那张图发 `deleteChart`
   - 对 `dialogsheet` / `macrosheet` 发下列 op，以及批注 op、文本框 op、形状与连接线 op、SmartArt op

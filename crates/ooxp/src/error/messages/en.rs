@@ -1396,7 +1396,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::ChartFormulaNotA1 => {
-            "series formula is not a contiguous A1 range (named ranges, 3-D references, and non-contiguous ranges are not written)"
+            "the series formula does not land on cells, or the new values do not match that cell count"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),

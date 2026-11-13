@@ -171,6 +171,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
   - Excel 16.0：`xlsx-chart-name.ps1`，1 PASS / 0 FAIL
   - 定义名 `Dyn` 为 `OFFSET(Sheet1!$B$11,0,0,2,1)`。格子改成 4 和 7 后，缓存是 4、7
   - 打开无 Repair，系列值 4、7
+- **Xc10** ✅
+  - Excel 16.0：`xlsx-chart-series-ref.ps1`
+  - `setChartSeries` 把 8、9 写入 `Sheet1:Sheet2!$B$11` 的两格。公式仍是这条三维引用
+  - 打开无 Repair，系列值 8、9
+- **Xc11** ✅
+  - 同一脚本。`setChartSeries` 把 1、2 写入 `Dyn` 的 `OFFSET` 区域。公式仍是 `Dyn`
+  - 打开无 Repair，系列值 1、2
 - **C8–C10** ✅
   - Excel 16.0：inspect 第一张 `sheet:Sheet1/pic:1`、`oneCell`、`from=B2`
   - 第二张 `twoCell`、`D2:F8`
@@ -957,7 +964,7 @@ Excel 16.0 插入的图通常是 `twoCellAnchor`；真 `oneCell` 由 `insertChar
 | Xr1 | 趋势线 | ✅ `insertTrendline` 后 Excel 无修复，COM 能看见趋势线 |
 | Xr2 | 次轴 | ✅ `setChartSeriesAxis` 后 `axis` 为 `secondary`，无修复 |
 | Xr3 | 命名区域 | ✅ 系列 `c:f` 为定义名时 `setChartSeries` 写入对应格子，无修复 |
-| Xr4 | 不连续 | ✅ 并集引用长度对得上时改数成功；三维引用仍 `NotImplemented` |
+| Xr4 | 不连续 | ✅ 并集引用长度对得上时改数成功。落不到表上的三维引用，以及个数对不上的并集，仍 `NotImplemented` |
 
 ## 图表稀有类型
 

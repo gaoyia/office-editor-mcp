@@ -63,11 +63,15 @@ fn inspect_charts(path: &Path) -> serde_json::Value {
 }
 
 fn inspect_cells(path: &Path, range: &str) -> serde_json::Value {
+    inspect_sheet_cells(path, "Sheet1", range)
+}
+
+fn inspect_sheet_cells(path: &Path, sheet: &str, range: &str) -> serde_json::Value {
     let RunOutput::Inspect(tree) = run(&json!({
         "schemaVersion": 1,
         "action": "inspect",
         "path": path.to_string_lossy(),
-        "scope": { "sheet": "Sheet1", "range": range }
+        "scope": { "sheet": sheet, "range": range }
     })
     .to_string())
     .unwrap() else {
@@ -734,6 +738,53 @@ fn chart_cache_rewrites_3d_ref() {
         xml.contains(r#"<c:pt idx="1"><c:v>7</c:v></c:pt>"#),
         "{xml}"
     );
+    let set = tmp("3d-set-series");
+    apply(
+        &out,
+        &set,
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [8, 9]
+        }]),
+    )
+    .unwrap();
+    let a = inspect_sheet_cells(&set, "Sheet1", "B11");
+    let b = inspect_sheet_cells(&set, "Sheet2", "B11");
+    let sheet = |tree: &serde_json::Value, name: &str| {
+        tree["sheets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == name)
+            .unwrap()
+            .clone()
+    };
+    assert!(sheet(&a, "Sheet1")["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 8));
+    assert!(sheet(&b, "Sheet2")["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet2!B11" && c["value"] == 9));
+    let xml = part_text(&set, "xl/charts/chart1.xml");
+    assert!(xml.contains("Sheet1:Sheet2!$B$11"), "{xml}");
+    assert!(xml.contains(r#"<c:v>8</c:v>"#), "{xml}");
+    assert!(xml.contains(r#"<c:v>9</c:v>"#), "{xml}");
+    let err = apply(
+        &set,
+        &tmp("3d-short"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [1]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
 #[test]
@@ -791,13 +842,36 @@ fn chart_cache_follows_offset_and_index_names() {
         xml.contains(r#"<c:pt idx="1"><c:v>7</c:v></c:pt>"#),
         "{xml}"
     );
-    let err = apply(
+    let written = tmp("dyn-set");
+    apply(
         &out,
-        &tmp("dyn-bad"),
+        &written,
         json!([{
             "op": "setChartSeries",
             "id": "sheet:Sheet1/chart:1/series:0",
             "values": [1, 2]
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&written, "B11:B12");
+    let list = cells["sheets"][0]["cells"].as_array().unwrap();
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B12" && c["value"] == 2));
+    let xml = part_text(&written, "xl/charts/chart1.xml");
+    assert!(xml.contains(">Dyn<"), "{xml}");
+    assert!(xml.contains(r#"<c:v>1</c:v>"#), "{xml}");
+    assert!(xml.contains(r#"<c:v>2</c:v>"#), "{xml}");
+    let err = apply(
+        &written,
+        &tmp("dyn-bad"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [1]
         }]),
     )
     .unwrap_err();
@@ -820,6 +894,53 @@ fn chart_cache_follows_offset_and_index_names() {
         "{xml2}"
     );
     assert!(!xml2.contains(r#"<c:pt idx="1">"#), "{xml2}");
+    let at_set = tmp("idx-set");
+    apply(
+        &out2,
+        &at_set,
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [6]
+        }]),
+    )
+    .unwrap();
+    let at_cells = inspect_cells(&at_set, "B12");
+    assert!(at_cells["sheets"][0]["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B12" && c["value"] == 6));
+    let at_xml = part_text(&at_set, "xl/charts/chart1.xml");
+    assert!(at_xml.contains(">At<"), "{at_xml}");
+
+    let scalar_src = tmp("scalar-name");
+    apply(
+        &charted,
+        &scalar_src,
+        json!([{
+            "op": "insertDefinedName",
+            "id": "xlsx:workbook",
+            "name": "One",
+            "formula": "1"
+        }]),
+    )
+    .unwrap();
+    let scalar = tmp("scalar-f");
+    rewrite_part(&scalar_src, &scalar, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$11", "One", 1)
+    });
+    let err = apply(
+        &scalar,
+        &tmp("scalar-bad"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [5]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
 #[test]

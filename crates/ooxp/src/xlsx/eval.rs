@@ -299,6 +299,11 @@ impl FormulaSession {
         Ok(Some(Self { book, sheet }))
     }
 
+    /// 公式落到的格子。三维引用和能求成区域的定义名都返回地址。一个数则没有。
+    pub(crate) fn formula_cells(&mut self, formula: &str) -> Option<Vec<(String, CellRef)>> {
+        self.book.chart_formula_cells(formula)
+    }
+
     pub(crate) fn eval(&mut self, formula: &str, here: CellRef) -> FormulaOutcome {
         let body = formula.trim().trim_start_matches('=');
         if body.is_empty() {
@@ -1189,6 +1194,79 @@ impl Book {
                 Calc::Ready(_) => Calc::Ready(Value::Scalar(Scalar::Err(VALUE))),
             },
         }
+    }
+
+    /// 系列公式能落到的格子。三维引用按工作表顺序展开。求出一个数时不返回。
+    fn chart_formula_cells(&mut self, formula: &str) -> Option<Vec<(String, CellRef)>> {
+        let text = formula.trim().trim_start_matches('=').trim();
+        if text.is_empty() || self.sheets.is_empty() || text.contains('[') {
+            return None;
+        }
+        if let Some(cells) = self.three_d_cells(text) {
+            return Some(cells);
+        }
+        let (sheet, src) = match split_chart_name(text) {
+            Some((sheet_name, name)) => {
+                let si = self
+                    .sheets
+                    .iter()
+                    .position(|s| s.name.eq_ignore_ascii_case(&sheet_name))?;
+                (si, name)
+            }
+            None => (0, text.to_string()),
+        };
+        let expr = parse_expr(&src)?;
+        let here = CellRef { col: 0, row: 0 };
+        let value = match self.eval_expr(&expr, sheet, here, Mode::Scalar) {
+            Calc::Ready(v) => v,
+            Calc::Skip => return None,
+        };
+        self.volatile.remove(&(sheet, 0, 0));
+        let rects = match value {
+            Value::Area(r) => vec![r],
+            Value::Areas(rs) if !rs.is_empty() => rs,
+            _ => return None,
+        };
+        let mut out = Vec::new();
+        for rect in &rects {
+            let (r1, r2) = ordered(rect.r1, rect.r2);
+            let (s1, s2) = self.resolve_span(rect, sheet)?;
+            for si in s1..=s2 {
+                let name = self.sheets.get(si)?.name.clone();
+                for row in r1.row..=r2.row {
+                    for col in r1.col..=r2.col {
+                        out.push((name.clone(), CellRef { col, row }));
+                    }
+                }
+            }
+        }
+        if out.is_empty() {
+            None
+        } else {
+            Some(out)
+        }
+    }
+
+    /// `表1:表2!区域`，含引号。不是三维引用时返回 `None`，交给后面的名字求值。
+    fn three_d_cells(&self, text: &str) -> Option<Vec<(String, CellRef)>> {
+        let (sheet, range) = split_chart_bang(text)?;
+        if !sheet.contains(':') {
+            return None;
+        }
+        let names: Vec<String> = self.sheets.iter().map(|s| s.name.clone()).collect();
+        let (lo, hi) = chart_sheet_span(&sheet, &names)?;
+        let (start, end) = a1::parse_range(&range.replace('$', "")).ok()?;
+        let (r1, r2) = ordered(start, end);
+        let mut out = Vec::new();
+        for si in lo..=hi {
+            let name = self.sheets.get(si)?.name.clone();
+            for row in r1.row..=r2.row {
+                for col in r1.col..=r2.col {
+                    out.push((name.clone(), CellRef { col, row }));
+                }
+            }
+        }
+        Some(out)
     }
 
     /// 系列公式是定义名，或名字里的 `OFFSET` / `INDEX` / 运算。求出的是格子区域才返回值。
@@ -10296,6 +10374,32 @@ fn store_chart_cache(el: &mut Element, values: &[Scalar]) -> bool {
         Some(cache) => replace_cache_pts(cache, values),
         None => false,
     }
+}
+
+/// `表!区域`。引号里的表名可以含冒号。
+fn split_chart_bang(text: &str) -> Option<(String, &str)> {
+    if let Some(rest) = text.strip_prefix('\'') {
+        let mut name = String::new();
+        let mut chars = rest.chars();
+        while let Some(ch) = chars.next() {
+            if ch == '\'' {
+                if chars.as_str().starts_with('\'') {
+                    name.push('\'');
+                    chars.next();
+                    continue;
+                }
+                let body = chars.as_str().strip_prefix('!')?;
+                return Some((name, body));
+            }
+            name.push(ch);
+        }
+        return None;
+    }
+    let (name, body) = text.rsplit_once('!')?;
+    if name.is_empty() || body.is_empty() {
+        return None;
+    }
+    Some((name.to_string(), body))
 }
 
 /// `表!名字`。后面必须是名字，不能是单元格或函数。
