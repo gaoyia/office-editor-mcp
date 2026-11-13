@@ -103,6 +103,12 @@ enum Calc {
     Skip,
 }
 
+impl From<&'static str> for Calc {
+    fn from(token: &'static str) -> Self {
+        ready_err(token)
+    }
+}
+
 struct CellRec {
     formula: Option<String>,
     cached: Option<Scalar>,
@@ -1224,23 +1230,668 @@ impl Book {
                     Some(v) => self.coerce(v.clone(), sheet, here, Mode::Scalar),
                 }
             }
-            other => match self.eval_database(other, &vals, sheet, here) {
+            other => match self.eval_finance(other, &vals, sheet, here) {
                 Some(done) => done,
-                None => match self.eval_lookup(other, &vals, sheet, here, mode) {
+                None => match self.eval_database(other, &vals, sheet, here) {
                     Some(done) => done,
-                    None => match self.eval_text(other, &vals, sheet, here) {
+                    None => match self.eval_lookup(other, &vals, sheet, here, mode) {
                         Some(done) => done,
-                        None => match self.eval_date(other, &vals, sheet, here) {
+                        None => match self.eval_text(other, &vals, sheet, here) {
                             Some(done) => done,
-                            None => match self.eval_stat(other, &vals, sheet, here) {
+                            None => match self.eval_date(other, &vals, sheet, here) {
                                 Some(done) => done,
-                                None => self.eval_math(other, &vals, sheet, here, mode),
+                                None => match self.eval_stat(other, &vals, sheet, here) {
+                                    Some(done) => done,
+                                    None => self.eval_math(other, &vals, sheet, here, mode),
+                                },
                             },
                         },
                     },
                 },
             },
         }
+    }
+
+    /// 财务类。不是这类函数时返回 `None`。`ECMA.PV` 不在此列。
+    fn eval_finance(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+    ) -> Option<Calc> {
+        let date1904 = self.date1904;
+        let done = match name {
+            "PV" | "FV" | "PMT" | "NPER" if (3..=5).contains(&vals.len()) => {
+                self.fin_annuity(name, vals, sheet, here)
+            }
+            "IPMT" | "PPMT" if (4..=6).contains(&vals.len()) => {
+                self.fin_annuity(name, vals, sheet, here)
+            }
+            "RATE" if (3..=6).contains(&vals.len()) => self.fin_rate(vals, sheet, here),
+            "NPV" if vals.len() >= 2 => self.fin_npv(vals, sheet, here),
+            "IRR" if vals.len() == 1 || vals.len() == 2 => self.fin_irr(vals, sheet, here),
+            "MIRR" if vals.len() == 3 => self.fin_mirr(vals, sheet, here),
+            "XNPV" if vals.len() == 3 => self.fin_xnpv(vals, sheet, here),
+            "XIRR" if vals.len() == 2 || vals.len() == 3 => self.fin_xirr(vals, sheet, here),
+            "ISPMT" if vals.len() == 4 => self.fin_ispmt(vals, sheet, here),
+            "FVSCHEDULE" if vals.len() == 2 => self.fin_schedule(vals, sheet, here),
+            "CUMIPMT" | "CUMPRINC" if vals.len() == 6 => self.fin_cum(name, vals, sheet, here),
+            "SLN" if vals.len() == 3 => self.fin_sln(vals, sheet, here),
+            "SYD" if vals.len() == 4 => self.fin_syd(vals, sheet, here),
+            "DB" if vals.len() == 4 || vals.len() == 5 => self.fin_db(vals, sheet, here),
+            "DDB" if vals.len() == 4 || vals.len() == 5 => self.fin_ddb(vals, sheet, here),
+            "VDB" if (5..=7).contains(&vals.len()) => self.fin_vdb(vals, sheet, here),
+            "AMORLINC" | "AMORDEGRC" if vals.len() == 6 || vals.len() == 7 => {
+                self.fin_amor(name, vals, sheet, here, date1904)
+            }
+            "ACCRINT" if (6..=8).contains(&vals.len()) => {
+                self.fin_accrint(vals, sheet, here, date1904)
+            }
+            "ACCRINTM" if vals.len() == 4 || vals.len() == 5 => {
+                self.fin_accrintm(vals, sheet, here, date1904)
+            }
+            "COUPDAYBS" | "COUPDAYS" | "COUPDAYSNC" | "COUPNCD" | "COUPNUM" | "COUPPCD"
+                if vals.len() == 3 || vals.len() == 4 =>
+            {
+                self.fin_coup(name, vals, sheet, here, date1904)
+            }
+            "DURATION" | "MDURATION" if vals.len() == 5 || vals.len() == 6 => {
+                self.fin_duration(name, vals, sheet, here, date1904)
+            }
+            "PRICE" | "YIELD" if vals.len() == 6 || vals.len() == 7 => {
+                self.fin_price(name, vals, sheet, here, date1904)
+            }
+            "PRICEDISC" | "YIELDDISC" | "DISC" | "INTRATE" | "RECEIVED"
+                if vals.len() == 4 || vals.len() == 5 =>
+            {
+                self.fin_discount(name, vals, sheet, here, date1904)
+            }
+            "PRICEMAT" | "YIELDMAT" if vals.len() == 5 || vals.len() == 6 => {
+                self.fin_maturity(name, vals, sheet, here, date1904)
+            }
+            "ODDFPRICE" | "ODDFYIELD" if vals.len() == 8 || vals.len() == 9 => {
+                self.fin_oddf(name, vals, sheet, here, date1904)
+            }
+            "ODDLPRICE" | "ODDLYIELD" if vals.len() == 7 || vals.len() == 8 => {
+                self.fin_oddl(name, vals, sheet, here, date1904)
+            }
+            "EFFECT" | "NOMINAL" | "DOLLARDE" | "DOLLARFR" if vals.len() == 2 => {
+                self.fin_pair(name, vals, sheet, here)
+            }
+            "TBILLEQ" | "TBILLPRICE" | "TBILLYIELD" if vals.len() == 3 => {
+                self.fin_tbill(name, vals, sheet, here)
+            }
+            "PV" | "FV" | "PMT" | "NPER" | "IPMT" | "PPMT" | "RATE" | "NPV" | "IRR" | "MIRR"
+            | "XNPV" | "XIRR" | "ISPMT" | "FVSCHEDULE" | "CUMIPMT" | "CUMPRINC" | "SLN" | "SYD"
+            | "DB" | "DDB" | "VDB" | "AMORLINC" | "AMORDEGRC" | "ACCRINT" | "ACCRINTM"
+            | "COUPDAYBS" | "COUPDAYS" | "COUPDAYSNC" | "COUPNCD" | "COUPNUM" | "COUPPCD"
+            | "DURATION" | "MDURATION" | "PRICE" | "YIELD" | "PRICEDISC" | "YIELDDISC" | "DISC"
+            | "INTRATE" | "RECEIVED" | "PRICEMAT" | "YIELDMAT" | "ODDFPRICE" | "ODDFYIELD"
+            | "ODDLPRICE" | "ODDLYIELD" | "EFFECT" | "NOMINAL" | "DOLLARDE" | "DOLLARFR"
+            | "TBILLEQ" | "TBILLPRICE" | "TBILLYIELD" => Calc::Skip,
+            _ => return None,
+        };
+        Some(done)
+    }
+
+    fn fin_num(&mut self, value: &Value, sheet: usize, here: CellRef) -> Result<f64, Calc> {
+        self.take_num(value, sheet, here)
+    }
+
+    fn fin_or(
+        &mut self,
+        vals: &[Value],
+        index: usize,
+        default: f64,
+        sheet: usize,
+        here: CellRef,
+    ) -> Result<f64, Calc> {
+        if index < vals.len() {
+            self.fin_num(&vals[index], sheet, here)
+        } else {
+            Ok(default)
+        }
+    }
+
+    fn fin_flows(&mut self, value: &Value, sheet: usize) -> Result<Vec<f64>, Calc> {
+        match value {
+            Value::Scalar(scalar) => match num_of(scalar.clone()) {
+                Scalar::Num(number) => Ok(vec![number]),
+                Scalar::Err(token) => Err(ready_err(token)),
+                _ => Err(ready_err(VALUE)),
+            },
+            Value::Grid(grid) => {
+                let mut out = Vec::new();
+                for row in grid {
+                    for cell in row {
+                        match cell {
+                            Scalar::Num(number) => out.push(*number),
+                            Scalar::Bool(_) | Scalar::Text(_) => {}
+                            Scalar::Err(token) => return Err(ready_err(token)),
+                        }
+                    }
+                }
+                Ok(out)
+            }
+            Value::Area(_) => {
+                let table = self.fact_table(value, sheet)?;
+                let mut out = Vec::new();
+                for row in table {
+                    for cell in row {
+                        match cell {
+                            Fact::Blank
+                            | Fact::Ready(Scalar::Bool(_))
+                            | Fact::Ready(Scalar::Text(_)) => {}
+                            Fact::Ready(Scalar::Num(number)) => out.push(number),
+                            Fact::Ready(Scalar::Err(token)) => return Err(ready_err(token)),
+                            Fact::Skip => return Err(Calc::Skip),
+                        }
+                    }
+                }
+                Ok(out)
+            }
+            Value::Areas(_) => Err(ready_err(VALUE)),
+        }
+    }
+
+    fn fin_annuity(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let a = self.fin_num(&vals[0], sheet, here)?;
+            let b = self.fin_num(&vals[1], sheet, here)?;
+            let c = self.fin_num(&vals[2], sheet, here)?;
+            let fourth = self.fin_or(vals, 3, 0.0, sheet, here)?;
+            let fifth = self.fin_or(vals, 4, 0.0, sheet, here)?;
+            let sixth = self.fin_or(vals, 5, 0.0, sheet, here)?;
+            Ok(match name {
+                "PV" => super::finance::pv(a, b, c, fourth, fifth)?,
+                "FV" => super::finance::fv(a, b, c, fourth, fifth)?,
+                "PMT" => super::finance::pmt(a, b, c, fourth, fifth)?,
+                "NPER" => super::finance::nper(a, b, c, fourth, fifth)?,
+                "IPMT" => super::finance::ipmt(a, b, c, fourth, fifth, sixth)?,
+                "PPMT" => super::finance::ppmt(a, b, c, fourth, fifth, sixth)?,
+                _ => return Err(ready_err(VALUE)),
+            })
+        })();
+        match result {
+            Ok(number) => ready_num(number),
+            Err(Calc::Skip) => Calc::Skip,
+            Err(Calc::Ready(value)) => Calc::Ready(value),
+        }
+    }
+
+    fn fin_rate(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let nper = self.fin_num(&vals[0], sheet, here)?;
+            let pmt = self.fin_num(&vals[1], sheet, here)?;
+            let pv = self.fin_num(&vals[2], sheet, here)?;
+            let fv = self.fin_or(vals, 3, 0.0, sheet, here)?;
+            let typ = self.fin_or(vals, 4, 0.0, sheet, here)?;
+            let guess = self.fin_or(vals, 5, 0.1, sheet, here)?;
+            Ok(super::finance::rate(nper, pmt, pv, fv, typ, guess)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_npv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let rate = self.fin_num(&vals[0], sheet, here)?;
+            let mut flows = Vec::new();
+            for value in &vals[1..] {
+                flows.extend(self.fin_flows(value, sheet)?);
+            }
+            Ok(super::finance::npv(rate, &flows)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_irr(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let flows = self.fin_flows(&vals[0], sheet)?;
+            let guess = self.fin_or(vals, 1, 0.1, sheet, here)?;
+            Ok(super::finance::irr(&flows, guess)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_mirr(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let flows = self.fin_flows(&vals[0], sheet)?;
+            let finance = self.fin_num(&vals[1], sheet, here)?;
+            let reinvest = self.fin_num(&vals[2], sheet, here)?;
+            Ok(super::finance::mirr(&flows, finance, reinvest)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_xnpv(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let rate = self.fin_num(&vals[0], sheet, here)?;
+            let flows = self.fin_flows(&vals[1], sheet)?;
+            let dates = self.fin_flows(&vals[2], sheet)?;
+            Ok(super::finance::xnpv(rate, &flows, &dates)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_xirr(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let flows = self.fin_flows(&vals[0], sheet)?;
+            let dates = self.fin_flows(&vals[1], sheet)?;
+            let guess = self.fin_or(vals, 2, 0.1, sheet, here)?;
+            Ok(super::finance::xirr(&flows, &dates, guess)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_ispmt(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let rate = self.fin_num(&vals[0], sheet, here)?;
+            let per = self.fin_num(&vals[1], sheet, here)?;
+            let nper = self.fin_num(&vals[2], sheet, here)?;
+            let pv = self.fin_num(&vals[3], sheet, here)?;
+            Ok(super::finance::ispmt(rate, per, nper, pv)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_schedule(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let principal = self.fin_num(&vals[0], sheet, here)?;
+            let rates = self.fin_flows(&vals[1], sheet)?;
+            Ok(super::finance::fvschedule(principal, &rates)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_cum(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let rate = self.fin_num(&vals[0], sheet, here)?;
+            let nper = self.fin_num(&vals[1], sheet, here)?;
+            let pv = self.fin_num(&vals[2], sheet, here)?;
+            let start = self.fin_num(&vals[3], sheet, here)?;
+            let end = self.fin_num(&vals[4], sheet, here)?;
+            let typ = self.fin_num(&vals[5], sheet, here)?;
+            Ok(if name == "CUMIPMT" {
+                super::finance::cum_ipmt(rate, nper, pv, start, end, typ)?
+            } else {
+                super::finance::cum_princ(rate, nper, pv, start, end, typ)?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_sln(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let salvage = self.fin_num(&vals[1], sheet, here)?;
+            let life = self.fin_num(&vals[2], sheet, here)?;
+            Ok(super::finance::sln(cost, salvage, life)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_syd(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let salvage = self.fin_num(&vals[1], sheet, here)?;
+            let life = self.fin_num(&vals[2], sheet, here)?;
+            let period = self.fin_num(&vals[3], sheet, here)?;
+            Ok(super::finance::syd(cost, salvage, life, period)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_db(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let salvage = self.fin_num(&vals[1], sheet, here)?;
+            let life = self.fin_num(&vals[2], sheet, here)?;
+            let period = self.fin_num(&vals[3], sheet, here)?;
+            let month = self.fin_or(vals, 4, 12.0, sheet, here)?;
+            Ok(super::finance::db(cost, salvage, life, period, month)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_ddb(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let salvage = self.fin_num(&vals[1], sheet, here)?;
+            let life = self.fin_num(&vals[2], sheet, here)?;
+            let period = self.fin_num(&vals[3], sheet, here)?;
+            let factor = self.fin_or(vals, 4, 2.0, sheet, here)?;
+            Ok(super::finance::ddb(cost, salvage, life, period, factor)?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_vdb(&mut self, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let salvage = self.fin_num(&vals[1], sheet, here)?;
+            let life = self.fin_num(&vals[2], sheet, here)?;
+            let start = self.fin_num(&vals[3], sheet, here)?;
+            let end = self.fin_num(&vals[4], sheet, here)?;
+            let factor = self.fin_or(vals, 5, 2.0, sheet, here)?;
+            let no_switch = if vals.len() == 7 {
+                self.take_flag(&vals[6], sheet, here)?
+            } else {
+                false
+            };
+            Ok(super::finance::vdb(
+                cost, salvage, life, start, end, factor, no_switch,
+            )?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_amor(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let cost = self.fin_num(&vals[0], sheet, here)?;
+            let purchased = self.fin_num(&vals[1], sheet, here)?;
+            let first = self.fin_num(&vals[2], sheet, here)?;
+            let salvage = self.fin_num(&vals[3], sheet, here)?;
+            let period = self.fin_num(&vals[4], sheet, here)?;
+            let rate = self.fin_num(&vals[5], sheet, here)?;
+            let basis = self.fin_or(vals, 6, 0.0, sheet, here)?.trunc() as i32;
+            Ok(if name == "AMORLINC" {
+                super::finance::amorlinc(
+                    cost, purchased, first, salvage, period, rate, basis, date1904,
+                )?
+            } else {
+                super::finance::amordegrc(
+                    cost, purchased, first, salvage, period, rate, basis, date1904,
+                )?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_accrint(&mut self, vals: &[Value], sheet: usize, here: CellRef, date1904: bool) -> Calc {
+        let result = (|| {
+            let issue = self.fin_num(&vals[0], sheet, here)?;
+            let first = self.fin_num(&vals[1], sheet, here)?;
+            let settlement = self.fin_num(&vals[2], sheet, here)?;
+            let rate = self.fin_num(&vals[3], sheet, here)?;
+            let par = self.fin_num(&vals[4], sheet, here)?;
+            let freq = self.fin_num(&vals[5], sheet, here)?;
+            let basis = self.fin_or(vals, 6, 0.0, sheet, here)?;
+            if vals.len() == 8 {
+                let _ = self.take_flag(&vals[7], sheet, here)?;
+            }
+            Ok(super::finance::accrint(
+                issue, first, settlement, rate, par, freq, basis, date1904,
+            )?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_accrintm(
+        &mut self,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let issue = self.fin_num(&vals[0], sheet, here)?;
+            let settlement = self.fin_num(&vals[1], sheet, here)?;
+            let rate = self.fin_num(&vals[2], sheet, here)?;
+            let par = self.fin_num(&vals[3], sheet, here)?;
+            let basis = self.fin_or(vals, 4, 0.0, sheet, here)?;
+            Ok(super::finance::accrintm(
+                issue, settlement, rate, par, basis, date1904,
+            )?)
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_coup(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let freq = self.fin_num(&vals[2], sheet, here)?;
+            let basis = self.fin_or(vals, 3, 0.0, sheet, here)?;
+            Ok(match name {
+                "COUPDAYBS" => {
+                    super::finance::coup_daybs(settlement, maturity, freq, basis, date1904)?
+                }
+                "COUPDAYS" => {
+                    super::finance::coup_days(settlement, maturity, freq, basis, date1904)?
+                }
+                "COUPDAYSNC" => {
+                    super::finance::coup_daysnc(settlement, maturity, freq, basis, date1904)?
+                }
+                "COUPNCD" => super::finance::coup_ncd(settlement, maturity, freq, basis, date1904)?,
+                "COUPNUM" => super::finance::coup_num(settlement, maturity, freq, basis, date1904)?,
+                "COUPPCD" => super::finance::coup_pcd(settlement, maturity, freq, basis, date1904)?,
+                _ => return Err(ready_err(VALUE)),
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_duration(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let rate = self.fin_num(&vals[2], sheet, here)?;
+            let yld = self.fin_num(&vals[3], sheet, here)?;
+            let freq = self.fin_num(&vals[4], sheet, here)?;
+            let basis = self.fin_or(vals, 5, 0.0, sheet, here)?;
+            Ok(if name == "DURATION" {
+                super::finance::duration(settlement, maturity, rate, yld, freq, basis, date1904)?
+            } else {
+                super::finance::mduration(settlement, maturity, rate, yld, freq, basis, date1904)?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_price(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let rate = self.fin_num(&vals[2], sheet, here)?;
+            let second = self.fin_num(&vals[3], sheet, here)?;
+            let redemption = self.fin_num(&vals[4], sheet, here)?;
+            let freq = self.fin_num(&vals[5], sheet, here)?;
+            let basis = self.fin_or(vals, 6, 0.0, sheet, here)?;
+            Ok(if name == "PRICE" {
+                super::finance::price(
+                    settlement, maturity, rate, second, redemption, freq, basis, date1904,
+                )?
+            } else {
+                super::finance::yield_bond(
+                    settlement, maturity, rate, second, redemption, freq, basis, date1904,
+                )?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_discount(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let left = self.fin_num(&vals[2], sheet, here)?;
+            let right = self.fin_num(&vals[3], sheet, here)?;
+            let basis = self.fin_or(vals, 4, 0.0, sheet, here)?;
+            Ok(match name {
+                "PRICEDISC" => {
+                    super::finance::pricedisc(settlement, maturity, left, right, basis, date1904)?
+                }
+                "YIELDDISC" => {
+                    super::finance::yielddisc(settlement, maturity, left, right, basis, date1904)?
+                }
+                "DISC" => super::finance::disc(settlement, maturity, left, right, basis, date1904)?,
+                "INTRATE" => {
+                    super::finance::intrate(settlement, maturity, left, right, basis, date1904)?
+                }
+                "RECEIVED" => {
+                    super::finance::received(settlement, maturity, left, right, basis, date1904)?
+                }
+                _ => return Err(ready_err(VALUE)),
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_maturity(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let issue = self.fin_num(&vals[2], sheet, here)?;
+            let rate = self.fin_num(&vals[3], sheet, here)?;
+            let second = self.fin_num(&vals[4], sheet, here)?;
+            let basis = self.fin_or(vals, 5, 0.0, sheet, here)?;
+            Ok(if name == "PRICEMAT" {
+                super::finance::pricemat(
+                    settlement, maturity, issue, rate, second, basis, date1904,
+                )?
+            } else {
+                super::finance::yieldmat(
+                    settlement, maturity, issue, rate, second, basis, date1904,
+                )?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_oddf(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let issue = self.fin_num(&vals[2], sheet, here)?;
+            let first = self.fin_num(&vals[3], sheet, here)?;
+            let rate = self.fin_num(&vals[4], sheet, here)?;
+            let second = self.fin_num(&vals[5], sheet, here)?;
+            let redemption = self.fin_num(&vals[6], sheet, here)?;
+            let freq = self.fin_num(&vals[7], sheet, here)?;
+            let basis = self.fin_or(vals, 8, 0.0, sheet, here)?;
+            Ok(if name == "ODDFPRICE" {
+                super::finance::oddfprice(
+                    settlement, maturity, issue, first, rate, second, redemption, freq, basis,
+                    date1904,
+                )?
+            } else {
+                super::finance::oddfyield(
+                    settlement, maturity, issue, first, rate, second, redemption, freq, basis,
+                    date1904,
+                )?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_oddl(
+        &mut self,
+        name: &str,
+        vals: &[Value],
+        sheet: usize,
+        here: CellRef,
+        date1904: bool,
+    ) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let last = self.fin_num(&vals[2], sheet, here)?;
+            let rate = self.fin_num(&vals[3], sheet, here)?;
+            let second = self.fin_num(&vals[4], sheet, here)?;
+            let redemption = self.fin_num(&vals[5], sheet, here)?;
+            let freq = self.fin_num(&vals[6], sheet, here)?;
+            let basis = self.fin_or(vals, 7, 0.0, sheet, here)?;
+            Ok(if name == "ODDLPRICE" {
+                super::finance::oddlprice(
+                    settlement, maturity, last, rate, second, redemption, freq, basis, date1904,
+                )?
+            } else {
+                super::finance::oddlyield(
+                    settlement, maturity, last, rate, second, redemption, freq, basis, date1904,
+                )?
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_pair(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let left = self.fin_num(&vals[0], sheet, here)?;
+            let right = self.fin_num(&vals[1], sheet, here)?;
+            Ok(match name {
+                "EFFECT" => super::finance::effect(left, right)?,
+                "NOMINAL" => super::finance::nominal(left, right)?,
+                "DOLLARDE" => super::finance::dollarde(left, right)?,
+                "DOLLARFR" => super::finance::dollarfr(left, right)?,
+                _ => return Err(ready_err(VALUE)),
+            })
+        })();
+        fin_calc(result)
+    }
+
+    fn fin_tbill(&mut self, name: &str, vals: &[Value], sheet: usize, here: CellRef) -> Calc {
+        let result = (|| {
+            let settlement = self.fin_num(&vals[0], sheet, here)?;
+            let maturity = self.fin_num(&vals[1], sheet, here)?;
+            let amount = self.fin_num(&vals[2], sheet, here)?;
+            Ok(match name {
+                "TBILLEQ" => super::finance::tbilleq(settlement, maturity, amount)?,
+                "TBILLPRICE" => super::finance::tbillprice(settlement, maturity, amount)?,
+                "TBILLYIELD" => super::finance::tbillyield(settlement, maturity, amount)?,
+                _ => return Err(ready_err(VALUE)),
+            })
+        })();
+        fin_calc(result)
     }
 
     /// 数据库类。不是这类函数时返回 `None`。`ECMA.DSUM` 不在此列。
@@ -7033,6 +7684,13 @@ fn ready_bool(value: bool) -> Calc {
     Calc::Ready(Value::Scalar(Scalar::Bool(value)))
 }
 
+fn fin_calc(result: Result<f64, Calc>) -> Calc {
+    match result {
+        Ok(number) => ready_num(number),
+        Err(done) => done,
+    }
+}
+
 fn ready_num(value: f64) -> Calc {
     Calc::Ready(Value::Scalar(Scalar::Num(value)))
 }
@@ -7646,7 +8304,7 @@ fn excel_epoch(date1904: bool) -> i64 {
 }
 
 /// 1900 系统在 3 月 1 日之前比公历少一天。假闰日 1900-02-29 的序列是 60。
-fn excel_serial(y: i32, m: u32, d: u32, date1904: bool) -> f64 {
+pub(crate) fn excel_serial(y: i32, m: u32, d: u32, date1904: bool) -> f64 {
     if !date1904 && y == 1900 && m == 2 && d == 29 {
         return 60.0;
     }
@@ -7661,7 +8319,7 @@ fn excel_serial(y: i32, m: u32, d: u32, date1904: bool) -> f64 {
     serial as f64
 }
 
-fn excel_ymd(serial: f64, date1904: bool) -> Option<(i32, u32, u32)> {
+pub(crate) fn excel_ymd(serial: f64, date1904: bool) -> Option<(i32, u32, u32)> {
     if !serial.is_finite() || serial < 0.0 {
         return None;
     }
@@ -7692,7 +8350,7 @@ fn leap_year(year: i32, date1904: bool) -> bool {
     real || (!date1904 && year == 1900)
 }
 
-fn days_in_month(year: i32, month: u32, date1904: bool) -> u32 {
+pub(crate) fn days_in_month(year: i32, month: u32, date1904: bool) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
@@ -7715,7 +8373,12 @@ fn year_len(year: i32, date1904: bool) -> u32 {
     }
 }
 
-fn shift_months(serial: f64, months: i32, end_of_month: bool, date1904: bool) -> Option<f64> {
+pub(crate) fn shift_months(
+    serial: f64,
+    months: i32,
+    end_of_month: bool,
+    date1904: bool,
+) -> Option<f64> {
     let (y, m, d) = excel_ymd(serial, date1904)?;
     let idx = (m as i32 - 1) + months;
     let y2 = y + idx.div_euclid(12);
@@ -8004,7 +8667,7 @@ fn date_diff(start: f64, end: f64, unit: &str, date1904: bool) -> Option<f64> {
     Some(n)
 }
 
-fn days_360(start: f64, end: f64, european: bool, date1904: bool) -> Option<f64> {
+pub(crate) fn days_360(start: f64, end: f64, european: bool, date1904: bool) -> Option<f64> {
     let (y1, m1, d1) = excel_ymd(start, date1904)?;
     let (y2, m2, d2) = excel_ymd(end, date1904)?;
     let mut sd = d1 as i32;

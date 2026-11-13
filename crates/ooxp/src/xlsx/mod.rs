@@ -17,6 +17,7 @@ mod dbcs;
 mod draw_pin;
 mod eval;
 mod extlink;
+mod finance;
 mod formula;
 mod group;
 mod hf;

@@ -164,6 +164,7 @@ $order = @(
     'xlsx-stat'
     'xlsx-lookup'
     'xlsx-db'
+    'xlsx-fin'
     'xlsx-data-table'
     'xlsx-formula-rest'
     'xlsx-validation'

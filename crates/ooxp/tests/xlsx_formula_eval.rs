@@ -1854,3 +1854,80 @@ fn database_functions_match_excel_16() {
     num("E26", 12.0);
     num("E27", 14.0);
 }
+
+#[test]
+fn financial_functions_match_excel_16() {
+    let path = book();
+    let mut cells = vec![
+        json!({"ref": "A1", "value": -100}),
+        json!({"ref": "A2", "value": 60}),
+        json!({"ref": "A3", "value": 60}),
+    ];
+    let formulas = [
+        ("E1", "=PV(0.08/12,12*20,500)"),
+        ("E2", "=PMT(0.08/12,12*10,10000)"),
+        ("E3", "=RATE(12*10,-100,10000)"),
+        ("E4", "=NPV(0.1,-10000,3000,4200,6800)"),
+        ("E5", "=IRR(A1:A3)"),
+        ("E6", "=SLN(10000,1000,5)"),
+        ("E7", "=DB(10000,1000,5,1)"),
+        ("E8", "=PRICE(DATE(2018,4,1),DATE(2021,1,1),0.08,0.09,100,2,0)"),
+        ("E9", "=YIELD(DATE(2018,4,1),DATE(2021,1,1),0.08,95,100,2,0)"),
+        ("E10", "=TBILLEQ(DATE(2018,1,1),DATE(2018,6,30),0.09)"),
+        (
+            "E11",
+            "=ODDFPRICE(DATE(2008,11,11),DATE(2021,3,1),DATE(2008,10,15),DATE(2009,3,1),0.0785,0.0625,100,2,1)",
+        ),
+        ("E12", "=DOLLARDE(1.02,16)"),
+        ("E13", "=AMORDEGRC(2400,DATE(2018,1,1),DATE(2018,4,1),300,1,0.15,0)"),
+        ("E14", "=CUMIPMT(0.08/12,120,10000,13,1,0)"),
+        ("E15", "=SLN(1000,100,0)"),
+        ("E16", "=ECMA.PV(0.08/12,12*20,500)"),
+        ("E17", "=COUPNUM(DATE(2018,4,1),DATE(2021,1,1),2,0)"),
+        ("E18", "=EFFECT(0.1,4)"),
+    ];
+    for (addr, formula) in formulas {
+        cells.push(json!({"ref": addr, "formula": formula}));
+    }
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&path, "A1:E18");
+    let num = |addr: &str, expect: f64| {
+        let got = cell(&tree, &format!("cell:Sheet1!{addr}"))["value"]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{addr}"));
+        assert!(
+            (got - expect).abs() < 1e-6,
+            "{addr} got {got} expect {expect}"
+        );
+    };
+    let err = |addr: &str, token: &str| {
+        let c = cell(&tree, &format!("cell:Sheet1!{addr}"));
+        assert_eq!(c["type"], "error", "{addr} {c}");
+        assert_eq!(c["value"], token, "{addr}");
+    };
+    num("E1", -59777.14585118782);
+    num("E2", -121.32759435535694);
+    num("E3", 0.003114181946001214);
+    num("E4", 1188.4434123352207);
+    num("E5", 0.1306623862918075);
+    num("E6", 1800.0);
+    num("E7", 3690.0);
+    num("E8", 97.5889177004159);
+    num("E9", 0.10117660926247074);
+    num("E10", 0.09554973821989529);
+    num("E11", 113.59771747407883);
+    num("E12", 1.125);
+    num("E13", 816.0);
+    err("E14", "#NUM!");
+    err("E15", "#DIV/0!");
+    assert!(cell(&tree, "cell:Sheet1!E16")["value"].is_null());
+    num("E17", 6.0);
+    num("E18", 0.10381289062499977);
+}
