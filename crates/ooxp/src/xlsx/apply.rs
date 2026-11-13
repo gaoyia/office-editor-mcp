@@ -600,6 +600,11 @@ fn apply_pkg(
                 let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
                 comments::apply_set_text(&mut pkg, &mut dirty_sheets, &part, op, i)?;
             }
+            XlsxOp::SetCommentBox(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_set_box(&mut pkg, &part, op, i)?;
+            }
             XlsxOp::SetCommentMeta(op) => {
                 let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
                 let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;

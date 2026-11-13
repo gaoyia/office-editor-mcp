@@ -108,6 +108,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "xlsx",
+        op: "deleteFormControl",
+        family: "sheet:{name}/control:{shapeId}",
+        test: "insert_and_delete_keep_the_four_places_together",
+    },
+    Row {
+        format: "xlsx",
         op: "deleteExternalLink",
         family: "extlink:{n}",
         test: "入口同 delete_dv_then_original_third",
@@ -123,6 +129,12 @@ const ROWS: &[Row] = &[
         op: "deleteInk",
         family: "ink:index:{k}",
         test: "入口同 delete_pic_then_resize_original_third",
+    },
+    Row {
+        format: "xlsx",
+        op: "deleteLegacyPicture",
+        family: "sheet:{name}/hf:{kind}:{side}/legacyPic:{shapeId}",
+        test: "delete_one_then_last_keeps_header_text",
     },
     Row {
         format: "xlsx",
@@ -312,6 +324,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "xlsx",
+        op: "insertFormControl",
+        family: "无",
+        test: "insert_and_delete_keep_the_four_places_together",
+    },
+    Row {
+        format: "xlsx",
         op: "insertHyperlink",
         family: "无",
         test: "-",
@@ -444,6 +462,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "xlsx",
+        op: "replaceLegacyPicture",
+        family: "sheet:{name}/hf:{kind}:{side}/legacyPic:{shapeId}",
+        test: "replace_keeps_vml_and_header_text",
+    },
+    Row {
+        format: "xlsx",
         op: "replyComment",
         family: "无",
         test: "-",
@@ -540,6 +564,12 @@ const ROWS: &[Row] = &[
     },
     Row {
         format: "xlsx",
+        op: "setCommentBox",
+        family: "无",
+        test: "set_comment_box_changes_visibility_and_size",
+    },
+    Row {
+        format: "xlsx",
         op: "setCommentDone",
         family: "无",
         test: "-",
@@ -591,6 +621,12 @@ const ROWS: &[Row] = &[
         op: "setExternalLink",
         family: "extlink:{n}",
         test: "入口同 delete_dv_then_original_third",
+    },
+    Row {
+        format: "xlsx",
+        op: "setFormControl",
+        family: "sheet:{name}/control:{shapeId}",
+        test: "set_writes_both_copies_and_rejects_the_wrong_field",
     },
     Row {
         format: "xlsx",

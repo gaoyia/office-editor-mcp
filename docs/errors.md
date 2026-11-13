@@ -739,6 +739,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - `setNoteNumbering` 的 id 不是 `docx:document` 或 `section:{n}` 报 `InvalidId`
 - 三个编号字段一个都不给、或枚举不认识，报 `InvalidField`
 - 找不到批注时，`deleteComment` / `replyComment` / `setCommentText` / `setCommentMeta` / `setCommentDone` 报 `IdNotFound`
+- `setCommentBox` 的批注在、Note 不在，报 `IdNotFound`。回复 id 报 `InvalidId`。宽或高不是正数报 `InvalidField`
 - 对批注容器 id 发 `setParaText` 报 `InvalidId`
 - `insertComment` 的 `start` / `end` 不在同一部件或起止颠倒报 `InvalidField`
 - `setCommentMeta` 三个字段一个都不给报 `InvalidField`

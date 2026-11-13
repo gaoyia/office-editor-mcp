@@ -1,4 +1,4 @@
-# xlsx 批注：docs/checklist-xlsx.md 的 Xcm1–Xcm5。
+# xlsx 批注：docs/checklist-xlsx.md 的 Xcm1–Xcm6。
 # 用 create 产物再 apply，不另做 Excel 另存样例。
 
 $ErrorActionPreference = 'Stop'
@@ -125,6 +125,52 @@ $treeIns = Invoke-OoxpTree @{
     scope = @{ comments = $true }
 } 'xlsx-xcm-inspect-inserted'
 $cid = [string]((@($treeIns.sheets[0].comments | Where-Object { $_ }) | Select-Object -First 1).id)
+$note = Get-OutPath 'xlsx-comments-note.xlsx'
+if (Test-Path $note) { Remove-Item -Force $note }
+$wbN = $excel.Workbooks.Add()
+$cellN = $wbN.Worksheets.Item(1).Range('A1')
+$commentN = $cellN.AddComment('Xcm框')
+$commentN.Visible = $false
+$wbN.SaveAs($note, 51)
+Close-AllWorkbooks $excel
+$treeN = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $note.Replace('\', '/'); format = 'xlsx'
+    scope = @{ comments = $true }
+} 'xlsx-xcm-note'
+$cN = @($treeN.sheets[0].comments | Where-Object { $_ }) | Select-Object -First 1
+$boxOut = Get-OutPath 'xlsx-comments-box.xlsx'
+if (Test-Path $boxOut) { Remove-Item -Force $boxOut }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $note.Replace('\', '/')
+    output = $boxOut.Replace('\', '/')
+    ops = @(@{
+        op = 'setCommentBox'
+        id = [string]$cN.id
+        visible = $true
+        width = 200
+        height = 60
+    })
+} 'xlsx-xcm-box' | Out-Null
+$boxSaved = Get-OutPath 'xlsx-comments-box-saved.xlsx'
+if (Test-Path $boxSaved) { Remove-Item -Force $boxSaved }
+$wbBox = Open-ExcelBook $excel $boxOut
+$wbBox.SaveAs($boxSaved, 51)
+Close-AllWorkbooks $excel
+$wbBox2 = Open-ExcelBook $excel $boxSaved
+$capBox = [string]$wbBox2.Windows.Item(1).Caption
+Close-AllWorkbooks $excel
+$treeBox = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $boxSaved.Replace('\', '/'); format = 'xlsx'
+    scope = @{ comments = $true }
+} 'xlsx-xcm-box-inspect'
+$cBox = @($treeBox.sheets[0].comments | Where-Object { $_ }) | Select-Object -First 1
+$wBox = [double]$cBox.box.width
+$hBox = [double]$cBox.box.height
+$xcm6ok = ($capBox -notmatch 'Repair') -and ($cBox.box.visible -eq $true) -and ($wBox -ge 190) -and ($wBox -le 210) -and ($hBox -ge 50) -and ($hBox -le 70) -and ([string]$cBox.text -eq 'Xcm框')
+Add-Check 'xlsx-Xcm6' $xcm6ok "caption=$capBox visible=$($cBox.box.visible) w=$wBox h=$hBox text=$($cBox.text)"
 
 $replyOut = Get-OutPath 'xlsx-comments-reply.xlsx'
 if (Test-Path $replyOut) { Remove-Item -Force $replyOut }

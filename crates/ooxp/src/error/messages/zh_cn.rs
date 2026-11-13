@@ -932,6 +932,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidDocPartBehavior => "behavior 只能是 content、p 或 pg".into(),
         ErrorKind::EmptyDocPartText => "text 不能为空".into(),
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
+        ErrorKind::CommentBoxNotFound { id } => format!("找不到批注框：{id}"),
+        ErrorKind::CommentBoxMeasure { field } => format!("批注框的宽或高必须是正数：{field}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()
         }

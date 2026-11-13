@@ -159,9 +159,13 @@ fn insert_list_reply_text_meta_done_delete() {
             "kind",
             "ref",
             "text",
-            "replies"
+            "replies",
+            "box"
         ]
     );
+    assert_eq!(comments[0]["box"]["visible"], false);
+    assert_eq!(comments[0]["box"]["width"], 108.0);
+    assert_eq!(comments[0]["box"]["height"], 59.25);
     assert_eq!(comments[0]["author"], "Alice");
     assert!(comments[0]["initials"].is_null());
     assert_eq!(comments[0]["kind"], "normal");
@@ -346,6 +350,57 @@ fn reject_bad_id_and_start_end() {
         json!([{ "op": "replyComment", "id": cid, "text": "r" }]),
     )
     .unwrap();
+}
+
+#[test]
+fn set_comment_box_changes_visibility_and_size() {
+    let src = create_book("box");
+    let inserted = tmp("ins");
+    insert_one(&src, &inserted, "框");
+    let tree = inspect_comments(&inserted);
+    let cid = tree["sheets"][0]["comments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = tmp("box-out");
+    apply(
+        &inserted,
+        &out,
+        json!([{
+            "op": "setCommentBox",
+            "id": cid,
+            "visible": true,
+            "width": 140,
+            "height": 80
+        }]),
+    )
+    .unwrap();
+    let after = inspect_comments(&out);
+    assert_eq!(after["sheets"][0]["comments"][0]["text"], "框");
+    assert_eq!(after["sheets"][0]["comments"][0]["box"]["visible"], true);
+    assert_eq!(after["sheets"][0]["comments"][0]["box"]["width"], 140.0);
+    assert_eq!(after["sheets"][0]["comments"][0]["box"]["height"], 80.0);
+    let vml = part_text(&out, "xl/drawings/vmlDrawing1.vml");
+    assert!(vml.contains("visibility:visible"), "{vml}");
+    assert!(vml.contains("<x:Visible/>"), "{vml}");
+    assert!(vml.contains("width:140pt"), "{vml}");
+    assert!(vml.contains("height:80pt"), "{vml}");
+    assert!(!vml.contains("visibility:hidden"), "{vml}");
+
+    let err = apply(
+        &inserted,
+        &tmp("box-empty"),
+        json!([{ "op": "setCommentBox", "id": cid }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &inserted,
+        &tmp("box-zero"),
+        json!([{ "op": "setCommentBox", "id": cid, "width": 0 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
 #[test]

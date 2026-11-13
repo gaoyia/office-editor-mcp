@@ -303,6 +303,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "replyComment" => XlsxOp::ReplyComment(parse_reply_comment(obj, i)?),
             "deleteComment" => XlsxOp::DeleteComment(parse_delete_comment(obj, i)?),
             "setCommentText" => XlsxOp::SetCommentText(parse_set_comment_text(obj, i)?),
+            "setCommentBox" => XlsxOp::SetCommentBox(parse_set_comment_box(obj, i)?),
             "setCommentMeta" => XlsxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?),
             "setCommentDone" => XlsxOp::SetCommentDone(parse_set_comment_done(obj, i)?),
             "insertHyperlink" => XlsxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),

@@ -91,6 +91,81 @@ pub(super) fn parse_set_comment_text(
     Ok(SetCommentTextOp { id, text })
 }
 
+pub(super) fn parse_set_comment_box(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentBoxOp, Error> {
+    deny_keys(obj, i, &["op", "id", "visible", "width", "height"])?;
+    let id = require_id(obj, i)?;
+    let target = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    if matches!(target.key, comments::CommentKey::Reply { .. }) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XlsxCommentForm,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let visible = match obj.get("visible") {
+        None => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "visible".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].visible"),
+            ));
+        }
+    };
+    let width = parse_box_pt(obj, i, "width")?;
+    let height = parse_box_pt(obj, i, "height")?;
+    if visible.is_none() && width.is_none() && height.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setCommentBox".into(),
+                field: "visible, width, or height".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCommentBoxOp {
+        id,
+        visible,
+        width,
+        height,
+    })
+}
+
+fn parse_box_pt(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite() && *x > 0.0) else {
+                return Err(Error::with_path(
+                    ErrorKind::CommentBoxMeasure {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
 pub(super) fn parse_set_comment_meta(
     obj: &serde_json::Map<String, Value>,
     i: usize,

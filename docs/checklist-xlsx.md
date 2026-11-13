@@ -40,7 +40,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
 同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。
 同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。
 同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。
-同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。
+同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm6 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。
 同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。
 同日补跑 `xlsx-create-headerfooter.ps1`，C14–C16 通过。同日补跑 `xlsx-anchor.ps1`，Xa1–Xa5 通过。
 2026-09-29 补跑 `xlsx-charts-rare.ps1`，Xq1–Xq5 通过。同日补跑 `xlsx-ole.ps1`，Xol1–Xol5 通过。同日补跑 `xlsx-slicers.ps1`，Xsl1–Xsl5 通过。
@@ -1485,6 +1485,7 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xcm3 | 回复 | `replyComment` 后 COM `Replies` 能看见；inspect 嵌在 `replies` |
 | Xcm4 | 删除 | `deleteComment` 后 `commentCount=0`、COM 没有线程批注、无修复 |
 | Xcm5 | 缺字段 | 只给 `op` 与 `id` 的 `setCommentMeta` 得 `InvalidField`，未写文件。不强制开 Excel |
+| Xcm6 | 批注框 | Excel 亲手批注上 `setCommentBox` 后另存无修复。`visible` 与请求一致，宽高接近请求值，正文仍在 |
 
 ## 形状与 SmartArt
 

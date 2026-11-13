@@ -1013,6 +1013,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidDocPartBehavior => "behavior must be content, p, or pg".into(),
         ErrorKind::EmptyDocPartText => "text must not be empty".into(),
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
+        ErrorKind::CommentBoxNotFound { id } => format!("Comment box not found: {id}"),
+        ErrorKind::CommentBoxMeasure { field } => {
+            format!("Comment box width or height must be positive: {field}")
+        }
         ErrorKind::NeedCommentParaId => {
             "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
         }

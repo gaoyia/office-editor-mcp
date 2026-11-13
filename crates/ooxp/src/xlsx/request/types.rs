@@ -1005,6 +1005,14 @@ pub struct SetCommentTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetCommentBoxOp {
+    pub id: String,
+    pub visible: Option<bool>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetCommentMetaOp {
     pub id: String,
     pub author: Option<String>,
@@ -1921,6 +1929,7 @@ pub enum XlsxOp {
     ReplyComment(ReplyCommentOp),
     DeleteComment(DeleteCommentOp),
     SetCommentText(SetCommentTextOp),
+    SetCommentBox(SetCommentBoxOp),
     SetCommentMeta(SetCommentMetaOp),
     SetCommentDone(SetCommentDoneOp),
     InsertHyperlink(InsertHyperlinkOp),

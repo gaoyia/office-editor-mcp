@@ -1,4 +1,4 @@
-//! 工作表线程化批注（MS-XLSX）。不把旧式 VML 批注当树节点。
+//! 工作表线程化批注（MS-XLSX）。Note 框不单独进树，显隐和宽高挂在对上的批注上。
 
 use serde_json::{json, Map, Value};
 
@@ -11,8 +11,8 @@ use super::apply;
 use super::layout;
 use super::picture;
 use super::request::{
-    DeleteCommentOp, InsertCommentOp, ReplyCommentOp, SetCommentDoneOp, SetCommentMetaOp,
-    SetCommentTextOp,
+    DeleteCommentOp, InsertCommentOp, ReplyCommentOp, SetCommentBoxOp, SetCommentDoneOp,
+    SetCommentMetaOp, SetCommentTextOp,
 };
 use super::REL_NS;
 
@@ -152,14 +152,12 @@ fn invalid_form(path: &str) -> Error {
 }
 
 pub fn count_on_sheet(pkg: &Package, sheet_part: &str) -> Result<usize, Error> {
-    let Some(part) = threaded_part(pkg, sheet_part)? else {
-        return Ok(0);
-    };
-    if !pkg.contains(&part) {
-        return Ok(0);
-    }
-    let doc = xml::parse(pkg.get(&part)?)?;
-    Ok(threaded_elements(&doc.root).filter(|e| is_top(e)).count())
+    let covered = threaded_refs(pkg, sheet_part)?;
+    let extra = legacy_rows(pkg, sheet_part)?
+        .into_iter()
+        .filter(|(refer, _, _, _)| !covered.iter().any(|had| had == refer))
+        .count();
+    Ok(covered.len() + extra)
 }
 
 pub fn collect_on_sheet(
@@ -167,6 +165,53 @@ pub fn collect_on_sheet(
     sheet_part: &str,
     sheet_name: &str,
 ) -> Result<Vec<Value>, Error> {
+    let vml = vml_text(pkg, sheet_part)?;
+    let mut out = Vec::new();
+    let mut covered = Vec::new();
+    if let Some(part) = threaded_part(pkg, sheet_part)? {
+        if pkg.contains(&part) {
+            let doc = xml::parse(pkg.get(&part)?)?;
+            let people = load_people(pkg)?;
+            let tops: Vec<&Element> = threaded_elements(&doc.root).filter(|e| is_top(e)).collect();
+            for top in tops {
+                if let Some(refer) = top.attr("ref") {
+                    if let Ok(cell) = a1::parse_cell(refer) {
+                        covered.push(a1::format_cell(cell.col, cell.row));
+                    }
+                }
+                if let Some(v) = comment_json(top, &doc.root, sheet_name, &people, vml.as_deref()) {
+                    out.push(v);
+                }
+            }
+        }
+    }
+    for (refer, uid, author, text) in legacy_rows(pkg, sheet_part)? {
+        if covered.iter().any(|had| had == &refer) {
+            continue;
+        }
+        let mut obj = Map::new();
+        let host = format!("cell:{sheet_name}!{refer}/comment:{uid}");
+        obj.insert("id".into(), json!(host));
+        obj.insert("commentId".into(), json!(uid));
+        obj.insert("author".into(), json!(author));
+        obj.insert("initials".into(), Value::Null);
+        obj.insert("date".into(), Value::Null);
+        obj.insert("done".into(), json!(false));
+        obj.insert("kind".into(), json!("normal"));
+        obj.insert("ref".into(), json!(refer));
+        obj.insert("text".into(), json!(text));
+        obj.insert("replies".into(), json!([]));
+        if let (Some(xml), Ok(cell)) = (vml.as_deref(), a1::parse_cell(&refer)) {
+            if let Some(box_json) = note_box_json(xml, cell) {
+                obj.insert("box".into(), box_json);
+            }
+        }
+        out.push(Value::Object(obj));
+    }
+    Ok(out)
+}
+
+fn threaded_refs(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
     let Some(part) = threaded_part(pkg, sheet_part)? else {
         return Ok(Vec::new());
     };
@@ -174,13 +219,70 @@ pub fn collect_on_sheet(
         return Ok(Vec::new());
     }
     let doc = xml::parse(pkg.get(&part)?)?;
-    let people = load_people(pkg)?;
-    let tops: Vec<&Element> = threaded_elements(&doc.root).filter(|e| is_top(e)).collect();
     let mut out = Vec::new();
-    for top in tops {
-        if let Some(v) = comment_json(top, &doc.root, sheet_name, &people) {
-            out.push(v);
+    for top in threaded_elements(&doc.root).filter(|el| is_top(el)) {
+        if let Some(refer) = top.attr("ref") {
+            if let Ok(cell) = a1::parse_cell(refer) {
+                out.push(a1::format_cell(cell.col, cell.row));
+            }
         }
+    }
+    Ok(out)
+}
+
+fn legacy_rows(
+    pkg: &Package,
+    sheet_part: &str,
+) -> Result<Vec<(String, String, String, String)>, Error> {
+    let Some(part) = comments_part(pkg, sheet_part)? else {
+        return Ok(Vec::new());
+    };
+    if !pkg.contains(&part) {
+        return Ok(Vec::new());
+    }
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let authors: Vec<String> = doc
+        .root
+        .child_by_local("authors")
+        .map(|el| {
+            el.element_children()
+                .filter(|child| child.local_name() == "author")
+                .map(|child| child.text_content())
+                .collect()
+        })
+        .unwrap_or_default();
+    let Some(list) = doc.root.child_by_local("commentList") else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for el in list
+        .element_children()
+        .filter(|el| el.local_name() == "comment")
+    {
+        let Some(uid) = el.attr_local("uid").map(str::to_string) else {
+            continue;
+        };
+        if !crate::host_env::looks_like_guid(&uid) {
+            continue;
+        }
+        let Some(refer) = el.attr("ref").and_then(|raw| {
+            a1::parse_cell(raw)
+                .ok()
+                .map(|cell| a1::format_cell(cell.col, cell.row))
+        }) else {
+            continue;
+        };
+        let author = el
+            .attr("authorId")
+            .and_then(|s| s.parse::<usize>().ok())
+            .and_then(|i| authors.get(i))
+            .cloned()
+            .unwrap_or_default();
+        let text = el
+            .child_by_local("text")
+            .map(|node| node.text_content())
+            .unwrap_or_default();
+        out.push((refer, uid, author, text));
     }
     Ok(out)
 }
@@ -190,6 +292,7 @@ fn comment_json(
     root: &Element,
     sheet_name: &str,
     people: &[Person],
+    vml: Option<&str>,
 ) -> Option<Value> {
     let guid = top.attr("id")?.to_string();
     let a1 = normalize_ref(top.attr("ref"));
@@ -221,10 +324,139 @@ fn comment_json(
     obj.insert("date".into(), opt_attr(top, "dT"));
     obj.insert("done".into(), json!(attr_done(top)));
     obj.insert("kind".into(), json!("normal"));
+    let box_json = match (&a1, vml) {
+        (Value::String(refer), Some(xml)) => a1::parse_cell(refer)
+            .ok()
+            .and_then(|cell| note_box_json(xml, cell)),
+        _ => None,
+    };
     obj.insert("ref".into(), a1);
     obj.insert("text".into(), json!(comment_text(top)));
     obj.insert("replies".into(), Value::Array(replies));
+    if let Some(box_json) = box_json {
+        obj.insert("box".into(), box_json);
+    }
     Some(Value::Object(obj))
+}
+
+fn vml_text(pkg: &Package, sheet_part: &str) -> Result<Option<String>, Error> {
+    let Some(part) = vml_part(pkg, sheet_part)? else {
+        return Ok(None);
+    };
+    if !pkg.contains(&part) {
+        return Ok(None);
+    }
+    Ok(Some(String::from_utf8_lossy(pkg.get(&part)?).into_owned()))
+}
+
+fn note_box_json(vml: &str, cell: CellRef) -> Option<Value> {
+    let (_, start, end) = note_on_cell(vml, cell)?;
+    let body = &vml[start..end];
+    let style = shape_style(body);
+    let visible = shape_visible(body, &style);
+    Some(json!({
+        "visible": visible,
+        "width": pt_value(&style, "width"),
+        "height": pt_value(&style, "height"),
+    }))
+}
+
+fn opening_tag_end(shape: &str) -> usize {
+    shape.find('>').map(|i| i + 1).unwrap_or(shape.len())
+}
+
+fn shape_visible(shape: &str, style: &str) -> bool {
+    if shape.contains("<x:Visible") {
+        return true;
+    }
+    style_value(style, "visibility").as_deref() != Some("hidden")
+}
+
+fn style_span(open: &str) -> Option<(usize, usize, String)> {
+    let i = open.find(" style=")?;
+    let qpos = i + " style=".len();
+    let quote = open[qpos..].chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let start = qpos + quote.len_utf8();
+    let rel = open[start..].find(quote)?;
+    let end = start + rel;
+    let value: String = open[start..end]
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    Some((start, end, value))
+}
+
+fn shape_style(shape: &str) -> String {
+    let open = &shape[..opening_tag_end(shape)];
+    style_span(open)
+        .map(|(_, _, value)| value)
+        .unwrap_or_default()
+}
+
+fn style_value(style: &str, key: &str) -> Option<String> {
+    style.split(';').find_map(|part| {
+        let (k, v) = part.trim().split_once(':')?;
+        (k.trim() == key).then(|| v.trim().to_string())
+    })
+}
+
+fn pt_value(style: &str, key: &str) -> Value {
+    let Some(raw) = style_value(style, key) else {
+        return Value::Null;
+    };
+    let Ok(n) = raw.trim_end_matches("pt").parse::<f64>() else {
+        return Value::Null;
+    };
+    serde_json::Number::from_f64(n)
+        .map(Value::Number)
+        .unwrap_or(Value::Null)
+}
+
+fn upsert_style(style: &str, key: &str, value: &str) -> String {
+    let mut parts: Vec<String> = style
+        .split(';')
+        .filter(|part| !part.trim().is_empty())
+        .map(|part| part.trim().to_string())
+        .collect();
+    let mut found = false;
+    for part in &mut parts {
+        if part.split_once(':').is_some_and(|(k, _)| k.trim() == key) {
+            *part = format!("{key}:{value}");
+            found = true;
+        }
+    }
+    if !found {
+        parts.push(format!("{key}:{value}"));
+    }
+    parts.join(";")
+}
+
+fn replace_style(shape: &str, style: &str) -> String {
+    let open_end = opening_tag_end(shape);
+    let open = &shape[..open_end];
+    let Some((start, end, _)) = style_span(open) else {
+        return shape.to_string();
+    };
+    let mut out = String::with_capacity(shape.len() + style.len());
+    out.push_str(&shape[..start]);
+    out.push_str(style);
+    out.push_str(&shape[end..]);
+    out
+}
+
+fn format_pt(n: f64) -> String {
+    if (n - n.round()).abs() < 1e-9 && n.abs() < 1e12 {
+        format!("{:.0}pt", n.round())
+    } else {
+        let mut s = format!("{n:.4}");
+        while s.contains('.') && (s.ends_with('0') || s.ends_with('.')) {
+            s.pop();
+        }
+        format!("{s}pt")
+    }
 }
 
 fn opt_attr(el: &Element, name: &str) -> Value {
@@ -427,6 +659,191 @@ pub fn apply_delete(
         }
     }
     Ok(())
+}
+
+pub fn apply_set_box(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetCommentBoxOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let target = parse_comment_id(&op.id, &format!("ops[{op_index}].id"))?;
+    let CommentKey::Top(guid) = &target.key else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XlsxCommentForm,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if !comment_uid_exists(pkg, sheet_part, guid)? {
+        return Err(not_found(&op.id, op_index));
+    }
+    let cell = a1::parse_cell(&target.a1).map_err(|_| not_found(&op.id, op_index))?;
+    let Some(part) = vml_part(pkg, sheet_part)? else {
+        return Err(box_not_found(&op.id, op_index));
+    };
+    if !pkg.contains(&part) {
+        return Err(box_not_found(&op.id, op_index));
+    }
+    let vml = String::from_utf8_lossy(pkg.get(&part)?).into_owned();
+    let Some((_, start, end)) = note_on_cell(&vml, cell) else {
+        return Err(box_not_found(&op.id, op_index));
+    };
+    let old = shape_style(&vml[start..end]);
+    let old_w = style_pt(&old, "width");
+    let old_h = style_pt(&old, "height");
+    let mut style = old;
+    if let Some(visible) = op.visible {
+        let token = if visible { "visible" } else { "hidden" };
+        style = upsert_style(&style, "visibility", token);
+    }
+    if let Some(width) = op.width {
+        style = upsert_style(&style, "width", &format_pt(width));
+    }
+    if let Some(height) = op.height {
+        style = upsert_style(&style, "height", &format_pt(height));
+    }
+    let mut body = replace_style(&vml[start..end], &style);
+    if let Some(visible) = op.visible {
+        body = set_client_visible(&body, visible);
+    }
+    let dw = match (op.width, old_w) {
+        (Some(want), Some(had)) => want - had,
+        _ => 0.0,
+    };
+    let dh = match (op.height, old_h) {
+        (Some(want), Some(had)) => want - had,
+        _ => 0.0,
+    };
+    if dw != 0.0 || dh != 0.0 {
+        body = shift_anchor(&body, dw, dh);
+    }
+    let mut out = String::with_capacity(vml.len() + body.len());
+    out.push_str(&vml[..start]);
+    out.push_str(&body);
+    out.push_str(&vml[end..]);
+    pkg.set(&part, out.into_bytes())?;
+    Ok(())
+}
+
+fn style_pt(style: &str, key: &str) -> Option<f64> {
+    let raw = style_value(style, key)?;
+    raw.trim_end_matches("pt").parse::<f64>().ok()
+}
+
+fn set_client_visible(shape: &str, visible: bool) -> String {
+    let mut out = shape
+        .replace("<x:Visible/>", "")
+        .replace("<x:Visible></x:Visible>", "");
+    if visible && !out.contains("<x:Visible") {
+        out = out.replacen("</x:ClientData>", "<x:Visible/></x:ClientData>", 1);
+    }
+    out
+}
+
+const COL_PX: i64 = 72;
+const ROW_PX: i64 = 20;
+
+fn shift_anchor(shape: &str, dw_pt: f64, dh_pt: f64) -> String {
+    let Some(open) = shape.find("<x:Anchor>") else {
+        return shape.to_string();
+    };
+    let start = open + "<x:Anchor>".len();
+    let Some(rel) = shape[start..].find("</x:Anchor>") else {
+        return shape.to_string();
+    };
+    let end = start + rel;
+    let mut nums: Vec<i64> = shape[start..end]
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if nums.len() != 8 {
+        return shape.to_string();
+    }
+    let (mut right, mut right_off) = (nums[4], nums[5]);
+    let (mut bottom, mut bottom_off) = (nums[6], nums[7]);
+    add_px(
+        &mut right,
+        &mut right_off,
+        (dw_pt * 96.0 / 72.0).round() as i64,
+        COL_PX,
+    );
+    add_px(
+        &mut bottom,
+        &mut bottom_off,
+        (dh_pt * 96.0 / 72.0).round() as i64,
+        ROW_PX,
+    );
+    nums[4] = right;
+    nums[5] = right_off;
+    nums[6] = bottom;
+    nums[7] = bottom_off;
+    let text = format!(
+        "\n    {}, {}, {}, {}, {}, {}, {}, {}",
+        nums[0], nums[1], nums[2], nums[3], nums[4], nums[5], nums[6], nums[7]
+    );
+    let mut out = String::with_capacity(shape.len() + text.len());
+    out.push_str(&shape[..start]);
+    out.push_str(&text);
+    out.push_str(&shape[end..]);
+    out
+}
+
+fn add_px(index: &mut i64, offset: &mut i64, delta: i64, page: i64) {
+    *offset += delta;
+    while *offset >= page {
+        *offset -= page;
+        *index += 1;
+    }
+    while *offset < 0 && *index > 0 {
+        *offset += page;
+        *index -= 1;
+    }
+    if *offset < 0 {
+        *offset = 0;
+    }
+}
+
+fn comment_uid_exists(pkg: &Package, sheet_part: &str, guid: &str) -> Result<bool, Error> {
+    if let Some(part) = threaded_part(pkg, sheet_part)? {
+        if pkg.contains(&part) {
+            let tc = xml::parse(pkg.get(&part)?)?;
+            if threaded_elements(&tc.root).any(|el| el.attr("id") == Some(guid)) {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(legacy_comment_uids(pkg, sheet_part)?
+        .iter()
+        .any(|id| id == guid))
+}
+
+fn legacy_comment_uids(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
+    let Some(part) = comments_part(pkg, sheet_part)? else {
+        return Ok(Vec::new());
+    };
+    if !pkg.contains(&part) {
+        return Ok(Vec::new());
+    }
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let Some(list) = doc.root.child_by_local("commentList") else {
+        return Ok(Vec::new());
+    };
+    Ok(list
+        .element_children()
+        .filter(|el| el.local_name() == "comment")
+        .filter_map(|el| el.attr_local("uid").map(str::to_string))
+        .filter(|id| crate::host_env::looks_like_guid(id))
+        .collect())
+}
+
+fn box_not_found(id: &str, op_index: usize) -> Error {
+    Error::with_path(
+        ErrorKind::CommentBoxNotFound { id: id.to_string() },
+        format!("ops[{op_index}].id"),
+    )
 }
 
 pub fn apply_set_text(
@@ -1043,6 +1460,12 @@ fn shape_spans(vml: &str) -> Vec<(usize, usize)> {
     let mut from = 0usize;
     while let Some(rel) = vml[from..].find("<v:shape") {
         let start = from + rel;
+        let next = start + "<v:shape".len();
+        let boundary = vml.as_bytes().get(next).copied();
+        if !matches!(boundary, Some(b' ' | b'>' | b'/')) {
+            from = next;
+            continue;
+        }
         let Some(rel_end) = vml[start..].find("</v:shape>") else {
             break;
         };

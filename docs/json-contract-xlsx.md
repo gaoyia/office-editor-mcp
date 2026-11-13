@@ -1140,6 +1140,11 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `date` 取 `@dT` 原文，缺则为 `null`。`done`：`@done` 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。`kind` 为 `normal`。
   `ref` 取 `@ref`，能解析成单一 A1 时规范化成列字母加大写行号；解析不了或缺失则为 `null`。`text` 取 `<text>` 的可见文本。回复嵌在 `replies` 里，不单独占 `commentCount`。
   回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`text`（无 `ref`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
+  顶层批注在同一格有 `ObjectType="Note"` 时，`replies` 后带 `box`。按 `x:Row` / `x:Column` 对格，不看 `shapeId`。
+  没有线程化批注的格子，若 `comments.xml` 里有带 `xr:uid` 的批注，也进这份名单，id 仍是 `cell:{name}!{A1}/comment:{uid}`。
+  `box` 字段顺序：`visible`、`width`、`height`。有 `x:Visible` 时 `visible` 为 `true`。否则样式含 `visibility:hidden` 时为 `false`。
+  `width` / `height` 取样式里的磅，没有则为 `null`。回复不带 `box`。没有 Note 时也不带 `box`。
+  Excel 另存会按 `x:Anchor` 重写磅。`setCommentBox` 改宽高时按 72 像素一列、20 像素一行挪锚点右下角。
   找线程化关系必须比完整 URI `http://schemas.microsoft.com/office/2017/10/relationships/threadedComment`。
 - `scope.hyperlinks` 为 `true` 时，每张 `worksheet` 带单元格 `hyperlinks`。没有链时为空数组。不依赖单元格切片。按该表 `<hyperlinks>` 里 `<hyperlink>` 的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`ref`、`rId`、`url`、`location`、`tooltip`、`display`。`index` 与 id 里的 `{n}` 相同。

@@ -14842,6 +14842,55 @@
         }
       }
     },
+    "setCommentBoxOp": {
+      "description": "改批注框的显隐或宽高。",
+      "descriptionEn": "Change a comment box's visibility or size.",
+      "limits": "只用于 xlsx 顶层批注。按格子的行、列找到 Note，不看 shapeId。visible、width、height 至少给一个。width 和 height 是正数，单位磅。回复 id 报 InvalidId。没有 Note 报 IdNotFound。不改批注文字。",
+      "limitsEn": "xlsx top-level comments only. The Note is found by the cell row and column, not by shapeId. Give at least one of visible, width, and height. width and height are positive numbers in points. A reply id returns InvalidId. A missing Note returns IdNotFound. Comment text stays unchanged.",
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCommentBox"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "visible"
+          ]
+        },
+        {
+          "required": [
+            "width"
+          ]
+        },
+        {
+          "required": [
+            "height"
+          ]
+        }
+      ]
+    },
     "setCommentMetaOp": {
       "description": "改批注的作者、缩写或时间。",
       "descriptionEn": "Change a comment's author, initials, or date.",
@@ -26177,6 +26226,9 @@
           "$ref": "#/$defs/setColumnsOp"
         },
         {
+          "$ref": "#/$defs/setCommentBoxOp"
+        },
+        {
           "$ref": "#/$defs/setCommentDoneOp"
         },
         {
@@ -26920,6 +26972,9 @@
         },
         {
           "$ref": "#/$defs/setColWidthOp"
+        },
+        {
+          "$ref": "#/$defs/setCommentBoxOp"
         },
         {
           "$ref": "#/$defs/setCommentDoneOp"

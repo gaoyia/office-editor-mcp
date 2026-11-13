@@ -887,6 +887,10 @@ define_error_kinds! {
     InvalidSectionType => vec![Self::InvalidSectionType],
     SectionTypeOnLastPara => vec![Self::SectionTypeOnLastPara],
     CommentNotFound { id: String } => vec![Self::CommentNotFound { id: "comment:0".into() }],
+    CommentBoxNotFound { id: String } => vec![Self::CommentBoxNotFound {
+        id: "cell:Sheet1!A1/comment:{00000000-0000-4000-8000-000000000001}".into(),
+    }],
+    CommentBoxMeasure { field: String } => vec![Self::CommentBoxMeasure { field: "width".into() }],
     NeedCommentParaId => vec![Self::NeedCommentParaId],
     NeedCommentMetaField => vec![Self::NeedCommentMetaField],
     CommentRangeCrossPart => vec![Self::CommentRangeCrossPart],
@@ -2089,6 +2093,7 @@ impl ErrorKind {
             | Self::LastStoryPara
             | Self::NeedCommentParaId
             | Self::NeedCommentMetaField
+            | Self::CommentBoxMeasure { .. }
             | Self::CommentRangeCrossPart
             | Self::CommentRangeReversed
             | Self::NeedChartSeriesField
@@ -2270,6 +2275,7 @@ impl ErrorKind {
             | Self::TextBoxNotFound { .. }
             | Self::NoteNotFound { .. }
             | Self::CommentNotFound { .. }
+            | Self::CommentBoxNotFound { .. }
             | Self::ChartNotFound { .. }
             | Self::ChartSeriesNotFound { .. }
             | Self::TrendlineNotFound { .. }

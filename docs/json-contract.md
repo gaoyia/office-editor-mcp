@@ -333,7 +333,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名覆
 以及透视表 op（`insertPivotTable`、`setPivotTable`、`deletePivotTable`）、以及定义名 op（`insertDefinedName`、`setDefinedName`、
 `deleteDefinedName`）、以及 `setPrintSetup`、`setSheetView`、`setAutoFilter`、`setSortState`、以及自定义视图 op（`insertCustomView`、
 `deleteCustomView`、`showCustomView`）、以及分组 op（`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`）、
-以及批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、
+以及批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentBox`、`setCommentMeta`、`setCommentDone`）、
 以及 `setShapeText`、`setShapeFormat`、以及文本框 op（`insertTextBox`、`deleteTextBox`、`setTextBoxSize`、`setTextBoxAnchor`；
 不含 `setTextBoxWrap`、`setTextBoxFill`、`setTextBoxLine`、`setTextBoxDirection`、`setTextBoxTextAnchor`）、以及形状管理 op（`insertShape`、`deleteShape`、
 `insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
@@ -1384,6 +1384,25 @@ xlsx 的 `id` 可以是批注容器 id 或回复 id。
 只改对应 `threadedComment` 的 `<text>`。pptx 的 `id` 可以是批注容器 id 或回复 id。只改对应 `p188:txBody` 的可见文本，规则与 `setShapeText` 相同。
 对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `txBody` 文本时同样拒绝。
 PowerPoint 16.0 的批注 `Text` 只读，另存也会丢掉空的 `ink`，所以不改字。
+
+### setCommentBox
+
+- **`op`**
+  - 必须是 `"setCommentBox"`
+- **`id`**
+  - xlsx 顶层批注 id，`cell:{name}!{A1}/comment:{guid}`
+- **`visible`**
+  - 可选布尔。`true` 写成 `visibility:visible`，`false` 写成 `visibility:hidden`
+- **`width`**
+  - 可选正数，磅
+- **`height`**
+  - 可选正数，磅
+
+只用于 xlsx。按批注格的行、列找到 `ObjectType="Note"` 的 `v:shape`，不看 `shapeId`。
+`visible`、`width`、`height` 至少给一个，否则报 `InvalidField`。宽或高不是正数报 `InvalidField`。
+`visible` 为真时写上 `x:Visible`，为假时去掉。改宽高时改样式，并按 72 像素一列、20 像素一行挪 `x:Anchor` 的右下角。
+回复 id 报 `InvalidId`。批注在、框不在，报 `IdNotFound`。不改文字、作者和线程。
+docx 与 pptx 不认这个 op。
 
 ### setCommentMeta
 
