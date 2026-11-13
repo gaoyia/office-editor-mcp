@@ -372,6 +372,8 @@ pub(crate) enum IdReason {
     SheetControlPrefix,
     /// xlsx 工作表 id，缺少 /control:…
     SheetControlContainer,
+    /// xlsx 旧式页眉图 id 必须是 sheet:{name}/hf:odd:header/legacyPic:CH 这种形式
+    SheetLegacyPicturePrefix,
     /// xlsx 的 insertFormControl 必须用 sheet:工作表名
     InsertFormControlNeedsSheet,
     /// xlsx 的 insertInk 必须用 sheet:工作表名
@@ -1090,6 +1092,13 @@ define_error_kinds! {
     },
     NeedSetFormControlField => vec![Self::NeedSetFormControlField],
     FormControlWorksheetOnly => vec![Self::FormControlWorksheetOnly],
+    LegacyPictureNotFound { id: String } => {
+        vec![Self::LegacyPictureNotFound {
+            id: "sheet:Sheet1/hf:odd:header/legacyPic:CH".into(),
+        }]
+    },
+    LegacyPictureWorksheetOnly => vec![Self::LegacyPictureWorksheetOnly],
+    LegacyPictureRasterOnly => vec![Self::LegacyPictureRasterOnly],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
     CustomShowNameTooLong => vec![Self::CustomShowNameTooLong],
@@ -1587,6 +1596,7 @@ impl IdReason {
             Self::SheetOleContainer,
             Self::SheetControlPrefix,
             Self::SheetControlContainer,
+            Self::SheetLegacyPicturePrefix,
             Self::InsertFormControlNeedsSheet,
             Self::InsertInkNeedsSheet,
             Self::SheetInkPrefix,
@@ -2200,6 +2210,8 @@ impl ErrorKind {
             | Self::InvalidFormControl { .. }
             | Self::NeedSetFormControlField
             | Self::FormControlWorksheetOnly
+            | Self::LegacyPictureWorksheetOnly
+            | Self::LegacyPictureRasterOnly
             | Self::XlsxHyperlinkNeedTarget
             | Self::EmptyHyperlinkLocation
             | Self::NeedXlsxSetHyperlinkField
@@ -2266,6 +2278,7 @@ impl ErrorKind {
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
             | Self::FormControlNotFound { .. }
+            | Self::LegacyPictureNotFound { .. }
             | Self::InkNotFound { .. }
             | Self::Model3dNotFound { .. }
             | Self::MathDrawingNotFound { .. }

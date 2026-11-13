@@ -19,6 +19,7 @@ use super::form_control;
 use super::formula;
 use super::hf;
 use super::ink;
+use super::legacy_hf;
 use super::model3d;
 use super::names;
 use super::ole;
@@ -89,6 +90,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_form_controls = scope.as_ref().is_some_and(|s| s.form_controls);
+    let want_legacy_pictures = scope.as_ref().is_some_and(|s| s.legacy_pictures);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let want_inks = scope.as_ref().is_some_and(|s| s.inks);
     let want_maths = scope.as_ref().is_some_and(|s| s.maths);
@@ -117,6 +119,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut sparkline_count = 0usize;
     let mut ole_object_count = 0usize;
     let mut form_control_count = 0usize;
+    let mut legacy_picture_count = 0usize;
     let mut model3d_count = 0usize;
     let mut ink_count = 0usize;
     let mut slicer_count = 0usize;
@@ -176,6 +179,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let forms = form_control::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?;
             form_control_count += forms.len();
             obj.insert("formControlCount".into(), json!(forms.len()));
+            let n_legacy = legacy_hf::count(&pkg, &sh.part, &sheet_doc.root, sh.kind)?;
+            legacy_picture_count += n_legacy;
+            obj.insert("legacyPictureCount".into(), json!(n_legacy));
             let n_m3d = model3d::count(&pkg, &sh.part, &sheet_doc.root)?;
             model3d_count += n_m3d;
             obj.insert("model3dCount".into(), json!(n_m3d));
@@ -220,6 +226,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         want_text_boxes,
                         want_shapes,
                         want_connectors,
+                        want_legacy_pictures,
                     )?),
                 );
             }
@@ -379,6 +386,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         want_text_boxes,
                         want_shapes,
                         want_connectors,
+                        want_legacy_pictures,
                     )?),
                 );
             }
@@ -429,6 +437,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         false,
                         false,
                         false,
+                        false,
                     )?),
                 );
             }
@@ -474,6 +483,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("formControlCount".into(), json!(form_control_count));
+    root.insert("legacyPictureCount".into(), json!(legacy_picture_count));
     root.insert("model3dCount".into(), json!(model3d_count));
     root.insert("inkCount".into(), json!(ink_count));
     root.insert("slicerCount".into(), json!(slicer_count));

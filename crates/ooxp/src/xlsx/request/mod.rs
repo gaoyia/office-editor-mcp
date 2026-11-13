@@ -79,6 +79,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sparklines",
             "oleObjects",
             "formControls",
+            "legacyPictures",
             "model3ds",
             "inks",
             "maths",
@@ -102,6 +103,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let form_controls = parse_bool_field(obj.get("formControls"), "formControls")?;
+    let legacy_pictures = parse_bool_field(obj.get("legacyPictures"), "legacyPictures")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let inks = parse_bool_field(obj.get("inks"), "inks")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
@@ -168,6 +170,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !sparklines
         && !ole_objects
         && !form_controls
+        && !legacy_pictures
         && !model3ds
         && !inks
         && !maths
@@ -194,6 +197,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sparklines,
         ole_objects,
         form_controls,
+        legacy_pictures,
         model3ds,
         inks,
         maths,
@@ -229,6 +233,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setCellStyle" => XlsxOp::SetCellStyle(Box::new(parse_set_cell_style(obj, i)?)),
             "setHeaderFooterText" => XlsxOp::SetHeaderFooterText(parse_set_hf_text(obj, i)?),
             "replacePicture" => XlsxOp::ReplacePicture(parse_replace_pic(obj, i)?),
+            "replaceLegacyPicture" => {
+                XlsxOp::ReplaceLegacyPicture(parse_replace_legacy_pic(obj, i)?)
+            }
+            "deleteLegacyPicture" => XlsxOp::DeleteLegacyPicture(parse_delete_legacy_pic(obj, i)?),
             "insertPicture" => XlsxOp::InsertPicture(parse_insert_pic(obj, i)?),
             "deletePicture" => XlsxOp::DeletePicture(parse_delete_pic(obj, i)?),
             "setPictureSize" => XlsxOp::SetPictureSize(parse_set_pic_size(obj, i)?),

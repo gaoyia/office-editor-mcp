@@ -157,6 +157,7 @@ pub struct InspectScope {
     pub sparklines: bool,
     pub ole_objects: bool,
     pub form_controls: bool,
+    pub legacy_pictures: bool,
     pub model3ds: bool,
     pub inks: bool,
     pub maths: bool,
@@ -1302,6 +1303,21 @@ pub struct ReplacePictureOp {
     pub file: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ReplaceLegacyPictureOp {
+    pub id: String,
+    pub sheet: String,
+    pub shape_id: String,
+    pub file: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteLegacyPictureOp {
+    pub id: String,
+    pub sheet: String,
+    pub shape_id: String,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct RelBox {
     pub from_x: f64,
@@ -1849,6 +1865,8 @@ pub enum XlsxOp {
     SetCellStyle(Box<SetCellStyleOp>),
     SetHeaderFooterText(SetHeaderFooterTextOp),
     ReplacePicture(ReplacePictureOp),
+    ReplaceLegacyPicture(ReplaceLegacyPictureOp),
+    DeleteLegacyPicture(DeleteLegacyPictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
     SetPictureSize(SetPictureSizeOp),

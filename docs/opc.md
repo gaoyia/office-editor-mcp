@@ -243,6 +243,8 @@ apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `app
 以及 `/xl/media/imageN.*`。
 工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。
 往页眉槽位插图时写 `<drawingHF r:id="…"/>`（ECMA-376 §18.3.1.37），关系 Type 同样以 `/drawing` 结尾，drawing 内容类型相同；不改 `legacyDrawingHF`。
+`replaceLegacyPicture` 在扩展名不变、且只有这一张图使用该媒体时，覆盖 `v:imagedata` 指向的原部件。扩展名变了，或几个形状共用一条 image 关系时，新建 `/xl/media/imageN.*` 并改 VML 自己的 `.rels`。不新建 `drawingHF`，不改页眉原文。
+`deleteLegacyPicture` 摘掉对应 `v:shape`。只被它使用的 image 关系和无人引用的媒体一起去掉。最后一张 `v:shape` 删掉后，去掉工作表上的 `legacyDrawingHF`、这条 vmlDrawing 关系，以及 vml 部件和它的 `.rels`。页眉原文留下。
 drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。
 插入 SVG 时 drawing `.rels` 写两条 Type 以 `/image` 结尾的关系：一条指向 1×1 PNG 占位，一条指向 `/xl/media/imageN.svg`。
 `[Content_Types].xml` 补 `Default Extension="svg"` 为 `image/svg+xml`。`a:blip/@r:embed` 指向 PNG，`asvg:svgBlip` 指向 SVG。

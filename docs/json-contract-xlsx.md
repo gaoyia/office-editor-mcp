@@ -49,6 +49,10 @@
 - **页眉页脚图**
   - id：`{槽 id}/pic:{cNvPrId}` 或 `{槽 id}/pic:index:{k}`
   - 例子：`sheet:Sheet1/hf:odd:header/pic:2`
+- **旧式页眉图**
+  - id：`sheet:{name}/hf:odd:header/legacyPic:{shapeId}` 或 `sheet:{name}/hf:odd:footer/legacyPic:{shapeId}`
+  - 例子：`sheet:Sheet1/hf:odd:header/legacyPic:CH`
+  - `shapeId` 只有 `LH`、`CH`、`RH`、`LF`、`CF`、`RF`
 - **工作表图表**
   - id：`sheet:{name}/chart:{cNvPrId}` 或 `sheet:{name}/chart:index:{k}`
   - 例子：`sheet:Sheet1/chart:2`
@@ -157,7 +161,7 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 对应 XML 本地名 `oddHeader` / `oddFooter` / `evenHeader` / `evenFooter` / `firstHeader` / `firstFooter`。
 文本就是该元素原文，含 `&P` / `&D` / `&A` / `&C` 这类代码，不编成独立域节点。inspect 报原文；apply 整段替换原文。
 
-页眉页脚图只认 `<drawingHF r:id>` 指向的 drawing 里、锚点的直接子元素 `xdr:pic` 且带 `a:blip`。判定与工作表图相同。VML / `legacyDrawingHF` 不进树、不改。
+页眉页脚图只认 `<drawingHF r:id>` 指向的 drawing 里、锚点的直接子元素 `xdr:pic` 且带 `a:blip`。判定与工作表图相同。这份名单不收 VML。只有 `legacyDrawingHF`、没有 `drawingHF` 的旧式页眉图另见下文，不并进 `pictures`。
 Excel 16.0 另存的页眉图通常是 VML，因此默认样例常常没有 DrawingML 页眉图；树里出现页眉图，只因为包里已有 `drawingHF`，或 `insertPicture` 往槽位新建了 DrawingML。
 工作表图名单与页眉图名单不混：`sheet:{name}/pic:…` 只来自 `<drawing>`，`sheet:{name}/hf:…/pic:…` 只来自 `<drawingHF>`。
 `drawingHF` 上的 `cho` / `lho` / `rho`（奇数页页眉中/左/右）、`che` / `lhe` / `rhe`（偶数页页眉）、`chf` / `lhf` / `rhf`（首页页眉）、
@@ -166,8 +170,23 @@ Excel 16.0 另存的页眉图通常是 VML，因此默认样例常常没有 Draw
 `dialogsheet` / `macrosheet` 只读页眉文本，不列出、不接受页眉图。
 `worksheet` 与 `chartsheet` 都列出、都接受页眉图（`insertPicture` 点槽位 id）。
 页眉 `drawingHF` 里的形状 / 文本框 / 连接线，有则进对应槽位名单；不提供往槽位 `insertShape` / `insertTextBox` / `insertConnector` / `insertOle` / `insertChart`。
-Excel 16.0 另存会把 DrawingML 页眉收成 VML，形状不会留下。不编辑 VML / `legacyDrawingHF`。
+Excel 16.0 另存会把 DrawingML 页眉收成 VML，形状不会留下。两套都在时，页眉图仍走 `drawingHF`，不改旁边的 VML。
 页眉页脚里的图表、OLE、SmartArt、3D 仍不进树。
+
+旧式页眉图只挂在没有 `<drawingHF>`、有 `<legacyDrawingHF r:id>` 的 `worksheet` 上。关系 Type 以 `/vmlDrawing` 结尾。`v:shape/@id` 为下面六个之一，并且带 `v:imagedata`：
+
+- `LH`、`CH`、`RH` 属于奇数页页眉
+- `LF`、`CF`、`RF` 属于奇数页页脚
+
+偶数页和首页的旧式页眉图不进树。`chartsheet`、`dialogsheet`、`macrosheet` 不列。表上已有 `drawingHF` 时，整表不列旧式页眉图。
+对不上这六个 id、或没有 `v:imagedata` 的 VML 形状不进树，部件原样写回。
+字段顺序是 `id`、`shapeId`，有内容类型时再跟 `contentType`。`shapeId` 是 `v:shape/@id` 原文。`contentType` 取这条 `v:imagedata` 关系指向的媒体部件。字节不进树。`o:title` 不进树。
+同一 `shapeId` 重复时，inspect 都列出，apply 命中该 VML 里文档顺序第一处。
+不算进表级或槽位 `pictureCount`，也不进槽位 `pictures`。工作簿与每张 `worksheet` 始终有 `legacyPictureCount`。`chartsheet` 的表节点没有这一项；它的槽位上 `legacyPictureCount` 恒为 `0`，也不带 `legacyPictures`。
+`replaceLegacyPicture` 只换这一张图的媒体字节。不改 `v:shape/@id`，不新建 `drawingHF`，不改页眉原文。多个形状共用同一条 image 关系时，只给这一张另建关系和媒体。扩展名不变且只有这一张在用时，覆盖原媒体部件。
+`deleteLegacyPicture` 摘掉这条 `v:shape`、只被它使用的 image 关系，以及无人引用的媒体。最后一张 `v:shape` 删掉后，去掉 `legacyDrawingHF`、这份 vmlDrawing 和工作表上的这条关系。不删页眉里的 `&G`。
+`exportMedia` 认这条 id，写出媒体原字节。必须在解析普通页眉图 id 之前分流 `/legacyPic:`。
+`replacePicture` 与 `deletePicture` 不接受这条 id。
 
 工作表图表挂在该 `worksheet` 或 `chartsheet` 上，不挂在单元格上，也不挂在工作簿根上。
 图表的 `{cNvPrId}` 取该 `xdr:graphicFrame` 里 `xdr:nvGraphicFramePr/xdr:cNvPr/@id` 的原文（§20.5.2.8），匹配规则与工作表图相同。
@@ -396,11 +415,11 @@ pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映
 往页眉槽位插图时写入 `oneCell`、从 A1、偏移 0，并把 `drawingHF` 上该侧中区属性写成新图的 `cNvPr` id（奇数页页眉 `cho`，偶数页页眉 `che`，首页页眉 `chf`，奇数页页脚 `cfo`，偶数页页脚 `cfe`，首页页脚 `cff`）。
 该中区已被占用则改写左区（`lh*`），再右区（`rh*`）；三区都占用仍插入 drawing，不再写属性，inspect 把它归到 `odd:header`。
 表上只有 `legacyDrawingHF`、没有 `drawingHF` 时，新建 DrawingML 的 `drawingHF`，不动 VML。
-`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureAnchor` 的 `id` 必须是工作表图 id、图表工作表 Chart Drawing 图 id 或页眉图 id。
+`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureAnchor` 的 `id` 必须是工作表图 id、图表工作表 Chart Drawing 图 id 或页眉图 id。旧式页眉图 id 报 `InvalidId`。
 对工作表 id、页眉槽位 id、单元格 id 或图表 id 发这四个 op 报 `InvalidId`。对 `dialogsheet` 上的页眉图发这四个 op 报 `InvalidField`。
 `chartsheet` 上 `relSize` 图的 `setPictureAnchor` 可改 `fromX` / `fromY` / `toX` / `toY`；禁止改成单元格锚点。
 `setPictureSize` 对 `relSize` 报 `InvalidField`（改 `toX` / `toY` 请用 `setPictureAnchor`）。
-`setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。`exportMedia` 认工作表图 id、页眉图 id 与工作表背景图 id `sheet:{name}/background`，写出 `/xl/media/…`。
+`setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。`exportMedia` 认工作表图 id、页眉图 id、旧式页眉图 id 与工作表背景图 id `sheet:{name}/background`，写出 `/xl/media/…`。
 `exportMedia` 也认工作表 OLE id，写出 `/xl/embeddings/…`，不是预览图。
 `exportMedia` 也认工作表 3D 模型 id，写出 GLB 原字节，不是海报。必须在解析图 id 之前分流 `/model3d:`。
 
@@ -582,6 +601,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `sheet` / `range` / 其它名单键
   - 不把控件画进树，也不把字节放进树
   - 页眉、`chartsheet` 不进树
+- **`scope.legacyPictures`**（否）
+  - 为 `true` 时，已展开的 `worksheet` 槽位填 `legacyPictures`
+  - 须同时 `headerFooter: true`。只开这一项时槽位名单不出现，表上仍有 `legacyPictureCount`
+  - 没有旧式页眉图时为空数组
+  - 不进 `pictures`，也不算进 `pictureCount`
+  - 不把图的字节放进树
+  - docx / pptx 的 `scope` 里出现 `legacyPictures` 报 `InvalidField`
 - **`scope.model3ds`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `model3ds`
   - 没有 3D 模型时为空数组
@@ -647,7 +673,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
  / `hyperlinks` / `sparklines` / `oleObjects` / `formControls` / `model3ds` / `inks` / `slicers` / `protectedRanges`。
 工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
-工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount` 与 `slicerCount`。
+工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`legacyPictureCount`、`model3dCount`、`inkCount` 与 `slicerCount`。
 每张 `worksheet` 仍有 `protectedRangeCount`。
 工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount`、`cellStyleCount` 与 `definedNames`。
 没有 `connections` / `externalLinks` / `customViews` / `cellStyles` 名单。每张表仍有 `hasHeaderFooter`。
@@ -658,7 +684,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 `scope.sheet` 点名 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`。只要想看工作表图名单，就给 `pictures: true`。
 只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看公式框名单，就给 `maths: true`。只要想看形状名单，就给 `shapes: true`。
 只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。
-只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。只要想看窗体控件名单，就给 `formControls: true`。
+只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。只要想看窗体控件名单，就给 `formControls: true`。只要想看旧式页眉图名单，就同时给 `headerFooter: true` 与 `legacyPictures: true`。
 只要想看 3D 模型名单，就给 `model3ds: true`。只要想看工作表墨迹名单，就给 `inks: true`。
 只要想看切片器名单，就给 `slicers: true`。只要想看允许编辑区域名单，就给 `protectedRanges: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
 只要想看自定义视图名单，就给 `customViews: true`。只要想看命名单元格样式名单，就给 `cellStyles: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
@@ -683,6 +709,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "sparklineCount": 0,
   "oleObjectCount": 0,
   "formControlCount": 0,
+  "legacyPictureCount": 0,
   "model3dCount": 0,
   "inkCount": 0,
   "slicerCount": 0,
@@ -735,6 +762,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "sparklineCount": 0,
       "oleObjectCount": 0,
       "formControlCount": 0,
+      "legacyPictureCount": 0,
       "model3dCount": 0,
       "inkCount": 0,
       "slicerCount": 0,
@@ -853,6 +881,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "sparklineCount": 0,
       "oleObjectCount": 0,
       "formControlCount": 0,
+      "legacyPictureCount": 0,
       "model3dCount": 0,
       "inkCount": 0,
       "slicerCount": 0,
@@ -923,7 +952,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 规则：
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`legacyPictureCount`、`model3dCount`、`inkCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
   `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`theme`、`themeOverride`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`，
   有命名单元格样式名单时再跟 `cellStyles`。
@@ -934,6 +963,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。
   `sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。
   `formControlCount` 始终出现，等于各 `worksheet` 的 `formControlCount` 之和。
+  `legacyPictureCount` 始终出现，等于各 `worksheet` 的 `legacyPictureCount` 之和。不含 `chartsheet`。
   `model3dCount` 始终出现，等于各 `worksheet` 的 `model3dCount` 之和。
   `inkCount` 始终出现，等于各 `worksheet` 的 `inkCount` 之和。
   `slicerCount` 始终出现，等于各 `worksheet` 的 `slicerCount` 之和。
@@ -962,7 +992,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`background`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`formControlCount`、`legacyPictureCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
@@ -985,6 +1015,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `sparklineCount` 始终出现，是该表 `extLst` 里 `x14:sparklineGroup` 的组数。没有则为 `0`。
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
   `formControlCount` 始终出现，是该表被收入的窗体控件个数（判定见上文工作表窗体控件）。没有则为 `0`。
+  `legacyPictureCount` 始终出现，是该表被收入的旧式页眉图个数（判定见上文旧式页眉图）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
   `inkCount` 始终出现，是该表被收入的工作表墨迹个数（判定见上文工作表墨迹那节）。没有则为 `0`。
   `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。
@@ -992,7 +1023,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `sheetProtection` 始终出现，规则见下文「工作表保护」。
   `chartsheet` 没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
-  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `formControlCount`，也没有 `model3dCount`，也没有 `inkCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
+  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `formControlCount`，也没有 `legacyPictureCount`，也没有 `model3dCount`，也没有 `inkCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `hasHeaderFooter`、`print`、`view`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，
@@ -1002,7 +1033,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
    / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
-   / `oleObjectCount` / `formControlCount` / `model3dCount` / `inkCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
+   / `oleObjectCount` / `formControlCount` / `legacyPictureCount` / `model3dCount` / `inkCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。
   判定 `kind` 只看 workbook 关系 Type：以 `/chartsheet` 结尾为 `chartsheet`；以 `/dialogsheet` 结尾为 `dialogsheet`；
   以 `/macrosheet`、`/xlMacrosheet` 或 `/xlIntlMacrosheet` 结尾为 `macrosheet`（国际宏表不另开 `kind`）；其余为 `worksheet`。
@@ -1201,8 +1232,9 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   不把 `xr:uid`、`iLevel`、`hidden`、`customBuiltin` 或 `cellStyleXfs` 里的字体 / 填充摊进名单。
   要看套用后的效果仍走格子上的 `setCellStyle` 摘要。docx / pptx 的 `scope` 里出现 `cellStyles` 报 `InvalidField`。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。
-  每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 与 `chartsheet` 再跟 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`，
-  若同时对应 scope 为 true 再跟 `pictures` / `textBoxes` / `shapes` / `connectors`。
+  每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 与 `chartsheet` 再跟 `pictureCount`、`legacyPictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`，
+  若同时对应 scope 为 true 再跟 `pictures` / `legacyPictures` / `textBoxes` / `shapes` / `connectors`。
+  `legacyPictures` 只在 `worksheet` 上、且 `legacyPictures: true` 时出现。`chartsheet` 槽位的 `legacyPictureCount` 恒为 `0`。
   `kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。
   页眉图字段顺序与工作表图相同，末尾 `contentType` 规则与工作表图相同。
   `dialogsheet` / `macrosheet` 的槽位没有这些计数与名单。
@@ -2743,6 +2775,70 @@ SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` �
 `text` 为空串时去掉该槽位元素；六个槽位都空时仍保留空的 `headerFooter`（若已有 `differentOddEven` / `differentFirst` 等属性则留下）。
 写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。不自动清这两项属性。不改 VML。不解释 `&P` 等代码。
 docx / pptx 上发此 op 报 `InvalidField`。create 写页眉页脚见上文 `sheets[].headerFooters`。
+
+### replaceLegacyPicture
+
+换一张已经在旧式页眉图名单里的图。只换媒体字节。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.legacy.xlsx",
+  "ops": [
+    {
+      "op": "replaceLegacyPicture",
+      "id": "sheet:Sheet1/hf:odd:header/legacyPic:CH",
+      "file": "C:\\data\\pic.png"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replaceLegacyPicture"` |
+| `id` | 旧式页眉图 id |
+| `file` | 本地栅格图路径。必填 |
+
+- 找不到该图报 `IdNotFound`
+- id 不是旧式页眉图 id 报 `InvalidId`
+- 表上已有 `drawingHF` 时这份 VML 不在名单里，报 `IdNotFound`
+- SVG 报 `InvalidField`
+- `chartsheet` 报 `InvalidField`
+- 不改 `v:shape/@id`，不新建 `drawingHF`，不改页眉原文
+- docx / pptx 上发此 op 报 `InvalidField`
+
+### deleteLegacyPicture
+
+按旧式页眉图 id 删掉一张图。不改页眉原文。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.legacy-del.xlsx",
+  "ops": [
+    {
+      "op": "deleteLegacyPicture",
+      "id": "sheet:Sheet1/hf:odd:header/legacyPic:CH"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteLegacyPicture"` |
+| `id` | 旧式页眉图 id |
+
+- 找不到该图报 `IdNotFound`
+- id 不是旧式页眉图 id 报 `InvalidId`
+- 最后一张 `v:shape` 删掉后去掉 `legacyDrawingHF`
+- 页眉里的 `&G` 留下
+- docx / pptx 上发此 op 报 `InvalidField`
 
 ### setPrintSetup
 

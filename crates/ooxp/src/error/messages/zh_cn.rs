@@ -524,6 +524,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetControlContainer => {
                 "工作表 id 必须带 /control:…（该 id 本身不是窗体控件）".into()
             }
+            IdReason::SheetLegacyPicturePrefix => {
+                "xlsx 旧式页眉图 id 必须是 sheet:工作表名/hf:odd:header/legacyPic:CH 这种形式".into()
+            }
             IdReason::InsertFormControlNeedsSheet => {
                 "xlsx 的 insertFormControl 的 id 必须是 sheet:工作表名".into()
             }
@@ -1414,6 +1417,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setFormControl 除 op 与 id 外至少要给一个字段".into()
         }
         ErrorKind::FormControlWorksheetOnly => "只能在工作表上修改窗体控件".into(),
+        ErrorKind::LegacyPictureNotFound { id } => format!("找不到旧式页眉图：{id}"),
+        ErrorKind::LegacyPictureWorksheetOnly => "只能在工作表上修改旧式页眉图".into(),
+        ErrorKind::LegacyPictureRasterOnly => "旧式页眉图只换栅格图".into(),
         ErrorKind::InvalidBookmarkName => {
             "书签名不能为空、不能含空白、不能以下划线开头".into()
         }

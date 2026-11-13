@@ -201,6 +201,7 @@ fn inspect_default_props_on_three_formats() {
             "sparklineCount",
             "oleObjectCount",
             "formControlCount",
+            "legacyPictureCount",
             "model3dCount",
             "inkCount",
             "slicerCount",

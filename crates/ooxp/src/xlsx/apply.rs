@@ -20,6 +20,7 @@ use super::hf;
 use super::ink;
 use super::inspect;
 use super::layout;
+use super::legacy_hf;
 use super::model3d;
 use super::ole;
 use super::omml;
@@ -116,6 +117,36 @@ fn apply_pkg(
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 reject_hf_pic_sheet(kind, op.target.hf, i)?;
                 picture::replace_picture(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::ReplaceLegacyPicture(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::LegacyPictureWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                legacy_hf::replace(
+                    &mut pkg,
+                    &doc.root,
+                    &part,
+                    &op.id,
+                    &op.shape_id,
+                    &op.file,
+                    i,
+                )?;
+            }
+            XlsxOp::DeleteLegacyPicture(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::LegacyPictureWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                legacy_hf::delete(&mut pkg, &mut doc.root, &part, &op.id, &op.shape_id, i)?;
             }
             XlsxOp::InsertPicture(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;

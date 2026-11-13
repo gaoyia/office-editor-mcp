@@ -464,6 +464,7 @@ fn header_footer_slots_list_drawing_counts() {
             "side",
             "text",
             "pictureCount",
+            "legacyPictureCount",
             "textBoxCount",
             "shapeCount",
             "connectorCount"

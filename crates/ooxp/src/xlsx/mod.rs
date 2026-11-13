@@ -27,6 +27,7 @@ mod hyperlink;
 mod ink;
 mod inspect;
 mod layout;
+mod legacy_hf;
 mod list_pin;
 mod model3d;
 mod names;

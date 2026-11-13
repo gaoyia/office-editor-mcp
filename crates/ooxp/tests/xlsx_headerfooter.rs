@@ -150,6 +150,7 @@ fn summary_without_scope() {
             "sparklineCount",
             "oleObjectCount",
             "formControlCount",
+            "legacyPictureCount",
             "model3dCount",
             "inkCount",
             "slicerCount",
@@ -199,6 +200,7 @@ fn expand_six_slots_and_set_text() {
             "side",
             "text",
             "pictureCount",
+            "legacyPictureCount",
             "textBoxCount",
             "shapeCount",
             "connectorCount"

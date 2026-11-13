@@ -219,6 +219,36 @@ pub(super) fn parse_insert_pic(
     })
 }
 
+pub(super) fn parse_replace_legacy_pic(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ReplaceLegacyPictureOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, _slot, shape_id) = super::super::legacy_hf::parse_id(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "replaceLegacyPicture")?;
+    Ok(ReplaceLegacyPictureOp {
+        id,
+        sheet,
+        shape_id,
+        file,
+    })
+}
+
+pub(super) fn parse_delete_legacy_pic(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteLegacyPictureOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, _slot, shape_id) = super::super::legacy_hf::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteLegacyPictureOp {
+        id,
+        sheet,
+        shape_id,
+    })
+}
+
 pub(super) fn parse_delete_pic(
     obj: &serde_json::Map<String, Value>,
     i: usize,

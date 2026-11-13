@@ -109,6 +109,7 @@ fn inspect_empty_on_create() {
             "sparklineCount",
             "oleObjectCount",
             "formControlCount",
+            "legacyPictureCount",
             "model3dCount",
             "inkCount",
             "slicerCount",

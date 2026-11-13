@@ -656,6 +656,9 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
     if super::background::looks_like_id(id) {
         return super::background::export(bytes, id);
     }
+    if super::legacy_hf::looks_like_id(id) {
+        return super::legacy_hf::export(bytes, id);
+    }
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_pic_id_at(id, "id")?;
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;

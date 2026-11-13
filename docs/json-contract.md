@@ -321,7 +321,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名覆
 只属于某一种格式的 op 正文见 [xlsx](json-contract-xlsx.md#apply)、[docx](json-contract-docx.md#apply)、[pptx](json-contract-pptx.md#apply)。
 跨格式 op（图、图表、SmartArt、批注、超链接、文本框、表格插删行列、`setProps`、`setProtection`、`setShapeText` 等）仍写在本文。
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setCellStyle`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setCellStyle`、`setHeaderFooterText`、`replacePicture`、`replaceLegacyPicture`、`deleteLegacyPicture`、`insertPicture`、
 `deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、
 `deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、
 `setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、

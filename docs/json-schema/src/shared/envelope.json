@@ -203,6 +203,12 @@
             "xlsx"
           ]
         },
+        "legacyPictures": {
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
+        },
         "watermarks": {
           "type": "boolean",
           "formats": [

@@ -15229,6 +15229,12 @@
             "xlsx"
           ]
         },
+        "legacyPictures": {
+          "type": "boolean",
+          "formats": [
+            "xlsx"
+          ]
+        },
         "watermarks": {
           "type": "boolean",
           "formats": [
@@ -16175,6 +16181,53 @@
         },
         "dz": {
           "type": "integer"
+        }
+      }
+    },
+    "replaceLegacyPictureOp": {
+      "description": "换一张旧式页眉图的媒体字节。",
+      "descriptionEn": "Replace the media bytes of one legacy header or footer picture.",
+      "limits": "id 必须是旧式页眉图 id。找不到报 IdNotFound。表上已有 drawingHF 时这份 VML 不在名单里，同样报 IdNotFound。SVG 报 InvalidField。不改形状 id，不新建 drawingHF，不改页眉原文。",
+      "limitsEn": "id must be a legacy header picture id. A missing picture returns IdNotFound. When the sheet already has drawingHF, this VML picture is not listed and also returns IdNotFound. SVG returns InvalidField. The shape id stays, drawingHF is not created, and the header text stays.",
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "replaceLegacyPicture"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteLegacyPictureOp": {
+      "description": "删一张旧式页眉图。",
+      "descriptionEn": "Delete one legacy header or footer picture.",
+      "limits": "id 必须是旧式页眉图 id。找不到报 IdNotFound。不改页眉原文。最后一张删掉后去掉 legacyDrawingHF。",
+      "limitsEn": "id must be a legacy header picture id. A missing picture returns IdNotFound. Header text stays. After the last one is deleted, legacyDrawingHF is removed.",
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteLegacyPicture"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -25647,6 +25700,9 @@
           "$ref": "#/$defs/deleteLayoutOp"
         },
         {
+          "$ref": "#/$defs/deleteLegacyPictureOp"
+        },
+        {
           "$ref": "#/$defs/deleteMasterOp"
         },
         {
@@ -26026,6 +26082,9 @@
         },
         {
           "$ref": "#/$defs/replaceInkCanvasOp"
+        },
+        {
+          "$ref": "#/$defs/replaceLegacyPictureOp"
         },
         {
           "$ref": "#/$defs/docxReplaceModel3dOp"
@@ -26647,6 +26706,9 @@
           "$ref": "#/$defs/xlsxDeleteInkOp"
         },
         {
+          "$ref": "#/$defs/deleteLegacyPictureOp"
+        },
+        {
           "$ref": "#/$defs/xlsxDeleteMathOp"
         },
         {
@@ -26801,6 +26863,9 @@
         },
         {
           "$ref": "#/$defs/xlsxReplaceInkOp"
+        },
+        {
+          "$ref": "#/$defs/replaceLegacyPictureOp"
         },
         {
           "$ref": "#/$defs/xlsxReplaceModel3dOp"

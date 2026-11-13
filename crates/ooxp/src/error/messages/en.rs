@@ -569,6 +569,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetControlContainer => {
                 "Sheet id must include /control:… (that id alone is not a form control)".into()
             }
+            IdReason::SheetLegacyPicturePrefix => {
+                "xlsx legacy header picture id must be sheet:name/hf:odd:header/legacyPic:CH".into()
+            }
             IdReason::InsertFormControlNeedsSheet => {
                 "xlsx insertFormControl id must be sheet:name".into()
             }
@@ -1610,6 +1613,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::FormControlWorksheetOnly => {
             "form controls can only be changed on a worksheet".into()
+        }
+        ErrorKind::LegacyPictureNotFound { id } => {
+            format!("legacy header or footer picture not found: {id}")
+        }
+        ErrorKind::LegacyPictureWorksheetOnly => {
+            "legacy header pictures can only be changed on a worksheet".into()
+        }
+        ErrorKind::LegacyPictureRasterOnly => {
+            "legacy header pictures only accept a raster image".into()
         }
         ErrorKind::InvalidBookmarkName => {
             "bookmark name must not be empty, contain whitespace, or start with an underscore"

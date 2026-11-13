@@ -145,6 +145,7 @@ pub(crate) fn inspect_slots(
     want_text_boxes: bool,
     want_shapes: bool,
     want_connectors: bool,
+    want_legacy_pictures: bool,
 ) -> Result<Vec<Value>, Error> {
     let hf = root.child_by_local("headerFooter");
     let hf_el = root.child_by_local("drawingHF");
@@ -157,6 +158,11 @@ pub(crate) fn inspect_slots(
         HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
     let mut connectors: Vec<(HfSlot, Vec<Value>)> =
         HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
+    let legacy = if sheet_kind == "worksheet" {
+        super::legacy_hf::collect(pkg, sheet_part, sheet_name, root, sheet_kind)?
+    } else {
+        Vec::new()
+    };
     if drawing {
         for pic in collect_hf_pictures(pkg, sheet_part, sheet_name, hf_el)? {
             if let Some((_, bucket)) = grouped.iter_mut().find(|(s, _)| *s == pic.0) {
@@ -188,11 +194,20 @@ pub(crate) fn inspect_slots(
         if drawing {
             let pics = &grouped[i].1;
             m.insert("pictureCount".into(), json!(pics.len()));
+            let legacy_here: Vec<Value> = legacy
+                .iter()
+                .filter(|item| item.slot == *slot)
+                .map(|item| item.value.clone())
+                .collect();
+            m.insert("legacyPictureCount".into(), json!(legacy_here.len()));
             m.insert("textBoxCount".into(), json!(boxes[i].1.len()));
             m.insert("shapeCount".into(), json!(shapes[i].1.len()));
             m.insert("connectorCount".into(), json!(connectors[i].1.len()));
             if want_pictures {
                 m.insert("pictures".into(), Value::Array(pictures_json(pics)));
+            }
+            if want_legacy_pictures && sheet_kind == "worksheet" {
+                m.insert("legacyPictures".into(), Value::Array(legacy_here));
             }
             if want_text_boxes {
                 m.insert("textBoxes".into(), Value::Array(boxes[i].1.clone()));
