@@ -1,5 +1,5 @@
 //! 工作表透视表：inspect 名单，apply 写缓存与透视表部件。
-//! 只有行字段和求和时，求值把合计写进 `sheetData`。
+//! 一个或多个行字段、一个列字段、筛选，以及计数、平均值和合计占比，求值把合计写进 `sheetData`。
 
 use serde_json::{json, Map, Value};
 
@@ -11,7 +11,9 @@ use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
 
 use super::a1::{self, CellRef};
 use super::picture;
-use super::request::{DeletePivotTableOp, InsertPivotTableOp, SetPivotTableOp};
+use super::request::{
+    DeletePivotTableOp, InsertPivotTableOp, PivotAgg, PivotValue, SetPivotTableOp,
+};
 use super::{REL_NS, SML_NS};
 
 pub const REL_PIVOT_TABLE: &str =
@@ -55,7 +57,7 @@ struct Axes {
     rows: Vec<String>,
     cols: Vec<String>,
     filters: Vec<String>,
-    values: Vec<String>,
+    values: Vec<PivotValue>,
 }
 
 #[derive(Clone)]
@@ -165,6 +167,7 @@ fn inspect_one(root: &Element, sheet: &str, n: usize, caches: &[(u32, CacheInfo)
 struct CacheInfo {
     source: Option<(String, String)>,
     fields: Vec<String>,
+    items: Vec<Vec<String>>,
 }
 
 fn load_caches(pkg: &Package, wb_part: &str) -> Result<Vec<(u32, CacheInfo)>, Error> {
@@ -214,16 +217,40 @@ fn parse_cache_info(root: &Element) -> CacheInfo {
         };
         Some((sheet, refer))
     });
-    let fields = root
-        .child_by_local("cacheFields")
-        .map(|cf| {
-            cf.children_by_local("cacheField")
-                .into_iter()
-                .map(|f| f.attr("name").unwrap_or("").to_string())
-                .collect()
-        })
-        .unwrap_or_default();
-    CacheInfo { source, fields }
+    let mut fields = Vec::new();
+    let mut items = Vec::new();
+    if let Some(cf) = root.child_by_local("cacheFields") {
+        for field in cf.children_by_local("cacheField") {
+            fields.push(field.attr("name").unwrap_or("").to_string());
+            items.push(shared_labels(field));
+        }
+    }
+    CacheInfo {
+        source,
+        fields,
+        items,
+    }
+}
+
+fn shared_labels(field: &Element) -> Vec<String> {
+    let Some(items) = field.child_by_local("sharedItems") else {
+        return Vec::new();
+    };
+    items.element_children().map(shared_item_label).collect()
+}
+
+fn shared_item_label(el: &Element) -> String {
+    match el.local_name() {
+        "b" => {
+            if el.attr("v") == Some("1") {
+                "TRUE".into()
+            } else {
+                "FALSE".into()
+            }
+        }
+        "m" => String::new(),
+        _ => el.attr("v").unwrap_or("").to_string(),
+    }
 }
 
 fn axis_names(
@@ -289,7 +316,8 @@ pub(crate) fn apply_insert(
     check_axes(&axes, &headers, op_index)?;
     let counts = unique_counts_from_records(headers.len(), &records);
     let loc_end = location_end(op.location, &axes, &headers, &counts);
-    if src_part == sheet_part && ranges_overlap(src_start, src_end, op.location, loc_end) {
+    let covered = covered_origin(op.location, axes.filters.len());
+    if src_part == sheet_part && ranges_overlap(src_start, src_end, covered, loc_end) {
         return Err(bad_field("location", op_index));
     }
     let taken = collect_pivot_names(pkg, sheet_index)?;
@@ -385,7 +413,8 @@ pub(crate) fn apply_set(
             &headers,
             &unique_counts_from_records(headers.len(), &records),
         );
-        if src_part == sheet_part && ranges_overlap(src.range.0, src.range.1, origin, loc_end) {
+        let covered = covered_origin(origin, axes.filters.len());
+        if src_part == sheet_part && ranges_overlap(src.range.0, src.range.1, covered, loc_end) {
             return Err(bad_field("location", op_index));
         }
         let users = count_cache_users(pkg, sheet_index, cache_id);
@@ -513,8 +542,45 @@ fn current_axes(root: &Element, fields: &[String]) -> Axes {
         rows: axis_names(root, "rowFields", "field", "x", fields, false),
         cols: axis_names(root, "colFields", "field", "x", fields, false),
         filters: axis_names(root, "pageFields", "pageField", "fld", fields, false),
-        values: axis_names(root, "dataFields", "dataField", "fld", fields, true),
+        values: read_value_fields(root, fields),
     }
+}
+
+fn read_value_fields(root: &Element, fields: &[String]) -> Vec<PivotValue> {
+    let Some(parent) = root.child_by_local("dataFields") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for field in parent.children_by_local("dataField") {
+        let Some(idx) = field.attr("fld").and_then(|s| s.parse::<usize>().ok()) else {
+            continue;
+        };
+        let Some(name) = fields.get(idx) else {
+            continue;
+        };
+        let shown = field
+            .attr("name")
+            .filter(|s| !s.is_empty())
+            .unwrap_or(name)
+            .to_string();
+        let agg = match field.attr("subtotal").unwrap_or("sum") {
+            s if s.eq_ignore_ascii_case("count") => PivotAgg::Count,
+            s if s.eq_ignore_ascii_case("average") => PivotAgg::Average,
+            s if s.eq_ignore_ascii_case("max") => PivotAgg::Max,
+            s if s.eq_ignore_ascii_case("min") => PivotAgg::Min,
+            _ => PivotAgg::Sum,
+        };
+        let percent = field
+            .attr("showDataAs")
+            .is_some_and(|s| s.eq_ignore_ascii_case("percentOfTotal"));
+        out.push(PivotValue {
+            field: name.clone(),
+            name: shown,
+            agg,
+            percent,
+        });
+    }
+    out
 }
 
 fn require_source_sheet(
@@ -549,13 +615,18 @@ fn check_source_span(start: CellRef, end: CellRef, op_index: usize) -> Result<()
     Ok(())
 }
 
+fn value_names(values: &[PivotValue]) -> Vec<String> {
+    values.iter().map(|v| v.field.clone()).collect()
+}
+
 fn check_axes(axes: &Axes, headers: &[String], op_index: usize) -> Result<(), Error> {
     check_axis_unique(axes, op_index)?;
+    let values = value_names(&axes.values);
     for (field, names) in [
         ("rows", axes.rows.as_slice()),
         ("cols", axes.cols.as_slice()),
         ("filters", axes.filters.as_slice()),
-        ("values", axes.values.as_slice()),
+        ("values", values.as_slice()),
     ] {
         for n in names {
             if header_index(headers, n).is_none() {
@@ -573,11 +644,12 @@ fn check_axes(axes: &Axes, headers: &[String], op_index: usize) -> Result<(), Er
 
 fn check_axis_unique(axes: &Axes, op_index: usize) -> Result<(), Error> {
     let mut seen: Vec<String> = Vec::new();
+    let values = value_names(&axes.values);
     for (field, names) in [
         ("rows", axes.rows.as_slice()),
         ("cols", axes.cols.as_slice()),
         ("filters", axes.filters.as_slice()),
-        ("values", axes.values.as_slice()),
+        ("values", values.as_slice()),
     ] {
         for n in names {
             let k = n.to_ascii_lowercase();
@@ -599,30 +671,60 @@ fn header_index(headers: &[String], name: &str) -> Option<usize> {
     headers.iter().position(|h| h.eq_ignore_ascii_case(name))
 }
 
+fn covered_origin(origin: CellRef, filters: usize) -> CellRef {
+    if filters == 0 || origin.row <= 1 {
+        return origin;
+    }
+    CellRef {
+        col: origin.col,
+        row: origin.row.saturating_sub(filters as u32 + 1).max(1),
+    }
+}
+
 fn location_end(
     origin: CellRef,
     axes: &Axes,
     headers: &[String],
     unique_counts: &[usize],
 ) -> CellRef {
-    let page = if axes.filters.is_empty() {
+    let header = if axes.cols.is_empty() { 1 } else { 2 };
+    let leaves = if axes.rows.is_empty() {
+        1
+    } else {
+        axis_unique_product(&axes.rows, headers, unique_counts)
+    };
+    let subs = subtotal_bound(&axes.rows, headers, unique_counts);
+    let value_cols = if axes.cols.is_empty() {
+        axes.values.len().max(1) as u32
+    } else {
+        axis_unique_product(&axes.cols, headers, unique_counts) + 1
+    };
+    let row_cols = if axes.rows.is_empty() {
         0
     } else {
-        axes.filters.len() as u32 + 1
+        axes.rows.len() as u32
     };
-    let row_n = axis_unique_product(&axes.rows, headers, unique_counts);
-    let col_n = axis_unique_product(&axes.cols, headers, unique_counts)
-        .max(axes.values.len().max(1) as u32);
-    let width = if axes.rows.is_empty() {
-        col_n
-    } else {
-        1 + col_n
-    };
-    let height = page + 1 + row_n + 1;
+    let width = (row_cols + value_cols).max(1);
+    let height = header + leaves + subs + 1;
     CellRef {
         col: origin.col + width - 1,
         row: origin.row + height - 1,
     }
+}
+
+fn subtotal_bound(names: &[String], headers: &[String], unique_counts: &[usize]) -> u32 {
+    if names.len() < 2 {
+        return 0;
+    }
+    let mut n = 1usize;
+    for name in &names[..names.len() - 1] {
+        let u = header_index(headers, name)
+            .and_then(|i| unique_counts.get(i).copied())
+            .unwrap_or(1)
+            .max(1);
+        n = n.saturating_mul(u).min(256);
+    }
+    n as u32
 }
 
 fn axis_unique_product(names: &[String], headers: &[String], unique_counts: &[usize]) -> u32 {
@@ -1066,16 +1168,10 @@ fn push_location(
     unique_counts: &[usize],
 ) {
     let end = location_end(origin, axes, headers, unique_counts);
-    let page = if axes.filters.is_empty() {
-        0u32
-    } else {
-        axes.filters.len() as u32 + 1
-    };
-    let first_header = page + 1;
     let mut loc = Element::new("location")
         .with_attr("ref", a1::format_range(origin, end))
-        .with_attr("firstHeaderRow", first_header.to_string())
-        .with_attr("firstDataRow", (first_header + 1).to_string())
+        .with_attr("firstHeaderRow", "1")
+        .with_attr("firstDataRow", "2")
         .with_attr("firstDataCol", "1");
     if !axes.filters.is_empty() {
         loc.set_attr("rowPageCount", axes.filters.len().to_string());
@@ -1112,7 +1208,11 @@ fn push_layout(root: &mut Element, axes: &Axes, headers: &[String], unique_count
                 name,
                 unique_counts,
             )));
-        } else if axes.values.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+        } else if axes
+            .values
+            .iter()
+            .any(|v| v.field.eq_ignore_ascii_case(name))
+        {
             pf.set_attr("dataField", "1");
         }
         fields.push_element(pf);
@@ -1173,15 +1273,27 @@ fn push_layout(root: &mut Element, axes: &Axes, headers: &[String], unique_count
     }
     if !axes.values.is_empty() {
         let mut df = Element::new("dataFields").with_attr("count", axes.values.len().to_string());
-        for n in &axes.values {
-            if let Some(i) = header_index(headers, n) {
-                df.push_element(
-                    Element::new("dataField")
-                        .with_attr("name", n.clone())
-                        .with_attr("fld", i.to_string())
-                        .with_attr("baseField", "0")
-                        .with_attr("baseItem", "0"),
-                );
+        for v in &axes.values {
+            if let Some(i) = header_index(headers, &v.field) {
+                let mut field = Element::new("dataField")
+                    .with_attr("name", v.name.clone())
+                    .with_attr("fld", i.to_string())
+                    .with_attr("baseField", "0")
+                    .with_attr("baseItem", "0");
+                let sub = match v.agg {
+                    PivotAgg::Sum => None,
+                    PivotAgg::Count => Some("count"),
+                    PivotAgg::Average => Some("average"),
+                    PivotAgg::Max => Some("max"),
+                    PivotAgg::Min => Some("min"),
+                };
+                if let Some(sub) = sub {
+                    field.set_attr("subtotal", sub);
+                }
+                if v.percent {
+                    field.set_attr("showDataAs", "percentOfTotal");
+                }
+                df.push_element(field);
             }
         }
         root.push_element(df);
@@ -1619,15 +1731,7 @@ fn cell_val(root: &Element, cell: CellRef, sst: &[String]) -> CacheVal {
     CacheVal::Empty
 }
 
-struct RowSumPlan {
-    host: usize,
-    origin: CellRef,
-    row_name: String,
-    value_names: Vec<String>,
-    groups: Vec<(String, Vec<f64>)>,
-}
-
-/// 透视区域。行字段求和时带上各组，其它版式只有范围。
+/// 透视区域。一个行字段且没有列字段时带上各组。
 pub(crate) struct PivotCover {
     pub host: usize,
     pub start: CellRef,
@@ -1635,12 +1739,13 @@ pub(crate) struct PivotCover {
     pub row_sum: Option<RowSumView>,
 }
 
-/// 一个行字段、求和、没有列字段和筛选时的分组。
+/// 一个行字段、没有列字段时的分组。数字是已经写在格子上的结果。
 #[derive(Clone)]
 pub(crate) struct RowSumView {
     pub row_name: String,
     pub value_names: Vec<String>,
     pub groups: Vec<(String, Vec<f64>)>,
+    pub grand: Vec<f64>,
 }
 
 /// 每张透视的位置。求值用它判断 `GETPIVOTDATA`，不改工作表。
@@ -1678,14 +1783,8 @@ pub(crate) fn pivot_covers(
             let Ok((start, end)) = a1::parse_range(loc) else {
                 continue;
             };
-            let row_sum =
-                plan_row_sum(&table.root, host_i, &caches, sheet_docs, names, sst).map(|plan| {
-                    RowSumView {
-                        row_name: plan.row_name,
-                        value_names: plan.value_names,
-                        groups: plan.groups,
-                    }
-                });
+            let row_sum = plan_display(&table.root, host_i, &caches, sheet_docs, names, sst)
+                .and_then(|plan| plan.view);
             out.push(PivotCover {
                 host: host_i,
                 start,
@@ -1697,7 +1796,7 @@ pub(crate) fn pivot_covers(
     Ok(out)
 }
 
-/// 只有一个行字段、若干求和、没有列字段和筛选时，把表头、各组和总计写进工作表。
+/// 把能确定的透视合计写进工作表。多个列字段，或列字段再加多个行字段、多个值，跳过。
 pub(crate) fn fill_row_sum_display(
     pkg: &Package,
     sheet_docs: &mut [(String, Document)],
@@ -1722,7 +1821,7 @@ pub(crate) fn fill_row_sum_display(
             let Ok(table) = xml::parse(bytes) else {
                 continue;
             };
-            if let Some(plan) = plan_row_sum(&table.root, host_i, &caches, sheet_docs, names, sst) {
+            if let Some(plan) = plan_display(&table.root, host_i, &caches, sheet_docs, names, sst) {
                 plans.push(plan);
             }
         }
@@ -1731,140 +1830,550 @@ pub(crate) fn fill_row_sum_display(
     for plan in plans {
         let host_i = plan.host;
         let host = &mut sheet_docs[host_i].1.root;
-        if paint_row_sum(host, &plan) {
+        if paint_display(host, &plan) {
             hosts.push(host_i);
         }
     }
     Ok(hosts)
 }
 
-fn plan_row_sum(
+#[derive(Clone, Copy)]
+enum AggKind {
+    Sum,
+    Count,
+    Average,
+    Max,
+    Min,
+}
+
+struct ValSpec {
+    name: String,
+    idx: usize,
+    kind: AggKind,
+    percent: bool,
+}
+
+#[derive(Clone, Copy)]
+struct Measure {
+    sum: f64,
+    n_num: u32,
+    n_all: u32,
+    max: f64,
+    min: f64,
+    has_bound: bool,
+    seen: bool,
+}
+
+impl Measure {
+    fn new() -> Self {
+        Self {
+            sum: 0.0,
+            n_num: 0,
+            n_all: 0,
+            max: 0.0,
+            min: 0.0,
+            has_bound: false,
+            seen: false,
+        }
+    }
+
+    fn add(&mut self, v: &CacheVal) {
+        self.seen = true;
+        match v {
+            CacheVal::Empty => {}
+            CacheVal::Number(s) => {
+                let n = s.parse::<f64>().unwrap_or(0.0);
+                if !self.has_bound {
+                    self.max = n;
+                    self.min = n;
+                    self.has_bound = true;
+                } else {
+                    self.max = self.max.max(n);
+                    self.min = self.min.min(n);
+                }
+                self.sum += n;
+                self.n_num += 1;
+                self.n_all += 1;
+            }
+            CacheVal::Text(_) | CacheVal::Bool(_) => self.n_all += 1,
+        }
+    }
+
+    fn merge(&mut self, other: &Measure) {
+        if !other.seen {
+            return;
+        }
+        if !self.seen {
+            *self = *other;
+            return;
+        }
+        self.sum += other.sum;
+        self.n_num += other.n_num;
+        self.n_all += other.n_all;
+        if !other.has_bound {
+            return;
+        }
+        if !self.has_bound {
+            self.max = other.max;
+            self.min = other.min;
+            self.has_bound = true;
+            return;
+        }
+        self.max = self.max.max(other.max);
+        self.min = self.min.min(other.min);
+    }
+
+    fn finish(&self, kind: AggKind) -> Option<f64> {
+        if !self.seen {
+            return None;
+        }
+        Some(match kind {
+            AggKind::Sum => self.sum,
+            AggKind::Count => f64::from(self.n_all),
+            AggKind::Average => {
+                if self.n_num == 0 {
+                    0.0
+                } else {
+                    self.sum / f64::from(self.n_num)
+                }
+            }
+            AggKind::Max => {
+                if self.has_bound {
+                    self.max
+                } else {
+                    0.0
+                }
+            }
+            AggKind::Min => {
+                if self.has_bound {
+                    self.min
+                } else {
+                    0.0
+                }
+            }
+        })
+    }
+}
+
+struct RowGroup {
+    key: Vec<String>,
+    measures: Vec<Measure>,
+}
+
+struct RowBody {
+    field_names: Vec<String>,
+    groups: Vec<RowGroup>,
+    specs: Vec<ValSpec>,
+}
+
+struct CrossSlot {
+    row: String,
+    col: String,
+    measure: Measure,
+}
+
+struct CrossBody {
+    value_name: String,
+    row_name: String,
+    col_name: String,
+    row_labels: Vec<String>,
+    col_labels: Vec<String>,
+    cells: Vec<CrossSlot>,
+    spec: ValSpec,
+}
+
+enum DisplayBody {
+    Rows(RowBody),
+    Cross(CrossBody),
+}
+
+struct DisplayPlan {
+    host: usize,
+    origin: CellRef,
+    pages: Vec<(String, String)>,
+    body: DisplayBody,
+    view: Option<RowSumView>,
+}
+
+struct PagePick {
+    idx: usize,
+    item: Option<usize>,
+    name: String,
+}
+
+fn plan_display(
     root: &Element,
     host: usize,
     caches: &[(u32, CacheInfo)],
     sheet_docs: &[(String, Document)],
     names: &[String],
     sst: &[String],
-) -> Option<RowSumPlan> {
-    if root
-        .child_by_local("pageFields")
-        .is_some_and(|p| !p.children_by_local("pageField").is_empty())
-    {
+) -> Option<DisplayPlan> {
+    let row_idxs = axis_indexes(root.child_by_local("rowFields"))?;
+    let col_idxs = axis_indexes(root.child_by_local("colFields"))?;
+    if row_idxs.is_empty() || col_idxs.len() > 1 {
         return None;
     }
-    if root.child_by_local("colFields").is_some_and(|p| {
-        p.children_by_local("field")
-            .iter()
-            .any(|f| f.attr("x") != Some("-2"))
-    }) {
+    let specs = value_specs(root)?;
+    if col_idxs.len() == 1 && (row_idxs.len() != 1 || specs.len() != 1) {
         return None;
     }
-    let row_fields = root
-        .child_by_local("rowFields")
-        .map(|p| p.children_by_local("field"))
-        .unwrap_or_default();
-    if row_fields.len() != 1 {
-        return None;
-    }
-    let row_idx = row_fields[0]
-        .attr("x")
-        .and_then(|s| s.parse::<usize>().ok())?;
-    let data_fields = root
-        .child_by_local("dataFields")
-        .map(|p| p.children_by_local("dataField"))
-        .unwrap_or_default();
-    if data_fields.is_empty() {
-        return None;
-    }
-    let mut value_idxs = Vec::new();
-    let mut value_names = Vec::new();
-    for field in &data_fields {
-        if let Some(sub) = field.attr("subtotal") {
-            if !sub.eq_ignore_ascii_case("sum") {
-                return None;
-            }
-        }
-        let idx = field.attr("fld").and_then(|s| s.parse::<usize>().ok())?;
-        value_idxs.push(idx);
-        value_names.push(field.attr("name").unwrap_or("").to_string());
-    }
-    let cache_id = root.attr("cacheId").and_then(|s| s.parse::<u32>().ok())?;
+    let cache_id = root.attr("cacheId")?.parse::<u32>().ok()?;
     let cache = caches
         .iter()
         .find(|(id, _)| *id == cache_id)
         .map(|(_, c)| c)?;
+    if row_idxs.iter().any(|i| *i >= cache.fields.len())
+        || col_idxs.iter().any(|i| *i >= cache.fields.len())
+        || specs.iter().any(|s| s.idx >= cache.fields.len())
+    {
+        return None;
+    }
+    let pages = page_picks(root, cache)?;
     let (src_sheet, src_ref) = cache.source.as_ref()?;
     let src_i = names
         .iter()
         .position(|n| n.eq_ignore_ascii_case(src_sheet))?;
     let (start, end) = a1::parse_range(src_ref).ok()?;
-    if row_idx >= cache.fields.len() || value_idxs.iter().any(|i| *i >= cache.fields.len()) {
-        return None;
-    }
     let (_headers, records) = read_source(&sheet_docs[src_i].1.root, start, end, sst);
-    let mut groups: Vec<(String, Vec<f64>)> = Vec::new();
-    for rec in &records {
-        if row_idx >= rec.len() || value_idxs.iter().any(|i| *i >= rec.len()) {
-            continue;
-        }
-        let label = cache_label(&rec[row_idx]);
-        let nums: Vec<f64> = value_idxs.iter().map(|i| cache_num(&rec[*i])).collect();
-        if let Some(found) = groups.iter_mut().find(|g| g.0 == label) {
-            for (slot, n) in found.1.iter_mut().zip(nums) {
-                *slot += n;
-            }
+    let kept = filter_records(records, cache, &pages);
+    let (origin, _) = a1::parse_range(root.child_by_local("location")?.attr("ref")?).ok()?;
+    let field_names: Vec<String> = row_idxs.iter().map(|i| cache.fields[*i].clone()).collect();
+    let page_labels = page_labels(&pages, cache);
+    if col_idxs.is_empty() {
+        let groups = row_groups(&kept, &row_idxs, &specs);
+        let view = if row_idxs.len() == 1 {
+            Some(row_view(&field_names, &groups, &specs))
         } else {
-            groups.push((label, nums));
-        }
+            None
+        };
+        return Some(DisplayPlan {
+            host,
+            origin,
+            pages: page_labels,
+            body: DisplayBody::Rows(RowBody {
+                field_names,
+                groups,
+                specs,
+            }),
+            view,
+        });
     }
-    let loc = root
-        .child_by_local("location")
-        .and_then(|l| l.attr("ref"))?;
-    let (origin, _) = a1::parse_range(loc).ok()?;
-    let row_name = cache.fields[row_idx].clone();
-    Some(RowSumPlan {
+    let spec = specs.into_iter().next()?;
+    Some(DisplayPlan {
         host,
         origin,
-        row_name,
-        value_names,
-        groups,
+        pages: page_labels,
+        body: DisplayBody::Cross(cross_body(
+            &kept,
+            row_idxs[0],
+            col_idxs[0],
+            &cache.fields,
+            spec,
+        )),
+        view: None,
     })
 }
 
-fn paint_row_sum(host: &mut Element, plan: &RowSumPlan) -> bool {
-    let origin = plan.origin;
-    let mut changed = put_text(host, origin, &plan.row_name);
-    for (i, name) in plan.value_names.iter().enumerate() {
-        let cell = CellRef {
-            col: origin.col + 1 + i as u32,
-            row: origin.row,
-        };
-        changed |= put_text(host, cell, name);
+fn axis_indexes(parent: Option<&Element>) -> Option<Vec<usize>> {
+    let Some(parent) = parent else {
+        return Some(Vec::new());
+    };
+    let mut out = Vec::new();
+    for field in parent.children_by_local("field") {
+        let raw = field.attr("x")?;
+        if raw == "-2" {
+            continue;
+        }
+        out.push(raw.parse().ok()?);
     }
-    let mut totals = vec![0.0; plan.value_names.len()];
-    for (offset, (label, nums)) in plan.groups.iter().enumerate() {
-        let row = origin.row + 1 + offset as u32;
+    Some(out)
+}
+
+fn value_specs(root: &Element) -> Option<Vec<ValSpec>> {
+    let parent = root.child_by_local("dataFields")?;
+    let fields = parent.children_by_local("dataField");
+    if fields.is_empty() {
+        return None;
+    }
+    let mut out = Vec::new();
+    for field in fields {
+        out.push(value_spec(field)?);
+    }
+    Some(out)
+}
+
+fn value_spec(field: &Element) -> Option<ValSpec> {
+    let idx = field.attr("fld")?.parse().ok()?;
+    let name = field.attr("name").unwrap_or("").to_string();
+    let kind = match field.attr("subtotal") {
+        None => AggKind::Sum,
+        Some(s) if s.eq_ignore_ascii_case("sum") => AggKind::Sum,
+        Some(s) if s.eq_ignore_ascii_case("count") => AggKind::Count,
+        Some(s) if s.eq_ignore_ascii_case("average") => AggKind::Average,
+        Some(s) if s.eq_ignore_ascii_case("max") => AggKind::Max,
+        Some(s) if s.eq_ignore_ascii_case("min") => AggKind::Min,
+        Some(_) => return None,
+    };
+    let percent = match field.attr("showDataAs") {
+        None => false,
+        Some(s) if s.eq_ignore_ascii_case("normal") => false,
+        Some(s) if s.eq_ignore_ascii_case("percentOfTotal") => true,
+        Some(_) => return None,
+    };
+    Some(ValSpec {
+        name,
+        idx,
+        kind,
+        percent,
+    })
+}
+
+fn page_picks(root: &Element, cache: &CacheInfo) -> Option<Vec<PagePick>> {
+    let Some(parent) = root.child_by_local("pageFields") else {
+        return Some(Vec::new());
+    };
+    let mut out = Vec::new();
+    for field in parent.children_by_local("pageField") {
+        let idx = field.attr("fld")?.parse::<usize>().ok()?;
+        let name = cache.fields.get(idx)?.clone();
+        let item = match field.attr("item") {
+            None => None,
+            Some(s) => Some(s.parse().ok()?),
+        };
+        out.push(PagePick { idx, item, name });
+    }
+    Some(out)
+}
+
+fn filter_records(
+    mut records: Vec<Vec<CacheVal>>,
+    cache: &CacheInfo,
+    pages: &[PagePick],
+) -> Vec<Vec<CacheVal>> {
+    for page in pages {
+        let Some(item) = page.item else {
+            continue;
+        };
+        let Some(want) = cache.items.get(page.idx).and_then(|list| list.get(item)) else {
+            continue;
+        };
+        records.retain(|rec| rec.get(page.idx).is_some_and(|v| cache_label(v) == *want));
+    }
+    records
+}
+
+fn page_labels(pages: &[PagePick], cache: &CacheInfo) -> Vec<(String, String)> {
+    pages
+        .iter()
+        .map(|page| {
+            let text = page
+                .item
+                .and_then(|item| {
+                    cache
+                        .items
+                        .get(page.idx)
+                        .and_then(|list| list.get(item))
+                        .cloned()
+                })
+                .unwrap_or_else(|| "(全部)".to_string());
+            (page.name.clone(), text)
+        })
+        .collect()
+}
+
+fn row_groups(records: &[Vec<CacheVal>], row_idxs: &[usize], specs: &[ValSpec]) -> Vec<RowGroup> {
+    let mut groups = Vec::new();
+    for rec in records {
+        if row_idxs.iter().any(|i| *i >= rec.len()) || specs.iter().any(|s| s.idx >= rec.len()) {
+            continue;
+        }
+        let key: Vec<String> = row_idxs.iter().map(|i| cache_label(&rec[*i])).collect();
+        let pos = if let Some(pos) = groups.iter().position(|g: &RowGroup| g.key == key) {
+            pos
+        } else {
+            groups.push(RowGroup {
+                key,
+                measures: vec![Measure::new(); specs.len()],
+            });
+            groups.len() - 1
+        };
+        for (measure, spec) in groups[pos].measures.iter_mut().zip(specs) {
+            measure.add(&rec[spec.idx]);
+        }
+    }
+    groups
+}
+
+fn cross_body(
+    records: &[Vec<CacheVal>],
+    row_idx: usize,
+    col_idx: usize,
+    fields: &[String],
+    spec: ValSpec,
+) -> CrossBody {
+    let mut row_labels = Vec::new();
+    let mut col_labels = Vec::new();
+    let mut cells: Vec<CrossSlot> = Vec::new();
+    for rec in records {
+        if row_idx >= rec.len() || col_idx >= rec.len() || spec.idx >= rec.len() {
+            continue;
+        }
+        let row = cache_label(&rec[row_idx]);
+        let col = cache_label(&rec[col_idx]);
+        if !row_labels.iter().any(|s| s == &row) {
+            row_labels.push(row.clone());
+        }
+        if !col_labels.iter().any(|s| s == &col) {
+            col_labels.push(col.clone());
+        }
+        if let Some(slot) = cells.iter_mut().find(|c| c.row == row && c.col == col) {
+            slot.measure.add(&rec[spec.idx]);
+        } else {
+            let mut measure = Measure::new();
+            measure.add(&rec[spec.idx]);
+            cells.push(CrossSlot { row, col, measure });
+        }
+    }
+    CrossBody {
+        value_name: spec.name.clone(),
+        row_name: fields.get(row_idx).cloned().unwrap_or_default(),
+        col_name: fields.get(col_idx).cloned().unwrap_or_default(),
+        row_labels,
+        col_labels,
+        cells,
+        spec,
+    }
+}
+
+fn row_view(field_names: &[String], groups: &[RowGroup], specs: &[ValSpec]) -> RowSumView {
+    let grands = merged_measures(groups, 0, groups.len(), specs.len());
+    let grand = specs
+        .iter()
+        .enumerate()
+        .map(|(i, spec)| shown(&grands[i], &grands[i], spec))
+        .collect();
+    let rows = groups
+        .iter()
+        .map(|group| {
+            let nums = specs
+                .iter()
+                .enumerate()
+                .map(|(i, spec)| shown(&group.measures[i], &grands[i], spec))
+                .collect();
+            (group.key[0].clone(), nums)
+        })
+        .collect();
+    RowSumView {
+        row_name: field_names.first().cloned().unwrap_or_default(),
+        value_names: specs.iter().map(|s| s.name.clone()).collect(),
+        groups: rows,
+        grand,
+    }
+}
+
+fn merged_measures(groups: &[RowGroup], start: usize, end: usize, n: usize) -> Vec<Measure> {
+    let mut acc = vec![Measure::new(); n];
+    for group in &groups[start..end] {
+        for (slot, measure) in acc.iter_mut().zip(&group.measures) {
+            slot.merge(measure);
+        }
+    }
+    acc
+}
+
+fn shown(measure: &Measure, grand: &Measure, spec: &ValSpec) -> f64 {
+    let Some(raw) = measure.finish(spec.kind) else {
+        return 0.0;
+    };
+    if !spec.percent {
+        return raw;
+    }
+    match grand.finish(spec.kind) {
+        Some(base) if base.abs() > 1e-12 => raw / base,
+        _ => 0.0,
+    }
+}
+
+fn paint_display(host: &mut Element, plan: &DisplayPlan) -> bool {
+    let mut changed = paint_pages(host, plan.origin, &plan.pages);
+    changed |= match &plan.body {
+        DisplayBody::Rows(body) => paint_row_body(host, plan.origin, body),
+        DisplayBody::Cross(body) => paint_cross(host, plan.origin, body),
+    };
+    changed
+}
+
+fn paint_pages(host: &mut Element, origin: CellRef, pages: &[(String, String)]) -> bool {
+    let n = pages.len() as u32;
+    let Some(top) = origin.row.checked_sub(n + 1) else {
+        return false;
+    };
+    if n == 0 || top < 1 {
+        return false;
+    }
+    let mut changed = false;
+    for (i, (name, label)) in pages.iter().enumerate() {
+        let row = top + i as u32;
         changed |= put_text(
             host,
             CellRef {
                 col: origin.col,
                 row,
             },
+            name,
+        );
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + 1,
+                row,
+            },
             label,
         );
-        for (i, n) in nums.iter().enumerate() {
-            totals[i] += n;
-            changed |= put_number(
-                host,
-                CellRef {
-                    col: origin.col + 1 + i as u32,
-                    row,
-                },
-                *n,
-            );
-        }
     }
-    let total_row = origin.row + 1 + plan.groups.len() as u32;
+    changed
+}
+
+fn paint_row_body(host: &mut Element, origin: CellRef, body: &RowBody) -> bool {
+    let n = body.field_names.len() as u32;
+    let mut changed = false;
+    for (c, name) in body.field_names.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + c as u32,
+                row: origin.row,
+            },
+            name,
+        );
+    }
+    for (c, spec) in body.specs.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + n + c as u32,
+                row: origin.row,
+            },
+            &spec.name,
+        );
+    }
+    let grands = merged_measures(&body.groups, 0, body.groups.len(), body.specs.len());
+    let (total_row, body_changed) = {
+        let mut cursor = LevelPaint {
+            host,
+            origin,
+            body,
+            grands: &grands,
+            changed: false,
+            row: origin.row + 1,
+        };
+        if !body.field_names.is_empty() {
+            cursor.paint(0, 0, body.groups.len());
+        }
+        (cursor.row, cursor.changed)
+    };
+    changed |= body_changed;
     changed |= put_text(
         host,
         CellRef {
@@ -1873,17 +2382,223 @@ fn paint_row_sum(host: &mut Element, plan: &RowSumPlan) -> bool {
         },
         "总计",
     );
-    for (i, n) in totals.iter().enumerate() {
+    for (i, spec) in body.specs.iter().enumerate() {
         changed |= put_number(
             host,
             CellRef {
-                col: origin.col + 1 + i as u32,
+                col: origin.col + n + i as u32,
                 row: total_row,
             },
-            *n,
+            shown(&grands[i], &grands[i], spec),
         );
     }
     changed
+}
+
+struct LevelPaint<'a> {
+    host: &'a mut Element,
+    origin: CellRef,
+    body: &'a RowBody,
+    grands: &'a [Measure],
+    changed: bool,
+    row: u32,
+}
+
+impl LevelPaint<'_> {
+    fn paint(&mut self, level: usize, start: usize, end: usize) {
+        let n = self.body.field_names.len();
+        if n == 0 {
+            return;
+        }
+        if level + 1 == n {
+            for i in start..end {
+                self.leaf(i);
+            }
+            return;
+        }
+        let mut s = start;
+        while s < end {
+            let label = self.body.groups[s].key[level].clone();
+            let mut e = s + 1;
+            while e < end && self.body.groups[e].key[level] == label {
+                e += 1;
+            }
+            self.paint(level + 1, s, e);
+            self.subtotal(level, &label, s, e);
+            s = e;
+        }
+    }
+
+    fn leaf(&mut self, i: usize) {
+        let n = self.body.field_names.len();
+        for c in 0..n {
+            let show = c + 1 == n
+                || i == 0
+                || self.body.groups[i].key[..=c] != self.body.groups[i - 1].key[..=c];
+            if !show {
+                continue;
+            }
+            let text = self.body.groups[i].key[c].clone();
+            self.changed |= put_text(
+                self.host,
+                CellRef {
+                    col: self.origin.col + c as u32,
+                    row: self.row,
+                },
+                &text,
+            );
+        }
+        let measures = self.body.groups[i].measures.clone();
+        self.write_values(&measures);
+        self.row += 1;
+    }
+
+    fn subtotal(&mut self, level: usize, label: &str, start: usize, end: usize) {
+        self.changed |= put_text(
+            self.host,
+            CellRef {
+                col: self.origin.col + level as u32,
+                row: self.row,
+            },
+            &format!("{label} 汇总"),
+        );
+        let merged = merged_measures(&self.body.groups, start, end, self.body.specs.len());
+        self.write_values(&merged);
+        self.row += 1;
+    }
+
+    fn write_values(&mut self, measures: &[Measure]) {
+        let n = self.body.field_names.len() as u32;
+        for (i, spec) in self.body.specs.iter().enumerate() {
+            self.changed |= put_number(
+                self.host,
+                CellRef {
+                    col: self.origin.col + n + i as u32,
+                    row: self.row,
+                },
+                shown(&measures[i], &self.grands[i], spec),
+            );
+        }
+    }
+}
+
+fn paint_cross(host: &mut Element, origin: CellRef, body: &CrossBody) -> bool {
+    let mut changed = put_text(host, origin, &body.value_name);
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col + 1,
+            row: origin.row,
+        },
+        &body.col_name,
+    );
+    let head = origin.row + 1;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: head,
+        },
+        &body.row_name,
+    );
+    for (i, label) in body.col_labels.iter().enumerate() {
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col + 1 + i as u32,
+                row: head,
+            },
+            label,
+        );
+    }
+    let grand_col = origin.col + 1 + body.col_labels.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: grand_col,
+            row: head,
+        },
+        "总计",
+    );
+    let grand = grand_measure(&body.cells);
+    for (r, row_label) in body.row_labels.iter().enumerate() {
+        let row = origin.row + 2 + r as u32;
+        changed |= put_text(
+            host,
+            CellRef {
+                col: origin.col,
+                row,
+            },
+            row_label,
+        );
+        let mut row_acc = Measure::new();
+        for (c, col_label) in body.col_labels.iter().enumerate() {
+            let Some(slot) = body
+                .cells
+                .iter()
+                .find(|s| s.row == *row_label && s.col == *col_label)
+            else {
+                continue;
+            };
+            row_acc.merge(&slot.measure);
+            changed |= put_number(
+                host,
+                CellRef {
+                    col: origin.col + 1 + c as u32,
+                    row,
+                },
+                shown(&slot.measure, &grand, &body.spec),
+            );
+        }
+        changed |= put_number(
+            host,
+            CellRef {
+                col: grand_col,
+                row,
+            },
+            shown(&row_acc, &grand, &body.spec),
+        );
+    }
+    let total_row = origin.row + 2 + body.row_labels.len() as u32;
+    changed |= put_text(
+        host,
+        CellRef {
+            col: origin.col,
+            row: total_row,
+        },
+        "总计",
+    );
+    for (c, col_label) in body.col_labels.iter().enumerate() {
+        let mut acc = Measure::new();
+        for slot in body.cells.iter().filter(|s| s.col == *col_label) {
+            acc.merge(&slot.measure);
+        }
+        changed |= put_number(
+            host,
+            CellRef {
+                col: origin.col + 1 + c as u32,
+                row: total_row,
+            },
+            shown(&acc, &grand, &body.spec),
+        );
+    }
+    changed |= put_number(
+        host,
+        CellRef {
+            col: grand_col,
+            row: total_row,
+        },
+        shown(&grand, &grand, &body.spec),
+    );
+    changed
+}
+
+fn grand_measure(cells: &[CrossSlot]) -> Measure {
+    let mut acc = Measure::new();
+    for slot in cells {
+        acc.merge(&slot.measure);
+    }
+    acc
 }
 
 fn cache_label(v: &CacheVal) -> String {
@@ -1892,13 +2607,6 @@ fn cache_label(v: &CacheVal) -> String {
         CacheVal::Bool(true) => "TRUE".into(),
         CacheVal::Bool(false) => "FALSE".into(),
         CacheVal::Empty => String::new(),
-    }
-}
-
-fn cache_num(v: &CacheVal) -> f64 {
-    match v {
-        CacheVal::Number(s) => s.parse().unwrap_or(0.0),
-        _ => 0.0,
     }
 }
 

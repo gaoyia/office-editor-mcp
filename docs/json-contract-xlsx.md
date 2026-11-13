@@ -455,7 +455,7 @@ pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映
 `insertPivotTable` 的 `id` 必须是工作表 id `sheet:{name}`。`setPivotTable` / `deletePivotTable` 的 `id` 必须是透视表 id。
 对单元格 id、图 id、数据验证 id、条件格式 id、表格 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。
 只读写工作表源（`cacheSource/@type="worksheet"`）。OLAP、外部连接与 consolidation 的缓存不进树、不接受 apply，原样留下。
-库按源格子抄缓存记录，并标 `refreshOnLoad`。只有行字段和求和时，求值另把合计写进 `sheetData`。其它形状不聚合。透视图表改数仍按已有 `flags.pivot` 拒绝。
+库按源格子抄缓存记录，并标 `refreshOnLoad`。一个或多个行字段、一个列字段、筛选，以及计数、平均值和合计占比，求值会把合计写进 `sheetData`。多个列字段，或列字段再加多个行字段或多个值，仍不聚合。透视图表改数仍按已有 `flags.pivot` 拒绝。
 
 定义名是 workbook `<definedNames>/<definedName>`（ECMA-376 §18.2.5）。`{n}` 从 1 起，按该元素的文档顺序。
 增删之后旧的 `name:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 编树 id：同一工作簿里表级同名可以并存。
@@ -1612,7 +1612,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组 / 数据表公式，再列宽行高隐藏与合并，
 再背景图、打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
 再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
-不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式命中和数据验证是否通过只出现在 inspect，不写进文件。公式文本仍不改。只含行字段与求和的透视表会把合计写进 `sheetData`。不刷新外部连接。
+不要另写一套 XML。能求值的公式、数据表和本机外部引用写入缓存 `<v>`，算不了的不写。条件格式命中和数据验证是否通过只出现在 inspect，不写进文件。公式文本仍不改。一个或多个行字段、一个列字段、筛选，以及计数、平均值和合计占比，会把合计写进 `sheetData`。多个列字段仍留给 Excel。不刷新外部连接。
 `cells[]` 出现 `dataTable` 报 `InvalidField`。`dataTableRef` 与 `formula` 一起用，规则与 `setCell` 相同。
 `cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
 `namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。
@@ -2306,7 +2306,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 ### insertPivotTable
 
-往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。库按源格子抄缓存记录，并标 `refreshOnLoad="1"`。只有行字段和求和时，随后的求值把合计写进 `sheetData`。其它形状仍留给 Excel 刷新。
+往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。库按源格子抄缓存记录，并标 `refreshOnLoad="1"`。随后的求值把能确定的合计写进 `sheetData`。多个列字段，或一个列字段再加多个行字段、多个值，仍留给 Excel 刷新。
 
 ```json
 {
@@ -2345,7 +2345,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 | `rows` | 可选。行轴字段名字符串数组，须是源表头里的名字 |
 | `cols` | 可选。列轴字段名 |
 | `filters` | 可选。报表筛选（page）字段名 |
-| `values` | 必须。值区字段名，至少一项 |
+| `values` | 必须。至少一项。字符串，或带 `field` 的对象 |
 
 `source.ref` 必须是单一矩形。非法 A1 报 `InvalidRange`。只有一行或零列报 `InvalidField`。`source.sheet` 省略则与目标表相同，必须是已有 `worksheet`。
 同一个字段名不能同时出现在 `rows` / `cols` / `filters` / `values` 里。`values` 缺省或空数组报 `InvalidField`。
@@ -2356,8 +2356,17 @@ workbook 写 `<pivotCaches>`（`CT_Workbook` 里插在 `customWorkbookViews` 之
 缓存关系 Type 以 `/pivotCacheDefinition` 结尾，记录关系 Type 以 `/pivotCacheRecords` 结尾，工作表关系 Type 以 `/pivotTable` 结尾。
 透视表部件再写一条指向该缓存定义的关系（同样以 `/pivotCacheDefinition` 结尾，ECMA-376 §12.3.11 / §12.3.12）。
 对应 Content Type 为 `spreadsheetml.pivotCacheDefinition+xml`、`pivotCacheRecords+xml`、`pivotTable+xml`。
-`<location>/@ref` 写成能盖住主体的最小矩形（含表头行与至少一行数据区），`firstHeaderRow="1"`、`firstDataRow="2"`、`firstDataCol="1"`。
+`<location>/@ref` 只包主体，不包筛选行。`firstHeaderRow="1"`、`firstDataRow="2"`、`firstDataCol="1"`。有筛选时另写 `rowPageCount` 与 `colPageCount="1"`。
 缓存 `refreshOnLoad="1"`。不写 OLAP。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。
+`values` 里的字符串按求和。对象必须有 `field`。`function` 可省略，或取 `sum`、`count`、`average`。`showAs` 可省略，或取 `percent`（合计占比）。表头仍用字段名，不改成「计数项」。
+求值写入 `sheetData` 的形状：
+
+- 一个或多个行字段、没有列字段：表头、明细、非末级的「某项 汇总」、以及「总计」。父级名字只出现在该组第一行
+- 一个行字段、一个列字段、一个值：两行表头。交叉处没有记录则留空。行、列都有「总计」
+- 筛选写在主体上方。未指定项时，旁边是「(全部)」。主体从 `location` 起算
+- 计数、平均值、最大、最小、合计占比按 `dataField` 的 `subtotal` 与 `showDataAs` 写入。合计占比的总计是 1
+- 多个列字段不写。列字段再加多个行字段或多个值，也不写
+
 docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写透视表。
 
 ### setPivotTable
@@ -2371,9 +2380,9 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写透视
 | `source` | 可选。新的源，约束与 insert 相同 |
 | `location` | 可选。新的主体左上角或区域 |
 | `name` | 可选。新的表名，约束与 insert 相同。`null` 报 `InvalidField` |
-| `rows` / `cols` / `filters` / `values` | 可选。字段名数组。给出则整轴替换。`values` 不能改成空数组 |
+| `rows` / `cols` / `filters` / `values` | 可选。给出则整轴替换。`values` 不能改成空数组 |
 
-除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。`values` 的写法与 `insertPivotTable` 相同。
 改 `source` 时按新源格子重写该缓存的 `cacheFields` 与 `cacheRecords`，并保持 `refreshOnLoad="1"`。若该缓存还被其它透视表使用，先复制一份新缓存再改，避免牵连。
 字段名必须仍在新表头里。改 `location` 时只改 `<location>/@ref` 的左上角并按当前轴重算最小矩形。未点名的属性与未知子元素原样留。找不到该序号报 `IdNotFound`。
 id 不是透视表 id 报 `InvalidId`。源不是工作表缓存报 `InvalidField`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
@@ -2653,8 +2662,8 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 普通格子里的多格 `OFFSET` 按隐式交集。对不上是 `#VALUE!`。`SUM` 则把这块加总
 - `INDIRECT` 默认按 A1。第二参为假时按 R1C1。`R[1]C` 相对公式所在格。认 `Sheet1!B4`。解析不成写入 `#REF!`。公式带 `ca="1"`
 - `TRANSPOSE` 在普通格子里写入 `#VALUE!`。数组公式按 `ref` 铺开
-- `GETPIVOTDATA` 只对一个行字段、求和、没有列字段和筛选的透视返回数。引用落在这块区域里即可，不限左上角
-- 只给数据字段时返回总计。再给行字段和项时返回该组。对不上或引用不在透视里，写入 `#REF!`。其它版式不写缓存。不带 `ca="1"`
+- `GETPIVOTDATA` 对一个行字段、没有列字段的透视返回格子上的数。计数、平均值和合计占比也算。可以有筛选。引用落在主体里即可，不限左上角
+- 只给数据字段时返回总计。再给这个行字段和项时返回该组。对不上或引用不在透视里，写入 `#REF!`。多个行字段或带列字段时不写缓存。不带 `ca="1"`
 - `RTD` 不连接服务器，写出 `#N/A`，不带 `ca="1"`
 - 不实现 `XLOOKUP`、`XMATCH`、`FILTER`、`UNIQUE`、`SORT`
 - 另外认数据库类 `DAVERAGE`、`DCOUNT`、`DCOUNTA`、`DGET`、`DMAX`、`DMIN`、`DPRODUCT`、`DSTDEV`、`DSTDEVP`、`DSUM`、`DVAR`、`DVARP`
@@ -2703,8 +2712,11 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 外部引用的相对路径相对工作簿所在目录。网页地址和打不开的文件不写
 - 图表里指向本工作簿连续区域的 `c:f`，在该区域至少有一个格子有值时，按格子缓存重写旁边的 `numCache` 或 `strCache`
 - 图表公式指向的区域全空时，保留写入时的缓存
-- 透视表只有行字段、数据字段是求和、没有列字段和筛选字段时，把表头、各组求和和「总计」写进 `sheetData`
-- 其它形状的透视表不聚合
+- 一个或多个行字段、没有列字段时，把表头、明细、非末级「某项 汇总」和「总计」写进 `sheetData`
+- 一个行字段加一个列字段、一个值时，写两行表头。没有记录的交叉格留空。行和列都有总计
+- 筛选写在主体上方。未指定项时写「(全部)」。`location` 的 `ref` 只包主体
+- 计数、平均值、最大、最小和合计占比按 `dataField` 写入。合计为 0 时，合计占比写 0
+- 多个列字段，或列字段再加多个行字段或多个值，不聚合
 
 ### 改动范围
 

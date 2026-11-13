@@ -1,5 +1,5 @@
 //! 单元格公式缓存。算不了的不写 `<v>`。
-//! 另外写数据表结果、本机外部引用、图表连续区域缓存，以及只有行字段时的透视合计。
+//! 另外写数据表结果、本机外部引用、图表连续区域缓存，以及能确定的透视合计。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -174,7 +174,7 @@ struct Book {
     externals: Vec<Option<ExtBook>>,
     /// `(链序号, sheetId, 列, 行)`。
     ext_used: HashMap<(usize, u32, u32, u32), Scalar>,
-    /// 透视区域。`GETPIVOTDATA` 只对行字段求和这种形状取值。
+    /// 透视区域。`GETPIVOTDATA` 只对一个行字段、没有列字段的形状取值。
     pivots: Vec<super::pivot::PivotCover>,
 }
 
@@ -2888,11 +2888,9 @@ impl Book {
             return ready_err(REF);
         };
         if vals.len() == 2 {
-            let total = sum
-                .groups
-                .iter()
-                .map(|g| g.1.get(vi).copied().unwrap_or(0.0))
-                .sum();
+            let Some(total) = sum.grand.get(vi).copied() else {
+                return ready_err(REF);
+            };
             return ready_num(total);
         }
         let row_name = sum.row_name.clone();

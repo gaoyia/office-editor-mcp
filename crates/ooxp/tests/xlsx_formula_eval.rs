@@ -464,6 +464,199 @@ fn pivot_row_sum_writes_display() {
     assert!((num_at(&tree, "cell:Sheet1!F4") - 22.0).abs() < 1e-9);
 }
 
+#[test]
+fn pivot_layouts_match_excel_16() {
+    let src = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "产品" },
+            { "ref": "B1", "value": "地区" },
+            { "ref": "C1", "value": "金额" },
+            { "ref": "A2", "value": "甲" },
+            { "ref": "B2", "value": "东" },
+            { "ref": "C2", "value": 10 },
+            { "ref": "A3", "value": "甲" },
+            { "ref": "B3", "value": "西" },
+            { "ref": "C3", "value": 5 },
+            { "ref": "A4", "value": "乙" },
+            { "ref": "B4", "value": "东" },
+            { "ref": "C4", "value": 7 }
+        ]}] }
+    })
+    .to_string())
+    .unwrap();
+    let out = book();
+    run(&json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": out.to_string_lossy(),
+        "ops": [
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E1",
+                "rows": ["产品", "地区"],
+                "values": ["金额"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E16",
+                "rows": ["产品"],
+                "cols": ["地区"],
+                "values": ["金额"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E32",
+                "rows": ["产品"],
+                "filters": ["地区"],
+                "values": ["金额"]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E40",
+                "rows": ["产品"],
+                "values": [{ "field": "金额", "function": "count" }]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E48",
+                "rows": ["产品"],
+                "values": [{ "field": "金额", "function": "average" }]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E56",
+                "rows": ["产品"],
+                "values": [{ "field": "金额", "showAs": "percent" }]
+            },
+            {
+                "op": "insertPivotTable",
+                "id": "sheet:Sheet1",
+                "source": { "sheet": "Sheet1", "ref": "A1:C4" },
+                "location": "E70",
+                "cols": ["产品", "地区"],
+                "values": ["金额"]
+            }
+        ]
+    })
+    .to_string())
+    .unwrap();
+    let tree = inspect_range(&out, "A1:H70");
+    let near = |id: &str, expect: f64| {
+        assert!((num_at(&tree, id) - expect).abs() < 1e-9, "{id}");
+    };
+    let text = |id: &str, expect: &str| {
+        assert_eq!(cell(&tree, id)["value"], json!(expect), "{id}");
+    };
+    let absent = |id: &str| {
+        let hit = tree["sheets"][0]["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|c| c["id"] == id);
+        assert!(!hit, "{id}");
+    };
+    text("cell:Sheet1!E1", "产品");
+    text("cell:Sheet1!F1", "地区");
+    text("cell:Sheet1!G1", "金额");
+    text("cell:Sheet1!E2", "甲");
+    text("cell:Sheet1!F2", "东");
+    near("cell:Sheet1!G2", 10.0);
+    absent("cell:Sheet1!E3");
+    text("cell:Sheet1!F3", "西");
+    near("cell:Sheet1!G3", 5.0);
+    text("cell:Sheet1!E4", "甲 汇总");
+    absent("cell:Sheet1!F4");
+    near("cell:Sheet1!G4", 15.0);
+    text("cell:Sheet1!E5", "乙");
+    text("cell:Sheet1!F5", "东");
+    near("cell:Sheet1!G5", 7.0);
+    text("cell:Sheet1!E6", "乙 汇总");
+    near("cell:Sheet1!G6", 7.0);
+    text("cell:Sheet1!E7", "总计");
+    near("cell:Sheet1!G7", 22.0);
+
+    text("cell:Sheet1!E16", "金额");
+    text("cell:Sheet1!F16", "地区");
+    text("cell:Sheet1!E17", "产品");
+    text("cell:Sheet1!F17", "东");
+    text("cell:Sheet1!G17", "西");
+    text("cell:Sheet1!H17", "总计");
+    text("cell:Sheet1!E18", "甲");
+    near("cell:Sheet1!F18", 10.0);
+    near("cell:Sheet1!G18", 5.0);
+    near("cell:Sheet1!H18", 15.0);
+    text("cell:Sheet1!E19", "乙");
+    near("cell:Sheet1!F19", 7.0);
+    absent("cell:Sheet1!G19");
+    near("cell:Sheet1!H19", 7.0);
+    text("cell:Sheet1!E20", "总计");
+    near("cell:Sheet1!F20", 17.0);
+    near("cell:Sheet1!G20", 5.0);
+    near("cell:Sheet1!H20", 22.0);
+
+    text("cell:Sheet1!E30", "地区");
+    text("cell:Sheet1!F30", "(全部)");
+    absent("cell:Sheet1!E31");
+    text("cell:Sheet1!E32", "产品");
+    text("cell:Sheet1!F32", "金额");
+    text("cell:Sheet1!E33", "甲");
+    near("cell:Sheet1!F33", 15.0);
+    text("cell:Sheet1!E34", "乙");
+    near("cell:Sheet1!F34", 7.0);
+    text("cell:Sheet1!E35", "总计");
+    near("cell:Sheet1!F35", 22.0);
+
+    near("cell:Sheet1!F41", 2.0);
+    near("cell:Sheet1!F42", 1.0);
+    near("cell:Sheet1!F43", 3.0);
+    near("cell:Sheet1!F49", 7.5);
+    near("cell:Sheet1!F50", 7.0);
+    near("cell:Sheet1!F51", 22.0 / 3.0);
+    near("cell:Sheet1!F57", 15.0 / 22.0);
+    near("cell:Sheet1!F58", 7.0 / 22.0);
+    near("cell:Sheet1!F59", 1.0);
+    absent("cell:Sheet1!E70");
+
+    let pivots = tree["sheets"][0]["pivots"].as_array().unwrap();
+    assert_eq!(pivots[1]["location"], json!("E16:H20"));
+    assert_eq!(pivots[2]["location"], json!("E32:F35"));
+    let xml = pivot_xml(&out);
+    assert!(xml.contains(r#"subtotal="count""#), "{xml}");
+    assert!(xml.contains(r#"subtotal="average""#), "{xml}");
+    assert!(xml.contains(r#"showDataAs="percentOfTotal""#), "{xml}");
+}
+
+fn pivot_xml(path: &std::path::Path) -> String {
+    let file = std::fs::File::open(path).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    let mut out = String::new();
+    for i in 0..zip.len() {
+        let mut zf = zip.by_index(i).unwrap();
+        if !zf.name().contains("pivotTable") {
+            continue;
+        }
+        std::io::Read::read_to_string(&mut zf, &mut out).unwrap();
+    }
+    out
+}
+
 /// 逻辑函数对照 Excel 16.0 样本。库自己算，不启动电子表格。
 #[test]
 fn logical_functions_match_excel_16() {

@@ -330,7 +330,7 @@ pub(super) fn parse_insert_pivot_table(
             format!("ops[{i}].location"),
         )
     })?;
-    let values = parse_pivot_fields(obj.get("values"), i, "values", true)?.ok_or_else(|| {
+    let values = parse_pivot_values(obj.get("values"), i, true)?.ok_or_else(|| {
         Error::with_path(
             ErrorKind::MissingField {
                 field: "values".into(),
@@ -371,7 +371,7 @@ pub(super) fn parse_set_pivot_table(
     )?;
     let id = require_id(obj, i)?;
     let (sheet, index) = parse_pivot_id(&id, i)?;
-    let values = parse_pivot_fields(obj.get("values"), i, "values", false)?;
+    let values = parse_pivot_values(obj.get("values"), i, false)?;
     if values.as_ref().is_some_and(|v| v.is_empty()) {
         return Err(Error::with_path(
             ErrorKind::InvalidPivotTable {
@@ -670,6 +670,150 @@ pub(super) fn parse_pivot_fields(
                 expected: TypeName::Array,
             },
             format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+pub(super) fn parse_pivot_values(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<Vec<PivotValue>>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "values".into(),
+            },
+            format!("ops[{i}].values"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "values".into(),
+            },
+            format!("ops[{i}].values"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                out.push(parse_one_pivot_value(item, i, j)?);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "values".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].values"),
+        )),
+    }
+}
+
+fn parse_one_pivot_value(item: &Value, i: usize, j: usize) -> Result<PivotValue, Error> {
+    let path = format!("ops[{i}].values[{j}]");
+    match item {
+        Value::String(s) if !s.is_empty() => Ok(PivotValue {
+            field: s.clone(),
+            name: s.clone(),
+            agg: PivotAgg::Sum,
+            percent: false,
+        }),
+        Value::String(_) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "values".into(),
+            },
+            path,
+        )),
+        Value::Object(map) => {
+            deny_keys_at(map, &path, &["field", "function", "showAs"])?;
+            let field = match map.get("field") {
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPivotTable {
+                            field: "field".into(),
+                        },
+                        format!("{path}.field"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "field".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{path}.field"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "field".into(),
+                        },
+                        format!("{path}.field"),
+                    ));
+                }
+            };
+            let agg = match map.get("function") {
+                None => PivotAgg::Sum,
+                Some(Value::String(s)) => match s.as_str() {
+                    "sum" => PivotAgg::Sum,
+                    "count" => PivotAgg::Count,
+                    "average" => PivotAgg::Average,
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::InvalidPivotTable {
+                                field: "function".into(),
+                            },
+                            format!("{path}.function"),
+                        ));
+                    }
+                },
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "function".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{path}.function"),
+                    ));
+                }
+            };
+            let percent = match map.get("showAs") {
+                None => false,
+                Some(Value::String(s)) if s == "percent" => true,
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPivotTable {
+                            field: "showAs".into(),
+                        },
+                        format!("{path}.showAs"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "showAs".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{path}.showAs"),
+                    ));
+                }
+            };
+            Ok(PivotValue {
+                field: field.clone(),
+                name: field,
+                agg,
+                percent,
+            })
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "values".into(),
+                expected: TypeName::String,
+            },
+            path,
         )),
     }
 }

@@ -1387,6 +1387,7 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xpt3 | 改源 | `setPivotTable` 把源改到含新数据行的范围后，Excel 仍认该表、无修复 |
 | Xpt4 | 删除 | `deletePivotTable` 后 `pivotCount=0`、COM Count=0、源数据还在、无修复 |
 | Xpt5 | 缺字段 | 只给 `op` 与 `id` 的 `insertPivotTable` 得 `InvalidField`，未写文件。不强制开 Excel |
+| Xpt6 | 其余版式 | ✅ 多个行字段写出「甲 汇总」和总计 22。一个列字段的空交叉留空。筛选为「(全部)」。计数 2、1、3，平均值 7.5，合计占比的总计是 1。Excel 16.0 无修复 |
 
 ## 命名区域
 

@@ -21,6 +21,39 @@
     ]
   },
   "$defs": {
+    "pivotValue": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "field"
+          ],
+          "properties": {
+            "field": {
+              "type": "string",
+              "minLength": 1
+            },
+            "function": {
+              "enum": [
+                "sum",
+                "count",
+                "average"
+              ]
+            },
+            "showAs": {
+              "enum": [
+                "percent"
+              ]
+            }
+          }
+        }
+      ]
+    },
     "insertSheetTableOp": {
       "description": "往工作表追加一张 SpreadsheetML 表（ECMA-376 §18.5.1.2）。",
       "descriptionEn": "Append one SpreadsheetML table to the worksheet (ECMA-376 §18.5.1.2).",
@@ -137,8 +170,8 @@
     "insertPivotTableOp": {
       "description": "往工作表追加一张 SpreadsheetML 透视表（ECMA-376 §18.10）。",
       "descriptionEn": "Append one SpreadsheetML pivot table to the worksheet (ECMA-376 §18.10).",
-      "limits": "库按源格子抄缓存记录，并标 refreshOnLoad=\"1\"。不在库里聚合，也不把合计写进 sheetData。打开后由 Excel 刷新。",
-      "limitsEn": "The library copies cache records from the source cells and sets refreshOnLoad=\"1\". It does not aggregate in the library and does not write totals into sheetData. Excel refreshes them on open.",
+      "limits": "库抄缓存并标 refreshOnLoad。多个行字段、一个列字段、筛选、计数、平均值和合计占比会写入 sheetData。多个列字段仍留给 Excel。",
+      "limitsEn": "The library copies the cache and sets refreshOnLoad. Multiple row fields, one column field, filters, count, average, and percent of total are written into sheetData. Multiple column fields are left for Excel.",
       "type": "object",
       "required": [
         "op",
@@ -192,8 +225,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/pivotValue"
           }
         }
       }
@@ -253,8 +285,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/$defs/pivotValue"
           }
         }
       }

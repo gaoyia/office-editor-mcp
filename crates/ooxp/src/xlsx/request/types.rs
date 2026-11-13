@@ -736,6 +736,23 @@ pub struct PivotSource {
     pub range: (a1::CellRef, a1::CellRef),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PivotAgg {
+    Sum,
+    Count,
+    Average,
+    Max,
+    Min,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PivotValue {
+    pub field: String,
+    pub name: String,
+    pub agg: PivotAgg,
+    pub percent: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertPivotTableOp {
     pub sheet: String,
@@ -745,7 +762,7 @@ pub struct InsertPivotTableOp {
     pub rows: Vec<String>,
     pub cols: Vec<String>,
     pub filters: Vec<String>,
-    pub values: Vec<String>,
+    pub values: Vec<PivotValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -758,7 +775,7 @@ pub struct SetPivotTableOp {
     pub rows: Option<Vec<String>>,
     pub cols: Option<Vec<String>>,
     pub filters: Option<Vec<String>>,
-    pub values: Option<Vec<String>>,
+    pub values: Option<Vec<PivotValue>>,
 }
 
 impl SetPivotTableOp {
