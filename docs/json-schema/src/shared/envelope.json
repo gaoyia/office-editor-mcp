@@ -767,8 +767,8 @@
     "exportSlideImageRequest": {
       "description": "把 pptx 一页的纯色页底、PNG 和没有描边的实心矩形画成 PNG。",
       "descriptionEn": "Draw a pptx slide's solid background, PNG pictures, and solid rectangles without a stroke to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。只画幻灯片自己的不透明纯色页底、没有旋转翻转裁剪的 PNG，以及没有旋转、没有描边的实心矩形。文字、其它形状和图表不画。组合里的图、视频和音频报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only the slide's own opaque solid background, unrotated unflipped uncropped PNG pictures, and unrotated solid rectangles without a stroke are drawn. Text, other shapes, and charts are not drawn. Pictures inside groups, video, and audio return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
+      "limits": "只读。不改源包，像素不进 inspect。只画幻灯片自己的不透明纯色页底、没有旋转翻转裁剪的 PNG，以及没有旋转、没有描边的不透明实心矩形。后画的盖住先画的，超出页面的部分裁掉。半透明、文字、其它形状和图表不画。组合里的图、视频和音频报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only the slide's own opaque solid background, unrotated unflipped uncropped PNG pictures, and unrotated opaque solid rectangles without a stroke are drawn. Later objects cover earlier ones, and the part outside the page is clipped. Translucent fills, text, other shapes, and charts are not drawn. Pictures inside groups, video, and audio return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [

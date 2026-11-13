@@ -1,4 +1,4 @@
-﻿# pptx 纯色页底、等像素 PNG 和没有描边的实心矩形。金样是 PowerPoint 16.0 的 Slide.Export。
+﻿# pptx 纯色页底、等像素 PNG、实心矩形的叠放和出界裁剪。金样是 PowerPoint 16.0 的 Slide.Export。
 # 像素差用 pixel-diff 标红。红区要回绘制引擎修，不要加大 MaxDelta。
 
 $ErrorActionPreference = 'Stop'
@@ -46,6 +46,14 @@ Invoke-OoxpRequest @{
         @{
             op = 'insertShape'; id = 'slide:1'; fill = 'EE4455'
             x = 1828800; y = 914400; cx = 914400; cy = 457200
+        }
+        @{
+            op = 'insertShape'; id = 'slide:1'; fill = '112233'
+            x = 2286000; y = 914400; cx = 914400; cy = 457200
+        }
+        @{
+            op = 'insertShape'; id = 'slide:1'; fill = '00FF00'
+            x = -9525; y = 1828800; cx = 28575; cy = 457200
         }
     )
 } 'pptx-slide-image-apply' | Out-Null

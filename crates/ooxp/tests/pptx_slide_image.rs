@@ -224,3 +224,90 @@ fn solid_rect_is_painted_and_stroke_or_text_is_not() {
     assert_eq!(pixel(&rgb, w, 300, 100), [0xAA, 0xBB, 0xCC]);
     assert_eq!(pixel(&rgb, w, 90, 80), [0xAA, 0xBB, 0xCC]);
 }
+
+#[test]
+fn later_rect_covers_earlier_and_the_page_clips() {
+    let src = tmp("stack-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("stack-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "EE4455",
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "112233",
+                "x": 2286000,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "00FF00",
+                "x": -9525,
+                "y": 1828800,
+                "cx": 28575,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 },
+                "x": 3657600,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            }
+        ]
+    }));
+    let out = tmp("stack-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 239, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 240, 96), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 335, 96), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 336, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 0, 192), [0x00, 0xFF, 0x00]);
+    assert_eq!(pixel(&rgb, w, 1, 239), [0x00, 0xFF, 0x00]);
+    assert_eq!(pixel(&rgb, w, 2, 192), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+}
