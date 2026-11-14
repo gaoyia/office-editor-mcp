@@ -2079,15 +2079,13 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     let sheet_part = picture::lookup_sheet_part(&pkg, &target.sheet, "id")?;
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
     let draw = super::list_pin::parse_part(&pkg, &drawing_part)?;
-    let (cx, cy) = find_chart_extent(&draw.root, &target.key)
-        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
+    let sheet = super::list_pin::parse_part(&pkg, &sheet_part)?;
+    let (width, height) = chart_bitmap_px(&draw.root, &sheet.root, &target.key)?;
     let rid = find_chart_rid(&draw.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
     let space = super::list_pin::parse_part(&pkg, &chart_part)?;
     let accents = super::chart_paint::theme_accents(pkg.get("/xl/theme/theme1.xml").ok());
-    let width = super::chart_paint::emu_to_px(cx)?;
-    let height = super::chart_paint::emu_to_px(cy)?;
     let png = super::chart_paint::render_chart(
         &space.root,
         width,
@@ -2101,33 +2099,31 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     })
 }
 
-fn find_chart_extent(root: &Element, key: &ChartKey) -> Option<(i64, i64)> {
+fn chart_bitmap_px(draw: &Element, sheet: &Element, key: &ChartKey) -> Result<(u32, u32), Error> {
     let mut index = 0usize;
-    let mut ext = None;
-    let _ = picture::walk_anchors(root, &mut |anchor, _| {
-        if ext.is_some() {
+    let mut size = None;
+    let mut failed = None;
+    let _ = picture::walk_anchors(draw, &mut |anchor, kind| {
+        if size.is_some() || failed.is_some() {
             return Ok(());
         }
         let Some(frame) = direct_chart_frame(anchor) else {
             return Ok(());
         };
         index += 1;
-        if chart_hit(frame, key, index) {
-            ext = frame_emu(frame);
+        if !chart_hit(frame, key, index) {
+            return Ok(());
+        }
+        match super::chart_paint::bitmap_px(sheet, anchor, kind) {
+            Ok(px) => size = Some(px),
+            Err(err) => failed = Some(err),
         }
         Ok(())
     });
-    ext
-}
-
-fn frame_emu(frame: &Element) -> Option<(i64, i64)> {
-    let ext = frame.child_by_local("xfrm")?.child_by_local("ext")?;
-    let cx: i64 = ext.attr_local("cx")?.parse().ok()?;
-    let cy: i64 = ext.attr_local("cy")?.parse().ok()?;
-    if cx <= 0 || cy <= 0 {
-        return None;
+    if let Some(err) = failed {
+        return Err(err);
     }
-    Some((cx, cy))
+    size.ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))
 }
 
 fn calibri_bytes() -> Option<Vec<u8>> {

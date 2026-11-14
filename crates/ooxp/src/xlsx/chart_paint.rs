@@ -9,10 +9,8 @@ use crate::xml::Element;
 const DPI: f64 = 96.0;
 const EMU_PER_INCH: f64 = 914_400.0;
 const MAX_PX: u32 = 4096;
-/// 轴、图例用 10 磅。Excel 16.0 画出来的数字比 9 磅更宽。
+/// 图里没写字号时，标题、轴、类目、图例都是 10 磅。标题另用粗体。
 const LABEL_PT: f64 = 10.0;
-/// 标题用 14 磅。
-const TITLE_PT: f64 = 14.0;
 
 const INK: [u8; 3] = [0, 0, 0];
 const BORDER: [u8; 3] = [0x89, 0x89, 0x89];
@@ -22,6 +20,23 @@ const INSET_TOP: i32 = 14;
 const INSET_RIGHT: i32 = 60;
 const INSET_BOTTOM: i32 = 34;
 const TICK_OUT: i32 = 3;
+/// 刻度字到左缘、刻度字到轴线。短标签仍停在 `INSET_LEFT`，不挪已对过的轴。
+const LABEL_EDGE: i32 = 6;
+const TICK_GAP: i32 = 11;
+/// 色块、色块到字、绘图区到色块、字到右缘。短标签用不满 `INSET_RIGHT`。
+const LEGEND_SWATCH: i32 = 8;
+const LEGEND_GAP: i32 = 6;
+const LEGEND_PLOT_GAP: i32 = 22;
+const LEGEND_PAD: i32 = 4;
+/// Excel 16.0 图表外框圆角。576、384、647 三档都是 14 像素。
+const CORNER_R: i32 = 14;
+const CAT_MAJOR: i32 = 4;
+const CAT_MAJOR_IN: i32 = 3;
+const CAT_MINOR: i32 = 3;
+const CAT_MINOR_IN: i32 = 2;
+/// 数值轴一个主刻度分成 5 段，中间 4 道次刻度。实心部分向两侧各 2 像素。
+const VAL_MINOR_PARTS: i32 = 5;
+const VAL_MINOR_ARM: i32 = 2;
 
 /// 包里没有 theme 时，Excel 16.0 用当前 Office 主题给自动系列上色。这套是 2023 的 accent。
 const FALLBACK_ACCENTS: [[u8; 3]; 6] = [
@@ -73,17 +88,117 @@ struct Canvas {
     px: Vec<u8>,
 }
 
-/// 图形 `a:ext` 的 EMU 按 96 dpi 四舍五入。超出 1..=4096 则不能画。
-pub(crate) fn emu_to_px(emu: i64) -> Result<u32, Error> {
-    if emu <= 0 {
+/// 图表 PNG 的像素。`twoCell` 按格子累加，其它锚点用 `a:ext`。缩放来自工作表。
+pub(crate) fn bitmap_px(
+    sheet: &Element,
+    anchor: &Element,
+    kind: super::picture::AnchorKind,
+) -> Result<(u32, u32), Error> {
+    let zoom = sheet_zoom(sheet);
+    let (w, h) = match kind {
+        super::picture::AnchorKind::TwoCell => two_cell_px(sheet, anchor, zoom)?,
+        _ => ext_px(anchor, zoom)?,
+    };
+    Ok((fit_px(w)?, fit_px(h)?))
+}
+
+fn fit_px(px: i64) -> Result<u32, Error> {
+    if !(1..=i64::from(MAX_PX)).contains(&px) {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
-    let px = (emu as f64) * DPI / EMU_PER_INCH;
-    let rounded = px.round();
-    if !(1.0..=f64::from(MAX_PX)).contains(&rounded) {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+    Ok(px as u32)
+}
+
+fn sheet_zoom(sheet: &Element) -> u32 {
+    sheet
+        .child_by_local("sheetViews")
+        .and_then(|views| views.child_by_local("sheetView"))
+        .and_then(|view| view.attr("zoomScale"))
+        .and_then(|s| s.parse::<u32>().ok())
+        .filter(|n| (10..=400).contains(n))
+        .unwrap_or(100)
+}
+
+fn zoomed(px: i64, zoom: u32) -> i64 {
+    (px as f64 * f64::from(zoom) / 100.0).round() as i64
+}
+
+fn emu_px(emu: i64) -> i64 {
+    (emu as f64 * DPI / EMU_PER_INCH).round() as i64
+}
+
+fn pt_to_px(pt: f64) -> i64 {
+    let emu = (pt * 12_700.0).round();
+    (emu / 9_525.0).round() as i64
+}
+
+fn row_px(sheet: &Element, row: u32) -> i64 {
+    if let Some(sheet_data) = sheet.child_by_local("sheetData") {
+        for el in sheet_data.children_by_local("row") {
+            let Some(r) = el.attr("r").and_then(|s| s.parse::<u32>().ok()) else {
+                continue;
+            };
+            if r != row {
+                continue;
+            }
+            if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
+                return pt_to_px(ht).max(1);
+            }
+        }
     }
-    Ok(rounded as u32)
+    let def = sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|el| el.attr_local("defaultRowHeight"))
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(14.25);
+    pt_to_px(def).max(1)
+}
+
+fn marker_x(sheet: &Element, col: u32, off: i64, zoom: u32) -> i64 {
+    let mut px = 0i64;
+    for c in 1..col {
+        px += zoomed(i64::from(super::layout::col_width_px(sheet, c)), zoom);
+    }
+    px + zoomed(emu_px(off), zoom)
+}
+
+fn marker_y(sheet: &Element, row: u32, off: i64, zoom: u32) -> i64 {
+    let mut px = 0i64;
+    for r in 1..row {
+        px += zoomed(row_px(sheet, r), zoom);
+    }
+    px + zoomed(emu_px(off), zoom)
+}
+
+fn two_cell_px(sheet: &Element, anchor: &Element, zoom: u32) -> Result<(i64, i64), Error> {
+    let (from, from_x, from_y) = super::picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_x, to_y) = super::picture::read_marker(anchor.child_by_local("to"))?;
+    let (Some(from), Some(to)) = (from, to) else {
+        return ext_px(anchor, zoom);
+    };
+    let w = marker_x(sheet, to.col, to_x, zoom) - marker_x(sheet, from.col, from_x, zoom);
+    let h = marker_y(sheet, to.row, to_y, zoom) - marker_y(sheet, from.row, from_y, zoom);
+    Ok((w, h))
+}
+
+fn ext_px(anchor: &Element, zoom: u32) -> Result<(i64, i64), Error> {
+    let ext = anchor
+        .child_by_local("graphicFrame")
+        .and_then(|frame| frame.child_by_local("xfrm"))
+        .and_then(|xfrm| xfrm.child_by_local("ext"))
+        .or_else(|| anchor.child_by_local("ext"));
+    let Some(ext) = ext else {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+    };
+    let cx: i64 = ext
+        .attr_local("cx")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
+    let cy: i64 = ext
+        .attr_local("cy")
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
+    Ok((zoomed(emu_px(cx), zoom), zoomed(emu_px(cy), zoom)))
 }
 
 pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
@@ -262,20 +377,39 @@ fn is_chart_wrapper(name: &str) -> bool {
 
 fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
     let label_px = (LABEL_PT * DPI / 72.0) as f32;
-    let gdi = super::chart_gdi::Face::new(label_px);
-    let title_px = (TITLE_PT * DPI / 72.0) as f32;
+    let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_face = chart
+        .title
+        .as_ref()
+        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
     let (axis_min, axis_max, step) = axis_range(&chart.series);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let plot_x = INSET_LEFT + 1;
-    let plot_y = INSET_TOP
-        + if chart.title.is_some() {
-            text_height(font, title_px).ceil() as i32
-        } else {
-            0
-        };
-    let plot_r = canvas.w as i32 - INSET_RIGHT;
+    let widest_tick = tick_labels
+        .iter()
+        .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
+        .max()
+        .unwrap_or(0);
+    let axis_x = axis_x_of(widest_tick);
+    let plot_x = axis_x + 1;
+    let title_top = 4.0;
+    let plot_y = if chart.title.is_some() {
+        let band = title_face
+            .as_ref()
+            .map(|face| face.em_box().ceil() as i32)
+            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
+        let half = gdi
+            .as_ref()
+            .map(|face| face.line_height().ceil() as i32 / 2)
+            .unwrap_or(0);
+        // 标题占一行，下面再空一行，顶上的刻度才不压住标题。
+        title_top as i32 + 2 * (band + half)
+    } else {
+        INSET_TOP
+    };
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let plot_r = canvas.w as i32 - inset_right;
     let plot_b = canvas.h as i32 - INSET_BOTTOM;
     let plot = Rect {
         x: f64::from(plot_x),
@@ -286,17 +420,26 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
     if chart.grid {
         for i in 0..=intervals {
             let y = plot_y + (i * (plot_b - plot_y) + intervals - 1) / intervals;
-            canvas.hline_i(INSET_LEFT - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
         }
     }
+    draw_value_minor_ticks(canvas, axis_x, plot_y, plot_b, intervals);
+    draw_cat_ticks(
+        canvas,
+        chart.categories.len(),
+        f64::from(axis_x),
+        f64::from(plot_r),
+        plot_b,
+    );
     draw_bars(canvas, chart, &plot, axis_min, axis_max);
-    canvas.vline_i(INSET_LEFT, plot_y, plot_b, INK);
+    canvas.vline_i(axis_x, plot_y, plot_b, INK);
     draw_tick_labels(
         canvas,
         font,
         gdi.as_ref(),
         label_px,
         &plot,
+        axis_x,
         &ticks,
         &tick_labels,
         axis_min,
@@ -304,12 +447,54 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
         &chart.categories,
     );
     if let Some(title) = &chart.title {
-        let width = text_width(font, gdi.as_ref(), title, title_px);
+        let face = title_face.as_ref().or(gdi.as_ref());
+        let width = text_width(font, face, title, label_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(canvas, font, gdi.as_ref(), title, x, 4.0, title_px, INK);
+        draw_text(canvas, font, face, title, x, title_top, label_px, INK);
     }
     draw_legend(canvas, chart, font, gdi.as_ref(), label_px, plot_r);
     canvas.stroke_border(BORDER);
+}
+
+fn draw_cat_ticks(canvas: &mut Canvas, n: usize, x0: f64, x1: f64, axis_y: i32) {
+    let n = n.max(1);
+    let slot = (x1 - x0) / n as f64;
+    if slot <= 0.0 {
+        return;
+    }
+    for i in 0..=n {
+        let x = (x0 + slot * i as f64).round() as i32;
+        canvas.vline_i(x, axis_y - CAT_MAJOR_IN, axis_y + CAT_MAJOR, INK);
+    }
+    for i in 0..n {
+        let x = (x0 + slot * (i as f64 + 0.5)).round() as i32;
+        canvas.vline_i(x, axis_y - CAT_MINOR_IN, axis_y + CAT_MINOR, INK);
+    }
+}
+
+fn draw_value_minor_ticks(
+    canvas: &mut Canvas,
+    axis_x: i32,
+    plot_y: i32,
+    plot_b: i32,
+    intervals: i32,
+) {
+    let span = plot_b - plot_y;
+    if intervals < 1 || span <= 0 {
+        return;
+    }
+    for i in 0..intervals {
+        let y0 = plot_y + (i * span + intervals - 1) / intervals;
+        let y1 = plot_y + ((i + 1) * span + intervals - 1) / intervals;
+        let gap = y1 - y0;
+        for k in 1..VAL_MINOR_PARTS {
+            let y = y0 + (k * gap + VAL_MINOR_PARTS / 2) / VAL_MINOR_PARTS;
+            if y <= y0 || y >= y1 {
+                continue;
+            }
+            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+        }
+    }
 }
 
 fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
@@ -356,12 +541,17 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
     }
 }
 
+fn axis_x_of(widest_tick: i32) -> i32 {
+    INSET_LEFT.max(LABEL_EDGE + widest_tick + TICK_GAP)
+}
+
 fn draw_tick_labels(
     canvas: &mut Canvas,
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
     plot: &Rect,
+    axis_x: i32,
     ticks: &[f64],
     labels: &[String],
     axis_min: f64,
@@ -377,7 +567,7 @@ fn draw_tick_labels(
             font,
             gdi,
             label,
-            f64::from(INSET_LEFT) - w - 11.0,
+            f64::from(axis_x) - w - f64::from(TICK_GAP),
             y - h / 2.0 + 4.0,
             px,
             INK,
@@ -404,30 +594,48 @@ fn draw_legend(
     if chart.legend != Some(LegendPos::Right) {
         return;
     }
-    let swatch = 8;
     let pitch = 24;
     let n = chart.series.len() as i32;
     if n == 0 {
         return;
     }
-    let block = pitch * (n - 1) + swatch;
+    let block = pitch * (n - 1) + LEGEND_SWATCH;
     let mut y = (canvas.h as i32 - block) / 2;
-    let x = plot_r + 22;
+    let x = plot_r + LEGEND_PLOT_GAP;
     for ser in &chart.series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
-        canvas.fill_rect(x, y, x + swatch, y + swatch, color);
+        canvas.fill_rect(x, y, x + LEGEND_SWATCH, y + LEGEND_SWATCH, color);
         draw_text(
             canvas,
             font,
             gdi,
             &ser.name,
-            f64::from(x + swatch + 6),
+            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
             f64::from(y - 2),
             px,
             INK,
         );
         y += pitch;
     }
+}
+
+/// 短名字维持测过的 60 像素。长名字把绘图区右缘向左推，避免字被画布切掉。
+fn legend_right_inset(
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+) -> i32 {
+    if chart.legend != Some(LegendPos::Right) {
+        return INSET_RIGHT;
+    }
+    let widest = chart
+        .series
+        .iter()
+        .map(|ser| text_width(font, gdi, &ser.name, px))
+        .fold(0.0, f64::max);
+    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + widest.ceil() as i32 + LEGEND_PAD;
+    need.max(INSET_RIGHT)
 }
 
 fn axis_range(series: &[Series]) -> (f64, f64, f64) {
@@ -455,7 +663,7 @@ fn axis_range(series: &[Series]) -> (f64, f64, f64) {
     for mag in (exp - 2)..=(exp + 1) {
         for nice in [1.0_f64, 2.0, 5.0] {
             let step = nice * 10f64.powi(mag);
-            let (axis_min, axis_max) = axis_ends(min_v, max_v, lo, hi, step, pin_min, pin_max);
+            let (axis_min, axis_max) = axis_ends(lo, hi, step, pin_min, pin_max);
             if axis_max <= axis_min {
                 continue;
             }
@@ -467,7 +675,7 @@ fn axis_range(series: &[Series]) -> (f64, f64, f64) {
             let replace = match best {
                 None => true,
                 Some((old_w, old_step, _)) => {
-                    width < old_w - 1e-9 || ((width - old_w).abs() < 1e-9 && step > old_step)
+                    width < old_w - 1e-9 || ((width - old_w).abs() < 1e-9 && step < old_step)
                 }
             };
             if replace {
@@ -476,21 +684,13 @@ fn axis_range(series: &[Series]) -> (f64, f64, f64) {
         }
     }
     if let Some((_, step, _)) = best {
-        let (axis_min, axis_max) = axis_ends(min_v, max_v, lo, hi, step, pin_min, pin_max);
+        let (axis_min, axis_max) = axis_ends(lo, hi, step, pin_min, pin_max);
         return (axis_min, axis_max, step);
     }
     (0.0, 1.0, 0.2)
 }
 
-fn axis_ends(
-    min_v: f64,
-    max_v: f64,
-    lo: f64,
-    hi: f64,
-    step: f64,
-    pin_min: bool,
-    pin_max: bool,
-) -> (f64, f64) {
+fn axis_ends(lo: f64, hi: f64, step: f64, pin_min: bool, pin_max: bool) -> (f64, f64) {
     let mut axis_min = if pin_min {
         0.0
     } else {
@@ -501,13 +701,22 @@ fn axis_ends(
     } else {
         (hi / step).ceil() * step
     };
-    if !pin_min && axis_min >= min_v - step * 1e-8 {
-        axis_min -= step;
-    }
-    if !pin_max && axis_max <= max_v + step * 1e-8 {
+    // 数据贴到自动上限的 95% 以上时，Excel 16.0 再加一个步长。正好 95% 不加。
+    if !pin_max && past_headroom(hi, axis_max) {
         axis_max += step;
     }
+    if !pin_min && past_headroom_low(lo, axis_min) {
+        axis_min -= step;
+    }
     (axis_min, axis_max)
+}
+
+fn past_headroom(value: f64, edge: f64) -> bool {
+    edge > 1e-12 && value > edge * 0.95 + edge * 1e-9
+}
+
+fn past_headroom_low(value: f64, edge: f64) -> bool {
+    edge < -1e-12 && value < edge * 0.95 - edge.abs() * 1e-9
 }
 
 fn tick_values(min: f64, max: f64, step: f64) -> Vec<f64> {
@@ -983,13 +1192,54 @@ impl Canvas {
     fn stroke_border(&mut self, color: [u8; 3]) {
         let w = self.w as i32;
         let h = self.h as i32;
-        if w == 0 || h == 0 {
+        if w < 2 || h < 2 {
             return;
         }
-        self.hline_i(0, w - 1, 0, color);
-        self.hline_i(0, w - 1, h - 1, color);
-        self.vline_i(0, 0, h - 1, color);
-        self.vline_i(w - 1, 0, h - 1, color);
+        let r = CORNER_R.min(w / 2).min(h / 2);
+        if r < 2 {
+            self.hline_i(0, w - 1, 0, color);
+            self.hline_i(0, w - 1, h - 1, color);
+            self.vline_i(0, 0, h - 1, color);
+            self.vline_i(w - 1, 0, h - 1, color);
+            return;
+        }
+        self.stroke_quarter(r, r, 0, r, 0, r, color);
+        self.stroke_quarter(w - r, r, w - r, w - 1, 0, r, color);
+        self.stroke_quarter(r, h - r, 0, r, h - r, h - 1, color);
+        self.stroke_quarter(w - r, h - r, w - r, w - 1, h - r, h - 1, color);
+        self.hline_i(r, w - 1 - r, 0, color);
+        self.hline_i(r, w - 1 - r, h - 1, color);
+        self.vline_i(0, r, h - 1 - r, color);
+        self.vline_i(w - 1, r, h - 1 - r, color);
+    }
+
+    /// 一个圆角。圆心用像素坐标，半径是外框圆角。只涂靠近圆弧的那一圈。
+    fn stroke_quarter(
+        &mut self,
+        cx: i32,
+        cy: i32,
+        x0: i32,
+        x1: i32,
+        y0: i32,
+        y1: i32,
+        color: [u8; 3],
+    ) {
+        // 大图圆心离边缘远，半径仍是 14。小图圆心就在圆角半径上。
+        let rad = f64::from(cx.min(cy).min(CORNER_R)) - 0.5;
+        let cx = f64::from(cx);
+        let cy = f64::from(cy);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let dx = f64::from(x) + 0.5 - cx;
+                let dy = f64::from(y) + 0.5 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                let cov = (1.0 - (dist - rad).abs()).clamp(0.0, 1.0);
+                if cov <= 0.0 {
+                    continue;
+                }
+                self.blend(x, y, color, (cov * 255.0).round() as u8);
+            }
+        }
     }
 }
 
@@ -1006,4 +1256,192 @@ fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
         .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
     drop(writer);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LONG_LEGEND: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:ser>
+          <c:order val="0"/>
+          <c:tx><c:v>2025 年</c:v></c:tx>
+          <c:val><c:numLit><c:pt idx="0"><c:v>850</c:v></c:pt></c:numLit></c:val>
+        </c:ser>
+        <c:ser>
+          <c:order val="1"/>
+          <c:tx><c:v>2026 年</c:v></c:tx>
+          <c:val><c:numLit><c:pt idx="0"><c:v>1160</c:v></c:pt></c:numLit></c:val>
+        </c:ser>
+      </c:barChart>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#;
+
+    #[test]
+    fn long_legend_label_stays_off_the_right_edge() {
+        let doc = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let png = render_chart(&doc.root, 576, 336, FALLBACK_ACCENTS, None).unwrap();
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let w = info.width as i32;
+        let h = info.height as i32;
+        let bytes = &buf[..info.buffer_size()];
+        let px = |x: i32, y: i32| {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            (bytes[i], bytes[i + 1], bytes[i + 2])
+        };
+        for x in (w - LEGEND_PAD)..(w - 1) {
+            for y in CORNER_R..(h - CORNER_R) {
+                let (r, g, b) = px(x, y);
+                assert!(
+                    r > 250 && g > 250 && b > 250,
+                    "右缘被写上了像素 x={x} y={y} {r},{g},{b}"
+                );
+            }
+        }
+        let mut dark = false;
+        for y in 0..h {
+            for x in (w / 2)..(w - LEGEND_PAD) {
+                let (r, g, b) = px(x, y);
+                if r < 40 && g < 40 && b < 40 {
+                    dark = true;
+                }
+            }
+        }
+        assert!(dark, "图例文字没有画到右侧");
+    }
+
+    #[test]
+    fn frame_is_rounded_and_category_ticks_drop() {
+        let doc = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let png = render_chart(&doc.root, 576, 336, FALLBACK_ACCENTS, None).unwrap();
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let w = info.width as i32;
+        let bytes = &buf[..info.buffer_size()];
+        let px = |x: i32, y: i32| {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            (bytes[i], bytes[i + 1], bytes[i + 2])
+        };
+        let (r, g, b) = px(0, 0);
+        assert!(r > 250 && g > 250 && b > 250, "圆角外被涂了 {r},{g},{b}");
+        assert_eq!(px(0, 20), (0x89, 0x89, 0x89));
+        assert_eq!(px(20, 0), (0x89, 0x89, 0x89));
+        let mut canvas = Canvas::new(200, 40);
+        draw_cat_ticks(&mut canvas, 2, 10.0, 190.0, 8);
+        draw_value_minor_ticks(&mut canvas, 20, 0, 25, 1);
+        let ink = |x: i32, y: i32| {
+            let i = (y as usize * canvas.w as usize + x as usize) * 3;
+            canvas.px[i] < 40
+        };
+        for x in [10, 100, 190] {
+            assert!(ink(x, 5), "主刻度没有向上 x={x}");
+            assert!(ink(x, 12), "主刻度没画到 x={x}");
+            assert!(!ink(x, 4), "主刻度向上超过 3 像素 x={x}");
+        }
+        for x in [55, 145] {
+            assert!(ink(x, 6), "次刻度没有向上 x={x}");
+            assert!(!ink(x, 5), "次刻度向上超过 2 像素 x={x}");
+            assert!(ink(x, 11), "次刻度没画到 x={x}");
+            assert!(!ink(x, 12), "次刻度画到了第 4 像素 x={x}");
+        }
+        for y in [5, 10, 15, 20] {
+            assert!(ink(18, y), "数值轴次刻度太短 y={y}");
+            assert!(ink(22, y), "数值轴次刻度没有向右 y={y}");
+            assert!(!ink(17, y), "数值轴次刻度向左超过 2 像素 y={y}");
+        }
+    }
+
+    fn one_series(max: f64) -> Series {
+        Series {
+            name: "S".to_string(),
+            values: vec![Some(max)],
+            color: None,
+            slot: 0,
+        }
+    }
+
+    #[test]
+    fn axis_headroom_matches_excel_samples() {
+        let cases = [
+            (4.0, 4.5, 0.5),
+            (3.9, 4.5, 0.5),
+            (95.0, 100.0, 10.0),
+            (96.0, 120.0, 20.0),
+            (1100.0, 1200.0, 200.0),
+            (1150.0, 1400.0, 200.0),
+            (1160.0, 1400.0, 200.0),
+        ];
+        for (max, axis, step) in cases {
+            let (lo, hi, got) = axis_range(&[one_series(max)]);
+            assert!(
+                (lo - 0.0).abs() < 1e-6 && (hi - axis).abs() < 1e-6 && (got - step).abs() < 1e-6,
+                "max={max} got {lo}..{hi} step {got}"
+            );
+        }
+    }
+
+    #[test]
+    fn wide_tick_pushes_axis_right() {
+        assert_eq!(axis_x_of(18), 37);
+        assert_eq!(axis_x_of(28), 45);
+    }
+
+    #[test]
+    fn two_cell_size_follows_columns_and_zoom() {
+        let sheet = crate::xml::parse(
+            br#"<worksheet>
+              <sheetViews><sheetView zoomScale="95" workbookViewId="0"/></sheetViews>
+              <cols>
+                <col min="1" max="1" width="16.7109375"/>
+                <col min="2" max="3" width="14.7109375"/>
+                <col min="4" max="7" width="12.7109375"/>
+                <col min="8" max="8" width="22.7109375"/>
+              </cols>
+            </worksheet>"#,
+        )
+        .unwrap();
+        let anchor = crate::xml::parse(
+            br#"<twoCellAnchor>
+              <from><col>0</col><colOff>0</colOff><row>18</row><rowOff>0</rowOff></from>
+              <to><col>7</col><colOff>0</colOff><row>32</row><rowOff>0</rowOff></to>
+            </twoCellAnchor>"#,
+        )
+        .unwrap();
+        let (w, h) = bitmap_px(
+            &sheet.root,
+            &anchor.root,
+            crate::xlsx::picture::AnchorKind::TwoCell,
+        )
+        .unwrap();
+        assert_eq!((w, h), (647, 252));
+    }
+
+    #[test]
+    fn one_cell_at_full_zoom_keeps_ext() {
+        let sheet = crate::xml::parse(br#"<worksheet/>"#).unwrap();
+        let anchor = crate::xml::parse(
+            br#"<oneCellAnchor><ext cx="5486400" cy="3200400"/></oneCellAnchor>"#,
+        )
+        .unwrap();
+        let (w, h) = bitmap_px(
+            &sheet.root,
+            &anchor.root,
+            crate::xlsx::picture::AnchorKind::OneCell,
+        )
+        .unwrap();
+        assert_eq!((w, h), (576, 336));
+    }
 }

@@ -2354,10 +2354,19 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 只画簇状柱形图。系列和类目用包里已有的缓存，不算公式
-- 宽高按图形 `a:ext` 的 EMU，96 dpi 四舍五入成像素
+- 宽高跟 Excel 16.0 的 `Chart.Export`。`twoCell` 按起止格的列宽和行高累加，不用占位的 `a:ext`
+- 每一列、每一行先换成 96 dpi 的像素，再乘工作表 `zoomScale`（缺省 100）后四舍五入，然后相加
+- `oneCell` 和 `absolute` 仍用 `a:ext` 的像素，再按同一个缩放四舍五入
+- 没有 `defaultRowHeight` 时，行高用 14.25 磅（19 像素）。写了就用写下的磅值
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 没有系列填充时，包里有 theme 就用 theme 的 accent。没有 theme 时用 Excel 16.0 的 Office 主题 accent。系列上的 `solidFill` 优先。不套用 `c:style`
-- 轴、网格、图例按图里的位置画。文字在 Windows 上用 GDI 的 Calibri 横排，别处用 fontdue
+- 轴、网格、图例按图里的位置画。图里没写字体时，字号用 10 磅。标题加粗，轴、类目和图例不加粗
+- 外框是 1 像素圆角，半径 14，颜色 `898989`。圆角外面留白
+- 类目轴主刻度在类目分界上，向上 3 像素、向下 4 像素。次刻度在类目正中，向上 2 像素、向下 3 像素
+- 数值轴主刻度是网格伸出轴线的 3 像素。相邻主刻度之间再画 4 道次刻度，向轴线两侧各 2 像素
+- Windows 上用 GDI 的「等线」横排。没有这套字时依次试 DengXian、微软雅黑、Calibri。别处用 fontdue 的 Calibri
+- 纵轴自动刻度用 1、2、5 的步长。数据超过这一档上限的 95% 时，再加一个步长。正数且能含 0 时，下限钉在 0
+- 右侧图例的系列名整段留在图内。名字比缺省右边距宽时，绘图区右缘向左让。短名字仍用原来的边距
 - 不是簇状柱形图，或 `crossBetween` 不是 `between`，报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到图报 `IdNotFound`。id 不是图表 id 报 `InvalidId`

@@ -574,7 +574,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportChartImage
 
-调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，读图形 `a:ext` 和图表缓存，把簇状柱形图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
+调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，按起止格或 `a:ext` 取像素，读图表缓存，把簇状柱形图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
 
 ### exportSparklineImage
 
@@ -607,7 +607,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 ## 实现时允许的依赖（文档约定，代码阶段再写入 Cargo.toml）
 
 库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx / docx 写保护哈希可用 `sha2`、`getrandom`、`base64`。
-簇状柱形图的 PNG 用 `png` 编码。Windows 上轴和图例的字形用 GDI 画 Calibri，别处用 `fontdue`。没有这套字体时仍画柱和网格，不调用 Office。
+簇状柱形图的 PNG 用 `png` 编码。外框是半径 14 的圆角。类目轴和数值轴都画主刻度、次刻度，刻度穿过轴线。图里没写字体时，Windows 上用 GDI 画 10 磅「等线」，标题加粗。别处用 `fontdue` 的 Calibri。没有这套字体时仍画柱和网格，不调用 Office。
 禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
 
 ## 阶段边界

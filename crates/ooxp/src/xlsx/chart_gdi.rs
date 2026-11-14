@@ -1,4 +1,4 @@
-//! Windows 上用 GDI 画 Calibri。Excel 16.0 的轴文字走的是这条，fontdue 的灰度对不上。
+//! Windows 上用 GDI 画图表文字。图里没写字体时用「等线」，和 Excel 16.0 的缺省一致。
 
 #[cfg(windows)]
 mod win {
@@ -23,6 +23,31 @@ mod win {
     }
 
     #[repr(C)]
+    struct TextMetric {
+        height: i32,
+        ascent: i32,
+        descent: i32,
+        internal_leading: i32,
+        external_leading: i32,
+        ave_char_width: i32,
+        max_char_width: i32,
+        weight: i32,
+        overhang: i32,
+        digitized_aspect_x: i32,
+        digitized_aspect_y: i32,
+        first_char: u16,
+        last_char: u16,
+        default_char: u16,
+        break_char: u16,
+        italic: u8,
+        underlined: u8,
+        struck_out: u8,
+        pitch_and_family: u8,
+        charset: u8,
+        _pad: [u8; 3],
+    }
+
+    #[repr(C)]
     struct Mat2 {
         e_m11: Fixed,
         e_m12: Fixed,
@@ -34,11 +59,15 @@ mod win {
     const GDI_ERROR: u32 = 0xFFFF_FFFF;
     const ANTIALIASED_QUALITY: u32 = 4;
     const FW_NORMAL: i32 = 400;
+    const FW_BOLD: i32 = 700;
+    const FACES: [&str; 5] = ["等线", "DengXian", "微软雅黑", "Microsoft YaHei", "Calibri"];
 
     #[link(name = "gdi32")]
     extern "system" {
         fn CreateCompatibleDC(hdc: *mut c_void) -> *mut c_void;
         fn DeleteDC(hdc: *mut c_void) -> i32;
+        fn GetTextFaceW(hdc: *mut c_void, count: i32, face: *mut u16) -> i32;
+        fn GetTextMetricsW(hdc: *mut c_void, metric: *mut TextMetric) -> i32;
         fn CreateFontW(
             height: i32,
             width: i32,
@@ -87,13 +116,26 @@ mod win {
     }
 
     impl Face {
+        /// 按顺序找本机有的字体。图里没写字体时，Excel 16.0 用「等线」。
+        pub fn open(px: f32, bold: bool) -> Option<Self> {
+            for name in FACES {
+                let Some(face) = Self::new(px, bold, name) else {
+                    continue;
+                };
+                if face.text_face() == name || name == "Calibri" {
+                    return Some(face);
+                }
+            }
+            None
+        }
+
         /// `px` 是 96 dpi 下的像素字号。负高度让 GDI 按字符高度而不是单元格高度来建。
-        pub fn new(px: f32) -> Option<Self> {
+        fn new(px: f32, bold: bool, name: &str) -> Option<Self> {
             let height = -(px.round() as i32);
             if height == 0 {
                 return None;
             }
-            let mut face: Vec<u16> = "Calibri".encode_utf16().collect();
+            let mut face: Vec<u16> = name.encode_utf16().collect();
             face.push(0);
             unsafe {
                 let dc = CreateCompatibleDC(std::ptr::null_mut());
@@ -105,7 +147,7 @@ mod win {
                     0,
                     0,
                     0,
-                    FW_NORMAL,
+                    if bold { FW_BOLD } else { FW_NORMAL },
                     0,
                     0,
                     0,
@@ -123,6 +165,15 @@ mod win {
                 SelectObject(dc, font);
                 Some(Self { dc, font })
             }
+        }
+
+        fn text_face(&self) -> String {
+            let mut buf = vec![0u16; 64];
+            let n = unsafe { GetTextFaceW(self.dc, buf.len() as i32, buf.as_mut_ptr()) };
+            if n <= 1 {
+                return String::new();
+            }
+            String::from_utf16_lossy(&buf[..n as usize - 1])
         }
 
         pub fn width(&self, text: &str) -> f64 {
@@ -241,10 +292,46 @@ mod win {
             }
         }
 
-        fn line_height(&self) -> f64 {
-            self.metrics('0')
-                .map(|m| f64::from(m.black_box_y))
+        fn text_metric(&self) -> Option<TextMetric> {
+            let mut metric = TextMetric {
+                height: 0,
+                ascent: 0,
+                descent: 0,
+                internal_leading: 0,
+                external_leading: 0,
+                ave_char_width: 0,
+                max_char_width: 0,
+                weight: 0,
+                overhang: 0,
+                digitized_aspect_x: 0,
+                digitized_aspect_y: 0,
+                first_char: 0,
+                last_char: 0,
+                default_char: 0,
+                break_char: 0,
+                italic: 0,
+                underlined: 0,
+                struck_out: 0,
+                pitch_and_family: 0,
+                charset: 0,
+                _pad: [0; 3],
+            };
+            let ok = unsafe { GetTextMetricsW(self.dc, &mut metric) };
+            (ok != 0 && metric.ascent > 0).then_some(metric)
+        }
+
+        /// 基线到字顶的距离。画字时用它，避免汉字高出数字「0」的黑框。
+        pub fn line_height(&self) -> f64 {
+            self.text_metric()
+                .map(|m| f64::from(m.ascent))
                 .unwrap_or(12.0)
+        }
+
+        /// 一整行的高度，含内部行距。标题下面的绘图区从这里往下排。
+        pub fn em_box(&self) -> f64 {
+            self.text_metric()
+                .map(|m| f64::from(m.height))
+                .unwrap_or_else(|| self.line_height())
         }
     }
 
@@ -256,6 +343,17 @@ mod win {
             e_m22: Fixed { fract: 0, value: 1 },
         }
     }
+
+    #[test]
+    fn chart_text_uses_dengxian() {
+        let face = Face::open(13.0, true).expect("本机应有图表字体");
+        let name = face.text_face();
+        assert!(
+            name == "等线" || name.eq_ignore_ascii_case("DengXian"),
+            "实际字体是 {name}"
+        );
+        assert_eq!(face.width("1400"), 28.0);
+    }
 }
 
 #[cfg(windows)]
@@ -266,8 +364,16 @@ pub struct Face;
 
 #[cfg(not(windows))]
 impl Face {
-    pub fn new(_: f32) -> Option<Self> {
+    pub fn open(_: f32, _: bool) -> Option<Self> {
         None
+    }
+
+    pub fn line_height(&self) -> f64 {
+        0.0
+    }
+
+    pub fn em_box(&self) -> f64 {
+        0.0
     }
 
     pub fn width(&self, _: &str) -> f64 {
