@@ -1,5 +1,6 @@
-//! 幻灯片只读栅格化。先画本页纯色页底，再按文档顺序画 PNG 和没有描边的实心矩形。
-//! 矩形可以绕中心转 90 度的倍数。不写回包，像素不进 inspect。文字、其它形状和图表留到后面。
+//! 幻灯片只读栅格化。先铺页底，再按文档顺序画形状、图、表和文字。
+//! 没有本页纯色页底时铺白。画不了的对象让整页失败，不交出缺一块的图。
+//! 不写回包，像素不进 inspect。
 
 use std::io::Cursor;
 
@@ -10,6 +11,7 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
+use crate::xlsx::Face;
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const DPI: f64 = 96.0;
@@ -29,7 +31,7 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let (cx, cy) = picture::canvas_size(&pres.root);
     let width = emu_span(cx)?;
     let height = emu_span(cy)?;
-    let bg = page_color(&doc.root).ok_or_else(unsupported)?;
+    let bg = page_color(&doc.root).unwrap_or([255, 255, 255]);
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
     fill(&mut rgb, bg);
     paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
@@ -123,31 +125,773 @@ fn visit(
 ) -> Result<(), Error> {
     for child in el.element_children() {
         match child.local_name() {
+            "nvGrpSpPr" | "grpSpPr" | "extLst" => {}
             "pic" => {
                 if grouped || transformed(child) || is_media(child) {
                     return Err(unsupported());
                 }
                 blit_pic(pkg, slide_part, child, rgb, width, height)?;
             }
-            "sp" if !grouped => paint_solid_rect(child, rgb, width, height),
+            "sp" if !grouped => paint_sp(child, rgb, width, height)?,
+            "graphicFrame" if !grouped => paint_frame(pkg, slide_part, child, rgb, width, height)?,
             "grpSp" => visit(pkg, slide_part, child, true, rgb, width, height)?,
             "AlternateContent" => {
                 if let Some(choice) = child.child_by_local("Choice") {
                     visit(pkg, slide_part, choice, grouped, rgb, width, height)?;
                 }
             }
-            _ => {}
+            _ => return Err(unsupported()),
         }
     }
     Ok(())
 }
 
-/// 只画轴对齐、不透明、没有描边的矩形。纯色翻转不改变像素。对不上的形状留空。
-fn paint_solid_rect(sp: &Element, rgb: &mut [u8], width: u32, height: u32) {
-    let Some((color, x, y, w, h)) = plain_rect(sp) else {
+/// 矩形、椭圆、圆角矩形和里面的文字。描边、半透明或转角对不上的矩形整块留空，页继续画。
+fn paint_sp(sp: &Element, rgb: &mut [u8], width: u32, height: u32) -> Result<(), Error> {
+    let Some(sp_pr) = sp.child_by_local("spPr") else {
+        return Ok(());
+    };
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    match prst {
+        "rect" => paint_rect(sp, sp_pr, rgb, width, height),
+        "ellipse" => paint_ellipse(sp, sp_pr, rgb, width, height),
+        "roundRect" => paint_round(sp, sp_pr, rgb, width, height),
+        _ => Err(unsupported()),
+    }
+}
+
+fn paint_rect(
+    sp: &Element,
+    sp_pr: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    if let Some((color, x, y, w, h)) = plain_rect(sp) {
+        fill_rect(rgb, width, height, x, y, w, h, color);
+        paint_tx(sp, x, y, w, h, rgb, width, height);
+        return Ok(());
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Ok(());
+    };
+    if xfrm.attr("rot").is_some() {
+        return Ok(());
+    }
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    if w <= 0 || h <= 0 {
+        return Ok(());
+    }
+    if sp_pr.child_by_local("noFill").is_some() && line_is_clear(sp_pr) {
+        paint_tx(sp, x, y, w, h, rgb, width, height);
+        return Ok(());
+    }
+    if sp_pr.child_by_local("gradFill").is_some() {
+        let (c0, c1, ang) = linear_gradient(sp_pr).ok_or_else(unsupported)?;
+        if !line_is_clear(sp_pr) {
+            return Err(unsupported());
+        }
+        fill_gradient(rgb, width, height, x, y, w, h, c0, c1, ang);
+        paint_tx(sp, x, y, w, h, rgb, width, height);
+    }
+    Ok(())
+}
+
+fn paint_ellipse(
+    sp: &Element,
+    sp_pr: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    let Some(oval) = oval_box(sp_pr)? else {
+        return Ok(());
+    };
+    fill_ellipse(
+        rgb,
+        width,
+        height,
+        oval.x,
+        oval.y,
+        oval.w,
+        oval.h,
+        oval.fill,
+        oval.stroke,
+    );
+    paint_tx(sp, oval.x, oval.y, oval.w, oval.h, rgb, width, height);
+    Ok(())
+}
+
+fn paint_round(
+    sp: &Element,
+    sp_pr: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    let Some(round) = round_box(sp_pr)? else {
+        return Ok(());
+    };
+    fill_round(
+        rgb,
+        width,
+        height,
+        round.x,
+        round.y,
+        round.w,
+        round.h,
+        round.radius,
+        round.fill,
+    );
+    paint_tx(sp, round.x, round.y, round.w, round.h, rgb, width, height);
+    Ok(())
+}
+
+struct Oval {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    fill: RgbaFill,
+    stroke: Option<[u8; 3]>,
+}
+
+struct Round {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    fill: RgbaFill,
+    radius: i32,
+}
+
+fn oval_box(sp_pr: &Element) -> Result<Option<Oval>, Error> {
+    if rotated(sp_pr) {
+        return Err(unsupported());
+    }
+    let Some((x, y, w, h)) = px_box(sp_pr) else {
+        return Ok(None);
+    };
+    Ok(Some(Oval {
+        x,
+        y,
+        w,
+        h,
+        fill: shape_fill(sp_pr)?,
+        stroke: stroke_color(sp_pr)?,
+    }))
+}
+
+fn round_box(sp_pr: &Element) -> Result<Option<Round>, Error> {
+    if rotated(sp_pr) {
+        return Err(unsupported());
+    }
+    let Some((x, y, w, h)) = px_box(sp_pr) else {
+        return Ok(None);
+    };
+    Ok(Some(Round {
+        x,
+        y,
+        w,
+        h,
+        fill: shape_fill(sp_pr)?,
+        radius: round_radius(sp_pr, w, h),
+    }))
+}
+
+fn rotated(sp_pr: &Element) -> bool {
+    sp_pr
+        .child_by_local("xfrm")
+        .and_then(|xfrm| xfrm.attr("rot"))
+        .is_some_and(|raw| raw.parse::<i64>().ok().unwrap_or(1) != 0)
+}
+
+fn px_box(sp_pr: &Element) -> Option<(i32, i32, i32, i32)> {
+    let xfrm = sp_pr.child_by_local("xfrm")?;
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (w, h) = (emu_px(cx), emu_px(cy));
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    Some((emu_px(x), emu_px(y), w, h))
+}
+
+struct RgbaFill {
+    color: [u8; 3],
+    alpha: u8,
+    on: bool,
+}
+
+fn shape_fill(sp_pr: &Element) -> Result<RgbaFill, Error> {
+    if sp_pr.child_by_local("noFill").is_some() {
+        return Ok(RgbaFill {
+            color: [0, 0, 0],
+            alpha: 0,
+            on: false,
+        });
+    }
+    if let Some(fill) = sp_pr.child_by_local("solidFill") {
+        let (color, alpha) = rgba_of(fill).ok_or_else(unsupported)?;
+        return Ok(RgbaFill {
+            color,
+            alpha,
+            on: true,
+        });
+    }
+    if sp_pr.child_by_local("gradFill").is_some() {
+        return Err(unsupported());
+    }
+    Ok(RgbaFill {
+        color: [0, 0, 0],
+        alpha: 0,
+        on: false,
+    })
+}
+
+fn stroke_color(sp_pr: &Element) -> Result<Option<[u8; 3]>, Error> {
+    if line_is_clear(sp_pr) {
+        return Ok(None);
+    }
+    let Some(fill) = sp_pr
+        .child_by_local("ln")
+        .and_then(|ln| ln.child_by_local("solidFill"))
+    else {
+        return Err(unsupported());
+    };
+    let (color, alpha) = rgba_of(fill).ok_or_else(unsupported)?;
+    if alpha != 255 {
+        return Err(unsupported());
+    }
+    Ok(Some(color))
+}
+
+fn rgba_of(fill: &Element) -> Option<([u8; 3], u8)> {
+    let clr = fill.child_by_local("srgbClr")?;
+    let mut alpha = 255u8;
+    for child in clr.element_children() {
+        if child.local_name() != "alpha" {
+            return None;
+        }
+        let val: u32 = child.attr("val")?.parse().ok()?;
+        alpha = ((u64::from(val.min(100_000)) * 255 + 50_000) / 100_000) as u8;
+    }
+    Some((parse_rgb(clr.attr("val")?)?, alpha))
+}
+
+fn linear_gradient(sp_pr: &Element) -> Option<([u8; 3], [u8; 3], i64)> {
+    let grad = sp_pr.child_by_local("gradFill")?;
+    let stops: Vec<&Element> = grad
+        .child_by_local("gsLst")?
+        .element_children()
+        .filter(|el| el.local_name() == "gs")
+        .collect();
+    if stops.len() != 2 {
+        return None;
+    }
+    let c0 = opaque_rgb(stops[0])?;
+    let c1 = opaque_rgb(stops[1])?;
+    let ang: i64 = grad
+        .child_by_local("lin")?
+        .attr("ang")
+        .unwrap_or("0")
+        .parse()
+        .ok()?;
+    if ang.rem_euclid(FULL_TURN) % RIGHT_ANGLE != 0 {
+        return None;
+    }
+    Some((c0, c1, ang))
+}
+
+fn round_radius(sp_pr: &Element, w: i32, h: i32) -> i32 {
+    let adj = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.child_by_local("avLst"))
+        .and_then(|list| {
+            list.element_children()
+                .find(|el| el.attr("name") == Some("adj"))
+        })
+        .and_then(|gd| gd.attr("fmla"))
+        .and_then(|fmla| fmla.strip_prefix("val "))
+        .and_then(|raw| raw.parse::<i64>().ok())
+        .unwrap_or(16_667);
+    let ss = i64::from(w.min(h).max(0));
+    ((ss * adj) / 100_000).clamp(0, ss / 2) as i32
+}
+
+fn paint_frame(
+    pkg: &Package,
+    slide_part: &str,
+    frame: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    let Some(xfrm) = frame.child_by_local("xfrm") else {
+        return Err(unsupported());
+    };
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    if w <= 0 || h <= 0 {
+        return Err(unsupported());
+    }
+    let Some(data) = frame
+        .child_by_local("graphic")
+        .and_then(|graphic| graphic.child_by_local("graphicData"))
+    else {
+        return Err(unsupported());
+    };
+    if let Some(chart) = data.child_by_local("chart") {
+        return paint_chart(pkg, slide_part, chart, rgb, width, height, x, y, w, h);
+    }
+    if let Some(tbl) = data.child_by_local("tbl") {
+        paint_table(tbl, rgb, width, height, x, y)?;
+        return Ok(());
+    }
+    Err(unsupported())
+}
+
+fn paint_chart(
+    pkg: &Package,
+    slide_part: &str,
+    chart: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<(), Error> {
+    let Some(rid) = chart.attr_local("id").filter(|s| !s.is_empty()) else {
+        return Err(unsupported());
+    };
+    let part = opc::resolve_id(pkg, slide_part, rid).map_err(|_| unsupported())?;
+    let bytes = pkg.get(&part).map_err(|_| unsupported())?;
+    let doc = crate::xml::parse(bytes).map_err(|_| unsupported())?;
+    let theme = pkg.get("/ppt/theme/theme1.xml").ok();
+    let png = crate::xlsx::render_clustered_chart(&doc.root, w as u32, h as u32, theme)
+        .map_err(|_| unsupported())?;
+    let image = decode_png(&png)?;
+    paint_image(rgb, width, height, x, y, w as u32, h as u32, &image);
+    Ok(())
+}
+
+fn paint_table(
+    tbl: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+) -> Result<(), Error> {
+    let cols: Vec<i32> = tbl
+        .child_by_local("tblGrid")
+        .map(|grid| {
+            grid.element_children()
+                .filter(|el| el.local_name() == "gridCol")
+                .map(|col| emu_px(col.attr("w").and_then(|raw| raw.parse().ok()).unwrap_or(0)))
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut py = y;
+    for tr in tbl.element_children().filter(|el| el.local_name() == "tr") {
+        let rh = emu_px(tr.attr("h").and_then(|raw| raw.parse().ok()).unwrap_or(0));
+        let mut px = x;
+        for (i, tc) in tr
+            .element_children()
+            .filter(|el| el.local_name() == "tc")
+            .enumerate()
+        {
+            let cw = cols.get(i).copied().unwrap_or(0);
+            if tc.attr_local("gridSpan").is_some()
+                || tc.attr_local("rowSpan").is_some_and(|v| v != "1")
+                || tc.attr_local("hMerge").is_some()
+                || tc.attr_local("vMerge").is_some()
+            {
+                return Err(unsupported());
+            }
+            let fill = tc
+                .child_by_local("tcPr")
+                .and_then(|pr| pr.child_by_local("solidFill"))
+                .and_then(opaque_rgb);
+            if let Some(color) = fill {
+                fill_rect(rgb, width, height, px, py, cw, rh, color);
+            }
+            let ink = fill
+                .map(|color| {
+                    let lum = u16::from(color[0]) + u16::from(color[1]) + u16::from(color[2]);
+                    if lum < 380 {
+                        [255, 255, 255]
+                    } else {
+                        [0x1F, 0x4E, 0x79]
+                    }
+                })
+                .unwrap_or([0, 0, 0]);
+            paint_cell_text(tc, px, py, cw, rh, ink, rgb, width, height);
+            px += cw;
+        }
+        py += rh;
+    }
+    Ok(())
+}
+
+fn paint_cell_text(
+    tc: &Element,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    color: [u8; 3],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) {
+    let Some(tx) = tc.child_by_local("txBody") else {
         return;
     };
-    fill_rect(rgb, width, height, x, y, w, h, color);
+    let text = tx_string(tx);
+    if text.is_empty() {
+        return;
+    }
+    let px = 16.0 * 96.0 / 72.0;
+    let Some(face) = Face::open_named(px, false, "微软雅黑") else {
+        return;
+    };
+    let tw = face.width(&text);
+    let left = f64::from(x) + (f64::from(w) - tw) / 2.0;
+    let top = f64::from(y) + (f64::from(h) - face.em_box()) / 2.0;
+    face.draw(&text, left, top, color, |cx, cy, ink, cov| {
+        blend(rgb, width, height, cx, cy, ink, cov);
+    });
+}
+
+fn tx_string(tx: &Element) -> String {
+    let mut out = String::new();
+    for para in tx.element_children().filter(|el| el.local_name() == "p") {
+        for child in para.element_children() {
+            if child.local_name() == "r" {
+                if let Some(text) = child.child_by_local("t") {
+                    out.push_str(&text.text_content());
+                }
+            }
+        }
+    }
+    out
+}
+
+fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width: u32, height: u32) {
+    let Some(tx) = sp.child_by_local("txBody") else {
+        return;
+    };
+    let body = tx.child_by_local("bodyPr");
+    let inset = |name: &str, default: i64| {
+        body.and_then(|el| el.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .map(emu_px)
+            .unwrap_or_else(|| emu_px(default))
+    };
+    let left = x + inset("lIns", 91_440);
+    let top = y + inset("tIns", 45_720);
+    let right = x + w - inset("rIns", 91_440);
+    let bottom = y + h - inset("bIns", 45_720);
+    let inner_w = right - left;
+    let inner_h = bottom - top;
+    if inner_w <= 0 || inner_h <= 0 {
+        return;
+    }
+    let anchor = body.and_then(|el| el.attr("anchor")).unwrap_or("t");
+    let mut lines: Vec<TextLine> = Vec::new();
+    for para in tx.element_children().filter(|el| el.local_name() == "p") {
+        let Some(line) = para_line(para) else {
+            continue;
+        };
+        lines.push(line);
+    }
+    if lines.is_empty() {
+        return;
+    }
+    let Some(probe) = Face::open_named(lines[0].px, lines[0].bold, &lines[0].font) else {
+        return;
+    };
+    let line_h = probe.em_box();
+    let block = line_h * lines.len() as f64;
+    let mut cursor_y = match anchor {
+        "ctr" => f64::from(top) + (f64::from(inner_h) - block) / 2.0,
+        "b" => f64::from(bottom) - block,
+        _ => f64::from(top),
+    };
+    for line in lines {
+        let Some(face) = Face::open_named(line.px, line.bold, &line.font) else {
+            cursor_y += line_h;
+            continue;
+        };
+        let wrapped = wrap_text(&face, &line.text, f64::from(inner_w));
+        for (index, piece) in wrapped.iter().enumerate() {
+            if index > 0 {
+                cursor_y += face.em_box();
+            }
+            let tw = face.width(piece);
+            let cursor_x = match line.align.as_str() {
+                "ctr" => f64::from(left) + (f64::from(inner_w) - tw) / 2.0,
+                "r" => f64::from(right) - tw,
+                _ => f64::from(left),
+            };
+            face.draw(piece, cursor_x, cursor_y, line.color, |cx, cy, ink, cov| {
+                blend(rgb, width, height, cx, cy, ink, cov);
+            });
+        }
+        cursor_y += face.em_box();
+    }
+}
+
+struct TextLine {
+    text: String,
+    px: f32,
+    bold: bool,
+    color: [u8; 3],
+    font: String,
+    align: String,
+}
+
+fn para_line(para: &Element) -> Option<TextLine> {
+    let run = para
+        .element_children()
+        .find(|el| el.local_name() == "r" && el.child_by_local("t").is_some())?;
+    let text = run.child_by_local("t")?.text_content();
+    if text.trim().is_empty() {
+        return None;
+    }
+    let rpr = run.child_by_local("rPr");
+    let sz = rpr
+        .and_then(|el| el.attr("sz"))
+        .and_then(|raw| raw.parse::<f32>().ok())
+        .unwrap_or(1800.0);
+    let bold = rpr
+        .and_then(|el| el.attr("b"))
+        .is_some_and(|v| v == "1" || v == "true");
+    let color = rpr
+        .and_then(|el| el.child_by_local("solidFill"))
+        .and_then(opaque_rgb)
+        .unwrap_or([0, 0, 0]);
+    let latin = rpr
+        .and_then(|el| el.child_by_local("latin"))
+        .and_then(|el| el.attr("typeface"))
+        .unwrap_or("");
+    let ea = rpr
+        .and_then(|el| el.child_by_local("ea"))
+        .and_then(|el| el.attr("typeface"))
+        .unwrap_or("");
+    let font = if text.chars().any(|ch| ch > '\u{7f}') && !ea.is_empty() {
+        ea.to_string()
+    } else if !latin.is_empty() {
+        latin.to_string()
+    } else if !ea.is_empty() {
+        ea.to_string()
+    } else {
+        "微软雅黑".to_string()
+    };
+    let align = para
+        .child_by_local("pPr")
+        .and_then(|el| el.attr("algn"))
+        .unwrap_or("l")
+        .to_string();
+    Some(TextLine {
+        text,
+        px: sz / 100.0 * 96.0 / 72.0,
+        bold,
+        color,
+        font,
+        align,
+    })
+}
+
+fn wrap_text(face: &Face, text: &str, max_w: f64) -> Vec<String> {
+    if max_w <= 0.0 || face.width(text) <= max_w {
+        return vec![text.to_string()];
+    }
+    let mut lines = Vec::new();
+    let mut cur = String::new();
+    for ch in text.chars() {
+        let mut trial = cur.clone();
+        trial.push(ch);
+        if face.width(&trial) > max_w && !cur.is_empty() {
+            lines.push(std::mem::take(&mut cur));
+            cur.push(ch);
+        } else {
+            cur = trial;
+        }
+    }
+    if !cur.is_empty() {
+        lines.push(cur);
+    }
+    if lines.is_empty() {
+        vec![text.to_string()]
+    } else {
+        lines
+    }
+}
+
+fn fill_gradient(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    c0: [u8; 3],
+    c1: [u8; 3],
+    ang: i64,
+) {
+    let turn = ang.rem_euclid(FULL_TURN);
+    for row in 0..h {
+        let py = y + row;
+        if py < 0 || py >= height as i32 {
+            continue;
+        }
+        for col in 0..w {
+            let px = x + col;
+            if px < 0 || px >= width as i32 {
+                continue;
+            }
+            let quarter = turn / RIGHT_ANGLE;
+            let (num, den) = match quarter {
+                1 => (i64::from(row), i64::from(h - 1)),
+                2 => (i64::from(w - 1 - col), i64::from(w - 1)),
+                3 => (i64::from(h - 1 - row), i64::from(h - 1)),
+                _ => (i64::from(col), i64::from(w - 1)),
+            };
+            let color = [
+                lerp(c0[0], c1[0], num, den),
+                lerp(c0[1], c1[1], num, den),
+                lerp(c0[2], c1[2], num, den),
+            ];
+            let i = (py as usize * width as usize + px as usize) * 3;
+            rgb[i..i + 3].copy_from_slice(&color);
+        }
+    }
+}
+
+fn lerp(a: u8, b: u8, num: i64, den: i64) -> u8 {
+    if den <= 0 {
+        return a;
+    }
+    let v = i64::from(a) + (i64::from(b) - i64::from(a)) * num / den;
+    v.clamp(0, 255) as u8
+}
+
+fn fill_ellipse(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    fill: RgbaFill,
+    stroke: Option<[u8; 3]>,
+) {
+    let sw = if stroke.is_some() { 1 } else { 0 };
+    for row in 0..h {
+        let py = y + row;
+        for col in 0..w {
+            let px = x + col;
+            if !inside_ellipse(px, py, x, y, w, h) {
+                continue;
+            }
+            let inner = sw > 0
+                && w > sw * 2
+                && h > sw * 2
+                && inside_ellipse(px, py, x + sw, y + sw, w - sw * 2, h - sw * 2);
+            if inner || stroke.is_none() {
+                if fill.on {
+                    blend(rgb, width, height, px, py, fill.color, fill.alpha);
+                }
+            } else if let Some(color) = stroke {
+                blend(rgb, width, height, px, py, color, 255);
+            }
+        }
+    }
+}
+
+fn inside_ellipse(px: i32, py: i32, x: i32, y: i32, w: i32, h: i32) -> bool {
+    if w <= 0 || h <= 0 {
+        return false;
+    }
+    let cx = f64::from(x) + f64::from(w) / 2.0;
+    let cy = f64::from(y) + f64::from(h) / 2.0;
+    let dx = (f64::from(px) + 0.5 - cx) / (f64::from(w) / 2.0);
+    let dy = (f64::from(py) + 0.5 - cy) / (f64::from(h) / 2.0);
+    dx * dx + dy * dy <= 1.0
+}
+
+fn fill_round(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    radius: i32,
+    fill: RgbaFill,
+) {
+    if !fill.on {
+        return;
+    }
+    for row in 0..h {
+        let py = y + row;
+        for col in 0..w {
+            let px = x + col;
+            if inside_round(px, py, x, y, w, h, radius) {
+                blend(rgb, width, height, px, py, fill.color, fill.alpha);
+            }
+        }
+    }
+}
+
+fn inside_round(px: i32, py: i32, x: i32, y: i32, w: i32, h: i32, radius: i32) -> bool {
+    if px < x || py < y || px >= x + w || py >= y + h {
+        return false;
+    }
+    let r = radius.max(0).min(w / 2).min(h / 2);
+    if r == 0 {
+        return true;
+    }
+    let (cx, cy) = if px < x + r && py < y + r {
+        (x + r, y + r)
+    } else if px >= x + w - r && py < y + r {
+        (x + w - r, y + r)
+    } else if px < x + r && py >= y + h - r {
+        (x + r, y + h - r)
+    } else if px >= x + w - r && py >= y + h - r {
+        (x + w - r, y + h - r)
+    } else {
+        return true;
+    };
+    let dx = f64::from(px) + 0.5 - f64::from(cx);
+    let dy = f64::from(py) + 0.5 - f64::from(cy);
+    dx * dx + dy * dy <= f64::from(r) * f64::from(r)
+}
+
+fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3], cov: u8) {
+    if cov == 0 || x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+        return;
+    }
+    let i = (y as usize * width as usize + x as usize) * 3;
+    if cov == 255 {
+        rgb[i..i + 3].copy_from_slice(&color);
+        return;
+    }
+    let c = u16::from(cov);
+    for (k, src) in color.into_iter().enumerate() {
+        let dst = u16::from(rgb[i + k]);
+        rgb[i + k] = ((u16::from(src) * c + dst * (255 - c) + 127) / 255) as u8;
+    }
 }
 
 fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {

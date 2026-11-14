@@ -1407,7 +1407,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "This slide cannot be drawn to PNG yet. Only the slide's own solid background, unrotated uncropped PNG pictures, and solid rectangles without a stroke, including quarter turns, are drawn, and the size must be 1 to 4096 pixels"
+            "This slide still has an object that cannot be drawn. Solid or white page backgrounds, unrotated uncropped PNG pictures, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells are drawn, and the size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::PageImageUnsupported => {

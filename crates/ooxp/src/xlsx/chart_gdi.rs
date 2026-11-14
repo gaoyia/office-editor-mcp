@@ -136,6 +136,20 @@ mod win {
             None
         }
 
+        /// 按形状上写的字体名打开。找不到就退回图表那套默认字体。
+        pub fn open_named(px: f32, bold: bool, name: &str) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
+            if !name.is_empty() && !name.starts_with('+') {
+                if let Some(mut face) = Self::new(px, bold, name, pt) {
+                    face.name = face.text_face();
+                    if !face.name.is_empty() {
+                        return Some(face);
+                    }
+                }
+            }
+            Self::open(px, bold)
+        }
+
         /// `px` 是 96 dpi 下的像素字号。负高度让 GDI 按字符高度而不是单元格高度来建。
         fn new(px: f32, bold: bool, name: &str, pt: f32) -> Option<Self> {
             let height = -(px.round() as i32);
@@ -631,6 +645,10 @@ pub struct Face;
 #[cfg(not(windows))]
 impl Face {
     pub fn open(_: f32, _: bool) -> Option<Self> {
+        None
+    }
+
+    pub fn open_named(_: f32, _: bool, _: &str) -> Option<Self> {
         None
     }
 

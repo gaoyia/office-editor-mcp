@@ -14,14 +14,13 @@ const LABEL_PT: f64 = 10.0;
 
 const INK: [u8; 3] = [0, 0, 0];
 const BORDER: [u8; 3] = [0x89, 0x89, 0x89];
-/// 图例在右、没有标题时，576×336 和 384×240 两张图的轴边距相同。
-const INSET_LEFT: i32 = 37;
 const INSET_TOP: i32 = 14;
 const INSET_RIGHT: i32 = 60;
 const INSET_BOTTOM: i32 = 34;
 const TICK_OUT: i32 = 3;
-/// 刻度字到左缘、刻度字到轴线。短标签仍停在 `INSET_LEFT`，不挪已对过的轴。
-const LABEL_EDGE: i32 = 6;
+/// 刻度字前进宽度的左缘。加上字宽和 `TICK_GAP` 就是轴线。
+/// 缩放 100 的金样：字宽 7 → 27，字宽 17 → 37，字宽 28 → 48。
+const LABEL_EDGE: i32 = 9;
 const TICK_GAP: i32 = 11;
 /// 色块、色块到字、绘图区到色块、字到右缘。短标签用不满 `INSET_RIGHT`。
 const LEGEND_SWATCH: i32 = 8;
@@ -432,7 +431,7 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
         canvas,
         chart.categories.len(),
         f64::from(axis_x),
-        f64::from(plot_r),
+        f64::from(plot_r + 1),
         plot_b,
     );
     draw_bars(canvas, chart, &plot, axis_min, axis_max);
@@ -476,12 +475,30 @@ fn draw_cat_ticks(canvas: &mut Canvas, n: usize, x0: f64, x1: f64, axis_y: i32) 
         return;
     }
     for i in 0..=n {
-        let x = (x0 + slot * i as f64).round() as i32;
+        let x = round_half_even(x0 + slot * i as f64);
         canvas.vline_i(x, axis_y - CAT_MAJOR_IN, axis_y + CAT_MAJOR, INK);
     }
     for i in 0..n {
-        let x = (x0 + slot * (i as f64 + 0.5)).round() as i32;
+        let x = round_half_even(x0 + slot * (i as f64 + 0.5));
         canvas.vline_i(x, axis_y - CAT_MINOR_IN, axis_y + CAT_MINOR, INK);
+    }
+}
+
+/// 正好在两个整数中间时取偶数。Excel 16.0 的类目分界是这样取的。
+fn round_half_even(value: f64) -> i32 {
+    let base = value.floor();
+    let frac = value - base;
+    if frac < 0.5 - 1e-8 {
+        return base as i32;
+    }
+    if frac > 0.5 + 1e-8 {
+        return base as i32 + 1;
+    }
+    let down = base as i32;
+    if down % 2 == 0 {
+        down
+    } else {
+        down + 1
     }
 }
 
@@ -515,7 +532,8 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
     let n = chart.series.len().max(1) as f64;
     let overlap = chart.overlap / 100.0;
     let gap = chart.gap_width / 100.0;
-    let slot = plot.w / cats;
+    // 右端那一列算进槽宽。左缘仍是轴线右侧的第一列。
+    let slot = (plot.w + 1.0) / cats;
     let denom = n - (n - 1.0) * overlap + gap;
     if denom <= 0.0 || slot <= 0.0 {
         return;
@@ -545,8 +563,8 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
             } else {
                 ser.color.unwrap_or(chart.accents[ser.slot % 6])
             };
-            let x0 = x.round() as i32;
-            let x1 = (x + bar_w).round() as i32;
+            let x0 = round_half_even(x);
+            let x1 = round_half_even(x + bar_w);
             let y0 = top.round() as i32;
             let y1 = (top + h).round() as i32;
             canvas.fill_rect(x0, y0, x1, y1, color);
@@ -555,7 +573,7 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
 }
 
 fn axis_x_of(widest_tick: i32) -> i32 {
-    INSET_LEFT.max(LABEL_EDGE + widest_tick + TICK_GAP)
+    LABEL_EDGE + widest_tick + TICK_GAP
 }
 
 fn draw_tick_labels(
@@ -587,7 +605,7 @@ fn draw_tick_labels(
         );
     }
     let cats = categories.len().max(1) as f64;
-    let slot = plot.w / cats;
+    let slot = (plot.w + 1.0) / cats;
     let baseline = plot.y + plot.h + 10.0;
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
@@ -1412,9 +1430,20 @@ mod tests {
     }
 
     #[test]
-    fn wide_tick_pushes_axis_right() {
-        assert_eq!(axis_x_of(18), 37);
-        assert_eq!(axis_x_of(28), 45);
+    fn axis_follows_tick_width() {
+        assert_eq!(axis_x_of(7), 27);
+        assert_eq!(axis_x_of(17), 37);
+        assert_eq!(axis_x_of(28), 48);
+    }
+
+    #[test]
+    fn half_pixel_lands_on_even() {
+        assert_eq!(round_half_even(149.5), 150);
+        assert_eq!(round_half_even(165.5), 166);
+        assert_eq!(round_half_even(250.5), 250);
+        assert_eq!(round_half_even(394.5), 394);
+        assert_eq!(round_half_even(88.25), 88);
+        assert_eq!(round_half_even(54.2), 54);
     }
 
     #[test]

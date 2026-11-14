@@ -43,7 +43,7 @@ Production use and commercial use require a commercial license from the author. 
 | `exportChartData` | Write the original embedding workbook of a docx or pptx chart to disk by chart id |
 | `exportChartImage` | Draw an xlsx clustered column chart to PNG by chart id. The package is unchanged, and the pixels do not enter inspect |
 | `exportSparklineImage` | Draw one xlsx line sparkline to PNG by sparkline group id. The package is unchanged, and the pixels do not enter inspect |
-| `exportSlideImage` | Draw a slide's solid background, unrotated PNG pictures, and solid rectangles without a stroke by slide id. The package is unchanged, and the pixels do not enter inspect |
+| `exportSlideImage` | Draw a slide's background, shapes, text, clustered column chart, and table by slide id. The package is unchanged, and the pixels do not enter inspect |
 | `exportPageImage` | Draw one docx page that has no text to a PNG by page id. The package is unchanged, and the pixels do not enter inspect |
 | `layoutCheck` | Read-only check of shape geometry on each pptx slide. It returns bounding boxes, overflow, overlap, and a text-overflow estimate. It does not write a file or render a picture |
 | `help` | Look up how to fill an action, an operation, or a field |

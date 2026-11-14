@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -46,7 +46,7 @@ docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
 
 ## 只读检查与试运行
@@ -582,7 +582,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportSlideImage
 
-调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素，画这一页自己的纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形，含绕中心转 90 度倍数的矩形。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的，超出页面的部分裁掉。包不写回。像素不进 inspect。页底不是这种纯色，或图带旋转、裁剪，则失败。文字和其它形状先跳过。xlsx 与 docx 直接拒绝。
+调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素。没有本页纯色页底时铺白。然后按文档顺序画 PNG、矩形、圆角矩形、椭圆、两色直线渐变、形状里的文字、簇状柱形图和纯色单元格的表。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的，超出页面的部分裁掉。包不写回。像素不进 inspect。图带旋转或裁剪，或还有别的对象，则整页失败。xlsx 与 docx 直接拒绝。
 
 ### exportPageImage
 
@@ -607,7 +607,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 ## 实现时允许的依赖（文档约定，代码阶段再写入 Cargo.toml）
 
 库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx / docx 写保护哈希可用 `sha2`、`getrandom`、`base64`。
-簇状柱形图的 PNG 用 `png` 编码。外框是半径 14 的圆角。类目轴和数值轴都画主刻度、次刻度，刻度穿过轴线。图里没写字体时，Windows 上用 GDI+ 的 AntiAliasGridFit 画 10 磅「等线」，标题加粗。别处用 `fontdue` 的 Calibri。没有这套字体时仍画柱和网格，不调用 Office。
+簇状柱形图的 PNG 用 `png` 编码。外框是半径 14 的圆角。类目轴和数值轴都画主刻度、次刻度，刻度穿过轴线。数值轴横坐标是 9 加最宽刻度字宽再加 11。图里没写字体时，Windows 上用 GDI+ 的 AntiAliasGridFit 画 10 磅「等线」，标题加粗。别处用 `fontdue` 的 Calibri。没有这套字体时仍画柱和网格，不调用 Office。
 禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
 
 ## 阶段边界

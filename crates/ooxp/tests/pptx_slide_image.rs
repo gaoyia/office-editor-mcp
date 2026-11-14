@@ -1,4 +1,4 @@
-//! exportSlideImage：纯色页底、等像素 PNG，以及没有描边的实心矩形。文字不画。
+//! exportSlideImage：页底、PNG、实心矩形。没有本页页底时铺白。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -119,7 +119,7 @@ fn solid_background_and_png_are_copied_at_96_dpi() {
 }
 
 #[test]
-fn missing_solid_background_and_other_formats_are_rejected() {
+fn missing_page_background_is_white() {
     let src = tmp("plain");
     run_ok(json!({
         "schemaVersion": 1,
@@ -128,17 +128,16 @@ fn missing_solid_background_and_other_formats_are_rejected() {
         "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
     }));
     let out = tmp("plain-png").with_extension("png");
-    let err = run(&json!({
+    run_ok(json!({
         "schemaVersion": 1,
         "action": "exportSlideImage",
         "path": src.to_string_lossy(),
         "id": "slide:1",
         "output": out.to_string_lossy()
-    })
-    .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert!(!out.exists());
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 0), [255, 255, 255]);
 
     let err = run(&json!({
         "schemaVersion": 1,

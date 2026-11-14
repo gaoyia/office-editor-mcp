@@ -13,7 +13,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线画成 PNG。像素不进 inspect。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图。像素不进 inspect。文字、其它形状和图表还不画。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。像素不进 inspect。有字、表格和图还不画。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
@@ -133,7 +133,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2363,10 +2363,14 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 轴、网格、图例按图里的位置画。图里没写字体时，字号用 10 磅。标题加粗，轴、类目和图例不加粗
 - 外框是 1 像素圆角，半径 14，颜色 `898989`。圆角外面留白
 - 类目轴主刻度在类目分界上，向上 3 像素、向下 4 像素。次刻度在类目正中，向上 2 像素、向下 3 像素
+- 类目槽从数值轴起到网格右端的下一列。这一段按类目等分，正好落在两个像素中间时取偶数
+- 柱用同一段宽度。缺省空隙是柱宽的 150%，一组柱在类目槽里居中
 - 数值轴主刻度是网格伸出轴线的 3 像素。相邻主刻度之间再画 4 道次刻度，向轴线两侧各 2 像素
 - Windows 上用 GDI+ 的 AntiAliasGridFit 画「等线」。没有这套字时依次试 DengXian、微软雅黑、Calibri。别处用 fontdue 的 Calibri
 - 字形的灰度可以和 Excel 不同。字的位置和黑框大小跟 Excel 对齐
 - 纵轴自动刻度用 1、2、5 的步长。数据超过这一档上限的 95% 时，再加一个步长。正数且能含 0 时，下限钉在 0
+- 数值轴的横坐标是 9，加上最宽刻度的字宽，再加上 11。字宽是 10 磅的 GDI 前进宽度，向上取整
+- 缩放 100 时，一位数刻度的轴在 x=27，「4.5」在 x=37，「1400」在 x=48。不设固定下限
 - 右侧图例的系列名整段留在图内。名字比缺省右边距宽时，绘图区右缘向左让。短名字仍用原来的边距
 - 不是簇状柱形图，或 `crossBetween` 不是 `between`，报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
@@ -2435,14 +2439,18 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 - 宽高按 `p:sldSz` 的 EMU，96 dpi 四舍五入成像素
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
-- 页底只认这一页自己的 `p:bg/p:bgPr/a:solidFill/a:srgbClr`。没有这层、带半透明、或是主题色、渐变、图片页底，报 `NotImplemented`
-- 然后按文档顺序画两类对象。位置和尺寸都用 `a:off` 与 `a:ext`，同一套 96 dpi
+- 本页有不透明 `srgbClr` 页底就用它。没有这层时铺白。半透明、主题色、渐变或图片页底仍不认，改铺白
+- 位置和尺寸用 `a:off` 与 `a:ext`，同一套 96 dpi。后画的盖住先画的，超出页面的部分裁掉
 - `p:pic` 里的嵌入 PNG。源图宽高和目标像素不同时，按最近邻取样。带透明通道的像素叠在已画内容上
-- 没有描边的实心矩形：`prst` 为 `rect`，填充是不透明 `srgbClr`。`flipH` 和 `flipV` 不改变这块纯色，照常画。后画的盖住先画的。超出页面的部分裁掉
-- `rot` 只认 0、90、180、270 度，单位是 1/60000 度。绕矩形中心转。90 和 270 画成宽高对调后的外接矩形
-- 旋转、翻转、裁剪、组合里的图、视频和音频报 `NotImplemented`
-- 有描边、效果、半透明，不是 90 度倍数的旋转，或不是矩形的形状先跳过，不报错
-- 文字、其它形状和图表这一期不画
+- 实心矩形：`prst` 为 `rect`，填充是不透明 `srgbClr`，没有描边。`flipH` 和 `flipV` 不改变这块纯色
+- 矩形可以绕中心转 90 度的倍数。90 和 270 画成宽高对调后的外接矩形。其它角度的矩形整块留空
+- 两色 `srgbClr` 直线渐变只画在没有描边、没有旋转的矩形上。角度只认 90 度的倍数
+- 椭圆可以带不透明描边和 `srgbClr` 透明度。圆角矩形用预设圆角，填充可以半透明
+- 形状里的文字用 `a:rPr` 的字号、粗体、颜色和字体。没有本机字体时这页字不画
+- 簇状柱形图嵌在幻灯片上时，按图表框的像素大小来画
+- 表只画纯色单元格和单元格文字。合并单元格让整页失败
+- 旋转、翻转、裁剪的图，视频和音频，报 `NotImplemented`，整页不画
+- 还有认不出的形状时，整页失败，不交出缺一块的图
 - xlsx 与 docx 报 `InvalidField`
 - id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 成功时 `contentType` 为 `image/png`。源包不写回
