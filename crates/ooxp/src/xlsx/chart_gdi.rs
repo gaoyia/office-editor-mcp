@@ -1,9 +1,10 @@
-//! Windows 上用 GDI 画图表文字。图里没写字体时用「等线」，和 Excel 16.0 的缺省一致。
+//! Windows 上用 GDI+ 的 AntiAliasGridFit 画图表文字。图里没写字体时用「等线」。
 
 #[cfg(windows)]
 mod win {
 
     use std::ffi::c_void;
+    use std::sync::OnceLock;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -100,6 +101,9 @@ mod win {
     pub struct Face {
         dc: *mut c_void,
         font: *mut c_void,
+        name: String,
+        bold: bool,
+        pt: f32,
     }
 
     impl Drop for Face {
@@ -118,11 +122,14 @@ mod win {
     impl Face {
         /// 按顺序找本机有的字体。图里没写字体时，Excel 16.0 用「等线」。
         pub fn open(px: f32, bold: bool) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
             for name in FACES {
-                let Some(face) = Self::new(px, bold, name) else {
+                let Some(mut face) = Self::new(px, bold, name, pt) else {
                     continue;
                 };
-                if face.text_face() == name || name == "Calibri" {
+                let actual = face.text_face();
+                if actual == name || name == "Calibri" {
+                    face.name = actual;
                     return Some(face);
                 }
             }
@@ -130,7 +137,7 @@ mod win {
         }
 
         /// `px` 是 96 dpi 下的像素字号。负高度让 GDI 按字符高度而不是单元格高度来建。
-        fn new(px: f32, bold: bool, name: &str) -> Option<Self> {
+        fn new(px: f32, bold: bool, name: &str, pt: f32) -> Option<Self> {
             let height = -(px.round() as i32);
             if height == 0 {
                 return None;
@@ -163,7 +170,13 @@ mod win {
                     return None;
                 }
                 SelectObject(dc, font);
-                Some(Self { dc, font })
+                Some(Self {
+                    dc,
+                    font,
+                    name: name.to_string(),
+                    bold,
+                    pt,
+                })
             }
         }
 
@@ -222,6 +235,23 @@ mod win {
             top: f64,
             color: [u8; 3],
             mut blend: impl FnMut(i32, i32, [u8; 3], u8),
+        ) {
+            if text.is_empty() {
+                return;
+            }
+            if self.draw_gdiplus(text, x, top, color, &mut blend) {
+                return;
+            }
+            self.draw_gray8(text, x, top, color, &mut blend);
+        }
+
+        fn draw_gray8(
+            &self,
+            text: &str,
+            x: f64,
+            top: f64,
+            color: [u8; 3],
+            blend: &mut impl FnMut(i32, i32, [u8; 3], u8),
         ) {
             let line = self.line_height();
             let mut cursor = x;
@@ -292,6 +322,138 @@ mod win {
             }
         }
 
+        /// 把整段字画进一块白底，再按灰度还原覆盖率。字宽仍用 GDI 的前进宽度，轴线不跟着挪。
+        fn draw_gdiplus(
+            &self,
+            text: &str,
+            x: f64,
+            top: f64,
+            color: [u8; 3],
+            blend: &mut impl FnMut(i32, i32, [u8; 3], u8),
+        ) -> bool {
+            if gdiplus_token().is_none() {
+                return false;
+            }
+            let pad = 4i32;
+            let bw = (self.width(text).ceil() as i32 + pad * 2 + 8).max(1);
+            let bh = (self.em_box().ceil() as i32 + pad * 2 + 8).max(1);
+            let mut pixels = vec![0xFFFF_FFFFu32; (bw as usize) * (bh as usize)];
+            let chars: Vec<u16> = text.encode_utf16().collect();
+            let mut name: Vec<u16> = self.name.encode_utf16().collect();
+            name.push(0);
+            let drawn = unsafe {
+                let mut bitmap = std::ptr::null_mut();
+                if GdipCreateBitmapFromScan0(
+                    bw,
+                    bh,
+                    bw * 4,
+                    PIXEL_FORMAT_32BPP_ARGB,
+                    pixels.as_mut_ptr().cast(),
+                    &mut bitmap,
+                ) != 0
+                    || bitmap.is_null()
+                {
+                    return false;
+                }
+                GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+                let mut graphics = std::ptr::null_mut();
+                if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                GdipSetPageUnit(graphics, UNIT_PIXEL);
+                GdipSetTextRenderingHint(graphics, TEXT_ANTIALIAS_GRIDFIT);
+                let mut family = std::ptr::null_mut();
+                if GdipCreateFontFamilyFromName(name.as_ptr(), std::ptr::null_mut(), &mut family)
+                    != 0
+                    || family.is_null()
+                {
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut font = std::ptr::null_mut();
+                let style = if self.bold { FONT_STYLE_BOLD } else { 0 };
+                if GdipCreateFont(family, self.pt, style, UNIT_POINT, &mut font) != 0
+                    || font.is_null()
+                {
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut brush = std::ptr::null_mut();
+                if GdipCreateSolidFill(0xFF00_0000, &mut brush) != 0 || brush.is_null() {
+                    GdipDeleteFont(font);
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut generic = std::ptr::null_mut();
+                let mut format = std::ptr::null_mut();
+                if GdipStringFormatGetGenericTypographic(&mut generic) != 0
+                    || GdipCloneStringFormat(generic, &mut format) != 0
+                    || format.is_null()
+                {
+                    GdipDeleteBrush(brush);
+                    GdipDeleteFont(font);
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                GdipSetStringFormatFlags(format, STRING_FORMAT_TYPO);
+                let rect = RectF {
+                    x: pad as f32,
+                    y: pad as f32,
+                    w: (bw - pad) as f32,
+                    h: (bh - pad) as f32,
+                };
+                let status = GdipDrawString(
+                    graphics,
+                    chars.as_ptr(),
+                    chars.len() as i32,
+                    font,
+                    &rect,
+                    format,
+                    brush,
+                );
+                GdipDeleteStringFormat(format);
+                GdipDeleteBrush(brush);
+                GdipDeleteFont(font);
+                GdipDeleteFontFamily(family);
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                status == 0
+            };
+            if !drawn {
+                return false;
+            }
+            let ox = x.round() as i32 - pad;
+            let oy = top.round() as i32 - pad;
+            for py in 0..bh {
+                for px in 0..bw {
+                    let row = pixels[py as usize * bw as usize + px as usize];
+                    let red = ((row >> 16) & 0xff) as u8;
+                    let green = ((row >> 8) & 0xff) as u8;
+                    let blue = (row & 0xff) as u8;
+                    if red == 255 && green == 255 && blue == 255 {
+                        continue;
+                    }
+                    let cov = (255 - u16::from(red))
+                        .max(255 - u16::from(green))
+                        .max(255 - u16::from(blue))
+                        .min(255) as u8;
+                    if cov == 0 {
+                        continue;
+                    }
+                    blend(ox + px, oy + py, color, cov);
+                }
+            }
+            true
+        }
+
         fn text_metric(&self) -> Option<TextMetric> {
             let mut metric = TextMetric {
                 height: 0,
@@ -335,6 +497,97 @@ mod win {
         }
     }
 
+    const TEXT_ANTIALIAS_GRIDFIT: i32 = 3;
+    const UNIT_PIXEL: i32 = 2;
+    const UNIT_POINT: i32 = 3;
+    const FONT_STYLE_BOLD: i32 = 1;
+    const PIXEL_FORMAT_32BPP_ARGB: i32 = 0x0026_200A;
+    /// GenericTypographic 再加不换行、保留行尾空格、不裁切。
+    const STRING_FORMAT_TYPO: i32 = 0x7804;
+
+    #[repr(C)]
+    struct GdiplusStartupInput {
+        version: u32,
+        callback: *mut c_void,
+        suppress_background: i32,
+        suppress_codecs: i32,
+    }
+
+    #[repr(C)]
+    struct RectF {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+    }
+
+    #[link(name = "gdiplus")]
+    extern "system" {
+        fn GdiplusStartup(
+            token: *mut usize,
+            input: *const GdiplusStartupInput,
+            output: *mut c_void,
+        ) -> i32;
+        fn GdipCreateBitmapFromScan0(
+            width: i32,
+            height: i32,
+            stride: i32,
+            format: i32,
+            scan0: *mut u8,
+            bitmap: *mut *mut c_void,
+        ) -> i32;
+        fn GdipBitmapSetResolution(bitmap: *mut c_void, xdpi: f32, ydpi: f32) -> i32;
+        fn GdipGetImageGraphicsContext(image: *mut c_void, graphics: *mut *mut c_void) -> i32;
+        fn GdipSetPageUnit(graphics: *mut c_void, unit: i32) -> i32;
+        fn GdipSetTextRenderingHint(graphics: *mut c_void, hint: i32) -> i32;
+        fn GdipCreateFontFamilyFromName(
+            name: *const u16,
+            collection: *mut c_void,
+            family: *mut *mut c_void,
+        ) -> i32;
+        fn GdipCreateFont(
+            family: *mut c_void,
+            size: f32,
+            style: i32,
+            unit: i32,
+            font: *mut *mut c_void,
+        ) -> i32;
+        fn GdipCreateSolidFill(color: u32, brush: *mut *mut c_void) -> i32;
+        fn GdipStringFormatGetGenericTypographic(format: *mut *mut c_void) -> i32;
+        fn GdipCloneStringFormat(src: *mut c_void, clone: *mut *mut c_void) -> i32;
+        fn GdipSetStringFormatFlags(format: *mut c_void, flags: i32) -> i32;
+        fn GdipDrawString(
+            graphics: *mut c_void,
+            text: *const u16,
+            length: i32,
+            font: *mut c_void,
+            layout: *const RectF,
+            format: *mut c_void,
+            brush: *mut c_void,
+        ) -> i32;
+        fn GdipDeleteStringFormat(format: *mut c_void) -> i32;
+        fn GdipDeleteBrush(brush: *mut c_void) -> i32;
+        fn GdipDeleteFont(font: *mut c_void) -> i32;
+        fn GdipDeleteFontFamily(family: *mut c_void) -> i32;
+        fn GdipDeleteGraphics(graphics: *mut c_void) -> i32;
+        fn GdipDisposeImage(image: *mut c_void) -> i32;
+    }
+
+    fn gdiplus_token() -> Option<usize> {
+        static TOKEN: OnceLock<Option<usize>> = OnceLock::new();
+        *TOKEN.get_or_init(|| unsafe {
+            let input = GdiplusStartupInput {
+                version: 1,
+                callback: std::ptr::null_mut(),
+                suppress_background: 0,
+                suppress_codecs: 0,
+            };
+            let mut token = 0usize;
+            let status = GdiplusStartup(&mut token, &input, std::ptr::null_mut());
+            (status == 0 && token != 0).then_some(token)
+        })
+    }
+
     fn identity() -> Mat2 {
         Mat2 {
             e_m11: Fixed { fract: 0, value: 1 },
@@ -353,6 +606,19 @@ mod win {
             "实际字体是 {name}"
         );
         assert_eq!(face.width("1400"), 28.0);
+    }
+
+    #[test]
+    fn chart_text_antialiases() {
+        let face = Face::open(13.0, false).expect("本机应有图表字体");
+        let mut smooth = 0;
+        face.draw("0", 4.0, 4.0, [0, 0, 0], |_, _, _, cov| {
+            let gray8 = (0u16..=64).any(|sample| (sample * 255) / 64 == u16::from(cov));
+            if cov > 0 && !gray8 {
+                smooth += 1;
+            }
+        });
+        assert!(smooth > 0, "应走 AntiAliasGridFit，而不是 Gray8");
     }
 }
 

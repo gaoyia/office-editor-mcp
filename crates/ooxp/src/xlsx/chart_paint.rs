@@ -28,6 +28,10 @@ const LEGEND_SWATCH: i32 = 8;
 const LEGEND_GAP: i32 = 6;
 const LEGEND_PLOT_GAP: i32 = 22;
 const LEGEND_PAD: i32 = 4;
+/// 有标题时，图例在这 30 像素标题带之下垂直居中。无标题的图不加这截。
+const LEGEND_TITLE_BAND: i32 = 30;
+/// 标题墨迹比布局顶低 7 像素。绘图区仍从布局顶往下排。
+const TITLE_DROP: f64 = 7.0;
 /// Excel 16.0 图表外框圆角。576、384、647 三档都是 14 像素。
 const CORNER_R: i32 = 14;
 const CAT_MAJOR: i32 = 4;
@@ -450,7 +454,16 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
         let face = title_face.as_ref().or(gdi.as_ref());
         let width = text_width(font, face, title, label_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(canvas, font, face, title, x, title_top, label_px, INK);
+        draw_text(
+            canvas,
+            font,
+            face,
+            title,
+            x,
+            title_top + TITLE_DROP,
+            label_px,
+            INK,
+        );
     }
     draw_legend(canvas, chart, font, gdi.as_ref(), label_px, plot_r);
     canvas.stroke_border(BORDER);
@@ -568,14 +581,14 @@ fn draw_tick_labels(
             gdi,
             label,
             f64::from(axis_x) - w - f64::from(TICK_GAP),
-            y - h / 2.0 + 4.0,
+            y - h / 2.0,
             px,
             INK,
         );
     }
     let cats = categories.len().max(1) as f64;
     let slot = plot.w / cats;
-    let baseline = plot.y + plot.h + 13.0;
+    let baseline = plot.y + plot.h + 10.0;
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
@@ -600,7 +613,12 @@ fn draw_legend(
         return;
     }
     let block = pitch * (n - 1) + LEGEND_SWATCH;
-    let mut y = (canvas.h as i32 - block) / 2;
+    let title_band = if chart.title.is_some() {
+        LEGEND_TITLE_BAND
+    } else {
+        0
+    };
+    let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + LEGEND_PLOT_GAP;
     for ser in &chart.series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
