@@ -142,7 +142,7 @@ fn visit(
     Ok(())
 }
 
-/// 只画轴对齐、不透明、没有描边的矩形。对不上的形状留空，留给后面的绘制。
+/// 只画轴对齐、不透明、没有描边的矩形。纯色翻转不改变像素。对不上的形状留空。
 fn paint_solid_rect(sp: &Element, rgb: &mut [u8], width: u32, height: u32) {
     let Some((color, x, y, w, h)) = plain_rect(sp) else {
         return;
@@ -159,9 +159,6 @@ fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
         return None;
     }
     let xfrm = sp_pr.child_by_local("xfrm")?;
-    if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
-        return None;
-    }
     let prst = sp_pr.child_by_local("prstGeom")?.attr("prst")?;
     if prst != "rect" {
         return None;
@@ -484,4 +481,18 @@ fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
 
 fn unsupported() -> Error {
     Error::with_path(ErrorKind::SlideImageUnsupported, "id")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flipped_solid_rect_keeps_the_same_box() {
+        let xml = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm flipH="1" flipV="1"><a:off x="1828800" y="914400"/><a:ext cx="914400" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let (color, x, y, w, h) = plain_rect(&doc.root).unwrap();
+        assert_eq!(color, [0xEE, 0x44, 0x55]);
+        assert_eq!((x, y, w, h), (192, 96, 96, 48));
+    }
 }
