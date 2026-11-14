@@ -123,11 +123,11 @@ fn dispatch(
 const INSTRUCTIONS_ZH: &str = "\
 ooxp 是 Office Open XML Patch。它用领域 JSON 读写 docx、xlsx、pptx。真源是包里的 XML。程序按稳定 id 打补丁，其余部件按原字节写回。只有新建文件才整包生成。程序不计算公式，不排版，也不放映。
 
-不知道如何使用这些工具时，先调用 help。不带参数可以看九个动作怎么用。要某个格式的操作名单，带上 format。要某一条操作的字段，再带上 format 和 op。查完再调用对应的工具。
+不知道如何使用这些工具时，先调用 help。不带参数可以看十个动作怎么用。要某个格式的操作名单，带上 format。要某一条操作的字段，再带上 format 和 op。查完再调用对应的工具。
 
-调用先走 inspect，只用返回树上的 id。id 和 op 名都从 inspect 或 help 里取。接着用 apply，一次只写需要的 op。create 整包生成一份新文件，目标路径已存在则覆盖。改已有内容用 apply。它是 action。op 名单里没有 create。要看它的字段，用 help 打开 name 为 createRequest 的定义。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。这三项不要同时出现。exportMedia、exportChartData、exportChartImage 和 exportSlideImage 把字节写到 output 给出的另一个路径。这些字节不进入 inspect 树。
+调用先走 inspect，只用返回树上的 id。id 和 op 名都从 inspect 或 help 里取。接着用 apply，一次只写需要的 op。create 整包生成一份新文件，目标路径已存在则覆盖。改已有内容用 apply。它是 action。op 名单里没有 create。要看它的字段，用 help 打开 name 为 createRequest 的定义。xlsx 的正文写在 workbook，docx 写在 document，pptx 写在 presentation。这三项不要同时出现。exportMedia、exportChartData、exportChartImage、exportSlideImage 和 exportPageImage 把字节写到 output 给出的另一个路径。这些字节不进入 inspect 树。
 
-九个工具的参数有两种形状。直接写领域 JSON，字段名保持原样。或者只写 requestPath，指向本机上一份领域 JSON 文件。两种不要同时写。action 由工具名补上。调用方写了 action 时，它必须和工具名相同。schemaVersion 可以省略，省略视为 1。写了又不是 1，调用会被拒绝。format 可以省略，程序从 path 的扩展名推断。path 是这份 Office 文件在本机的路径。apply 要另存时，把新路径写在 output，省略则写回 path。exportMedia、exportChartData、exportChartImage 和 exportSlideImage 把落盘路径写在 output。调用被拒绝时，读错误里的 code 和字段，再改请求。
+十个工具的参数有两种形状。直接写领域 JSON，字段名保持原样。或者只写 requestPath，指向本机上一份领域 JSON 文件。两种不要同时写。action 由工具名补上。调用方写了 action 时，它必须和工具名相同。schemaVersion 可以省略，省略视为 1。写了又不是 1，调用会被拒绝。format 可以省略，程序从 path 的扩展名推断。path 是这份 Office 文件在本机的路径。apply 要另存时，把新路径写在 output，省略则写回 path。exportMedia、exportChartData、exportChartImage、exportSlideImage 和 exportPageImage 把落盘路径写在 output。调用被拒绝时，读错误里的 code 和字段，再改请求。
 
 help 一次只打开一层。它不读文件，也不改文件。不带参数时，它返回动作目录和 ask。带 format 时，它列出该格式的 op。带 q 时可以再加 format，结果会命中动作、定义和 op。带 format 和 op 时，它打开这一条操作。带 name 时，它打开一个定义。name 是定义名，例如 createRequest、inspectScope。q、op、name 不要同时出现。返回里的 kind 和 next 说明这一层是什么，以及下一步该带哪些字段。上一层的结果不是全部字段。help 不写 locale、进程也没给 --lang 时，说明是中文。
 
@@ -136,11 +136,11 @@ help 一次只打开一层。它不读文件，也不改文件。不带参数时
 const INSTRUCTIONS_EN: &str = "\
 ooxp is Office Open XML Patch. It reads and writes docx, xlsx, and pptx with domain JSON. The source of truth is the XML in the package. The program patches that XML by stable id and writes every other part back as its original bytes. Only creating a file generates a whole package. The program does not calculate formulas, lay out pages, or run a slide show.
 
-If you do not know how to use these tools, call help first. With no arguments it shows how the nine actions work. For one format's operation list, add format. For one operation's fields, add format and op. Then call the tool.
+If you do not know how to use these tools, call help first. With no arguments it shows how the ten actions work. For one format's operation list, add format. For one operation's fields, add format and op. Then call the tool.
 
-Start with inspect, and use only ids from the returned tree. Take ids and op names from inspect or help. Then use apply, and send only the ops you need. create generates a whole new file, and an existing path is overwritten. To change existing content, use apply. It is an action. The op list has no create. To see its fields, open the definition named createRequest with help. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation. Do not send those three together. exportMedia, exportChartData, exportChartImage, and exportSlideImage write bytes to the path in output. Those bytes do not enter the inspect tree.
+Start with inspect, and use only ids from the returned tree. Take ids and op names from inspect or help. Then use apply, and send only the ops you need. create generates a whole new file, and an existing path is overwritten. To change existing content, use apply. It is an action. The op list has no create. To see its fields, open the definition named createRequest with help. The xlsx body goes in workbook, the docx body in document, and the pptx body in presentation. Do not send those three together. exportMedia, exportChartData, exportChartImage, exportSlideImage, and exportPageImage write bytes to the path in output. Those bytes do not enter the inspect tree.
 
-Each of the nine tools takes one of two shapes. Write domain JSON directly and keep the field names. Or write only requestPath, pointing at a domain JSON file on this machine. Do not send both. The tool name fills in action. If you write action, it must match the tool name. schemaVersion may be omitted, and that means 1. Any other value is rejected. format may be omitted; the program infers it from the path extension. path is the Office file on this machine. To save apply as another file, put the new path in output. Omit it to write back to path. exportMedia, exportChartData, exportChartImage, and exportSlideImage put the destination path in output. When a call is rejected, read the error code and field, then change the request.
+Each of the ten tools takes one of two shapes. Write domain JSON directly and keep the field names. Or write only requestPath, pointing at a domain JSON file on this machine. Do not send both. The tool name fills in action. If you write action, it must match the tool name. schemaVersion may be omitted, and that means 1. Any other value is rejected. format may be omitted; the program infers it from the path extension. path is the Office file on this machine. To save apply as another file, put the new path in output. Omit it to write back to path. exportMedia, exportChartData, exportChartImage, exportSlideImage, and exportPageImage put the destination path in output. When a call is rejected, read the error code and field, then change the request.
 
 help opens one layer at a time. It does not read a file or change a file. With no arguments it returns the action index and ask. With format it lists that format's ops. With q it may also take format, and the hits include actions, definitions, and ops. With format and op it opens that one operation. With name it opens a definition. name is a definition name, such as createRequest or inspectScope. Do not send q, op, and name together. kind and next say what this layer is and which fields to send next. The previous layer is not the full field list. When help omits locale and the process has no --lang, the text is Chinese.
 
@@ -300,6 +300,13 @@ fn tools(lang: Lang) -> Value {
                 lang,
             ),
             tool(
+                "exportPageImage",
+                say(lang, "按页 id 把 docx 里没有字的一页写成 PNG，写到 output。源文件保持不变，像素不进入 inspect 树。有字的页还不画。", "Draw one docx page that has no text to a PNG at output by page id. The source file stays unchanged, and the pixels do not enter the inspect tree. Pages with text are not drawn yet."),
+                domain_properties(Action::ExportPageImage, lang),
+                &["path", "id", "output"],
+                lang,
+            ),
+            tool(
                 "layoutCheck",
                 say(lang, "只读检查 pptx 每页形状的几何，返回包围盒、越界、重叠与文字溢出估算。不写文件，也不生成图片。", "Read-only geometry check for pptx shapes. Returns boxes, out-of-bounds, overlaps, and text-overflow estimates. It writes no files and renders no images."),
                 domain_properties(Action::LayoutCheck, lang),
@@ -335,6 +342,7 @@ fn action_name(action: Action) -> &'static str {
         Action::ExportChartData => "exportChartData",
         Action::ExportChartImage => "exportChartImage",
         Action::ExportSlideImage => "exportSlideImage",
+        Action::ExportPageImage => "exportPageImage",
         Action::LayoutCheck => "layoutCheck",
         Action::Help => "help",
     }
@@ -485,15 +493,16 @@ fn call_tool(params: &Value, default_lang: Option<&str>) -> Value {
             | "exportChartData"
             | "exportChartImage"
             | "exportSlideImage"
+            | "exportPageImage"
             | "layoutCheck"
             | "help"
     ) {
         let message = match lang {
             Lang::ZhCn => format!(
-                "未知工具：{name}。可用的工具是 inspect、create、apply、exportMedia、exportChartData、exportChartImage、exportSlideImage、layoutCheck、help。"
+                "未知工具：{name}。可用的工具是 inspect、create、apply、exportMedia、exportChartData、exportChartImage、exportSlideImage、exportPageImage、layoutCheck、help。"
             ),
             Lang::En => format!(
-                "Unknown tool: {name}. The tools are inspect, create, apply, exportMedia, exportChartData, exportChartImage, exportSlideImage, layoutCheck, and help."
+                "Unknown tool: {name}. The tools are inspect, create, apply, exportMedia, exportChartData, exportChartImage, exportSlideImage, exportPageImage, layoutCheck, and help."
             ),
         };
         return fail(lang, "UnsupportedAction", message, None);
@@ -1048,6 +1057,7 @@ mod tests {
                 "exportChartData",
                 "exportChartImage",
                 "exportSlideImage",
+                "exportPageImage",
                 "layoutCheck",
                 "help"
             ]
@@ -1059,7 +1069,7 @@ mod tests {
         let response = reply(r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#).unwrap();
         let parsed: Value = serde_json::from_str(&response).unwrap();
         let tools = parsed["result"]["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 9);
+        assert_eq!(tools.len(), 10);
         let tool = tools.iter().find(|t| t["name"] == "layoutCheck").unwrap();
         assert_eq!(tool["inputSchema"]["oneOf"][0]["required"], json!(["path"]));
     }

@@ -13,6 +13,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图。像素不进 inspect。文字、其它形状和图表还不画。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。像素不进 inspect。有字、表格和图还不画。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
@@ -102,10 +103,10 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 可选。省略视为 `1`。写了就必须是 `1` |
-| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`layoutCheck`、`help` 之一 |
+| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`exportPageImage`、`layoutCheck`、`help` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，九种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
+`locale` 不属于动作参数，十种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。
 这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。`ooxp mcp --lang` 与这里的 `--lang` 同一档。没带时，错误文案只剩 `locale` 和 `OOXP_LANG`。`help` 在请求和 `--lang` 都没给语言时仍是中文。自己另写的外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
@@ -131,14 +132,14 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
 
 本工具不调用它们。不写 `format`、`q`、`op`、`name` 时，这句话写在 `help` 这一条的 `limits` 里。搜「预览」或 `preview` 也会命中。
 
-不带 `format`、`q`、`op`、`name` 时，只说明九个动作各自干什么，以及下一步该带哪些字段。
+不带 `format`、`q`、`op`、`name` 时，只说明十个动作各自干什么，以及下一步该带哪些字段。
 
 带 `format` 时，列出该格式的操作。`description` 只写这个操作做什么。填的时候要注意的放在 `limits`，另成一条。`xlsm` 与 `xlsx` 同一份名单。
 
@@ -2395,6 +2396,40 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 文字、其它形状和图表这一期不画
 - xlsx 与 docx 报 `InvalidField`
 - id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
+- 成功时 `contentType` 为 `image/png`。源包不写回
+- 像素差在绘制引擎里修。对照只标红区，不靠放宽容差过关
+
+## exportPageImage
+
+按页 id 把这一页写成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "exportPageImage",
+  "path": "C:\\data\\note.docx",
+  "id": "page:1",
+  "output": "C:\\out\\page.png"
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 源 docx |
+| `id` | 是 | 页 id，形如 `page:1`，从 1 起 |
+| `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
+| `format` | 否 | 可省略，从 `path` 扩展名推断 |
+
+- 只画没有可见内容的页。正文只有空段，段上没有子元素。一节，节属性在 `w:body` 末尾
+- 没有页眉、页脚、页面边框、行号、文档网格，也没有多栏
+- 默认字体是 Calibri，字号 11 磅（`w:sz` 为 22）。默认段落样式没有段前段后
+- 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页
+- 宽高按该节 `w:pgSz` 的 twip，96 dpi，`twip × 96 / 1440` 四舍五入成像素
+- 宽或高小于 1 或大于 4096 报 `NotImplemented`
+- 页边距缺了按 1440 twip。正文区放不下一行报 `NotImplemented`
+- 有字、表格、图、分节符，或行距不是上面这一档，报 `NotImplemented`
+- xlsx 与 pptx 报 `InvalidField`
+- id 不是 `page:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 成功时 `contentType` 为 `image/png`。源包不写回
 - 像素差在绘制引擎里修。对照只标红区，不靠放宽容差过关
 

@@ -67,7 +67,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - **`UnsupportedSchema`**（退出码 2）
   - `schemaVersion` 不是 `1`
 - **`UnsupportedAction`**（退出码 2）
-  - `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData` / `exportChartImage` / `exportSlideImage` / `layoutCheck` / `help`
+  - `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData` / `exportChartImage` / `exportSlideImage` / `exportPageImage` / `layoutCheck` / `help`
 - **`UnsupportedFormat`**（退出码 2）
   - 扩展名或 `format` 不是 `xlsx` / `xlsm` / `docx` / `pptx`
 - **`UnsupportedOp`**（退出码 2）
@@ -76,7 +76,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
   - 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键
   - docx create 只给 `password`、不给限制编辑种类
   - 字符串含有 XML 不允许的字符。`path` 指向该字段，例如 `ops[2].text`、`workbook.sheets[0].cells[3].value`。文案带码位，例如 `U+000B`
-  - `run_bytes` 做 inspect、apply、exportMedia、exportChartData、exportChartImage、exportSlideImage 时没带上包字节。不带 `path`。英文是 `Package bytes are required`，中文是 `缺少文件字节`
+  - `run_bytes` 做 inspect、apply、exportMedia、exportChartData、exportChartImage、exportSlideImage、exportPageImage 时没带上包字节。不带 `path`。英文是 `Package bytes are required`，中文是 `缺少文件字节`
 - **`InvalidRange`**（退出码 2）
   - A1 区域解析失败，或起止颠倒
 - **`InvalidId`**（退出码 2）
@@ -1162,6 +1162,9 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 页底不是本页不透明纯色，或图不是没有旋转、裁剪的 PNG，`exportSlideImage` 报 `NotImplemented`。有描边或不是矩形的形状先跳过，不因此报错
 - xlsx 与 docx 上发 `exportSlideImage` 报 `InvalidField`
+- `exportPageImage` 的 id 不是 `page:N` 报 `InvalidId`。页不存在报 `IdNotFound`
+- 有字、表格、图，或行距不是 Calibri 11 磅空段，`exportPageImage` 报 `NotImplemented`
+- xlsx 与 pptx 上发 `exportPageImage` 报 `InvalidField`
 - `id` 不是图表 id 报 `InvalidId`
 - 没有 embedding 报 `OpcPartMissing`
 - `setProps` / `setCustomProp` 的 id 不是对应格式根报 `InvalidId`
@@ -1179,7 +1182,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 inspect 成功：stdout 是领域树，见 [json-contract.md](json-contract.md) 与 [json-contract-xlsx.md](json-contract-xlsx.md) 等分册。
 不要再包一层 `{ "ok": true, "tree": ... }`，以免和树本身的字段打架。
 
-create / apply / exportMedia / exportChartData / exportChartImage / exportSlideImage 成功：stdout 为一行 JSON：
+create / apply / exportMedia / exportChartData / exportChartImage / exportSlideImage / exportPageImage 成功：stdout 为一行 JSON：
 
 ```json
 {
@@ -1189,7 +1192,7 @@ create / apply / exportMedia / exportChartData / exportChartImage / exportSlideI
 }
 ```
 
-`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create、`exportMedia`、`exportChartData`、`exportChartImage` 与 `exportSlideImage` 省略该字段。
+`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage` 与 `exportPageImage` 省略该字段。
 
 apply 带 `dryRun: true` 时成功响应不带 `path`，也不写文件。它带 `dryRun: true`、`opsApplied` 和 `parts`，`parts` 是本批标脏的部件名数组：
 
@@ -1206,7 +1209,7 @@ apply 带 `dryRun: true` 时成功响应不带 `path`，也不写文件。它带
 
 `layoutCheck` 成功：stdout 是几何检查结果 JSON，不带 `ok`、不带 `path`。它不写文件，详见 [json-contract.md](json-contract.md#layoutcheck)。
 
-`exportMedia` 与 `exportChartData` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段。`exportChartImage` 成功时 `contentType` 固定为 `image/png`：
+`exportMedia` 与 `exportChartData` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段。`exportChartImage`、`exportSlideImage` 与 `exportPageImage` 成功时 `contentType` 固定为 `image/png`：
 
 ```json
 {

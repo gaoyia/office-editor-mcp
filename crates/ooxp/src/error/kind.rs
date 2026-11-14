@@ -45,6 +45,8 @@ pub(crate) enum IdReason {
     SlideIndexFromOne,
     /// exportSlideImage 的 id 必须是 slide:N
     ExportSlideNeedsSlide,
+    /// exportPageImage 的 id 必须是 page:N
+    ExportPageNeedsPage,
     ShapeEmpty,
     ShapeIndexNotInt,
     ShapeIndexFromOne,
@@ -797,6 +799,8 @@ define_error_kinds! {
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
     ChartImageUnsupported => vec![Self::ChartImageUnsupported],
     SlideImageUnsupported => vec![Self::SlideImageUnsupported],
+    PageNotFound { n: u32 } => vec![Self::PageNotFound { n: 2 }],
+    PageImageUnsupported => vec![Self::PageImageUnsupported],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
@@ -1415,6 +1419,7 @@ impl IdReason {
             Self::SlideIndexNotInt,
             Self::SlideIndexFromOne,
             Self::ExportSlideNeedsSlide,
+            Self::ExportPageNeedsPage,
             Self::ShapeEmpty,
             Self::ShapeIndexNotInt,
             Self::ShapeIndexFromOne,
@@ -2260,6 +2265,7 @@ impl ErrorKind {
             | Self::SectionNotFound { .. }
             | Self::CustomShowNotFound { .. }
             | Self::SlideNotFound { .. }
+            | Self::PageNotFound { .. }
             | Self::MasterNotFound { .. }
             | Self::ThemeNotFound { .. }
             | Self::DocumentThemeNotFound
@@ -2351,6 +2357,7 @@ impl ErrorKind {
             | Self::ChartFormulaNotA1
             | Self::ChartImageUnsupported
             | Self::SlideImageUnsupported
+            | Self::PageImageUnsupported
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple

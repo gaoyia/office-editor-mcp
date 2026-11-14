@@ -91,6 +91,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideIndexNotInt => "Slide index must be a positive integer".into(),
             IdReason::SlideIndexFromOne => "Slide index starts at 1".into(),
             IdReason::ExportSlideNeedsSlide => "exportSlideImage id must be slide:N".into(),
+            IdReason::ExportPageNeedsPage => "exportPageImage id must be page:N".into(),
             IdReason::ShapeEmpty => "shape must not be empty".into(),
             IdReason::ShapeIndexNotInt => {
                 "shape:index must be followed by a positive integer".into()
@@ -910,6 +911,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
         ErrorKind::CustomShowNotFound { id } => format!("Custom show not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
+        ErrorKind::PageNotFound { n } => format!("Page not found: page:{n}"),
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
         ErrorKind::DocumentThemeNotFound => "Document theme part not found".into(),
@@ -1406,6 +1408,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SlideImageUnsupported => {
             "This slide cannot be drawn to PNG yet. Only the slide's own solid background, unrotated uncropped PNG pictures, and solid rectangles without a stroke, including quarter turns, are drawn, and the size must be 1 to 4096 pixels"
+                .into()
+        }
+        ErrorKind::PageImageUnsupported => {
+            "This page cannot be drawn to PNG yet. Only a page with no text is drawn: one section, empty paragraphs, Calibri 11 pt, and no header or footer. Text, tables, and pictures are not drawn yet"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),

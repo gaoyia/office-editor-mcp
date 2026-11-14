@@ -81,6 +81,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideIndexNotInt => "slide 序号必须是正整数".into(),
             IdReason::SlideIndexFromOne => "slide 序号从 1 起".into(),
             IdReason::ExportSlideNeedsSlide => "出图 id 必须是 slide:N".into(),
+            IdReason::ExportPageNeedsPage => "出图 id 必须是 page:N".into(),
             IdReason::ShapeEmpty => "shape 后面不能为空".into(),
             IdReason::ShapeIndexNotInt => "shape:index 后面必须是正整数".into(),
             IdReason::ShapeIndexFromOne => "shape:index 从 1 起".into(),
@@ -854,6 +855,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SectionNotFound { id } => format!("找不到节：{id}"),
         ErrorKind::CustomShowNotFound { id } => format!("找不到自定义放映：{id}"),
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
+        ErrorKind::PageNotFound { n } => format!("找不到页面：page:{n}"),
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
         ErrorKind::DocumentThemeNotFound => "找不到文档 theme 部件".into(),
@@ -1255,6 +1257,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SlideImageUnsupported => {
             "这一页还不能画出 PNG。目前只画幻灯片自己的纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形（含 90 度倍数的旋转），而且宽高要落在 1 到 4096 像素之间".into()
+        }
+        ErrorKind::PageImageUnsupported => {
+            "这一页还不能画出 PNG。目前只画没有字的页：单节、空段、Calibri 11 磅、没有页眉页脚。有字、表格和图还不画".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),

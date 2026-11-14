@@ -20,6 +20,7 @@
         "exportChartData",
         "exportChartImage",
         "exportSlideImage",
+        "exportPageImage",
         "layoutCheck",
         "help"
       ]
@@ -129,6 +130,21 @@
       },
       "then": {
         "$ref": "#/$defs/exportSlideImageRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "exportPageImage"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exportPageImageRequest"
       }
     },
     {

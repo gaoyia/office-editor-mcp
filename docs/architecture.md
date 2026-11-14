@@ -7,7 +7,7 @@
 
 产品名是 `ooxp`，全称 Office Open XML Patch。一个 Rust 库，外加一个命令行工具。库只认领域 JSON。命令行把 stdin 或文件里的领域 JSON 交给库，再把结果写到 stdout 或磁盘。
 
-命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把九个动作登记成工具。九个动作是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`layoutCheck`、`help`。
+命令行另有 `ooxp mcp`。它从标准输入读 JSON-RPC，把十个动作登记成工具。十个动作是 `inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`exportPageImage`、`layoutCheck`、`help`。
 参数有两种形状：直接写领域 JSON，或只写 `requestPath` 指向一份领域 JSON 文件。命令行读完文件后，交给库的仍是领域 JSON。库不解析这一层信封。
 
 不许为了信封去改领域 JSON。`requestPath` 不是领域字段。也不许把动作拆扁成一套 MCP 专用字段。
@@ -15,7 +15,7 @@
 对齐 Transitional OOXML，也就是 Office 默认存出来的那种包。
 ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/...`）只作对照，create 不按 Strict 生成。
 根关系里 `officeDocument` 的类型，或主部件根元素的命名空间，以 `http://purl.oclc.org/ooxml/` 开头，就是 Strict 包。
-inspect、exportMedia、exportChartData、exportChartImage、exportSlideImage 只读，照常执行。
+inspect、exportMedia、exportChartData、exportChartImage、exportSlideImage、exportPageImage 只读，照常执行。
 apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件。
 请先用 Office 另存为 Transitional。本程序不实现 Strict 写入。
 
@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把纯色页底、PNG 和没有描边的实心矩形写成图，文字和其它形状还不画。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -46,6 +46,7 @@ docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把本页纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
 
 ## 只读检查与试运行
 
@@ -578,6 +579,10 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素，画这一页自己的纯色页底、没有旋转和裁剪的 PNG，以及没有描边的实心矩形，含绕中心转 90 度倍数的矩形。后画的盖住先画的，超出页面的部分裁掉。包不写回。像素不进 inspect。页底不是这种纯色，或图带旋转、裁剪，则失败。文字和其它形状先跳过。xlsx 与 docx 直接拒绝。
 
+### exportPageImage
+
+调用方给出源 docx、页 id 和本地目标路径。库打开包，按节的 `w:pgSz` 取像素，把没有字的那一页画成白图。空段按 Calibri 11 磅的单倍行距分页。包不写回。像素不进 inspect。有字、表格、图或行距对不上，则失败。xlsx 与 pptx 直接拒绝。
+
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
@@ -590,7 +595,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 - 形状与文本框见 §19.3.1.45 / §19.3.1.51，图片 `p:pic` 见 §19.3.1.37，`cNvPr` 见 §19.3.1.12，`p:graphicFrame` 见 §19.3.1.21。
 - 嵌入对象 `p:oleObj` 见 §19.3.2.4，Zoom 见 MS-PPTX §2.2.15 / §2.9–2.11，备注页见 §13.3.5 与 §19.3.2，讲义母版见 §19.3.1.24。
 - 现代批注见 MS-PPTX 2018/8（`p188:cmLst` / `p188:authorLst`）。包结构见 §9 与 §12.2。
-- 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 放映引擎，也不实现 SmartArt 版式算法。只读 PNG 出图已放开：金样用 Office 16.0 导出，按实测容差比较，不把像素写回包，也不塞进 inspect。像素差在绘制引擎里修。对照脚本只标红区，不改输出，也不靠放宽容差过关。不接受把整棵 `<p:timing>` 当 JSON 写入。
+- 不实现 Excel 计算引擎、PowerPoint 放映引擎，也不实现 SmartArt 版式算法。Word 整页排版不一次做完。只读 PNG 出图已放开：金样用 Office 16.0 导出，按实测容差比较，不把像素写回包，也不塞进 inspect。能和 Word 逐页对上像素的页面才画，对不上的版面报未实现。像素差在绘制引擎里修。对照脚本只标红区，不改输出，也不靠放宽容差过关。不接受把整棵 `<p:timing>` 当 JSON 写入。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。
 

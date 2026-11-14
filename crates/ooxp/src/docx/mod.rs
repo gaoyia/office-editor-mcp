@@ -27,6 +27,7 @@ mod notes;
 mod numbering;
 mod ole;
 mod page_bg;
+mod page_paint;
 mod para;
 mod perm;
 mod picture;
@@ -49,6 +50,7 @@ pub use charts::export_chart_data;
 pub use create::create;
 pub use export::export_media;
 pub use inspect::inspect;
+pub use page_paint::export_page_image;
 pub use request::{parse_ops, parse_scope};
 
 pub const REL_CHART: &str =

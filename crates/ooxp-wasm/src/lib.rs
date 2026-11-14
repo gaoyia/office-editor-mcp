@@ -97,6 +97,7 @@ fn needs_package(action: &str) -> bool {
             | "exportChartData"
             | "exportChartImage"
             | "exportSlideImage"
+            | "exportPageImage"
             | "layoutCheck"
     )
 }
@@ -106,9 +107,8 @@ fn output_name(value: &Value) -> String {
     let pick = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_string);
     match action {
         "apply" => pick("output").or_else(|| pick("path")),
-        "exportMedia" | "exportChartData" | "exportChartImage" | "exportSlideImage" => {
-            pick("output")
-        }
+        "exportMedia" | "exportChartData" | "exportChartImage" | "exportSlideImage"
+        | "exportPageImage" => pick("output"),
         _ => pick("path"),
     }
     .unwrap_or_else(|| "output.bin".to_string())
