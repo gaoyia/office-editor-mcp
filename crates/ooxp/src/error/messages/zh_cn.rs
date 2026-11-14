@@ -1261,6 +1261,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::PageImageUnsupported => {
             "这一页还不能画出 PNG。目前只画没有字的页：单节、空段、Calibri 11 磅、没有页眉页脚。有字、表格和图还不画".into()
         }
+        ErrorKind::SparklineImageUnsupported => {
+            "这条迷你图还不能画出 PNG。目前只画一组里的一条折线，不画标记、高低点、坐标轴和日期轴，而且格子宽高要落在 1 到 4096 像素之间".into()
+        }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
         ErrorKind::NotesSlideImage => "不能改 type 为 sldImg 的占位符".into(),

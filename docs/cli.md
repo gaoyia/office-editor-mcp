@@ -42,7 +42,7 @@ stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向
 | help 成功 | 帮助 JSON，UTF-8，末尾换行 | 空 | 0 |
 | layoutCheck 成功 | 几何检查结果 JSON，UTF-8，末尾换行 | 空 | 0 |
 | apply 的 `dryRun` 成功 | `{ "ok": true, "dryRun": true, "parts": [...], ... }`，不写文件 | 空 | 0 |
-| create / apply / exportMedia / exportChartData / exportChartImage 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
+| create / apply / exportMedia / exportChartData / exportChartImage / exportSparklineImage / exportSlideImage / exportPageImage 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
 | 失败 | 空 | `{ "ok": false, "error": { ... } }` | 见 [errors.md](errors.md) |
 
 JSON 打印用稳定的字段顺序，不要求 pretty-print。调试时可以加 `--pretty`，让 stdout 带缩进。默认紧凑一行，方便管道。
@@ -73,7 +73,7 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 `action` 为 `help` 时不读 Office 文件，也不改文件。
 
-- 不带参数时返回十个动作，以及 `ask`
+- 不带参数时返回十一个动作，以及 `ask`
 - `ask` 里的每一条都是可以原样提交的 help 请求
 - 带 `format` 时列出该格式的 op
 - 带 `q` 时按当前层写出的字段名和说明搜索
@@ -153,7 +153,7 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 客户端请求的 `protocolVersion` 在名单里，就回同一版。不在名单里、缺了、或是空串，回 `2025-11-25`。
 
-工具有十个，名字就是动作名：`inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`exportPageImage`、`layoutCheck`、`help`。`arguments` 有两种形状。
+工具有十一个，名字就是动作名：`inspect`、`create`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSparklineImage`、`exportSlideImage`、`exportPageImage`、`layoutCheck`、`help`。`arguments` 有两种形状。
 
 | 形状 | 参数 |
 | --- | --- |
@@ -166,7 +166,7 @@ Windows 上不必理会控制台代码页。下面三种情形写出去的东西
 
 没写 `schemaVersion` 视为 `1`。写了又不是 `1`，工具结果带 `isError`，正文仍是命令行那种错误 JSON。
 
-`path` 写在 `arguments` 里，表示要打开的 Office 文件。`apply` 另存时把新路径写在 `output`，省略则写回 `path`。`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage` 和 `exportPageImage` 的 `output` 必填。`--lang` 是这个进程的默认语言。它决定 `initialize` 的说明，以及 `tools/list` 里的工具介绍。参数里的 `locale` 优先于它，再看 `OOXP_LANG`，都没有则错误文案用英文。`help` 在请求和 `--lang` 都没给语言时，说明仍是中文。给了 `--lang` 又没写 `locale` 时，`help` 的说明跟着 `--lang`。
+`path` 写在 `arguments` 里，表示要打开的 Office 文件。`apply` 另存时把新路径写在 `output`，省略则写回 `path`。`exportMedia`、`exportChartData`、`exportChartImage`、`exportSparklineImage`、`exportSlideImage` 和 `exportPageImage` 的 `output` 必填。`--lang` 是这个进程的默认语言。它决定 `initialize` 的说明，以及 `tools/list` 里的工具介绍。参数里的 `locale` 优先于它，再看 `OOXP_LANG`，都没有则错误文案用英文。`help` 在请求和 `--lang` 都没给语言时，说明仍是中文。给了 `--lang` 又没写 `locale` 时，`help` 的说明跟着 `--lang`。
 
 工具自己拒绝请求时，正文仍是上面的错误 JSON，`code` 用这些值：
 

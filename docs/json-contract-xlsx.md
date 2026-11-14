@@ -3,7 +3,7 @@
 本文是 [json-contract.md](json-contract.md) 的 xlsx 分册。这里写稳定 id、inspect 的 scope 与响应、create，以及只属于工作簿的 apply op。
 
 信封、跨格式 op（图、图表、SmartArt、批注、超链接、文本框、表格插删行列、`setProps`、`setProtection`、
-`setShapeText` 等）以及 `exportMedia` / `exportChartData` / `exportChartImage` 仍在主文件。
+`setShapeText` 等）以及 `exportMedia` / `exportChartData` / `exportChartImage` / `exportSparklineImage` 仍在主文件。
 
 机器可读副本在 [json-schema/request.schema.json](json-schema/request.schema.json)。
 工作簿专有的分块在 [json-schema/src/xlsx/](json-schema/src/xlsx/)。

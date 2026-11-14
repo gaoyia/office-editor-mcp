@@ -42,6 +42,7 @@ Production use and commercial use require a commercial license from the author. 
 | `exportMedia` | Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to disk by id |
 | `exportChartData` | Write the original embedding workbook of a docx or pptx chart to disk by chart id |
 | `exportChartImage` | Draw an xlsx clustered column chart to PNG by chart id. The package is unchanged, and the pixels do not enter inspect |
+| `exportSparklineImage` | Draw one xlsx line sparkline to PNG by sparkline group id. The package is unchanged, and the pixels do not enter inspect |
 | `exportSlideImage` | Draw a slide's solid background, unrotated PNG pictures, and solid rectangles without a stroke by slide id. The package is unchanged, and the pixels do not enter inspect |
 | `exportPageImage` | Draw one docx page that has no text to a PNG by page id. The package is unchanged, and the pixels do not enter inspect |
 | `layoutCheck` | Read-only check of shape geometry on each pptx slide. It returns bounding boxes, overflow, overlap, and a text-overflow estimate. It does not write a file or render a picture |
@@ -90,7 +91,7 @@ Use it as an MCP server for an editor. An IDE does not inherit the shell `PATH` 
 }
 ```
 
-The tools are `inspect`, `create`, `apply`, `exportMedia`, `exportChartData`, `exportChartImage`, `exportSlideImage`, `exportPageImage`, `layoutCheck`, and `help`. Call `help` to see how to fill an operation. Details are in `docs/cli.md`.
+The tools are `inspect`, `create`, `apply`, `exportMedia`, `exportChartData`, `exportChartImage`, `exportSparklineImage`, `exportSlideImage`, `exportPageImage`, `layoutCheck`, and `help`. Call `help` to see how to fill an operation. Details are in `docs/cli.md`.
 
 Arguments have two shapes.
 

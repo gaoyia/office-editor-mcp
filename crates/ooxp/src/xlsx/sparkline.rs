@@ -12,7 +12,7 @@ use super::request::{
 };
 use super::style;
 use crate::chart;
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::Package;
 use crate::xml::{Element, Node};
 
@@ -189,7 +189,7 @@ fn inspect_sparkline(el: &Element, sheet: &str, cells: &CellCache) -> Value {
 }
 
 /// 公式必须是一张已知表上的连续区域。先按行，再从左到右。没有缓存的格子是 null。
-fn range_values(formula: &str, here: &str, cells: &CellCache) -> Option<Vec<Value>> {
+pub(crate) fn range_values(formula: &str, here: &str, cells: &CellCache) -> Option<Vec<Value>> {
     let (named, body) = split_formula(formula)?;
     let sheet = named.unwrap_or_else(|| here.to_string());
     let map = cells.sheets.get(&sheet.to_ascii_lowercase())?;
@@ -720,6 +720,297 @@ fn overlay_colors(g: &mut Element, colors: &SparkColors) {
         let Some(spec) = spec else { continue };
         set_named_el(g, local, style::color_el(prefixed, spec));
     }
+}
+
+pub fn export_sparkline_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
+    let (sheet_name, index) = parse_export_id(id)?;
+    let pkg = Package::open_bytes(bytes.to_vec())?;
+    let wb_part = crate::opc::office_document_part(&pkg)?;
+    let wb = crate::xml::parse(pkg.get(&wb_part)?)?;
+    let rels = crate::opc::Relationships::from_package(&pkg, &wb_part)?;
+    let sheets = super::inspect::list_sheets(&wb.root, &rels, &wb_part, &pkg)?;
+    let sst = super::inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
+    let refs: Vec<(&str, &str, &str)> = sheets
+        .iter()
+        .map(|s| (s.name.as_str(), s.part.as_str(), s.kind))
+        .collect();
+    let cells = CellCache::load(&pkg, &refs, &sst)?;
+    let sheet_part = super::picture::lookup_sheet_part(&pkg, &sheet_name, "id")?;
+    let doc = crate::xml::parse(pkg.get(&sheet_part)?)?;
+    let group = group_at(&doc.root, index, id)?;
+    let png = paint_group(&pkg, &sheets, &sheet_name, &doc.root, group, &cells)?;
+    Ok(super::ExportedMedia {
+        bytes: png,
+        content_type: Some("image/png".to_string()),
+    })
+}
+
+fn parse_export_id(id: &str) -> Result<(String, usize), Error> {
+    let bad = |reason| Error::with_path(ErrorKind::InvalidId { reason }, "id");
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(bad(IdReason::SheetSparkPrefix));
+    };
+    let Some((name, nstr)) = rest.split_once("/spark:") else {
+        return Err(bad(IdReason::SheetSparkPrefix));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(bad(IdReason::SheetSparkPrefix));
+    }
+    if nstr.is_empty() || !nstr.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(bad(IdReason::SparkIndexNotInt));
+    }
+    let n: usize = nstr.parse().map_err(|_| bad(IdReason::SparkIndexNotInt))?;
+    if n == 0 {
+        return Err(bad(IdReason::SparkIndexFromOne));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn group_at<'a>(root: &'a Element, index: usize, id: &str) -> Result<&'a Element, Error> {
+    let attr = crate::xml::pin_attr("spark");
+    let mut live = 0usize;
+    for group in groups(root) {
+        live += 1;
+        if crate::xml::pin_matches(group, &attr, index, live) {
+            return Ok(group);
+        }
+    }
+    Err(Error::with_path(
+        ErrorKind::SparklineNotFound { id: id.to_string() },
+        "id",
+    ))
+}
+
+fn paint_group(
+    pkg: &Package,
+    sheets: &[super::inspect::SheetMeta],
+    sheet_name: &str,
+    sheet: &Element,
+    group: &Element,
+    cells: &CellCache,
+) -> Result<Vec<u8>, Error> {
+    if !is_plain_line(group) {
+        return Err(image_unsupported());
+    }
+    let item = only_sparkline(group)?;
+    let refer = child_text(item, "sqref").ok_or_else(image_unsupported)?;
+    let (host, end) = a1::parse_range(refer.trim()).map_err(|_| image_unsupported())?;
+    if host != end || in_merge(sheet, host) {
+        return Err(image_unsupported());
+    }
+    let formula = child_text(item, "f").ok_or_else(image_unsupported)?;
+    let cached = range_values(&formula, sheet_name, cells).ok_or_else(image_unsupported)?;
+    if !attr_on(group, "displayHidden")
+        && formula_touches_hidden(pkg, sheets, sheet_name, sheet, &formula)?
+    {
+        return Err(image_unsupported());
+    }
+    let width = layout::col_width_px(sheet, host.col);
+    let height = layout::row_height_px(sheet, host.row);
+    let values = cached.iter().map(point_of).collect();
+    let spec = super::sparkline_paint::LineSpec {
+        values,
+        empty: empty_mode(group),
+        axis_min: axis_end(group, "minAxisType", "manualMin")?,
+        axis_max: axis_end(group, "maxAxisType", "manualMax")?,
+        color: series_rgb(group)?,
+        weight_px: line_weight_px(group)?,
+    };
+    super::sparkline_paint::render(width, height, &spec)
+}
+
+fn is_plain_line(group: &Element) -> bool {
+    matches!(
+        group.attr("type").map(str::trim),
+        None | Some("") | Some("line")
+    ) && !attr_on(group, "markers")
+        && !attr_on(group, "high")
+        && !attr_on(group, "low")
+        && !attr_on(group, "first")
+        && !attr_on(group, "last")
+        && !attr_on(group, "negative")
+        && !attr_on(group, "displayXAxis")
+        && !attr_on(group, "dateAxis")
+        && !attr_on(group, "rightToLeft")
+}
+
+fn only_sparkline(group: &Element) -> Result<&Element, Error> {
+    let Some(list) = group.child_by_local("sparklines") else {
+        return Err(image_unsupported());
+    };
+    let mut found = None;
+    for el in list.children_by_local("sparkline") {
+        if found.is_some() {
+            return Err(image_unsupported());
+        }
+        found = Some(el);
+    }
+    found.ok_or_else(image_unsupported)
+}
+
+fn attr_on(el: &Element, name: &str) -> bool {
+    el.attr(name).is_some_and(|raw| {
+        let text = raw.trim();
+        text == "1" || text.eq_ignore_ascii_case("true")
+    })
+}
+
+fn empty_mode(group: &Element) -> super::sparkline_paint::EmptyCells {
+    match display_empty(group) {
+        SparkEmpty::Gap => super::sparkline_paint::EmptyCells::Gap,
+        SparkEmpty::Span => super::sparkline_paint::EmptyCells::Span,
+        SparkEmpty::Zero => super::sparkline_paint::EmptyCells::Zero,
+    }
+}
+
+fn axis_end(group: &Element, type_attr: &str, manual_attr: &str) -> Result<Option<f64>, Error> {
+    match group.attr(type_attr).map(str::trim) {
+        None | Some("") | Some("individual") | Some("group") => Ok(None),
+        Some("custom") => {
+            let raw = group.attr(manual_attr).ok_or_else(image_unsupported)?;
+            let n = raw.trim().parse::<f64>().map_err(|_| image_unsupported())?;
+            if n.is_finite() {
+                Ok(Some(n))
+            } else {
+                Err(image_unsupported())
+            }
+        }
+        Some(_) => Err(image_unsupported()),
+    }
+}
+
+fn series_rgb(group: &Element) -> Result<[u8; 3], Error> {
+    let Some(el) = group.child_by_local("colorSeries") else {
+        return Ok([0x37, 0x60, 0x92]);
+    };
+    let Some(raw) = el.attr("rgb") else {
+        return Err(image_unsupported());
+    };
+    parse_series_rgb(raw).ok_or_else(image_unsupported)
+}
+
+fn parse_series_rgb(raw: &str) -> Option<[u8; 3]> {
+    let hex = raw.trim();
+    let body = match hex.len() {
+        6 => hex,
+        8 => {
+            let alpha = u8::from_str_radix(&hex[..2], 16).ok()?;
+            if alpha != 0xff {
+                return None;
+            }
+            &hex[2..]
+        }
+        _ => return None,
+    };
+    let n = u32::from_str_radix(body, 16).ok()?;
+    Some([
+        ((n >> 16) & 0xff) as u8,
+        ((n >> 8) & 0xff) as u8,
+        (n & 0xff) as u8,
+    ])
+}
+
+fn line_weight_px(group: &Element) -> Result<f64, Error> {
+    let pt = match group.attr("lineWeight").map(str::trim) {
+        None | Some("") => 0.75,
+        Some(raw) => raw.parse::<f64>().map_err(|_| image_unsupported())?,
+    };
+    if pt.is_finite() && pt > 0.0 && pt <= 72.0 {
+        Ok(pt * 96.0 / 72.0)
+    } else {
+        Err(image_unsupported())
+    }
+}
+
+fn point_of(value: &Value) -> Option<f64> {
+    value.as_f64().filter(|n| n.is_finite())
+}
+
+fn in_merge(sheet: &Element, cell: CellRef) -> bool {
+    let Some(merges) = sheet.child_by_local("mergeCells") else {
+        return false;
+    };
+    for el in merges.children_by_local("mergeCell") {
+        let Some(raw) = el.attr("ref") else {
+            continue;
+        };
+        let Ok((start, end)) = a1::parse_range(raw) else {
+            continue;
+        };
+        if start == end {
+            continue;
+        }
+        if cell.col >= start.col
+            && cell.col <= end.col
+            && cell.row >= start.row
+            && cell.row <= end.row
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn formula_touches_hidden(
+    pkg: &Package,
+    sheets: &[super::inspect::SheetMeta],
+    host: &str,
+    host_root: &Element,
+    formula: &str,
+) -> Result<bool, Error> {
+    let Some((named, body)) = split_formula(formula) else {
+        return Ok(false);
+    };
+    let Ok((start, end)) = a1::parse_range(body) else {
+        return Ok(false);
+    };
+    let name = named.unwrap_or_else(|| host.to_string());
+    if name.eq_ignore_ascii_case(host) {
+        return Ok(range_hidden(host_root, start, end));
+    }
+    let Some(meta) = sheets.iter().find(|s| s.name.eq_ignore_ascii_case(&name)) else {
+        return Ok(false);
+    };
+    let doc = crate::xml::parse(pkg.get(&meta.part)?)?;
+    Ok(range_hidden(&doc.root, start, end))
+}
+
+fn range_hidden(sheet: &Element, start: CellRef, end: CellRef) -> bool {
+    if let Some(data) = sheet.child_by_local("sheetData") {
+        for row in data.children_by_local("row") {
+            let Some(n) = row.attr("r").and_then(|s| s.parse::<u32>().ok()) else {
+                continue;
+            };
+            if n < start.row || n > end.row {
+                continue;
+            }
+            if attr_on(row, "hidden") {
+                return true;
+            }
+        }
+    }
+    for cols in sheet.children_by_local("cols") {
+        for col in cols.children_by_local("col") {
+            let Some(min) = col.attr("min").and_then(|s| s.parse::<u32>().ok()) else {
+                continue;
+            };
+            let max = col
+                .attr("max")
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(min);
+            if max < start.col || min > end.col {
+                continue;
+            }
+            if attr_on(col, "hidden") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn image_unsupported() -> Error {
+    Error::with_path(ErrorKind::SparklineImageUnsupported, "id")
 }
 
 fn set_named_el(parent: &mut Element, local: &str, el: Element) {

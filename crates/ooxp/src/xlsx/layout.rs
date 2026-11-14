@@ -737,6 +737,34 @@ fn default_row_emu(sheet: &Element) -> i64 {
     points_to_emu(pt).max(1)
 }
 
+pub(crate) fn col_width_px(sheet: &Element, col: u32) -> u32 {
+    emu_to_px(col_width_emu(sheet, col))
+}
+
+pub(crate) fn row_height_px(sheet: &Element, row: u32) -> u32 {
+    emu_to_px(row_emu(sheet, row))
+}
+
+fn row_emu(sheet: &Element, row: u32) -> i64 {
+    for (cr, ch) in custom_row_heights(sheet) {
+        if cr == row {
+            return ch.max(1);
+        }
+    }
+    default_row_emu(sheet).max(1)
+}
+
+fn emu_to_px(emu: i64) -> u32 {
+    let px = (emu as f64 / EMU_PER_PIXEL as f64).round();
+    if !px.is_finite() || px < 1.0 {
+        return 0;
+    }
+    if px > u32::MAX as f64 {
+        return u32::MAX;
+    }
+    px as u32
+}
+
 fn col_width_emu(sheet: &Element, col: u32) -> i64 {
     for cols in sheet.children_by_local("cols") {
         for el in cols.children_by_local("col") {

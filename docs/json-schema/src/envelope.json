@@ -19,6 +19,7 @@
         "exportMedia",
         "exportChartData",
         "exportChartImage",
+        "exportSparklineImage",
         "exportSlideImage",
         "exportPageImage",
         "layoutCheck",
@@ -115,6 +116,21 @@
       },
       "then": {
         "$ref": "#/$defs/exportChartImageRequest"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "exportSparklineImage"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "$ref": "#/$defs/exportSparklineImageRequest"
       }
     },
     {

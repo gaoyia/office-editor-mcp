@@ -25,7 +25,7 @@ pub enum ByteOutput {
     },
 }
 
-/// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSlideImage`、`exportPageImage` 必须带上包字节。
+/// 不打开、不保存文件。`inspect`、`apply`、`exportMedia`、`exportChartData`、`exportChartImage`、`exportSparklineImage`、`exportSlideImage`、`exportPageImage` 必须带上包字节。
 pub fn run_bytes(
     input_json: &str,
     package: Option<&[u8]>,
@@ -100,6 +100,15 @@ fn run_bytes_inner(input_json: &str, package: Option<&[u8]>) -> Result<ByteOutpu
                 content_type: exported.content_type,
             })
         }
+        Action::ExportSparklineImage => {
+            let bytes = require_package(package)?;
+            let exported = export_sparkline_image_bytes(&req, bytes)?;
+            Ok(ByteOutput::Bytes {
+                bytes: exported.bytes,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
         Action::ExportSlideImage => {
             let bytes = require_package(package)?;
             let exported = export_slide_image_bytes(&req, bytes)?;
@@ -143,6 +152,7 @@ pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
         | Action::ExportMedia
         | Action::ExportChartData
         | Action::ExportChartImage
+        | Action::ExportSparklineImage
         | Action::ExportSlideImage
         | Action::ExportPageImage
         | Action::LayoutCheck => {
@@ -200,6 +210,7 @@ fn output_path(req: &Request) -> Result<std::path::PathBuf, Error> {
         Action::ExportMedia
         | Action::ExportChartData
         | Action::ExportChartImage
+        | Action::ExportSparklineImage
         | Action::ExportSlideImage
         | Action::ExportPageImage => req
             .obj
@@ -229,6 +240,7 @@ fn screen(req: &Request) -> Result<(), Error> {
         Action::ExportMedia
             | Action::ExportChartData
             | Action::ExportChartImage
+            | Action::ExportSparklineImage
             | Action::ExportSlideImage
             | Action::ExportPageImage
     ) {
@@ -521,6 +533,39 @@ fn export_chart_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
                 ErrorKind::ActionNotForFormat {
                     format: "pptx".into(),
                     action: "exportChartImage".into(),
+                },
+                "action",
+            ))
+        },
+    )
+}
+
+fn export_sparkline_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
+    let fmt = format_of(req)?;
+    let id = str_field(&req.obj, "id")?;
+    for_format(
+        fmt,
+        || {
+            let exported = xlsx::export_sparkline_image(bytes, id)?;
+            Ok(Exported {
+                bytes: exported.bytes,
+                content_type: exported.content_type,
+            })
+        },
+        || {
+            Err(Error::with_path(
+                ErrorKind::ActionNotForFormat {
+                    format: "docx".into(),
+                    action: "exportSparklineImage".into(),
+                },
+                "action",
+            ))
+        },
+        || {
+            Err(Error::with_path(
+                ErrorKind::ActionNotForFormat {
+                    format: "pptx".into(),
+                    action: "exportSparklineImage".into(),
                 },
                 "action",
             ))

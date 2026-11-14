@@ -36,6 +36,7 @@ pub enum Action {
     ExportMedia,
     ExportChartData,
     ExportChartImage,
+    ExportSparklineImage,
     ExportSlideImage,
     ExportPageImage,
     LayoutCheck,
@@ -86,6 +87,7 @@ pub fn envelope_fields(action: Action) -> &'static [&'static str] {
         Action::ExportMedia
         | Action::ExportChartData
         | Action::ExportChartImage
+        | Action::ExportSparklineImage
         | Action::ExportSlideImage
         | Action::ExportPageImage => &[
             "schemaVersion",
@@ -133,6 +135,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "exportMedia" => Action::ExportMedia,
         "exportChartData" => Action::ExportChartData,
         "exportChartImage" => Action::ExportChartImage,
+        "exportSparklineImage" => Action::ExportSparklineImage,
         "exportSlideImage" => Action::ExportSlideImage,
         "exportPageImage" => Action::ExportPageImage,
         "layoutCheck" => Action::LayoutCheck,

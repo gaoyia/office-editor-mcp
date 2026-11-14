@@ -46,6 +46,7 @@ mod sheets;
 mod slicer;
 mod smartart;
 mod sparkline;
+mod sparkline_paint;
 mod stats;
 mod style;
 mod table;
@@ -63,6 +64,7 @@ pub use create::create_with_workbook_ct;
 pub use inspect::inspect;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
+pub use sparkline::export_sparkline_image;
 
 pub struct ExportedMedia {
     pub bytes: Vec<u8>,

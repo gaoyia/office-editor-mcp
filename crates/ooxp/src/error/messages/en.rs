@@ -1414,6 +1414,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "This page cannot be drawn to PNG yet. Only a page with no text is drawn: one section, empty paragraphs, Calibri 11 pt, and no header or footer. Text, tables, and pictures are not drawn yet"
                 .into()
         }
+        ErrorKind::SparklineImageUnsupported => {
+            "This sparkline cannot be drawn to PNG yet. Only one line in a group is drawn, without markers, high or low points, an axis, or a date axis, and the cell must be 1 to 4096 pixels"
+                .into()
+        }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs must be twoCell, oneCell, or absolute".into(),
         ErrorKind::NotesSlideImage => {

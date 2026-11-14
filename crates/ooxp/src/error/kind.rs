@@ -801,6 +801,7 @@ define_error_kinds! {
     SlideImageUnsupported => vec![Self::SlideImageUnsupported],
     PageNotFound { n: u32 } => vec![Self::PageNotFound { n: 2 }],
     PageImageUnsupported => vec![Self::PageImageUnsupported],
+    SparklineImageUnsupported => vec![Self::SparklineImageUnsupported],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
@@ -2358,6 +2359,7 @@ impl ErrorKind {
             | Self::ChartImageUnsupported
             | Self::SlideImageUnsupported
             | Self::PageImageUnsupported
+            | Self::SparklineImageUnsupported
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple
