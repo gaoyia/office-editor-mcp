@@ -12,6 +12,7 @@ manual-check/**
 !manual-check/**/
 !manual-check/README.md
 !manual-check/**/*.ps1
+!manual-check/office/image-corpus.md
 !manual-check/**/requests/*.json
 # 产物、日志和脚本生成的请求都不入库
 manual-check/**/out/**
