@@ -2470,6 +2470,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 色阶认两档或三档。百分位用 `PERCENTILE.INC`，颜色按 RGB 混合
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
+- 同一条命中的公式规则，差分边框只有 `thin`、`medium`、`thick` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。虚线、双线、点线、发丝和斜线的差分边框报 `NotImplemented`
 - 自动筛选在表头右侧画 17×17 的按钮。箭头水平居中，尖端落在按钮正中。表头文字停在按钮左边
 - 字色、填充色和边框色认 `rgb`、主题色和索引色。主题色下标依次是 `lt1`、`dk1`、`lt2`、`dk2`、六个强调色、超链接、已访问的超链接，取工作簿主题里的颜色。没有主题部件时用 Office 默认色。`tint` 从 -1 到 1，负值变暗，正值变亮。`auto` 当黑色。下标对不上报 `NotImplemented`
 - 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`

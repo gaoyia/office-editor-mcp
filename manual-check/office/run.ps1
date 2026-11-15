@@ -67,6 +67,7 @@ $order = @(
     'xlsx-row-gap-image'
     'xlsx-sheet-shape-image'
     'xlsx-cf-expression-image'
+    'xlsx-cf-border-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'

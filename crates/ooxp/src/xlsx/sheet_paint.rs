@@ -744,6 +744,7 @@ struct Xf {
 struct Dxf {
     fill: Option<[u8; 3]>,
     color: Option<[u8; 3]>,
+    edges: Edges,
 }
 
 struct Styles {
@@ -1299,10 +1300,24 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
         .child_by_local("font")
         .and_then(|font| font.child_by_local("color"))
         .and_then(|el| palette.resolve(el));
-    if dxf.child_by_local("border").is_some() {
-        return Err(unsupported());
+    // 差分边框先只认实线。虚线、双线和斜线仍让整表失败。
+    let edges = match dxf.child_by_local("border") {
+        None => Edges::default(),
+        Some(border) => solid_only(parse_edges(border, palette)?)?,
+    };
+    Ok(Dxf { fill, color, edges })
+}
+
+fn solid_only(edges: Edges) -> Result<Edges, Error> {
+    for edge in [edges.left, edges.right, edges.top, edges.bottom]
+        .into_iter()
+        .flatten()
+    {
+        if edge.kind != LineKind::Solid {
+            return Err(unsupported());
+        }
     }
-    Ok(Dxf { fill, color })
+    Ok(edges)
 }
 
 fn builtin_fmt(id: u32) -> Option<NumFmt> {
@@ -1946,7 +1961,18 @@ fn paint(
     if draw_frame {
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     }
-    paint_borders(&mut canvas, styles, cells, &xs, &ys, c0, r0, &rects)?;
+    paint_borders(
+        &mut canvas,
+        sheet,
+        styles,
+        cells,
+        &xs,
+        &ys,
+        c0,
+        r0,
+        &rects,
+        session,
+    )?;
     paint_plain_rects(&mut canvas, shapes);
     if rtl {
         canvas.flip_horizontal();
@@ -2108,6 +2134,7 @@ fn pattern_on(kind: PatternKind, x: i32, y: i32) -> bool {
 
 fn paint_borders(
     canvas: &mut Canvas,
+    sheet: &Element,
     styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
     xs: &Axis,
@@ -2115,14 +2142,13 @@ fn paint_borders(
     c0: u32,
     r0: u32,
     rects: &[(u32, u32, u32, u32)],
+    session: &mut Option<FormulaSession>,
 ) -> Result<(), Error> {
+    reject_other_dxf_borders(sheet, styles)?;
     let mut strokes = Vec::new();
     let mut order = 0u32;
     for &(row, col, col_end, row_end) in rects {
-        let Some(cell) = cells.get(&(col, row)) else {
-            continue;
-        };
-        let edges = styles.xf(cell.style)?.edges;
+        let mut edges = resolved_edges(sheet, styles, cells, session, col, row)?;
         if edges.left.is_none()
             && edges.right.is_none()
             && edges.top.is_none()
@@ -2138,7 +2164,6 @@ fn paint_borders(
         if x1 == x0 || y1 == y0 {
             continue;
         }
-        let mut edges = edges;
         if col_end > col {
             edges.right = None;
         }
@@ -2150,9 +2175,13 @@ fn paint_borders(
         let top_pad = end_pad(edges.top);
         let bottom_pad = end_pad(edges.bottom);
         // 比左边更细时，底边左端才让开。左边是虚线让开全部厚度，实线让开一半。
-        let bottom_inset = inset_for(edges.bottom, neighbor_edge(styles, cells, col, row));
+        let bottom_inset = inset_for(
+            edges.bottom,
+            neighbor_bottom(sheet, styles, cells, session, col, row)?,
+        );
         // 自己有上边，或上面那一格有底边时，上边界留给横线。两边都没有才从边界涂起。
-        let yield_top = edges.top.is_some() || above_has_bottom(styles, cells, col, row)?;
+        let yield_top =
+            edges.top.is_some() || above_has_bottom(sheet, styles, cells, session, col, row)?;
         push_stroke(
             &mut strokes,
             &mut order,
@@ -2239,20 +2268,21 @@ enum Side {
     Bottom,
 }
 
-/// 正上方那一格写了底边时，竖线不占这一行的上边界。
+/// 正上方那一格有底边时，竖线不占这一行的上边界。底边可以来自格子，也可以来自命中的公式差分。
 fn above_has_bottom(
+    sheet: &Element,
     styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
+    session: &mut Option<FormulaSession>,
     col: u32,
     row: u32,
 ) -> Result<bool, Error> {
     if row == 0 {
         return Ok(false);
     }
-    let Some(cell) = cells.get(&(col, row - 1)) else {
-        return Ok(false);
-    };
-    Ok(styles.xf(cell.style)?.edges.bottom.is_some())
+    Ok(resolved_edges(sheet, styles, cells, session, col, row - 1)?
+        .bottom
+        .is_some())
 }
 
 /// 邻边实际存在时，线才向那一端伸出它的外侧像素。
@@ -2261,17 +2291,18 @@ fn end_pad(edge: Option<Edge>) -> i32 {
 }
 
 /// 线以边界像素为中线。偶数宽度多出的一像素朝坐标较小的一侧。
-fn neighbor_edge(
+fn neighbor_bottom(
+    sheet: &Element,
     styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
+    session: &mut Option<FormulaSession>,
     col: u32,
     row: u32,
-) -> Option<Edge> {
+) -> Result<Option<Edge>, Error> {
     if col == 0 {
-        return None;
+        return Ok(None);
     }
-    let cell = cells.get(&(col - 1, row))?;
-    styles.xf(cell.style).ok()?.edges.bottom
+    Ok(resolved_edges(sheet, styles, cells, session, col - 1, row)?.bottom)
 }
 
 fn inset_for(edge: Option<Edge>, neighbor: Option<Edge>) -> i32 {
@@ -2540,6 +2571,101 @@ fn expression_gaps(
         }
     }
     Ok(out)
+}
+
+fn edges_present(edges: Edges) -> bool {
+    edges.left.is_some() || edges.right.is_some() || edges.top.is_some() || edges.bottom.is_some()
+}
+
+fn overlay_edges(base: Edges, over: Edges) -> Edges {
+    Edges {
+        left: over.left.or(base.left),
+        right: over.right.or(base.right),
+        top: over.top.or(base.top),
+        bottom: over.bottom.or(base.bottom),
+    }
+}
+
+/// 格子自己的边，再盖上命中的公式差分。没写的一侧留着。
+fn resolved_edges(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    session: &mut Option<FormulaSession>,
+    col: u32,
+    row: u32,
+) -> Result<Edges, Error> {
+    let mut edges = match cells.get(&(col, row)) {
+        Some(cell) => styles.xf(cell.style)?.edges,
+        None => Edges::default(),
+    };
+    if let Some(over) = expression_border(sheet, styles, session, col, row)? {
+        edges = overlay_edges(edges, over);
+    }
+    Ok(edges)
+}
+
+/// 公式以外的规则如果带了边框，整表仍不做。
+fn reject_other_dxf_borders(sheet: &Element, styles: &Styles) -> Result<(), Error> {
+    for block in sheet.children_by_local("conditionalFormatting") {
+        for rule in block.children_by_local("cfRule") {
+            let Some(id) = rule.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) else {
+                continue;
+            };
+            let Some(dxf) = styles.dxfs.get(id) else {
+                return Err(unsupported());
+            };
+            if !edges_present(dxf.edges) {
+                continue;
+            }
+            if rule.attr("type") != Some("expression") {
+                return Err(unsupported());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 优先级数字最小的那条命中规则提供整份差分边框，不和另一条拼边。
+fn expression_border(
+    sheet: &Element,
+    styles: &Styles,
+    session: &mut Option<FormulaSession>,
+    col: u32,
+    row: u32,
+) -> Result<Option<Edges>, Error> {
+    let mut best: Option<(i32, Edges)> = None;
+    for block in sheet.children_by_local("conditionalFormatting") {
+        let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
+        if !in_areas(col, row, &areas) {
+            continue;
+        }
+        for rule in block.children_by_local("cfRule") {
+            if rule.attr("type") != Some("expression") {
+                continue;
+            }
+            let Some(id) = rule.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) else {
+                continue;
+            };
+            let Some(dxf) = styles.dxfs.get(id) else {
+                return Err(unsupported());
+            };
+            if !edges_present(dxf.edges) {
+                continue;
+            }
+            if !expression_hit(session, rule, &areas, col, row)? {
+                continue;
+            }
+            let priority = rule
+                .attr("priority")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(i32::MAX);
+            if best.is_none_or(|(p, _)| priority < p) {
+                best = Some((priority, dxf.edges));
+            }
+        }
+    }
+    Ok(best.map(|(_, edges)| edges))
 }
 
 fn expression_fill(

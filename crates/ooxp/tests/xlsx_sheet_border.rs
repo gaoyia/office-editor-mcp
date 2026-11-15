@@ -450,3 +450,103 @@ fn vertical_line_yields_its_top_when_the_cell_above_has_a_bottom() {
     assert_eq!(pixel(&px, w, 63, 21), BLUE);
     assert_eq!(pixel(&px, w, 64, 21), [255, 255, 255]);
 }
+
+fn formula_right(formula: &str) -> PathBuf {
+    let src = tmp("cf-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("cf-border");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A2",
+                "type": "expression", "formulas": [formula],
+                "dxf": { "border": { "right": { "style": "thin", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    })
+}
+
+/// 公式差分的细右边框和格子边框同一套像素，含上边界。
+#[test]
+fn formula_thin_right_paints_the_top_boundary() {
+    let (w, h, px) = decode_png(&export(&formula_right("TRUE")).unwrap());
+    assert_eq!((w, h), (65, 41));
+    assert_eq!(pixel(&px, w, 64, 19), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 64, 20), [0, 0, 0]);
+    assert_eq!(pixel(&px, w, 64, 40), [0, 0, 0]);
+}
+
+#[test]
+fn formula_false_does_not_paint_a_border() {
+    let (w, h, px) = decode_png(&export(&formula_right("FALSE")).unwrap());
+    assert_eq!((w, h), (65, 41));
+    assert_eq!(pixel(&px, w, 64, 20), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 64, 30), [255, 255, 255]);
+}
+
+#[test]
+fn dashed_and_cell_is_borders_still_fail() {
+    let src = tmp("dash-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": 1 }
+        ] }] }
+    }));
+    let dashed = tmp("dash");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": dashed.to_string_lossy(),
+        "ops": [{
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1",
+            "type": "expression", "formulas": ["TRUE"],
+            "dxf": { "border": { "right": { "style": "dashed", "color": { "rgb": "FF000000" } } } }
+        }]
+    }));
+    assert_eq!(
+        export(&dashed).unwrap_err().code(),
+        ErrorCode::NotImplemented
+    );
+
+    let cell_is = tmp("cellis");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": cell_is.to_string_lossy(),
+        "ops": [{
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1",
+            "type": "cellIs", "operator": "greaterThan", "formulas": ["0"],
+            "dxf": { "border": { "right": { "style": "thin", "color": { "rgb": "FF000000" } } } }
+        }]
+    }));
+    assert_eq!(
+        export(&cell_is).unwrap_err().code(),
+        ErrorCode::NotImplemented
+    );
+}
