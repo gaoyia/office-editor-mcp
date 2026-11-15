@@ -5,6 +5,9 @@
 //! 从右到左且没有文字时，把整张图水平翻转。有文字时不翻。
 //! 两种纯色的图案铺在和纯色同一块矩形上。点的位置用整张图的像素，不从格子左上角重算。
 //! 虚线、点线、发丝、双线和点划线按整图坐标取余。偶数宽度多出的一像素朝坐标较小的一侧。
+//! 没写行高时，没写 `defaultRowHeight` 的空行是 14.25 磅。
+//! 写了这个属性但 `customHeight` 不是真时，不采用这个数字。
+//! `customHeight` 为真时，空行和常规字体的行用写下的磅值。
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,7 +25,8 @@ use super::ExportedMedia;
 const MAX_PX: i32 = 4096;
 const GRID: [u8; 3] = [224, 224, 224];
 const DEFAULT_COL_PX: i32 = 64;
-const DEFAULT_ROW_PT: f64 = 15.0;
+/// 没写 `defaultRowHeight` 时的空行。Excel 的标准行高是 14.25 磅，19 像素。
+const DEFAULT_ROW_PT: f64 = 14.25;
 
 pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let name = parse_sheet_id(id)?;
@@ -397,6 +401,7 @@ struct Dxf {
 
 struct Styles {
     fonts: Vec<FontInfo>,
+    normal_font: usize,
     fills: Vec<Fill>,
     xfs: Vec<Xf>,
     formats: HashMap<u32, String>,
@@ -602,6 +607,7 @@ impl Styles {
                 italic: false,
                 color: Some([0, 0, 0]),
             }],
+            normal_font: 0,
             fills: vec![Fill::None, Fill::Nope],
             xfs: vec![Xf {
                 font: 0,
@@ -643,6 +649,7 @@ impl Styles {
                 color: Some([0, 0, 0]),
             });
         }
+        let normal_font = normal_font_index(root).min(fonts.len() - 1);
         let mut fills = Vec::new();
         if let Some(list) = root.child_by_local("fills") {
             for fill in list.children_by_local("fill") {
@@ -679,6 +686,7 @@ impl Styles {
         }
         Ok(Self {
             fonts,
+            normal_font,
             fills,
             xfs,
             formats,
@@ -693,6 +701,15 @@ impl Styles {
     fn font(&self, index: usize) -> Result<&FontInfo, Error> {
         let xf = self.xf(index)?;
         self.fonts.get(xf.font).ok_or_else(unsupported)
+    }
+
+    fn normal_font(&self) -> &FontInfo {
+        &self.fonts[self.normal_font]
+    }
+
+    fn normal_row_pt(&self) -> f64 {
+        let font = self.normal_font();
+        auto_row_pt(&font.name, font.pt)
     }
 
     fn fmt_of(&self, index: usize) -> Result<NumFmt, Error> {
@@ -1153,6 +1170,68 @@ fn excel_col_px(width: f64) -> i32 {
     px.floor() as i32
 }
 
+struct RowBase {
+    pt: f64,
+    /// `customHeight` 为真时，常规字体不再把行顶高。
+    lock_normal: bool,
+}
+
+fn row_base(sheet: &Element, styles: &Styles) -> RowBase {
+    let pr = sheet.child_by_local("sheetFormatPr");
+    let written = pr
+        .and_then(|el| el.attr("defaultRowHeight"))
+        .and_then(|s| s.parse().ok());
+    let custom = pr.is_some_and(|el| truthy(el.attr("customHeight")));
+    if custom {
+        if let Some(pt) = written {
+            return RowBase {
+                pt,
+                lock_normal: true,
+            };
+        }
+    }
+    // 写了磅值但没有 customHeight 时，Excel 不用这个数字，改用常规样式。
+    if written.is_some() {
+        return RowBase {
+            pt: styles.normal_row_pt(),
+            lock_normal: false,
+        };
+    }
+    RowBase {
+        pt: DEFAULT_ROW_PT,
+        lock_normal: false,
+    }
+}
+
+fn normal_font_index(root: &Element) -> usize {
+    let Some(styles) = root.child_by_local("cellStyles") else {
+        return 0;
+    };
+    let Some(style) = styles
+        .children_by_local("cellStyle")
+        .into_iter()
+        .find(|el| {
+            el.attr("name")
+                .is_some_and(|name| name.eq_ignore_ascii_case("Normal"))
+        })
+    else {
+        return 0;
+    };
+    let xf_id = style
+        .attr("xfId")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+    let Some(xfs) = root.child_by_local("cellStyleXfs") else {
+        return 0;
+    };
+    xfs.children_by_local("xf")
+        .into_iter()
+        .nth(xf_id)
+        .and_then(|xf| xf.attr("fontId"))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
 fn row_sizes(
     sheet: &Element,
     styles: &Styles,
@@ -1160,11 +1239,7 @@ fn row_sizes(
     r0: u32,
     r1: u32,
 ) -> Result<Vec<i32>, Error> {
-    let default_pt = sheet
-        .child_by_local("sheetFormatPr")
-        .and_then(|el| el.attr("defaultRowHeight"))
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_ROW_PT);
+    let base = row_base(sheet, styles);
     let mut custom = HashMap::new();
     let mut hidden = HashSet::new();
     if let Some(data) = sheet.child_by_local("sheetData") {
@@ -1189,7 +1264,7 @@ fn row_sizes(
         let pt = if let Some(ht) = custom.get(&row) {
             *ht
         } else {
-            row_auto_pt(styles, cells, row, default_pt)?
+            row_auto_pt(sheet, styles, cells, row, &base)?
         };
         let px = excel_row_px(pt);
         if px < 1 {
@@ -1201,20 +1276,50 @@ fn row_sizes(
 }
 
 fn row_auto_pt(
+    sheet: &Element,
     styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
     row: u32,
-    default_pt: f64,
+    base: &RowBase,
 ) -> Result<f64, Error> {
-    let mut pt = default_pt;
+    let normal = styles.normal_font();
+    let mut pt = base.pt;
+    let mut raise = |font: &FontInfo| {
+        if base.lock_normal && same_face(font, normal) {
+            return;
+        }
+        pt = pt.max(auto_row_pt(&font.name, font.pt));
+    };
     for ((_, r), cell) in cells {
         if *r != row {
             continue;
         }
-        let font = styles.font(cell.style)?;
-        pt = pt.max(auto_row_pt(&font.name, font.pt));
+        raise(styles.font(cell.style)?);
+    }
+    // 合并盖住的行没有自己的格子。锚点的字仍把这些行加高，隐藏的锚点也算。
+    if let Some(list) = sheet.child_by_local("mergeCells") {
+        for el in list.children_by_local("mergeCell") {
+            let Some(raw) = el.attr("ref") else {
+                continue;
+            };
+            let (a, b) = a1::parse_range(raw).map_err(|_| unsupported())?;
+            let r0 = a.row.min(b.row);
+            let r1 = a.row.max(b.row);
+            if row < r0 || row > r1 || row == r0 {
+                continue;
+            }
+            let anchor = cells.get(&(a.col.min(b.col), r0));
+            let Some(cell) = anchor else {
+                continue;
+            };
+            raise(styles.font(cell.style)?);
+        }
     }
     Ok(pt)
+}
+
+fn same_face(font: &FontInfo, normal: &FontInfo) -> bool {
+    font.name.eq_ignore_ascii_case(&normal.name) && (font.pt - normal.pt).abs() < 0.05
 }
 
 /// 未写行高时的磅值。Calibri 11 是 15。10 磅微软雅黑是 16.5。

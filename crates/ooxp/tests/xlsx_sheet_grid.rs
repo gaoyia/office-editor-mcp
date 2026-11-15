@@ -207,6 +207,94 @@ fn grid_colored_fill_stays_when_grid_is_off() {
     assert_eq!(pixel(&px, w, 70, 10), GRID);
 }
 
+fn gap_book(tag: &str) -> PathBuf {
+    let path = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": "" },
+                    { "ref": "A3", "value": "" }
+                ]
+            }]
+        }
+    }));
+    let painted = tmp("gap-painted");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "output": painted.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A1",
+                "fill": { "pattern": "solid", "fg": { "rgb": "FFEE4455" } }
+            },
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A3",
+                "fill": { "pattern": "solid", "fg": { "rgb": "FF112233" } }
+            }
+        ]
+    }));
+    hide_grid(&painted, "0")
+}
+
+fn with_format(src: &Path, format: &str) -> PathBuf {
+    let dst = tmp("row-format");
+    let format = format.to_string();
+    rewrite_sheet(src, &dst, move |xml| {
+        assert!(!xml.contains("sheetFormatPr"));
+        xml.replace("<sheetData>", &format!("{format}<sheetData>"))
+    });
+    dst
+}
+
+#[test]
+fn missing_default_row_height_is_fourteen_point_two_five() {
+    let src = gap_book("gap");
+    let sheet = std::fs::read(&src).unwrap();
+    assert!(!String::from_utf8_lossy(&sheet).contains("defaultRowHeight"));
+    let (w, h, px) = decode_png(&export(&src));
+    assert_eq!((w, h), (65, 60));
+    let red = [0xEE, 0x44, 0x55];
+    let blue = [0x11, 0x22, 0x33];
+    let white = [255, 255, 255];
+    assert_eq!(pixel(&px, w, 0, 1), white);
+    assert_eq!(pixel(&px, w, 1, 1), red);
+    assert_eq!(pixel(&px, w, 1, 20), red);
+    assert_eq!(pixel(&px, w, 1, 21), white);
+    assert_eq!(pixel(&px, w, 1, 38), white);
+    assert_eq!(pixel(&px, w, 1, 39), blue);
+    assert_eq!(pixel(&px, w, 1, 59), blue);
+
+    let ignored = with_format(&src, r#"<sheetFormatPr defaultRowHeight="18"/>"#);
+    let (w, h, px) = decode_png(&export(&ignored));
+    assert_eq!((w, h), (65, 61));
+    assert_eq!(pixel(&px, w, 1, 20), red);
+    assert_eq!(pixel(&px, w, 1, 21), white);
+    assert_eq!(pixel(&px, w, 1, 39), white);
+    assert_eq!(pixel(&px, w, 1, 40), blue);
+    assert_eq!(pixel(&px, w, 1, 60), blue);
+
+    let locked = with_format(
+        &src,
+        r#"<sheetFormatPr defaultRowHeight="12" customHeight="1"/>"#,
+    );
+    let (w, h, px) = decode_png(&export(&locked));
+    assert_eq!((w, h), (65, 49));
+    assert_eq!(pixel(&px, w, 1, 16), red);
+    assert_eq!(pixel(&px, w, 1, 17), white);
+    assert_eq!(pixel(&px, w, 1, 31), white);
+    assert_eq!(pixel(&px, w, 1, 32), blue);
+    assert_eq!(pixel(&px, w, 1, 48), blue);
+}
+
 #[test]
 fn right_to_left_without_text_is_drawn() {
     let src = book("rtl");
