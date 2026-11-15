@@ -2151,6 +2151,8 @@ fn paint_borders(
         let bottom_pad = end_pad(edges.bottom);
         // 比左边更细时，底边左端才让开。左边是虚线让开全部厚度，实线让开一半。
         let bottom_inset = inset_for(edges.bottom, neighbor_edge(styles, cells, col, row));
+        // 自己有上边，或上面那一格有底边时，上边界留给横线。两边都没有才从边界涂起。
+        let yield_top = edges.top.is_some() || above_has_bottom(styles, cells, col, row)?;
         push_stroke(
             &mut strokes,
             &mut order,
@@ -2163,6 +2165,7 @@ fn paint_borders(
             top_pad,
             bottom_pad,
             0,
+            yield_top,
         );
         push_stroke(
             &mut strokes,
@@ -2176,6 +2179,7 @@ fn paint_borders(
             top_pad,
             bottom_pad,
             0,
+            yield_top,
         );
         push_stroke(
             &mut strokes,
@@ -2189,6 +2193,7 @@ fn paint_borders(
             left_pad,
             right_pad,
             0,
+            false,
         );
         push_stroke(
             &mut strokes,
@@ -2202,6 +2207,7 @@ fn paint_borders(
             left_pad,
             right_pad,
             bottom_inset,
+            false,
         );
     }
     // 更粗的后画。同样粗时，右边缘盖住左边缘，其余保持格子的先后。
@@ -2231,6 +2237,22 @@ enum Side {
     Right,
     Top,
     Bottom,
+}
+
+/// 正上方那一格写了底边时，竖线不占这一行的上边界。
+fn above_has_bottom(
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    if row == 0 {
+        return Ok(false);
+    }
+    let Some(cell) = cells.get(&(col, row - 1)) else {
+        return Ok(false);
+    };
+    Ok(styles.xf(cell.style)?.edges.bottom.is_some())
 }
 
 /// 邻边实际存在时，线才向那一端伸出它的外侧像素。
@@ -2302,6 +2324,7 @@ fn push_stroke(
     pad0: i32,
     pad1: i32,
     inset0: i32,
+    yield_start: bool,
 ) {
     let Some(edge) = edge else {
         return;
@@ -2316,9 +2339,9 @@ fn push_stroke(
     };
     let across0 = boundary - neg;
     let across1 = boundary + pos + 1;
-    // 竖线不占上边界，那一像素留给上面的横线。
-    let along_start = if vertical {
-        along0 - pad0 + inset0 + i32::from(pad0 == 0)
+    // 1 像素上边，或上面那一格的底边，占住上边界。更粗的上边仍按 pad 向上伸出。
+    let along_start = if vertical && yield_start && pad0 == 0 {
+        along0 - pad0 + inset0 + 1
     } else {
         along0 - pad0 + inset0
     };

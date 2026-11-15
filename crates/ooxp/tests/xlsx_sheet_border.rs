@@ -259,7 +259,7 @@ fn dashes_and_double_follow_the_picture_pixel() {
             color: RED,
         },
     );
-    // 竖线不涂上边界。
+    // B2 没有上边，点线从这一行的上边界涂起。
     push_expect(
         &mut strokes,
         &mut order,
@@ -268,7 +268,7 @@ fn dashes_and_double_follow_the_picture_pixel() {
             px: 1,
             vertical: true,
             boundary: 64,
-            along0: 21,
+            along0: 20,
             along1: 40,
             color: RED,
         },
@@ -340,4 +340,113 @@ fn diagonal_and_gradient_still_fail() {
         export(&gradient).unwrap_err().code(),
         ErrorCode::NotImplemented
     );
+}
+
+/// 第二行只有细右边框时，竖线含上边界。同一行另有细上边时，上边界留给上边。
+#[test]
+fn vertical_line_paints_the_top_boundary_without_a_top_edge() {
+    let src = tmp("cap-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "C1", "value": "" },
+            { "ref": "C2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("cap");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "setCellStyle", "id": "cell:Sheet1!A2",
+                "border": { "right": { "style": "thin", "color": { "rgb": "FF000000" } } }
+            },
+            {
+                "op": "setCellStyle", "id": "cell:Sheet1!C2",
+                "border": {
+                    "top": { "style": "thin", "color": { "rgb": "FFEE4455" } },
+                    "right": { "style": "thin", "color": { "rgb": "FF0000FF" } }
+                }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (193, 41));
+    assert_eq!(pixel(&px, w, 64, 19), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 64, 20), [0, 0, 0]);
+    assert_eq!(pixel(&px, w, 64, 40), [0, 0, 0]);
+    assert_eq!(pixel(&px, w, 64, 21), [0, 0, 0]);
+    // C 列右缘在 x=192。有上边时，y=20 是红上边，蓝竖线从 y=21 开始。
+    assert_eq!(pixel(&px, w, 192, 20), RED);
+    assert_eq!(pixel(&px, w, 192, 21), BLUE);
+    assert_eq!(pixel(&px, w, 191, 20), RED);
+}
+
+/// 上面那一格有底边时，双线的内侧也不涂上边界。底边让开后露出的那一像素保持空白。
+#[test]
+fn vertical_line_yields_its_top_when_the_cell_above_has_a_bottom() {
+    let src = tmp("yield-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "B1", "value": "" },
+            { "ref": "B2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("yield");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "setCellStyle", "id": "cell:Sheet1!A1",
+                "border": { "bottom": { "style": "mediumDashDot", "color": { "rgb": "FFEE4455" } } }
+            },
+            {
+                "op": "setCellStyle", "id": "cell:Sheet1!B1",
+                "border": { "bottom": { "style": "dashDotDot", "color": { "rgb": "FFEE4455" } } }
+            },
+            {
+                "op": "setCellStyle", "id": "cell:Sheet1!B2",
+                "border": { "left": { "style": "double", "color": { "rgb": "FF0000FF" } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (129, 41));
+    // 双线中线在 x=64。内侧 x=65 的上边界被上面的底边占住，底边本身从 x=66 才开始。
+    assert_eq!(pixel(&px, w, 65, 20), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 65, 21), BLUE);
+    assert_eq!(pixel(&px, w, 63, 21), BLUE);
+    assert_eq!(pixel(&px, w, 64, 21), [255, 255, 255]);
 }

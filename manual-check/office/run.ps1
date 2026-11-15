@@ -63,6 +63,7 @@ $order = @(
     'xlsx-rtl-image'
     'xlsx-pattern-image'
     'xlsx-border-image'
+    'xlsx-border-cap-image'
     'xlsx-row-gap-image'
     'xlsx-sheet-shape-image'
     'xlsx-cf-expression-image'
