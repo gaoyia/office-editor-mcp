@@ -8,6 +8,8 @@
 //! 没写行高时，没写 `defaultRowHeight` 的空行是 14.25 磅。
 //! 写了这个属性但 `customHeight` 不是真时，不采用这个数字。
 //! `customHeight` 为真时，空行和常规字体的行用写下的磅值。
+//! 没有描边、没有字的纯色矩形画在边框上面。锚点 EMU 除以 9525 后四舍五入。
+//! 上边和左边的外框盖住矩形。
 
 use std::collections::{HashMap, HashSet};
 
@@ -43,12 +45,26 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
     let styles = load_styles(&pkg, &wb_part, &rels)?;
     let (c0, r0, c1, r1) = used_range(root)?;
-    reject_drawings(&pkg, &sheet_part, c0, r0, c1, r1)?;
     let session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, session)?;
     let cols = column_sizes(root, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
-    let canvas = paint(root, &styles, &cells, c0, r0, &cols, &rows, grid_lines, rtl)?;
+    let shapes = plain_rects(
+        &pkg,
+        &sheet_part,
+        root,
+        &styles,
+        &cells,
+        c0,
+        r0,
+        c1,
+        r1,
+        &cols,
+        &rows,
+    )?;
+    let canvas = paint(
+        root, &styles, &cells, c0, r0, &cols, &rows, grid_lines, rtl, &shapes,
+    )?;
     let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
     Ok(ExportedMedia {
         bytes: png,
@@ -246,43 +262,364 @@ fn cell_addr(prev_col: u32, row: u32, attr: Option<&str>) -> Result<(u32, u32), 
     Ok((prev_col + 1, row))
 }
 
-fn reject_drawings(
+struct PlainRect {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    color: [u8; 3],
+}
+
+/// 压到区域上的图形：纯色矩形留下，其余仍让整表失败。
+fn plain_rects(
     pkg: &Package,
     sheet_part: &str,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
     c0: u32,
     r0: u32,
     c1: u32,
     r1: u32,
-) -> Result<(), Error> {
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<Vec<PlainRect>, Error> {
+    let mut out = Vec::new();
     for part in picture::drawing_parts(pkg, sheet_part)? {
         let doc = super::list_pin::parse_part(pkg, &part)?;
         if has_local(&doc.root, "grpSp") {
             return Err(unsupported());
         }
-        picture::walk_anchors(&doc.root, &mut |anchor, kind| match kind {
-            AnchorKind::TwoCell => {
-                let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
-                let (to, _, _) = picture::read_marker(anchor.child_by_local("to"))?;
-                if let (Some(a), Some(b)) = (from, to) {
-                    if overlaps(a.col, b.col, c0, c1) && overlaps(a.row, b.row, r0, r1) {
-                        return Err(unsupported());
-                    }
+        walk_anchors_forward(&doc.root, &mut |anchor, kind| {
+            if let Some(rect) = plain_rect(
+                anchor, kind, sheet, styles, cells, c0, r0, c1, r1, cols, rows,
+            )? {
+                if crosses_hidden(&rect, cols, rows) {
+                    return Err(unsupported());
                 }
-                Ok(())
+                out.push(rect);
             }
-            AnchorKind::OneCell => {
-                let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
-                if let Some(a) = from {
-                    if a.col <= c1 && a.row <= r1 {
-                        return Err(unsupported());
-                    }
-                }
-                Ok(())
-            }
-            AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => Err(unsupported()),
+            Ok(())
         })?;
     }
+    Ok(out)
+}
+
+fn walk_anchors_forward(
+    el: &Element,
+    f: &mut impl FnMut(&Element, AnchorKind) -> Result<(), Error>,
+) -> Result<(), Error> {
+    if el.local_name() == "AlternateContent" {
+        if let Some(index) = crate::xml::alternate_child(el)? {
+            if let crate::xml::Node::Element(child) = &el.children[index] {
+                return walk_anchors_forward(child, f);
+            }
+        }
+        return Ok(());
+    }
+    if let Some(kind) = AnchorKind::from_local(el.local_name()) {
+        return f(el, kind);
+    }
+    if el.local_name() == "grpSp" {
+        return Ok(());
+    }
+    for child in el.element_children() {
+        walk_anchors_forward(child, f)?;
+    }
     Ok(())
+}
+
+fn plain_rect(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    c1: u32,
+    r1: u32,
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<Option<PlainRect>, Error> {
+    let hits = match kind {
+        AnchorKind::TwoCell => {
+            let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
+            let (to, _, _) = picture::read_marker(anchor.child_by_local("to"))?;
+            match (from, to) {
+                (Some(a), Some(b)) => {
+                    overlaps(a.col, b.col, c0, c1) && overlaps(a.row, b.row, r0, r1)
+                }
+                _ => false,
+            }
+        }
+        AnchorKind::OneCell => {
+            let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
+            from.is_some_and(|a| a.col <= c1 && a.row <= r1)
+        }
+        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => {
+            return Err(unsupported());
+        }
+    };
+    if !hits {
+        return Ok(None);
+    }
+    let Some(sp) = anchor.child_by_local("sp") else {
+        return Err(unsupported());
+    };
+    let color = plain_color(sp)?;
+    let (x0, y0, x1, y1) = rect_edges(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
+    Ok(Some(PlainRect {
+        x0,
+        y0,
+        x1,
+        y1,
+        color,
+    }))
+}
+
+fn rect_edges(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<(i32, i32, i32, i32), Error> {
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let x_from = axis_origin(from.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let y_from = axis_origin(from.row, r0, rows, &mut |row| {
+        row_px_one(sheet, styles, cells, row)
+    })?;
+    let (x1, y1) = match kind {
+        AnchorKind::OneCell => {
+            let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+            let cx = emu_attr(ext, "cx")?;
+            let cy = emu_attr(ext, "cy")?;
+            if cx <= 0 || cy <= 0 {
+                return Err(unsupported());
+            }
+            let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
+            let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
+            (x_from + round_px(x_end)?, y_from + round_px(y_end)?)
+        }
+        AnchorKind::TwoCell => {
+            let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+            let to = to.ok_or_else(unsupported)?;
+            let x_to = axis_origin(to.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
+            let y_to = axis_origin(to.row, r0, rows, &mut |row| {
+                row_px_one(sheet, styles, cells, row)
+            })?;
+            (x_to + round_px(to_x)?, y_to + round_px(to_y)?)
+        }
+        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => {
+            return Err(unsupported());
+        }
+    };
+    let x0 = x_from + round_px(col_off)?;
+    let y0 = y_from + round_px(row_off)?;
+    if x1 < x0 || y1 < y0 {
+        return Err(unsupported());
+    }
+    Ok((x0, y0, x1, y1))
+}
+
+fn axis_origin(
+    index: u32,
+    start: u32,
+    sizes: &[i32],
+    extra: &mut impl FnMut(u32) -> Result<i32, Error>,
+) -> Result<i32, Error> {
+    if index >= start {
+        let mut at = 0i32;
+        for i in start..index {
+            let rel = (i - start) as usize;
+            let px = if rel < sizes.len() {
+                sizes[rel]
+            } else {
+                extra(i)?
+            };
+            at = at.saturating_add(px);
+        }
+        Ok(at)
+    } else {
+        let mut at = 0i32;
+        for i in index..start {
+            at = at.saturating_sub(extra(i)?);
+        }
+        Ok(at)
+    }
+}
+
+fn column_px_of(sheet: &Element, col: u32) -> Result<i32, Error> {
+    let default = sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|el| el.attr("defaultColWidth"))
+        .and_then(|s| s.parse().ok());
+    column_px(sheet, col, default)
+}
+
+fn row_px_one(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    row: u32,
+) -> Result<i32, Error> {
+    let base = row_base(sheet, styles);
+    if let Some(data) = sheet.child_by_local("sheetData") {
+        let mut prev = 0u32;
+        for el in data.children_by_local("row") {
+            let r = a1::row_after(prev, el.attr("r"));
+            prev = r;
+            if r != row {
+                continue;
+            }
+            if truthy(el.attr("hidden")) {
+                return Ok(0);
+            }
+            if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
+                let px = excel_row_px(ht);
+                if px < 1 {
+                    return Err(unsupported());
+                }
+                return Ok(px);
+            }
+            break;
+        }
+    }
+    let pt = row_auto_pt(sheet, styles, cells, row, &base)?;
+    let px = excel_row_px(pt);
+    if px < 1 {
+        return Err(unsupported());
+    }
+    Ok(px)
+}
+
+fn emu_attr(el: &Element, name: &str) -> Result<i64, Error> {
+    el.attr(name)
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())
+}
+
+/// 9525 是奇数，EMU 除出来不会正好落在半像素上。
+fn round_px(emu: i64) -> Result<i32, Error> {
+    if emu < 0 {
+        return Err(unsupported());
+    }
+    let px = (emu as f64 / 9_525.0).round();
+    if px > i32::MAX as f64 {
+        return Err(unsupported());
+    }
+    Ok(px as i32)
+}
+
+fn plain_color(sp: &Element) -> Result<[u8; 3], Error> {
+    let sp_pr = sp.child_by_local("spPr").ok_or_else(unsupported)?;
+    let geom = sp_pr.child_by_local("prstGeom").ok_or_else(unsupported)?;
+    if geom.attr("prst") != Some("rect") || sp_pr.child_by_local("custGeom").is_some() {
+        return Err(unsupported());
+    }
+    if let Some(xfrm) = sp_pr.child_by_local("xfrm") {
+        if xfrm.attr("rot").is_some_and(|rot| rot != "0")
+            || truthy(xfrm.attr("flipH"))
+            || truthy(xfrm.attr("flipV"))
+        {
+            return Err(unsupported());
+        }
+    }
+    if sp_pr.element_children().any(|child| {
+        matches!(
+            child.local_name(),
+            "gradFill" | "blipFill" | "pattFill" | "noFill"
+        )
+    }) {
+        return Err(unsupported());
+    }
+    let fill = sp_pr.child_by_local("solidFill").ok_or_else(unsupported)?;
+    let color = srgb_fill(fill)?;
+    let ln = sp_pr.child_by_local("ln").ok_or_else(unsupported)?;
+    if ln.child_by_local("noFill").is_none()
+        || ln
+            .element_children()
+            .any(|child| child.local_name() != "noFill")
+    {
+        return Err(unsupported());
+    }
+    if visible_text(sp) {
+        return Err(unsupported());
+    }
+    Ok(color)
+}
+
+fn srgb_fill(fill: &Element) -> Result<[u8; 3], Error> {
+    let clr = fill.child_by_local("srgbClr").ok_or_else(unsupported)?;
+    if fill
+        .element_children()
+        .any(|child| child.local_name() != "srgbClr")
+    {
+        return Err(unsupported());
+    }
+    for child in clr.element_children() {
+        if child.local_name() != "alpha" || child.attr("val") != Some("100000") {
+            return Err(unsupported());
+        }
+    }
+    let hex = clr.attr("val").ok_or_else(unsupported)?;
+    if hex.len() != 6 || !hex.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(unsupported());
+    }
+    let mut color = [0u8; 3];
+    for (i, byte) in color.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).map_err(|_| unsupported())?;
+    }
+    Ok(color)
+}
+
+fn visible_text(el: &Element) -> bool {
+    if el.local_name() == "t" && !el.text_content().trim().is_empty() {
+        return true;
+    }
+    el.element_children().any(visible_text)
+}
+
+fn paint_plain_rects(canvas: &mut Canvas, shapes: &[PlainRect]) {
+    for shape in shapes {
+        for y in shape.y0..shape.y1 {
+            // 外框盖住第一行和第一列，边框留在外框上。
+            if y <= 0 {
+                continue;
+            }
+            for x in shape.x0..shape.x1 {
+                if x <= 0 {
+                    continue;
+                }
+                canvas.put(x, y, shape.color);
+            }
+        }
+    }
+}
+
+fn crosses_hidden(rect: &PlainRect, cols: &[i32], rows: &[i32]) -> bool {
+    let mut at = 0;
+    for size in cols {
+        if *size == 0 && rect.x0 <= at && rect.x1 > at {
+            return true;
+        }
+        at += size;
+    }
+    at = 0;
+    for size in rows {
+        if *size == 0 && rect.y0 <= at && rect.y1 > at {
+            return true;
+        }
+        at += size;
+    }
+    false
 }
 
 fn overlaps(a: u32, b: u32, lo: u32, hi: u32) -> bool {
@@ -1516,6 +1853,7 @@ fn paint(
     rows: &[i32],
     grid_lines: bool,
     rtl: bool,
+    shapes: &[PlainRect],
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
@@ -1583,6 +1921,7 @@ fn paint(
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     }
     paint_borders(&mut canvas, styles, cells, &xs, &ys, c0, r0, &rects)?;
+    paint_plain_rects(&mut canvas, shapes);
     if rtl {
         canvas.flip_horizontal();
     }
