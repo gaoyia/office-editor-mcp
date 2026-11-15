@@ -69,6 +69,7 @@ $order = @(
     'xlsx-sheet-group-image'
     'xlsx-sheet-scheme-image'
     'xlsx-theme-tint-image'
+    'xlsx-hidden-format-image'
     'xlsx-cf-expression-image'
     'xlsx-cf-border-image'
     'xlsx-cf-average-image'

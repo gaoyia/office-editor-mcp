@@ -1047,6 +1047,8 @@ enum NumFmt {
     IntComma,
     Fixed(u32),
     Percent(u32),
+    /// 段数是 2、3 或 4，每段都空。4 段时文字和布尔也不画。
+    Blank(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1836,8 +1838,15 @@ fn builtin_fmt(id: u32) -> Option<NumFmt> {
 }
 
 fn parse_format(code: &str) -> Result<NumFmt, Error> {
+    if code.contains(';') {
+        let parts: Vec<&str> = code.split(';').collect();
+        if (2..=4).contains(&parts.len()) && parts.iter().all(|part| part.is_empty()) {
+            return Ok(NumFmt::Blank(parts.len() as u8));
+        }
+        return Err(unsupported());
+    }
     let code = code.trim();
-    if code.contains(';') || code.contains('[') {
+    if code.contains('[') {
         return Err(unsupported());
     }
     if code.eq_ignore_ascii_case("general") {
@@ -3713,11 +3722,15 @@ fn paint_labels(
 }
 
 fn label_text(shown: &Shown, fmt: &NumFmt) -> Result<String, Error> {
+    let hide_text = matches!(fmt, NumFmt::Blank(4));
     match shown {
         Shown::Empty => Ok(String::new()),
+        Shown::Text(text) if hide_text => Ok(String::new()),
         Shown::Text(text) => Ok(text.clone()),
+        Shown::Bool(_) if hide_text => Ok(String::new()),
         Shown::Bool(true) => Ok("TRUE".into()),
         Shown::Bool(false) => Ok("FALSE".into()),
+        Shown::Num(_) if matches!(fmt, NumFmt::Blank(_)) => Ok(String::new()),
         Shown::Num(n) => format_num(*n, fmt),
         Shown::Err => Ok(String::new()),
     }
@@ -3732,6 +3745,7 @@ fn format_num(n: f64, fmt: &NumFmt) -> Result<String, Error> {
         NumFmt::IntComma => format_comma(n),
         NumFmt::Fixed(digits) => format_fixed(n, *digits),
         NumFmt::Percent(digits) => format!("{}%", format_fixed(n * 100.0, *digits)),
+        NumFmt::Blank(_) => String::new(),
     })
 }
 
@@ -4552,5 +4566,30 @@ mod tests {
     fn general_format_code_ignores_case() {
         assert!(matches!(parse_format("GENERAL").unwrap(), NumFmt::General));
         assert!(matches!(parse_format("General").unwrap(), NumFmt::General));
+        assert!(matches!(parse_format(";;;").unwrap(), NumFmt::Blank(4)));
+        assert!(matches!(parse_format(";;").unwrap(), NumFmt::Blank(3)));
+        assert!(matches!(parse_format(";").unwrap(), NumFmt::Blank(2)));
+        assert!(parse_format("0;").is_err());
+        assert!(parse_format(";;; ").is_err());
+        assert_eq!(
+            label_text(&Shown::Num(123.0), &NumFmt::Blank(3)).unwrap(),
+            ""
+        );
+        assert_eq!(
+            label_text(&Shown::Text("字".into()), &NumFmt::Blank(3)).unwrap(),
+            "字"
+        );
+        assert_eq!(
+            label_text(&Shown::Text("字".into()), &NumFmt::Blank(4)).unwrap(),
+            ""
+        );
+        assert_eq!(
+            label_text(&Shown::Bool(true), &NumFmt::Blank(4)).unwrap(),
+            ""
+        );
+        assert_eq!(
+            label_text(&Shown::Bool(true), &NumFmt::Blank(2)).unwrap(),
+            "TRUE"
+        );
     }
 }

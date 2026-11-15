@@ -1166,6 +1166,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - `exportSheetImage` 找不到工作表报 `IdNotFound`
 - `exportSheetImage` 的 id 不是 `sheet:{name}` 报 `InvalidId`
 - 画不了已用区域，或宽高不在 1 到 4096 像素之间，`exportSheetImage` 报 `NotImplemented`
+- 数字格式只有分号、分成两段到四段且每段都空时，数字不画。四段时文字和布尔也不画。其它带分号或方括号的格式报 `NotImplemented`
 - 两种纯色的图案可以画。虚线、点线、发丝、双线、点划线和斜点划线也可以画。斜线边框、渐变填充、半透明图案色、认不出的图案，以及条件格式里的图案，仍报 `NotImplemented`
 - 不透明 PNG 在目标像素等于要贴的像素时可以画。`a:srcRect` 落到整像素且不缩放时也可以画。百分比落在像素中间，或裁完还要缩放，报 `NotImplemented`
 - 同一单元格里的恒等组合，只含没有描边的纯色矩形时可以画。缩放、旋转、跨格或里面还有别的对象，报 `NotImplemented`
