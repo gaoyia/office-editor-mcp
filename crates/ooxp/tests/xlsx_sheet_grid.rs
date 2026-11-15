@@ -4,7 +4,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, ErrorCode, RunOutput};
+use ooxp::{run, RunOutput};
 use serde_json::json;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -108,19 +108,6 @@ fn export(src: &Path) -> Vec<u8> {
     std::fs::read(png).unwrap()
 }
 
-fn export_err(src: &Path) -> ooxp::Error {
-    let png = src.with_extension("png");
-    run(&json!({
-        "schemaVersion": 1,
-        "action": "exportSheetImage",
-        "path": src.to_string_lossy(),
-        "id": "sheet:Sheet1",
-        "output": png.to_string_lossy(),
-    })
-    .to_string())
-    .unwrap_err()
-}
-
 fn rewrite_sheet(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
@@ -221,7 +208,7 @@ fn grid_colored_fill_stays_when_grid_is_off() {
 }
 
 #[test]
-fn right_to_left_still_fails_the_sheet() {
+fn right_to_left_without_text_is_drawn() {
     let src = book("rtl");
     let dst = tmp("rtl-sheet");
     rewrite_sheet(&src, &dst, |xml| {
@@ -230,5 +217,7 @@ fn right_to_left_still_fails_the_sheet() {
             "<sheetViews><sheetView rightToLeft=\"1\" showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
         )
     });
-    assert_eq!(export_err(&dst).code(), ErrorCode::NotImplemented);
+    let (w, h, px) = decode_png(&export(&dst));
+    assert_eq!((w, h), (129, 41));
+    assert_eq!(pixel(&px, w, 0, 0), [255, 255, 255]);
 }

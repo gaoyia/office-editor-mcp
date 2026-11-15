@@ -2,6 +2,7 @@
 //! 不乘工作表 `zoomScale`。缩放 95 的销售看板金样仍是 100% 的 1095×418。
 //! `showGridLines` 为假时不画网格，上边和左边的外框留白，宽高不变。
 //! 隐藏行和隐藏列不占像素。这一边全部隐藏时只留 1 像素白。
+//! 从右到左且没有文字时，把整张图水平翻转。有文字时不翻。
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,9 +28,10 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let root = &sheet_doc.root;
-    reject_view(root)?;
+    reject_rtl_extras(root)?;
     reject_hidden_rules(root)?;
     let grid_lines = shows_grid(root);
+    let rtl = right_to_left(root);
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
@@ -40,7 +42,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let cells = read_cells(root, &sst, session)?;
     let cols = column_sizes(root, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
-    let canvas = paint(root, &styles, &cells, c0, r0, &cols, &rows, grid_lines)?;
+    let canvas = paint(root, &styles, &cells, c0, r0, &cols, &rows, grid_lines, rtl)?;
     let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
     Ok(ExportedMedia {
         bytes: png,
@@ -71,15 +73,25 @@ fn bad_id() -> Error {
     )
 }
 
-fn reject_view(sheet: &Element) -> Result<(), Error> {
+fn right_to_left(sheet: &Element) -> bool {
     let Some(view) = sheet
         .child_by_local("sheetViews")
         .and_then(|views| views.child_by_local("sheetView"))
     else {
-        return Ok(());
+        return false;
     };
-    // 从右到左时列从右边起排，外框像素会变。这一期不画。
-    if truthy(view.attr("rightToLeft")) {
+    truthy(view.attr("rightToLeft"))
+}
+
+/// 没有文字时，Excel 的从右到左就是整图水平翻转。有文字时字仍正写，不能翻。
+/// 条件格式和筛选按钮的方向还没对过。
+fn reject_rtl_extras(sheet: &Element) -> Result<(), Error> {
+    if !right_to_left(sheet) {
+        return Ok(());
+    }
+    if sheet.child_by_local("conditionalFormatting").is_some()
+        || sheet.child_by_local("autoFilter").is_some()
+    {
         return Err(unsupported());
     }
     Ok(())
@@ -1242,6 +1254,20 @@ impl Canvas {
             self.put(0, y, color);
         }
     }
+
+    fn flip_horizontal(&mut self) {
+        let w = self.w as usize;
+        let h = self.h as usize;
+        for y in 0..h {
+            for x in 0..w / 2 {
+                let i = (y * w + x) * 3;
+                let j = (y * w + (w - 1 - x)) * 3;
+                for k in 0..3 {
+                    self.px.swap(i + k, j + k);
+                }
+            }
+        }
+    }
 }
 
 struct Merge {
@@ -1260,6 +1286,7 @@ fn paint(
     cols: &[i32],
     rows: &[i32],
     grid_lines: bool,
+    rtl: bool,
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
@@ -1321,11 +1348,15 @@ fn paint(
         c0,
         r0,
         sheet,
+        rtl,
     )?;
     if draw_frame {
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     }
     paint_borders(&mut canvas, styles, cells, &xs, &ys, c0, r0, &rects)?;
+    if rtl {
+        canvas.flip_horizontal();
+    }
     Ok(canvas)
 }
 
@@ -1996,6 +2027,7 @@ fn paint_labels(
     c0: u32,
     r0: u32,
     sheet: &Element,
+    rtl: bool,
 ) -> Result<(), Error> {
     let filter = filter_header(sheet)?;
     let mut jobs = Vec::new();
@@ -2033,6 +2065,10 @@ fn paint_labels(
         let text = label_text(&cell.shown, &fmt)?;
         if text.is_empty() {
             continue;
+        }
+        // 从右到左时 Excel 仍正写文字，整图翻转会把字反过来。
+        if rtl {
+            return Err(unsupported());
         }
         let Some(color) = font.color else {
             return Err(unsupported());

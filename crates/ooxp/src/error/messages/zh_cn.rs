@@ -1266,7 +1266,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "这条迷你图还不能画出 PNG。目前只画一组里的一条折线，不画标记、高低点、坐标轴和日期轴，而且格子宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::SheetImageUnsupported => {
-            "这张工作表还不能画出 PNG。目前按已用区域画网格，关掉网格时外框留白，隐藏行和隐藏列不占像素，并画纯色填充、细中粗实线边框、文字、合并单元格、数据条、色阶和筛选按钮。画不了的对象会让整表失败，宽高也要落在 1 到 4096 像素之间".into()
+            "这张工作表还不能画出 PNG。目前按已用区域画网格，关掉网格时外框留白，隐藏行和隐藏列不占像素。从右到左且没有文字时整图水平翻转。还画纯色填充、细中粗实线边框、文字、合并单元格、数据条、色阶和筛选按钮。画不了的对象会让整表失败，宽高也要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
