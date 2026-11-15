@@ -34,6 +34,7 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let bg = page_color(&doc.root).unwrap_or([255, 255, 255]);
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
     fill(&mut rgb, bg);
+    paint_inherited(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     let png = encode_png(width, height, &rgb)?;
     Ok(ExportedMedia {
@@ -112,6 +113,50 @@ fn paint_tree(
         return Ok(());
     };
     visit(pkg, slide_part, tree, &[], rgb, width, height)
+}
+
+/// 母版、版式上已经会画的对象先画。页底已经铺好，本页内容还没画。
+fn paint_inherited(
+    pkg: &Package,
+    slide_part: &str,
+    slide_root: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    if !shows_master_shapes(slide_root) {
+        return Ok(());
+    }
+    let Some(layout_part) = linked_part(pkg, slide_part, "/slideLayout")? else {
+        return Ok(());
+    };
+    let layout = super::list_pin::parse_part(pkg, &layout_part)?;
+    if shows_master_shapes(&layout.root) {
+        if let Some(master_part) = linked_part(pkg, &layout_part, "/slideMaster")? {
+            let master = super::list_pin::parse_part(pkg, &master_part)?;
+            paint_tree(pkg, &master_part, &master.root, rgb, width, height)?;
+        }
+    }
+    paint_tree(pkg, &layout_part, &layout.root, rgb, width, height)
+}
+
+fn shows_master_shapes(root: &Element) -> bool {
+    !matches!(
+        root.attr("showMasterSp"),
+        Some("0") | Some("false") | Some("FALSE")
+    )
+}
+
+fn linked_part(pkg: &Package, source: &str, type_suffix: &str) -> Result<Option<String>, Error> {
+    let rels = opc::Relationships::from_package(pkg, source)?;
+    let Some(rel) = rels
+        .rels
+        .iter()
+        .find(|rel| !rel.is_external() && rel.rel_type.ends_with(type_suffix))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(opc::resolve_rel_target(source, &rel.target)?))
 }
 
 fn visit(

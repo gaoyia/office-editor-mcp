@@ -593,6 +593,8 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 `a:srcRect` 四边落到整像素，且裁完宽高等于目标像素时，原样拷贝这块原图。百分比在像素中间，或裁完还要缩放，整页失败。
 
+母版和版式上已经会画的对象画在本页内容下面。本页 `showMasterSp` 为假时不画。版式 `showMasterSp` 为假时不画母版上的对象。
+
 ### exportPageImage
 
 调用方给出源 docx、页 id 和本地目标路径。库打开包，按节的 `w:pgSz` 取像素，把没有字的那一页画成白图。空段按 Calibri 11 磅的单倍行距分页。包不写回。像素不进 inspect。有字、表格、图或行距对不上，则失败。xlsx 与 pptx 直接拒绝。

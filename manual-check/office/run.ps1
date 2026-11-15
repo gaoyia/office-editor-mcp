@@ -233,6 +233,7 @@ $order = @(
     'pptx-slide-image'
     'pptx-group-image'
     'pptx-crop-image'
+    'pptx-master-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'

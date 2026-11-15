@@ -658,6 +658,101 @@ fn whole_pixel_crop_copies_the_source_and_a_fractional_crop_fails() {
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
+#[test]
+fn layout_and_master_shapes_paint_under_the_slide() {
+    let src = tmp("master-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("master-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "F0F0F0" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertShape",
+                "id": "master:1/layout:1",
+                "fill": "EE4455",
+                "x": 914400,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "master:1",
+                "fill": "112233",
+                "x": 914400,
+                "y": 1828800,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "00AA66",
+                "x": 1524000,
+                "y": 914400,
+                "cx": 304800,
+                "cy": 457200
+            }
+        ]
+    }));
+    let out = tmp("master-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 96, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 159, 143), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 160, 96), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 191, 143), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 96, 192), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 191, 239), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 95, 96), [0xF0, 0xF0, 0xF0]);
+    assert_eq!(pixel(&rgb, w, 96, 191), [0xF0, 0xF0, 0xF0]);
+
+    let hidden = tmp("master-hidden");
+    rewrite_slide(&deck, &hidden, |xml| {
+        xml.replace("<p:sld ", "<p:sld showMasterSp=\"0\" ")
+    });
+    let hidden_png = tmp("master-hidden-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": hidden.to_string_lossy(),
+        "id": "slide:1",
+        "output": hidden_png.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&hidden_png).unwrap());
+    assert_eq!(pixel(&rgb, w, 96, 96), [0xF0, 0xF0, 0xF0]);
+    assert_eq!(pixel(&rgb, w, 96, 192), [0xF0, 0xF0, 0xF0]);
+    assert_eq!(pixel(&rgb, w, 160, 96), [0x00, 0xAA, 0x66]);
+}
+
 fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
