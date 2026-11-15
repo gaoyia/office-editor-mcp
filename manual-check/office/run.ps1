@@ -267,6 +267,7 @@ $order = @(
     'pptx-turn-group-image'
     'pptx-child-turn-image'
     'pptx-both-turn-image'
+    'pptx-child-flip-image'
     'pptx-crop-image'
     'pptx-master-image'
     'pptx-theme-bg-image'
