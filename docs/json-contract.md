@@ -2495,7 +2495,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 图案类型也认 `lightGrid`、`darkGrid`、`mediumGray`、`lightGray`、`darkGray`、`darkDown`、`lightDown`、`darkUp`、`lightUp`、`darkTrellis` 和 `lightTrellis`
 - `fgColor` 是点，`bgColor` 是底。没写前景时用黑色，没写背景时用白色。颜色仍认 `rgb`、主题色和索引色
 - `rgb` 写成 8 位、前两位又不是 `FF` 时，这一格图案不认，整表报 `NotImplemented`
-- 没有描边、没有字的纯色矩形可以画。`prst` 是 `rect`，填充是不透明的 `srgbClr`，`a:ln` 只有 `noFill`，正文没有文字
+- 没有描边、没有字的纯色矩形可以画。`prst` 是 `rect`，`a:ln` 只有 `noFill`，正文没有文字。填充是不透明的 `srgbClr`，或没有颜色变换的 `schemeClr`。`schemeClr` 的颜色取主题部件里这一档，`sysClr` 用 `lastClr`。没有主题部件，或带了 `lumMod`、`tint`、`shade`、`alpha`，报 `NotImplemented`
 - 锚点的 EMU 除以 9525 后四舍五入。`oneCell` 的终点是起点单元格加上偏移和 `ext`。`twoCell` 的终点是 `to` 标记。图形含起点，不含终点
 - 上边和左边的外框盖住图形。图形盖住格子、网格和边框。后画的盖住先画的
 - 不透明 PNG 可以画。目标框的宽和高必须等于要贴的像素。没有 `a:srcRect` 时贴整张图。`a:srcRect` 四边落到整像素，并且裁完的宽高正好等于目标像素时，贴这一块。百分比落在像素中间，或裁完还要缩放，报 `NotImplemented`。`fillRect` 有偏移、旋转、翻转、描边、半透明、不是 PNG，也报 `NotImplemented`

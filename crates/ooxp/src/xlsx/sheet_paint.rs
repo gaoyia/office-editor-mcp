@@ -50,6 +50,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let cells = read_cells(root, &sst, &mut session)?;
     let cols = column_sizes(root, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
+    let theme = loaded_theme(&pkg, &wb_part, &rels);
     let shapes = plain_rects(
         &pkg,
         &sheet_part,
@@ -62,6 +63,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         r1,
         &cols,
         &rows,
+        theme.as_ref(),
     )?;
     let canvas = paint(
         root,
@@ -307,6 +309,7 @@ fn plain_rects(
     r1: u32,
     cols: &[i32],
     rows: &[i32],
+    theme: Option<&LoadedTheme>,
 ) -> Result<Vec<Overlay>, Error> {
     let mut out = Vec::new();
     for part in picture::drawing_parts(pkg, sheet_part)? {
@@ -316,8 +319,9 @@ fn plain_rects(
                 if anchor.child_by_local("pic").is_some() || anchor.child_by_local("sp").is_some() {
                     return Err(unsupported());
                 }
-                for rect in identity_group(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?
-                {
+                for rect in identity_group(
+                    anchor, kind, sheet, styles, cells, c0, r0, cols, rows, theme,
+                )? {
                     out.push(Overlay::Fill(rect));
                 }
                 return Ok(());
@@ -341,7 +345,7 @@ fn plain_rects(
                     y0,
                     x1,
                     y1,
-                    color: plain_color(sp)?,
+                    color: plain_color(sp, theme)?,
                 }));
             } else {
                 return Err(unsupported());
@@ -543,7 +547,7 @@ fn round_px(emu: i64) -> Result<i32, Error> {
     Ok(px as i32)
 }
 
-fn plain_color(sp: &Element) -> Result<[u8; 3], Error> {
+fn plain_color(sp: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {
     let sp_pr = sp.child_by_local("spPr").ok_or_else(unsupported)?;
     let geom = sp_pr.child_by_local("prstGeom").ok_or_else(unsupported)?;
     if geom.attr("prst") != Some("rect") || sp_pr.child_by_local("custGeom").is_some() {
@@ -566,7 +570,7 @@ fn plain_color(sp: &Element) -> Result<[u8; 3], Error> {
         return Err(unsupported());
     }
     let fill = sp_pr.child_by_local("solidFill").ok_or_else(unsupported)?;
-    let color = srgb_fill(fill)?;
+    let color = shape_fill(fill, theme)?;
     let ln = sp_pr.child_by_local("ln").ok_or_else(unsupported)?;
     if ln.child_by_local("noFill").is_none()
         || ln
@@ -592,6 +596,7 @@ fn identity_group(
     r0: u32,
     cols: &[i32],
     rows: &[i32],
+    theme: Option<&LoadedTheme>,
 ) -> Result<Vec<PlainRect>, Error> {
     if kind != AnchorKind::TwoCell {
         return Err(unsupported());
@@ -652,7 +657,7 @@ fn identity_group(
                     y0,
                     x1,
                     y1,
-                    color: plain_color(child)?,
+                    color: plain_color(child, theme)?,
                 });
             }
             _ => return Err(unsupported()),
@@ -709,14 +714,36 @@ fn child_rect(
     Ok((x0, y0, x1, y1))
 }
 
-fn srgb_fill(fill: &Element) -> Result<[u8; 3], Error> {
-    let clr = fill.child_by_local("srgbClr").ok_or_else(unsupported)?;
-    if fill
-        .element_children()
-        .any(|child| child.local_name() != "srgbClr")
-    {
+fn shape_fill(fill: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {
+    let mut children = fill.element_children();
+    let clr = children.next().ok_or_else(unsupported)?;
+    if children.next().is_some() {
         return Err(unsupported());
     }
+    match clr.local_name() {
+        "srgbClr" => srgb_bytes(clr),
+        "schemeClr" => scheme_rgb(clr, theme),
+        _ => Err(unsupported()),
+    }
+}
+
+fn scheme_rgb(clr: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {
+    if clr.element_children().next().is_some() {
+        return Err(unsupported());
+    }
+    let theme = theme.ok_or_else(unsupported)?;
+    let name = clr.attr("val").ok_or_else(unsupported)?;
+    let index = THEME_NAMES
+        .iter()
+        .position(|slot| *slot == name)
+        .ok_or_else(unsupported)?;
+    if !theme.present[index] {
+        return Err(unsupported());
+    }
+    Ok(theme.slots[index])
+}
+
+fn srgb_bytes(clr: &Element) -> Result<[u8; 3], Error> {
     for child in clr.element_children() {
         if child.local_name() != "alpha" || child.attr("val") != Some("100000") {
             return Err(unsupported());
@@ -1136,6 +1163,34 @@ const THEME_NAMES: [&str; 12] = [
     "lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
     "hlink", "folHlink",
 ];
+
+struct LoadedTheme {
+    slots: [[u8; 3]; 12],
+    present: [bool; 12],
+}
+
+/// 主题部件里实际写下的档。没有部件时返回 `None`，形状上的 `schemeClr` 整表不做。
+fn loaded_theme(pkg: &Package, wb_part: &str, rels: &Relationships) -> Option<LoadedTheme> {
+    let rel = rels
+        .rels
+        .iter()
+        .find(|rel| rel.rel_type.ends_with("/theme") && !rel.is_external())?;
+    let part = crate::opc::resolve_rel_target(wb_part, &rel.target).ok()?;
+    let bytes = pkg.get(&part).ok()?;
+    let doc = crate::xml::parse(bytes).ok()?;
+    let scheme = find_local(&doc.root, "clrScheme")?;
+    let mut theme = LoadedTheme {
+        slots: default_theme(),
+        present: [false; 12],
+    };
+    for (i, name) in THEME_NAMES.iter().enumerate() {
+        if let Some(rgb) = scheme.child_by_local(name).and_then(slot_rgb) {
+            theme.slots[i] = rgb;
+            theme.present[i] = true;
+        }
+    }
+    Some(theme)
+}
 
 struct Palette {
     theme: [[u8; 3]; 12],

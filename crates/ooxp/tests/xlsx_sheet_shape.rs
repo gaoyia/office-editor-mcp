@@ -303,5 +303,147 @@ fn grouped_book(drawing: &str) -> PathBuf {
     book
 }
 
+#[test]
+fn a_theme_color_with_no_transform_is_flat() {
+    let shaped = one_rect();
+    let painted = tmp("scheme");
+    rewrite(&shaped, &painted, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml.replace(
+                "<a:solidFill><a:srgbClr val=\"FFFFFF\"/></a:solidFill>",
+                "<a:solidFill><a:schemeClr val=\"accent1\"/></a:solidFill>",
+            );
+            *xml = xml.replace(
+                "<a:ln w=\"9525\"><a:solidFill><a:srgbClr val=\"000000\"/></a:solidFill></a:ln>",
+                "<a:ln><a:noFill/></a:ln>",
+            );
+        }
+    });
+    let book = with_theme(&painted);
+    let (w, h, rgb) = decode_png(&export(&book));
+    assert_eq!((w, h), (65, 41));
+    assert_block(&rgb, w, 1, 9, 1, 9);
+    assert_eq!(pixel(&rgb, w, 9, 1), [255, 255, 255]);
+}
+
+#[test]
+fn a_theme_color_transform_fails_the_sheet() {
+    let shaped = one_rect();
+    let painted = tmp("lum");
+    rewrite(&shaped, &painted, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml.replace(
+                "<a:srgbClr val=\"FFFFFF\"/>",
+                "<a:schemeClr val=\"accent1\"><a:lumMod val=\"50000\"/></a:schemeClr>",
+            );
+        }
+    });
+    let book = with_theme(&painted);
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": book.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": tmp("lum-out").with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn a_theme_color_without_a_theme_part_fails_the_sheet() {
+    let shaped = one_rect();
+    let painted = tmp("no-theme");
+    rewrite(&shaped, &painted, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml.replace(
+                "<a:srgbClr val=\"FFFFFF\"/>",
+                "<a:schemeClr val=\"accent1\"/>",
+            );
+        }
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": painted.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": tmp("no-theme-out").with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+fn one_rect() -> PathBuf {
+    let src = tmp("scheme-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": "" }] }] }
+    }));
+    let shaped = tmp("scheme-shaped");
+    let px = 9525;
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+              "from": "A1", "fromOffX": px, "fromOffY": px, "cx": 8 * px, "cy": 8 * px }
+        ]
+    }));
+    shaped
+}
+
+fn with_theme(src: &Path) -> PathBuf {
+    let dest = tmp("themed");
+    let bytes = std::fs::read(src).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/_rels/workbook.xml.rels" {
+                let text = String::from_utf8(data).unwrap().replace(
+                    "</Relationships>",
+                    r#"<Relationship Id="rIdTheme" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#,
+                );
+                data = text.into_bytes();
+            } else if name == "[Content_Types].xml" {
+                let text = String::from_utf8(data).unwrap().replace(
+                    "</Types>",
+                    r#"<Override PartName="/xl/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>"#,
+                );
+                data = text.into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.start_file("xl/theme/theme1.xml", opt).unwrap();
+        zip_out.write_all(SCHEME_THEME.as_bytes()).unwrap();
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(&dest, out.into_inner()).unwrap();
+    dest
+}
+
+const SCHEME_THEME: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Probe"><a:themeElements><a:clrScheme name="Probe"><a:dk1><a:sysClr val="windowText" lastClr="010203"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="EE4455"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme></a:themeElements></a:theme>"#;
+
 const GROUP_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>9525</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>9525</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>247650</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>85725</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合 3"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="238125" cy="76200"/><a:chOff x="9525" y="9525"/><a:chExt cx="238125" cy="76200"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="76200" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="190500" y="9525"/><a:ext cx="57150" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
