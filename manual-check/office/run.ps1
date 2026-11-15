@@ -66,6 +66,7 @@ $order = @(
     'xlsx-border-cap-image'
     'xlsx-row-gap-image'
     'xlsx-sheet-shape-image'
+    'xlsx-sheet-group-image'
     'xlsx-cf-expression-image'
     'xlsx-cf-border-image'
     'xlsx-cf-average-image'

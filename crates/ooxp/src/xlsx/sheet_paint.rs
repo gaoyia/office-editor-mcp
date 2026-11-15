@@ -311,10 +311,17 @@ fn plain_rects(
     let mut out = Vec::new();
     for part in picture::drawing_parts(pkg, sheet_part)? {
         let doc = super::list_pin::parse_part(pkg, &part)?;
-        if has_local(&doc.root, "grpSp") {
-            return Err(unsupported());
-        }
         walk_anchors_forward(&doc.root, &mut |anchor, kind| {
+            if anchor.child_by_local("grpSp").is_some() {
+                if anchor.child_by_local("pic").is_some() || anchor.child_by_local("sp").is_some() {
+                    return Err(unsupported());
+                }
+                for rect in identity_group(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?
+                {
+                    out.push(Overlay::Fill(rect));
+                }
+                return Ok(());
+            }
             if !anchor_hits(anchor, kind, c0, r0, c1, r1)? {
                 return Ok(());
             }
@@ -361,7 +368,7 @@ fn walk_anchors_forward(
         return f(el, kind);
     }
     if el.local_name() == "grpSp" {
-        return Ok(());
+        return Err(unsupported());
     }
     for child in el.element_children() {
         walk_anchors_forward(child, f)?;
@@ -572,6 +579,134 @@ fn plain_color(sp: &Element) -> Result<[u8; 3], Error> {
         return Err(unsupported());
     }
     Ok(color)
+}
+
+/// 同一单元格里、变换是恒等的组合。子矩形的坐标和没编组时一样。
+fn identity_group(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<Vec<PlainRect>, Error> {
+    if kind != AnchorKind::TwoCell {
+        return Err(unsupported());
+    }
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let to = to.ok_or_else(unsupported)?;
+    if from.col != to.col || from.row != to.row {
+        return Err(unsupported());
+    }
+    let group = anchor.child_by_local("grpSp").ok_or_else(unsupported)?;
+    let pr = group.child_by_local("grpSpPr").ok_or_else(unsupported)?;
+    if pr
+        .element_children()
+        .any(|child| child.local_name() != "xfrm")
+    {
+        return Err(unsupported());
+    }
+    let xfrm = pr.child_by_local("xfrm").ok_or_else(unsupported)?;
+    if xfrm.attr("rot").is_some_and(|rot| rot != "0")
+        || truthy(xfrm.attr("flipH"))
+        || truthy(xfrm.attr("flipV"))
+        || xfrm
+            .element_children()
+            .any(|child| !matches!(child.local_name(), "off" | "ext" | "chOff" | "chExt"))
+    {
+        return Err(unsupported());
+    }
+    let (off_x, off_y, cx, cy) = box_emu(xfrm, "off", "ext")?;
+    let (ch_x, ch_y, ch_cx, ch_cy) = box_emu(xfrm, "chOff", "chExt")?;
+    if off_x != ch_x || off_y != ch_y || cx != ch_cx || cy != ch_cy || cx <= 0 || cy <= 0 {
+        return Err(unsupported());
+    }
+    if col_off != off_x || row_off != off_y {
+        return Err(unsupported());
+    }
+    let end_x = off_x.checked_add(cx).ok_or_else(unsupported)?;
+    let end_y = off_y.checked_add(cy).ok_or_else(unsupported)?;
+    if to_x != end_x || to_y != end_y {
+        return Err(unsupported());
+    }
+    let x_from = axis_origin(from.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let y_from = axis_origin(from.row, r0, rows, &mut |row| {
+        row_px_one(sheet, styles, cells, row)
+    })?;
+    let mut rects = Vec::new();
+    for child in group.element_children() {
+        match child.local_name() {
+            "nvGrpSpPr" | "grpSpPr" => {}
+            "sp" => {
+                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, ch_x, ch_y, ch_cx, ch_cy)?;
+                if crosses_hidden(x0, y0, x1, y1, cols, rows) {
+                    return Err(unsupported());
+                }
+                rects.push(PlainRect {
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    color: plain_color(child)?,
+                });
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if rects.is_empty() {
+        return Err(unsupported());
+    }
+    Ok(rects)
+}
+
+fn box_emu(xfrm: &Element, off_name: &str, ext_name: &str) -> Result<(i64, i64, i64, i64), Error> {
+    let off = xfrm.child_by_local(off_name).ok_or_else(unsupported)?;
+    let ext = xfrm.child_by_local(ext_name).ok_or_else(unsupported)?;
+    Ok((
+        emu_attr(off, "x")?,
+        emu_attr(off, "y")?,
+        emu_attr(ext, "cx")?,
+        emu_attr(ext, "cy")?,
+    ))
+}
+
+fn child_rect(
+    sp: &Element,
+    x_from: i32,
+    y_from: i32,
+    ch_x: i64,
+    ch_y: i64,
+    ch_cx: i64,
+    ch_cy: i64,
+) -> Result<(i32, i32, i32, i32), Error> {
+    let xfrm = sp
+        .child_by_local("spPr")
+        .and_then(|pr| pr.child_by_local("xfrm"))
+        .ok_or_else(unsupported)?;
+    let (x, y, w, h) = box_emu(xfrm, "off", "ext")?;
+    if w <= 0 || h <= 0 {
+        return Err(unsupported());
+    }
+    let x1_emu = x.checked_add(w).ok_or_else(unsupported)?;
+    let y1_emu = y.checked_add(h).ok_or_else(unsupported)?;
+    let ch_x1 = ch_x.checked_add(ch_cx).ok_or_else(unsupported)?;
+    let ch_y1 = ch_y.checked_add(ch_cy).ok_or_else(unsupported)?;
+    if x < ch_x || y < ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
+        return Err(unsupported());
+    }
+    let x0 = x_from + round_px(x)?;
+    let y0 = y_from + round_px(y)?;
+    let x1 = x_from + round_px(x1_emu)?;
+    let y1 = y_from + round_px(y1_emu)?;
+    if x1 < x0 || y1 < y0 {
+        return Err(unsupported());
+    }
+    Ok((x0, y0, x1, y1))
 }
 
 fn srgb_fill(fill: &Element) -> Result<[u8; 3], Error> {
@@ -862,10 +997,6 @@ fn overlaps(a: u32, b: u32, lo: u32, hi: u32) -> bool {
     let a0 = a.min(b);
     let a1 = a.max(b);
     a0 <= hi && lo <= a1
-}
-
-fn has_local(el: &Element, name: &str) -> bool {
-    el.local_name() == name || el.element_children().any(|child| has_local(child, name))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -4,7 +4,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, RunOutput};
+use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -235,3 +235,73 @@ fn a_rectangle_with_a_line_still_fails_the_sheet() {
         "{text}"
     );
 }
+
+#[test]
+fn an_identity_group_paints_the_same_rectangles() {
+    let book = grouped_book(GROUP_XML);
+    let (w, h, rgb) = decode_png(&export(&book));
+    assert_eq!((w, h), (65, 41));
+    assert_block(&rgb, w, 1, 9, 1, 9);
+    assert_eq!(pixel(&rgb, w, 9, 1), [255, 255, 255]);
+    assert_block(&rgb, w, 20, 26, 1, 5);
+    assert_eq!(pixel(&rgb, w, 19, 1), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 26, 1), [255, 255, 255]);
+}
+
+#[test]
+fn a_scaled_group_fails_the_sheet() {
+    let xml = GROUP_XML.replace(
+        r#"<a:chExt cx="238125" cy="76200"/>"#,
+        r#"<a:chExt cx="100000" cy="76200"/>"#,
+    );
+    let book = grouped_book(&xml);
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": book.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": tmp("scaled-out").with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+fn grouped_book(drawing: &str) -> PathBuf {
+    let src = tmp("group-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": "" }] }] }
+    }));
+    let shaped = tmp("group-shaped");
+    let px = 9525;
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+              "from": "A1", "cx": 8 * px, "cy": 8 * px }
+        ]
+    }));
+    let book = tmp("group");
+    rewrite(&shaped, &book, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = drawing.to_string();
+        }
+    });
+    book
+}
+
+const GROUP_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>9525</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>9525</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>247650</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>85725</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合 3"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="238125" cy="76200"/><a:chOff x="9525" y="9525"/><a:chExt cx="238125" cy="76200"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="76200" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="190500" y="9525"/><a:ext cx="57150" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
