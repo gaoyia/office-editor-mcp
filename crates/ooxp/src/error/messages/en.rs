@@ -1408,7 +1408,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "This slide still has an object that cannot be drawn. Solid or white page backgrounds, unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells are drawn, including inside groups and on the master or layout. The size must be 1 to 4096 pixels"
+            "This slide still has an object that cannot be drawn. White backgrounds and solid page backgrounds without a color transform are drawn, including theme colors on the slide, layout, or master. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells are drawn, including inside groups and on the master or layout. The size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::PageImageUnsupported => {

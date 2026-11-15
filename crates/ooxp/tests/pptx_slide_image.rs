@@ -753,11 +753,277 @@ fn layout_and_master_shapes_paint_under_the_slide() {
     assert_eq!(pixel(&rgb, w, 160, 96), [0x00, 0xAA, 0x66]);
 }
 
+#[test]
+fn theme_page_background_follows_the_measured_color() {
+    let src = tmp("theme-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let base = tmp("theme-base");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": base.to_string_lossy(),
+        "ops": [{ "op": "deleteShape", "id": shape_id }]
+    }));
+
+    let accent = "<p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"accent1\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>";
+    let custom = tmp("theme-custom");
+    rewrite_named(&base, &custom, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(xml, "<p:cSld>", &format!("<p:cSld>{accent}")),
+        "ppt/theme/theme1.xml" => swap(
+            xml,
+            "<a:accent1><a:srgbClr val=\"4F81BD\"/></a:accent1>",
+            "<a:accent1><a:srgbClr val=\"EE4455\"/></a:accent1>",
+        ),
+        _ => xml,
+    });
+    assert_page(&custom, [0xEE, 0x44, 0x55]);
+
+    let bg1 = tmp("theme-bg1");
+    rewrite_named(&base, &bg1, |name, xml| {
+        match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"bg1\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+        ),
+        _ => xml,
+    }
+    });
+    assert_page(&bg1, [255, 255, 255]);
+
+    let reference = tmp("theme-ref");
+    rewrite_named(&base, &reference, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgRef idx=\"1001\"><a:schemeClr val=\"accent1\"/></p:bgRef></p:bg>",
+        ),
+        _ => xml,
+    });
+    assert_page(&reference, [0x4F, 0x81, 0xBD]);
+
+    let reference_rgb = tmp("theme-ref-rgb");
+    rewrite_named(&base, &reference_rgb, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgRef idx=\"1001\"><a:srgbClr val=\"112233\"/></p:bgRef></p:bg>",
+        ),
+        _ => xml,
+    });
+    assert_page(&reference_rgb, [0x11, 0x22, 0x33]);
+
+    let inherited = tmp("theme-inherit");
+    rewrite_named(&base, &inherited, |name, xml| match name {
+        "ppt/slideMasters/slideMaster1.xml" => swap(
+            xml,
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef>",
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"accent1\"/></p:bgRef>",
+        ),
+        _ => xml,
+    });
+    assert_page(&inherited, [0x4F, 0x81, 0xBD]);
+
+    let hidden = tmp("theme-hidden");
+    rewrite_named(&base, &hidden, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(xml, "<p:cSld>", "<p:cSld showMasterSp=\"0\">"),
+        "ppt/slideMasters/slideMaster1.xml" => swap(
+            xml,
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef>",
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"accent1\"/></p:bgRef>",
+        ),
+        _ => xml,
+    });
+    assert_page(&hidden, [0x4F, 0x81, 0xBD]);
+
+    let layout = tmp("theme-layout");
+    rewrite_named(&base, &layout, |name, xml| {
+        match name {
+        "ppt/slideLayouts/slideLayout1.xml" => swap(
+            xml,
+            "<p:cSld name=\"空白\">",
+            "<p:cSld name=\"空白\"><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"accent2\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+        ),
+        _ => xml,
+    }
+    });
+    assert_page(&layout, [0xC0, 0x50, 0x4D]);
+
+    let remap = "<p:clrMapOvr><a:overrideClrMapping bg1=\"accent2\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/></p:clrMapOvr>";
+    let slide_map = tmp("theme-remap");
+    rewrite_named(&base, &slide_map, |name, xml| match name {
+        "ppt/slides/slide1.xml" => {
+            let xml = swap(
+                xml,
+                "<p:cSld>",
+                "<p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"bg1\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+            );
+            swap(
+                xml,
+                "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
+                remap,
+            )
+        }
+        _ => xml,
+    });
+    assert_page(&slide_map, [0xC0, 0x50, 0x4D]);
+
+    let layout_map = tmp("theme-layout-map");
+    rewrite_named(&base, &layout_map, |name, xml| match name {
+        "ppt/slideLayouts/slideLayout1.xml" => {
+            let xml = swap(
+                xml,
+                "<p:cSld name=\"空白\">",
+                "<p:cSld name=\"空白\"><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"bg1\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+            );
+            swap(
+                xml,
+                "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
+                remap,
+            )
+        }
+        _ => xml,
+    });
+    assert_page(&layout_map, [0xC0, 0x50, 0x4D]);
+
+    let inherit_map = remap.replace("bg1=\"accent2\"", "bg1=\"accent1\"");
+    let inherited_map = tmp("theme-inherit-map");
+    rewrite_named(&base, &inherited_map, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>",
+            &inherit_map,
+        ),
+        _ => xml,
+    });
+    assert_page(&inherited_map, [0x4F, 0x81, 0xBD]);
+
+    let empty_ref = tmp("theme-idx0");
+    rewrite_named(&base, &empty_ref, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgRef idx=\"0\"><a:schemeClr val=\"accent1\"/></p:bgRef></p:bg>",
+        ),
+        "ppt/slideMasters/slideMaster1.xml" => swap(
+            xml,
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef>",
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"accent1\"/></p:bgRef>",
+        ),
+        _ => xml,
+    });
+    assert_page(&empty_ref, [255, 255, 255]);
+
+    let gradient = tmp("theme-grad");
+    rewrite_named(&base, &gradient, |name, xml| match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgRef idx=\"1002\"><a:schemeClr val=\"accent1\"/></p:bgRef></p:bg>",
+        ),
+        _ => xml,
+    });
+    assert_page(&gradient, [255, 255, 255]);
+
+    let tinted = tmp("theme-tint");
+    rewrite_named(&base, &tinted, |name, xml| {
+        match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"accent1\"><a:lumMod val=\"50000\"/></a:schemeClr></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+        ),
+        _ => xml,
+    }
+    });
+    assert_page(&tinted, [255, 255, 255]);
+
+    let opaque = tmp("theme-alpha");
+    rewrite_named(&base, &opaque, |name, xml| {
+        match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgPr><a:solidFill><a:schemeClr val=\"accent1\"><a:alpha val=\"100000\"/></a:schemeClr></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+        ),
+        _ => xml,
+    }
+    });
+    assert_page(&opaque, [0x4F, 0x81, 0xBD]);
+
+    let wins = tmp("theme-wins");
+    rewrite_named(&base, &wins, |name, xml| {
+        match name {
+        "ppt/slides/slide1.xml" => swap(
+            xml,
+            "<p:cSld>",
+            "<p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val=\"FF0000\"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>",
+        ),
+        "ppt/slideMasters/slideMaster1.xml" => swap(
+            xml,
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef>",
+            "<p:bgRef idx=\"1001\"><a:schemeClr val=\"accent1\"/></p:bgRef>",
+        ),
+        _ => xml,
+    }
+    });
+    assert_page(&wins, [255, 0, 0]);
+}
+
+fn assert_page(path: &Path, color: [u8; 3]) {
+    let out = tmp("theme-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": path.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 0), color);
+    assert_eq!(pixel(&rgb, w, 640, 360), color);
+    assert_eq!(pixel(&rgb, w, w - 1, h - 1), color);
+}
+
+fn swap(xml: String, from: &str, to: &str) -> String {
+    assert!(xml.contains(from), "缺少 {from}");
+    xml.replacen(from, to, 1)
+}
+
 fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
+    let mut edit = Some(edit);
+    rewrite_named(src, dst, |name, xml| {
+        if name == "ppt/slides/slide1.xml" {
+            edit.take().unwrap()(xml)
+        } else {
+            xml
+        }
+    });
+}
+
+fn rewrite_named(src: &Path, dst: &Path, mut edit: impl FnMut(&str, String) -> String) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut out = Cursor::new(Vec::new());
-    let mut edit = Some(edit);
     {
         let mut zip_out = zip::ZipWriter::new(&mut out);
         let opt = zip::write::SimpleFileOptions::default()
@@ -767,9 +1033,9 @@ fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
             let name = file.name().to_string();
             let mut data = Vec::new();
             file.read_to_end(&mut data).unwrap();
-            if name == "ppt/slides/slide1.xml" {
+            if name.ends_with(".xml") {
                 let xml = String::from_utf8(data).unwrap();
-                data = edit.take().unwrap()(xml).into_bytes();
+                data = edit(&name, xml).into_bytes();
             }
             zip_out.start_file(&name, opt).unwrap();
             zip_out.write_all(&data).unwrap();

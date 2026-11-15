@@ -1,5 +1,5 @@
 //! 幻灯片只读栅格化。先铺页底，再按文档顺序画形状、图、表和文字。
-//! 没有本页纯色页底时铺白。画不了的对象让整页失败，不交出缺一块的图。
+//! 页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。画不了的对象让整页失败，不交出缺一块的图。
 //! 不写回包，像素不进 inspect。
 
 use std::io::Cursor;
@@ -31,7 +31,7 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let (cx, cy) = picture::canvas_size(&pres.root);
     let width = emu_span(cx)?;
     let height = emu_span(cy)?;
-    let bg = page_color(&doc.root).unwrap_or([255, 255, 255]);
+    let bg = page_fill(&pkg, &slide.part, &doc.root)?;
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
     fill(&mut rgb, bg);
     paint_inherited(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
@@ -79,23 +79,195 @@ fn parse_slide_id(id: &str) -> Result<usize, Error> {
     Ok(n as usize)
 }
 
-fn page_color(root: &Element) -> Option<[u8; 3]> {
-    let clr = root
-        .child_by_local("cSld")?
-        .child_by_local("bg")?
-        .child_by_local("bgPr")?
-        .child_by_local("solidFill")?
-        .child_by_local("srgbClr")?;
-    for child in clr.element_children() {
-        if child.local_name() != "alpha" {
-            return None;
-        }
-        let val = child.attr("val").unwrap_or("");
-        if val != "100000" {
-            return None;
+const WHITE: [u8; 3] = [255, 255, 255];
+
+/// 本页有 `p:bg` 就用本页，否则用版式，再否则用母版。
+/// 这一层写了页底但画不成纯色时铺白，不再往下继承。
+fn page_fill(pkg: &Package, slide_part: &str, slide: &Element) -> Result<[u8; 3], Error> {
+    let layout_part = linked_part(pkg, slide_part, "/slideLayout")?;
+    let layout_doc = match &layout_part {
+        Some(part) => Some(super::list_pin::parse_part(pkg, part)?),
+        None => None,
+    };
+    let master_part = match &layout_part {
+        Some(part) => linked_part(pkg, part, "/slideMaster")?,
+        None => None,
+    };
+    let master_doc = match &master_part {
+        Some(part) => Some(super::list_pin::parse_part(pkg, part)?),
+        None => None,
+    };
+    let theme_part = match &master_part {
+        Some(part) => linked_part(pkg, part, "/theme")?,
+        None => None,
+    };
+    let theme_doc = match &theme_part {
+        Some(part) => Some(super::list_pin::parse_part(pkg, part)?),
+        None => None,
+    };
+    let map = color_map(
+        slide,
+        layout_doc.as_ref().map(|doc| &doc.root),
+        master_doc.as_ref().map(|doc| &doc.root),
+    );
+    let theme = theme_doc.as_ref().map(|doc| &doc.root);
+    let bg = page_bg(slide)
+        .or_else(|| layout_doc.as_ref().and_then(|doc| page_bg(&doc.root)))
+        .or_else(|| master_doc.as_ref().and_then(|doc| page_bg(&doc.root)));
+    Ok(bg
+        .and_then(|el| resolve_bg(el, map, theme))
+        .unwrap_or(WHITE))
+}
+
+fn page_bg(root: &Element) -> Option<&Element> {
+    root.child_by_local("cSld")?.child_by_local("bg")
+}
+
+/// 本页有覆盖表就用本页的。否则用版式的覆盖表。都没有时用母版 `clrMap`。
+fn color_map<'a>(
+    slide: &'a Element,
+    layout: Option<&'a Element>,
+    master: Option<&'a Element>,
+) -> Option<&'a Element> {
+    if let Some(map) = override_map(slide) {
+        return Some(map);
+    }
+    if let Some(layout) = layout {
+        if let Some(map) = override_map(layout) {
+            return Some(map);
         }
     }
-    parse_rgb(clr.attr("val")?)
+    master.and_then(|el| el.child_by_local("clrMap"))
+}
+
+fn override_map(root: &Element) -> Option<&Element> {
+    root.child_by_local("clrMapOvr")
+        .and_then(|el| el.child_by_local("overrideClrMapping"))
+}
+
+fn resolve_bg(bg: &Element, map: Option<&Element>, theme: Option<&Element>) -> Option<[u8; 3]> {
+    if let Some(pr) = bg.child_by_local("bgPr") {
+        return resolve_bg_pr(pr, map, theme);
+    }
+    if let Some(reference) = bg.child_by_local("bgRef") {
+        return resolve_bg_ref(reference, map, theme);
+    }
+    None
+}
+
+fn resolve_bg_pr(pr: &Element, map: Option<&Element>, theme: Option<&Element>) -> Option<[u8; 3]> {
+    if pr
+        .attr("shadeToTitle")
+        .is_some_and(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+    {
+        return None;
+    }
+    let mut fill = None;
+    for child in pr.element_children() {
+        match child.local_name() {
+            "solidFill" if fill.is_none() => fill = Some(child),
+            "effectLst" if child.element_children().next().is_none() => {}
+            _ => return None,
+        }
+    }
+    plain_color(only_child(fill?)?, map, theme)
+}
+
+fn resolve_bg_ref(
+    reference: &Element,
+    map: Option<&Element>,
+    theme: Option<&Element>,
+) -> Option<[u8; 3]> {
+    let idx: u32 = reference.attr("idx")?.parse().ok()?;
+    // 0 和 1000 表示没有页底。调用方已经选定这一层，所以铺白，不再继承。
+    if idx == 0 || idx == 1000 {
+        return Some(WHITE);
+    }
+    let style = fill_style(theme?, idx)?;
+    if !is_plain_ph(style) {
+        return None;
+    }
+    plain_color(only_child(reference)?, map, theme)
+}
+
+fn fill_style(theme: &Element, idx: u32) -> Option<&Element> {
+    let (list, offset) = if (1..1000).contains(&idx) {
+        ("fillStyleLst", idx - 1)
+    } else if idx >= 1001 {
+        ("bgFillStyleLst", idx - 1001)
+    } else {
+        return None;
+    };
+    theme
+        .child_by_local("themeElements")?
+        .child_by_local("fmtScheme")?
+        .child_by_local(list)?
+        .element_children()
+        .nth(offset as usize)
+}
+
+fn is_plain_ph(fill: &Element) -> bool {
+    if fill.local_name() != "solidFill" {
+        return false;
+    }
+    let Some(clr) = only_child(fill) else {
+        return false;
+    };
+    clr.local_name() == "schemeClr" && clr.attr("val") == Some("phClr") && color_is_plain(clr)
+}
+
+fn plain_color(clr: &Element, map: Option<&Element>, theme: Option<&Element>) -> Option<[u8; 3]> {
+    if !color_is_plain(clr) {
+        return None;
+    }
+    match clr.local_name() {
+        "srgbClr" => parse_rgb(clr.attr("val")?),
+        "schemeClr" => theme_color(theme?, &mapped_name(map, clr.attr("val")?)),
+        _ => None,
+    }
+}
+
+fn color_is_plain(clr: &Element) -> bool {
+    clr.element_children()
+        .all(|child| child.local_name() == "alpha" && child.attr("val").unwrap_or("") == "100000")
+}
+
+fn mapped_name(map: Option<&Element>, name: &str) -> String {
+    if let Some(map) = map {
+        return map.attr(name).unwrap_or(name).to_string();
+    }
+    match name {
+        "bg1" => "lt1",
+        "tx1" => "dk1",
+        "bg2" => "lt2",
+        "tx2" => "dk2",
+        other => other,
+    }
+    .to_string()
+}
+
+fn theme_color(theme: &Element, name: &str) -> Option<[u8; 3]> {
+    let slot = theme
+        .child_by_local("themeElements")?
+        .child_by_local("clrScheme")?
+        .child_by_local(name)?;
+    if let Some(el) = slot.child_by_local("srgbClr") {
+        return parse_rgb(el.attr("val")?);
+    }
+    let el = slot.child_by_local("sysClr")?;
+    el.attr("lastClr")
+        .and_then(parse_rgb)
+        .or_else(|| match el.attr("val") {
+            Some("window") => Some(WHITE),
+            Some("windowText") => Some([0, 0, 0]),
+            _ => None,
+        })
+}
+
+fn only_child(el: &Element) -> Option<&Element> {
+    let mut kids = el.element_children();
+    let first = kids.next()?;
+    kids.next().is_none().then_some(first)
 }
 
 fn paint_tree(

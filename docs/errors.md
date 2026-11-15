@@ -1168,7 +1168,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - 画不了已用区域，或宽高不在 1 到 4096 像素之间，`exportSheetImage` 报 `NotImplemented`
 - docx 与 pptx 上发 `exportSheetImage` 报 `InvalidField`
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
-- 页底不是本页不透明纯色，或图不是没有旋转、裁剪的 PNG，`exportSlideImage` 报 `NotImplemented`。有描边或不是矩形的形状先跳过，不因此报错
+- 图带旋转、要缩放的裁剪，或还有别的画不了的对象，`exportSlideImage` 报 `NotImplemented`。页底画不了时铺白，不因此报错
 - xlsx 与 docx 上发 `exportSlideImage` 报 `InvalidField`
 - `exportPageImage` 的 id 不是 `page:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 有字、表格、图，或行距不是 Calibri 11 磅空段，`exportPageImage` 报 `NotImplemented`
