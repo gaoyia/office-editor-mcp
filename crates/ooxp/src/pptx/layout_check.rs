@@ -58,6 +58,10 @@ pub(crate) struct GroupXfrm {
     cy0: i64,
     ccx: i64,
     ccy: i64,
+    /// 顺时针 90 度的次数，0 到 3。其它角度保持 0，出图会先拒绝这一页。
+    quarter: i64,
+    flip_h: bool,
+    flip_v: bool,
 }
 
 impl GroupXfrm {
@@ -72,6 +76,9 @@ impl GroupXfrm {
             cy0: 0,
             ccx: 0,
             ccy: 0,
+            quarter: 0,
+            flip_h: false,
+            flip_v: false,
         }
     }
 }
@@ -105,7 +112,30 @@ pub(crate) fn group_xfrm(grp: &Element) -> GroupXfrm {
         cy0,
         ccx,
         ccy,
+        quarter: group_quarter(xfrm),
+        flip_h: flag(xfrm, "flipH"),
+        flip_v: flag(xfrm, "flipV"),
     }
+}
+
+fn flag(xfrm: &Element, name: &str) -> bool {
+    matches!(
+        xfrm.attr(name),
+        Some(value) if value == "1" || value.eq_ignore_ascii_case("true")
+    )
+}
+
+fn group_quarter(xfrm: &Element) -> i64 {
+    let Some(raw) = xfrm.attr("rot") else {
+        return 0;
+    };
+    let Ok(n) = raw.parse::<i64>() else {
+        return 0;
+    };
+    if n.rem_euclid(5_400_000) != 0 {
+        return 0;
+    }
+    n.rem_euclid(21_600_000) / 5_400_000
 }
 
 fn attr_or(el: Option<&Element>, name: &str, default: i64) -> i64 {
@@ -219,6 +249,9 @@ pub(crate) fn map_emu(
     cy: i64,
     chain: &[GroupXfrm],
 ) -> (i64, i64, i64, i64) {
+    if chain.iter().any(|g| g.quarter != 0 || g.flip_h || g.flip_v) {
+        return map_turned(x, y, cx, cy, chain);
+    }
     let (mut ax, mut bx) = (Rat::one(), Rat::zero());
     let (mut ay, mut by) = (Rat::one(), Rat::zero());
     for g in chain.iter().rev() {
@@ -246,6 +279,50 @@ pub(crate) fn map_emu(
         ay.mul_int(y).add(by).round(),
         ax.mul_int(cx).round(),
         ay.mul_int(cy).round(),
+    )
+}
+
+/// 先按整数比例放进组的外框，再翻转，再绕中心顺时针转 90 度的倍数。
+/// 链从内到外。返回转完之后的外接矩形。
+fn map_turned(x: i64, y: i64, cx: i64, cy: i64, chain: &[GroupXfrm]) -> (i64, i64, i64, i64) {
+    let mut corners = [(x, y), (x + cx, y), (x + cx, y + cy), (x, y + cy)];
+    for g in chain.iter().rev() {
+        if g.ccx == 0 || g.ccy == 0 {
+            continue;
+        }
+        for corner in &mut corners {
+            *corner = place_in_group(g, corner.0, corner.1);
+        }
+    }
+    let min_x = corners.iter().map(|p| p.0).min().unwrap_or(0);
+    let min_y = corners.iter().map(|p| p.1).min().unwrap_or(0);
+    let max_x = corners.iter().map(|p| p.0).max().unwrap_or(0);
+    let max_y = corners.iter().map(|p| p.1).max().unwrap_or(0);
+    (min_x, min_y, max_x - min_x, max_y - min_y)
+}
+
+fn place_in_group(g: &GroupXfrm, x: i64, y: i64) -> (i64, i64) {
+    let mut sx = Rat::new((x as i128 - g.cx0 as i128) * g.gcx as i128, g.ccx as i128);
+    let mut sy = Rat::new((y as i128 - g.cy0 as i128) * g.gcy as i128, g.ccy as i128);
+    if g.flip_h {
+        sx = Rat::new(g.gcx as i128, 1).add(sx.neg());
+    }
+    if g.flip_v {
+        sy = Rat::new(g.gcy as i128, 1).add(sy.neg());
+    }
+    let half_x = Rat::new(g.gcx as i128, 2);
+    let half_y = Rat::new(g.gcy as i128, 2);
+    let dx = sx.add(half_x.neg());
+    let dy = sy.add(half_y.neg());
+    let (dx, dy) = match g.quarter {
+        1 => (dy.neg(), dx),
+        2 => (dx.neg(), dy.neg()),
+        3 => (dy, dx.neg()),
+        _ => (dx, dy),
+    };
+    (
+        Rat::new(g.gx as i128, 1).add(half_x).add(dx).round(),
+        Rat::new(g.gy as i128, 1).add(half_y).add(dy).round(),
     )
 }
 
@@ -303,6 +380,10 @@ impl Rat {
 
     fn mul_int(self, v: i64) -> Self {
         Self::new(self.num * v as i128, self.den)
+    }
+
+    fn neg(self) -> Self {
+        Self::new(-self.num, self.den)
     }
 
     /// 四舍五入到最近整数，半值远离零：-1.5 -> -2，1.5 -> 2。
@@ -529,6 +610,9 @@ mod tests {
             cy0: 0,
             ccx: 2,
             ccy: 2,
+            quarter: 0,
+            flip_h: false,
+            flip_v: false,
         };
         let positive = shape_box(&sp_with("3", "3", "4", "4", None), &[g]).unwrap();
         assert_eq!(
@@ -553,6 +637,9 @@ mod tests {
             cy0: 0,
             ccx: 2,
             ccy: 2,
+            quarter: 0,
+            flip_h: false,
+            flip_v: false,
         };
         let outer = GroupXfrm {
             gx: 1_000,
@@ -563,6 +650,9 @@ mod tests {
             cy0: 0,
             ccx: 1,
             ccy: 1,
+            quarter: 0,
+            flip_h: false,
+            flip_v: false,
         };
         // 内层 x' = 100 + 2x，外层 x'' = 1000 + 3x'，合计 x'' = 1300 + 6x。
         let b = shape_box(&sp_with("10", "0", "2", "2", None), &[outer, inner]).unwrap();
@@ -580,6 +670,9 @@ mod tests {
             cy0: 0,
             ccx: 0,
             ccy: 0,
+            quarter: 0,
+            flip_h: false,
+            flip_v: false,
         };
         let b = shape_box(&sp_with("7", "8", "9", "10", None), &[g]).unwrap();
         assert_eq!((b.x, b.y, b.cx, b.cy), (7, 8, 9, 10));

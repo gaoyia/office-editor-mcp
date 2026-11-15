@@ -1,5 +1,5 @@
 ﻿# 组合里的实心矩形。恒等组合和按 chExt 放大两倍的组合，都跟 PowerPoint 16.0 的 Slide.Export 比像素。
-# 组合自身旋转时整页失败。红区回绘制引擎修，不要加大 MaxDelta。
+# 不是 90 度倍数的旋转整页失败。直角倍数见 pptx-turn-group-image。红区回绘制引擎修，不要加大 MaxDelta。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -33,7 +33,7 @@ function Set-GroupRot([string]$path) {
         try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
         $needle = '<a:xfrm><a:off x="1828800" y="914400"/><a:ext cx="1828800"'
         if (-not $text.Contains($needle)) { throw "找不到要旋转的组合" }
-        $text = $text.Replace($needle, '<a:xfrm rot="5400000"><a:off x="1828800" y="914400"/><a:ext cx="1828800"')
+        $text = $text.Replace($needle, '<a:xfrm rot="100"><a:off x="1828800" y="914400"/><a:ext cx="1828800"')
         $entry.Delete()
         $created = $zip.CreateEntry('ppt/slides/slide1.xml')
         $writer = New-Object System.IO.StreamWriter($created.Open())
@@ -123,7 +123,7 @@ $rotOk = $false
 $rotDetail = ''
 try {
     Export-Lib $rotated 'pptx-group-image-rot.png' 'pptx-group-image-rot-export' | Out-Null
-    $rotDetail = '旋转的组合应当整页失败'
+    $rotDetail = '不是直角倍数的组合应当整页失败'
 }
 catch {
     $rotDetail = $_.Exception.Message

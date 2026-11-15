@@ -370,7 +370,7 @@ fn visit(
     Ok(())
 }
 
-/// 组合自身旋转或翻转时，子形状的像素框不能再按轴对齐换算。
+/// 不是 90 度倍数的旋转，子形状不再是实心外接矩形。翻转和直角倍数可以画。
 fn group_turns(grp: &Element) -> bool {
     let Some(xfrm) = grp
         .child_by_local("grpSpPr")
@@ -378,11 +378,12 @@ fn group_turns(grp: &Element) -> bool {
     else {
         return false;
     };
-    if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
-        return true;
-    }
-    xfrm.attr("rot")
-        .is_some_and(|raw| raw.parse::<i64>().ok().unwrap_or(1) != 0)
+    let Some(raw) = xfrm.attr("rot") else {
+        return false;
+    };
+    raw.parse::<i64>()
+        .ok()
+        .is_none_or(|n| n.rem_euclid(5_400_000) != 0)
 }
 
 fn map_box(xfrm: &Element, chain: &[super::layout_check::GroupXfrm]) -> (i64, i64, i64, i64) {
@@ -1952,7 +1953,9 @@ fn plain_box(
     chain: &[super::layout_check::GroupXfrm],
 ) -> Option<(i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
-    if sp_pr.child_by_local("effectLst").is_some()
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
         || sp_pr.child_by_local("scene3d").is_some()
         || sp_pr.child_by_local("sp3d").is_some()
     {
@@ -2041,9 +2044,13 @@ fn line_is_clear(sp_pr: &Element) -> bool {
     let Some(ln) = sp_pr.child_by_local("ln") else {
         return true;
     };
-    ln.element_children()
-        .all(|child| child.local_name() == "noFill")
-        && ln.child_by_local("noFill").is_some()
+    ln.child_by_local("noFill").is_some()
+        && ln.element_children().all(|child| {
+            !matches!(
+                child.local_name(),
+                "solidFill" | "gradFill" | "pattFill" | "blipFill"
+            )
+        })
 }
 
 fn opaque_rgb(fill: &Element) -> Option<[u8; 3]> {
@@ -2450,10 +2457,26 @@ mod tests {
     }
 
     #[test]
-    fn rotated_group_is_not_axis_aligned() {
-        let xml = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+    fn a_group_off_the_quarter_turn_fails() {
+        let xml = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="100"><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
         assert!(group_turns(&doc.root));
+    }
+
+    #[test]
+    fn a_quarter_turn_group_maps_the_solid_rects() {
+        let grp = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="762000" y="457200"/><a:ext cx="1524000" cy="609600"/><a:chOff x="762000" y="457200"/><a:chExt cx="1524000" cy="609600"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let group = crate::xml::parse(grp.as_bytes()).unwrap();
+        assert!(!group_turns(&group.root));
+        let chain = [super::super::layout_check::group_xfrm(&group.root)];
+        let wide = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="762000" y="762000"/><a:ext cx="1524000" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln w="25400"><a:noFill/><a:prstDash val="solid"/></a:ln><a:effectLst/></p:spPr></p:sp>"#;
+        let narrow = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="457200"/><a:ext cx="304800" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let wide = crate::xml::parse(wide.as_bytes()).unwrap();
+        let narrow = crate::xml::parse(narrow.as_bytes()).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (128, 0, 32, 160));
+        let (_, x, y, w, h) = plain_rect(&narrow.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (144, 120, 48, 32));
     }
 
     #[test]
