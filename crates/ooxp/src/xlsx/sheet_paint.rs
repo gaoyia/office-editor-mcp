@@ -1405,6 +1405,8 @@ enum Shown {
     Num(f64),
     Text(String),
     Bool(bool),
+    /// `t="e"`。字色和底色相同才不画文字，否则整表不做。
+    Err,
 }
 
 struct CellRec {
@@ -1496,6 +1498,7 @@ fn value_shown(cell: &Element, sst: &[String]) -> Result<Shown, Error> {
         )),
         "n" | "d" if value.is_empty() => Ok(Shown::Empty),
         "n" => Ok(Shown::Num(value.parse().map_err(|_| unsupported())?)),
+        "e" => Ok(Shown::Err),
         _ => Err(unsupported()),
     }
 }
@@ -2523,6 +2526,9 @@ fn paint_rules(
             "containsBlanks" | "notContainsBlanks" => {
                 let _ = blank_mode(rule, areas)?;
             }
+            "containsErrors" | "notContainsErrors" => {
+                let _ = error_mode(rule, areas)?;
+            }
             _ => return Err(unsupported()),
         }
     }
@@ -2587,6 +2593,12 @@ fn expression_gaps(
                 Some("expression") | Some("notContainsText") => paints_blank = true,
                 Some("containsBlanks") | Some("notContainsBlanks") => {
                     paints_blank |= blank_mode(rule, &areas)? == Some(true);
+                }
+                Some("notContainsErrors") => {
+                    paints_blank |= error_mode(rule, &areas)? == Some(ErrorPaint::ExceptErrors);
+                }
+                Some("containsErrors") => {
+                    let _ = error_mode(rule, &areas)?;
                 }
                 _ => {}
             }
@@ -2797,7 +2809,13 @@ fn cf_fill(
                     }
                 }
                 "containsBlanks" | "notContainsBlanks" => match blank_mode(rule, &areas)? {
-                    Some(want_blank) if cell_is_blank(cells, col, row) == want_blank => {
+                    Some(want_blank) if blank_cell_hit(cells, col, row, want_blank) => {
+                        dxf_fill(styles, rule)?
+                    }
+                    Some(_) | None => None,
+                },
+                "containsErrors" | "notContainsErrors" => match error_mode(rule, &areas)? {
+                    Some(paint) if error_cell_hit(cells, col, row, paint) => {
                         dxf_fill(styles, rule)?
                     }
                     Some(_) | None => None,
@@ -3150,6 +3168,16 @@ fn paint_labels(
         }
         let xf = styles.xf(cell.style)?;
         let font = styles.font(cell.style)?;
+        if matches!(cell.shown, Shown::Err) {
+            let font_color = dxf_color(sheet, styles, cells, col, row, session)?
+                .or(font.color)
+                .ok_or_else(unsupported)?;
+            let fill_color = error_backdrop(sheet, styles, cells, col, row, session, xf.fill)?;
+            if font_color != fill_color {
+                return Err(unsupported());
+            }
+            continue;
+        }
         let fmt = styles.fmt_of(cell.style)?;
         let text = label_text(&cell.shown, &fmt)?;
         if text.is_empty() {
@@ -3208,6 +3236,7 @@ fn label_text(shown: &Shown, fmt: &NumFmt) -> Result<String, Error> {
         Shown::Bool(true) => Ok("TRUE".into()),
         Shown::Bool(false) => Ok("FALSE".into()),
         Shown::Num(n) => format_num(*n, fmt),
+        Shown::Err => Ok(String::new()),
     }
 }
 
@@ -3302,6 +3331,7 @@ fn shown_text(shown: &Shown) -> String {
         Shown::Num(n) => format_general(*n).to_lowercase(),
         Shown::Bool(true) => "true".into(),
         Shown::Bool(false) => "false".into(),
+        Shown::Err => String::new(),
     }
 }
 
@@ -3439,12 +3469,116 @@ fn strip_ascii_prefix<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
     }
 }
 
-/// 空白含没有格子、没有值，以及去掉首尾普通空格后为空的文字。
+/// 空白含没有格子、没有值，以及去掉首尾普通空格后为空的文字。错误值另判。
 fn cell_is_blank(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> bool {
     match cells.get(&(col, row)).map(|cell| &cell.shown) {
         None | Some(Shown::Empty) => true,
         Some(Shown::Text(text)) => text.trim_matches(' ').is_empty(),
-        Some(Shown::Num(_) | Shown::Bool(_)) => false,
+        Some(Shown::Num(_) | Shown::Bool(_) | Shown::Err) => false,
+    }
+}
+
+/// 错误值上 `LEN(TRIM)` 得到错误，空白和非空白都不铺。
+fn blank_cell_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    col: u32,
+    row: u32,
+    want_blank: bool,
+) -> bool {
+    if matches!(
+        cells.get(&(col, row)).map(|cell| &cell.shown),
+        Some(Shown::Err)
+    ) {
+        return false;
+    }
+    cell_is_blank(cells, col, row) == want_blank
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ErrorPaint {
+    OnlyErrors,
+    ExceptErrors,
+}
+
+/// `Some` 表示公式能铺。没有公式时不铺。
+fn error_mode(rule: &Element, areas: &[(CellRef, CellRef)]) -> Result<Option<ErrorPaint>, Error> {
+    let formulas = rule.children_by_local("formula");
+    if formulas.is_empty() {
+        return Ok(None);
+    }
+    if formulas.len() != 1 {
+        return Err(unsupported());
+    }
+    let (a, b) = areas.first().copied().ok_or_else(unsupported)?;
+    let anchor = CellRef {
+        col: a.col.min(b.col),
+        row: a.row.min(b.row),
+    };
+    let paint = match rule.attr("type") {
+        Some("containsErrors") => ErrorPaint::OnlyErrors,
+        Some("notContainsErrors") => ErrorPaint::ExceptErrors,
+        _ => return Err(unsupported()),
+    };
+    if !canonical_error_formula(formulas[0].text_content().trim(), anchor, paint) {
+        return Err(unsupported());
+    }
+    Ok(Some(paint))
+}
+
+/// Excel 16.0 把错误规则存成锚点上的 `ISERROR` 或 `NOT(ISERROR)`。
+fn canonical_error_formula(text: &str, anchor: CellRef, paint: ErrorPaint) -> bool {
+    let text = text.strip_prefix('=').unwrap_or(text);
+    let anchor_text = a1::format_cell(anchor.col, anchor.row);
+    let (body, closing) = match paint {
+        ErrorPaint::OnlyErrors => ("ISERROR(", ")"),
+        ErrorPaint::ExceptErrors => ("NOT(ISERROR(", "))"),
+    };
+    let Some(rest) = strip_ascii_prefix(text, body) else {
+        return false;
+    };
+    let Some((cell, rest)) = rest.split_once(closing) else {
+        return false;
+    };
+    cell.eq_ignore_ascii_case(&anchor_text) && rest.is_empty()
+}
+
+fn cell_is_error(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> bool {
+    matches!(
+        cells.get(&(col, row)).map(|cell| &cell.shown),
+        Some(Shown::Err)
+    )
+}
+
+fn error_cell_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    col: u32,
+    row: u32,
+    paint: ErrorPaint,
+) -> bool {
+    let error = cell_is_error(cells, col, row);
+    match paint {
+        ErrorPaint::OnlyErrors => error,
+        ErrorPaint::ExceptErrors => !error,
+    }
+}
+
+/// 错误文字底下的颜色。没有填充时是白。图案上的错误文字不画。
+fn error_backdrop(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    col: u32,
+    row: u32,
+    session: &mut Option<FormulaSession>,
+    fill_id: usize,
+) -> Result<[u8; 3], Error> {
+    if let Some(rgb) = cf_fill(sheet, styles, cells, col, row, session)? {
+        return Ok(rgb);
+    }
+    match styles.fills.get(fill_id).copied().unwrap_or(Fill::Nope) {
+        Fill::Solid(rgb) => Ok(rgb),
+        Fill::None => Ok([255, 255, 255]),
+        Fill::Pattern(_, _, _) | Fill::Nope => Err(unsupported()),
     }
 }
 
@@ -3491,6 +3625,7 @@ fn duplicate_key(cell: &CellRec) -> Result<Option<DupKey>, Error> {
                 Ok(Some(DupKey::Text(text.to_lowercase())))
             }
         }
+        Shown::Err => Err(unsupported()),
     }
 }
 
@@ -3600,7 +3735,7 @@ fn simple_hit(
         "aboveAverage" => average_hit(cells, rule, areas, col, row)?,
         "top10" => top_hit(cells, rule, areas, col, row),
         "containsText" | "notContainsText" | "beginsWith" | "endsWith" => {
-            text_hit(cells, rule, col, row)
+            text_hit(cells, rule, col, row)?
         }
         _ => false,
     })
@@ -3690,15 +3825,26 @@ fn top_hit(
     }
 }
 
-fn text_hit(cells: &HashMap<(u32, u32), CellRec>, rule: &Element, col: u32, row: u32) -> bool {
+fn text_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    rule: &Element,
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    if matches!(
+        cells.get(&(col, row)).map(|cell| &cell.shown),
+        Some(Shown::Err)
+    ) {
+        return Err(unsupported());
+    }
     let needle = rule.attr("text").unwrap_or("").to_lowercase();
     let text = cell_text(cells, col, row);
     match rule.attr("type").unwrap_or("") {
-        "containsText" => !needle.is_empty() && text.contains(&needle),
-        "notContainsText" => !text.contains(&needle),
-        "beginsWith" => text.starts_with(&needle),
-        "endsWith" => text.ends_with(&needle),
-        _ => false,
+        "containsText" => Ok(!needle.is_empty() && text.contains(&needle)),
+        "notContainsText" => Ok(!text.contains(&needle)),
+        "beginsWith" => Ok(text.starts_with(&needle)),
+        "endsWith" => Ok(text.ends_with(&needle)),
+        _ => Ok(false),
     }
 }
 
@@ -3742,7 +3888,11 @@ fn dxf_color(
                     rule.attr("type") == Some("uniqueValues"),
                 )?,
                 "containsBlanks" | "notContainsBlanks" => match blank_mode(rule, &areas)? {
-                    Some(want_blank) => cell_is_blank(cells, col, row) == want_blank,
+                    Some(want_blank) => blank_cell_hit(cells, col, row, want_blank),
+                    None => false,
+                },
+                "containsErrors" | "notContainsErrors" => match error_mode(rule, &areas)? {
+                    Some(paint) => error_cell_hit(cells, col, row, paint),
                     None => false,
                 },
                 _ => false,

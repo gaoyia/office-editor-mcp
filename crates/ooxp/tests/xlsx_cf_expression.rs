@@ -581,3 +581,133 @@ fn a_foreign_blank_formula_fails_the_sheet() {
     );
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
+
+fn mark_errors(book: &Path, refs: &[&str]) -> PathBuf {
+    let bytes = std::fs::read(book).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/worksheets/sheet1.xml" {
+                let mut xml = String::from_utf8(data).unwrap();
+                for r in refs {
+                    xml = replace_cell_with_error(&xml, r);
+                }
+                data = xml.into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    let dst = tmp("err-cells");
+    std::fs::write(&dst, out.into_inner()).unwrap();
+    dst
+}
+
+fn replace_cell_with_error(xml: &str, r: &str) -> String {
+    let token = format!(r#"<c r="{r}""#);
+    let start = xml.find(&token).unwrap_or_else(|| panic!("找不到 {r}"));
+    let end = xml[start..].find("</c>").unwrap() + start + 4;
+    let open_end = xml[start..].find('>').unwrap() + start;
+    let open = &xml[start..=open_end];
+    let style = open
+        .find(" s=\"")
+        .map(|i| {
+            let rest = &open[i + 4..];
+            let n = rest.find('"').unwrap();
+            format!(r#" s="{}""#, &rest[..n])
+        })
+        .unwrap_or_default();
+    let cell = format!(r#"<c r="{r}"{style} t="e"><v>#DIV/0!</v></c>"#);
+    format!("{}{cell}{}", &xml[..start], &xml[end..])
+}
+
+#[test]
+fn errors_fill_div0_and_leave_a_missing_cell() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A3", "value": "e" },
+            { "ref": "A4", "value": "e" }
+        ]),
+        "containsErrors",
+        4,
+        Some("ISERROR(A1)"),
+    );
+    let book = mark_errors(&book, &["A3", "A4"]);
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+    quiet_row(&rgb, w, 70, RED);
+}
+
+#[test]
+fn not_contains_errors_paints_a_missing_cell() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 2 },
+            { "ref": "A3", "value": "e" }
+        ]),
+        "notContainsErrors",
+        3,
+        Some("NOT(ISERROR(A1))"),
+    );
+    let book = mark_errors(&book, &["A3"]);
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 61));
+    quiet_row(&rgb, w, 10, RED);
+    quiet_row(&rgb, w, 30, RED);
+    quiet_row(&rgb, w, 50, [255, 255, 255]);
+}
+
+#[test]
+fn an_error_rule_without_formula_does_not_fill() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": "e" }
+        ]),
+        "containsErrors",
+        2,
+        None,
+    );
+    let book = mark_errors(&book, &["A2"]);
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 41));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+}
+
+#[test]
+fn a_foreign_error_formula_fails_the_sheet() {
+    let book = duplicate_book(
+        json!([{ "ref": "A1", "value": 1 }]),
+        "containsErrors",
+        1,
+        Some("A1=1"),
+    );
+    assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn a_visible_error_fails_the_sheet() {
+    let src = tmp("visible-err-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    }));
+    let book = hide_grid(&src);
+    let book = mark_errors(&book, &["A1"]);
+    assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
+}

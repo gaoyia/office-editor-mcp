@@ -73,6 +73,7 @@ $order = @(
     'xlsx-cf-duplicate-image'
     'xlsx-cf-unique-image'
     'xlsx-cf-blank-image'
+    'xlsx-cf-error-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'
