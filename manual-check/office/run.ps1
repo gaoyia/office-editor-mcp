@@ -70,6 +70,7 @@ $order = @(
     'xlsx-flip-rect-image'
     'xlsx-sheet-group-image'
     'xlsx-cross-group-image'
+    'xlsx-scale-group-image'
     'xlsx-sheet-scheme-image'
     'xlsx-theme-tint-image'
     'xlsx-hidden-format-image'

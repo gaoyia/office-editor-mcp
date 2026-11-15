@@ -584,7 +584,7 @@ fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Resu
     Ok(color)
 }
 
-/// 变换是恒等的组合。组坐标从工作表左上角量起，和锚点框按像素重合才画。可以跨格。
+/// 没有旋转、翻转的组合。坐标从 A1 量起，和锚点框按像素重合才画。可以跨格，也可以缩放。
 fn identity_group(
     anchor: &Element,
     kind: AnchorKind,
@@ -621,7 +621,7 @@ fn identity_group(
     }
     let (off_x, off_y, cx, cy) = box_emu(xfrm, "off", "ext")?;
     let (ch_x, ch_y, ch_cx, ch_cy) = box_emu(xfrm, "chOff", "chExt")?;
-    if off_x != ch_x || off_y != ch_y || cx != ch_cx || cy != ch_cy || cx <= 0 || cy <= 0 {
+    if cx <= 0 || cy <= 0 || ch_cx <= 0 || ch_cy <= 0 {
         return Err(unsupported());
     }
     let end_x = off_x.checked_add(cx).ok_or_else(unsupported)?;
@@ -645,8 +645,9 @@ fn identity_group(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) =
-                    child_rect(child, origin_x, origin_y, ch_x, ch_y, ch_cx, ch_cy)?;
+                let (x0, y0, x1, y1) = child_rect(
+                    child, origin_x, origin_y, off_x, off_y, cx, cy, ch_x, ch_y, ch_cx, ch_cy,
+                )?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
@@ -682,6 +683,10 @@ fn child_rect(
     sp: &Element,
     x_from: i32,
     y_from: i32,
+    off_x: i64,
+    off_y: i64,
+    cx: i64,
+    cy: i64,
     ch_x: i64,
     ch_y: i64,
     ch_cx: i64,
@@ -702,6 +707,10 @@ fn child_rect(
     if x < ch_x || y < ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
         return Err(unsupported());
     }
+    let x = map_group(off_x, ch_x, cx, ch_cx, x)?;
+    let y = map_group(off_y, ch_y, cy, ch_cy, y)?;
+    let x1_emu = map_group(off_x, ch_x, cx, ch_cx, x1_emu)?;
+    let y1_emu = map_group(off_y, ch_y, cy, ch_cy, y1_emu)?;
     let x0 = x_from + round_px(x)?;
     let y0 = y_from + round_px(y)?;
     let x1 = x_from + round_px(x1_emu)?;
@@ -710,6 +719,25 @@ fn child_rect(
         return Err(unsupported());
     }
     Ok((x0, y0, x1, y1))
+}
+
+/// 组起点 + (子坐标 - 子坐标原点) × 组边长 / 子坐标边长。除法去掉余数。
+fn map_group(
+    origin: i64,
+    ch_origin: i64,
+    span: i64,
+    ch_span: i64,
+    value: i64,
+) -> Result<i64, Error> {
+    if span <= 0 || ch_span <= 0 {
+        return Err(unsupported());
+    }
+    let delta = value.checked_sub(ch_origin).ok_or_else(unsupported)?;
+    if delta < 0 {
+        return Err(unsupported());
+    }
+    let prod = delta.checked_mul(span).ok_or_else(unsupported)?;
+    origin.checked_add(prod / ch_span).ok_or_else(unsupported)
 }
 
 fn shape_fill(fill: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {
