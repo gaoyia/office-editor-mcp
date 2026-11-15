@@ -656,7 +656,7 @@ fn identity_group(
                     y0,
                     x1,
                     y1,
-                    color: plain_color(child, theme, false)?,
+                    color: plain_color(child, theme, true)?,
                 });
             }
             _ => return Err(unsupported()),
@@ -666,6 +666,81 @@ fn identity_group(
         return Err(unsupported());
     }
     Ok(rects)
+}
+
+/// 子矩形先绕自己的中心转 90 度的倍数，得到外接矩形，再交给组去缩放和旋转。
+fn local_box(xfrm: &Element) -> Result<(i64, i64, i64, i64), Error> {
+    let (x, y, w, h) = box_emu(xfrm, "off", "ext")?;
+    if w <= 0 || h <= 0 {
+        return Err(unsupported());
+    }
+    let quarter = group_quarter(xfrm)?;
+    if quarter == 0 {
+        return Ok((x, y, w, h));
+    }
+    let cx2 = x
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_add(w)
+        .ok_or_else(unsupported)?;
+    let cy2 = y
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_add(h)
+        .ok_or_else(unsupported)?;
+    let x1 = x.checked_add(w).ok_or_else(unsupported)?;
+    let y1 = y.checked_add(h).ok_or_else(unsupported)?;
+    let mut min_x = i64::MAX;
+    let mut min_y = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut max_y = i64::MIN;
+    for (px, py) in [(x, y), (x1, y), (x1, y1), (x, y1)] {
+        let (nx2, ny2) = spin_twice(cx2, cy2, px, py, quarter)?;
+        min_x = min_x.min(nx2);
+        min_y = min_y.min(ny2);
+        max_x = max_x.max(nx2);
+        max_y = max_y.max(ny2);
+    }
+    if min_x % 2 != 0 || min_y % 2 != 0 || max_x % 2 != 0 || max_y % 2 != 0 {
+        return Err(unsupported());
+    }
+    let left = min_x / 2;
+    let top = min_y / 2;
+    Ok((left, top, max_x / 2 - left, max_y / 2 - top))
+}
+
+fn spin_twice(cx2: i64, cy2: i64, px: i64, py: i64, quarter: i64) -> Result<(i64, i64), Error> {
+    let mut dx2 = px
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_sub(cx2)
+        .ok_or_else(unsupported)?;
+    let mut dy2 = py
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_sub(cy2)
+        .ok_or_else(unsupported)?;
+    match quarter {
+        1 => {
+            let next = dx2;
+            dx2 = dy2.checked_neg().ok_or_else(unsupported)?;
+            dy2 = next;
+        }
+        2 => {
+            dx2 = dx2.checked_neg().ok_or_else(unsupported)?;
+            dy2 = dy2.checked_neg().ok_or_else(unsupported)?;
+        }
+        3 => {
+            let next = dx2;
+            dx2 = dy2;
+            dy2 = next.checked_neg().ok_or_else(unsupported)?;
+        }
+        _ => return Err(unsupported()),
+    }
+    Ok((
+        cx2.checked_add(dx2).ok_or_else(unsupported)?,
+        cy2.checked_add(dy2).ok_or_else(unsupported)?,
+    ))
 }
 
 fn box_emu(xfrm: &Element, off_name: &str, ext_name: &str) -> Result<(i64, i64, i64, i64), Error> {
@@ -704,10 +779,10 @@ fn child_rect(
         .child_by_local("spPr")
         .and_then(|pr| pr.child_by_local("xfrm"))
         .ok_or_else(unsupported)?;
-    let (x, y, w, h) = box_emu(xfrm, "off", "ext")?;
-    if w <= 0 || h <= 0 {
+    if truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV")) {
         return Err(unsupported());
     }
+    let (x, y, w, h) = local_box(xfrm)?;
     let x1_emu = x.checked_add(w).ok_or_else(unsupported)?;
     let y1_emu = y.checked_add(h).ok_or_else(unsupported)?;
     let ch_x1 = map.ch_x.checked_add(map.ch_cx).ok_or_else(unsupported)?;
