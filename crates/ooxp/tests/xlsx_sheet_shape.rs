@@ -199,6 +199,23 @@ fn quarter_turn_uses_the_anchor_box() {
     assert_block(&rgb, w, 1, 8, 1, 8);
     assert_eq!(pixel(&rgb, w, 8, 1), [255, 255, 255]);
 
+    for raw in [
+        "rot=\"16200000\"",
+        "flipH=\"1\"",
+        "flipV=\"1\"",
+        "rot=\"10800000\" flipH=\"1\" flipV=\"1\"",
+    ] {
+        let book = tmp("flip");
+        rewrite(&paint_red(&shaped), &book, |name, xml| {
+            if name.starts_with("xl/drawings/drawing") {
+                *xml = xml.replace("<a:xfrm>", &format!("<a:xfrm {raw}>"));
+            }
+        });
+        let (w, h, rgb) = decode_png(&export(&book));
+        assert_eq!((w, h), (65, 21), "{raw}");
+        assert_block(&rgb, w, 1, 8, 1, 8);
+    }
+
     let odd = tmp("odd");
     rewrite(&turned, &odd, |name, xml| {
         if name.starts_with("xl/drawings/drawing") {

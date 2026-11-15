@@ -1172,7 +1172,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - 不透明 PNG 在目标像素等于要贴的像素时可以画。`a:srcRect` 落到整像素且不缩放时也可以画。百分比落在像素中间，或裁完还要缩放，报 `NotImplemented`
 - 同一单元格里的恒等组合，只含没有描边的纯色矩形时可以画。缩放、旋转、跨格或里面还有别的对象，报 `NotImplemented`
 - 矩形填充可以是不透明的 `srgbClr`，或没有颜色变换的 `schemeClr`。没有主题部件，或带了颜色变换，报 `NotImplemented`
-- 没有描边的纯色矩形转 90 度的倍数时，按锚点外接矩形铺色。线是 `noFill` 时，虚线、斜接和隐藏线不画。其它角度和翻转报 `NotImplemented`
+- 没有描边的纯色矩形转 90 度的倍数，或做水平、垂直翻转时，按锚点外接矩形铺色。线是 `noFill` 时，虚线、斜接和隐藏线不画。其它角度报 `NotImplemented`
 - docx 与 pptx 上发 `exportSheetImage` 报 `InvalidField`
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 图带旋转、要缩放的裁剪，或还有别的画不了的对象，`exportSlideImage` 报 `NotImplemented`。页底画不了时铺白，不因此报错

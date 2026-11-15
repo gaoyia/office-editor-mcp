@@ -67,6 +67,7 @@ $order = @(
     'xlsx-row-gap-image'
     'xlsx-sheet-shape-image'
     'xlsx-quarter-rect-image'
+    'xlsx-flip-rect-image'
     'xlsx-sheet-group-image'
     'xlsx-sheet-scheme-image'
     'xlsx-theme-tint-image'

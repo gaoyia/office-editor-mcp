@@ -557,9 +557,10 @@ fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Resu
         if xfrm
             .attr("rot")
             .is_some_and(|rot| !quarter_turn(rot, quarter))
-            || truthy(xfrm.attr("flipH"))
-            || truthy(xfrm.attr("flipV"))
         {
+            return Err(unsupported());
+        }
+        if !quarter && (truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV"))) {
             return Err(unsupported());
         }
     }
