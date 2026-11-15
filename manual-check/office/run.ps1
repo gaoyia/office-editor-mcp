@@ -75,6 +75,7 @@ $order = @(
     'xlsx-turn-group-image'
     'xlsx-child-turn-image'
     'xlsx-child-flip-image'
+    'xlsx-nested-image'
     'xlsx-sheet-scheme-image'
     'xlsx-theme-tint-image'
     'xlsx-hidden-format-image'

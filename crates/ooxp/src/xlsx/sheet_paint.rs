@@ -602,6 +602,23 @@ fn identity_group(
     }
     let anchor_box = rect_edges(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
     let group = anchor.child_by_local("grpSp").ok_or_else(unsupported)?;
+    let map = read_group_map(group)?;
+    // 组里的 EMU 从 A1 左上角量起。格子下标从 1 起，不是从锚点那一格量起。
+    let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let origin_y = axis_origin(1, r0, rows, &mut |row| {
+        row_px_one(sheet, styles, cells, row)
+    })?;
+    if anchor_box != turned_box(&map, origin_x, origin_y)? {
+        return Err(unsupported());
+    }
+    let rects = group_rects(group, &[map], origin_x, origin_y, cols, rows, theme)?;
+    if rects.is_empty() {
+        return Err(unsupported());
+    }
+    Ok(rects)
+}
+
+fn read_group_map(group: &Element) -> Result<GroupMap, Error> {
     let pr = group.child_by_local("grpSpPr").ok_or_else(unsupported)?;
     if pr
         .element_children()
@@ -621,7 +638,7 @@ fn identity_group(
     if cx <= 0 || cy <= 0 || ch_cx <= 0 || ch_cy <= 0 {
         return Err(unsupported());
     }
-    let map = GroupMap {
+    Ok(GroupMap {
         off_x,
         off_y,
         cx,
@@ -633,21 +650,25 @@ fn identity_group(
         quarter: group_quarter(xfrm)?,
         flip_h: truthy(xfrm.attr("flipH")),
         flip_v: truthy(xfrm.attr("flipV")),
-    };
-    // 组里的 EMU 从 A1 左上角量起。格子下标从 1 起，不是从锚点那一格量起。
-    let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, col))?;
-    let origin_y = axis_origin(1, r0, rows, &mut |row| {
-        row_px_one(sheet, styles, cells, row)
-    })?;
-    if anchor_box != turned_box(&map, origin_x, origin_y)? {
-        return Err(unsupported());
-    }
+    })
+}
+
+/// 链从外到内。子矩形先落到里层，再逐层换到外层。
+fn group_rects(
+    group: &Element,
+    chain: &[GroupMap],
+    x_from: i32,
+    y_from: i32,
+    cols: &[i32],
+    rows: &[i32],
+    theme: Option<&LoadedTheme>,
+) -> Result<Vec<PlainRect>, Error> {
     let mut rects = Vec::new();
     for child in group.element_children() {
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) = child_rect(child, origin_x, origin_y, &map)?;
+                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, chain)?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
@@ -659,13 +680,38 @@ fn identity_group(
                     color: plain_color(child, theme, true)?,
                 });
             }
+            "grpSp" => {
+                let inner = read_group_map(child)?;
+                let parent = chain.last().ok_or_else(unsupported)?;
+                if !frame_inside(&inner, parent) {
+                    return Err(unsupported());
+                }
+                let mut next = chain.to_vec();
+                next.push(inner);
+                rects.extend(group_rects(
+                    child, &next, x_from, y_from, cols, rows, theme,
+                )?);
+            }
             _ => return Err(unsupported()),
         }
     }
-    if rects.is_empty() {
-        return Err(unsupported());
-    }
     Ok(rects)
+}
+
+fn frame_inside(inner: &GroupMap, parent: &GroupMap) -> bool {
+    let Some(x1) = inner.off_x.checked_add(inner.cx) else {
+        return false;
+    };
+    let Some(y1) = inner.off_y.checked_add(inner.cy) else {
+        return false;
+    };
+    let Some(px1) = parent.ch_x.checked_add(parent.ch_cx) else {
+        return false;
+    };
+    let Some(py1) = parent.ch_y.checked_add(parent.ch_cy) else {
+        return false;
+    };
+    inner.off_x >= parent.ch_x && inner.off_y >= parent.ch_y && x1 <= px1 && y1 <= py1
 }
 
 /// 子矩形先绕自己的中心转 90 度的倍数，得到外接矩形，再交给组去缩放和旋转。
@@ -754,6 +800,7 @@ fn box_emu(xfrm: &Element, off_name: &str, ext_name: &str) -> Result<(i64, i64, 
     ))
 }
 
+#[derive(Clone, Copy)]
 struct GroupMap {
     off_x: i64,
     off_y: i64,
@@ -773,8 +820,9 @@ fn child_rect(
     sp: &Element,
     x_from: i32,
     y_from: i32,
-    map: &GroupMap,
+    chain: &[GroupMap],
 ) -> Result<(i32, i32, i32, i32), Error> {
+    let map = chain.last().ok_or_else(unsupported)?;
     let xfrm = sp
         .child_by_local("spPr")
         .and_then(|pr| pr.child_by_local("xfrm"))
@@ -788,29 +836,25 @@ fn child_rect(
     if x < map.ch_x || y < map.ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
         return Err(unsupported());
     }
-    let (x0, y0, x1, y1) = turned_edges(
-        map,
-        x_from,
-        y_from,
-        [
-            (
-                into_ext(x, map.ch_x, map.cx, map.ch_cx)?,
-                into_ext(y, map.ch_y, map.cy, map.ch_cy)?,
-            ),
-            (
-                into_ext(x1_emu, map.ch_x, map.cx, map.ch_cx)?,
-                into_ext(y, map.ch_y, map.cy, map.ch_cy)?,
-            ),
-            (
-                into_ext(x1_emu, map.ch_x, map.cx, map.ch_cx)?,
-                into_ext(y1_emu, map.ch_y, map.cy, map.ch_cy)?,
-            ),
-            (
-                into_ext(x, map.ch_x, map.cx, map.ch_cx)?,
-                into_ext(y1_emu, map.ch_y, map.cy, map.ch_cy)?,
-            ),
-        ],
-    )?;
+    let mut corners = [(x, y), (x1_emu, y), (x1_emu, y1_emu), (x, y1_emu)];
+    for (index, map) in chain.iter().enumerate().rev() {
+        let mut next = [(0_i64, 0_i64); 4];
+        for (i, (px, py)) in corners.into_iter().enumerate() {
+            let sx = into_ext(px, map.ch_x, map.cx, map.ch_cx)?;
+            let sy = into_ext(py, map.ch_y, map.cy, map.ch_cy)?;
+            if index == 0 {
+                next[i] = (sx, sy);
+            } else {
+                let (x2, y2) = place_twice(map, sx, sy)?;
+                if x2 % 2 != 0 || y2 % 2 != 0 {
+                    return Err(unsupported());
+                }
+                next[i] = (x2 / 2, y2 / 2);
+            }
+        }
+        corners = next;
+    }
+    let (x0, y0, x1, y1) = turned_edges(&chain[0], x_from, y_from, corners)?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
