@@ -3012,7 +3012,7 @@ fn paint_rules(
             "cellIs" => {
                 let _ = rule_numbers(rule)?;
             }
-            "dataBar" | "expression" | "aboveAverage" | "top10" | "containsText"
+            "dataBar" | "expression" | "timePeriod" | "aboveAverage" | "top10" | "containsText"
             | "notContainsText" | "beginsWith" | "endsWith" | "duplicateValues"
             | "uniqueValues" => {}
             "containsBlanks" | "notContainsBlanks" => {
@@ -3082,7 +3082,9 @@ fn expression_gaps(
         let mut paints_blank = false;
         for rule in block.children_by_local("cfRule") {
             match rule.attr("type") {
-                Some("expression") | Some("notContainsText") => paints_blank = true,
+                Some("expression") | Some("timePeriod") | Some("notContainsText") => {
+                    paints_blank = true
+                }
                 Some("containsBlanks") | Some("notContainsBlanks") => {
                     paints_blank |= blank_mode(rule, &areas)? == Some(true);
                 }
@@ -3278,7 +3280,9 @@ fn cf_fill(
                 "dataBar" => None,
                 "colorScale" => scale_of(cells, &areas, rule, col, row)?,
                 "cellIs" => cell_is_fill(styles, cells, rule, col, row)?,
-                "expression" => expression_fill(styles, session, rule, &areas, col, row)?,
+                "expression" | "timePeriod" => {
+                    expression_fill(styles, session, rule, &areas, col, row)?
+                }
                 "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
                 | "endsWith" => {
                     if simple_hit(cells, rule, &areas, col, row)? {
@@ -4374,7 +4378,7 @@ fn dxf_color(
                     };
                     cell_is(rule.attr("operator").unwrap_or(""), n, &args).unwrap_or(false)
                 }
-                "expression" => expression_hit(session, rule, &areas, col, row)?,
+                "expression" | "timePeriod" => expression_hit(session, rule, &areas, col, row)?,
                 "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
                 | "endsWith" => simple_hit(cells, rule, &areas, col, row)?,
                 "duplicateValues" | "uniqueValues" => value_hit(

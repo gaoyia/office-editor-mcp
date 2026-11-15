@@ -2471,6 +2471,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 色阶认两档或三档。百分位用 `PERCENTILE.INC`，颜色按 RGB 混合
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
+- `timePeriod` 用规则里的 `<formula>`，按 `expression` 同一套平移后再求值。命中且差分是纯色时铺上该色，区域内没有 `<c>` 的空位也铺。没有公式或求不了报 `NotImplemented`。这条规则的差分边框仍报 `NotImplemented`
 - 同一条命中的公式规则，差分边框是 `thin`、`medium`、`thick`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。`dashed`、`slantDashDot` 和斜线的差分边框报 `NotImplemented`
 - `aboveAverage` 只数区域内的数字，空格不算。高于平均是严格大于。`equalAverage` 为真时含等于。`aboveAverage` 为 0 时看低于平均。`stdDev` 用总体标准差，平方和除以个数。数字少于两个又写了 `stdDev` 时不铺。命中且差分是纯色时铺上该色
 - `top10` 的 `rank` 缺省是 10。`percent` 为真时，个数乘 `rank` 再除以 100，向上取整，至少 1。并列时阈值上的格子都算。`bottom` 为真时取最小的那些。命中且差分是纯色时铺上该色
