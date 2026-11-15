@@ -2462,14 +2462,21 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - 自动筛选在表头右侧画 17×17 的按钮。箭头水平居中，尖端落在按钮正中。表头文字停在按钮左边
 - 字色、填充色和边框色认 `rgb`、主题色和索引色。主题色下标依次是 `lt1`、`dk1`、`lt2`、`dk2`、六个强调色、超链接、已访问的超链接，取工作簿主题里的颜色。没有主题部件时用 Office 默认色。`tint` 从 -1 到 1，负值变暗，正值变亮。`auto` 当黑色。下标对不上报 `NotImplemented`
-- 实线边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。没写颜色时用黑色。线以格子边界为中线，偶数宽度多出的一像素落在格外。线只伸到实际有边的那一端，不沿合并区扩开。落在合并区内部的边不画。同一条边界上更粗的线盖住更细的线，同样粗时右边和下边的格子后画。斜线和虚线报 `NotImplemented`
+- 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`
+- 没写颜色时用黑色。线以格子边界为中线。宽度是偶数时，多出的一像素落在坐标较小的一侧。线只伸到实际有边的那一端，不沿合并区扩开。落在合并区内部的边不画。同一条边界上更粗的线盖住更细的线。同样粗时，右边缘盖住左边缘，其余保持格子的先后
+- 底边比左边那一格的底边更细时，左端才让开。左边是虚线就让开它的全部厚度，左边是实线就让开一半。2 像素虚线在边界那一行再向右涂 1 像素。竖线不涂格子的上边界
+- 虚线按整张图的坐标取余。横线用 x，竖线用 y。`dashed` 横线在余数 3 时空一像素，周期 4。竖向 `dashed` 先把 y 减 1，再用同一套余数。`dotted` 在余数 0 和 3 上涂，周期 4。`hair` 在偶数坐标上涂
+- `dashDot` 的周期是 18，余数 0 到 8、12 到 14 涂。`dashDotDot` 的周期是 24，余数 0 到 8、12 到 14、18 到 20 涂
+- `mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot` 是 2 像素，占边界和坐标较小的那一像素。前三种两行用同一套余数。`mediumDashed` 的周期是 12，余数 0 到 8 涂。后两种分别用 `dashDot` 和 `dashDotDot` 的余数
+- `slantDashDot` 的边界那一行按周期 18，余数 0 到 9、12 到 15 涂。紧挨的较小坐标那一行，余数 1 到 11、13 到 17 涂
+- `double` 不涂边界那一像素，涂它两侧各 1 像素
 - 图案和纯色铺在同一块矩形上，盖住格子右缘和下缘。点的位置用整张图的像素坐标，含左边和上边那一像素外框，不从格子左上角重算
 - 从右到左的翻转发生在铺完图案之后，点跟着整张图一起翻
 - 图案类型认 `gray125`、`gray0625`、`lightHorizontal`、`darkHorizontal`、`lightVertical` 和 `darkVertical`
 - 图案类型也认 `lightGrid`、`darkGrid`、`mediumGray`、`lightGray`、`darkGray`、`darkDown`、`lightDown`、`darkUp`、`lightUp`、`darkTrellis` 和 `lightTrellis`
 - `fgColor` 是点，`bgColor` 是底。没写前景时用黑色，没写背景时用白色。颜色仍认 `rgb`、主题色和索引色
 - `rgb` 写成 8 位、前两位又不是 `FF` 时，这一格图案不认，整表报 `NotImplemented`
-- 渐变填充、认不出的图案、条件格式里的图案、压到区域上的图形、组合图形和其它条件格式，报 `NotImplemented`
+- 斜线边框、渐变填充、认不出的图案、条件格式里的图案、压到区域上的图形、组合图形和其它条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到工作表报 `IdNotFound`。id 不是 `sheet:{name}` 报 `InvalidId`

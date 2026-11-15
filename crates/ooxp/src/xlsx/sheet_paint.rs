@@ -4,6 +4,7 @@
 //! 隐藏行和隐藏列不占像素。这一边全部隐藏时只留 1 像素白。
 //! 从右到左且没有文字时，把整张图水平翻转。有文字时不翻。
 //! 两种纯色的图案铺在和纯色同一块矩形上。点的位置用整张图的像素，不从格子左上角重算。
+//! 虚线、点线、发丝、双线和点划线按整图坐标取余。偶数宽度多出的一像素朝坐标较小的一侧。
 
 use std::collections::{HashMap, HashSet};
 
@@ -350,8 +351,24 @@ struct FontInfo {
     color: Option<[u8; 3]>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LineKind {
+    Solid,
+    Double,
+    Dashed,
+    Dotted,
+    Hair,
+    DashDot,
+    DashDotDot,
+    MediumDashed,
+    MediumDashDot,
+    MediumDashDotDot,
+    SlantDashDot,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Edge {
+    kind: LineKind,
     px: i32,
     color: [u8; 3],
 }
@@ -821,17 +838,28 @@ fn parse_edge(border: &Element, name: &str, palette: &Palette) -> Result<Option<
     if style == "none" {
         return Ok(None);
     }
-    let px = match style {
-        "thin" => 1,
-        "medium" => 2,
-        "thick" => 3,
+    // 双线占边界两侧，排序时按 3 像素，绘制时跳过正中那一像素。
+    let (kind, px) = match style {
+        "thin" => (LineKind::Solid, 1),
+        "medium" => (LineKind::Solid, 2),
+        "thick" => (LineKind::Solid, 3),
+        "dashed" => (LineKind::Dashed, 1),
+        "dotted" => (LineKind::Dotted, 1),
+        "hair" => (LineKind::Hair, 1),
+        "double" => (LineKind::Double, 3),
+        "dashDot" => (LineKind::DashDot, 1),
+        "dashDotDot" => (LineKind::DashDotDot, 1),
+        "mediumDashed" => (LineKind::MediumDashed, 2),
+        "mediumDashDot" => (LineKind::MediumDashDot, 2),
+        "mediumDashDotDot" => (LineKind::MediumDashDotDot, 2),
+        "slantDashDot" => (LineKind::SlantDashDot, 2),
         _ => return Err(unsupported()),
     };
     let color = match el.child_by_local("color") {
         None => [0, 0, 0],
         Some(color) => palette.resolve(color).ok_or_else(unsupported)?,
     };
-    Ok(Some(Edge { px, color }))
+    Ok(Some(Edge { kind, px, color }))
 }
 
 fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
@@ -1645,6 +1673,8 @@ fn paint_borders(
         let right_pad = end_pad(edges.right);
         let top_pad = end_pad(edges.top);
         let bottom_pad = end_pad(edges.bottom);
+        // 比左边更细时，底边左端才让开。左边是虚线让开全部厚度，实线让开一半。
+        let bottom_inset = inset_for(edges.bottom, neighbor_edge(styles, cells, col, row));
         push_stroke(
             &mut strokes,
             &mut order,
@@ -1656,6 +1686,7 @@ fn paint_borders(
             y1,
             top_pad,
             bottom_pad,
+            0,
         );
         push_stroke(
             &mut strokes,
@@ -1668,6 +1699,7 @@ fn paint_borders(
             y1,
             top_pad,
             bottom_pad,
+            0,
         );
         push_stroke(
             &mut strokes,
@@ -1680,6 +1712,7 @@ fn paint_borders(
             y1,
             left_pad,
             right_pad,
+            0,
         );
         push_stroke(
             &mut strokes,
@@ -1692,19 +1725,24 @@ fn paint_borders(
             y1,
             left_pad,
             right_pad,
+            bottom_inset,
         );
     }
-    // 更粗的后画，盖住同一条边界上的细线。同样粗时保持格子的先后。
-    strokes.sort_by_key(|stroke| (stroke.px, stroke.order));
+    // 更粗的后画。同样粗时，右边缘盖住左边缘，其余保持格子的先后。
+    strokes.sort_by_key(|stroke| (stroke.px, stroke.rank, stroke.order));
     for stroke in strokes {
-        canvas.fill_rect(stroke.x0, stroke.y0, stroke.x1, stroke.y1, stroke.color);
+        paint_line(canvas, &stroke);
     }
     Ok(())
 }
 
 struct Stroke {
     px: i32,
+    rank: i32,
     order: u32,
+    kind: LineKind,
+    vertical: bool,
+    boundary: i32,
     x0: i32,
     y0: i32,
     x1: i32,
@@ -1724,7 +1762,58 @@ fn end_pad(edge: Option<Edge>) -> i32 {
     edge.map(|edge| edge.px / 2).unwrap_or(0)
 }
 
-/// 线以边界像素为中线。偶数宽度多出的一像素朝格外。
+/// 线以边界像素为中线。偶数宽度多出的一像素朝坐标较小的一侧。
+fn neighbor_edge(
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    col: u32,
+    row: u32,
+) -> Option<Edge> {
+    if col == 0 {
+        return None;
+    }
+    let cell = cells.get(&(col - 1, row))?;
+    styles.xf(cell.style).ok()?.edges.bottom
+}
+
+fn inset_for(edge: Option<Edge>, neighbor: Option<Edge>) -> i32 {
+    let (Some(edge), Some(neighbor)) = (edge, neighbor) else {
+        return 0;
+    };
+    // 双线的两条线各是 1 像素，让开时不按 3 像素算。
+    let ours = if edge.kind == LineKind::Double {
+        1
+    } else {
+        edge.px
+    };
+    if neighbor.px < ours {
+        return 0;
+    }
+    let dashed = matches!(
+        neighbor.kind,
+        LineKind::Dashed
+            | LineKind::Dotted
+            | LineKind::Hair
+            | LineKind::DashDot
+            | LineKind::DashDotDot
+            | LineKind::MediumDashed
+            | LineKind::MediumDashDot
+            | LineKind::MediumDashDotDot
+            | LineKind::SlantDashDot
+    );
+    if neighbor.px == ours {
+        if dashed {
+            neighbor.px
+        } else {
+            0
+        }
+    } else if dashed {
+        neighbor.px
+    } else {
+        neighbor.px / 2
+    }
+}
+
 fn push_stroke(
     out: &mut Vec<Stroke>,
     order: &mut u32,
@@ -1736,31 +1825,44 @@ fn push_stroke(
     y1: i32,
     pad0: i32,
     pad1: i32,
+    inset0: i32,
 ) {
     let Some(edge) = edge else {
         return;
     };
-    let outside = edge.px / 2;
-    let inside = edge.px - outside - 1;
-    let (along0, along1, boundary, vertical, outward_negative) = match side {
-        Side::Left => (y0, y1, x0, true, true),
-        Side::Right => (y0, y1, x1, true, false),
-        Side::Top => (x0, x1, y0, false, true),
-        Side::Bottom => (x0, x1, y1, false, false),
+    let neg = edge.px / 2;
+    let pos = edge.px - neg - 1;
+    let (along0, along1, boundary, vertical) = match side {
+        Side::Left => (y0, y1, x0, true),
+        Side::Right => (y0, y1, x1, true),
+        Side::Top => (x0, x1, y0, false),
+        Side::Bottom => (x0, x1, y1, false),
     };
-    let (across0, across1) = if outward_negative {
-        (boundary - outside, boundary + inside + 1)
+    let across0 = boundary - neg;
+    let across1 = boundary + pos + 1;
+    // 竖线不占上边界，那一像素留给上面的横线。
+    let along_start = if vertical {
+        along0 - pad0 + inset0 + i32::from(pad0 == 0)
     } else {
-        (boundary - inside, boundary + outside + 1)
+        along0 - pad0 + inset0
     };
-    let (x0, x1, y0, y1) = if vertical {
-        (across0, across1, along0 - pad0, along1 + pad1 + 1)
+    let (x0, y0, x1, y1) = if vertical {
+        (across0, along_start, across1, along1 + pad1 + 1)
     } else {
-        (along0 - pad0, along1 + pad1 + 1, across0, across1)
+        (along_start, across0, along1 + pad1 + 1, across1)
+    };
+    // 右边缘后画，盖住相邻格子的左边缘。
+    let rank = match side {
+        Side::Right => 1,
+        Side::Left | Side::Top | Side::Bottom => 0,
     };
     out.push(Stroke {
         px: edge.px,
+        rank,
         order: *order,
+        kind: edge.kind,
+        vertical,
+        boundary,
         x0,
         y0,
         x1,
@@ -1768,6 +1870,70 @@ fn push_stroke(
         color: edge.color,
     });
     *order += 1;
+}
+
+fn paint_line(canvas: &mut Canvas, stroke: &Stroke) {
+    for y in stroke.y0..stroke.y1 {
+        for x in stroke.x0..stroke.x1 {
+            let (along, across) = if stroke.vertical { (y, x) } else { (x, y) };
+            // 竖向 dashed 的空档比横线晚一个像素。
+            let along = if stroke.vertical && stroke.kind == LineKind::Dashed {
+                along - 1
+            } else {
+                along
+            };
+            if line_on(stroke.kind, along, across, stroke.boundary) {
+                canvas.put(x, y, stroke.color);
+            }
+        }
+    }
+    // 2 像素虚线的边界那一行向终点再涂 1 像素。
+    if !stroke.vertical && two_pixel_dash(stroke.kind) {
+        let x = stroke.x1;
+        let y = stroke.boundary;
+        if (stroke.y0..stroke.y1).contains(&y) && line_on(stroke.kind, x, y, stroke.boundary) {
+            canvas.put(x, y, stroke.color);
+        }
+    }
+}
+
+fn two_pixel_dash(kind: LineKind) -> bool {
+    matches!(
+        kind,
+        LineKind::MediumDashed
+            | LineKind::MediumDashDot
+            | LineKind::MediumDashDotDot
+            | LineKind::SlantDashDot
+    )
+}
+
+/// 余数用整张图的坐标。横线看 x，竖线看 y。
+fn line_on(kind: LineKind, along: i32, across: i32, boundary: i32) -> bool {
+    let r4 = along.rem_euclid(4);
+    let r12 = along.rem_euclid(12);
+    let r18 = along.rem_euclid(18);
+    let r24 = along.rem_euclid(24);
+    match kind {
+        LineKind::Solid => true,
+        LineKind::Double => across != boundary,
+        LineKind::Dashed => r4 != 3,
+        LineKind::Dotted => r4 == 0 || r4 == 3,
+        LineKind::Hair => along.rem_euclid(2) == 0,
+        LineKind::DashDot | LineKind::MediumDashDot => {
+            (0..=8).contains(&r18) || (12..=14).contains(&r18)
+        }
+        LineKind::DashDotDot | LineKind::MediumDashDotDot => {
+            (0..=8).contains(&r24) || (12..=14).contains(&r24) || (18..=20).contains(&r24)
+        }
+        LineKind::MediumDashed => (0..=8).contains(&r12),
+        LineKind::SlantDashDot => {
+            if across == boundary {
+                (0..=9).contains(&r18) || (12..=15).contains(&r18)
+            } else {
+                (1..=11).contains(&r18) || (13..=17).contains(&r18)
+            }
+        }
+    }
 }
 
 fn paint_rules(
