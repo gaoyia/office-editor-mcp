@@ -1341,20 +1341,91 @@ impl Palette {
     }
 }
 
-/// `tint` 按 ECMA-376 §18.8.3：负值把通道乘 `(1 + tint)`，正值向白靠拢。
+const EXCEL_HLS_MAX: i32 = 240;
+const EXCEL_RGB_MAX: i32 = 255;
+
+/// Excel 把 `tint` 打在 240 级 HLS 的亮度上。亮度先向 0 截成整数，再转回 RGB。
+/// 离整百分比不超过 `1/32767` 的值按那个百分比算，这是 Excel 存进样式的那一档。
 fn apply_sheet_tint(rgb: [u8; 3], tint: f64) -> [u8; 3] {
     if tint.abs() < 1e-9 {
         return rgb;
     }
-    rgb.map(|channel| {
-        let v = f64::from(channel) / 255.0;
-        let out = if tint < 0.0 {
-            v * (1.0 + tint)
-        } else {
-            v * (1.0 - tint) + tint
-        };
-        (out * 255.0).round().clamp(0.0, 255.0) as u8
-    })
+    let tint = normalize_excel_tint(tint);
+    let (hue, lum, sat) = rgb_to_excel_hls(rgb);
+    let moved = if tint < 0.0 {
+        f64::from(lum) * (1.0 + tint)
+    } else {
+        f64::from(lum) * (1.0 - tint) + f64::from(EXCEL_HLS_MAX) * tint
+    };
+    let lum = (moved as i32).clamp(0, EXCEL_HLS_MAX);
+    excel_hls_to_rgb(hue, lum, sat)
+}
+
+fn normalize_excel_tint(tint: f64) -> f64 {
+    let whole = (tint * 100.0).round() / 100.0;
+    if (tint - whole).abs() <= 1.0 / 32_767.0 {
+        whole
+    } else {
+        tint
+    }
+}
+
+fn rgb_to_excel_hls(rgb: [u8; 3]) -> (i32, i32, i32) {
+    let (red, green, blue) = (i32::from(rgb[0]), i32::from(rgb[1]), i32::from(rgb[2]));
+    let brightest = red.max(green).max(blue);
+    let darkest = red.min(green).min(blue);
+    let sum = brightest + darkest;
+    let span = brightest - darkest;
+    let lum = (sum * EXCEL_HLS_MAX + EXCEL_RGB_MAX) / (2 * EXCEL_RGB_MAX);
+    if span == 0 {
+        return (0, lum, 0);
+    }
+    let sat = if lum <= EXCEL_HLS_MAX / 2 {
+        (span * EXCEL_HLS_MAX + sum / 2) / sum
+    } else {
+        (span * EXCEL_HLS_MAX + (2 * EXCEL_RGB_MAX - sum) / 2) / (2 * EXCEL_RGB_MAX - sum)
+    };
+    let distance = |channel: i32| ((brightest - channel) * (EXCEL_HLS_MAX / 6) + span / 2) / span;
+    let hue = if red == brightest {
+        distance(blue) - distance(green)
+    } else if green == brightest {
+        EXCEL_HLS_MAX / 3 + distance(red) - distance(blue)
+    } else {
+        2 * EXCEL_HLS_MAX / 3 + distance(green) - distance(red)
+    };
+    (hue.rem_euclid(EXCEL_HLS_MAX), lum, sat)
+}
+
+fn excel_hls_to_rgb(hue: i32, lum: i32, sat: i32) -> [u8; 3] {
+    let upper = if lum <= EXCEL_HLS_MAX / 2 {
+        (lum * (EXCEL_HLS_MAX + sat) + EXCEL_HLS_MAX / 2) / EXCEL_HLS_MAX
+    } else {
+        lum + sat - (lum * sat + EXCEL_HLS_MAX / 2) / EXCEL_HLS_MAX
+    };
+    let lower = 2 * lum - upper;
+    let channel = |offset: i32| {
+        let level = excel_hue_level(lower, upper, hue + offset);
+        ((level * EXCEL_RGB_MAX + EXCEL_HLS_MAX / 2) / EXCEL_HLS_MAX).clamp(0, EXCEL_RGB_MAX) as u8
+    };
+    [
+        channel(EXCEL_HLS_MAX / 3),
+        channel(0),
+        channel(-EXCEL_HLS_MAX / 3),
+    ]
+}
+
+fn excel_hue_level(lower: i32, upper: i32, hue: i32) -> i32 {
+    let hue = hue.rem_euclid(EXCEL_HLS_MAX);
+    let sixth = EXCEL_HLS_MAX / 6;
+    if hue < sixth {
+        lower + ((upper - lower) * hue + EXCEL_HLS_MAX / 12) / sixth
+    } else if hue < EXCEL_HLS_MAX / 2 {
+        upper
+    } else if hue < 2 * EXCEL_HLS_MAX / 3 {
+        lower + ((upper - lower) * (2 * EXCEL_HLS_MAX / 3 - hue) + EXCEL_HLS_MAX / 12) / sixth
+    } else {
+        lower
+    }
 }
 
 impl Styles {
@@ -4445,6 +4516,22 @@ mod tests {
         assert_eq!(slots[1], [0, 0, 0]);
         assert_eq!(apply_sheet_tint([0, 0, 0], 0.5), [128, 128, 128]);
         assert_eq!(apply_sheet_tint([255, 255, 255], -0.5), [128, 128, 128]);
+        assert_eq!(
+            apply_sheet_tint([0xEE, 0x44, 0x55], 0.399_975_585_192_419_2),
+            [0xF4, 0x8E, 0x99]
+        );
+        assert_eq!(
+            apply_sheet_tint([0xEE, 0x44, 0x55], -0.249_977_111_117_893),
+            [0xD2, 0x13, 0x26]
+        );
+        assert_eq!(
+            apply_sheet_tint([0xFF, 0xFF, 0xFF], -0.15),
+            [0xD9, 0xD9, 0xD9]
+        );
+        assert_eq!(
+            apply_sheet_tint([0xDA, 0xB6, 0xBA], 0.7999),
+            [0xF8, 0xEF, 0xF0]
+        );
         let palette = Palette {
             theme: slots,
             indexed: DEFAULT_INDEXED.iter().copied().map(rgb_of).collect(),
