@@ -349,7 +349,12 @@ fn not_contains_paints_a_missing_cell() {
     quiet_row(&rgb, w, 50, RED);
 }
 
-fn duplicate_book(cells: serde_json::Value, kind: &str) -> PathBuf {
+fn duplicate_book(
+    cells: serde_json::Value,
+    kind: &str,
+    rows: u32,
+    formula: Option<&str>,
+) -> PathBuf {
     let src = tmp("dup-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -361,13 +366,15 @@ fn duplicate_book(cells: serde_json::Value, kind: &str) -> PathBuf {
     let mut ops = Vec::new();
     let list = cells.as_array().unwrap();
     let white = json!({ "color": { "rgb": "FFFFFFFF" } });
-    for (i, cell) in list.iter().enumerate() {
+    for row in 1..=rows {
         ops.push(json!({
             "op": "setRowHeight",
             "id": "sheet:Sheet1",
-            "row": i + 1,
+            "row": row,
             "height": 15
         }));
+    }
+    for cell in list {
         let r = cell["ref"].as_str().unwrap();
         ops.push(json!({
             "op": "setCellStyle",
@@ -408,8 +415,17 @@ fn duplicate_book(cells: serde_json::Value, kind: &str) -> PathBuf {
                     );
                 }
                 let last = list.last().unwrap()["ref"].as_str().unwrap();
+                let formula_xml = match formula {
+                    Some(text) => format!(
+                        "<formula>{}</formula>",
+                        text.replace('&', "&amp;")
+                            .replace('<', "&lt;")
+                            .replace('>', "&gt;")
+                    ),
+                    None => String::new(),
+                };
                 let rule = format!(
-                    "<conditionalFormatting sqref=\"A1:{last}\"><cfRule type=\"{kind}\" dxfId=\"0\" priority=\"1\"/></conditionalFormatting>"
+                    "<conditionalFormatting sqref=\"A1:{last}\"><cfRule type=\"{kind}\" dxfId=\"0\" priority=\"1\">{formula_xml}</cfRule></conditionalFormatting>"
                 );
                 xml = xml.replace("</worksheet>", &format!("{rule}</worksheet>"));
                 data = xml.into_bytes();
@@ -436,6 +452,8 @@ fn duplicate_values_paint_numeric_text_and_ignore_case() {
             { "ref": "A6", "value": "ab" }
         ]),
         "duplicateValues",
+        6,
+        None,
     );
     let (w, h, rgb) = decode_png(&export(&book).unwrap());
     assert_eq!((w, h), (65, 121));
@@ -461,6 +479,8 @@ fn unparsed_numeric_text_fails_the_sheet() {
             { "ref": "A2", "value": 1 }
         ]),
         "duplicateValues",
+        2,
+        None,
     );
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
@@ -475,6 +495,8 @@ fn unique_values_paint_only_the_single_occurrence() {
             { "ref": "A4", "value": "1.00" }
         ]),
         "uniqueValues",
+        4,
+        None,
     );
     let (w, h, rgb) = decode_png(&export(&book).unwrap());
     assert_eq!((w, h), (65, 81));
@@ -484,4 +506,78 @@ fn unique_values_paint_only_the_single_occurrence() {
     quiet_row(&rgb, w, 70, [255, 255, 255]);
     assert_eq!(pixel(&rgb, w, 1, 61), [0x00, 0x80, 0x00]);
     assert_eq!(pixel(&rgb, w, 7, 61), [255, 255, 255]);
+}
+
+#[test]
+fn blanks_fill_a_missing_cell_and_spaces() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A3", "value": "  " },
+            { "ref": "A4", "value": "a" }
+        ]),
+        "containsBlanks",
+        4,
+        Some("LEN(TRIM(A1))=0"),
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, RED);
+    quiet_row(&rgb, w, 50, RED);
+    quiet_row(&rgb, w, 70, [255, 255, 255]);
+}
+
+#[test]
+fn not_contains_blanks_skips_empty_cells() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A3", "value": "  " },
+            { "ref": "A4", "value": "a" }
+        ]),
+        "notContainsBlanks",
+        4,
+        Some("len(trim(a1))>0"),
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    quiet_row(&rgb, w, 10, RED);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, [255, 255, 255]);
+    quiet_row(&rgb, w, 70, RED);
+}
+
+#[test]
+fn a_blank_rule_without_formula_does_not_fill() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A3", "value": "  " },
+            { "ref": "A4", "value": "a" }
+        ]),
+        "containsBlanks",
+        4,
+        None,
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, [255, 255, 255]);
+    quiet_row(&rgb, w, 70, [255, 255, 255]);
+}
+
+#[test]
+fn a_foreign_blank_formula_fails_the_sheet() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": "" }
+        ]),
+        "containsBlanks",
+        2,
+        Some("A1=1"),
+    );
+    assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }

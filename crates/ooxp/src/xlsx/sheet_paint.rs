@@ -2520,6 +2520,9 @@ fn paint_rules(
             "dataBar" | "expression" | "aboveAverage" | "top10" | "containsText"
             | "notContainsText" | "beginsWith" | "endsWith" | "duplicateValues"
             | "uniqueValues" => {}
+            "containsBlanks" | "notContainsBlanks" => {
+                let _ = blank_mode(rule, areas)?;
+            }
             _ => return Err(unsupported()),
         }
     }
@@ -2578,12 +2581,16 @@ fn expression_gaps(
     let mut out = Vec::new();
     for block in sheet.children_by_local("conditionalFormatting") {
         let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
-        let paints_blank = block.children_by_local("cfRule").iter().any(|rule| {
-            matches!(
-                rule.attr("type"),
-                Some("expression") | Some("notContainsText")
-            )
-        });
+        let mut paints_blank = false;
+        for rule in block.children_by_local("cfRule") {
+            match rule.attr("type") {
+                Some("expression") | Some("notContainsText") => paints_blank = true,
+                Some("containsBlanks") | Some("notContainsBlanks") => {
+                    paints_blank |= blank_mode(rule, &areas)? == Some(true);
+                }
+                _ => {}
+            }
+        }
         if !paints_blank {
             continue;
         }
@@ -2789,6 +2796,12 @@ fn cf_fill(
                         None
                     }
                 }
+                "containsBlanks" | "notContainsBlanks" => match blank_mode(rule, &areas)? {
+                    Some(want_blank) if cell_is_blank(cells, col, row) == want_blank => {
+                        dxf_fill(styles, rule)?
+                    }
+                    Some(_) | None => None,
+                },
                 _ => return Err(unsupported()),
             };
             if let Some(color) = color {
@@ -3370,6 +3383,71 @@ fn paint_text_number_marks(
     Ok(())
 }
 
+/// `Some(true)` 铺空白，`Some(false)` 铺非空白。没有公式时不铺。
+fn blank_mode(rule: &Element, areas: &[(CellRef, CellRef)]) -> Result<Option<bool>, Error> {
+    let formulas = rule.children_by_local("formula");
+    if formulas.is_empty() {
+        return Ok(None);
+    }
+    if formulas.len() != 1 {
+        return Err(unsupported());
+    }
+    let (a, b) = areas.first().copied().ok_or_else(unsupported)?;
+    let anchor = CellRef {
+        col: a.col.min(b.col),
+        row: a.row.min(b.row),
+    };
+    let want_blank = match rule.attr("type") {
+        Some("containsBlanks") => true,
+        Some("notContainsBlanks") => false,
+        _ => return Err(unsupported()),
+    };
+    let text = formulas[0].text_content();
+    if !canonical_blank_formula(text.trim(), anchor, want_blank) {
+        return Err(unsupported());
+    }
+    Ok(Some(want_blank))
+}
+
+/// Excel 16.0 把空白规则存成锚点上的 `LEN(TRIM(锚点))`。
+fn canonical_blank_formula(text: &str, anchor: CellRef, want_blank: bool) -> bool {
+    let text = text.strip_prefix('=').unwrap_or(text);
+    let Some(rest) = strip_ascii_prefix(text, "LEN(") else {
+        return false;
+    };
+    let Some(rest) = strip_ascii_prefix(rest, "TRIM(") else {
+        return false;
+    };
+    let Some((cell, rest)) = rest.split_once("))") else {
+        return false;
+    };
+    if !cell.eq_ignore_ascii_case(&a1::format_cell(anchor.col, anchor.row)) {
+        return false;
+    }
+    if want_blank {
+        rest == "=0"
+    } else {
+        rest == ">0"
+    }
+}
+
+fn strip_ascii_prefix<'a>(text: &'a str, prefix: &str) -> Option<&'a str> {
+    if text.len() >= prefix.len() && text[..prefix.len()].eq_ignore_ascii_case(prefix) {
+        Some(&text[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+/// 空白含没有格子、没有值，以及去掉首尾普通空格后为空的文字。
+fn cell_is_blank(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> bool {
+    match cells.get(&(col, row)).map(|cell| &cell.shown) {
+        None | Some(Shown::Empty) => true,
+        Some(Shown::Text(text)) => text.trim_matches(' ').is_empty(),
+        Some(Shown::Num(_) | Shown::Bool(_)) => false,
+    }
+}
+
 fn value_hit(
     cells: &HashMap<(u32, u32), CellRec>,
     areas: &[(CellRef, CellRef)],
@@ -3663,6 +3741,10 @@ fn dxf_color(
                     row,
                     rule.attr("type") == Some("uniqueValues"),
                 )?,
+                "containsBlanks" | "notContainsBlanks" => match blank_mode(rule, &areas)? {
+                    Some(want_blank) => cell_is_blank(cells, col, row) == want_blank,
+                    None => false,
+                },
                 _ => false,
             };
             if !applies {
