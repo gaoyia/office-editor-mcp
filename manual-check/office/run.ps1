@@ -75,6 +75,7 @@ $order = @(
     'xlsx-cf-blank-image'
     'xlsx-cf-error-image'
     'xlsx-sheet-picture-image'
+    'xlsx-sheet-crop-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'

@@ -642,7 +642,7 @@ fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
     }
 }
 
-/// 目标框正好等于图片像素时，按原图贴上。缩放和半透明整表不做。
+/// 目标框正好等于要贴的像素时，按原图贴上。整像素裁剪且不缩放时贴这一块。
 fn sheet_png(
     pkg: &Package,
     drawing_part: &str,
@@ -668,10 +668,86 @@ fn sheet_png(
     let media = crate::opc::resolve_id(pkg, drawing_part, rid).map_err(|_| unsupported())?;
     let bytes = pkg.get(&media).map_err(|_| unsupported())?;
     let (image_w, image_h, rgb) = decode_opaque_png(bytes)?;
-    if image_w != w || image_h != h {
+    let rgb = match source_window(pic, image_w, image_h, w, h)? {
+        Some((left, top, _, _)) => crop_rgb(&rgb, image_w, left, top, w, h),
+        None => {
+            if image_w != w || image_h != h {
+                return Err(unsupported());
+            }
+            rgb
+        }
+    };
+    Ok(SheetPng { x0, y0, w, h, rgb })
+}
+
+/// 裁剪四边落到整像素，且裁完尺寸等于目标时，返回原图上的这块。没有裁剪时返回 `None`。
+fn source_window(
+    pic: &Element,
+    image_w: u32,
+    image_h: u32,
+    dest_w: u32,
+    dest_h: u32,
+) -> Result<Option<(u32, u32, u32, u32)>, Error> {
+    let Some(rect) = pic
+        .child_by_local("blipFill")
+        .and_then(|fill| fill.child_by_local("srcRect"))
+    else {
+        return Ok(None);
+    };
+    let (l, t, r, b) = (
+        percent_attr(rect, "l")?,
+        percent_attr(rect, "t")?,
+        percent_attr(rect, "r")?,
+        percent_attr(rect, "b")?,
+    );
+    if l == 0 && t == 0 && r == 0 && b == 0 {
+        return Ok(None);
+    }
+    let left = percent_px(l, image_w).ok_or_else(unsupported)?;
+    let top = percent_px(t, image_h).ok_or_else(unsupported)?;
+    let right = percent_px(r, image_w).ok_or_else(unsupported)?;
+    let bottom = percent_px(b, image_h).ok_or_else(unsupported)?;
+    let Some(src_w) = image_w.checked_sub(left).and_then(|w| w.checked_sub(right)) else {
+        return Err(unsupported());
+    };
+    let Some(src_h) = image_h.checked_sub(top).and_then(|h| h.checked_sub(bottom)) else {
+        return Err(unsupported());
+    };
+    if src_w == 0 || src_h == 0 || src_w != dest_w || src_h != dest_h {
         return Err(unsupported());
     }
-    Ok(SheetPng { x0, y0, w, h, rgb })
+    Ok(Some((left, top, src_w, src_h)))
+}
+
+fn percent_attr(el: &Element, name: &str) -> Result<i64, Error> {
+    match el.attr(name) {
+        None => Ok(0),
+        Some(raw) => raw.parse().map_err(|_| unsupported()),
+    }
+}
+
+/// 百分比换成像素。离整像素超过半个百分比量化步长时不认。
+fn percent_px(pct: i64, extent: u32) -> Option<u32> {
+    if pct < 0 {
+        return None;
+    }
+    let prod = i128::from(pct) * i128::from(extent);
+    let n = (prod + 50_000) / 100_000;
+    let err = (prod - n * 100_000).abs();
+    if err * 2 > i128::from(extent) || n > i128::from(extent) {
+        return None;
+    }
+    Some(n as u32)
+}
+
+fn crop_rgb(rgb: &[u8], image_w: u32, left: u32, top: u32, w: u32, h: u32) -> Vec<u8> {
+    let mut out = Vec::with_capacity((w * h * 3) as usize);
+    for row in 0..h {
+        let start = (((top + row) * image_w + left) * 3) as usize;
+        let end = start + (w as usize) * 3;
+        out.extend_from_slice(&rgb[start..end]);
+    }
+    out
 }
 
 fn accept_sheet_pic(pic: &Element) -> Result<(), Error> {
@@ -710,13 +786,6 @@ fn accept_sheet_pic(pic: &Element) -> Result<(), Error> {
         match child.local_name() {
             "blip" | "stretch" | "srcRect" => {}
             _ => return Err(unsupported()),
-        }
-    }
-    if let Some(rect) = fill.child_by_local("srcRect") {
-        for name in ["l", "t", "r", "b"] {
-            if rect.attr(name).is_some_and(|raw| raw != "0") {
-                return Err(unsupported());
-            }
         }
     }
     if let Some(rect) = fill
