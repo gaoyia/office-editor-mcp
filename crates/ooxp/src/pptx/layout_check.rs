@@ -49,7 +49,7 @@ fn slide_size(pres_root: &Element) -> (i64, i64) {
 
 /// 一层组合的 `a:xfrm`。四个子元素都按属性逐个补缺省，已有属性保留。
 #[derive(Clone, Copy)]
-struct GroupXfrm {
+pub(crate) struct GroupXfrm {
     gx: i64,
     gy: i64,
     gcx: i64,
@@ -76,7 +76,7 @@ impl GroupXfrm {
     }
 }
 
-fn group_xfrm(grp: &Element) -> GroupXfrm {
+pub(crate) fn group_xfrm(grp: &Element) -> GroupXfrm {
     let Some(xfrm) = grp
         .child_by_local("grpSpPr")
         .and_then(|p| p.child_by_local("xfrm"))
@@ -206,8 +206,19 @@ fn shape_box(sp: &Element, chain: &[GroupXfrm]) -> Option<Rect> {
     let y = attr_or(off, "y", 0);
     let cx = attr_or(ext, "cx", 0);
     let cy = attr_or(ext, "cy", 0);
+    let (x, y, cx, cy) = map_emu(x, y, cx, cy, chain);
+    Some(Rect { x, y, cx, cy })
+}
 
-    // 累积仿射：X_final = ax × X + bx，尺寸只缩放。
+/// 组内 EMU 沿祖先组合链换到幻灯片 EMU。链是外到内，套用从最内层到最外层。
+/// `ccx` 或 `ccy` 为 0 的一层按恒等跳过。最后四舍五入，半值远离零。
+pub(crate) fn map_emu(
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    chain: &[GroupXfrm],
+) -> (i64, i64, i64, i64) {
     let (mut ax, mut bx) = (Rat::one(), Rat::zero());
     let (mut ay, mut by) = (Rat::one(), Rat::zero());
     for g in chain.iter().rev() {
@@ -230,12 +241,12 @@ fn shape_box(sp: &Element, chain: &[GroupXfrm]) -> Option<Rect> {
         ay = ay.mul(sy);
         by = by.mul(sy).add(ty);
     }
-    Some(Rect {
-        x: ax.mul_int(x).add(bx).round(),
-        y: ay.mul_int(y).add(by).round(),
-        cx: ax.mul_int(cx).round(),
-        cy: ay.mul_int(cy).round(),
-    })
+    (
+        ax.mul_int(x).add(bx).round(),
+        ay.mul_int(y).add(by).round(),
+        ax.mul_int(cx).round(),
+        ay.mul_int(cy).round(),
+    )
 }
 
 /// 分母恒正的既约有理数。

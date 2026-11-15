@@ -111,14 +111,14 @@ fn paint_tree(
     else {
         return Ok(());
     };
-    visit(pkg, slide_part, tree, false, rgb, width, height)
+    visit(pkg, slide_part, tree, &[], rgb, width, height)
 }
 
 fn visit(
     pkg: &Package,
     slide_part: &str,
     el: &Element,
-    grouped: bool,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
@@ -127,17 +127,24 @@ fn visit(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" | "extLst" => {}
             "pic" => {
-                if grouped || transformed(child) || is_media(child) {
+                if transformed(child) || is_media(child) {
                     return Err(unsupported());
                 }
-                blit_pic(pkg, slide_part, child, rgb, width, height)?;
+                blit_pic(pkg, slide_part, child, chain, rgb, width, height)?;
             }
-            "sp" if !grouped => paint_sp(child, rgb, width, height)?,
-            "graphicFrame" if !grouped => paint_frame(pkg, slide_part, child, rgb, width, height)?,
-            "grpSp" => visit(pkg, slide_part, child, true, rgb, width, height)?,
+            "sp" => paint_sp(child, chain, rgb, width, height)?,
+            "graphicFrame" => paint_frame(pkg, slide_part, child, chain, rgb, width, height)?,
+            "grpSp" => {
+                if group_turns(child) {
+                    return Err(unsupported());
+                }
+                let mut next = chain.to_vec();
+                next.push(super::layout_check::group_xfrm(child));
+                visit(pkg, slide_part, child, &next, rgb, width, height)?;
+            }
             "AlternateContent" => {
                 if let Some(choice) = child.child_by_local("Choice") {
-                    visit(pkg, slide_part, choice, grouped, rgb, width, height)?;
+                    visit(pkg, slide_part, choice, chain, rgb, width, height)?;
                 }
             }
             _ => return Err(unsupported()),
@@ -146,8 +153,34 @@ fn visit(
     Ok(())
 }
 
+/// 组合自身旋转或翻转时，子形状的像素框不能再按轴对齐换算。
+fn group_turns(grp: &Element) -> bool {
+    let Some(xfrm) = grp
+        .child_by_local("grpSpPr")
+        .and_then(|pr| pr.child_by_local("xfrm"))
+    else {
+        return false;
+    };
+    if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
+        return true;
+    }
+    xfrm.attr("rot")
+        .is_some_and(|raw| raw.parse::<i64>().ok().unwrap_or(1) != 0)
+}
+
+fn map_box(xfrm: &Element, chain: &[super::layout_check::GroupXfrm]) -> (i64, i64, i64, i64) {
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    super::layout_check::map_emu(x, y, cx, cy, chain)
+}
+
 /// 矩形、椭圆、圆角矩形和里面的文字。描边、半透明或转角对不上的矩形整块留空，页继续画。
-fn paint_sp(sp: &Element, rgb: &mut [u8], width: u32, height: u32) -> Result<(), Error> {
+fn paint_sp(
+    sp: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
     let Some(sp_pr) = sp.child_by_local("spPr") else {
         return Ok(());
     };
@@ -156,9 +189,9 @@ fn paint_sp(sp: &Element, rgb: &mut [u8], width: u32, height: u32) -> Result<(),
         .and_then(|geom| geom.attr("prst"))
         .unwrap_or("");
     match prst {
-        "rect" => paint_rect(sp, sp_pr, rgb, width, height),
-        "ellipse" => paint_ellipse(sp, sp_pr, rgb, width, height),
-        "roundRect" => paint_round(sp, sp_pr, rgb, width, height),
+        "rect" => paint_rect(sp, sp_pr, chain, rgb, width, height),
+        "ellipse" => paint_ellipse(sp, sp_pr, chain, rgb, width, height),
+        "roundRect" => paint_round(sp, sp_pr, chain, rgb, width, height),
         _ => Err(unsupported()),
     }
 }
@@ -166,11 +199,12 @@ fn paint_sp(sp: &Element, rgb: &mut [u8], width: u32, height: u32) -> Result<(),
 fn paint_rect(
     sp: &Element,
     sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
 ) -> Result<(), Error> {
-    if let Some((color, x, y, w, h)) = plain_rect(sp) {
+    if let Some((color, x, y, w, h)) = plain_rect(sp, chain) {
         fill_rect(rgb, width, height, x, y, w, h, color);
         paint_tx(sp, x, y, w, h, rgb, width, height);
         return Ok(());
@@ -181,7 +215,7 @@ fn paint_rect(
     if xfrm.attr("rot").is_some() {
         return Ok(());
     }
-    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = map_box(xfrm, chain);
     let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
     if w <= 0 || h <= 0 {
         return Ok(());
@@ -204,11 +238,12 @@ fn paint_rect(
 fn paint_ellipse(
     sp: &Element,
     sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
 ) -> Result<(), Error> {
-    let Some(oval) = oval_box(sp_pr)? else {
+    let Some(oval) = oval_box(sp_pr, chain)? else {
         return Ok(());
     };
     fill_ellipse(rgb, width, height, &oval);
@@ -228,11 +263,12 @@ fn paint_ellipse(
 fn paint_round(
     sp: &Element,
     sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
 ) -> Result<(), Error> {
-    let Some(round) = round_box(sp_pr)? else {
+    let Some(round) = round_box(sp_pr, chain)? else {
         return Ok(());
     };
     let inset = round
@@ -323,14 +359,17 @@ struct Round {
     edge_b: i32,
 }
 
-fn oval_box(sp_pr: &Element) -> Result<Option<Oval>, Error> {
+fn oval_box(
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Result<Option<Oval>, Error> {
     if rotated(sp_pr) {
         return Err(unsupported());
     }
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Ok(None);
     };
-    let (ex, ey, ecx, ecy) = xfrm_box(xfrm);
+    let (ex, ey, ecx, ecy) = map_box(xfrm, chain);
     let (w, h) = (emu_f(ecx), emu_f(ecy));
     if w <= 0.0 || h <= 0.0 || emu_px(ecx) <= 0 || emu_px(ecy) <= 0 {
         return Ok(None);
@@ -346,14 +385,17 @@ fn oval_box(sp_pr: &Element) -> Result<Option<Oval>, Error> {
     }))
 }
 
-fn round_box(sp_pr: &Element) -> Result<Option<Round>, Error> {
+fn round_box(
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Result<Option<Round>, Error> {
     if rotated(sp_pr) {
         return Err(unsupported());
     }
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Ok(None);
     };
-    let (ex, ey, ecx, ecy) = xfrm_box(xfrm);
+    let (ex, ey, ecx, ecy) = map_box(xfrm, chain);
     let (x, y, w, h) = (emu_px(ex), emu_px(ey), emu_px(ecx), emu_px(ecy));
     if w <= 0 || h <= 0 {
         return Ok(None);
@@ -521,6 +563,7 @@ fn paint_frame(
     pkg: &Package,
     slide_part: &str,
     frame: &Element,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
@@ -528,7 +571,7 @@ fn paint_frame(
     let Some(xfrm) = frame.child_by_local("xfrm") else {
         return Err(unsupported());
     };
-    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = map_box(xfrm, chain);
     let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
     if w <= 0 || h <= 0 {
         return Err(unsupported());
@@ -1665,7 +1708,10 @@ fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3]
     }
 }
 
-fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
+fn plain_rect(
+    sp: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Option<([u8; 3], i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
     if sp_pr.child_by_local("effectLst").is_some()
         || sp_pr.child_by_local("scene3d").is_some()
@@ -1684,6 +1730,7 @@ fn plain_rect(sp: &Element) -> Option<([u8; 3], i32, i32, i32, i32)> {
     let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
     let (x, y, cx, cy) = xfrm_box(xfrm);
     let (x, y, cx, cy) = turned_box(x, y, cx, cy, xfrm.attr("rot"))?;
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
     let w = emu_px(cx);
     let h = emu_px(cy);
     if w <= 0 || h <= 0 {
@@ -1785,6 +1832,7 @@ fn blit_pic(
     pkg: &Package,
     slide_part: &str,
     pic: &Element,
+    chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
     width: u32,
     height: u32,
@@ -1803,7 +1851,7 @@ fn blit_pic(
         return Err(unsupported());
     }
     let image = decode_png(bytes)?;
-    let (x, y, cx, cy) = pic_box(pic);
+    let (x, y, cx, cy) = pic_box(pic, chain);
     let dest_w = emu_px(cx);
     let dest_h = emu_px(cy);
     if dest_w <= 0 || dest_h <= 0 {
@@ -1824,10 +1872,10 @@ fn blit_pic(
     Ok(())
 }
 
-fn pic_box(pic: &Element) -> (i64, i64, i64, i64) {
+fn pic_box(pic: &Element, chain: &[super::layout_check::GroupXfrm]) -> (i64, i64, i64, i64) {
     pic.child_by_local("spPr")
         .and_then(|sp| sp.child_by_local("xfrm"))
-        .map(xfrm_box)
+        .map(|xfrm| map_box(xfrm, chain))
         .unwrap_or((0, 0, 0, 0))
 }
 
@@ -2010,9 +2058,28 @@ mod tests {
     fn flipped_solid_rect_keeps_the_same_box() {
         let xml = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm flipH="1" flipV="1"><a:off x="1828800" y="914400"/><a:ext cx="914400" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        let (color, x, y, w, h) = plain_rect(&doc.root).unwrap();
+        let (color, x, y, w, h) = plain_rect(&doc.root, &[]).unwrap();
         assert_eq!(color, [0xEE, 0x44, 0x55]);
         assert_eq!((x, y, w, h), (192, 96, 96, 48));
+    }
+
+    #[test]
+    fn grouped_rect_maps_emu_before_pixels() {
+        let grp = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="15000" cy="15000"/><a:chOff x="0" y="0"/><a:chExt cx="10000" cy="10000"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let sp = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="5000" y="0"/><a:ext cx="914400" cy="457200"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let group = crate::xml::parse(grp.as_bytes()).unwrap();
+        let chain = [super::super::layout_check::group_xfrm(&group.root)];
+        let shape = crate::xml::parse(sp.as_bytes()).unwrap();
+        let (_, x, y, w, h) = plain_rect(&shape.root, &chain).unwrap();
+        // 5000×1.5=7500 EMU，先换算再取整是 1 像素。先取整再乘会变成 2。
+        assert_eq!((x, y, w, h), (1, 0, 144, 72));
+    }
+
+    #[test]
+    fn rotated_group_is_not_axis_aligned() {
+        let xml = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(group_turns(&doc.root));
     }
 
     #[test]

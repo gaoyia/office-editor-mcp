@@ -406,6 +406,143 @@ fn quarter_turn_swaps_the_box_around_its_center() {
     assert_eq!(pixel(&rgb, w, 672, 96), [0xAA, 0xBB, 0xCC]);
 }
 
+#[test]
+fn grouped_rects_keep_their_boxes_and_scaled_groups_map_first() {
+    let src = tmp("grp-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grp-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "EE4455",
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "112233",
+                "x": 2743200,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            }
+        ]
+    }));
+    let placed = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": deck.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shapes = placed["slides"][0]["shapes"].as_array().unwrap();
+    assert_eq!(shapes.len(), 2);
+    let ids: Vec<&str> = shapes
+        .iter()
+        .map(|shape| shape["id"].as_str().unwrap())
+        .collect();
+    let grouped = tmp("grp-grouped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": deck.to_string_lossy(),
+        "output": grouped.to_string_lossy(),
+        "ops": [{
+            "op": "groupShapes",
+            "id": "slide:1",
+            "ids": ids
+        }]
+    }));
+    let out = tmp("grp-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": grouped.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 287, 143), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 383, 143), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 191, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+
+    let scaled = tmp("grp-scaled");
+    rewrite_slide(&grouped, &scaled, |xml| {
+        xml.replace(
+            "<a:chExt cx=\"1828800\" cy=\"457200\"/>",
+            "<a:chExt cx=\"914400\" cy=\"228600\"/>",
+        )
+    });
+    let scaled_png = tmp("grp-scaled-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": scaled.to_string_lossy(),
+        "id": "slide:1",
+        "output": scaled_png.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&scaled_png).unwrap());
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 383, 191), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 384, 96), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 575, 191), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 191, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 576, 96), [0xAA, 0xBB, 0xCC]);
+
+    let turned = tmp("grp-rot");
+    rewrite_slide(&grouped, &turned, |xml| {
+        xml.replace(
+            "<a:xfrm><a:off x=\"1828800\" y=\"914400\"/><a:ext cx=\"1828800\"",
+            "<a:xfrm rot=\"5400000\"><a:off x=\"1828800\" y=\"914400\"/><a:ext cx=\"1828800\"",
+        )
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": turned.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp("grp-rot-png").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
 fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();

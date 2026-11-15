@@ -2516,6 +2516,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 汉字用主题 minor 的 `a:ea`。`typeface` 为空时用微软雅黑
 - 内置样式 `{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}` 且 `firstRow` 打开时，首行在 run 没写粗体和字色的情况下加粗，字用白色
 - 其余单元格没写字色时用黑色。别的表样式不套这套首行规则
+- 组合里已经会画的对象，先按 `layoutCheck` 的组合换算落到幻灯片 EMU，再按上面的像素规则取整。组合自身旋转或翻转时整页失败
 - 旋转、翻转、裁剪的图，视频和音频，报 `NotImplemented`，整页不画
 - 还有认不出的形状时，整页失败，不交出缺一块的图
 - xlsx 与 docx 报 `InvalidField`
@@ -2614,7 +2615,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   缺失本身不判 0，先按上面补缺省；补完仍为 0 才恒等。缺 `a:xfrm` 的形状不给 `box`。
 - `box` 与同一 id 在 `inspect` 里的 `x` / `y` / `cx` / `cy` 不是同一坐标系，不能直接比相等。
   后者按 [pptx 分册](json-contract-pptx.md) 第 1220 行取自身 `a:xfrm` 的原始 EMU，不换算。第 914 行是图的规则，管不到形状。
-- 仓库目前只在生成组合时写 `chOff` / `chExt`，没有读取换算的代码，`layoutCheck` 要自己实现这一步。
+- `layoutCheck` 的包围盒和 `exportSlideImage` 的像素都按这一套换算。出图换完再按 96 dpi 取整。组合自身旋转或翻转时这一页不出图。
 
 判定式都用整数算，长度量取 EMU：
 
