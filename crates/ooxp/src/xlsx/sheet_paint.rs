@@ -584,7 +584,7 @@ fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Resu
     Ok(color)
 }
 
-/// 没有旋转、翻转的组合。坐标从 A1 量起，和锚点框按像素重合才画。可以跨格，也可以缩放。
+/// 纯色矩形的组合。可以缩放，也可以绕中心转 90 度的倍数，或翻转。坐标从 A1 量起。
 fn identity_group(
     anchor: &Element,
     kind: AnchorKind,
@@ -610,12 +610,9 @@ fn identity_group(
         return Err(unsupported());
     }
     let xfrm = pr.child_by_local("xfrm").ok_or_else(unsupported)?;
-    if xfrm.attr("rot").is_some_and(|rot| rot != "0")
-        || truthy(xfrm.attr("flipH"))
-        || truthy(xfrm.attr("flipV"))
-        || xfrm
-            .element_children()
-            .any(|child| !matches!(child.local_name(), "off" | "ext" | "chOff" | "chExt"))
+    if xfrm
+        .element_children()
+        .any(|child| !matches!(child.local_name(), "off" | "ext" | "chOff" | "chExt"))
     {
         return Err(unsupported());
     }
@@ -624,20 +621,25 @@ fn identity_group(
     if cx <= 0 || cy <= 0 || ch_cx <= 0 || ch_cy <= 0 {
         return Err(unsupported());
     }
-    let end_x = off_x.checked_add(cx).ok_or_else(unsupported)?;
-    let end_y = off_y.checked_add(cy).ok_or_else(unsupported)?;
+    let map = GroupMap {
+        off_x,
+        off_y,
+        cx,
+        cy,
+        ch_x,
+        ch_y,
+        ch_cx,
+        ch_cy,
+        quarter: group_quarter(xfrm)?,
+        flip_h: truthy(xfrm.attr("flipH")),
+        flip_v: truthy(xfrm.attr("flipV")),
+    };
     // 组里的 EMU 从 A1 左上角量起。格子下标从 1 起，不是从锚点那一格量起。
     let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, col))?;
     let origin_y = axis_origin(1, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
-    let group_box = (
-        origin_x + round_px(off_x)?,
-        origin_y + round_px(off_y)?,
-        origin_x + round_px(end_x)?,
-        origin_y + round_px(end_y)?,
-    );
-    if anchor_box != group_box {
+    if anchor_box != turned_box(&map, origin_x, origin_y)? {
         return Err(unsupported());
     }
     let mut rects = Vec::new();
@@ -645,9 +647,7 @@ fn identity_group(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) = child_rect(
-                    child, origin_x, origin_y, off_x, off_y, cx, cy, ch_x, ch_y, ch_cx, ch_cy,
-                )?;
+                let (x0, y0, x1, y1) = child_rect(child, origin_x, origin_y, &map)?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
@@ -679,10 +679,7 @@ fn box_emu(xfrm: &Element, off_name: &str, ext_name: &str) -> Result<(i64, i64, 
     ))
 }
 
-fn child_rect(
-    sp: &Element,
-    x_from: i32,
-    y_from: i32,
+struct GroupMap {
     off_x: i64,
     off_y: i64,
     cx: i64,
@@ -691,6 +688,17 @@ fn child_rect(
     ch_y: i64,
     ch_cx: i64,
     ch_cy: i64,
+    /// 顺时针 90 度的次数，0 到 3。屏幕坐标向下为正。
+    quarter: i64,
+    flip_h: bool,
+    flip_v: bool,
+}
+
+fn child_rect(
+    sp: &Element,
+    x_from: i32,
+    y_from: i32,
+    map: &GroupMap,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let xfrm = sp
         .child_by_local("spPr")
@@ -702,33 +710,76 @@ fn child_rect(
     }
     let x1_emu = x.checked_add(w).ok_or_else(unsupported)?;
     let y1_emu = y.checked_add(h).ok_or_else(unsupported)?;
-    let ch_x1 = ch_x.checked_add(ch_cx).ok_or_else(unsupported)?;
-    let ch_y1 = ch_y.checked_add(ch_cy).ok_or_else(unsupported)?;
-    if x < ch_x || y < ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
+    let ch_x1 = map.ch_x.checked_add(map.ch_cx).ok_or_else(unsupported)?;
+    let ch_y1 = map.ch_y.checked_add(map.ch_cy).ok_or_else(unsupported)?;
+    if x < map.ch_x || y < map.ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
         return Err(unsupported());
     }
-    let x = map_group(off_x, ch_x, cx, ch_cx, x)?;
-    let y = map_group(off_y, ch_y, cy, ch_cy, y)?;
-    let x1_emu = map_group(off_x, ch_x, cx, ch_cx, x1_emu)?;
-    let y1_emu = map_group(off_y, ch_y, cy, ch_cy, y1_emu)?;
-    let x0 = x_from + round_px(x)?;
-    let y0 = y_from + round_px(y)?;
-    let x1 = x_from + round_px(x1_emu)?;
-    let y1 = y_from + round_px(y1_emu)?;
+    let (x0, y0, x1, y1) = turned_edges(
+        map,
+        x_from,
+        y_from,
+        [
+            (
+                into_ext(x, map.ch_x, map.cx, map.ch_cx)?,
+                into_ext(y, map.ch_y, map.cy, map.ch_cy)?,
+            ),
+            (
+                into_ext(x1_emu, map.ch_x, map.cx, map.ch_cx)?,
+                into_ext(y, map.ch_y, map.cy, map.ch_cy)?,
+            ),
+            (
+                into_ext(x1_emu, map.ch_x, map.cx, map.ch_cx)?,
+                into_ext(y1_emu, map.ch_y, map.cy, map.ch_cy)?,
+            ),
+            (
+                into_ext(x, map.ch_x, map.cx, map.ch_cx)?,
+                into_ext(y1_emu, map.ch_y, map.cy, map.ch_cy)?,
+            ),
+        ],
+    )?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
     Ok((x0, y0, x1, y1))
 }
 
-/// 组起点 + (子坐标 - 子坐标原点) × 组边长 / 子坐标边长。除法去掉余数。
-fn map_group(
-    origin: i64,
-    ch_origin: i64,
-    span: i64,
-    ch_span: i64,
-    value: i64,
-) -> Result<i64, Error> {
+fn turned_box(map: &GroupMap, x_from: i32, y_from: i32) -> Result<(i32, i32, i32, i32), Error> {
+    turned_edges(
+        map,
+        x_from,
+        y_from,
+        [(0, 0), (map.cx, 0), (map.cx, map.cy), (0, map.cy)],
+    )
+}
+
+fn turned_edges(
+    map: &GroupMap,
+    x_from: i32,
+    y_from: i32,
+    corners: [(i64, i64); 4],
+) -> Result<(i32, i32, i32, i32), Error> {
+    let mut min_x = i64::MAX;
+    let mut min_y = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut max_y = i64::MIN;
+    for (sx, sy) in corners {
+        let (x2, y2) = place_twice(map, sx, sy)?;
+        min_x = min_x.min(x2);
+        min_y = min_y.min(y2);
+        max_x = max_x.max(x2);
+        max_y = max_y.max(y2);
+    }
+    Ok((
+        x_from + round_twice(min_x)?,
+        y_from + round_twice(min_y)?,
+        x_from + round_twice(max_x)?,
+        y_from + round_twice(max_y)?,
+    ))
+}
+
+/// 子坐标先按整数比例放进组的外框。除法去掉余数。
+fn into_ext(value: i64, ch_origin: i64, span: i64, ch_span: i64) -> Result<i64, Error> {
     if span <= 0 || ch_span <= 0 {
         return Err(unsupported());
     }
@@ -737,7 +788,85 @@ fn map_group(
         return Err(unsupported());
     }
     let prod = delta.checked_mul(span).ok_or_else(unsupported)?;
-    origin.checked_add(prod / ch_span).ok_or_else(unsupported)
+    Ok(prod / ch_span)
+}
+
+/// 先翻转，再绕外框中心顺时针转。返回的数是 EMU 的两倍，避免中心落在半个 EMU 上。
+fn place_twice(map: &GroupMap, mut sx: i64, mut sy: i64) -> Result<(i64, i64), Error> {
+    if map.flip_h {
+        sx = map.cx.checked_sub(sx).ok_or_else(unsupported)?;
+    }
+    if map.flip_v {
+        sy = map.cy.checked_sub(sy).ok_or_else(unsupported)?;
+    }
+    let mut dx2 = sx
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_sub(map.cx)
+        .ok_or_else(unsupported)?;
+    let mut dy2 = sy
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_sub(map.cy)
+        .ok_or_else(unsupported)?;
+    match map.quarter {
+        0 => {}
+        1 => {
+            let next = dx2;
+            dx2 = dy2.checked_neg().ok_or_else(unsupported)?;
+            dy2 = next;
+        }
+        2 => {
+            dx2 = dx2.checked_neg().ok_or_else(unsupported)?;
+            dy2 = dy2.checked_neg().ok_or_else(unsupported)?;
+        }
+        3 => {
+            let next = dx2;
+            dx2 = dy2;
+            dy2 = next.checked_neg().ok_or_else(unsupported)?;
+        }
+        _ => return Err(unsupported()),
+    }
+    let x2 = map
+        .off_x
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_add(map.cx)
+        .ok_or_else(unsupported)?
+        .checked_add(dx2)
+        .ok_or_else(unsupported)?;
+    let y2 = map
+        .off_y
+        .checked_mul(2)
+        .ok_or_else(unsupported)?
+        .checked_add(map.cy)
+        .ok_or_else(unsupported)?
+        .checked_add(dy2)
+        .ok_or_else(unsupported)?;
+    Ok((x2, y2))
+}
+
+fn group_quarter(xfrm: &Element) -> Result<i64, Error> {
+    let Some(raw) = xfrm.attr("rot") else {
+        return Ok(0);
+    };
+    let n = raw.parse::<i64>().map_err(|_| unsupported())?;
+    if n.rem_euclid(5_400_000) != 0 {
+        return Err(unsupported());
+    }
+    Ok(n.rem_euclid(21_600_000) / 5_400_000)
+}
+
+/// `num` 是 EMU 的两倍。
+fn round_twice(num: i64) -> Result<i32, Error> {
+    if num < 0 {
+        return Err(unsupported());
+    }
+    let px = (num as f64 / 19_050.0).round();
+    if px > i32::MAX as f64 {
+        return Err(unsupported());
+    }
+    Ok(px as i32)
 }
 
 fn shape_fill(fill: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {

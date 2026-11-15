@@ -462,6 +462,109 @@ fn a_scaled_group_paints_the_stretched_rectangles() {
 }
 
 #[test]
+fn a_turned_group_paints_the_rotated_rectangles() {
+    let (w, h, rgb) = paint_drawing(&["A1"], &[1], 30.0, TURN_XML);
+    assert_eq!((w, h), (65, 41));
+    assert_block(&rgb, w, 20, 28, 1, 36);
+    assert_eq!(pixel(&rgb, w, 19, 10), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 28, 10), [255, 255, 255]);
+    assert_block(&rgb, w, 24, 36, 25, 32);
+    assert_eq!(pixel(&rgb, w, 36, 26), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 36, 10), [255, 255, 255]);
+}
+
+#[test]
+fn a_flipped_group_paints_the_mirrored_rectangles() {
+    let (w, h, rgb) = paint_drawing(&["A1", "A2", "A3", "A4"], &[1, 2, 3, 4], 30.0, FLIP_XML);
+    assert_eq!((w, h), (65, 161));
+    assert_block(&rgb, w, 16, 40, 128, 136);
+    assert_eq!(pixel(&rgb, w, 15, 128), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 40, 128), [255, 255, 255]);
+    assert_block(&rgb, w, 20, 28, 140, 152);
+    assert_eq!(pixel(&rgb, w, 19, 140), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 28, 140), [255, 255, 255]);
+}
+
+#[test]
+fn a_half_turn_group_paints_the_swapped_rectangles() {
+    let (w, h, rgb) = paint_drawing(&["A1", "A2"], &[1, 2], 30.0, HALF_XML);
+    assert_eq!((w, h), (65, 81));
+    assert_block(&rgb, w, 16, 40, 64, 72);
+    assert_block(&rgb, w, 20, 28, 48, 60);
+    assert_eq!(pixel(&rgb, w, 19, 50), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 28, 50), [255, 255, 255]);
+}
+
+#[test]
+fn a_group_at_another_angle_fails_the_sheet() {
+    let src = drawing_book(
+        &["A1"],
+        &[1],
+        30.0,
+        &TURN_XML.replace("rot=\"5400000\"", "rot=\"100\""),
+    );
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": src.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": tmp("odd-rot").with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+fn paint_drawing(cells: &[&str], rows: &[u32], height: f64, drawing: &str) -> (u32, u32, Vec<u8>) {
+    decode_png(&export(&drawing_book(cells, rows, height, drawing)))
+}
+
+fn drawing_book(cells: &[&str], rows: &[u32], height: f64, drawing: &str) -> PathBuf {
+    let src = tmp("src");
+    let listed: Vec<_> = cells
+        .iter()
+        .map(|cell| json!({ "ref": cell, "value": "" }))
+        .collect();
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": listed }] }
+    }));
+    let shaped = tmp("shaped");
+    let ops: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            json!({ "op": "setRowHeight", "id": "sheet:Sheet1", "row": row, "height": height })
+        })
+        .chain(std::iter::once(json!({
+            "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+            "from": "A1", "cx": 9525, "cy": 9525
+        })))
+        .collect();
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": ops
+    }));
+    let book = tmp("drawn");
+    rewrite(&shaped, &book, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = drawing.to_string();
+        }
+    });
+    book
+}
+
+#[test]
 fn a_scaled_group_fails_the_sheet() {
     let xml = GROUP_XML.replace(
         r#"<a:chExt cx="238125" cy="76200"/>"#,
@@ -657,6 +760,15 @@ fn with_theme(src: &Path) -> PathBuf {
 
 const SCHEME_THEME: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Probe"><a:themeElements><a:clrScheme name="Probe"><a:dk1><a:sysClr val="windowText" lastClr="010203"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="EE4455"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme></a:themeElements></a:theme>"#;
+
+const TURN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>190500</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>342900</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>342900</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm rot="5400000"><a:off x="95250" y="95250"/><a:ext cx="342900" cy="152400"/><a:chOff x="76200" y="76200"/><a:chExt cx="381000" cy="152400"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="76200" y="152400"/><a:ext cx="381000" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="342900" y="76200"/><a:ext cx="76200" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
+
+const FLIP_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>152400</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>381000</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>304800</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm flipH="1"><a:off x="152400" y="1219200"/><a:ext cx="228600" cy="228600"/><a:chOff x="152400" y="1219200"/><a:chExt cx="228600" cy="228600"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="152400" y="1219200"/><a:ext cx="228600" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="266700" y="1333500"/><a:ext cx="76200" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
+
+const HALF_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>152400</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>381000</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>304800</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm rot="10800000"><a:off x="152400" y="457200"/><a:ext cx="228600" cy="228600"/><a:chOff x="152400" y="457200"/><a:chExt cx="228600" cy="228600"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="152400" y="457200"/><a:ext cx="228600" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="266700" y="571500"/><a:ext cx="76200" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
 
 const SCALE_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from><xdr:to><xdr:col>1</xdr:col><xdr:colOff>114300</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>190500</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="76200" y="76200"/><a:ext cx="647700" cy="114300"/><a:chOff x="76200" y="76200"/><a:chExt cx="323850" cy="114300"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="76200" y="76200"/><a:ext cx="152400" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="304800" y="76200"/><a:ext cx="95250" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
