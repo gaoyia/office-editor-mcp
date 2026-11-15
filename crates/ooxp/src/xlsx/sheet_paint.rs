@@ -345,7 +345,7 @@ fn plain_rects(
                     y0,
                     x1,
                     y1,
-                    color: plain_color(sp, theme)?,
+                    color: plain_color(sp, theme, true)?,
                 }));
             } else {
                 return Err(unsupported());
@@ -547,14 +547,16 @@ fn round_px(emu: i64) -> Result<i32, Error> {
     Ok(px as i32)
 }
 
-fn plain_color(sp: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Error> {
+fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Result<[u8; 3], Error> {
     let sp_pr = sp.child_by_local("spPr").ok_or_else(unsupported)?;
     let geom = sp_pr.child_by_local("prstGeom").ok_or_else(unsupported)?;
     if geom.attr("prst") != Some("rect") || sp_pr.child_by_local("custGeom").is_some() {
         return Err(unsupported());
     }
     if let Some(xfrm) = sp_pr.child_by_local("xfrm") {
-        if xfrm.attr("rot").is_some_and(|rot| rot != "0")
+        if xfrm
+            .attr("rot")
+            .is_some_and(|rot| !quarter_turn(rot, quarter))
             || truthy(xfrm.attr("flipH"))
             || truthy(xfrm.attr("flipV"))
         {
@@ -572,11 +574,7 @@ fn plain_color(sp: &Element, theme: Option<&LoadedTheme>) -> Result<[u8; 3], Err
     let fill = sp_pr.child_by_local("solidFill").ok_or_else(unsupported)?;
     let color = shape_fill(fill, theme)?;
     let ln = sp_pr.child_by_local("ln").ok_or_else(unsupported)?;
-    if ln.child_by_local("noFill").is_none()
-        || ln
-            .element_children()
-            .any(|child| child.local_name() != "noFill")
-    {
+    if !clear_line(ln) {
         return Err(unsupported());
     }
     if visible_text(sp) {
@@ -657,7 +655,7 @@ fn identity_group(
                     y0,
                     x1,
                     y1,
-                    color: plain_color(child, theme)?,
+                    color: plain_color(child, theme, false)?,
                 });
             }
             _ => return Err(unsupported()),
@@ -758,6 +756,26 @@ fn srgb_bytes(clr: &Element) -> Result<[u8; 3], Error> {
         *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).map_err(|_| unsupported())?;
     }
     Ok(color)
+}
+
+/// 直角倍数不改变纯色矩形的外接框。组合里的子矩形不走这条。
+fn quarter_turn(raw: &str, allow: bool) -> bool {
+    if !allow {
+        return raw == "0";
+    }
+    raw.parse::<i64>()
+        .is_ok_and(|n| n.rem_euclid(5_400_000) == 0)
+}
+
+/// `noFill` 时虚线、斜接和隐藏线都不画。旁边再有填充才算描边。
+fn clear_line(ln: &Element) -> bool {
+    ln.child_by_local("noFill").is_some()
+        && ln.element_children().all(|child| {
+            !matches!(
+                child.local_name(),
+                "solidFill" | "gradFill" | "pattFill" | "blipFill"
+            )
+        })
 }
 
 fn visible_text(el: &Element) -> bool {

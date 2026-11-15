@@ -161,6 +161,63 @@ fn plain_rectangles_follow_the_measured_edges() {
 }
 
 #[test]
+fn quarter_turn_uses_the_anchor_box() {
+    let src = tmp("src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }
+        ] }] }
+    }));
+    let shaped = tmp("shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+              "from": "A1", "cx": 8 * 9525, "cy": 8 * 9525 }
+        ]
+    }));
+    let turned = tmp("turn");
+    rewrite(&paint_red(&shaped), &turned, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml
+                .replace("<a:xfrm>", "<a:xfrm rot=\"5400000\">")
+                .replace(
+                    "<a:ln><a:noFill/></a:ln>",
+                    "<a:ln w=\"19050\"><a:noFill/><a:prstDash val=\"solid\"/><a:miter lim=\"800000\"/></a:ln>",
+                );
+        }
+    });
+    let (w, h, rgb) = decode_png(&export(&turned));
+    assert_eq!((w, h), (65, 21));
+    assert_block(&rgb, w, 1, 8, 1, 8);
+    assert_eq!(pixel(&rgb, w, 8, 1), [255, 255, 255]);
+
+    let odd = tmp("odd");
+    rewrite(&turned, &odd, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml.replace("rot=\"5400000\"", "rot=\"100\"");
+        }
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": odd.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": odd.with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
 fn rectangle_covers_an_interior_border_and_leaves_the_frame() {
     let src = tmp("src");
     run_ok(json!({
