@@ -2496,7 +2496,8 @@ fn paint_rules(
             "cellIs" => {
                 let _ = rule_numbers(rule)?;
             }
-            "dataBar" | "expression" => {}
+            "dataBar" | "expression" | "aboveAverage" | "top10" | "containsText"
+            | "notContainsText" | "beginsWith" | "endsWith" => {}
             _ => return Err(unsupported()),
         }
     }
@@ -2555,11 +2556,13 @@ fn expression_gaps(
     let mut out = Vec::new();
     for block in sheet.children_by_local("conditionalFormatting") {
         let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
-        let has_expr = block
-            .children_by_local("cfRule")
-            .iter()
-            .any(|rule| rule.attr("type") == Some("expression"));
-        if !has_expr {
+        let paints_blank = block.children_by_local("cfRule").iter().any(|rule| {
+            matches!(
+                rule.attr("type"),
+                Some("expression") | Some("notContainsText")
+            )
+        });
+        if !paints_blank {
             continue;
         }
         for row in r0..=r1 {
@@ -2743,6 +2746,14 @@ fn cf_fill(
                 "colorScale" => scale_of(cells, &areas, rule, col, row)?,
                 "cellIs" => cell_is_fill(styles, cells, rule, col, row)?,
                 "expression" => expression_fill(styles, session, rule, &areas, col, row)?,
+                "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
+                | "endsWith" => {
+                    if simple_hit(cells, rule, &areas, col, row)? {
+                        dxf_fill(styles, rule)?
+                    } else {
+                        None
+                    }
+                }
                 _ => return Err(unsupported()),
             };
             if let Some(color) = color {
@@ -3214,6 +3225,159 @@ fn format_fixed(n: f64, digits: u32) -> String {
     format!("{v:.prec$}", prec = digits as usize)
 }
 
+fn dxf_fill(styles: &Styles, rule: &Element) -> Result<Option<[u8; 3]>, Error> {
+    let Some(id) = rule.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) else {
+        return Ok(None);
+    };
+    let Some(dxf) = styles.dxfs.get(id) else {
+        return Err(unsupported());
+    };
+    Ok(dxf.fill)
+}
+
+fn area_nums(cells: &HashMap<(u32, u32), CellRec>, areas: &[(CellRef, CellRef)]) -> Vec<f64> {
+    let mut out = Vec::new();
+    for ((col, row), cell) in cells {
+        if in_areas(*col, *row, areas) {
+            if let Shown::Num(n) = cell.shown {
+                out.push(n);
+            }
+        }
+    }
+    out
+}
+
+fn shown_text(shown: &Shown) -> String {
+    match shown {
+        Shown::Empty => String::new(),
+        Shown::Text(text) => text.to_lowercase(),
+        Shown::Num(n) => format_general(*n).to_lowercase(),
+        Shown::Bool(true) => "true".into(),
+        Shown::Bool(false) => "false".into(),
+    }
+}
+
+fn cell_text(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> String {
+    cells
+        .get(&(col, row))
+        .map(|cell| shown_text(&cell.shown))
+        .unwrap_or_default()
+}
+
+/// 高于平均、前 N 和文本规则。命中判断和检查结果用同一套。
+fn simple_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    rule: &Element,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    Ok(match rule.attr("type").unwrap_or("") {
+        "aboveAverage" => average_hit(cells, rule, areas, col, row)?,
+        "top10" => top_hit(cells, rule, areas, col, row),
+        "containsText" | "notContainsText" | "beginsWith" | "endsWith" => {
+            text_hit(cells, rule, col, row)
+        }
+        _ => false,
+    })
+}
+
+fn average_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    rule: &Element,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    let nums = area_nums(cells, areas);
+    let Some(Shown::Num(n)) = cells.get(&(col, row)).map(|cell| &cell.shown) else {
+        return Ok(false);
+    };
+    if nums.is_empty() {
+        return Ok(false);
+    }
+    let mean = nums.iter().sum::<f64>() / nums.len() as f64;
+    let spread = match rule.attr("stdDev") {
+        None => 0.0,
+        Some(raw) => {
+            if nums.len() < 2 {
+                return Ok(false);
+            }
+            let k: f64 = raw.parse().map_err(|_| unsupported())?;
+            let var = nums.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / nums.len() as f64;
+            k * var.sqrt()
+        }
+    };
+    let above = !matches!(
+        rule.attr("aboveAverage"),
+        Some("0") | Some("false") | Some("FALSE")
+    );
+    let eq = truthy(rule.attr("equalAverage"));
+    let hit = if above {
+        if eq {
+            *n >= mean + spread
+        } else {
+            *n > mean + spread
+        }
+    } else if eq {
+        *n <= mean - spread
+    } else {
+        *n < mean - spread
+    };
+    Ok(hit)
+}
+
+fn top_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    rule: &Element,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> bool {
+    let nums = area_nums(cells, areas);
+    let Some(Shown::Num(n)) = cells.get(&(col, row)).map(|cell| &cell.shown) else {
+        return false;
+    };
+    if nums.is_empty() {
+        return false;
+    }
+    let mut sorted = nums;
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let rank = rule
+        .attr("rank")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(10)
+        .max(1);
+    let count = if truthy(rule.attr("percent")) {
+        (sorted.len() * rank).div_ceil(100).max(1)
+    } else {
+        rank
+    };
+    let bottom = truthy(rule.attr("bottom"));
+    let threshold = if bottom {
+        sorted[count.saturating_sub(1).min(sorted.len() - 1)]
+    } else {
+        sorted[sorted.len().saturating_sub(count)]
+    };
+    if bottom {
+        *n <= threshold
+    } else {
+        *n >= threshold
+    }
+}
+
+fn text_hit(cells: &HashMap<(u32, u32), CellRec>, rule: &Element, col: u32, row: u32) -> bool {
+    let needle = rule.attr("text").unwrap_or("").to_lowercase();
+    let text = cell_text(cells, col, row);
+    match rule.attr("type").unwrap_or("") {
+        "containsText" => !needle.is_empty() && text.contains(&needle),
+        "notContainsText" => !text.contains(&needle),
+        "beginsWith" => text.starts_with(&needle),
+        "endsWith" => text.ends_with(&needle),
+        _ => false,
+    }
+}
+
 fn dxf_color(
     sheet: &Element,
     styles: &Styles,
@@ -3222,10 +3386,10 @@ fn dxf_color(
     row: u32,
     session: &mut Option<FormulaSession>,
 ) -> Result<Option<[u8; 3]>, Error> {
-    let Some(Shown::Num(n)) = cells.get(&(col, row)).map(|cell| &cell.shown) else {
-        return Ok(None);
+    let n = match cells.get(&(col, row)).map(|cell| &cell.shown) {
+        Some(Shown::Num(n)) => Some(*n),
+        _ => None,
     };
-    let n = *n;
     let mut hit = None;
     for block in sheet.children_by_local("conditionalFormatting") {
         let Ok(areas) = parse_areas(block.attr("sqref").unwrap_or("")) else {
@@ -3237,12 +3401,15 @@ fn dxf_color(
         for rule in block.children_by_local("cfRule") {
             let applies = match rule.attr("type").unwrap_or("") {
                 "cellIs" => {
+                    let Some(n) = n else { continue };
                     let Ok(args) = rule_numbers(rule) else {
                         continue;
                     };
                     cell_is(rule.attr("operator").unwrap_or(""), n, &args).unwrap_or(false)
                 }
                 "expression" => expression_hit(session, rule, &areas, col, row)?,
+                "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
+                | "endsWith" => simple_hit(cells, rule, &areas, col, row)?,
                 _ => false,
             };
             if !applies {

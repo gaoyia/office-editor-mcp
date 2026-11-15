@@ -625,8 +625,8 @@ fn avg_hits(el: &Element, root: &Element, cells: &[CellRef]) -> Vec<String> {
         if nums.len() < 2 {
             return Vec::new();
         }
-        let var =
-            nums.iter().map(|(_, n)| (n - mean).powi(2)).sum::<f64>() / (nums.len() - 1) as f64;
+        // 总体标准差：平方和除以个数。样本标准差会把 1、2、3 加一倍时的 3 漏掉。
+        let var = nums.iter().map(|(_, n)| (n - mean).powi(2)).sum::<f64>() / nums.len() as f64;
         k * var.sqrt()
     } else {
         0.0

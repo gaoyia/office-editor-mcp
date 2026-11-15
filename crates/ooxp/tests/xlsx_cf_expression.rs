@@ -204,3 +204,147 @@ fn an_unknown_formula_fails_the_sheet() {
         "{text}"
     );
 }
+
+fn quiet_row(rgb: &[u8], width: u32, y: u32, color: [u8; 3]) {
+    for x in 1..width {
+        assert_eq!(pixel(rgb, width, x, y), color, "({x},{y})");
+    }
+    assert_eq!(pixel(rgb, width, 0, y), [255, 255, 255], "外框 ({y})");
+}
+
+fn rank_book(cells: serde_json::Value, rule: serde_json::Value) -> PathBuf {
+    let src = tmp("src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells.clone() }] }
+    }));
+    let book = tmp("rank");
+    let mut ops = vec![
+        json!({ "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 }),
+        json!({ "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 }),
+        json!({ "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": 15 }),
+    ];
+    let white = json!({ "color": { "rgb": "FFFFFFFF" } });
+    if let Some(list) = cells.as_array() {
+        for cell in list {
+            let r = cell["ref"].as_str().unwrap();
+            ops.push(json!({
+                "op": "setCellStyle",
+                "id": format!("cell:Sheet1!{r}"),
+                "font": white.clone()
+            }));
+        }
+    }
+    ops.push(rule);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": ops
+    }));
+    hide_grid(&book)
+}
+
+#[test]
+fn above_average_paints_only_the_strictly_greater_cell() {
+    let dxf = json!({
+        "fill": { "pattern": "solid", "fg": { "rgb": "FFEE4455" } },
+        "font": { "color": { "rgb": "FFEE4455" } }
+    });
+    let book = rank_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": 2 },
+            { "ref": "A3", "value": 3 }
+        ]),
+        json!({
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:A3",
+            "type": "aboveAverage", "dxf": dxf
+        }),
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 61));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+}
+
+#[test]
+fn population_stddev_top_rank_and_text_use_the_same_fill() {
+    let dxf = json!({
+        "fill": { "pattern": "solid", "fg": { "rgb": "FFEE4455" } },
+        "font": { "color": { "rgb": "FFEE4455" } }
+    });
+    let sd = rank_book(
+        json!([
+            { "ref": "A1", "value": 0 },
+            { "ref": "A2", "value": 2 },
+            { "ref": "A3", "value": 3 }
+        ]),
+        json!({
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:A3",
+            "type": "aboveAverage", "stdDev": 1, "dxf": dxf
+        }),
+    );
+    let (w, _, rgb) = decode_png(&export(&sd).unwrap());
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+
+    let top = rank_book(
+        json!([
+            { "ref": "A1", "value": 5 },
+            { "ref": "A2", "value": 1 },
+            { "ref": "A3", "value": 5 }
+        ]),
+        json!({
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:A3",
+            "type": "top10", "rank": 1, "dxf": dxf
+        }),
+    );
+    let (w, _, rgb) = decode_png(&export(&top).unwrap());
+    quiet_row(&rgb, w, 10, RED);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+
+    let text = rank_book(
+        json!([
+            { "ref": "A1", "value": "abc" },
+            { "ref": "A2", "value": "zz" },
+            { "ref": "A3", "value": "Ab" }
+        ]),
+        json!({
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:A3",
+            "type": "containsText", "text": "ab", "dxf": dxf
+        }),
+    );
+    let (w, _, rgb) = decode_png(&export(&text).unwrap());
+    quiet_row(&rgb, w, 10, RED);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+}
+
+#[test]
+fn not_contains_paints_a_missing_cell() {
+    let book = rank_book(
+        json!([
+            { "ref": "A1", "value": "abc" },
+            { "ref": "A3", "value": "zz" }
+        ]),
+        json!({
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:A3",
+            "type": "notContainsText", "text": "ab",
+            "dxf": {
+                "fill": { "pattern": "solid", "fg": { "rgb": "FFEE4455" } },
+                "font": { "color": { "rgb": "FFEE4455" } }
+            }
+        }),
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 61));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, RED);
+    quiet_row(&rgb, w, 50, RED);
+}

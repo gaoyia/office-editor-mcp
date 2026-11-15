@@ -68,6 +68,7 @@ $order = @(
     'xlsx-sheet-shape-image'
     'xlsx-cf-expression-image'
     'xlsx-cf-border-image'
+    'xlsx-cf-average-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'
