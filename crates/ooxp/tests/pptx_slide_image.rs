@@ -225,6 +225,147 @@ fn solid_rect_is_painted_and_stroke_or_text_is_not() {
 }
 
 #[test]
+fn scheme_rect_uses_the_theme_slot_and_a_transform_fails() {
+    let src = tmp("scheme-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("scheme-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "FFFFFF",
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "FFFFFF",
+                "x": 3657600,
+                "y": 914400,
+                "cx": 457200,
+                "cy": 457200
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": "FFFFFF",
+                "x": 4572000,
+                "y": 1828800,
+                "cx": 457200,
+                "cy": 457200
+            }
+        ]
+    }));
+    let white = "<a:solidFill><a:srgbClr val=\"FFFFFF\"/></a:solidFill>";
+    let painted = tmp("scheme-painted");
+    rewrite_named(&deck, &painted, |name, xml| match name {
+        "ppt/slides/slide1.xml" => {
+            let xml = swap(
+                xml,
+                white,
+                "<a:solidFill><a:schemeClr val=\"accent1\"/></a:solidFill>",
+            );
+            let xml = swap(
+                xml,
+                white,
+                "<a:solidFill><a:schemeClr val=\"dk1\"/></a:solidFill>",
+            );
+            swap(
+                xml,
+                white,
+                "<a:solidFill><a:schemeClr val=\"bg1\"/></a:solidFill>",
+            )
+        }
+        "ppt/theme/theme1.xml" => swap(
+            xml,
+            "<a:accent1><a:srgbClr val=\"4F81BD\"/></a:accent1>",
+            "<a:accent1><a:srgbClr val=\"EE4455\"/></a:accent1>",
+        ),
+        _ => xml,
+    });
+    let out = tmp("scheme-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 200, 100), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 191, 100), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 400, 120), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 500, 200), [255, 255, 255]);
+
+    let mapped = tmp("scheme-mapped");
+    rewrite_slide(&painted, &mapped, |xml| {
+        swap(
+            xml,
+            "<a:masterClrMapping/>",
+            "<a:overrideClrMapping bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent2\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>",
+        )
+    });
+    let mapped_png = tmp("scheme-mapped-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": mapped.to_string_lossy(),
+        "id": "slide:1",
+        "output": mapped_png.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&mapped_png).unwrap());
+    assert_eq!(pixel(&rgb, w, 200, 100), [0xC0, 0x50, 0x4D]);
+    assert_eq!(pixel(&rgb, w, 400, 120), [0, 0, 0]);
+
+    let shifted = tmp("scheme-lum");
+    rewrite_slide(&painted, &shifted, |xml| {
+        swap(
+            xml,
+            "<a:schemeClr val=\"accent1\"/>",
+            "<a:schemeClr val=\"accent1\"><a:lumMod val=\"50000\"/></a:schemeClr>",
+        )
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": shifted.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp("scheme-lum-png").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
 fn later_rect_covers_earlier_and_the_page_clips() {
     let src = tmp("stack-src");
     run_ok(json!({

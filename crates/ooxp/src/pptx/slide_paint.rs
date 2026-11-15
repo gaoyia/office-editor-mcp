@@ -349,7 +349,7 @@ fn visit(
                 }
                 blit_pic(pkg, slide_part, child, chain, rgb, width, height)?;
             }
-            "sp" => paint_sp(child, chain, rgb, width, height)?,
+            "sp" => paint_sp(pkg, slide_part, child, chain, rgb, width, height)?,
             "graphicFrame" => paint_frame(pkg, slide_part, child, chain, rgb, width, height)?,
             "grpSp" => {
                 if group_turns(child) {
@@ -392,6 +392,8 @@ fn map_box(xfrm: &Element, chain: &[super::layout_check::GroupXfrm]) -> (i64, i6
 
 /// 矩形、椭圆、圆角矩形和里面的文字。描边、半透明或转角对不上的矩形整块留空，页继续画。
 fn paint_sp(
+    pkg: &Package,
+    part: &str,
     sp: &Element,
     chain: &[super::layout_check::GroupXfrm],
     rgb: &mut [u8],
@@ -406,7 +408,7 @@ fn paint_sp(
         .and_then(|geom| geom.attr("prst"))
         .unwrap_or("");
     match prst {
-        "rect" => paint_rect(sp, sp_pr, chain, rgb, width, height),
+        "rect" => paint_rect(pkg, part, sp, sp_pr, chain, rgb, width, height),
         "ellipse" => paint_ellipse(sp, sp_pr, chain, rgb, width, height),
         "roundRect" => paint_round(sp, sp_pr, chain, rgb, width, height),
         _ => Err(unsupported()),
@@ -414,6 +416,8 @@ fn paint_sp(
 }
 
 fn paint_rect(
+    pkg: &Package,
+    part: &str,
     sp: &Element,
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
@@ -425,6 +429,13 @@ fn paint_rect(
         fill_rect(rgb, width, height, x, y, w, h, color);
         paint_tx(sp, x, y, w, h, rgb, width, height);
         return Ok(());
+    }
+    if let Some((x, y, w, h)) = plain_box(sp, chain) {
+        if let Some(color) = scheme_rect_color(pkg, part, sp_pr)? {
+            fill_rect(rgb, width, height, x, y, w, h, color);
+            paint_tx(sp, x, y, w, h, rgb, width, height);
+            return Ok(());
+        }
     }
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Ok(());
@@ -1930,6 +1941,17 @@ fn plain_rect(
     chain: &[super::layout_check::GroupXfrm],
 ) -> Option<([u8; 3], i32, i32, i32, i32)> {
     let sp_pr = sp.child_by_local("spPr")?;
+    let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
+    let (x, y, w, h) = plain_box(sp, chain)?;
+    Some((color, x, y, w, h))
+}
+
+/// 没有效果、没有描边的矩形像素框。填充另判。
+fn plain_box(
+    sp: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Option<(i32, i32, i32, i32)> {
+    let sp_pr = sp.child_by_local("spPr")?;
     if sp_pr.child_by_local("effectLst").is_some()
         || sp_pr.child_by_local("scene3d").is_some()
         || sp_pr.child_by_local("sp3d").is_some()
@@ -1944,7 +1966,6 @@ fn plain_rect(
     if !line_is_clear(sp_pr) {
         return None;
     }
-    let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
     let (x, y, cx, cy) = xfrm_box(xfrm);
     let (x, y, cx, cy) = turned_box(x, y, cx, cy, xfrm.attr("rot"))?;
     let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
@@ -1953,7 +1974,67 @@ fn plain_rect(
     if w <= 0 || h <= 0 {
         return None;
     }
-    Some((color, emu_px(x), emu_px(y), w, h))
+    Some((emu_px(x), emu_px(y), w, h))
+}
+
+/// 实心矩形上没有颜色变换的 `schemeClr`。不是这种填充时返回 `None`，解析不了则整页失败。
+fn scheme_rect_color(pkg: &Package, part: &str, sp_pr: &Element) -> Result<Option<[u8; 3]>, Error> {
+    let Some(fill) = sp_pr.child_by_local("solidFill") else {
+        return Ok(None);
+    };
+    let Some(clr) = only_child(fill) else {
+        return Ok(None);
+    };
+    if clr.local_name() != "schemeClr" {
+        return Ok(None);
+    }
+    scheme_rgb(pkg, part, clr).ok_or_else(unsupported).map(Some)
+}
+
+/// 按这块所在部件的配色表和母版主题取色。规则与页底的 `plain_color` 相同。
+fn scheme_rgb(pkg: &Package, part: &str, clr: &Element) -> Option<[u8; 3]> {
+    if part.contains("/slideMasters/") {
+        let master = super::list_pin::parse_part(pkg, part).ok()?;
+        let theme = theme_doc(pkg, part)?;
+        return plain_color(clr, master.root.child_by_local("clrMap"), Some(&theme.root));
+    }
+    if part.contains("/slideLayouts/") {
+        let layout = super::list_pin::parse_part(pkg, part).ok()?;
+        let master_part = linked_part(pkg, part, "/slideMaster").ok().flatten()?;
+        let master = super::list_pin::parse_part(pkg, &master_part).ok()?;
+        let theme = theme_doc(pkg, &master_part)?;
+        let map = override_map(&layout.root).or_else(|| master.root.child_by_local("clrMap"));
+        return plain_color(clr, map, Some(&theme.root));
+    }
+    let slide = super::list_pin::parse_part(pkg, part).ok()?;
+    let layout_part = linked_part(pkg, part, "/slideLayout").ok().flatten();
+    let layout = match &layout_part {
+        Some(path) => super::list_pin::parse_part(pkg, path).ok(),
+        None => None,
+    };
+    let master_part = match &layout_part {
+        Some(path) => linked_part(pkg, path, "/slideMaster").ok().flatten(),
+        None => None,
+    };
+    let master = match &master_part {
+        Some(path) => super::list_pin::parse_part(pkg, path).ok(),
+        None => None,
+    };
+    let theme = match &master_part {
+        Some(path) => theme_doc(pkg, path),
+        None => None,
+    };
+    let map = color_map(
+        &slide.root,
+        layout.as_ref().map(|doc| &doc.root),
+        master.as_ref().map(|doc| &doc.root),
+    );
+    plain_color(clr, map, theme.as_ref().map(|doc| &doc.root))
+}
+
+fn theme_doc(pkg: &Package, master_part: &str) -> Option<crate::xml::Document> {
+    let part = linked_part(pkg, master_part, "/theme").ok().flatten()?;
+    super::list_pin::parse_part(pkg, &part).ok()
 }
 
 fn line_is_clear(sp_pr: &Element) -> bool {
