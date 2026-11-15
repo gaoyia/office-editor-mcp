@@ -1300,20 +1300,20 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
         .child_by_local("font")
         .and_then(|font| font.child_by_local("color"))
         .and_then(|el| palette.resolve(el));
-    // 差分边框先只认实线。虚线、双线和斜线仍让整表失败。
+    // 竖向 dashed 的相位和 slantDashDot 的末端还没对齐。这两种和斜线仍让整表失败。
     let edges = match dxf.child_by_local("border") {
         None => Edges::default(),
-        Some(border) => solid_only(parse_edges(border, palette)?)?,
+        Some(border) => accepted_dxf_edges(parse_edges(border, palette)?)?,
     };
     Ok(Dxf { fill, color, edges })
 }
 
-fn solid_only(edges: Edges) -> Result<Edges, Error> {
+fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
     for edge in [edges.left, edges.right, edges.top, edges.bottom]
         .into_iter()
         .flatten()
     {
-        if edge.kind != LineKind::Solid {
+        if matches!(edge.kind, LineKind::Dashed | LineKind::SlantDashDot) {
             return Err(unsupported());
         }
     }

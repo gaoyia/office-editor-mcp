@@ -506,6 +506,48 @@ fn formula_false_does_not_paint_a_border() {
 }
 
 #[test]
+fn formula_dotted_right_paints_like_a_cell_border() {
+    let src = tmp("dot-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("dot");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A2",
+                "type": "expression", "formulas": ["TRUE"],
+                "dxf": { "border": { "right": { "style": "dotted", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 41));
+    assert_eq!(pixel(&px, w, 64, 20), [0, 0, 0]);
+    assert_eq!(pixel(&px, w, 64, 21), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 64, 23), [0, 0, 0]);
+}
+
+#[test]
 fn dashed_and_cell_is_borders_still_fail() {
     let src = tmp("dash-src");
     run_ok(json!({
@@ -530,6 +572,23 @@ fn dashed_and_cell_is_borders_still_fail() {
     }));
     assert_eq!(
         export(&dashed).unwrap_err().code(),
+        ErrorCode::NotImplemented
+    );
+
+    let slant = tmp("slant");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": slant.to_string_lossy(),
+        "ops": [{
+            "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1",
+            "type": "expression", "formulas": ["TRUE"],
+            "dxf": { "border": { "right": { "style": "slantDashDot", "color": { "rgb": "FF000000" } } } }
+        }]
+    }));
+    assert_eq!(
+        export(&slant).unwrap_err().code(),
         ErrorCode::NotImplemented
     );
 
