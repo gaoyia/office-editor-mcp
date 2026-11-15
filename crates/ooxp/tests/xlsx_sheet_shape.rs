@@ -323,6 +323,100 @@ fn an_identity_group_paints_the_same_rectangles() {
 }
 
 #[test]
+fn an_identity_group_can_cross_a_column() {
+    let src = tmp("src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "B1", "value": "" }
+        ] }] }
+    }));
+    let shaped = tmp("shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+              "from": "A1", "cx": 9525, "cy": 9525 }
+        ]
+    }));
+    let book = tmp("cross");
+    rewrite(&shaped, &book, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = CROSS_XML.to_string();
+        }
+    });
+    let (w, h, rgb) = decode_png(&export(&book));
+    assert_eq!((w, h), (129, 41));
+    assert_block(&rgb, w, 8, 24, 8, 20);
+    assert_eq!(pixel(&rgb, w, 24, 8), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 71, 8), [255, 255, 255]);
+    assert_block(&rgb, w, 72, 82, 8, 20);
+    assert_eq!(pixel(&rgb, w, 82, 8), [255, 255, 255]);
+}
+
+#[test]
+fn an_identity_group_can_cross_a_row() {
+    let src = tmp("src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "A3", "value": "" }
+        ] }] }
+    }));
+    let shaped = tmp("shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 30 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": 30 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+              "from": "A1", "cx": 9525, "cy": 9525 }
+        ]
+    }));
+    let book = tmp("down");
+    rewrite(&shaped, &book, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = ROW_XML.to_string();
+        }
+    });
+    let (w, h, rgb) = decode_png(&export(&book));
+    assert_eq!((w, h), (65, 121));
+    assert_block(&rgb, w, 8, 20, 48, 58);
+    assert_eq!(pixel(&rgb, w, 8, 47), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 8, 58), [255, 255, 255]);
+    assert_block(&rgb, w, 8, 20, 88, 98);
+    assert_eq!(pixel(&rgb, w, 8, 87), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 8, 98), [255, 255, 255]);
+}
+
+#[test]
 fn a_scaled_group_fails_the_sheet() {
     let xml = GROUP_XML.replace(
         r#"<a:chExt cx="238125" cy="76200"/>"#,
@@ -518,6 +612,12 @@ fn with_theme(src: &Path) -> PathBuf {
 
 const SCHEME_THEME: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Probe"><a:themeElements><a:clrScheme name="Probe"><a:dk1><a:sysClr val="windowText" lastClr="010203"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="EE4455"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme></a:themeElements></a:theme>"#;
+
+const CROSS_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from><xdr:to><xdr:col>1</xdr:col><xdr:colOff>171450</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>190500</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="76200" y="76200"/><a:ext cx="704850" cy="114300"/><a:chOff x="76200" y="76200"/><a:chExt cx="704850" cy="114300"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="76200" y="76200"/><a:ext cx="152400" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="685800" y="76200"/><a:ext cx="95250" cy="114300"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
+
+const ROW_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>190500</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>171450</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="7" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="76200" y="457200"/><a:ext cx="114300" cy="476250"/><a:chOff x="76200" y="457200"/><a:chExt cx="114300" cy="476250"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="4" name="形状 3"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="76200" y="457200"/><a:ext cx="114300" cy="95250"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="5" name="形状 4"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="76200" y="838200"/><a:ext cx="114300" cy="95250"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
 
 const GROUP_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>9525</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>9525</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>247650</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>85725</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合 3"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="238125" cy="76200"/><a:chOff x="9525" y="9525"/><a:chExt cx="238125" cy="76200"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="76200" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="190500" y="9525"/><a:ext cx="57150" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;

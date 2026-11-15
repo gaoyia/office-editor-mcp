@@ -584,7 +584,7 @@ fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Resu
     Ok(color)
 }
 
-/// 同一单元格里、变换是恒等的组合。子矩形的坐标和没编组时一样。
+/// 变换是恒等的组合。组坐标从工作表左上角量起，和锚点框按像素重合才画。可以跨格。
 fn identity_group(
     anchor: &Element,
     kind: AnchorKind,
@@ -600,13 +600,7 @@ fn identity_group(
     if kind != AnchorKind::TwoCell {
         return Err(unsupported());
     }
-    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
-    let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
-    let from = from.ok_or_else(unsupported)?;
-    let to = to.ok_or_else(unsupported)?;
-    if from.col != to.col || from.row != to.row {
-        return Err(unsupported());
-    }
+    let anchor_box = rect_edges(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
     let group = anchor.child_by_local("grpSp").ok_or_else(unsupported)?;
     let pr = group.child_by_local("grpSpPr").ok_or_else(unsupported)?;
     if pr
@@ -630,24 +624,29 @@ fn identity_group(
     if off_x != ch_x || off_y != ch_y || cx != ch_cx || cy != ch_cy || cx <= 0 || cy <= 0 {
         return Err(unsupported());
     }
-    if col_off != off_x || row_off != off_y {
-        return Err(unsupported());
-    }
     let end_x = off_x.checked_add(cx).ok_or_else(unsupported)?;
     let end_y = off_y.checked_add(cy).ok_or_else(unsupported)?;
-    if to_x != end_x || to_y != end_y {
-        return Err(unsupported());
-    }
-    let x_from = axis_origin(from.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
-    let y_from = axis_origin(from.row, r0, rows, &mut |row| {
+    // 组里的 EMU 从 A1 左上角量起。格子下标从 1 起，不是从锚点那一格量起。
+    let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let origin_y = axis_origin(1, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
+    let group_box = (
+        origin_x + round_px(off_x)?,
+        origin_y + round_px(off_y)?,
+        origin_x + round_px(end_x)?,
+        origin_y + round_px(end_y)?,
+    );
+    if anchor_box != group_box {
+        return Err(unsupported());
+    }
     let mut rects = Vec::new();
     for child in group.element_children() {
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, ch_x, ch_y, ch_cx, ch_cy)?;
+                let (x0, y0, x1, y1) =
+                    child_rect(child, origin_x, origin_y, ch_x, ch_y, ch_cx, ch_cy)?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
