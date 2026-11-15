@@ -349,7 +349,7 @@ fn not_contains_paints_a_missing_cell() {
     quiet_row(&rgb, w, 50, RED);
 }
 
-fn duplicate_book(cells: serde_json::Value) -> PathBuf {
+fn duplicate_book(cells: serde_json::Value, kind: &str) -> PathBuf {
     let src = tmp("dup-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -409,7 +409,7 @@ fn duplicate_book(cells: serde_json::Value) -> PathBuf {
                 }
                 let last = list.last().unwrap()["ref"].as_str().unwrap();
                 let rule = format!(
-                    "<conditionalFormatting sqref=\"A1:{last}\"><cfRule type=\"duplicateValues\" dxfId=\"0\" priority=\"1\"/></conditionalFormatting>"
+                    "<conditionalFormatting sqref=\"A1:{last}\"><cfRule type=\"{kind}\" dxfId=\"0\" priority=\"1\"/></conditionalFormatting>"
                 );
                 xml = xml.replace("</worksheet>", &format!("{rule}</worksheet>"));
                 data = xml.into_bytes();
@@ -426,14 +426,17 @@ fn duplicate_book(cells: serde_json::Value) -> PathBuf {
 
 #[test]
 fn duplicate_values_paint_numeric_text_and_ignore_case() {
-    let book = duplicate_book(json!([
-        { "ref": "A1", "value": 1 },
-        { "ref": "A2", "value": 2 },
-        { "ref": "A3", "value": "1.00" },
-        { "ref": "A4", "value": "" },
-        { "ref": "A5", "value": "Ab" },
-        { "ref": "A6", "value": "ab" }
-    ]));
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": 2 },
+            { "ref": "A3", "value": "1.00" },
+            { "ref": "A4", "value": "" },
+            { "ref": "A5", "value": "Ab" },
+            { "ref": "A6", "value": "ab" }
+        ]),
+        "duplicateValues",
+    );
     let (w, h, rgb) = decode_png(&export(&book).unwrap());
     assert_eq!((w, h), (65, 121));
     quiet_row(&rgb, w, 10, RED);
@@ -452,9 +455,33 @@ fn duplicate_values_paint_numeric_text_and_ignore_case() {
 
 #[test]
 fn unparsed_numeric_text_fails_the_sheet() {
-    let book = duplicate_book(json!([
-        { "ref": "A1", "value": "$1" },
-        { "ref": "A2", "value": 1 }
-    ]));
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": "$1" },
+            { "ref": "A2", "value": 1 }
+        ]),
+        "duplicateValues",
+    );
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn unique_values_paint_only_the_single_occurrence() {
+    let book = duplicate_book(
+        json!([
+            { "ref": "A1", "value": 1 },
+            { "ref": "A2", "value": 2 },
+            { "ref": "A3", "value": 1 },
+            { "ref": "A4", "value": "1.00" }
+        ]),
+        "uniqueValues",
+    );
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    quiet_row(&rgb, w, 10, [255, 255, 255]);
+    quiet_row(&rgb, w, 30, RED);
+    quiet_row(&rgb, w, 50, [255, 255, 255]);
+    quiet_row(&rgb, w, 70, [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 1, 61), [0x00, 0x80, 0x00]);
+    assert_eq!(pixel(&rgb, w, 7, 61), [255, 255, 255]);
 }

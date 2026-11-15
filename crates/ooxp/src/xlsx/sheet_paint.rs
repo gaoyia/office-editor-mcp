@@ -2518,7 +2518,8 @@ fn paint_rules(
                 let _ = rule_numbers(rule)?;
             }
             "dataBar" | "expression" | "aboveAverage" | "top10" | "containsText"
-            | "notContainsText" | "beginsWith" | "endsWith" | "duplicateValues" => {}
+            | "notContainsText" | "beginsWith" | "endsWith" | "duplicateValues"
+            | "uniqueValues" => {}
             _ => return Err(unsupported()),
         }
     }
@@ -2775,8 +2776,14 @@ fn cf_fill(
                         None
                     }
                 }
-                "duplicateValues" => {
-                    if duplicate_hit(cells, &areas, col, row)? {
+                "duplicateValues" | "uniqueValues" => {
+                    if value_hit(
+                        cells,
+                        &areas,
+                        col,
+                        row,
+                        rule.attr("type") == Some("uniqueValues"),
+                    )? {
                         dxf_fill(styles, rule)?
                     } else {
                         None
@@ -3363,11 +3370,12 @@ fn paint_text_number_marks(
     Ok(())
 }
 
-fn duplicate_hit(
+fn value_hit(
     cells: &HashMap<(u32, u32), CellRec>,
     areas: &[(CellRef, CellRef)],
     col: u32,
     row: u32,
+    unique: bool,
 ) -> Result<bool, Error> {
     let mut counts: HashMap<DupKey, usize> = HashMap::new();
     let mut here = None;
@@ -3383,7 +3391,14 @@ fn duplicate_hit(
         }
         *counts.entry(key).or_default() += 1;
     }
-    Ok(here.is_some_and(|key| counts.get(&key).copied().unwrap_or(0) >= 2))
+    Ok(here.is_some_and(|key| {
+        let n = counts.get(&key).copied().unwrap_or(0);
+        if unique {
+            n == 1
+        } else {
+            n >= 2
+        }
+    }))
 }
 
 fn duplicate_key(cell: &CellRec) -> Result<Option<DupKey>, Error> {
@@ -3641,7 +3656,13 @@ fn dxf_color(
                 "expression" => expression_hit(session, rule, &areas, col, row)?,
                 "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
                 | "endsWith" => simple_hit(cells, rule, &areas, col, row)?,
-                "duplicateValues" => duplicate_hit(cells, &areas, col, row)?,
+                "duplicateValues" | "uniqueValues" => value_hit(
+                    cells,
+                    &areas,
+                    col,
+                    row,
+                    rule.attr("type") == Some("uniqueValues"),
+                )?,
                 _ => false,
             };
             if !applies {

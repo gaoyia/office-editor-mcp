@@ -71,6 +71,7 @@ $order = @(
     'xlsx-cf-average-image'
     'xlsx-cf-dash-image'
     'xlsx-cf-duplicate-image'
+    'xlsx-cf-unique-image'
     'xlsx-chart-3d'
     'xlsx-chart-name'
     'xlsx-chart-series-ref'
