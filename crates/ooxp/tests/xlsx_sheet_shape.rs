@@ -473,6 +473,23 @@ fn a_child_quarter_turn_paints_the_rotated_rectangle() {
 }
 
 #[test]
+fn a_child_flip_keeps_the_same_rectangle() {
+    let xml = CHILD_TURN_XML
+        .replace("rot=\"5400000\"", "rot=\"5400000\" flipH=\"1\"")
+        .replace(
+            "<a:xfrm><a:off x=\"762000\"",
+            "<a:xfrm flipV=\"1\"><a:off x=\"762000\"",
+        );
+    let (w, h, rgb) = paint_drawing(&["A1", "B1", "A2", "B2"], &[1, 2], 30.0, &xml);
+    assert_eq!((w, h), (129, 81));
+    assert_block(&rgb, w, 32, 48, 1, 48);
+    assert_block(&rgb, w, 80, 104, 16, 32);
+    assert_eq!(pixel(&rgb, w, 31, 10), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 48, 10), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 80, 15), [255, 255, 255]);
+}
+
+#[test]
 fn a_child_at_another_angle_fails_the_sheet() {
     let src = drawing_book(
         &["A1", "B1", "A2", "B2"],

@@ -779,9 +779,7 @@ fn child_rect(
         .child_by_local("spPr")
         .and_then(|pr| pr.child_by_local("xfrm"))
         .ok_or_else(unsupported)?;
-    if truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV")) {
-        return Err(unsupported());
-    }
+    // 纯色矩形绕自己的中心翻转后，外接框不变，也可以和直角叠在一起。
     let (x, y, w, h) = local_box(xfrm)?;
     let x1_emu = x.checked_add(w).ok_or_else(unsupported)?;
     let y1_emu = y.checked_add(h).ok_or_else(unsupported)?;
