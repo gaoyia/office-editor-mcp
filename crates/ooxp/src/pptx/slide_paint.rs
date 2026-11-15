@@ -2593,6 +2593,32 @@ mod tests {
     }
 
     #[test]
+    fn an_inner_quarter_turn_maps_before_the_outer_group() {
+        let outer = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm><a:off x="952500" y="209550"/><a:ext cx="781050" cy="1333500"/><a:chOff x="952500" y="209550"/><a:chExt cx="781050" cy="1333500"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let inner = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="952500" y="762000"/><a:ext cx="1333500" cy="228600"/><a:chOff x="952500" y="762000"/><a:chExt cx="1333500" cy="228600"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let outer = crate::xml::parse(outer.as_bytes()).unwrap();
+        let inner = crate::xml::parse(inner.as_bytes()).unwrap();
+        let chain = [
+            super::super::layout_check::group_xfrm(&outer.root),
+            super::super::layout_check::group_xfrm(&inner.root),
+        ];
+        let wide = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="952500" y="762000"/><a:ext cx="762000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="1905000" y="762000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let wide = crate::xml::parse(wide.as_bytes()).unwrap();
+        let side = crate::xml::parse(side.as_bytes()).unwrap();
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (158, 22, 24, 80));
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (158, 122, 24, 40));
+
+        let chain = [super::super::layout_check::group_xfrm(&outer.root)];
+        let extra = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="952500" y="1143000"/><a:ext cx="571500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let extra = crate::xml::parse(extra.as_bytes()).unwrap();
+        let (_, x, y, w, h) = plain_rect(&extra.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (100, 120, 60, 20));
+    }
+
+    #[test]
     fn crop_percent_lands_on_whole_pixels_or_not_at_all() {
         assert_eq!(percent_px(25_000, 4), Some(1));
         assert_eq!(percent_px(33_333, 3), Some(1));
