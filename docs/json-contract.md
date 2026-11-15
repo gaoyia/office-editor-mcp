@@ -12,7 +12,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
-xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线画成 PNG。像素不进 inspect。
+xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。像素不进 inspect。有字、表格和图还不画。
@@ -2383,7 +2383,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ## exportSparklineImage
 
-按迷你图组 id 把这一组里的一条折线画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里只有这条线，没有格子的文字、填充和边框。
+按迷你图组 id 把这一组里的一条折线或非负柱形画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里只有这条线或这些柱，没有格子的文字、填充和边框。
 
 ```json
 {
@@ -2412,7 +2412,11 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `minAxisType` / `maxAxisType` 缺省是 `individual`。`group` 在这一组只有一条时与它相同。`custom` 用 `manualMin` / `manualMax`，缺了或最小值不小于最大值时报 `NotImplemented`。超出轴端的数收到轴端
 - 线色用 `colorSeries` 的 `rgb`。没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 线宽缺省 0.75 磅，按 96 dpi 换成像素
-- 柱形、盈亏、标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
+- 柱形在每个点都是有限非负数、没有空格子时可以画。柱是纯色，没有抗锯齿。色用 `colorSeries` 的 `rgb`，没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
+- 柱形横向：格子宽减去 5 后按点数等分，槽从第 3 列像素起。第 i 根柱（从 0 起）占这一槽正中的三分之二。左缘是 `floor(3 + (i + 1/6) × 槽宽)`，右缘含端点是 `ceil(3 + (i + 5/6) × 槽宽) - 1`。右缘正好落在整数上时，这一列不画
+- 柱形纵向和折线同一段：上沿是 5，下沿含端点是高度减 4。绘图高是高度减 8。最小值和最大值取这些数自己。全部相同且大于 0 时每根柱都铺满。全部是 0 时不画。其余柱高是 `floor((值 - 最小) / (最大 - 最小) × (绘图高 - 1)) + 1`，底边贴下沿。值是 0 且最小值也是 0 时这一根不画，槽仍占着
+- 柱形不读自定义轴。有负数、空格子、标记、高点、低点、首点、末点、负值着色、横坐标、日期轴、从右到左，或宽小于 6、高小于 9，报 `NotImplemented`
+- 盈亏，以及折线上的标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
 - 源格子落在隐藏的行或列上，且没有 `displayHidden`，报 `NotImplemented`。`displayHidden` 为真时，隐藏格子的缓存照样画
 - docx 与 pptx 报 `InvalidField`
 - 找不到组报 `IdNotFound`。id 不是迷你图组 id 报 `InvalidId`

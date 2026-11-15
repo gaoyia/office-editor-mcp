@@ -1,5 +1,6 @@
-//! 折线迷你图。几何按 Excel 16.0 空单元格量出来的位置。
-//! 左右各留 2 像素，点落在等分格的正中。纵轴上沿 5 像素，下沿是高度减 4。
+//! 折线迷你图和柱形迷你图。几何按 Excel 16.0 空单元格量出来的位置。
+//! 折线左右各留 2 像素，点落在等分格的正中。纵轴上沿 5 像素，下沿是高度减 4。
+//! 柱形槽从第 3 列起、右端留 2，柱占槽的三分之二。柱是纯色，没有抗锯齿。
 
 use crate::error::{Error, ErrorKind};
 
@@ -60,6 +61,81 @@ pub(crate) fn render(width: u32, height: u32, spec: &LineSpec) -> Result<Vec<u8>
         }
     }
     encode_png(width, height, &px)
+}
+
+/// 非负柱形。宽至少 6、高至少 9，否则上下左右的留白叠在一起。
+pub(crate) fn render_columns(
+    width: u32,
+    height: u32,
+    values: &[f64],
+    color: [u8; 3],
+) -> Result<Vec<u8>, Error> {
+    if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
+        return Err(unsupported());
+    }
+    if values.is_empty() || values.iter().any(|n| !n.is_finite() || *n < 0.0) {
+        return Err(unsupported());
+    }
+    let mut px = vec![255u8; (width as usize) * (height as usize) * 3];
+    let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let plot_h = height as i32 - 8;
+    let bottom = height as i32 - 4;
+    for (index, value) in values.iter().enumerate() {
+        let bar = bar_px(*value, lo, hi, plot_h);
+        if bar <= 0 {
+            continue;
+        }
+        let Some((x0, x1)) = column_x(width, values.len(), index) else {
+            return Err(unsupported());
+        };
+        if x1 < x0 {
+            continue;
+        }
+        let y0 = bottom - bar + 1;
+        for y in y0..=bottom {
+            for x in x0..=x1 {
+                if x >= 0 && y >= 0 && (x as u32) < width && (y as u32) < height {
+                    put(&mut px, width, x as u32, y as u32, color);
+                }
+            }
+        }
+    }
+    encode_png(width, height, &px)
+}
+
+/// 槽宽是 `(宽 - 5) / 点数`。第 i 根柱的左右缘是 `3 + (i + 1/6) * 槽宽` 与 `3 + (i + 5/6) * 槽宽`。
+/// 左缘取 floor，右缘是不含端点的 ceil 再减 1。整数除法与这个取整相同。
+fn column_x(width: u32, count: usize, index: usize) -> Option<(i32, i32)> {
+    let n = i64::try_from(count).ok()?;
+    let i = i64::try_from(index).ok()?;
+    let span = i64::from(width) - 5;
+    if n <= 0 || span <= 0 {
+        return None;
+    }
+    let den = 6_i64.checked_mul(n)?;
+    let x0 = 3 + (6 * i + 1).checked_mul(span)? / den;
+    let k = (6 * i + 5).checked_mul(span)?;
+    let q = k / den;
+    let x1 = 3 + if k % den == 0 { q - 1 } else { q };
+    Some((i32::try_from(x0).ok()?, i32::try_from(x1).ok()?))
+}
+
+fn bar_px(value: f64, lo: f64, hi: f64, plot_h: i32) -> i32 {
+    if hi == lo {
+        return if hi > 0.0 { plot_h } else { 0 };
+    }
+    if value == 0.0 && lo == 0.0 {
+        return 0;
+    }
+    let t = (value - lo) / (hi - lo);
+    let h = (t * f64::from(plot_h - 1)).floor() as i32 + 1;
+    h.clamp(0, plot_h)
+}
+
+fn put(px: &mut [u8], width: u32, x: u32, y: u32, color: [u8; 3]) {
+    let i = ((y as usize) * (width as usize) + x as usize) * 3;
+    px[i..i + 3].copy_from_slice(&color);
 }
 
 fn plotted(spec: &LineSpec) -> Vec<(usize, f64)> {

@@ -1,4 +1,4 @@
-//! exportSparklineImage：一组里的一条折线画成 PNG。柱形和标记不画。
+//! exportSparklineImage：一组里的一条折线，或没有负数的柱形，画成 PNG。标记不画。
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -37,7 +37,7 @@ fn pixel(rgb: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
     [rgb[i], rgb[i + 1], rgb[i + 2]]
 }
 
-fn book(tag: &str) -> PathBuf {
+fn book_with(tag: &str, values: [i64; 3]) -> PathBuf {
     let path = tmp(tag);
     run_ok(json!({
         "schemaVersion": 1,
@@ -47,14 +47,18 @@ fn book(tag: &str) -> PathBuf {
             "sheets": [{
                 "name": "Sheet1",
                 "cells": [
-                    { "ref": "B1", "value": 1 },
-                    { "ref": "C1", "value": 4 },
-                    { "ref": "D1", "value": 2 }
+                    { "ref": "B1", "value": values[0] },
+                    { "ref": "C1", "value": values[1] },
+                    { "ref": "D1", "value": values[2] }
                 ]
             }]
         }
     }));
     path
+}
+
+fn book(tag: &str) -> PathBuf {
+    book_with(tag, [1, 4, 2])
 }
 
 fn insert_line(src: &Path) -> PathBuf {
@@ -114,22 +118,126 @@ fn line_sparkline_is_a_png_of_the_cell() {
     assert!(start[2] > 140, "起点像素 {start:?}");
 }
 
-#[test]
-fn column_markers_and_missing_ids_are_rejected() {
-    let src = insert_line(&book("reject"));
-    let column = tmp("column");
+fn set_type(src: &Path, tag: &str, kind: &str) -> PathBuf {
+    let out = tmp(tag);
     run_ok(json!({
         "schemaVersion": 1,
         "action": "apply",
         "path": src.to_string_lossy(),
-        "output": column.to_string_lossy(),
+        "output": out.to_string_lossy(),
         "ops": [{
             "op": "setSparkline",
             "id": "sheet:Sheet1/spark:1",
-            "type": "column"
+            "type": kind
         }]
     }));
-    let err = export(&column, "sheet:Sheet1/spark:1").unwrap_err();
+    out
+}
+
+const SERIES: [u8; 3] = [0x37, 0x60, 0x92];
+
+/// 含端点的柱。坐标来自 Excel 16.0 的空单元格，不从绘制函数回推。
+fn assert_bars(rgb: &[u8], width: u32, height: u32, bars: &[(u32, u32, u32, u32)]) {
+    for y in 0..height {
+        for x in 0..width {
+            let inside = bars
+                .iter()
+                .any(|(x0, x1, y0, y1)| x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1);
+            let want = if inside { SERIES } else { [255, 255, 255] };
+            assert_eq!(pixel(rgb, width, x, y), want, "像素 ({x},{y})");
+        }
+    }
+}
+
+#[test]
+fn column_sparkline_matches_the_measured_bars() {
+    let src = set_type(&insert_line(&book("col")), "col-set", "column");
+    let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
+    assert_eq!((w, h), (64, 20));
+    assert_bars(
+        &rgb,
+        w,
+        h,
+        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+    );
+}
+
+#[test]
+fn column_sparkline_on_a_wider_cell_uses_the_same_slots() {
+    let line = insert_line(&book("wide"));
+    let src = tmp("wide-set");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": line.to_string_lossy(),
+        "output": src.to_string_lossy(),
+        "ops": [
+            { "op": "setSparkline", "id": "sheet:Sheet1/spark:1", "type": "column" },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 15 }
+        ]
+    }));
+    let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
+    assert_eq!((w, h), (110, 20));
+    assert_bars(
+        &rgb,
+        w,
+        h,
+        &[(8, 32, 16, 16), (43, 67, 5, 16), (78, 102, 13, 16)],
+    );
+}
+
+#[test]
+fn column_sparkline_skips_a_zero_when_the_minimum_is_zero() {
+    let src = set_type(
+        &insert_line(&book_with("zero", [0, 2, 4])),
+        "zero-set",
+        "column",
+    );
+    let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
+    assert_eq!((w, h), (64, 20));
+    assert_bars(&rgb, w, h, &[(25, 39, 11, 16), (45, 58, 5, 16)]);
+}
+
+#[test]
+fn column_sparkline_of_equal_positives_fills_the_plot() {
+    let src = set_type(
+        &insert_line(&book_with("same", [4, 4, 4])),
+        "same-set",
+        "column",
+    );
+    let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
+    assert_bars(
+        &rgb,
+        w,
+        h,
+        &[(6, 19, 5, 16), (25, 39, 5, 16), (45, 58, 5, 16)],
+    );
+}
+
+#[test]
+fn column_sparkline_of_all_zeros_is_blank() {
+    let src = set_type(
+        &insert_line(&book_with("blank", [0, 0, 0])),
+        "blank-set",
+        "column",
+    );
+    let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
+    assert_bars(&rgb, w, h, &[]);
+}
+
+#[test]
+fn negatives_stacked_markers_and_missing_ids_are_rejected() {
+    let src = insert_line(&book("reject"));
+    let negative = set_type(
+        &insert_line(&book_with("neg", [-1, 1, 2])),
+        "neg-set",
+        "column",
+    );
+    let err = export(&negative, "sheet:Sheet1/spark:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let stacked = set_type(&src, "stacked", "stacked");
+    let err = export(&stacked, "sheet:Sheet1/spark:1").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 
     let marked = tmp("marked");

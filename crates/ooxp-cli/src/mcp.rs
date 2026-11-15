@@ -294,7 +294,7 @@ fn tools(lang: Lang) -> Value {
             ),
             tool(
                 "exportSparklineImage",
-                say(lang, "按迷你图组 id 把一条折线画成 PNG 写到 output。源文件保持不变，像素不进入 inspect 树。", "Draw one line sparkline to a PNG at output by sparkline group id. The source file stays unchanged, and the pixels do not enter the inspect tree."),
+                say(lang, "按迷你图组 id 把一条折线或非负柱形画成 PNG 写到 output。源文件保持不变，像素不进入 inspect 树。", "Draw one line sparkline, or one non-negative column sparkline, to a PNG at output by sparkline group id. The source file stays unchanged, and the pixels do not enter the inspect tree."),
                 domain_properties(Action::ExportSparklineImage, lang),
                 &["path", "id", "output"],
                 lang,

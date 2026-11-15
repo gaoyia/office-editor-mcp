@@ -1416,7 +1416,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SparklineImageUnsupported => {
-            "This sparkline cannot be drawn to PNG yet. Only one line in a group is drawn, without markers, high or low points, an axis, or a date axis, and the cell must be 1 to 4096 pixels"
+            "This sparkline cannot be drawn to PNG yet. Only one line in a group is drawn, or a column sparkline whose values are all non-negative and present. Markers, high or low points, an axis, and a date axis are not drawn, and the cell must fall in the drawable size range"
                 .into()
         }
         ErrorKind::SheetImageUnsupported => {

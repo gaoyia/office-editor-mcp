@@ -45,7 +45,7 @@ docx 的 `exportMedia` 认图、OLE、墨迹画布、3D 与嵌入字体。图写
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
-xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
+xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
@@ -579,7 +579,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportSparklineImage
 
-调用方给出源 xlsx、迷你图组 id 和本地目标路径。库打开包，用格子缓存和这个格子的宽高，把一条折线画成 PNG。包不写回。像素不进 inspect。不是这条折线则失败。docx 与 pptx 直接拒绝。
+调用方给出源 xlsx、迷你图组 id 和本地目标路径。库打开包，用格子缓存和这个格子的宽高，把一条折线或非负柱形画成 PNG。包不写回。像素不进 inspect。不是这两种则失败。docx 与 pptx 直接拒绝。
 
 ### exportSheetImage
 

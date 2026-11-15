@@ -42,7 +42,7 @@ Production use and commercial use require a commercial license from the author. 
 | `exportMedia` | Write the original bytes of a picture, audio, video, OLE object, ink, 3D model, or embedded font to disk by id |
 | `exportChartData` | Write the original embedding workbook of a docx or pptx chart to disk by chart id |
 | `exportChartImage` | Draw an xlsx clustered column chart to PNG by chart id. The package is unchanged, and the pixels do not enter inspect |
-| `exportSparklineImage` | Draw one xlsx line sparkline to PNG by sparkline group id. The package is unchanged, and the pixels do not enter inspect |
+| `exportSparklineImage` | Draw one xlsx line sparkline, or one non-negative column sparkline, to PNG by sparkline group id. The package is unchanged, and the pixels do not enter inspect |
 | `exportSheetImage` | Draw an xlsx worksheet's used range to PNG by sheet id. The package is unchanged, and the pixels do not enter inspect |
 | `exportSlideImage` | Draw a slide's background, shapes, text, clustered column chart, and table by slide id. The package is unchanged, and the pixels do not enter inspect |
 | `exportPageImage` | Draw one docx page that has no text to a PNG by page id. The package is unchanged, and the pixels do not enter inspect |

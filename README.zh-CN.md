@@ -42,7 +42,7 @@
 | `exportMedia` | 按 id 把图片、音视频、OLE、墨迹、3D 模型或嵌入字体的原字节写到本地 |
 | `exportChartData` | 按图表 id 把 docx / pptx 的 embedding 工作簿原字节写到本地 |
 | `exportChartImage` | 按图表 id 把 xlsx 簇状柱形图画成 PNG。不改包，像素不进 inspect |
-| `exportSparklineImage` | 按迷你图组 id 把一条折线画成 PNG。不改包，像素不进 inspect |
+| `exportSparklineImage` | 按迷你图组 id 把一条折线或非负柱形画成 PNG。不改包，像素不进 inspect |
 | `exportSheetImage` | 按工作表 id 把已用区域画成 PNG。不改包，像素不进 inspect |
 | `exportSlideImage` | 按幻灯片 id 把页底、形状、文字、簇状柱形图和表写成图。不改包，像素不进 inspect |
 | `exportPageImage` | 按页 id 把 docx 里没有字的一页写成 PNG。不改包，像素不进 inspect |

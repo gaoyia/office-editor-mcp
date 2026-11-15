@@ -800,7 +800,8 @@ fn paint_group(
     group: &Element,
     cells: &CellCache,
 ) -> Result<Vec<u8>, Error> {
-    if !is_plain_line(group) {
+    let column = is_plain_column(group);
+    if !column && !is_plain_line(group) {
         return Err(image_unsupported());
     }
     let item = only_sparkline(group)?;
@@ -818,23 +819,36 @@ fn paint_group(
     }
     let width = layout::col_width_px(sheet, host.col);
     let height = layout::row_height_px(sheet, host.row);
+    let color = series_rgb(group)?;
+    if column {
+        let axis_min = axis_end(group, "minAxisType", "manualMin")?;
+        let axis_max = axis_end(group, "maxAxisType", "manualMax")?;
+        if axis_min.is_some() || axis_max.is_some() {
+            return Err(image_unsupported());
+        }
+        let mut values = Vec::with_capacity(cached.len());
+        for value in &cached {
+            match point_of(value) {
+                Some(n) if n.is_finite() && n >= 0.0 => values.push(n),
+                _ => return Err(image_unsupported()),
+            }
+        }
+        return super::sparkline_paint::render_columns(width, height, &values, color);
+    }
     let values = cached.iter().map(point_of).collect();
     let spec = super::sparkline_paint::LineSpec {
         values,
         empty: empty_mode(group),
         axis_min: axis_end(group, "minAxisType", "manualMin")?,
         axis_max: axis_end(group, "maxAxisType", "manualMax")?,
-        color: series_rgb(group)?,
+        color,
         weight_px: line_weight_px(group)?,
     };
     super::sparkline_paint::render(width, height, &spec)
 }
 
-fn is_plain_line(group: &Element) -> bool {
-    matches!(
-        group.attr("type").map(str::trim),
-        None | Some("") | Some("line")
-    ) && !attr_on(group, "markers")
+fn plain_flags(group: &Element) -> bool {
+    !attr_on(group, "markers")
         && !attr_on(group, "high")
         && !attr_on(group, "low")
         && !attr_on(group, "first")
@@ -843,6 +857,17 @@ fn is_plain_line(group: &Element) -> bool {
         && !attr_on(group, "displayXAxis")
         && !attr_on(group, "dateAxis")
         && !attr_on(group, "rightToLeft")
+}
+
+fn is_plain_line(group: &Element) -> bool {
+    matches!(
+        group.attr("type").map(str::trim),
+        None | Some("") | Some("line")
+    ) && plain_flags(group)
+}
+
+fn is_plain_column(group: &Element) -> bool {
+    group.attr("type").is_some_and(|raw| raw.trim() == "column") && plain_flags(group)
 }
 
 fn only_sparkline(group: &Element) -> Result<&Element, Error> {
