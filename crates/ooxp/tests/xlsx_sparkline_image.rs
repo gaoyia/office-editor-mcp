@@ -1,4 +1,5 @@
-//! exportSparklineImage：一组里的一条折线，或没有负数的柱形，画成 PNG。标记不画。
+//! exportSparklineImage：一组里的一条折线，或没有负数的柱形，画成 PNG。
+//! 柱形的高点、低点、首点和末点换成纯色。折线上的标记不画。
 
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -225,6 +226,134 @@ fn column_sparkline_of_all_zeros_is_blank() {
     assert_bars(&rgb, w, h, &[]);
 }
 
+const LOW: [u8; 3] = [0x11, 0x22, 0x33];
+const HIGH: [u8; 3] = [0xEE, 0x44, 0x55];
+fn assert_colored(rgb: &[u8], width: u32, height: u32, bars: &[(u32, u32, u32, u32, [u8; 3])]) {
+    for y in 0..height {
+        for x in 0..width {
+            let mut want = [255, 255, 255];
+            for (x0, x1, y0, y1, color) in bars {
+                if x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1 {
+                    want = *color;
+                }
+            }
+            assert_eq!(pixel(rgb, width, x, y), want, "像素 ({x},{y})");
+        }
+    }
+}
+
+fn column_with(tag: &str, values: [i64; 3], fields: serde_json::Value) -> (u32, u32, Vec<u8>) {
+    let line = insert_line(&book_with(tag, values));
+    let src = tmp(tag);
+    let mut op = json!({
+        "op": "setSparkline",
+        "id": "sheet:Sheet1/spark:1",
+        "type": "column"
+    });
+    for (key, value) in fields.as_object().unwrap() {
+        op[key] = value.clone();
+    }
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": line.to_string_lossy(),
+        "output": src.to_string_lossy(),
+        "ops": [op]
+    }));
+    decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap())
+}
+
+#[test]
+fn column_point_colors_keep_low_then_high_then_last() {
+    let (w, h, rgb) = column_with(
+        "points",
+        [1, 4, 2],
+        json!({
+            "low": true,
+            "high": true,
+            "colors": {
+                "low": { "rgb": "FF112233" },
+                "high": { "rgb": "FFEE4455" }
+            }
+        }),
+    );
+    assert_eq!((w, h), (64, 20));
+    assert_colored(
+        &rgb,
+        w,
+        h,
+        &[
+            (6, 19, 16, 16, LOW),
+            (25, 39, 5, 16, HIGH),
+            (45, 58, 13, 16, SERIES),
+        ],
+    );
+
+    let (w, h, rgb) = column_with(
+        "equal-points",
+        [3, 3, 3],
+        json!({
+            "low": true,
+            "high": true,
+            "colors": {
+                "low": { "rgb": "FF112233" },
+                "high": { "rgb": "FFEE4455" }
+            }
+        }),
+    );
+    assert_colored(
+        &rgb,
+        w,
+        h,
+        &[
+            (6, 19, 5, 16, LOW),
+            (25, 39, 5, 16, LOW),
+            (45, 58, 5, 16, LOW),
+        ],
+    );
+
+    let (w, h, rgb) = column_with(
+        "low-last",
+        [2, 4, 1],
+        json!({
+            "low": true,
+            "last": true,
+            "colors": {
+                "low": { "rgb": "FFEE4455" },
+                "last": { "rgb": "FFABCDEF" }
+            }
+        }),
+    );
+    assert_colored(
+        &rgb,
+        w,
+        h,
+        &[
+            (6, 19, 13, 16, SERIES),
+            (25, 39, 5, 16, SERIES),
+            (45, 58, 16, 16, HIGH),
+        ],
+    );
+}
+
+#[test]
+fn column_markers_and_an_unused_negative_flag_keep_the_series() {
+    let (w, h, rgb) = column_with("col-markers", [1, 4, 2], json!({ "markers": true }));
+    assert_bars(
+        &rgb,
+        w,
+        h,
+        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+    );
+    let (w, h, rgb) = column_with("col-negative", [1, 4, 2], json!({ "negative": true }));
+    assert_bars(
+        &rgb,
+        w,
+        h,
+        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+    );
+}
+
 #[test]
 fn negatives_stacked_markers_and_missing_ids_are_rejected() {
     let src = insert_line(&book("reject"));
@@ -238,6 +367,38 @@ fn negatives_stacked_markers_and_missing_ids_are_rejected() {
 
     let stacked = set_type(&src, "stacked", "stacked");
     let err = export(&stacked, "sheet:Sheet1/spark:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let high_line = tmp("high-line");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": high_line.to_string_lossy(),
+        "ops": [{
+            "op": "setSparkline",
+            "id": "sheet:Sheet1/spark:1",
+            "high": true
+        }]
+    }));
+    let err = export(&high_line, "sheet:Sheet1/spark:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let axis_line = insert_line(&book_with("axis", [1, 4, 2]));
+    let axis = tmp("axis");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": axis_line.to_string_lossy(),
+        "output": axis.to_string_lossy(),
+        "ops": [{
+            "op": "setSparkline",
+            "id": "sheet:Sheet1/spark:1",
+            "type": "column",
+            "displayXAxis": true
+        }]
+    }));
+    let err = export(&axis, "sheet:Sheet1/spark:1").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 
     let marked = tmp("marked");

@@ -833,7 +833,8 @@ fn paint_group(
                 _ => return Err(image_unsupported()),
             }
         }
-        return super::sparkline_paint::render_columns(width, height, &values, color);
+        let colors = column_colors(group, &values, color)?;
+        return super::sparkline_paint::render_columns(width, height, &values, &colors);
     }
     let values = cached.iter().map(point_of).collect();
     let spec = super::sparkline_paint::LineSpec {
@@ -867,7 +868,57 @@ fn is_plain_line(group: &Element) -> bool {
 }
 
 fn is_plain_column(group: &Element) -> bool {
-    group.attr("type").is_some_and(|raw| raw.trim() == "column") && plain_flags(group)
+    group.attr("type").is_some_and(|raw| raw.trim() == "column") && column_flags(group)
+}
+
+/// 柱形上的标记不改变像素。负值着色只在出现负数时才改画面，那种柱仍不画。
+fn column_flags(group: &Element) -> bool {
+    !attr_on(group, "displayXAxis") && !attr_on(group, "dateAxis") && !attr_on(group, "rightToLeft")
+}
+
+/// 同一根柱同时命中时，按低点、高点、首点、末点留第一种。
+fn column_colors(group: &Element, values: &[f64], series: [u8; 3]) -> Result<Vec<[u8; 3]>, Error> {
+    let low = point_rgb(group, "low", "colorLow")?;
+    let high = point_rgb(group, "high", "colorHigh")?;
+    let first = point_rgb(group, "first", "colorFirst")?;
+    let last = point_rgb(group, "last", "colorLast")?;
+    let min = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let n = values.len();
+    Ok(values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| {
+            if let Some(color) = low.filter(|_| *value == min) {
+                return color;
+            }
+            if let Some(color) = high.filter(|_| *value == max) {
+                return color;
+            }
+            if let Some(color) = first.filter(|_| index == 0) {
+                return color;
+            }
+            if let Some(color) = last.filter(|_| index + 1 == n) {
+                return color;
+            }
+            series
+        })
+        .collect())
+}
+
+fn point_rgb(group: &Element, flag: &str, color_name: &str) -> Result<Option<[u8; 3]>, Error> {
+    if !attr_on(group, flag) {
+        return Ok(None);
+    }
+    let Some(el) = group.child_by_local(color_name) else {
+        return Ok(Some([0xD0, 0x00, 0x00]));
+    };
+    let Some(raw) = el.attr("rgb") else {
+        return Err(image_unsupported());
+    };
+    parse_series_rgb(raw)
+        .map(Some)
+        .ok_or_else(image_unsupported)
 }
 
 fn only_sparkline(group: &Element) -> Result<&Element, Error> {

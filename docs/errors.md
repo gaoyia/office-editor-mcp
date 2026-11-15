@@ -1161,7 +1161,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - docx 与 pptx 上发 `exportChartImage` 报 `InvalidField`
 - `exportSparklineImage` 找不到迷你图组报 `IdNotFound`
 - `exportSparklineImage` 的 id 不是迷你图组 id 报 `InvalidId`
-- 不是折线，也不是符合条件的非负柱形，或宽高不在能画的范围里，`exportSparklineImage` 报 `NotImplemented`
+- 不是折线，也不是符合条件的非负柱形，或宽高不在能画的范围里，`exportSparklineImage` 报 `NotImplemented`。柱形的高点、低点、首点和末点可以换成纯色。折线上的这些点、柱形的负值、坐标轴和日期轴仍报 `NotImplemented`
 - docx 与 pptx 上发 `exportSparklineImage` 报 `InvalidField`
 - `exportSheetImage` 找不到工作表报 `IdNotFound`
 - `exportSheetImage` 的 id 不是 `sheet:{name}` 报 `InvalidId`

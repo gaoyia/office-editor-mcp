@@ -15922,8 +15922,8 @@
     "exportSparklineImageRequest": {
       "description": "把 xlsx 一组里的一条折线或非负柱形迷你图画成 PNG。",
       "descriptionEn": "Draw one line sparkline, or one non-negative column sparkline, in an xlsx group to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。id 是 sheet:{name}/spark:{n}。一组只能有一条，落点只能是一个格子。折线可以画。柱形只在每个点都是非负数、没有空格子时画。盈亏、标记、高低点、首末点、负值、横坐标、日期轴、从右到左，以及柱形上的负数和空格子，报 NotImplemented。数值用包里已有的缓存。docx 与 pptx 报 InvalidField。宽或高超出能画的范围也报 NotImplemented。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. id is sheet:{name}/spark:{n}. The group must hold one sparkline, and the location must be one cell. A line can be drawn. A column is drawn only when every point is non-negative and present. Win/loss, markers, high and low points, first and last points, negatives, the axis, a date axis, right-to-left, and a column with a negative or an empty cell return NotImplemented. Values come from caches already in the package. docx and pptx return InvalidField. Width or height outside the drawable range also returns NotImplemented.",
+      "limits": "只读。不改源包，像素不进 inspect。id 是 sheet:{name}/spark:{n}。一组只能有一条，落点只能是一个格子。折线可以画。柱形只在每个点都是非负数、没有空格子时画。高点、低点、首点和末点换成纯色，同一根柱按低点、高点、首点、末点留第一种。盈亏、折线上的标记和这些点、柱形的负值、横坐标、日期轴、从右到左，以及柱形上的空格子，报 NotImplemented。数值用包里已有的缓存。docx 与 pptx 报 InvalidField。宽或高超出能画的范围也报 NotImplemented。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. id is sheet:{name}/spark:{n}. The group must hold one sparkline, and the location must be one cell. A line can be drawn. A column is drawn only when every point is non-negative and present. High, low, first, and last points use a solid color, and one bar keeps the first match in that order. Win/loss, those points on a line, a negative column, the axis, a date axis, right-to-left, and an empty column cell return NotImplemented. Values come from caches already in the package. docx and pptx return InvalidField. Width or height outside the drawable range also returns NotImplemented.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [

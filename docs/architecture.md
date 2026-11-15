@@ -579,7 +579,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportSparklineImage
 
-调用方给出源 xlsx、迷你图组 id 和本地目标路径。库打开包，用格子缓存和这个格子的宽高，把一条折线或非负柱形画成 PNG。包不写回。像素不进 inspect。不是这两种则失败。docx 与 pptx 直接拒绝。
+调用方给出源 xlsx、迷你图组 id 和本地目标路径。库打开包，用格子缓存和这个格子的宽高，把一条折线或非负柱形画成 PNG。柱形的高点、低点、首点和末点换成纯色，同一根柱按低点、高点、首点、末点的顺序留第一种。包不写回。像素不进 inspect。不是这两种则失败。docx 与 pptx 直接拒绝。
 
 ### exportSheetImage
 

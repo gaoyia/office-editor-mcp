@@ -68,12 +68,15 @@ pub(crate) fn render_columns(
     width: u32,
     height: u32,
     values: &[f64],
-    color: [u8; 3],
+    colors: &[[u8; 3]],
 ) -> Result<Vec<u8>, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
-    if values.is_empty() || values.iter().any(|n| !n.is_finite() || *n < 0.0) {
+    if values.is_empty()
+        || colors.len() != values.len()
+        || values.iter().any(|n| !n.is_finite() || *n < 0.0)
+    {
         return Err(unsupported());
     }
     let mut px = vec![255u8; (width as usize) * (height as usize) * 3];
@@ -96,7 +99,7 @@ pub(crate) fn render_columns(
         for y in y0..=bottom {
             for x in x0..=x1 {
                 if x >= 0 && y >= 0 && (x as u32) < width && (y as u32) < height {
-                    put(&mut px, width, x as u32, y as u32, color);
+                    put(&mut px, width, x as u32, y as u32, colors[index]);
                 }
             }
         }
