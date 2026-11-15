@@ -1134,6 +1134,31 @@ fn read_fill(fill: &Element, palette: &Palette) -> Fill {
     }
 }
 
+/// 差分填充没写 `patternType`、只有 `bgColor` 时，Excel 把它画成纯色。
+fn dxf_fill_color(fill: &Element, palette: &Palette) -> Result<Option<[u8; 3]>, Error> {
+    if fill.child_by_local("gradientFill").is_some() {
+        return Err(unsupported());
+    }
+    let Some(pat) = fill.child_by_local("patternFill") else {
+        return Ok(None);
+    };
+    if pat.attr("patternType").is_none() {
+        if pat.child_by_local("fgColor").is_some() {
+            return Err(unsupported());
+        }
+        let Some(color) = pat.child_by_local("bgColor") else {
+            return Ok(None);
+        };
+        return palette.resolve(color).map(Some).ok_or_else(unsupported);
+    }
+    match read_fill(fill, palette) {
+        Fill::None => Ok(None),
+        Fill::Solid(rgb) => Ok(Some(rgb)),
+        // 条件格式里的图案还没和 Excel 对过。
+        Fill::Pattern(_, _, _) | Fill::Nope => Err(unsupported()),
+    }
+}
+
 fn pattern_kind(name: &str) -> Option<PatternKind> {
     Some(match name {
         "gray125" => PatternKind::Gray125,
@@ -1289,12 +1314,7 @@ fn read_v(value: Option<&str>) -> Result<VAlign, Error> {
 fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
     let fill = match dxf.child_by_local("fill") {
         None => None,
-        Some(fill) => match read_fill(fill, palette) {
-            Fill::None => None,
-            Fill::Solid(rgb) => Some(rgb),
-            // 条件格式里的图案还没和 Excel 对过。
-            Fill::Pattern(_, _, _) | Fill::Nope => return Err(unsupported()),
-        },
+        Some(fill) => dxf_fill_color(fill, palette)?,
     };
     let color = dxf
         .child_by_local("font")
@@ -1973,6 +1993,7 @@ fn paint(
         &rects,
         session,
     )?;
+    paint_text_number_marks(&mut canvas, cells, &merges, &covered, &xs, &ys, c0, r0)?;
     paint_plain_rects(&mut canvas, shapes);
     if rtl {
         canvas.flip_horizontal();
@@ -2497,7 +2518,7 @@ fn paint_rules(
                 let _ = rule_numbers(rule)?;
             }
             "dataBar" | "expression" | "aboveAverage" | "top10" | "containsText"
-            | "notContainsText" | "beginsWith" | "endsWith" => {}
+            | "notContainsText" | "beginsWith" | "endsWith" | "duplicateValues" => {}
             _ => return Err(unsupported()),
         }
     }
@@ -2749,6 +2770,13 @@ fn cf_fill(
                 "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
                 | "endsWith" => {
                     if simple_hit(cells, rule, &areas, col, row)? {
+                        dxf_fill(styles, rule)?
+                    } else {
+                        None
+                    }
+                }
+                "duplicateValues" => {
+                    if duplicate_hit(cells, &areas, col, row)? {
                         dxf_fill(styles, rule)?
                     } else {
                         None
@@ -3264,6 +3292,209 @@ fn cell_text(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> String
         .unwrap_or_default()
 }
 
+#[derive(Clone, PartialEq, Eq, Hash)]
+enum DupKey {
+    Num(u64),
+    Text(String),
+    Bool(bool),
+}
+
+fn num_bits(n: f64) -> u64 {
+    let n = if n == 0.0 { 0.0 } else { n };
+    n.to_bits()
+}
+
+/// 重复值。没有值的格子不进比较。文字能看成数字时并进数字。
+const TEXT_NUMBER_MARK: [u8; 3] = [0x00, 0x80, 0x00];
+
+/// Excel 把存成文字的数字标上左上角绿三角。复制图片里这块是 6×6，盖住填充。
+fn paint_text_number_marks(
+    canvas: &mut Canvas,
+    cells: &HashMap<(u32, u32), CellRec>,
+    merges: &[Merge],
+    covered: &HashSet<(u32, u32)>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+) -> Result<(), Error> {
+    let mut jobs = Vec::new();
+    for merge in merges {
+        jobs.push((merge.c0, merge.r0, merge.c1, merge.r1));
+    }
+    let c1 = c0 + xs.origin.len() as u32 - 2;
+    let r1 = r0 + ys.origin.len() as u32 - 2;
+    for (col, row) in cells.keys() {
+        if *col < c0 || *row < r0 || *col > c1 || *row > r1 || covered.contains(&(*col, *row)) {
+            continue;
+        }
+        if merges
+            .iter()
+            .any(|merge| merge.c0 == *col && merge.r0 == *row)
+        {
+            continue;
+        }
+        jobs.push((*col, *row, *col, *row));
+    }
+    for (col, row, col_end, row_end) in jobs {
+        let Some(cell) = cells.get(&(col, row)) else {
+            continue;
+        };
+        let Shown::Text(text) = &cell.shown else {
+            continue;
+        };
+        if !matches!(parse_dup_number(text), Ok(Some(_))) {
+            continue;
+        }
+        let x0 = xs.origin[(col - c0) as usize];
+        let y0 = ys.origin[(row - r0) as usize];
+        let x1 = xs.origin[(col_end - c0) as usize + 1];
+        let y1 = ys.origin[(row_end - r0) as usize + 1];
+        for i in 0..6 {
+            for k in 0..(6 - i) {
+                let x = x0 + 1 + k;
+                let y = y0 + 1 + i;
+                if x < x1 && y < y1 {
+                    canvas.put(x, y, TEXT_NUMBER_MARK);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn duplicate_hit(
+    cells: &HashMap<(u32, u32), CellRec>,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    let mut counts: HashMap<DupKey, usize> = HashMap::new();
+    let mut here = None;
+    for ((c, r), cell) in cells {
+        if !in_areas(*c, *r, areas) {
+            continue;
+        }
+        let Some(key) = duplicate_key(cell)? else {
+            continue;
+        };
+        if *c == col && *r == row {
+            here = Some(key.clone());
+        }
+        *counts.entry(key).or_default() += 1;
+    }
+    Ok(here.is_some_and(|key| counts.get(&key).copied().unwrap_or(0) >= 2))
+}
+
+fn duplicate_key(cell: &CellRec) -> Result<Option<DupKey>, Error> {
+    match &cell.shown {
+        Shown::Empty => Ok(None),
+        Shown::Bool(value) => Ok(Some(DupKey::Bool(*value))),
+        Shown::Num(n) => Ok(Some(DupKey::Num(num_bits(*n)))),
+        Shown::Text(text) => {
+            if let Some(n) = parse_dup_number(text)? {
+                Ok(Some(DupKey::Num(num_bits(n))))
+            } else {
+                Ok(Some(DupKey::Text(text.to_lowercase())))
+            }
+        }
+    }
+}
+
+/// 没有数字时返回 `None`，交给文字比较。有数字但不是这套写法时整表失败。
+fn parse_dup_number(text: &str) -> Result<Option<f64>, Error> {
+    if !text.chars().any(|ch| ch.is_ascii_digit()) {
+        return Ok(None);
+    }
+    let mut body = text.trim();
+    let mut neg = false;
+    if let Some(inner) = body
+        .strip_prefix('(')
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        neg = true;
+        body = inner.trim();
+    } else if let Some(rest) = body.strip_prefix('+') {
+        body = rest.trim();
+    } else if let Some(rest) = body.strip_prefix('-') {
+        neg = true;
+        body = rest.trim();
+    }
+    let mut percent = false;
+    if let Some(rest) = body.strip_suffix('%') {
+        percent = true;
+        body = rest.trim_end();
+    }
+    let (mantissa, exp) = split_dup_exp(body)?;
+    let mut value = parse_dup_mantissa(mantissa)? * 10f64.powi(exp);
+    if percent {
+        value /= 100.0;
+    }
+    if neg {
+        value = -value;
+    }
+    if !value.is_finite() {
+        return Err(unsupported());
+    }
+    Ok(Some(value))
+}
+
+fn split_dup_exp(text: &str) -> Result<(&str, i32), Error> {
+    let Some(pos) = text.find(['e', 'E']) else {
+        return Ok((text, 0));
+    };
+    let exp = &text[pos + 1..];
+    if exp.is_empty() || exp.contains(['e', 'E']) {
+        return Err(unsupported());
+    }
+    let exp = exp.parse::<i32>().map_err(|_| unsupported())?;
+    Ok((&text[..pos], exp))
+}
+
+fn parse_dup_mantissa(text: &str) -> Result<f64, Error> {
+    if text.is_empty() {
+        return Err(unsupported());
+    }
+    let mut parts = text.split('.');
+    let int_part = parts.next().unwrap_or("");
+    let frac = parts.next();
+    if parts.next().is_some() || int_part.is_empty() || frac.is_some_and(str::is_empty) {
+        return Err(unsupported());
+    }
+    let digits = grouped_digits(int_part)?;
+    if let Some(frac) = frac {
+        if !frac.chars().all(|ch| ch.is_ascii_digit()) {
+            return Err(unsupported());
+        }
+        format!("{digits}.{frac}")
+            .parse()
+            .map_err(|_| unsupported())
+    } else {
+        digits.parse().map_err(|_| unsupported())
+    }
+}
+
+fn grouped_digits(text: &str) -> Result<String, Error> {
+    if !text.contains(',') {
+        if text.chars().all(|ch| ch.is_ascii_digit()) {
+            return Ok(text.to_string());
+        }
+        return Err(unsupported());
+    }
+    let groups: Vec<&str> = text.split(',').collect();
+    if groups.len() < 2
+        || groups[0].is_empty()
+        || groups[0].len() > 3
+        || groups[1..]
+            .iter()
+            .any(|group| group.len() != 3 || !group.chars().all(|ch| ch.is_ascii_digit()))
+        || !groups[0].chars().all(|ch| ch.is_ascii_digit())
+    {
+        return Err(unsupported());
+    }
+    Ok(groups.concat())
+}
+
 /// 高于平均、前 N 和文本规则。命中判断和检查结果用同一套。
 fn simple_hit(
     cells: &HashMap<(u32, u32), CellRec>,
@@ -3410,6 +3641,7 @@ fn dxf_color(
                 "expression" => expression_hit(session, rule, &areas, col, row)?,
                 "aboveAverage" | "top10" | "containsText" | "notContainsText" | "beginsWith"
                 | "endsWith" => simple_hit(cells, rule, &areas, col, row)?,
+                "duplicateValues" => duplicate_hit(cells, &areas, col, row)?,
                 _ => false,
             };
             if !applies {

@@ -4,7 +4,7 @@ use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, RunOutput};
+use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -347,4 +347,114 @@ fn not_contains_paints_a_missing_cell() {
     quiet_row(&rgb, w, 10, [255, 255, 255]);
     quiet_row(&rgb, w, 30, RED);
     quiet_row(&rgb, w, 50, RED);
+}
+
+fn duplicate_book(cells: serde_json::Value) -> PathBuf {
+    let src = tmp("dup-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells.clone() }] }
+    }));
+    let book = tmp("dup");
+    let mut ops = Vec::new();
+    let list = cells.as_array().unwrap();
+    let white = json!({ "color": { "rgb": "FFFFFFFF" } });
+    for (i, cell) in list.iter().enumerate() {
+        ops.push(json!({
+            "op": "setRowHeight",
+            "id": "sheet:Sheet1",
+            "row": i + 1,
+            "height": 15
+        }));
+        let r = cell["ref"].as_str().unwrap();
+        ops.push(json!({
+            "op": "setCellStyle",
+            "id": format!("cell:Sheet1!{r}"),
+            "font": white.clone()
+        }));
+    }
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": ops
+    }));
+    let bytes = std::fs::read(&book).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/styles.xml" {
+                let mut xml = String::from_utf8(data).unwrap();
+                let dxf = "<dxfs count=\"1\"><dxf><font><color rgb=\"FFEE4455\"/></font><fill><patternFill><bgColor rgb=\"FFEE4455\"/></patternFill></fill></dxf></dxfs>";
+                xml = xml.replace("</styleSheet>", &format!("{dxf}</styleSheet>"));
+                data = xml.into_bytes();
+            }
+            if name == "xl/worksheets/sheet1.xml" {
+                let mut xml = String::from_utf8(data).unwrap();
+                if !xml.contains("showGridLines") {
+                    xml = xml.replace(
+                        "<sheetData>",
+                        "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+                    );
+                }
+                let last = list.last().unwrap()["ref"].as_str().unwrap();
+                let rule = format!(
+                    "<conditionalFormatting sqref=\"A1:{last}\"><cfRule type=\"duplicateValues\" dxfId=\"0\" priority=\"1\"/></conditionalFormatting>"
+                );
+                xml = xml.replace("</worksheet>", &format!("{rule}</worksheet>"));
+                data = xml.into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    let dst = tmp("dup-grid");
+    std::fs::write(&dst, out.into_inner()).unwrap();
+    dst
+}
+
+#[test]
+fn duplicate_values_paint_numeric_text_and_ignore_case() {
+    let book = duplicate_book(json!([
+        { "ref": "A1", "value": 1 },
+        { "ref": "A2", "value": 2 },
+        { "ref": "A3", "value": "1.00" },
+        { "ref": "A4", "value": "" },
+        { "ref": "A5", "value": "Ab" },
+        { "ref": "A6", "value": "ab" }
+    ]));
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 121));
+    quiet_row(&rgb, w, 10, RED);
+    quiet_row(&rgb, w, 30, [255, 255, 255]);
+    quiet_row(&rgb, w, 50, RED);
+    quiet_row(&rgb, w, 70, [255, 255, 255]);
+    quiet_row(&rgb, w, 90, RED);
+    quiet_row(&rgb, w, 110, RED);
+    assert_eq!(pixel(&rgb, w, 1, 1), RED);
+    assert_eq!(pixel(&rgb, w, 1, 41), [0x00, 0x80, 0x00]);
+    assert_eq!(pixel(&rgb, w, 6, 41), [0x00, 0x80, 0x00]);
+    assert_eq!(pixel(&rgb, w, 7, 41), RED);
+    assert_eq!(pixel(&rgb, w, 1, 46), [0x00, 0x80, 0x00]);
+    assert_eq!(pixel(&rgb, w, 2, 46), RED);
+}
+
+#[test]
+fn unparsed_numeric_text_fails_the_sheet() {
+    let book = duplicate_book(json!([
+        { "ref": "A1", "value": "$1" },
+        { "ref": "A2", "value": 1 }
+    ]));
+    assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }

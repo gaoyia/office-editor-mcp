@@ -2474,6 +2474,8 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `aboveAverage` 只数区域内的数字，空格不算。高于平均是严格大于。`equalAverage` 为真时含等于。`aboveAverage` 为 0 时看低于平均。`stdDev` 用总体标准差，平方和除以个数。数字少于两个又写了 `stdDev` 时不铺。命中且差分是纯色时铺上该色
 - `top10` 的 `rank` 缺省是 10。`percent` 为真时，个数乘 `rank` 再除以 100，向上取整，至少 1。并列时阈值上的格子都算。`bottom` 为真时取最小的那些。命中且差分是纯色时铺上该色
 - `containsText`、`notContainsText`、`beginsWith`、`endsWith` 忽略大小写。`notContainsText` 也铺到区域内没有 `<c>` 的空位。命中且差分是纯色时铺上该色。这几类规则的差分边框仍报 `NotImplemented`
+- `duplicateValues` 只数有值的格子，没有 `<v>` 的格子不参与。数字按数值相等，格式不影响。文字忽略大小写。能看成数字的文字按数值并进数字，包括前后空格、千分位逗号、小数、科学计数、百分号和括号里的负数。百分号前面可以有空格。含有数字但对不上这套写法的文字报 `NotImplemented`。空字符串和空格按文字比，互不相等。布尔只和布尔比。命中且差分是纯色时铺上该色。差分填充没写 `patternType`、只有 `bgColor` 时也当纯色。这条规则的差分边框仍报 `NotImplemented`
+- 文字能按上面这套规则看成数字时，格子左上角内侧画 6×6 的直角三角，颜色是 `008000`。三角盖住填充和边框。没有数字的文字不画。含有数字但对不上写法时，没有重复值规则就不画三角，整表照常画
 - 自动筛选在表头右侧画 17×17 的按钮。箭头水平居中，尖端落在按钮正中。表头文字停在按钮左边
 - 字色、填充色和边框色认 `rgb`、主题色和索引色。主题色下标依次是 `lt1`、`dk1`、`lt2`、`dk2`、六个强调色、超链接、已访问的超链接，取工作簿主题里的颜色。没有主题部件时用 Office 默认色。`tint` 从 -1 到 1，负值变暗，正值变亮。`auto` 当黑色。下标对不上报 `NotImplemented`
 - 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`
@@ -2494,7 +2496,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 锚点的 EMU 除以 9525 后四舍五入。`oneCell` 的终点是起点单元格加上偏移和 `ext`。`twoCell` 的终点是 `to` 标记。矩形含起点，不含终点
 - 上边和左边的外框盖住矩形。矩形盖住格子、网格和边框。后画的矩形盖住先画的
 - 有描边、有字、旋转、翻转、不是矩形、组合、图片和其它图形，报 `NotImplemented`。隐藏行或隐藏列碰到这种矩形也报 `NotImplemented`
-- 斜线边框、渐变填充、认不出的图案、条件格式里的图案、图标集、重复值和其它还没画的条件格式，报 `NotImplemented`
+- 斜线边框、渐变填充、认不出的图案、条件格式里的图案、图标集和其它还没画的条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到工作表报 `IdNotFound`。id 不是 `sheet:{name}` 报 `InvalidId`
