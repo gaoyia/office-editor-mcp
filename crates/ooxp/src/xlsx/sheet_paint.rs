@@ -681,11 +681,8 @@ fn group_rects(
                 });
             }
             "grpSp" => {
+                // 里层转 90 度后，存下来的外框可以伸出父组合的子坐标。像素按换算结果取。
                 let inner = read_group_map(child)?;
-                let parent = chain.last().ok_or_else(unsupported)?;
-                if !frame_inside(&inner, parent) {
-                    return Err(unsupported());
-                }
                 let mut next = chain.to_vec();
                 next.push(inner);
                 rects.extend(group_rects(
@@ -696,22 +693,6 @@ fn group_rects(
         }
     }
     Ok(rects)
-}
-
-fn frame_inside(inner: &GroupMap, parent: &GroupMap) -> bool {
-    let Some(x1) = inner.off_x.checked_add(inner.cx) else {
-        return false;
-    };
-    let Some(y1) = inner.off_y.checked_add(inner.cy) else {
-        return false;
-    };
-    let Some(px1) = parent.ch_x.checked_add(parent.ch_cx) else {
-        return false;
-    };
-    let Some(py1) = parent.ch_y.checked_add(parent.ch_cy) else {
-        return false;
-    };
-    inner.off_x >= parent.ch_x && inner.off_y >= parent.ch_y && x1 <= px1 && y1 <= py1
 }
 
 /// 子矩形先绕自己的中心转 90 度的倍数，得到外接矩形，再交给组去缩放和旋转。
