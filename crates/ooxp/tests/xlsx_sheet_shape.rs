@@ -191,7 +191,8 @@ fn rectangle_covers_an_interior_border_and_leaves_the_frame() {
     let book = paint_red(&shaped);
     let (w, h, rgb) = decode_png(&export(&book));
     assert_eq!((w, h), (129, 21));
-    assert_eq!(pixel(&rgb, w, 64, 0), [255, 255, 255]);
+    // 格子没有上边，上面也没有底边，竖线从上边界涂起。
+    assert_eq!(pixel(&rgb, w, 64, 0), [0, 0, 0]);
     assert_block(&rgb, w, 60, 76, 1, 10);
     assert_eq!(pixel(&rgb, w, 64, 5), RED);
     assert_eq!(pixel(&rgb, w, 64, 10), [0, 0, 0]);

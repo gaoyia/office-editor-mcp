@@ -12,6 +12,7 @@
 //! 上边和左边的外框盖住矩形。
 
 use std::collections::{HashMap, HashSet};
+use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{Package, Relationships};
@@ -280,6 +281,19 @@ struct PlainRect {
     color: [u8; 3],
 }
 
+struct SheetPng {
+    x0: i32,
+    y0: i32,
+    w: u32,
+    h: u32,
+    rgb: Vec<u8>,
+}
+
+enum Overlay {
+    Fill(PlainRect),
+    Png(SheetPng),
+}
+
 /// 压到区域上的图形：纯色矩形留下，其余仍让整表失败。
 fn plain_rects(
     pkg: &Package,
@@ -293,7 +307,7 @@ fn plain_rects(
     r1: u32,
     cols: &[i32],
     rows: &[i32],
-) -> Result<Vec<PlainRect>, Error> {
+) -> Result<Vec<Overlay>, Error> {
     let mut out = Vec::new();
     for part in picture::drawing_parts(pkg, sheet_part)? {
         let doc = super::list_pin::parse_part(pkg, &part)?;
@@ -301,13 +315,29 @@ fn plain_rects(
             return Err(unsupported());
         }
         walk_anchors_forward(&doc.root, &mut |anchor, kind| {
-            if let Some(rect) = plain_rect(
-                anchor, kind, sheet, styles, cells, c0, r0, c1, r1, cols, rows,
-            )? {
-                if crosses_hidden(&rect, cols, rows) {
+            if !anchor_hits(anchor, kind, c0, r0, c1, r1)? {
+                return Ok(());
+            }
+            let (x0, y0, x1, y1) =
+                rect_edges(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
+            if crosses_hidden(x0, y0, x1, y1, cols, rows) {
+                return Err(unsupported());
+            }
+            if let Some(pic) = anchor.child_by_local("pic") {
+                if right_to_left(sheet) {
                     return Err(unsupported());
                 }
-                out.push(rect);
+                out.push(Overlay::Png(sheet_png(pkg, &part, pic, x0, y0, x1, y1)?));
+            } else if let Some(sp) = anchor.child_by_local("sp") {
+                out.push(Overlay::Fill(PlainRect {
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                    color: plain_color(sp)?,
+                }));
+            } else {
+                return Err(unsupported());
             }
             Ok(())
         })?;
@@ -339,53 +369,31 @@ fn walk_anchors_forward(
     Ok(())
 }
 
-fn plain_rect(
+fn anchor_hits(
     anchor: &Element,
     kind: AnchorKind,
-    sheet: &Element,
-    styles: &Styles,
-    cells: &HashMap<(u32, u32), CellRec>,
     c0: u32,
     r0: u32,
     c1: u32,
     r1: u32,
-    cols: &[i32],
-    rows: &[i32],
-) -> Result<Option<PlainRect>, Error> {
-    let hits = match kind {
+) -> Result<bool, Error> {
+    match kind {
         AnchorKind::TwoCell => {
             let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
             let (to, _, _) = picture::read_marker(anchor.child_by_local("to"))?;
-            match (from, to) {
+            Ok(match (from, to) {
                 (Some(a), Some(b)) => {
                     overlaps(a.col, b.col, c0, c1) && overlaps(a.row, b.row, r0, r1)
                 }
                 _ => false,
-            }
+            })
         }
         AnchorKind::OneCell => {
             let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
-            from.is_some_and(|a| a.col <= c1 && a.row <= r1)
+            Ok(from.is_some_and(|a| a.col <= c1 && a.row <= r1))
         }
-        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => {
-            return Err(unsupported());
-        }
-    };
-    if !hits {
-        return Ok(None);
+        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => Err(unsupported()),
     }
-    let Some(sp) = anchor.child_by_local("sp") else {
-        return Err(unsupported());
-    };
-    let color = plain_color(sp)?;
-    let (x0, y0, x1, y1) = rect_edges(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
-    Ok(Some(PlainRect {
-        x0,
-        y0,
-        x1,
-        y1,
-        color,
-    }))
 }
 
 fn rect_edges(
@@ -597,34 +605,183 @@ fn visible_text(el: &Element) -> bool {
     el.element_children().any(visible_text)
 }
 
-fn paint_plain_rects(canvas: &mut Canvas, shapes: &[PlainRect]) {
+fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
     for shape in shapes {
-        for y in shape.y0..shape.y1 {
-            // 外框盖住第一行和第一列，边框留在外框上。
-            if y <= 0 {
-                continue;
-            }
-            for x in shape.x0..shape.x1 {
-                if x <= 0 {
-                    continue;
+        match shape {
+            Overlay::Fill(shape) => {
+                for y in shape.y0..shape.y1 {
+                    // 外框盖住第一行和第一列，边框留在外框上。
+                    if y <= 0 {
+                        continue;
+                    }
+                    for x in shape.x0..shape.x1 {
+                        if x <= 0 {
+                            continue;
+                        }
+                        canvas.put(x, y, shape.color);
+                    }
                 }
-                canvas.put(x, y, shape.color);
+            }
+            Overlay::Png(shape) => {
+                for row in 0..shape.h {
+                    let y = shape.y0 + row as i32;
+                    if y <= 0 {
+                        continue;
+                    }
+                    for col in 0..shape.w {
+                        let x = shape.x0 + col as i32;
+                        if x <= 0 {
+                            continue;
+                        }
+                        let i = (row * shape.w + col) as usize * 3;
+                        canvas.put(x, y, [shape.rgb[i], shape.rgb[i + 1], shape.rgb[i + 2]]);
+                    }
+                }
             }
         }
     }
 }
 
-fn crosses_hidden(rect: &PlainRect, cols: &[i32], rows: &[i32]) -> bool {
+/// 目标框正好等于图片像素时，按原图贴上。缩放和半透明整表不做。
+fn sheet_png(
+    pkg: &Package,
+    drawing_part: &str,
+    pic: &Element,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+) -> Result<SheetPng, Error> {
+    accept_sheet_pic(pic)?;
+    let Some(w) = (x1 - x0).try_into().ok().filter(|w: &u32| *w > 0) else {
+        return Err(unsupported());
+    };
+    let Some(h) = (y1 - y0).try_into().ok().filter(|h: &u32| *h > 0) else {
+        return Err(unsupported());
+    };
+    let rid = pic
+        .child_by_local("blipFill")
+        .and_then(|fill| fill.child_by_local("blip"))
+        .and_then(|blip| blip.attr_local("embed"))
+        .filter(|rid| !rid.is_empty())
+        .ok_or_else(unsupported)?;
+    let media = crate::opc::resolve_id(pkg, drawing_part, rid).map_err(|_| unsupported())?;
+    let bytes = pkg.get(&media).map_err(|_| unsupported())?;
+    let (image_w, image_h, rgb) = decode_opaque_png(bytes)?;
+    if image_w != w || image_h != h {
+        return Err(unsupported());
+    }
+    Ok(SheetPng { x0, y0, w, h, rgb })
+}
+
+fn accept_sheet_pic(pic: &Element) -> Result<(), Error> {
+    if let Some(sp_pr) = pic.child_by_local("spPr") {
+        for child in sp_pr.element_children() {
+            match child.local_name() {
+                "xfrm" | "prstGeom" | "ln" => {}
+                _ => return Err(unsupported()),
+            }
+        }
+        if let Some(xfrm) = sp_pr.child_by_local("xfrm") {
+            if xfrm.attr("rot").is_some_and(|rot| rot != "0")
+                || truthy(xfrm.attr("flipH"))
+                || truthy(xfrm.attr("flipV"))
+            {
+                return Err(unsupported());
+            }
+        }
+        if let Some(geom) = sp_pr.child_by_local("prstGeom") {
+            if geom.attr("prst") != Some("rect") {
+                return Err(unsupported());
+            }
+        }
+        if let Some(ln) = sp_pr.child_by_local("ln") {
+            if ln.child_by_local("noFill").is_none()
+                || ln
+                    .element_children()
+                    .any(|child| child.local_name() != "noFill")
+            {
+                return Err(unsupported());
+            }
+        }
+    }
+    let fill = pic.child_by_local("blipFill").ok_or_else(unsupported)?;
+    for child in fill.element_children() {
+        match child.local_name() {
+            "blip" | "stretch" | "srcRect" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    if let Some(rect) = fill.child_by_local("srcRect") {
+        for name in ["l", "t", "r", "b"] {
+            if rect.attr(name).is_some_and(|raw| raw != "0") {
+                return Err(unsupported());
+            }
+        }
+    }
+    if let Some(rect) = fill
+        .child_by_local("stretch")
+        .and_then(|stretch| stretch.child_by_local("fillRect"))
+    {
+        for name in ["l", "t", "r", "b"] {
+            if rect.attr(name).is_some_and(|raw| raw != "0") {
+                return Err(unsupported());
+            }
+        }
+    }
+    let blip = fill.child_by_local("blip").ok_or_else(unsupported)?;
+    if blip
+        .element_children()
+        .any(|child| child.local_name() != "extLst")
+    {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+fn decode_opaque_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Error> {
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(unsupported());
+    }
+    let decoder = png::Decoder::new(Cursor::new(bytes));
+    let mut reader = decoder.read_info().map_err(|_| unsupported())?;
+    if reader.info().bit_depth != png::BitDepth::Eight {
+        return Err(unsupported());
+    }
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).map_err(|_| unsupported())?;
+    let raw = &buf[..frame.buffer_size()];
+    let rgb = match frame.color_type {
+        png::ColorType::Rgb => raw.to_vec(),
+        png::ColorType::Rgba => {
+            let mut out = Vec::with_capacity(raw.len() / 4 * 3);
+            for chunk in raw.chunks_exact(4) {
+                if chunk[3] != 255 {
+                    return Err(unsupported());
+                }
+                out.extend_from_slice(&chunk[..3]);
+            }
+            out
+        }
+        _ => return Err(unsupported()),
+    };
+    if rgb.len() != (frame.width as usize) * (frame.height as usize) * 3 {
+        return Err(unsupported());
+    }
+    Ok((frame.width, frame.height, rgb))
+}
+
+fn crosses_hidden(x0: i32, y0: i32, x1: i32, y1: i32, cols: &[i32], rows: &[i32]) -> bool {
     let mut at = 0;
     for size in cols {
-        if *size == 0 && rect.x0 <= at && rect.x1 > at {
+        if *size == 0 && x0 <= at && x1 > at {
             return true;
         }
         at += size;
     }
     at = 0;
     for size in rows {
-        if *size == 0 && rect.y0 <= at && rect.y1 > at {
+        if *size == 0 && y0 <= at && y1 > at {
             return true;
         }
         at += size;
@@ -1901,7 +2058,7 @@ fn paint(
     rows: &[i32],
     grid_lines: bool,
     rtl: bool,
-    shapes: &[PlainRect],
+    shapes: &[Overlay],
     session: &mut Option<FormulaSession>,
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
