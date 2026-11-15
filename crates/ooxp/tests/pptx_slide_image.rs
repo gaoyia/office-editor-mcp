@@ -543,6 +543,121 @@ fn grouped_rects_keep_their_boxes_and_scaled_groups_map_first() {
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
+#[test]
+fn whole_pixel_crop_copies_the_source_and_a_fractional_crop_fails() {
+    let src = tmp("crop-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    let mut raw = Vec::new();
+    for (r, g, b) in [
+        (0xFFu8, 0x00, 0x00),
+        (0x00, 0xFF, 0x00),
+        (0x00, 0x00, 0xFF),
+        (0xFF, 0xFF, 0x00),
+        (0xFF, 0x00, 0xFF),
+        (0x00, 0xFF, 0xFF),
+        (0x11, 0x22, 0x33),
+        (0x44, 0x55, 0x66),
+        (0x77, 0x88, 0x99),
+        (0xAA, 0xBB, 0xCC),
+        (0xDD, 0xEE, 0xFF),
+        (0x01, 0x02, 0x03),
+        (0x04, 0x05, 0x06),
+        (0x07, 0x08, 0x09),
+        (0x0A, 0x0B, 0x0C),
+        (0x0D, 0x0E, 0x0F),
+    ] {
+        raw.extend_from_slice(&[r, g, b]);
+    }
+    let mut png = Vec::new();
+    let mut encoder = png::Encoder::new(&mut png, 4, 4);
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&raw)
+        .unwrap();
+    std::fs::write(&png_path, png).unwrap();
+
+    let deck = tmp("crop-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "F0F0F0" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": 914400,
+                "y": 914400,
+                "cx": 19050,
+                "cy": 19050
+            }
+        ]
+    }));
+    let cropped = tmp("crop-whole");
+    rewrite_slide(&deck, &cropped, |xml| {
+        xml.replace(
+            "<a:blip r:embed=\"rId2\"/>",
+            "<a:blip r:embed=\"rId2\"/><a:srcRect l=\"25000\" t=\"25000\" r=\"25000\" b=\"25000\"/>",
+        )
+    });
+    let out = tmp("crop-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": cropped.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 96, 96), [0x00, 0xFF, 0xFF]);
+    assert_eq!(pixel(&rgb, w, 97, 96), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 96, 97), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 97, 97), [0xDD, 0xEE, 0xFF]);
+    assert_eq!(pixel(&rgb, w, 95, 96), [0xF0, 0xF0, 0xF0]);
+
+    let fractional = tmp("crop-frac");
+    rewrite_slide(&deck, &fractional, |xml| {
+        xml.replace(
+            "<a:blip r:embed=\"rId2\"/>",
+            "<a:blip r:embed=\"rId2\"/><a:srcRect l=\"12500\"/>",
+        )
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": fractional.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp("crop-frac-png").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
 fn rewrite_slide(src: &Path, dst: &Path, edit: impl FnOnce(String) -> String) {
     let bytes = std::fs::read(src).unwrap();
     let mut zip_in = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();

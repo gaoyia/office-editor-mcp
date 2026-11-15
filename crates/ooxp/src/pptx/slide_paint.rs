@@ -614,7 +614,7 @@ fn paint_chart(
     let png = crate::xlsx::render_clustered_chart(&doc.root, w as u32, h as u32, theme)
         .map_err(|_| unsupported())?;
     let image = decode_png(&png)?;
-    paint_image(rgb, width, height, x, y, w as u32, h as u32, &image);
+    paint_image(rgb, width, height, x, y, w as u32, h as u32, &image, None);
     Ok(())
 }
 
@@ -1798,13 +1798,6 @@ fn turned_box(x: i64, y: i64, cx: i64, cy: i64, rot: Option<&str>) -> Option<(i6
 }
 
 fn transformed(pic: &Element) -> bool {
-    if pic
-        .child_by_local("blipFill")
-        .and_then(|fill| fill.child_by_local("srcRect"))
-        .is_some()
-    {
-        return true;
-    }
     let Some(xfrm) = pic
         .child_by_local("spPr")
         .and_then(|sp| sp.child_by_local("xfrm"))
@@ -1859,17 +1852,90 @@ fn blit_pic(
     }
     let dest_x = emu_px(x);
     let dest_y = emu_px(y);
+    let dest_w = dest_w as u32;
+    let dest_h = dest_h as u32;
+    let crop = source_window(pic, image.w, image.h, dest_w, dest_h)?;
     paint_image(
-        rgb,
-        width,
-        height,
-        dest_x,
-        dest_y,
-        dest_w as u32,
-        dest_h as u32,
-        &image,
+        rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop,
     );
     Ok(())
+}
+
+/// 裁剪四边落到整像素，且裁完尺寸等于目标时，返回原图上的这块。
+/// 没有裁剪时返回 `None`，沿用原来的取样。对不齐的裁剪让整页失败。
+fn source_window(
+    pic: &Element,
+    image_w: u32,
+    image_h: u32,
+    dest_w: u32,
+    dest_h: u32,
+) -> Result<Option<(u32, u32, u32, u32)>, Error> {
+    let Some(fill) = pic.child_by_local("blipFill") else {
+        return Ok(None);
+    };
+    let Some(rect) = fill.child_by_local("srcRect") else {
+        return Ok(None);
+    };
+    let (l, t, r, b) = (
+        percent_attr(rect, "l")?,
+        percent_attr(rect, "t")?,
+        percent_attr(rect, "r")?,
+        percent_attr(rect, "b")?,
+    );
+    if l == 0 && t == 0 && r == 0 && b == 0 {
+        return Ok(None);
+    }
+    if fill.child_by_local("tile").is_some() || fill_rect_moves(fill) {
+        return Err(unsupported());
+    }
+    let left = percent_px(l, image_w).ok_or_else(unsupported)?;
+    let top = percent_px(t, image_h).ok_or_else(unsupported)?;
+    let right = percent_px(r, image_w).ok_or_else(unsupported)?;
+    let bottom = percent_px(b, image_h).ok_or_else(unsupported)?;
+    let Some(src_w) = image_w.checked_sub(left).and_then(|w| w.checked_sub(right)) else {
+        return Err(unsupported());
+    };
+    let Some(src_h) = image_h.checked_sub(top).and_then(|h| h.checked_sub(bottom)) else {
+        return Err(unsupported());
+    };
+    if src_w == 0 || src_h == 0 || src_w != dest_w || src_h != dest_h {
+        return Err(unsupported());
+    }
+    Ok(Some((left, top, src_w, src_h)))
+}
+
+fn percent_attr(el: &Element, name: &str) -> Result<i64, Error> {
+    match el.attr(name) {
+        None => Ok(0),
+        Some(raw) => raw.parse().map_err(|_| unsupported()),
+    }
+}
+
+/// 百分比换成像素。离整像素超过半个百分比量化步长时不认。
+fn percent_px(pct: i64, extent: u32) -> Option<u32> {
+    if pct < 0 {
+        return None;
+    }
+    let prod = i128::from(pct) * i128::from(extent);
+    let n = (prod + 50_000) / 100_000;
+    let err = (prod - n * 100_000).abs();
+    if err * 2 > i128::from(extent) || n > i128::from(extent) {
+        return None;
+    }
+    Some(n as u32)
+}
+
+fn fill_rect_moves(fill: &Element) -> bool {
+    let Some(rect) = fill
+        .child_by_local("stretch")
+        .and_then(|stretch| stretch.child_by_local("fillRect"))
+    else {
+        return false;
+    };
+    ["l", "t", "r", "b"].iter().any(|name| {
+        rect.attr(name)
+            .is_some_and(|raw| raw.parse::<i64>().ok() != Some(0))
+    })
 }
 
 fn pic_box(pic: &Element, chain: &[super::layout_check::GroupXfrm]) -> (i64, i64, i64, i64) {
@@ -1927,19 +1993,29 @@ fn paint_image(
     dest_w: u32,
     dest_h: u32,
     image: &Rgba,
+    crop: Option<(u32, u32, u32, u32)>,
 ) {
+    let (sx0, sy0) = crop.map(|(x, y, _, _)| (x, y)).unwrap_or((0, 0));
     for row in 0..dest_h {
         let y = dest_y + row as i32;
         if y < 0 || y >= height as i32 {
             continue;
         }
-        let sy = ((row as u64 * image.h as u64) / dest_h as u64).min(image.h as u64 - 1) as u32;
+        let sy = if crop.is_some() {
+            sy0 + row
+        } else {
+            ((row as u64 * image.h as u64) / dest_h as u64).min(image.h as u64 - 1) as u32
+        };
         for col in 0..dest_w {
             let x = dest_x + col as i32;
             if x < 0 || x >= width as i32 {
                 continue;
             }
-            let sx = ((col as u64 * image.w as u64) / dest_w as u64).min(image.w as u64 - 1) as u32;
+            let sx = if crop.is_some() {
+                sx0 + col
+            } else {
+                ((col as u64 * image.w as u64) / dest_w as u64).min(image.w as u64 - 1) as u32
+            };
             let si = ((sy as usize) * (image.w as usize) + sx as usize) * 4;
             let src = [
                 image.px[si],
@@ -2080,6 +2156,26 @@ mod tests {
         let xml = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="0" y="0"/><a:ext cx="914400" cy="914400"/><a:chOff x="0" y="0"/><a:chExt cx="914400" cy="914400"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
         assert!(group_turns(&doc.root));
+    }
+
+    #[test]
+    fn crop_percent_lands_on_whole_pixels_or_not_at_all() {
+        assert_eq!(percent_px(25_000, 4), Some(1));
+        assert_eq!(percent_px(33_333, 3), Some(1));
+        assert_eq!(percent_px(0, 4), Some(0));
+        assert_eq!(percent_px(12_500, 4), None);
+        assert_eq!(percent_px(-25_000, 4), None);
+    }
+
+    #[test]
+    fn one_to_one_crop_keeps_the_source_pixels() {
+        let xml = r#"<p:pic xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:blipFill><a:blip r:embed="rId2"/><a:srcRect l="25000" t="25000" r="25000" b="25000"/><a:stretch><a:fillRect/></a:stretch></p:blipFill></p:pic>"#;
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert_eq!(
+            source_window(&doc.root, 4, 4, 2, 2).unwrap(),
+            Some((1, 1, 2, 2))
+        );
+        assert!(source_window(&doc.root, 4, 4, 4, 4).is_err());
     }
 
     #[test]
