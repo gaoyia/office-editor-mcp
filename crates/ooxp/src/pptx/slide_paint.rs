@@ -2495,6 +2495,32 @@ mod tests {
     }
 
     #[test]
+    fn a_child_turn_and_a_group_turn_compose() {
+        let turned = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm rot="5400000"><a:off x="2514600" y="914400"/><a:ext cx="1752600" cy="1524000"/><a:chOff x="2514600" y="914400"/><a:chExt cx="1752600" cy="1524000"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let flipped = r#"<p:grpSp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:grpSpPr><a:xfrm flipH="1"><a:off x="2514600" y="3962400"/><a:ext cx="1752600" cy="1524000"/><a:chOff x="2514600" y="3962400"/><a:chExt cx="1752600" cy="1524000"/></a:xfrm></p:grpSpPr></p:grpSp>"#;
+        let turned = crate::xml::parse(turned.as_bytes()).unwrap();
+        let flipped = crate::xml::parse(flipped.as_bytes()).unwrap();
+        let wide = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm rot="5400000"><a:off x="1905000" y="1524000"/><a:ext cx="1524000" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="3810000" y="1524000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let wide = crate::xml::parse(wide.as_bytes()).unwrap();
+        let side = crate::xml::parse(side.as_bytes()).unwrap();
+        let chain = [super::super::layout_check::group_xfrm(&turned.root)];
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (276, 84, 160, 32));
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (340, 220, 32, 48));
+        let wide = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm rot="5400000"><a:off x="1905000" y="4572000"/><a:ext cx="1524000" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let side = r#"<p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:spPr><a:xfrm><a:off x="3810000" y="4572000"/><a:ext cx="457200" cy="304800"/></a:xfrm><a:prstGeom prst="rect"/><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>"#;
+        let wide = crate::xml::parse(wide.as_bytes()).unwrap();
+        let side = crate::xml::parse(side.as_bytes()).unwrap();
+        let chain = [super::super::layout_check::group_xfrm(&flipped.root)];
+        let (_, x, y, w, h) = plain_rect(&wide.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (416, 416, 32, 160));
+        let (_, x, y, w, h) = plain_rect(&side.root, &chain).unwrap();
+        assert_eq!((x, y, w, h), (264, 480, 48, 32));
+    }
+
+    #[test]
     fn crop_percent_lands_on_whole_pixels_or_not_at_all() {
         assert_eq!(percent_px(25_000, 4), Some(1));
         assert_eq!(percent_px(33_333, 3), Some(1));
