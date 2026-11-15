@@ -1,6 +1,7 @@
 //! 工作表已用区域出图。像素对齐 Excel 16.0 的 `Range.CopyPicture`（xlScreen、xlBitmap）。
 //! 不乘工作表 `zoomScale`。缩放 95 的销售看板金样仍是 100% 的 1095×418。
 //! `showGridLines` 为假时不画网格，上边和左边的外框留白，宽高不变。
+//! 隐藏行和隐藏列不占像素。这一边全部隐藏时只留 1 像素白。
 
 use std::collections::{HashMap, HashSet};
 
@@ -27,6 +28,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let root = &sheet_doc.root;
     reject_view(root)?;
+    reject_hidden_rules(root)?;
     let grid_lines = shows_grid(root);
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
@@ -94,6 +96,54 @@ fn shows_grid(sheet: &Element) -> bool {
     !view
         .attr("showGridLines")
         .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+/// 条件格式把隐藏格子算进最小、最大时，可见格子的颜色会变。这一期不猜，整表不画。
+fn reject_hidden_rules(sheet: &Element) -> Result<(), Error> {
+    let mut hidden_rows = HashSet::new();
+    if let Some(data) = sheet.child_by_local("sheetData") {
+        let mut prev = 0u32;
+        for row in data.children_by_local("row") {
+            let r = a1::row_after(prev, row.attr("r"));
+            prev = r;
+            if truthy(row.attr("hidden")) {
+                hidden_rows.insert(r);
+            }
+        }
+    }
+    let mut hidden_cols = Vec::new();
+    for cols in sheet.children_by_local("cols") {
+        for el in cols.children_by_local("col") {
+            if !truthy(el.attr("hidden")) {
+                continue;
+            }
+            let min = el.attr("min").and_then(|s| s.parse::<u32>().ok());
+            let max = el.attr("max").and_then(|s| s.parse::<u32>().ok());
+            if let (Some(min), Some(max)) = (min, max) {
+                hidden_cols.push((min, max));
+            }
+        }
+    }
+    if hidden_rows.is_empty() && hidden_cols.is_empty() {
+        return Ok(());
+    }
+    for block in sheet.children_by_local("conditionalFormatting") {
+        let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
+        for (a, b) in areas {
+            let r0 = a.row.min(b.row);
+            let r1 = a.row.max(b.row);
+            let c0 = a.col.min(b.col);
+            let c1 = a.col.max(b.col);
+            let row_hit = hidden_rows.iter().any(|row| *row >= r0 && *row <= r1);
+            let col_hit = hidden_cols
+                .iter()
+                .any(|(min, max)| c0 <= *max && c1 >= *min);
+            if row_hit || col_hit {
+                return Err(unsupported());
+            }
+        }
+    }
+    Ok(())
 }
 
 fn truthy(value: Option<&str>) -> bool {
@@ -857,9 +907,7 @@ fn read_cells(
     };
     let mut prev_row = 0u32;
     for row in data.children_by_local("row") {
-        if truthy(row.attr("hidden")) {
-            return Err(unsupported());
-        }
+        // 隐藏行也读。合并的锚点可能藏在这里，填充仍要铺到可见格子上。
         let r = a1::row_after(prev_row, row.attr("r"));
         prev_row = r;
         let mut prev_col = 0u32;
@@ -956,7 +1004,8 @@ fn column_px(sheet: &Element, col: u32, default: Option<f64>) -> Result<i32, Err
                 let max = el.attr("max").and_then(|s| s.parse::<u32>().ok());
                 if let (Some(min), Some(max)) = (min, max) {
                     if col >= min && col <= max {
-                        return Err(unsupported());
+                        // 隐藏列不占像素。XML 里的宽度留着，出图不用。
+                        return Ok(0);
                     }
                 }
             }
@@ -1000,11 +1049,15 @@ fn row_sizes(
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_ROW_PT);
     let mut custom = HashMap::new();
+    let mut hidden = HashSet::new();
     if let Some(data) = sheet.child_by_local("sheetData") {
         let mut prev = 0u32;
         for row in data.children_by_local("row") {
             let r = a1::row_after(prev, row.attr("r"));
             prev = r;
+            if truthy(row.attr("hidden")) {
+                hidden.insert(r);
+            }
             if let Some(ht) = row.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
                 custom.insert(r, ht);
             }
@@ -1012,6 +1065,10 @@ fn row_sizes(
     }
     let mut sizes = Vec::new();
     for row in r0..=r1 {
+        if hidden.contains(&row) {
+            sizes.push(0);
+            continue;
+        }
         let pt = if let Some(ht) = custom.get(&row) {
             *ht
         } else {
@@ -1094,6 +1151,10 @@ impl Axis {
 
     fn bitmap(&self) -> i32 {
         self.span() + 1
+    }
+
+    fn has_span(&self) -> bool {
+        self.origin.windows(2).any(|pair| pair[1] > pair[0])
     }
 }
 
@@ -1203,7 +1264,9 @@ fn paint(
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
     let mut canvas = Canvas::new(xs.bitmap(), ys.bitmap())?;
-    if grid_lines {
+    // 一整边都隐藏时，Excel 只留 1 像素白，不画网格。
+    let draw_frame = xs.has_span() && ys.has_span();
+    if draw_frame && grid_lines {
         canvas.grid(&xs, &ys);
     }
     let merges = merges_of(
@@ -1259,7 +1322,9 @@ fn paint(
         r0,
         sheet,
     )?;
-    canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
+    if draw_frame {
+        canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
+    }
     paint_borders(&mut canvas, styles, cells, &xs, &ys, c0, r0, &rects)?;
     Ok(canvas)
 }
@@ -1321,6 +1386,14 @@ fn paint_cell(
     col_end: u32,
     row_end: u32,
 ) -> Result<(), Error> {
+    let x0 = xs.origin[(col - c0) as usize];
+    let x1 = xs.origin[(col_end - c0) as usize + 1];
+    let y0 = ys.origin[(row - r0) as usize];
+    let y1 = ys.origin[(row_end - r0) as usize + 1];
+    // 隐藏行、隐藏列的跨度是 0。不能往交界上涂出 1 像素。
+    if x1 == x0 || y1 == y0 {
+        return Ok(());
+    }
     let Some(cell) = cells.get(&(col, row)) else {
         return Ok(());
     };
@@ -1337,10 +1410,6 @@ fn paint_cell(
     let Some(rgb) = cf_fill(sheet, styles, cells, col, row)?.or(base) else {
         return Ok(());
     };
-    let x0 = xs.origin[(col - c0) as usize];
-    let x1 = xs.origin[(col_end - c0) as usize + 1];
-    let y0 = ys.origin[(row - r0) as usize];
-    let y1 = ys.origin[(row_end - r0) as usize + 1];
     canvas.fill_cell(x0, y0, x1, y1, rgb);
     Ok(())
 }
@@ -1374,6 +1443,9 @@ fn paint_borders(
         let x1 = xs.origin[(col - c0) as usize + 1];
         let y0 = ys.origin[(row - r0) as usize];
         let y1 = ys.origin[(row - r0) as usize + 1];
+        if x1 == x0 || y1 == y0 {
+            continue;
+        }
         let mut edges = edges;
         if col_end > col {
             edges.right = None;
@@ -1880,12 +1952,14 @@ fn cell_rect(
     if cx + 1 >= xs.origin.len() || ry + 1 >= ys.origin.len() {
         return None;
     }
-    Some((
-        xs.origin[cx],
-        ys.origin[ry],
-        xs.origin[cx + 1],
-        ys.origin[ry + 1],
-    ))
+    let x0 = xs.origin[cx];
+    let x1 = xs.origin[cx + 1];
+    let y0 = ys.origin[ry];
+    let y1 = ys.origin[ry + 1];
+    if x1 == x0 || y1 == y0 {
+        return None;
+    }
+    Some((x0, y0, x1, y1))
 }
 
 #[derive(Default)]
@@ -1946,6 +2020,13 @@ fn paint_labels(
         let Some(cell) = cells.get(&(col, row)) else {
             continue;
         };
+        let x0 = xs.origin[(col - c0) as usize];
+        let x1 = xs.origin[(col_end - c0) as usize + 1];
+        let y0 = ys.origin[(row - r0) as usize];
+        let y1 = ys.origin[(row_end - r0) as usize + 1];
+        if x1 == x0 || y1 == y0 {
+            continue;
+        }
         let xf = styles.xf(cell.style)?;
         let font = styles.font(cell.style)?;
         let fmt = styles.fmt_of(cell.style)?;
@@ -1957,10 +2038,6 @@ fn paint_labels(
             return Err(unsupported());
         };
         let color = dxf_color(sheet, styles, cells, col, row).unwrap_or(color);
-        let x0 = xs.origin[(col - c0) as usize];
-        let x1 = xs.origin[(col_end - c0) as usize + 1];
-        let y0 = ys.origin[(row - r0) as usize];
-        let y1 = ys.origin[(row_end - r0) as usize + 1];
         let mut clip_r = x1;
         if filter_hit(filter, col, row, col_end) {
             clip_r = clip_r.min(x1 - 17);
@@ -2150,8 +2227,13 @@ fn paint_filters(
         if col < c0 || col >= c0 + cols as u32 || fr < r0 || fr >= r0 + rows as u32 {
             continue;
         }
+        let x0 = xs.origin[(col - c0) as usize];
         let x1 = xs.origin[(col - c0) as usize + 1];
+        let y0 = ys.origin[(fr - r0) as usize];
         let y1 = ys.origin[(fr - r0) as usize + 1];
+        if x1 == x0 || y1 == y0 {
+            continue;
+        }
         paint_button(canvas, x1 - 17, y1 - 18);
     }
 }
