@@ -1,5 +1,6 @@
 //! 工作表已用区域出图。像素对齐 Excel 16.0 的 `Range.CopyPicture`（xlScreen、xlBitmap）。
 //! 不乘工作表 `zoomScale`。缩放 95 的销售看板金样仍是 100% 的 1095×418。
+//! `showGridLines` 为假时不画网格，上边和左边的外框留白，宽高不变。
 
 use std::collections::{HashMap, HashSet};
 
@@ -26,6 +27,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let root = &sheet_doc.root;
     reject_view(root)?;
+    let grid_lines = shows_grid(root);
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
@@ -36,7 +38,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let cells = read_cells(root, &sst, session)?;
     let cols = column_sizes(root, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
-    let canvas = paint(root, &styles, &cells, c0, r0, &cols, &rows)?;
+    let canvas = paint(root, &styles, &cells, c0, r0, &cols, &rows, grid_lines)?;
     let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
     Ok(ExportedMedia {
         bytes: png,
@@ -74,17 +76,24 @@ fn reject_view(sheet: &Element) -> Result<(), Error> {
     else {
         return Ok(());
     };
-    // 从右到左，或关掉网格线时，外框像素会变。这一期不画。
+    // 从右到左时列从右边起排，外框像素会变。这一期不画。
     if truthy(view.attr("rightToLeft")) {
         return Err(unsupported());
     }
-    if view
+    Ok(())
+}
+
+/// 没写 `showGridLines` 时默认开着。`0` 和 `false` 关掉。
+fn shows_grid(sheet: &Element) -> bool {
+    let Some(view) = sheet
+        .child_by_local("sheetViews")
+        .and_then(|views| views.child_by_local("sheetView"))
+    else {
+        return true;
+    };
+    !view
         .attr("showGridLines")
         .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
-    {
-        return Err(unsupported());
-    }
-    Ok(())
 }
 
 fn truthy(value: Option<&str>) -> bool {
@@ -1163,13 +1172,13 @@ impl Canvas {
         }
     }
 
-    /// 上边和左边的外框盖住第一格的填充。右边和底边属于最后一格的远缘。
-    fn leading_frame(&mut self) {
+    /// 上边和左边的外框盖住第一格的填充。网格开着时是网格色，关掉时留白。
+    fn leading_frame(&mut self, color: [u8; 3]) {
         for x in 0..self.w {
-            self.put(x, 0, GRID);
+            self.put(x, 0, color);
         }
         for y in 0..self.h {
-            self.put(0, y, GRID);
+            self.put(0, y, color);
         }
     }
 }
@@ -1189,11 +1198,14 @@ fn paint(
     r0: u32,
     cols: &[i32],
     rows: &[i32],
+    grid_lines: bool,
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
     let mut canvas = Canvas::new(xs.bitmap(), ys.bitmap())?;
-    canvas.grid(&xs, &ys);
+    if grid_lines {
+        canvas.grid(&xs, &ys);
+    }
     let merges = merges_of(
         sheet,
         c0,
@@ -1247,7 +1259,7 @@ fn paint(
         r0,
         sheet,
     )?;
-    canvas.leading_frame();
+    canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     paint_borders(&mut canvas, styles, cells, &xs, &ys, c0, r0, &rects)?;
     Ok(canvas)
 }

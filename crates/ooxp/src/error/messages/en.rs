@@ -1420,7 +1420,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SheetImageUnsupported => {
-            "This worksheet cannot be drawn to PNG yet. The used range can show gridlines, solid fills, thin medium and thick solid borders, text, merged cells, data bars, color scales, and filter buttons. An object that cannot be drawn fails the sheet, and the size must be 1 to 4096 pixels"
+            "This worksheet cannot be drawn to PNG yet. The used range can show gridlines, or a white frame when gridlines are off, plus solid fills, thin medium and thick solid borders, text, merged cells, data bars, color scales, and filter buttons. An object that cannot be drawn fails the sheet, and the size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
