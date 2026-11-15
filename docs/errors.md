@@ -1166,6 +1166,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - `exportSheetImage` 找不到工作表报 `IdNotFound`
 - `exportSheetImage` 的 id 不是 `sheet:{name}` 报 `InvalidId`
 - 画不了已用区域，或宽高不在 1 到 4096 像素之间，`exportSheetImage` 报 `NotImplemented`
+- 两种纯色的图案可以画。渐变填充、半透明图案色、认不出的图案，以及条件格式里的图案，仍报 `NotImplemented`
 - docx 与 pptx 上发 `exportSheetImage` 报 `InvalidField`
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 图带旋转、要缩放的裁剪，或还有别的画不了的对象，`exportSlideImage` 报 `NotImplemented`。页底画不了时铺白，不因此报错

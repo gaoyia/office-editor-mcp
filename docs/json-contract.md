@@ -2463,7 +2463,13 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 自动筛选在表头右侧画 17×17 的按钮。箭头水平居中，尖端落在按钮正中。表头文字停在按钮左边
 - 字色、填充色和边框色认 `rgb`、主题色和索引色。主题色下标依次是 `lt1`、`dk1`、`lt2`、`dk2`、六个强调色、超链接、已访问的超链接，取工作簿主题里的颜色。没有主题部件时用 Office 默认色。`tint` 从 -1 到 1，负值变暗，正值变亮。`auto` 当黑色。下标对不上报 `NotImplemented`
 - 实线边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。没写颜色时用黑色。线以格子边界为中线，偶数宽度多出的一像素落在格外。线只伸到实际有边的那一端，不沿合并区扩开。落在合并区内部的边不画。同一条边界上更粗的线盖住更细的线，同样粗时右边和下边的格子后画。斜线和虚线报 `NotImplemented`
-- 渐变填充、压到区域上的图形、组合图形和其它条件格式，报 `NotImplemented`
+- 图案和纯色铺在同一块矩形上，盖住格子右缘和下缘。点的位置用整张图的像素坐标，含左边和上边那一像素外框，不从格子左上角重算
+- 从右到左的翻转发生在铺完图案之后，点跟着整张图一起翻
+- 图案类型认 `gray125`、`gray0625`、`lightHorizontal`、`darkHorizontal`、`lightVertical` 和 `darkVertical`
+- 图案类型也认 `lightGrid`、`darkGrid`、`mediumGray`、`lightGray`、`darkGray`、`darkDown`、`lightDown`、`darkUp`、`lightUp`、`darkTrellis` 和 `lightTrellis`
+- `fgColor` 是点，`bgColor` 是底。没写前景时用黑色，没写背景时用白色。颜色仍认 `rgb`、主题色和索引色
+- `rgb` 写成 8 位、前两位又不是 `FF` 时，这一格图案不认，整表报 `NotImplemented`
+- 渐变填充、认不出的图案、条件格式里的图案、压到区域上的图形、组合图形和其它条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到工作表报 `IdNotFound`。id 不是 `sheet:{name}` 报 `InvalidId`

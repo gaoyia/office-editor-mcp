@@ -3,6 +3,7 @@
 //! `showGridLines` 为假时不画网格，上边和左边的外框留白，宽高不变。
 //! 隐藏行和隐藏列不占像素。这一边全部隐藏时只留 1 像素白。
 //! 从右到左且没有文字时，把整张图水平翻转。有文字时不翻。
+//! 两种纯色的图案铺在和纯色同一块矩形上。点的位置用整张图的像素，不从格子左上角重算。
 
 use std::collections::{HashMap, HashSet};
 
@@ -312,10 +313,32 @@ enum NumFmt {
     Percent(u32),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PatternKind {
+    Gray125,
+    Gray0625,
+    LightHorizontal,
+    DarkHorizontal,
+    LightVertical,
+    DarkVertical,
+    LightGrid,
+    DarkGrid,
+    MediumGray,
+    LightGray,
+    DarkGray,
+    DarkDown,
+    LightDown,
+    DarkUp,
+    LightUp,
+    DarkTrellis,
+    LightTrellis,
+}
+
 #[derive(Clone, Copy, Debug)]
 enum Fill {
     None,
     Solid([u8; 3]),
+    Pattern(PatternKind, [u8; 3], [u8; 3]),
     Nope,
 }
 
@@ -714,8 +737,61 @@ fn read_fill(fill: &Element, palette: &Palette) -> Fill {
             .and_then(|el| palette.resolve(el))
             .map(Fill::Solid)
             .unwrap_or(Fill::Nope),
-        _ => Fill::Nope,
+        other => match pattern_kind(other) {
+            Some(kind) => {
+                let Some(fg) = pattern_channel(pat, "fgColor", [0, 0, 0], palette) else {
+                    return Fill::Nope;
+                };
+                let Some(bg) = pattern_channel(pat, "bgColor", [255, 255, 255], palette) else {
+                    return Fill::Nope;
+                };
+                Fill::Pattern(kind, fg, bg)
+            }
+            None => Fill::Nope,
+        },
     }
+}
+
+fn pattern_kind(name: &str) -> Option<PatternKind> {
+    Some(match name {
+        "gray125" => PatternKind::Gray125,
+        "gray0625" => PatternKind::Gray0625,
+        "lightHorizontal" => PatternKind::LightHorizontal,
+        "darkHorizontal" => PatternKind::DarkHorizontal,
+        "lightVertical" => PatternKind::LightVertical,
+        "darkVertical" => PatternKind::DarkVertical,
+        "lightGrid" => PatternKind::LightGrid,
+        "darkGrid" => PatternKind::DarkGrid,
+        "mediumGray" => PatternKind::MediumGray,
+        "lightGray" => PatternKind::LightGray,
+        "darkGray" => PatternKind::DarkGray,
+        "darkDown" => PatternKind::DarkDown,
+        "lightDown" => PatternKind::LightDown,
+        "darkUp" => PatternKind::DarkUp,
+        "lightUp" => PatternKind::LightUp,
+        "darkTrellis" => PatternKind::DarkTrellis,
+        "lightTrellis" => PatternKind::LightTrellis,
+        _ => return None,
+    })
+}
+
+/// 没写颜色时，前景是黑，背景是白。`rgb` 带了不是 `FF` 的透明度时不认。
+fn pattern_channel(
+    pat: &Element,
+    name: &str,
+    fallback: [u8; 3],
+    palette: &Palette,
+) -> Option<[u8; 3]> {
+    let Some(el) = pat.child_by_local(name) else {
+        return Some(fallback);
+    };
+    if let Some(rgb) = el.attr("rgb") {
+        let hex = rgb.trim();
+        if hex.len() == 8 && !hex[..2].eq_ignore_ascii_case("ff") {
+            return None;
+        }
+    }
+    palette.resolve(el)
 }
 
 fn parse_edges(border: &Element, palette: &Palette) -> Result<Edges, Error> {
@@ -823,7 +899,8 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
         Some(fill) => match read_fill(fill, palette) {
             Fill::None => None,
             Fill::Solid(rgb) => Some(rgb),
-            Fill::Nope => return Err(unsupported()),
+            // 条件格式里的图案还没和 Excel 对过。
+            Fill::Pattern(_, _, _) | Fill::Nope => return Err(unsupported()),
         },
     };
     let color = dxf
@@ -1232,6 +1309,25 @@ impl Canvas {
         self.fill_rect(x0, y0, x1 + 1, y1 + 1, color);
     }
 
+    /// 图案和纯色铺同一块矩形。点用整张图的像素坐标。
+    fn fill_pattern(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        kind: PatternKind,
+        fg: [u8; 3],
+        bg: [u8; 3],
+    ) {
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let color = if pattern_on(kind, x, y) { fg } else { bg };
+                self.put(x, y, color);
+            }
+        }
+    }
+
     fn grid(&mut self, xs: &Axis, ys: &Axis) {
         for x in &xs.origin {
             for y in 0..self.h {
@@ -1433,16 +1529,77 @@ fn paint_cell(
     if matches!(fill, Fill::Nope) {
         return Err(unsupported());
     }
-    let base = match fill {
-        Fill::Solid(rgb) => Some(rgb),
-        Fill::None => None,
-        Fill::Nope => None,
-    };
-    let Some(rgb) = cf_fill(sheet, styles, cells, col, row)?.or(base) else {
+    if let Some(rgb) = cf_fill(sheet, styles, cells, col, row)? {
+        canvas.fill_cell(x0, y0, x1, y1, rgb);
         return Ok(());
-    };
-    canvas.fill_cell(x0, y0, x1, y1, rgb);
+    }
+    match fill {
+        Fill::Solid(rgb) => canvas.fill_cell(x0, y0, x1, y1, rgb),
+        Fill::Pattern(kind, fg, bg) => canvas.fill_pattern(x0, y0, x1, y1, kind, fg, bg),
+        Fill::None | Fill::Nope => {}
+    }
     Ok(())
+}
+
+/// 点阵按 Excel 16.0 的复制图片量过。坐标含外框，不从格子原点重算。
+fn pattern_on(kind: PatternKind, x: i32, y: i32) -> bool {
+    let x4 = x.rem_euclid(4);
+    let y4 = y.rem_euclid(4);
+    match kind {
+        PatternKind::Gray125 => (y4 == 2 && x4 == 2) || (y4 == 0 && x4 == 0),
+        PatternKind::Gray0625 => {
+            let x8 = x.rem_euclid(8);
+            let y8 = y.rem_euclid(8);
+            ((y8 == 2 || y8 == 6) && x8 == 4) || ((y8 == 0 || y8 == 4) && x8 == 0)
+        }
+        PatternKind::LightHorizontal => y4 == 0,
+        PatternKind::DarkHorizontal => y4 == 0 || y4 == 1,
+        PatternKind::LightVertical => x4 == 0,
+        PatternKind::DarkVertical => x4 == 0 || x4 == 1,
+        PatternKind::LightGrid => x4 == 0 || y4 == 0,
+        PatternKind::DarkGrid => {
+            if y4 == 1 || y4 == 2 {
+                x4 == 1 || x4 == 2
+            } else {
+                x4 == 0 || x4 == 3
+            }
+        }
+        PatternKind::MediumGray => (x + y).rem_euclid(2) == 0,
+        PatternKind::LightGray => {
+            if y.rem_euclid(2) == 1 {
+                x4 == 2
+            } else {
+                x4 == 0
+            }
+        }
+        PatternKind::DarkGray => {
+            if y.rem_euclid(2) == 1 {
+                x4 != 1
+            } else {
+                x4 != 3
+            }
+        }
+        PatternKind::DarkDown => (x - y).rem_euclid(4) <= 1,
+        PatternKind::LightDown => x4 == y4,
+        PatternKind::DarkUp => {
+            let sum = (x + y).rem_euclid(4);
+            sum == 2 || sum == 3
+        }
+        PatternKind::LightUp => (x + y).rem_euclid(4) == 3,
+        PatternKind::DarkTrellis => {
+            y.rem_euclid(2) == 0 || {
+                let sum = (x + y).rem_euclid(4);
+                sum == 2 || sum == 3
+            }
+        }
+        PatternKind::LightTrellis => {
+            if y.rem_euclid(2) == 0 {
+                x4 == y4
+            } else {
+                x.rem_euclid(2) == 1
+            }
+        }
+    }
 }
 
 fn paint_borders(
