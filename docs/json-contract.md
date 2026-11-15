@@ -2469,6 +2469,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 数据条只认最小、最大两档。长度从列内可用宽度的 10% 到 90%，并向白色淡出。负数报 `NotImplemented`
 - 色阶认两档或三档。百分位用 `PERCENTILE.INC`，颜色按 RGB 混合
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
+- `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
 - 自动筛选在表头右侧画 17×17 的按钮。箭头水平居中，尖端落在按钮正中。表头文字停在按钮左边
 - 字色、填充色和边框色认 `rgb`、主题色和索引色。主题色下标依次是 `lt1`、`dk1`、`lt2`、`dk2`、六个强调色、超链接、已访问的超链接，取工作簿主题里的颜色。没有主题部件时用 Office 默认色。`tint` 从 -1 到 1，负值变暗，正值变亮。`auto` 当黑色。下标对不上报 `NotImplemented`
 - 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`
@@ -2489,7 +2490,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 锚点的 EMU 除以 9525 后四舍五入。`oneCell` 的终点是起点单元格加上偏移和 `ext`。`twoCell` 的终点是 `to` 标记。矩形含起点，不含终点
 - 上边和左边的外框盖住矩形。矩形盖住格子、网格和边框。后画的矩形盖住先画的
 - 有描边、有字、旋转、翻转、不是矩形、组合、图片和其它图形，报 `NotImplemented`。隐藏行或隐藏列碰到这种矩形也报 `NotImplemented`
-- 斜线边框、渐变填充、认不出的图案、条件格式里的图案和其它条件格式，报 `NotImplemented`
+- 斜线边框、渐变填充、认不出的图案、条件格式里的图案、图标集、重复值、前 N、高于平均和其它还没画的条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到工作表报 `IdNotFound`。id 不是 `sheet:{name}` 报 `InvalidId`

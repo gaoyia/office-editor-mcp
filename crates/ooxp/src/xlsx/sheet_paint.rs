@@ -19,7 +19,7 @@ use crate::xml::Element;
 
 use super::a1::{self, CellRef};
 use super::chart_gdi::Face;
-use super::eval::{self, Displayed, FormulaSession};
+use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
 use super::ExportedMedia;
@@ -45,8 +45,8 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
     let styles = load_styles(&pkg, &wb_part, &rels)?;
     let (c0, r0, c1, r1) = used_range(root)?;
-    let session = eval::FormulaSession::open(&pkg, &name)?;
-    let cells = read_cells(root, &sst, session)?;
+    let mut session = eval::FormulaSession::open(&pkg, &name)?;
+    let cells = read_cells(root, &sst, &mut session)?;
     let cols = column_sizes(root, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
     let shapes = plain_rects(
@@ -63,7 +63,17 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         &rows,
     )?;
     let canvas = paint(
-        root, &styles, &cells, c0, r0, &cols, &rows, grid_lines, rtl, &shapes,
+        root,
+        &styles,
+        &cells,
+        c0,
+        r0,
+        &cols,
+        &rows,
+        grid_lines,
+        rtl,
+        &shapes,
+        &mut session,
     )?;
     let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
     Ok(ExportedMedia {
@@ -1370,7 +1380,7 @@ struct CellRec {
 fn read_cells(
     sheet: &Element,
     sst: &[String],
-    mut session: Option<FormulaSession>,
+    session: &mut Option<FormulaSession>,
 ) -> Result<HashMap<(u32, u32), CellRec>, Error> {
     let mut out = HashMap::new();
     let Some(data) = sheet.child_by_local("sheetData") else {
@@ -1389,7 +1399,7 @@ fn read_cells(
                 .attr("s")
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0usize);
-            let shown = shown_of(cell, sst, CellRef { col, row: row_n }, &mut session)?;
+            let shown = shown_of(cell, sst, CellRef { col, row: row_n }, session)?;
             out.insert((col, row_n), CellRec { style, shown });
         }
     }
@@ -1854,6 +1864,7 @@ fn paint(
     grid_lines: bool,
     rtl: bool,
     shapes: &[PlainRect],
+    session: &mut Option<FormulaSession>,
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
@@ -1884,6 +1895,19 @@ fn paint(
         }
         rects.push((row, col, col, row));
     }
+    if !cols.is_empty() && !rows.is_empty() {
+        let c1 = c0 + cols.len() as u32 - 1;
+        let r1 = r0 + rows.len() as u32 - 1;
+        for (col, row) in expression_gaps(sheet, c0, r0, c1, r1)? {
+            if cells.contains_key(&(col, row))
+                || covered.contains(&(col, row))
+                || merges.iter().any(|m| m.c0 == col && m.r0 == row)
+            {
+                continue;
+            }
+            rects.push((row, col, col, row));
+        }
+    }
     rects.sort_unstable();
     for &(row, col, col_end, row_end) in &rects {
         paint_cell(
@@ -1899,6 +1923,7 @@ fn paint(
             row,
             col_end,
             row_end,
+            session,
         )?;
     }
     paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
@@ -1916,6 +1941,7 @@ fn paint(
         r0,
         sheet,
         rtl,
+        session,
     )?;
     if draw_frame {
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
@@ -1984,6 +2010,7 @@ fn paint_cell(
     row: u32,
     col_end: u32,
     row_end: u32,
+    session: &mut Option<FormulaSession>,
 ) -> Result<(), Error> {
     let x0 = xs.origin[(col - c0) as usize];
     let x1 = xs.origin[(col_end - c0) as usize + 1];
@@ -1993,18 +2020,23 @@ fn paint_cell(
     if x1 == x0 || y1 == y0 {
         return Ok(());
     }
-    let Some(cell) = cells.get(&(col, row)) else {
-        return Ok(());
+    let fill = if let Some(cell) = cells.get(&(col, row)) {
+        let xf = styles.xf(cell.style)?;
+        let fill = styles.fills.get(xf.fill).copied().unwrap_or(Fill::Nope);
+        if matches!(fill, Fill::Nope) {
+            return Err(unsupported());
+        }
+        Some(fill)
+    } else {
+        None
     };
-    let xf = styles.xf(cell.style)?;
-    let fill = styles.fills.get(xf.fill).copied().unwrap_or(Fill::Nope);
-    if matches!(fill, Fill::Nope) {
-        return Err(unsupported());
-    }
-    if let Some(rgb) = cf_fill(sheet, styles, cells, col, row)? {
+    if let Some(rgb) = cf_fill(sheet, styles, cells, col, row, session)? {
         canvas.fill_cell(x0, y0, x1, y1, rgb);
         return Ok(());
     }
+    let Some(fill) = fill else {
+        return Ok(());
+    };
     match fill {
         Fill::Solid(rgb) => canvas.fill_cell(x0, y0, x1, y1, rgb),
         Fill::Pattern(kind, fg, bg) => canvas.fill_pattern(x0, y0, x1, y1, kind, fg, bg),
@@ -2410,7 +2442,7 @@ fn paint_rules(
             "cellIs" => {
                 let _ = rule_numbers(rule)?;
             }
-            "dataBar" => {}
+            "dataBar" | "expression" => {}
             _ => return Err(unsupported()),
         }
     }
@@ -2459,12 +2491,92 @@ fn area_numbers(cells: &HashMap<(u32, u32), CellRec>, areas: &[(CellRef, CellRef
     out
 }
 
+fn expression_gaps(
+    sheet: &Element,
+    c0: u32,
+    r0: u32,
+    c1: u32,
+    r1: u32,
+) -> Result<Vec<(u32, u32)>, Error> {
+    let mut out = Vec::new();
+    for block in sheet.children_by_local("conditionalFormatting") {
+        let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
+        let has_expr = block
+            .children_by_local("cfRule")
+            .iter()
+            .any(|rule| rule.attr("type") == Some("expression"));
+        if !has_expr {
+            continue;
+        }
+        for row in r0..=r1 {
+            for col in c0..=c1 {
+                if in_areas(col, row, &areas) {
+                    out.push((col, row));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn expression_fill(
+    styles: &Styles,
+    session: &mut Option<FormulaSession>,
+    rule: &Element,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> Result<Option<[u8; 3]>, Error> {
+    if !expression_hit(session, rule, areas, col, row)? {
+        return Ok(None);
+    }
+    let Some(id) = rule.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) else {
+        return Ok(None);
+    };
+    let Some(dxf) = styles.dxfs.get(id) else {
+        return Err(unsupported());
+    };
+    Ok(dxf.fill)
+}
+
+fn expression_hit(
+    session: &mut Option<FormulaSession>,
+    rule: &Element,
+    areas: &[(CellRef, CellRef)],
+    col: u32,
+    row: u32,
+) -> Result<bool, Error> {
+    let text = rule
+        .children_by_local("formula")
+        .into_iter()
+        .next()
+        .ok_or_else(unsupported)?
+        .text_content();
+    let (a, b) = areas.first().copied().ok_or_else(unsupported)?;
+    let anchor = CellRef {
+        col: a.col.min(b.col),
+        row: a.row.min(b.row),
+    };
+    let here = CellRef { col, row };
+    let shifted = super::formula::shift_a1_formula(&text, anchor, here);
+    let Some(session) = session.as_mut() else {
+        return Err(unsupported());
+    };
+    match session.eval(&shifted, here) {
+        FormulaOutcome::Bool(value) => Ok(value),
+        FormulaOutcome::Num(n) if n.is_finite() => Ok(n != 0.0),
+        FormulaOutcome::Num(_) | FormulaOutcome::Text | FormulaOutcome::Err => Ok(false),
+        FormulaOutcome::Unknown => Err(unsupported()),
+    }
+}
+
 fn cf_fill(
     sheet: &Element,
     styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
     col: u32,
     row: u32,
+    session: &mut Option<FormulaSession>,
 ) -> Result<Option<[u8; 3]>, Error> {
     let mut best: Option<(i32, [u8; 3])> = None;
     for block in sheet.children_by_local("conditionalFormatting") {
@@ -2481,6 +2593,7 @@ fn cf_fill(
                 "dataBar" => None,
                 "colorScale" => scale_of(cells, &areas, rule, col, row)?,
                 "cellIs" => cell_is_fill(styles, cells, rule, col, row)?,
+                "expression" => expression_fill(styles, session, rule, &areas, col, row)?,
                 _ => return Err(unsupported()),
             };
             if let Some(color) = color {
@@ -2795,6 +2908,7 @@ fn paint_labels(
     r0: u32,
     sheet: &Element,
     rtl: bool,
+    session: &mut Option<FormulaSession>,
 ) -> Result<(), Error> {
     let filter = filter_header(sheet)?;
     let mut jobs = Vec::new();
@@ -2840,7 +2954,7 @@ fn paint_labels(
         let Some(color) = font.color else {
             return Err(unsupported());
         };
-        let color = dxf_color(sheet, styles, cells, col, row).unwrap_or(color);
+        let color = dxf_color(sheet, styles, cells, col, row, session)?.unwrap_or(color);
         let mut clip_r = x1;
         if filter_hit(filter, col, row, col_end) {
             clip_r = clip_r.min(x1 - 17);
@@ -2957,10 +3071,12 @@ fn dxf_color(
     cells: &HashMap<(u32, u32), CellRec>,
     col: u32,
     row: u32,
-) -> Option<[u8; 3]> {
-    let Shown::Num(n) = cells.get(&(col, row))?.shown else {
-        return None;
+    session: &mut Option<FormulaSession>,
+) -> Result<Option<[u8; 3]>, Error> {
+    let Some(Shown::Num(n)) = cells.get(&(col, row)).map(|cell| &cell.shown) else {
+        return Ok(None);
     };
+    let n = *n;
     let mut hit = None;
     for block in sheet.children_by_local("conditionalFormatting") {
         let Ok(areas) = parse_areas(block.attr("sqref").unwrap_or("")) else {
@@ -2970,15 +3086,19 @@ fn dxf_color(
             continue;
         }
         for rule in block.children_by_local("cfRule") {
-            if rule.attr("type") != Some("cellIs") {
+            let applies = match rule.attr("type").unwrap_or("") {
+                "cellIs" => {
+                    let Ok(args) = rule_numbers(rule) else {
+                        continue;
+                    };
+                    cell_is(rule.attr("operator").unwrap_or(""), n, &args).unwrap_or(false)
+                }
+                "expression" => expression_hit(session, rule, &areas, col, row)?,
+                _ => false,
+            };
+            if !applies {
                 continue;
             }
-            let Ok(args) = rule_numbers(rule) else {
-                continue;
-            };
-            let Ok(true) = cell_is(rule.attr("operator").unwrap_or(""), n, &args) else {
-                continue;
-            };
             let Some(id) = rule.attr("dxfId").and_then(|s| s.parse::<usize>().ok()) else {
                 continue;
             };
@@ -2987,7 +3107,7 @@ fn dxf_color(
             }
         }
     }
-    hit
+    Ok(hit)
 }
 
 fn filter_header(sheet: &Element) -> Result<Option<(u32, u32, u32, u32)>, Error> {
