@@ -535,6 +535,28 @@ fn an_inner_quarter_turn_paints_the_rotated_group() {
 }
 
 #[test]
+fn both_sheet_groups_turn_by_a_quarter() {
+    let labels: Vec<String> = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L']
+        .into_iter()
+        .flat_map(|col| (1..=24).map(move |row| format!("{col}{row}")))
+        .collect();
+    let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+    let rows: Vec<u32> = (1..=24).collect();
+    let (w, h, rgb) = paint_drawing(&refs, &rows, 30.0, LAYERS_TURN_XML);
+    assert_eq!((w, h), (769, 961));
+    assert_block(&rgb, w, 191, 271, 189, 213);
+    assert_block(&rgb, w, 131, 171, 189, 213);
+    assert_block(&rgb, w, 153, 173, 131, 191);
+    assert_eq!(pixel(&rgb, w, 190, 200), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 130, 200), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 271, 200), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 160, 130), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 152, 150), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 173, 150), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 160, 213), [255, 255, 255]);
+}
+
+#[test]
 fn a_child_at_another_angle_fails_the_sheet() {
     let src = drawing_book(
         &["A1", "B1", "A2", "B2"],
@@ -853,6 +875,9 @@ fn with_theme(src: &Path) -> PathBuf {
 
 const SCHEME_THEME: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Probe"><a:themeElements><a:clrScheme name="Probe"><a:dk1><a:sysClr val="windowText" lastClr="010203"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="EE4455"/></a:accent1><a:accent2><a:srgbClr val="C0504D"/></a:accent2><a:accent3><a:srgbClr val="9BBB59"/></a:accent3><a:accent4><a:srgbClr val="8064A2"/></a:accent4><a:accent5><a:srgbClr val="4BACC6"/></a:accent5><a:accent6><a:srgbClr val="F79646"/></a:accent6><a:hlink><a:srgbClr val="0000FF"/></a:hlink><a:folHlink><a:srgbClr val="800080"/></a:folHlink></a:clrScheme></a:themeElements></a:theme>"#;
+
+const LAYERS_TURN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>2</xdr:col><xdr:colOff>28575</xdr:colOff><xdr:row>3</xdr:row><xdr:rowOff>104775</xdr:rowOff></xdr:from><xdr:to><xdr:col>4</xdr:col><xdr:colOff>142875</xdr:colOff><xdr:row>5</xdr:row><xdr:rowOff>123825</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="8" name="外层"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm rot="5400000"><a:off x="1524000" y="971550"/><a:ext cx="781050" cy="1333500"/><a:chOff x="1524000" y="971550"/><a:chExt cx="781050" cy="1333500"/></a:xfrm></xdr:grpSpPr><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="内层"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm rot="5400000"><a:off x="1524000" y="1524000"/><a:ext cx="1333500" cy="228600"/><a:chOff x="1524000" y="1524000"/><a:chExt cx="1333500" cy="228600"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="矩形 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="1524000" y="1524000"/><a:ext cx="762000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="矩形 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="2476500" y="1524000"/><a:ext cx="381000" cy="228600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="5" name="矩形 3"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="1524000" y="1905000"/><a:ext cx="571500" cy="190500"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
 
 const INNER_TURN_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>152400</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>1</xdr:col><xdr:colOff>38100</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>152400</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="8" name="外层"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="152400" y="0"/><a:ext cx="495300" cy="914400"/><a:chOff x="152400" y="0"/><a:chExt cx="495300" cy="914400"/></a:xfrm></xdr:grpSpPr><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="内层"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm rot="5400000"><a:off x="247650" y="247650"/><a:ext cx="647700" cy="152400"/><a:chOff x="152400" y="152400"/><a:chExt cx="838200" cy="152400"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="矩形 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="152400" y="152400"/><a:ext cx="457200" cy="152400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="矩形 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="762000" y="152400"/><a:ext cx="228600" cy="152400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="5" name="矩形 3"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="152400" y="762000"/><a:ext cx="304800" cy="152400"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
