@@ -1,4 +1,4 @@
-//! 簇状柱形图只读栅格化。读图部件里已有的缓存，不写回包，也不算公式。
+//! 簇状柱形图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 
 use fontdue::{Font, FontSettings};
@@ -247,18 +247,25 @@ pub(crate) fn render_chart(
     accents: [[u8; 3]; 6],
     font_bytes: Option<&[u8]>,
     host: ChartHost,
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
 ) -> Result<Vec<u8>, Error> {
     if width == 0 || height == 0 || width > MAX_PX || height > MAX_PX {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
-    let chart = read_clustered_column(root, accents)?;
+    let chart = read_clustered_column(root, accents, cells, sheet)?;
     let font = font_bytes.and_then(|bytes| Font::from_bytes(bytes, FontSettings::default()).ok());
     let mut canvas = Canvas::new(width, height);
     paint(&mut canvas, &chart, font.as_ref(), host);
     encode_png(width, height, &canvas.px)
 }
 
-fn read_clustered_column(root: &Element, accents: [[u8; 3]; 6]) -> Result<ColumnChart, Error> {
+fn read_clustered_column(
+    root: &Element,
+    accents: [[u8; 3]; 6],
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
+) -> Result<ColumnChart, Error> {
     let chart = root
         .child_by_local("chart")
         .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
@@ -292,11 +299,11 @@ fn read_clustered_column(root: &Element, accents: [[u8; 3]; 6]) -> Result<Column
     let mut series = Vec::new();
     for ser in bar.element_children().filter(|el| el.local_name() == "ser") {
         let order = number_val(ser, "order").unwrap_or(series.len() as f64) as usize;
-        let values = cache_numbers(ser.child_by_local("val"));
+        let values = series_numbers(ser.child_by_local("val"), sheet, cells);
         if values.is_empty() {
             continue;
         }
-        let name = series_name(ser).unwrap_or_else(|| format!("系列{}", order + 1));
+        let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let color = series_color(ser, accents);
         if series.len() <= order {
             series.resize_with(order + 1, || Series {
@@ -322,6 +329,13 @@ fn read_clustered_column(root: &Element, accents: [[u8; 3]; 6]) -> Result<Column
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
     let mut categories = cache_labels(series_cat(bar));
+    if categories.is_empty() {
+        if let Some(text) = formula_text(series_cat(bar)) {
+            if let Some(labels) = labels_from_cells(&text, sheet, cells) {
+                categories = labels;
+            }
+        }
+    }
     if categories.len() < n {
         let start = categories.len();
         categories.extend((start..n).map(|i| (i + 1).to_string()));
@@ -425,13 +439,7 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
     } else {
         INSET_TOP
     };
-    let inset_right = legend_right_inset(
-        chart,
-        font,
-        gdi.as_ref(),
-        label_px,
-        matches!(host, ChartHost::Slide),
-    );
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
     let plot_r = canvas.w as i32 - inset_right;
     let plot_b = canvas.h as i32 - INSET_BOTTOM;
     let plot = Rect {
@@ -447,6 +455,9 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
         }
     }
     draw_value_minor_ticks(canvas, axis_x, plot_y, plot_b, intervals);
+    draw_bars(canvas, chart, &plot, axis_min, axis_max);
+    canvas.vline_i(axis_x, plot_y, plot_b, INK);
+    // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     draw_cat_ticks(
         canvas,
         chart.categories.len(),
@@ -454,8 +465,6 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
         f64::from(plot_r + 1),
         plot_b,
     );
-    draw_bars(canvas, chart, &plot, axis_min, axis_max);
-    canvas.vline_i(axis_x, plot_y, plot_b, INK);
     draw_tick_labels(
         canvas,
         font,
@@ -683,27 +692,23 @@ fn legend_right_inset(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
-    slide: bool,
 ) -> i32 {
     if chart.legend != Some(LegendPos::Right) {
         return INSET_RIGHT;
     }
-    // 幻灯片上 PowerPoint 按 GDI+ 默认排版宽度把绘图区向左推。
+    // Excel 和幻灯片都按 GDI+ 默认排版宽度把绘图区向左推。
     // 字形前进宽度更窄，类目槽会被撑开，右边的柱跟着偏出去。
+    let from_layout = gdi.is_some();
     let widest = chart
         .series
         .iter()
-        .map(|ser| {
-            if slide {
-                if let Some(face) = gdi {
-                    return face.layout_width(&ser.name);
-                }
-            }
-            text_width(font, gdi, &ser.name, px)
+        .map(|ser| match gdi {
+            Some(face) => face.layout_width(&ser.name),
+            None => text_width(font, None, &ser.name, px),
         })
         .fold(0.0, f64::max);
     // 默认排版宽度已经含防裁切的边，再向上取整会把绘图区多让出 1 像素。
-    let name_px = if slide {
+    let name_px = if from_layout {
         widest as i32
     } else {
         widest.ceil() as i32
@@ -874,7 +879,73 @@ fn title_text(chart: &Element) -> Option<String> {
     None
 }
 
-fn series_name(ser: &Element) -> Option<String> {
+fn series_numbers(
+    parent: Option<&Element>,
+    sheet: &str,
+    cells: Option<&super::sparkline::CellCache>,
+) -> Vec<Option<f64>> {
+    let cached = cache_numbers(parent);
+    if !cached.is_empty() {
+        return cached;
+    }
+    let Some(text) = formula_text(parent) else {
+        return Vec::new();
+    };
+    numbers_from_cells(&text, sheet, cells).unwrap_or_default()
+}
+
+fn formula_text(parent: Option<&Element>) -> Option<String> {
+    let text = find_deep(parent?, "f")?.text_content();
+    let text = text.trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
+}
+
+fn numbers_from_cells(
+    formula: &str,
+    sheet: &str,
+    cells: Option<&super::sparkline::CellCache>,
+) -> Option<Vec<Option<f64>>> {
+    let values = super::sparkline::range_values(formula, sheet, cells?)?;
+    Some(values.into_iter().map(json_number).collect())
+}
+
+fn labels_from_cells(
+    formula: &str,
+    sheet: &str,
+    cells: Option<&super::sparkline::CellCache>,
+) -> Option<Vec<String>> {
+    let values = super::sparkline::range_values(formula, sheet, cells?)?;
+    Some(values.into_iter().map(json_label).collect())
+}
+
+fn json_number(value: serde_json::Value) -> Option<f64> {
+    match value {
+        serde_json::Value::Number(n) => n.as_f64().filter(|n| n.is_finite()),
+        serde_json::Value::Bool(b) => Some(if b { 1.0 } else { 0.0 }),
+        serde_json::Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
+}
+
+fn json_label(value: serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s,
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Bool(true) => "TRUE".into(),
+        serde_json::Value::Bool(false) => "FALSE".into(),
+        _ => String::new(),
+    }
+}
+
+fn series_name(
+    ser: &Element,
+    sheet: &str,
+    cells: Option<&super::sparkline::CellCache>,
+) -> Option<String> {
     let tx = ser.child_by_local("tx")?;
     if let Some(v) = tx.child_by_local("v") {
         let text = v.text_content();
@@ -882,13 +953,16 @@ fn series_name(ser: &Element) -> Option<String> {
             return Some(text);
         }
     }
-    let cache = find_deep(tx, "strCache").or_else(|| find_deep(tx, "numCache"))?;
-    let text = cache_labels_of(cache).into_iter().next()?;
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
+    if let Some(cache) = find_deep(tx, "strCache").or_else(|| find_deep(tx, "numCache")) {
+        let text = cache_labels_of(cache).into_iter().next()?;
+        if !text.is_empty() {
+            return Some(text);
+        }
     }
+    let text = formula_text(Some(tx))?;
+    labels_from_cells(&text, sheet, cells)?
+        .into_iter()
+        .find(|label| !label.is_empty())
 }
 
 fn series_color(ser: &Element, accents: [[u8; 3]; 6]) -> Option<[u8; 3]> {
@@ -1359,6 +1433,129 @@ mod tests {
   </c:chart>
 </c:chartSpace>"#;
 
+    #[cfg(windows)]
+    fn grid_right(xml: &str) -> i32 {
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let png = render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let w = info.width as i32;
+        let bytes = &buf[..info.buffer_size()];
+        let y = INSET_TOP;
+        let mut right = None;
+        for x in (0..w).rev() {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            if bytes[i] == 0 && bytes[i + 1] == 0 && bytes[i + 2] == 0 {
+                right = Some(x);
+                break;
+            }
+        }
+        right.expect("顶上网格不存在")
+    }
+
+    #[cfg(windows)]
+    fn column_chart(name: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:ser>
+          <c:order val="0"/>
+          <c:tx><c:v>{name}</c:v></c:tx>
+          <c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser>
+      </c:barChart>
+      <c:valAx><c:majorGridlines/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn long_legend_uses_layout_width_and_short_names_keep_the_inset() {
+        assert!(
+            super::super::chart_gdi::Face::open((10.0_f64 * 96.0 / 72.0) as f32, false).is_some(),
+            "本机应有图表字体"
+        );
+        assert_eq!(grid_right(&column_chart("S1")), 576 - INSET_RIGHT);
+        assert_eq!(grid_right(&column_chart("South")), 498);
+    }
+
+    #[test]
+    fn category_ticks_paint_over_bars() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:ser>
+          <c:order val="0"/>
+          <c:tx><c:v>S1</c:v></c:tx>
+          <c:cat><c:strLit><c:pt idx="0"><c:v>A</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:pt idx="0"><c:v>4</c:v></c:pt></c:numLit></c:val>
+        </c:ser>
+      </c:barChart>
+      <c:valAx><c:majorGridlines/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#;
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let png = render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let w = info.width as i32;
+        let bytes = &buf[..info.buffer_size()];
+        let at = |x: i32, y: i32| {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            (bytes[i], bytes[i + 1], bytes[i + 2])
+        };
+        let axis_y = 336 - INSET_BOTTOM;
+        let tick_y = axis_y - 1;
+        let bar = |x: i32, y: i32| {
+            let (r, g, b) = at(x, y);
+            let hi = r.max(g).max(b);
+            let lo = r.min(g).min(b);
+            hi > 80 && hi - lo > 40
+        };
+        let ink = |x: i32, y: i32| at(x, y) == (0, 0, 0);
+        let kept = (0..w).any(|x| ink(x, tick_y) && bar(x, tick_y - 12));
+        assert!(kept, "柱底把类目刻度盖住了");
+    }
+
     #[test]
     fn long_legend_label_stays_off_the_right_edge() {
         let doc = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
@@ -1369,6 +1566,8 @@ mod tests {
             FALLBACK_ACCENTS,
             None,
             ChartHost::Excel,
+            None,
+            "",
         )
         .unwrap();
         let decoder = png::Decoder::new(std::io::Cursor::new(png));
@@ -1413,6 +1612,8 @@ mod tests {
             FALLBACK_ACCENTS,
             None,
             ChartHost::Excel,
+            None,
+            "",
         )
         .unwrap();
         let decoder = png::Decoder::new(std::io::Cursor::new(png));
@@ -1483,6 +1684,8 @@ mod tests {
             FALLBACK_ACCENTS,
             None,
             ChartHost::Excel,
+            None,
+            "",
         )
         .unwrap();
         let slide = render_chart(
@@ -1492,6 +1695,8 @@ mod tests {
             FALLBACK_ACCENTS,
             None,
             ChartHost::Slide,
+            None,
+            "",
         )
         .unwrap();
         let decode = |png: Vec<u8>| {
@@ -1525,7 +1730,8 @@ mod tests {
     fn slide_legend_keeps_the_category_span_from_growing() {
         let doc = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
         let render = |host| {
-            let png = render_chart(&doc.root, 576, 336, FALLBACK_ACCENTS, None, host).unwrap();
+            let png =
+                render_chart(&doc.root, 576, 336, FALLBACK_ACCENTS, None, host, None, "").unwrap();
             let decoder = png::Decoder::new(std::io::Cursor::new(png));
             let mut reader = decoder.read_info().unwrap();
             let mut buf = vec![0; reader.output_buffer_size()];
@@ -1544,10 +1750,19 @@ mod tests {
         let y = 336 - INSET_BOTTOM;
         let excel_r = last_dark(&excel, y).expect("excel 没有横轴");
         let slide_r = last_dark(&slide, y).expect("slide 没有横轴");
-        assert!(
-            excel_r - slide_r >= 4,
-            "幻灯片绘图区右端应更靠左 excel={excel_r} slide={slide_r}"
-        );
+        assert_eq!(excel_r, slide_r, "Excel 和幻灯片应按同一段排版宽度留白");
+        let face = super::super::chart_gdi::Face::open((10.0_f64 * 96.0 / 72.0) as f32, false);
+        if let Some(face) = face {
+            let adv = face.width("2025 年").max(face.width("2026 年")).ceil() as i32;
+            let advance_edge = 576
+                - (LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + adv + LEGEND_PAD)
+                    .max(INSET_RIGHT)
+                + 1;
+            assert!(
+                excel_r + 4 <= advance_edge,
+                "排版宽度应把绘图区向左推 excel={excel_r} advance={advance_edge}"
+            );
+        }
     }
 
     fn one_series(max: f64) -> Series {
@@ -1640,5 +1855,55 @@ mod tests {
         )
         .unwrap();
         assert_eq!((w, h), (576, 336));
+    }
+
+    #[test]
+    fn missing_num_cache_reads_cell_values() {
+        let xml =
+            br#"<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+          <c:chart><c:plotArea><c:barChart>
+            <c:barDir val="col"/><c:grouping val="clustered"/>
+            <c:ser>
+              <c:order val="0"/>
+              <c:tx><c:strRef><c:f>Data!B1</c:f></c:strRef></c:tx>
+              <c:cat><c:strRef><c:f>Data!A2:A3</c:f></c:strRef></c:cat>
+              <c:val><c:numRef><c:f>Data!B2:B3</c:f></c:numRef></c:val>
+            </c:ser>
+          </c:barChart></c:plotArea></c:chart>
+        </c:chartSpace>"#;
+        let doc = crate::xml::parse(xml).unwrap();
+        let missed = render_chart(
+            &doc.root,
+            320,
+            200,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "Data",
+        );
+        assert!(missed.is_err());
+        let cells = super::super::sparkline::CellCache::from_pairs(
+            "Data",
+            &[
+                ((2, 1), serde_json::json!("系列")),
+                ((1, 2), serde_json::json!("甲")),
+                ((1, 3), serde_json::json!("乙")),
+                ((2, 2), serde_json::json!(10)),
+                ((2, 3), serde_json::json!(30)),
+            ],
+        );
+        let png = render_chart(
+            &doc.root,
+            320,
+            200,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            Some(&cells),
+            "Data",
+        )
+        .unwrap();
+        assert!(png.len() > 100);
     }
 }

@@ -2086,6 +2086,7 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
     let space = super::list_pin::parse_part(&pkg, &chart_part)?;
     let accents = super::chart_paint::theme_accents(pkg.get("/xl/theme/theme1.xml").ok());
+    let cells = chart_cell_cache(&pkg)?;
     let png = super::chart_paint::render_chart(
         &space.root,
         width,
@@ -2093,6 +2094,8 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
         accents,
         calibri_bytes().as_deref(),
         super::chart_paint::ChartHost::Excel,
+        Some(&cells),
+        &target.sheet,
     )?;
     Ok(super::ExportedMedia {
         bytes: png,
@@ -2125,6 +2128,19 @@ fn chart_bitmap_px(draw: &Element, sheet: &Element, key: &ChartKey) -> Result<(u
         return Err(err);
     }
     size.ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))
+}
+
+fn chart_cell_cache(pkg: &Package) -> Result<super::sparkline::CellCache, Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let wb = xml::parse(pkg.get(&wb_part)?)?;
+    let rels = Relationships::from_package(pkg, &wb_part)?;
+    let sheets = inspect::list_sheets(&wb.root, &rels, &wb_part, pkg)?;
+    let sst = inspect::load_shared_strings(pkg, &wb_part, &rels)?;
+    let refs: Vec<(&str, &str, &str)> = sheets
+        .iter()
+        .map(|s| (s.name.as_str(), s.part.as_str(), s.kind))
+        .collect();
+    super::sparkline::CellCache::load(pkg, &refs, &sst)
 }
 
 fn calibri_bytes() -> Option<Vec<u8>> {

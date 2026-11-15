@@ -575,7 +575,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportChartImage
 
-调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，按起止格或 `a:ext` 取像素，读图表缓存，把簇状柱形图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
+调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，按起止格或 `a:ext` 取像素，读图表缓存。没有缓存时，读公式所指格子里已有的值。然后把簇状柱形图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
 
 ### exportSparklineImage
 

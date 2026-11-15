@@ -726,8 +726,8 @@
     "exportChartImageRequest": {
       "description": "把 xlsx 簇状柱形图画成 PNG。",
       "descriptionEn": "Draw an xlsx clustered column chart to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。只画簇状柱形图，系列用包里已有的缓存。docx 与 pptx 报 InvalidField。其余图报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only clustered column charts are drawn, using caches already in the package. docx and pptx return InvalidField. Other charts return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented.",
+      "limits": "只读。不改源包，像素不进 inspect。只画簇状柱形图。系列优先用图里的缓存，没有时用公式所指格子里已有的缓存。docx 与 pptx 报 InvalidField。其余图报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Only clustered column charts are drawn. A series uses the cache in the chart, or the cached cells its formula points at when that cache is absent. docx and pptx return InvalidField. Other charts return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [

@@ -75,6 +75,17 @@ impl CellCache {
         }
         Ok(Self { sheets: out })
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_pairs(name: &str, pairs: &[((u32, u32), Value)]) -> Self {
+        let mut map = HashMap::new();
+        for (at, value) in pairs {
+            map.insert(*at, value.clone());
+        }
+        let mut sheets = HashMap::new();
+        sheets.insert(name.to_ascii_lowercase(), map);
+        Self { sheets }
+    }
 }
 
 pub(crate) fn inspect(root: &Element, sheet: &str, cells: &CellCache) -> Value {

@@ -84,6 +84,8 @@ pub(crate) fn render_clustered_chart(
         accents,
         None,
         chart_paint::ChartHost::Slide,
+        None,
+        "",
     )
 }
 
