@@ -728,3 +728,73 @@ fn equal_custom_grid_widths_export() {
     assert_eq!((x, y), (96, 114));
     assert!(w > 0 && h > 0);
 }
+
+#[cfg(windows)]
+fn create_with_header(tag: &str, body: &str, header: &str) -> PathBuf {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": body }],
+            "headers": [{ "type": "default", "paragraphs": [{ "text": header }] }]
+        }
+    }));
+    src
+}
+
+#[cfg(windows)]
+#[test]
+fn default_header_letter_matches_ink_top() {
+    // oracle：header=708 → 页眉「H」墨迹顶 y=52（与正文 A 的 margin+5 同源偏移）。
+    let doc = create_with_header("hdr-only", "", "H");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    // Word PDF oracle onlyH：墨迹顶 (97,52)；GDI+「H」相对「A」可偏 1px。
+    assert_eq!(y, 52, "x={x} y={y} w={w} h={h}");
+    assert!(x == 96 || x == 97, "x={x}");
+    assert!(h >= 8 && w >= 6, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn blank_header_does_not_shift_body_ink() {
+    let doc = create_with_header("hdr-blank", "A", "");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 101, 9, 9));
+}
+
+#[cfg(windows)]
+#[test]
+fn header_and_body_stack_without_body_shift() {
+    let doc = create_with_header("hdr-both", "A", "H");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!(x, 96);
+    assert_eq!(y, 52); // header top
+                       // 正文 A 墨迹仍在 101..109；合成盒底应覆盖到正文。
+    assert!(y + h > 109, "h={h} bottom={}", y + h - 1);
+    assert!(w >= 8);
+}
+
+#[cfg(windows)]
+#[test]
+fn header_with_table_is_not_implemented() {
+    let src = tmp("hdr-tbl");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "" }],
+            "headers": [{
+                "type": "default",
+                "paragraphs": [{ "text": "" }],
+                "tables": [{ "cells": [["", ""], ["", ""]] }]
+            }]
+        }
+    }));
+    let err = export(&src, "page:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}

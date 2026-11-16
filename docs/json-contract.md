@@ -17,7 +17,7 @@ xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
-docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁 Calibri 多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或无文字表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/样式/表内文字、页眉还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁 Calibri 多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或无文字表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`），或 default 页眉拉丁 Calibri（`pgMar/@header` 顶距，正文原点不位移），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/样式/表内文字、奇偶/首页页眉、页脚、页眉内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
@@ -208,7 +208,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 ### 请求
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "inspect",
@@ -220,7 +220,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
     "maxCells": 5000
   }
 }
-```
+``
 
 xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，混用报 `InvalidField`。
 
@@ -279,7 +279,7 @@ apply 的入参是操作列表，不是树。另可带布尔字段 `dryRun`。
 
 下面这种写法非法，必须报 `InvalidField`：
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -287,11 +287,11 @@ apply 的入参是操作列表，不是树。另可带布尔字段 `dryRun`。
   "sheets": [],
   "cells": []
 }
-```
+``
 
 合法请求：
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -315,7 +315,7 @@ apply 的入参是操作列表，不是树。另可带布尔字段 `dryRun`。
     }
   ]
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -481,7 +481,7 @@ pptx 的 `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeigh
 docx 改 `/word/settings.xml` 的限制编辑；xlsx 改工作表 `sheetProtection` 或工作簿 `workbookProtection`；
 pptx 改 `presentation.xml` 的 `p:modifyVerifier`。pptx 的放映设置用 `setShowPr`，不要塞进本 op。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -495,9 +495,9 @@ pptx 改 `presentation.xml` 的 `p:modifyVerifier`。pptx 的放映设置用 `se
     }
   ]
 }
-```
+``
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -516,9 +516,9 @@ pptx 改 `presentation.xml` 的 `p:modifyVerifier`。pptx 的放映设置用 `se
     }
   ]
 }
-```
+``
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -532,7 +532,7 @@ pptx 改 `presentation.xml` 的 `p:modifyVerifier`。pptx 的放映设置用 `se
     }
   ]
 }
-```
+``
 
 docx：
 
@@ -655,7 +655,7 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
 
 ### replacePicture
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -669,7 +669,7 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
     }
   ]
 }
-```
+``
 
 - **`op`**
   - 必须是 `"replacePicture"`
@@ -707,7 +707,7 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
 
 ### insertPicture
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -721,7 +721,7 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
     }
   ]
 }
-```
+``
 
 - **`op`**
   - 必须是 `"insertPicture"`
@@ -826,7 +826,7 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
 
 ### deletePicture
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -838,7 +838,7 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
     }
   ]
 }
-```
+``
 
 | 字段 | 含义 |
 | --- | --- |
@@ -853,7 +853,7 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
 
 ### setPictureSize
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -867,7 +867,7 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
     }
   ]
 }
-```
+``
 
 | 字段 | 含义 |
 | --- | --- |
@@ -923,7 +923,7 @@ docx 上 `setMathSize` / `setMathAnchor` / `setMathPos` 报 `InvalidField`。
 
 ### insertTextBox
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -937,7 +937,7 @@ docx 上 `setMathSize` / `setMathAnchor` / `setMathPos` 报 `InvalidField`。
     }
   ]
 }
-```
+``
 
 | 字段 | 含义 |
 | --- | --- |
@@ -987,7 +987,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 
 ### insertTable
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -1011,7 +1011,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
     }
   ]
 }
-```
+``
 
 - **`op`**
   - 必须是 `"insertTable"`
@@ -2075,7 +2075,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 
 ### setShapeText
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -2089,7 +2089,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
     }
   ]
 }
-```
+``
 
 - **`op`**
   - 必须是 `"setShapeText"`
@@ -2145,7 +2145,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 
 改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐、框内垂直锚点、段落间距与字符间距。不改可见字。不要用 Word 的半磅字号。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "apply",
@@ -2161,7 +2161,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
     }
   ]
 }
-```
+``
 
 | 字段 | 含义 |
 | --- | --- |
@@ -2215,7 +2215,7 @@ xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`�
 
 按原文把形状或文本框里的可见文字拆成多个 run。`id` 与 `setShapeText` 相同。不改没点名的字，不重建形状。短的用 `match`。中间很长时不写 `match`，只写两个切点：`after` 是左切点，这一截从它后面开始；`before` 是右切点，这一截到它前面结束。两切点中间的原文单独成一截，中间不用抄出来。
 
-```json
+``json
 {
   "op": "setShapeRuns",
   "id": "slide:1/shape:2",
@@ -2223,7 +2223,7 @@ xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`�
     { "after": "前半", "before": "结尾", "color": "FF0000", "underline": "sng" }
   ]
 }
-```
+``
 
 xlsx 文本框和带文字的形状用同一条，id 例如 `sheet:Sheet1/sp:1`。docx 上发此 op 报 `InvalidField`。单元格、备注整段、讲义槽位、图表标题、SmartArt 点文字不走这条。
 
@@ -2258,7 +2258,7 @@ xlsx 文本框和带文字的形状用同一条，id 例如 `sheet:Sheet1/sp:1`�
 三种格式也认 3D 模型 id，写出 GLB 原字节。docx 也认墨迹画布 id。
 不读进 inspect 树，不做转码、缩放、子集化或预览。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportMedia",
@@ -2266,7 +2266,7 @@ xlsx 文本框和带文字的形状用同一条，id 例如 `sheet:Sheet1/sp:1`�
   "id": "para:3F2A1B00/pic:1",
   "output": "C:\\out\\logo.png"
 }
-```
+``
 
 - **`path`**（是）
   - 源 docx、xlsx 或 pptx
@@ -2311,7 +2311,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按图表 id 把 embedding 工作簿原字节写到本地。不读进 inspect 树，不转码。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportChartData",
@@ -2319,7 +2319,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "para:3F2A1B00/chart:7",
   "output": "C:\\out\\chart.xlsx"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2339,7 +2339,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按图表 id 把工作表上的簇状柱形图画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportChartImage",
@@ -2347,7 +2347,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "sheet:Sheet1/chart:2",
   "output": "C:\\out\\chart.png"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2387,7 +2387,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按迷你图组 id 把这一组里的一条折线或非负柱形画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里只有这条线或这些柱，没有格子的文字、填充和边框。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportSparklineImage",
@@ -2395,7 +2395,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "sheet:Sheet1/spark:1",
   "output": "C:\\out\\spark.png"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2431,7 +2431,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按工作表 id 把已用区域画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里是格子。没有描边、没有字的纯色矩形可以画。不透明 PNG 在目标框正好等于要贴的像素时可以画，整像素且不缩放的裁剪也贴这一块。同一单元格里、变换是恒等的组合，里面只有这种矩形时也画。其它压到已用区域上的图形让整表失败。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportSheetImage",
@@ -2439,7 +2439,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "sheet:总览",
   "output": "C:\\out\\sheet.png"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2519,7 +2519,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按幻灯片 id 把这一页写成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportSlideImage",
@@ -2527,7 +2527,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "slide:1",
   "output": "C:\\out\\slide.png"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2607,7 +2607,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 按页 id 把这一页写成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
 
-```json
+``json
 {
   "schemaVersion": 1,
   "action": "exportPageImage",
@@ -2615,7 +2615,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
   "id": "page:1",
   "output": "C:\\out\\page.png"
 }
-```
+``
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -2650,7 +2650,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 成功时 stdout 是一份 JSON 树，不带 `ok`、不带 `path`：
 
-```json
+``json
 {
   "schemaVersion": 1,
   "format": "pptx",
@@ -2676,7 +2676,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
     }
   ]
 }
-```
+``
 
 形状集合与坐标系：
 

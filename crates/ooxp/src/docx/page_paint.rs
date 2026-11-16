@@ -2,7 +2,8 @@
 //! 宽高按节的 `w:pgSz`，96 dpi，twip×96/1440 四舍五入。
 //! 单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
 //! 不透明 `wp:inline` PNG（extent 像素=源）与无文字表（填色 + single/nil 边、tblGrid/tblInd/trHeight）已画。
-//! 合并/表样式/表内文字与图、浮动绕排、页眉、显式行距/分页控制仍不画。
+//! default 页眉拉丁 Calibri（按 pgMar/@header 顶距，正文不位移）已画；奇偶/首页/页脚/页眉图表域仍 NI。
+//! 合并/表样式/表内文字与图、浮动绕排、显式行距/分页控制仍不画。
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 use std::io::Cursor;
@@ -45,6 +46,8 @@ struct Layout {
     height: u32,
     /// 下标 0 = page:1。
     pages: Vec<Page>,
+    /// 每页重复绘制的 default 页眉文字（无则空）。
+    header_texts: Vec<TextLine>,
 }
 
 struct Page {
@@ -78,6 +81,7 @@ struct ImageBlit {
     rgb: Vec<u8>,
 }
 
+#[derive(Clone)]
 struct TextLine {
     text: String,
     sz: u32,
@@ -124,11 +128,111 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
     if pages.is_empty() {
         return Err(unsupported());
     }
+    // 页眉在上边距区域内绘制，不把正文 y 下推（oracle：blank 页眉时正文 A 仍在 101）。
+    let header_texts = layout_default_header(pkg, doc_part, sect, left, body_w, page_h)?;
     Ok(Layout {
         width,
         height,
         pages,
+        header_texts,
     })
+}
+
+/// `w:pgMar/@w:header`：页顶到页眉内容顶。缺省 708（Word 默认半英寸），不是正文 top 的 1440。
+fn header_distance_twip(sect: &Element) -> Result<i64, Error> {
+    let Some(mar) = sect.child_by_local("pgMar") else {
+        return Ok(708);
+    };
+    match mar.attr_local("header") {
+        None => Ok(708),
+        Some(raw) => {
+            let n = parse_twip(raw)?;
+            if n < 0 {
+                return Err(unsupported());
+            }
+            Ok(n)
+        }
+    }
+}
+
+/// 解析并排版唯一的 default 页眉。无引用 → 空；有图/表/域/页脚/奇偶首页 → NI。
+fn layout_default_header(
+    pkg: &Package,
+    doc_part: &str,
+    sect: &Element,
+    margin_left: i64,
+    body_w: i64,
+    page_h: i64,
+) -> Result<Vec<TextLine>, Error> {
+    if super::hf::even_and_odd_headers(pkg, doc_part)? {
+        return Err(unsupported());
+    }
+    if sect
+        .element_children()
+        .any(|c| c.local_name() == "footerReference")
+    {
+        return Err(unsupported());
+    }
+    let rels = crate::opc::Relationships::from_package(pkg, doc_part)?;
+    let map = super::hf::explicit_refs(
+        sect,
+        "headerReference",
+        super::hf::HfKind::Header,
+        doc_part,
+        &rels,
+    )?;
+    if map.contains_key(&super::hf::HfType::Even) || map.contains_key(&super::hf::HfType::First) {
+        return Err(unsupported());
+    }
+    let Some(part) = map.get(&super::hf::HfType::Default).cloned() else {
+        return Ok(Vec::new());
+    };
+    let header_top = header_distance_twip(sect)?;
+    if header_top >= page_h {
+        return Err(unsupported());
+    }
+    let bytes = pkg.get(&part)?;
+    let doc = xml::parse(bytes)?;
+    if doc.root.local_name() != "hdr" {
+        return Err(unsupported());
+    }
+    let story = header_body_story(pkg, &part, &doc.root)?;
+    if story.is_empty() {
+        return Ok(Vec::new());
+    }
+    // 页眉不跨页；可用高度为页高减去页眉顶距。
+    let avail = page_h.saturating_sub(header_top);
+    let pages = layout_story(&story, margin_left, header_top, body_w, avail)?;
+    if pages.len() != 1 {
+        return Err(unsupported());
+    }
+    let page = &pages[0];
+    if !page.images.is_empty() || !page.tables.is_empty() {
+        return Err(unsupported());
+    }
+    Ok(page.texts.clone())
+}
+
+fn header_body_story(
+    pkg: &Package,
+    header_part: &str,
+    hdr: &Element,
+) -> Result<Vec<StoryPara>, Error> {
+    let mut story = Vec::new();
+    for child in hdr.element_children() {
+        match child.local_name() {
+            "p" => {
+                let para = paragraph_kind(pkg, header_part, child)?;
+                match para {
+                    StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
+                    other => story.push(other),
+                }
+            }
+            // 表/图/内容控件/域等：明确 NI，不静默丢。
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(story)
 }
 
 fn ensure_space(
@@ -729,6 +833,8 @@ fn sect_is_plain(sect: &Element, has_text: bool) -> bool {
         .all(|child| match child.local_name() {
             "pgSz" | "pgMar" | "type" | "formProt" | "paperSrc" | "textDirection" | "bidi"
             | "rtlGutter" | "pgNumType" => true,
+            // 本切片只认 default 页眉；奇偶/首页/页脚仍 NI（计划不做，除非已差 0）。
+            "headerReference" => child.attr_local("type").unwrap_or("default") == "default",
             "titlePg" => !has_text,
             "vAlign" => {
                 let val = child.attr_local("val").unwrap_or("top");
@@ -835,6 +941,9 @@ fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
         }
         for img in &page_items.images {
             paint_image(&mut rgb, layout.width, layout.height, img)?;
+        }
+        for line in &layout.header_texts {
+            paint_text(&mut rgb, layout.width, layout.height, line)?;
         }
         for line in &page_items.texts {
             paint_text(&mut rgb, layout.width, layout.height, line)?;
@@ -1113,8 +1222,11 @@ fn decode_opaque_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Error> {
     Ok((w, h, rgb))
 }
 
-/// 空单元格自动行高：Calibri 11 单倍行距 + Word 空表 PDF 对齐余量。
-/// oracle（96dpi Word PDF）：2–5 行空表横线 y=114/132/151/170/188/207；累加 (n+7)/15 需 +11（非 +7）。
+/// 空单元格自动行高（仅 DEFAULT_SZ / 空单元格路径）。
+/// Word COM：默认表 Top/Bottom padding=0、Left/Right=5.4pt(=108twip)；空单元格段落
+/// Font=11、SpaceBefore=0，LineSpacing≈13.9pt（≈278–279 twip）。
+/// TTF 单倍 `line_advance(22)=268` twip；与 Word 单元格行框差 **11 twip（0.55pt）**。
+/// 96dpi PDF 横线累计验证 2–5 行：114/132/151/170/188/207。非 Calibri11 空行不走此常数。
 fn empty_auto_row_twip() -> Result<i64, Error> {
     Ok(line_advance_twip(DEFAULT_SZ)?.saturating_add(11))
 }
