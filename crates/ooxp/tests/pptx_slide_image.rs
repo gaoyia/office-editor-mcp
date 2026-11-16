@@ -1270,14 +1270,15 @@ fn translucent_two_stop_gradient_blends_over_the_page() {
     let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
     let left = pixel(&rgb, w, 192, 120);
     let right = pixel(&rgb, w, 287, 120);
-    let mid = pixel(&rgb, w, 239, 120);
+    let mid = pixel(&rgb, w, 240, 120);
+    // 与 Office 16.0 金样端点、中点一致：sRGB 线性插值后再按 128/255 浮点叠在页底上。
+    assert_eq!(left, [212, 93, 102], "左端 {left:?}");
+    assert_eq!(right, [85, 93, 229], "右端 {right:?}");
+    assert_eq!(mid, [148, 93, 166], "中点 {mid:?}");
     assert_ne!(left, [0xAA, 0xBB, 0xCC]);
     assert_ne!(right, [0xAA, 0xBB, 0xCC]);
     assert_ne!(left, [255, 0, 0]);
     assert_ne!(right, [0, 0, 255]);
-    assert_ne!(left, right);
-    assert_ne!(mid, left);
-    assert_ne!(mid, right);
     assert!(left[0] > left[2], "左端应更红 {left:?}");
     assert!(right[2] > right[0], "右端应更蓝 {right:?}");
 }
