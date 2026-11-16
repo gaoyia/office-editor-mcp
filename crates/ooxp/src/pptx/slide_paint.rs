@@ -1800,23 +1800,49 @@ fn paint_table(
         .collect();
     let xs = table_grid_edges(x, &col_emus);
     let ys = table_grid_edges(y, &row_emus);
+    // 横向合并：锚格 `gridSpan`，后续格 `hMerge`。纵向合并仍整表不画。
+    // 带合并且会走默认无样式灰边时整表不画（灰边交点未差 0，且内线穿过合并区）。
+    let mut has_h_merge = false;
+    for tr in &rows {
+        for tc in tr.element_children().filter(|el| el.local_name() == "tc") {
+            if tc.attr_local("rowSpan").is_some_and(|v| v != "1") || attr_on_true(tc, "vMerge") {
+                return Err(unsupported());
+            }
+            if tc.attr_local("gridSpan").is_some() || attr_on_true(tc, "hMerge") {
+                has_h_merge = true;
+            }
+        }
+    }
+    if has_h_merge && should_paint_default_table_grid(tbl) {
+        return Err(unsupported());
+    }
     for (row_index, tr) in rows.iter().enumerate() {
         let py = *ys.get(row_index).unwrap_or(&y);
         let rh = ys.get(row_index + 1).copied().unwrap_or(py) - py;
-        for (i, tc) in tr
+        let tcs: Vec<&Element> = tr
             .element_children()
             .filter(|el| el.local_name() == "tc")
-            .enumerate()
-        {
-            let px = *xs.get(i).unwrap_or(&x);
-            let cw = xs.get(i + 1).copied().unwrap_or(px) - px;
-            if tc.attr_local("gridSpan").is_some()
-                || tc.attr_local("rowSpan").is_some_and(|v| v != "1")
-                || tc.attr_local("hMerge").is_some()
-                || tc.attr_local("vMerge").is_some()
-            {
+            .collect();
+        if tcs.len() + 1 != xs.len() {
+            return Err(unsupported());
+        }
+        let mut i = 0usize;
+        while i < tcs.len() {
+            let tc = tcs[i];
+            if attr_on_true(tc, "hMerge") {
                 return Err(unsupported());
             }
+            let span = cell_grid_span(tc)?;
+            if i + span > tcs.len() {
+                return Err(unsupported());
+            }
+            for k in 1..span {
+                if !attr_on_true(tcs[i + k], "hMerge") {
+                    return Err(unsupported());
+                }
+            }
+            let px = xs[i];
+            let cw = xs[i + span] - px;
             let fill = tc
                 .child_by_local("tcPr")
                 .and_then(|pr| pr.child_by_local("solidFill"))
@@ -1824,6 +1850,7 @@ fn paint_table(
             if let Some(color) = fill {
                 fill_rect(rgb, width, height, px, py, cw, rh, color);
             }
+            i += span;
         }
     }
     if should_paint_default_table_grid(tbl) {
@@ -1832,13 +1859,22 @@ fn paint_table(
     for (row_index, tr) in rows.iter().enumerate() {
         let py = *ys.get(row_index).unwrap_or(&y);
         let rh = ys.get(row_index + 1).copied().unwrap_or(py) - py;
-        for (i, tc) in tr
+        let tcs: Vec<&Element> = tr
             .element_children()
             .filter(|el| el.local_name() == "tc")
-            .enumerate()
-        {
-            let px = *xs.get(i).unwrap_or(&x);
-            let cw = xs.get(i + 1).copied().unwrap_or(px) - px;
+            .collect();
+        let mut i = 0usize;
+        while i < tcs.len() {
+            let tc = tcs[i];
+            if attr_on_true(tc, "hMerge") {
+                return Err(unsupported());
+            }
+            let span = cell_grid_span(tc)?;
+            if i + span > tcs.len() {
+                return Err(unsupported());
+            }
+            let px = xs[i];
+            let cw = xs[i + span] - px;
             paint_cell_text(
                 tc,
                 &fonts,
@@ -1851,9 +1887,30 @@ fn paint_table(
                 width,
                 height,
             );
+            i += span;
         }
     }
     Ok(())
+}
+
+fn attr_on_true(el: &Element, local: &str) -> bool {
+    matches!(
+        el.attr_local(local).map(str::trim),
+        Some("1") | Some("true") | Some("True")
+    )
+}
+
+fn cell_grid_span(tc: &Element) -> Result<usize, Error> {
+    match tc.attr_local("gridSpan").map(str::trim) {
+        None | Some("") => Ok(1),
+        Some(raw) => {
+            let n: usize = raw.parse().map_err(|_| unsupported())?;
+            if !(1..=64).contains(&n) {
+                return Err(unsupported());
+            }
+            Ok(n)
+        }
+    }
 }
 
 const TABLE_GRID_LN: &[&str] = &["lnL", "lnR", "lnT", "lnB", "lnTlToBr", "lnBlToTr"];

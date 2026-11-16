@@ -3703,3 +3703,140 @@ fn shrinking_or_mixed_crop_scale_is_not_implemented() {
     export_cropped_should_fail(&png, 38100, 9525, 25000, 25000, 25000, 25000, "cs-mix-wh");
     export_cropped_should_fail(&png, 9525, 38100, 25000, 25000, 25000, 25000, "cs-mix-hw");
 }
+
+#[test]
+fn horizontal_merge_fill_spans_columns_with_table_style() {
+    // 默认带 tableStyleId，不走无样式灰边。横向 gridSpan=2 填色应盖住两列。
+    let deck = tmp("hmerge-style");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 1,
+                    "cols": 2,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 1828800,
+                    "cy": 914400,
+                    "cells": [[{ "text": "", "fill": "00AA00" }, { "text": "", "fill": "EE4455" }]]
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("hmerge-style-painted");
+    rewrite_slide(&deck, &painted, |xml| {
+        let mut out = xml;
+        let first = out.find("<a:tc>").expect("first tc");
+        out.insert_str(first + 5, " gridSpan=\"2\"");
+        let second = out[first + 10..].find("<a:tc>").expect("second tc") + first + 10;
+        out.insert_str(second + 5, " hMerge=\"1\"");
+        out
+    });
+    let out = tmp("hmerge-style.png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    let mid_left = pixel(&rgb, w, 192 + 40, 96 + 40);
+    let mid_right = pixel(&rgb, w, 192 + 140, 96 + 40);
+    assert_eq!(mid_left, [0x00, 0xAA, 0x00], "left of merge {mid_left:?}");
+    assert_eq!(
+        mid_right,
+        [0x00, 0xAA, 0x00],
+        "right of merge should keep anchor fill {mid_right:?}"
+    );
+}
+
+#[test]
+fn horizontal_merge_with_default_grid_is_not_implemented() {
+    let deck = tmp("hmerge-grid");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 1,
+                    "cols": 2,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 1828800,
+                    "cy": 914400,
+                    "tableStyleId": null,
+                    "cells": [[{ "text": "", "fill": "00AA00" }, { "text": "", "fill": "00AA00" }]]
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("hmerge-grid-painted");
+    rewrite_slide(&deck, &painted, |xml| {
+        let mut out = xml;
+        let first = out.find("<a:tc>").expect("first tc");
+        out.insert_str(first + 5, " gridSpan=\"2\"");
+        let second = out[first + 10..].find("<a:tc>").expect("second tc") + first + 10;
+        out.insert_str(second + 5, " hMerge=\"1\"");
+        out
+    });
+    let out = tmp("hmerge-grid.png").with_extension("png");
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn vertical_merge_is_not_implemented() {
+    let deck = tmp("vmerge");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 2,
+                    "cols": 1,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 914400,
+                    "cy": 1828800,
+                    "cells": [[{ "text": "", "fill": "00AA00" }], [{ "text": "", "fill": "00AA00" }]]
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("vmerge-painted");
+    rewrite_slide(&deck, &painted, |xml| {
+        let mut out = xml;
+        let first = out.find("<a:tc>").expect("first tc");
+        out.insert_str(first + 5, " rowSpan=\"2\"");
+        let second = out[first + 10..].find("<a:tc>").expect("second tc") + first + 10;
+        out.insert_str(second + 5, " vMerge=\"1\"");
+        out
+    });
+    let out = tmp("vmerge.png").with_extension("png");
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
