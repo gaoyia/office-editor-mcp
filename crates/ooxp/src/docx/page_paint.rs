@@ -4,6 +4,8 @@
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 
+use std::io::Cursor;
+
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, Package};
 use crate::xlsx::Face;
@@ -40,8 +42,22 @@ pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
 struct Layout {
     width: u32,
     height: u32,
-    /// 每页要画的行。下标 0 = page:1。
-    pages: Vec<Vec<TextLine>>,
+    /// 下标 0 = page:1。
+    pages: Vec<Page>,
+}
+
+struct Page {
+    texts: Vec<TextLine>,
+    images: Vec<ImageBlit>,
+}
+
+struct ImageBlit {
+    left_twip: i64,
+    top_twip: i64,
+    width_px: u32,
+    height_px: u32,
+    /// 不透明 RGB，长度 width*height*3。
+    rgb: Vec<u8>,
 }
 
 struct TextLine {
@@ -57,9 +73,10 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
         return Err(unsupported());
     }
     let body = root.child_by_local("body").ok_or_else(unsupported)?;
-    let (story, sect) = body_story(body)?;
+    let (story, sect) = body_story(pkg, doc_part, body)?;
     let has_text = story.iter().any(|p| matches!(p, StoryPara::Text(_)));
-    if !sect_is_plain(sect, has_text) || !uses_default_calibri(pkg, doc_part)? {
+    let has_image = story.iter().any(|p| matches!(p, StoryPara::Image(_)));
+    if !sect_is_plain(sect, has_text || has_image) || !uses_default_calibri(pkg, doc_part)? {
         return Err(unsupported());
     }
     let page_w = page_twip(sect, "w")?;
@@ -94,7 +111,7 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
 }
 
 fn ensure_space(
-    pages: &mut Vec<Vec<TextLine>>,
+    pages: &mut Vec<Page>,
     y: &mut i64,
     at_page_top: &mut bool,
     margin_top: i64,
@@ -110,7 +127,10 @@ fn ensure_space(
     if *at_page_top {
         return Err(unsupported());
     }
-    pages.push(Vec::new());
+    pages.push(Page {
+        texts: Vec::new(),
+        images: Vec::new(),
+    });
     *y = margin_top;
     *at_page_top = true;
     if *y + need > page_bottom {
@@ -127,14 +147,16 @@ fn layout_story(
     margin_top: i64,
     body_w: i64,
     body_h: i64,
-) -> Result<Vec<Vec<TextLine>>, Error> {
+) -> Result<Vec<Page>, Error> {
     // ??????????????floor(body_h * 2048 / 550000) ? ? ???
-    // ?? 52 ????????????/???????
     let adv11 = line_advance_twip(DEFAULT_SZ)?;
     let lines_fit = (body_h as u64).saturating_mul(LINE_DEN) / LINE_NUM;
     let usable = (lines_fit as i64).saturating_mul(adv11).min(body_h);
     let page_bottom = margin_top.saturating_add(usable);
-    let mut pages: Vec<Vec<TextLine>> = vec![Vec::new()];
+    let mut pages: Vec<Page> = vec![Page {
+        texts: Vec::new(),
+        images: Vec::new(),
+    }];
     let mut y = margin_top;
     let mut at_page_top = true;
 
@@ -156,6 +178,42 @@ fn layout_story(
                 y = y.saturating_add(before_use).saturating_add(adv);
                 at_page_top = false;
                 y = y.saturating_add((*after).max(0));
+            }
+            StoryPara::Image(img) => {
+                let before_use = img.before_twip.max(0);
+                let h_twip = emu_twip(img.cy_emu)?;
+                ensure_space(
+                    &mut pages,
+                    &mut y,
+                    &mut at_page_top,
+                    margin_top,
+                    page_bottom,
+                    before_use.saturating_add(h_twip),
+                )?;
+                let before_use = img.before_twip.max(0);
+                y = y.saturating_add(before_use);
+                let left_twip = margin_left.saturating_add(img.indent_twip.max(0));
+                if left_twip < 0 {
+                    return Err(unsupported());
+                }
+                let w_twip = emu_twip(img.cx_emu)?;
+                if w_twip > body_w.saturating_sub(img.indent_twip.max(0)) {
+                    return Err(unsupported());
+                }
+                pages
+                    .last_mut()
+                    .ok_or_else(unsupported)?
+                    .images
+                    .push(ImageBlit {
+                        left_twip,
+                        top_twip: y,
+                        width_px: img.width_px,
+                        height_px: img.height_px,
+                        rgb: img.rgb.clone(),
+                    });
+                y = y.saturating_add(h_twip);
+                at_page_top = false;
+                y = y.saturating_add(img.after_twip.max(0));
             }
             StoryPara::Text(line) => {
                 let content_w = body_w.saturating_sub(line.indent_twip.max(0));
@@ -179,13 +237,17 @@ fn layout_story(
                         lead.saturating_add(adv),
                     )?;
                     y = y.saturating_add(lead);
-                    pages.last_mut().ok_or_else(unsupported)?.push(TextLine {
-                        text: row,
-                        sz: line.sz,
-                        left_twip,
-                        top_twip: y,
-                        body_w_twip: content_w,
-                    });
+                    pages
+                        .last_mut()
+                        .ok_or_else(unsupported)?
+                        .texts
+                        .push(TextLine {
+                            text: row,
+                            sz: line.sz,
+                            left_twip,
+                            top_twip: y,
+                            body_w_twip: content_w,
+                        });
                     y = y.saturating_add(adv);
                     at_page_top = false;
                 }
@@ -297,9 +359,25 @@ struct PendingText {
 enum StoryPara {
     Empty { before: i64, after: i64 },
     Text(PendingText),
+    Image(PendingImage),
 }
 
-fn body_story(body: &Element) -> Result<(Vec<StoryPara>, &Element), Error> {
+struct PendingImage {
+    indent_twip: i64,
+    before_twip: i64,
+    after_twip: i64,
+    cx_emu: i64,
+    cy_emu: i64,
+    width_px: u32,
+    height_px: u32,
+    rgb: Vec<u8>,
+}
+
+fn body_story<'a>(
+    pkg: &Package,
+    doc_part: &str,
+    body: &'a Element,
+) -> Result<(Vec<StoryPara>, &'a Element), Error> {
     let mut story: Vec<StoryPara> = Vec::new();
     let mut sect: Option<&Element> = None;
     let children: Vec<&Element> = body.element_children().collect();
@@ -309,7 +387,7 @@ fn body_story(body: &Element) -> Result<(Vec<StoryPara>, &Element), Error> {
                 if sect.is_some() {
                     return Err(unsupported());
                 }
-                story.push(paragraph_kind(child)?);
+                story.push(paragraph_kind(pkg, doc_part, child)?);
             }
             "sectPr" => {
                 if sect.is_some() || index + 1 != children.len() {
@@ -329,7 +407,7 @@ fn body_story(body: &Element) -> Result<(Vec<StoryPara>, &Element), Error> {
     Ok((story, sect))
 }
 
-fn paragraph_kind(p: &Element) -> Result<StoryPara, Error> {
+fn paragraph_kind(pkg: &Package, doc_part: &str, p: &Element) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
     let mut before = 0i64;
     let mut after = 0i64;
@@ -353,6 +431,44 @@ fn paragraph_kind(p: &Element) -> Result<StoryPara, Error> {
         }
         return Ok(StoryPara::Empty { before, after });
     };
+    // ? run?????? inline ???? NI?
+    let mut drawing: Option<&Element> = None;
+    let mut has_text = false;
+    for child in run.element_children() {
+        match child.local_name() {
+            "drawing" => {
+                if drawing.is_some() {
+                    return Err(unsupported());
+                }
+                drawing = Some(child);
+            }
+            "t" => {
+                if !element_text(child).is_empty() {
+                    has_text = true;
+                }
+            }
+            "rPr" => {}
+            "tab" | "br" | "cr" | "noBreakHyphen" | "softHyphen" | "sym" | "object" | "pict"
+            | "fldChar" | "instrText" => return Err(unsupported()),
+            _ => return Err(unsupported()),
+        }
+    }
+    if drawing.is_some() && has_text {
+        return Err(unsupported());
+    }
+    if let Some(drawing) = drawing {
+        let img = plain_inline_image(pkg, doc_part, drawing)?;
+        return Ok(StoryPara::Image(PendingImage {
+            indent_twip: indent,
+            before_twip: before,
+            after_twip: after,
+            cx_emu: img.0,
+            cy_emu: img.1,
+            width_px: img.2,
+            height_px: img.3,
+            rgb: img.4,
+        }));
+    }
     let (text, sz) = plain_run(run)?;
     if text.is_empty() {
         return Ok(StoryPara::Empty { before, after });
@@ -632,12 +748,37 @@ fn twip_px(twip: i64) -> Result<u32, Error> {
 fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     let mut rgb = vec![255u8; (layout.width as usize) * (layout.height as usize) * 3];
     let idx = (page as usize).saturating_sub(1);
-    if let Some(lines) = layout.pages.get(idx) {
-        for line in lines {
+    if let Some(page_items) = layout.pages.get(idx) {
+        for img in &page_items.images {
+            paint_image(&mut rgb, layout.width, layout.height, img)?;
+        }
+        for line in &page_items.texts {
             paint_text(&mut rgb, layout.width, layout.height, line)?;
         }
     }
     encode_png(layout.width, layout.height, &rgb)
+}
+
+fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit) -> Result<(), Error> {
+    let x0 = twip_px_unclamped(img.left_twip)? as i32;
+    let y0 = twip_px_unclamped(img.top_twip)? as i32;
+    if x0 < 0 || y0 < 0 {
+        return Err(unsupported());
+    }
+    let w = img.width_px as i32;
+    let h = img.height_px as i32;
+    if x0 + w > page_w as i32 || y0 + h > page_h as i32 {
+        return Err(unsupported());
+    }
+    // 1:1 ??????????? PPT HighQualityBicubic?
+    for row in 0..img.height_px {
+        let src_off = (row as usize) * (img.width_px as usize) * 3;
+        let dst_y = (y0 as u32).saturating_add(row);
+        let dst_off = (dst_y as usize * page_w as usize + x0 as usize) * 3;
+        let n = (img.width_px as usize) * 3;
+        rgb[dst_off..dst_off + n].copy_from_slice(&img.rgb[src_off..src_off + n]);
+    }
+    Ok(())
 }
 
 fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine) -> Result<(), Error> {
@@ -731,6 +872,161 @@ fn parse_page_id(id: &str) -> Result<u32, Error> {
         ));
     }
     Ok(n)
+}
+
+fn emu_twip(emu: i64) -> Result<i64, Error> {
+    if emu <= 0 {
+        return Err(unsupported());
+    }
+    // 914400 EMU = 1440 twip ? /635?
+    Ok(emu / 635)
+}
+
+fn emu_px(emu: i64) -> Result<u32, Error> {
+    if emu <= 0 {
+        return Err(unsupported());
+    }
+    let px = emu.saturating_mul(96) / 914_400;
+    if !(1..=MAX_PX).contains(&(px as u64)) {
+        return Err(unsupported());
+    }
+    Ok(px as u32)
+}
+
+/// ?? `wp:inline` + ??? PNG?? extent ?????????????????
+fn plain_inline_image(
+    pkg: &Package,
+    doc_part: &str,
+    drawing: &Element,
+) -> Result<(i64, i64, u32, u32, Vec<u8>), Error> {
+    let children: Vec<&Element> = drawing.element_children().collect();
+    if children.len() != 1 || children[0].local_name() != "inline" {
+        return Err(unsupported());
+    }
+    let inline = children[0];
+    let extent = inline.child_by_local("extent").ok_or_else(unsupported)?;
+    let cx: i64 = extent
+        .attr_local("cx")
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())?;
+    let cy: i64 = extent
+        .attr_local("cy")
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())?;
+    let width_px = emu_px(cx)?;
+    let height_px = emu_px(cy)?;
+    // ??????inline ??? dist ????? 0?? 0 ? NI?
+    for key in ["distT", "distB", "distL", "distR"] {
+        if let Some(v) = inline.attr_local(key) {
+            if v != "0" {
+                return Err(unsupported());
+            }
+        }
+    }
+    if inline.child_by_local("anchor").is_some() {
+        return Err(unsupported());
+    }
+    // blipFill??? srcRect??? blip ? alpha?
+    let pic = find_local_desc(inline, "pic").ok_or_else(unsupported)?;
+    let blip_fill = pic.child_by_local("blipFill").ok_or_else(unsupported)?;
+    if blip_fill.child_by_local("srcRect").is_some() {
+        return Err(unsupported());
+    }
+    let blip = blip_fill.child_by_local("blip").ok_or_else(unsupported)?;
+    if blip.element_children().any(|el| {
+        let n = el.local_name();
+        n == "alphaModFix" || n == "alpha" || n.contains("alpha")
+    }) {
+        return Err(unsupported());
+    }
+    let rid = super::picture::blip_embed(drawing).ok_or_else(unsupported)?;
+    if super::picture::blip_link(drawing).is_some() {
+        // ??? link ??????
+        if super::picture::blip_embed(drawing).is_none() {
+            return Err(unsupported());
+        }
+    }
+    // ?? embed ???? link NI?
+    let media = super::picture::resolve_embed(pkg, doc_part, &rid)?;
+    let bytes = pkg.get(&media)?;
+    let (sw, sh, rgb) = decode_opaque_png(bytes)?;
+    if sw != width_px || sh != height_px {
+        // ??????????? oracle 1:1??
+        return Err(unsupported());
+    }
+    Ok((cx, cy, width_px, height_px, rgb))
+}
+
+fn find_local_desc<'a>(root: &'a Element, local: &str) -> Option<&'a Element> {
+    if root.local_name() == local {
+        return Some(root);
+    }
+    for child in root.element_children() {
+        if let Some(found) = find_local_desc(child, local) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn decode_opaque_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Error> {
+    let decoder = png::Decoder::new(Cursor::new(bytes));
+    let mut reader = decoder.read_info().map_err(|_| unsupported())?;
+    let info = reader.info();
+    let w = info.width;
+    let h = info.height;
+    if !(1..=MAX_PX).contains(&(w as u64)) || !(1..=MAX_PX).contains(&(h as u64)) {
+        return Err(unsupported());
+    }
+    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).map_err(|_| unsupported())?;
+    let data = &buf[..frame.buffer_size()];
+    let mut rgb = Vec::with_capacity((w as usize) * (h as usize) * 3);
+    match frame.color_type {
+        png::ColorType::Rgb => {
+            if frame.bit_depth != png::BitDepth::Eight {
+                return Err(unsupported());
+            }
+            rgb.extend_from_slice(data);
+        }
+        png::ColorType::Rgba => {
+            if frame.bit_depth != png::BitDepth::Eight {
+                return Err(unsupported());
+            }
+            for chunk in data.as_chunks::<4>().0 {
+                if chunk[3] != 255 {
+                    return Err(unsupported());
+                }
+                rgb.extend_from_slice(&chunk[..3]);
+            }
+        }
+        png::ColorType::Grayscale => {
+            if frame.bit_depth != png::BitDepth::Eight {
+                return Err(unsupported());
+            }
+            for &g in data {
+                rgb.extend_from_slice(&[g, g, g]);
+            }
+        }
+        png::ColorType::GrayscaleAlpha => {
+            if frame.bit_depth != png::BitDepth::Eight {
+                return Err(unsupported());
+            }
+            for chunk in data.as_chunks::<2>().0 {
+                if chunk[1] != 255 {
+                    return Err(unsupported());
+                }
+                rgb.extend_from_slice(&[chunk[0], chunk[0], chunk[0]]);
+            }
+        }
+        _ => return Err(unsupported()),
+    }
+    if rgb.len() != (w as usize) * (h as usize) * 3 {
+        return Err(unsupported());
+    }
+    Ok((w, h, rgb))
 }
 
 fn unsupported() -> Error {

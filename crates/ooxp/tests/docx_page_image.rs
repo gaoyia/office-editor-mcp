@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
+use zip::{ZipArchive, ZipWriter};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -432,6 +433,81 @@ fn explicit_line_spacing_is_not_implemented() {
     assert_eq!(err.code(), ooxp::ErrorCode::NotImplemented);
 }
 
+#[cfg(windows)]
+fn inject_ppr_child(src: &std::path::Path, tag: &str, child_xml: &str) -> PathBuf {
+    use std::io::{Read, Write};
+    let out = src.with_file_name(format!(
+        "{}-{tag}.docx",
+        src.file_stem().unwrap().to_string_lossy()
+    ));
+    if out.exists() {
+        std::fs::remove_file(&out).unwrap();
+    }
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut zout = ZipWriter::new(std::fs::File::create(&out).unwrap());
+    let opts =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for i in 0..zin.len() {
+        let mut file = zin.by_index(i).unwrap();
+        let name = file.name().to_string();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+        if name == "word/document.xml" {
+            let xml = String::from_utf8(data).unwrap();
+            let pos = xml.find("<w:p ").expect("p");
+            let gt = xml[pos..].find('>').expect(">") + pos;
+            let injected = format!("{}<w:pPr>{child_xml}</w:pPr>{}", &xml[..=gt], &xml[gt + 1..]);
+            zout.start_file(name, opts).unwrap();
+            zout.write_all(injected.as_bytes()).unwrap();
+        } else {
+            zout.start_file(name, opts).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+    }
+    zout.finish().unwrap();
+    out
+}
+
+#[cfg(windows)]
+#[test]
+fn pagination_ppr_controls_are_not_implemented() {
+    let src = create_text("ppr-ni-src", "A");
+    for (tag, xml) in [
+        ("keepNext", "<w:keepNext/>"),
+        ("keepLines", "<w:keepLines/>"),
+        ("pageBreakBefore", "<w:pageBreakBefore/>"),
+        ("widowControl", r#"<w:widowControl w:val="0"/>"#),
+    ] {
+        let doc = inject_ppr_child(&src, tag, xml);
+        let err = export(&doc, "page:1").unwrap_err();
+        assert_eq!(
+            err.code(),
+            ErrorCode::NotImplemented,
+            "{tag} should stay NI, not silent skip"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn accepted_plain_ppr_still_exports() {
+    // ??????? pPr / jc left / before=0 ?? ?????????
+    let plain = create_text("ppr-ok-plain", "A");
+    assert!(export(&plain, "page:1").is_ok());
+    let pid = first_para_id(&plain);
+    let jc = apply_ops(
+        &plain,
+        json!([{ "op": "setParaFormat", "id": pid, "align": "left" }]),
+    );
+    assert!(export(&jc, "page:1").is_ok());
+    let before = apply_ops(
+        &plain,
+        json!([{ "op": "setParaFormat", "id": first_para_id(&plain), "before": 0 }]),
+    );
+    assert!(export(&before, "page:1").is_ok());
+}
+
 #[cfg(not(windows))]
 #[test]
 fn text_is_not_drawn_off_windows() {
@@ -460,4 +536,66 @@ fn other_formats_are_rejected() {
     .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[cfg(windows)]
+fn fixture_png(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
+#[cfg(windows)]
+fn create_inline_png(tag: &str, png_name: &str, cx: i64, cy: i64, left: Option<i64>) -> PathBuf {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "" }] }
+    }));
+    let pid = first_para_id(&src);
+    let mut ops = vec![json!({
+        "op": "insertPicture",
+        "id": pid,
+        "file": fixture_png(png_name).to_string_lossy(),
+        "cx": cx,
+        "cy": cy
+    })];
+    if let Some(left) = left {
+        ops.insert(0, json!({ "op": "setParaFormat", "id": pid, "left": left }));
+    }
+    apply_ops(&src, json!(ops))
+}
+
+#[cfg(windows)]
+#[test]
+fn opaque_inline_png_matches_ink_box() {
+    // 96dpi 原生 extent：64x32 → 609600x304800 EMU。
+    let doc = create_inline_png("pic-red", "opaque-64x32-red.png", 609_600, 304_800, None);
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 96, 64, 32));
+}
+
+#[cfg(windows)]
+#[test]
+fn opaque_inline_png_respects_left_indent() {
+    let doc = create_inline_png(
+        "pic-indent",
+        "opaque-64x32-red.png",
+        609_600,
+        304_800,
+        Some(720),
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (144, 96, 64, 32));
+}
+
+#[cfg(windows)]
+#[test]
+fn scaled_inline_png_extent_is_not_implemented() {
+    // 源 64x32，extent 报 96x48 → 缩放 NI（本切片只 1:1）。
+    let doc = create_inline_png("pic-scale", "opaque-64x32-red.png", 914_400, 457_200, None);
+    let err = export(&doc, "page:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
