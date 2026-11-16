@@ -2432,8 +2432,8 @@ enum Shown {
     Num(f64),
     Text(String),
     Bool(bool),
-    /// `t="e"`。字色和底色相同才不画文字，否则整表不做。
-    Err,
+    /// `t="e"` 且 `<v>` 为点名错误码（如 `#DIV/0!`）。显示串用缓存原文。
+    Err(String),
 }
 
 struct CellRec {
@@ -2503,6 +2503,13 @@ fn has_cached_value(cell: &Element) -> bool {
     cell.child_by_local("v").is_some() || cell.child_by_local("is").is_some()
 }
 
+fn known_error_code(code: &str) -> bool {
+    matches!(
+        code,
+        "#NULL!" | "#DIV/0!" | "#VALUE!" | "#REF!" | "#NAME?" | "#NUM!" | "#N/A"
+    )
+}
+
 fn value_shown(cell: &Element, sst: &[String]) -> Result<Shown, Error> {
     let kind = cell.attr("t").unwrap_or("n");
     let value = cell
@@ -2525,7 +2532,12 @@ fn value_shown(cell: &Element, sst: &[String]) -> Result<Shown, Error> {
         )),
         "n" | "d" if value.is_empty() => Ok(Shown::Empty),
         "n" => Ok(Shown::Num(value.parse().map_err(|_| unsupported())?)),
-        "e" => Ok(Shown::Err),
+        "e" => {
+            if value.is_empty() || !known_error_code(&value) {
+                return Err(unsupported());
+            }
+            Ok(Shown::Err(value))
+        }
         _ => Err(unsupported()),
     }
 }
@@ -2575,7 +2587,9 @@ fn column_px(sheet: &Element, col: u32, default: Option<f64>) -> Result<i32, Err
     })
 }
 
-/// Excel 把列宽换成 96 dpi 像素。`16.7109375` 是 117。
+/// Excel 把 OOXML `col/@width`（已含 padding 的字符宽单位）换成 **96 dpi** 像素。
+/// MDW=7：Calibri 11（Normal）在 96dpi 下 digit width 的规范取值；与销售看板金样 `excel_col_px(16.7109375)=117` 锁定。
+/// 不把本机 106 屏 MDW≈8 硬写进公式。高 DPI 存盘 width 相对 COM 点宽推导的 96dpi 目标可能偏短——记残差，不改 MDW。
 fn excel_col_px(width: f64) -> i32 {
     let mdw = 7.0f64;
     let px = ((256.0 * width + (128.0 / mdw).floor()) / 256.0) * mdw;
@@ -4199,16 +4213,6 @@ fn paint_labels(
         }
         let xf = styles.xf(cell.style)?;
         let font = styles.font(cell.style)?;
-        if matches!(cell.shown, Shown::Err) {
-            let font_color = dxf_color(sheet, styles, cells, col, row, session)?
-                .or(font.color)
-                .ok_or_else(unsupported)?;
-            let fill_color = error_backdrop(sheet, styles, cells, col, row, session, xf.fill)?;
-            if font_color != fill_color {
-                return Err(unsupported());
-            }
-            continue;
-        }
         let fmt = styles.fmt_of(cell.style)?;
         let date1904 = session.as_ref().map(|s| s.date1904()).unwrap_or(false);
         let text = label_text(&cell.shown, &fmt, date1904)?;
@@ -4282,7 +4286,7 @@ fn label_text(shown: &Shown, fmt: &NumFmt, date1904: bool) -> Result<String, Err
         Shown::Bool(false) => Ok("FALSE".into()),
         Shown::Num(_) if matches!(fmt, NumFmt::Blank(_)) => Ok(String::new()),
         Shown::Num(n) => format_num(*n, fmt, date1904),
-        Shown::Err => Ok(String::new()),
+        Shown::Err(code) => Ok(code.clone()),
     }
 }
 
@@ -4501,7 +4505,7 @@ fn shown_text(shown: &Shown) -> String {
         Shown::Num(n) => format_general(*n).to_lowercase(),
         Shown::Bool(true) => "true".into(),
         Shown::Bool(false) => "false".into(),
-        Shown::Err => String::new(),
+        Shown::Err(code) => code.clone(),
     }
 }
 
@@ -4644,7 +4648,7 @@ fn cell_is_blank(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> bo
     match cells.get(&(col, row)).map(|cell| &cell.shown) {
         None | Some(Shown::Empty) => true,
         Some(Shown::Text(text)) => text.trim_matches(' ').is_empty(),
-        Some(Shown::Num(_) | Shown::Bool(_) | Shown::Err) => false,
+        Some(Shown::Num(_) | Shown::Bool(_) | Shown::Err(_)) => false,
     }
 }
 
@@ -4657,7 +4661,7 @@ fn blank_cell_hit(
 ) -> bool {
     if matches!(
         cells.get(&(col, row)).map(|cell| &cell.shown),
-        Some(Shown::Err)
+        Some(Shown::Err(_))
     ) {
         return false;
     }
@@ -4715,7 +4719,7 @@ fn canonical_error_formula(text: &str, anchor: CellRef, paint: ErrorPaint) -> bo
 fn cell_is_error(cells: &HashMap<(u32, u32), CellRec>, col: u32, row: u32) -> bool {
     matches!(
         cells.get(&(col, row)).map(|cell| &cell.shown),
-        Some(Shown::Err)
+        Some(Shown::Err(_))
     )
 }
 
@@ -4729,26 +4733,6 @@ fn error_cell_hit(
     match paint {
         ErrorPaint::OnlyErrors => error,
         ErrorPaint::ExceptErrors => !error,
-    }
-}
-
-/// 错误文字底下的颜色。没有填充时是白。图案上的错误文字不画。
-fn error_backdrop(
-    sheet: &Element,
-    styles: &Styles,
-    cells: &HashMap<(u32, u32), CellRec>,
-    col: u32,
-    row: u32,
-    session: &mut Option<FormulaSession>,
-    fill_id: usize,
-) -> Result<[u8; 3], Error> {
-    if let Some(rgb) = cf_fill(sheet, styles, cells, col, row, session)? {
-        return Ok(rgb);
-    }
-    match styles.fills.get(fill_id).copied().unwrap_or(Fill::Nope) {
-        Fill::Solid(rgb) => Ok(rgb),
-        Fill::None => Ok([255, 255, 255]),
-        Fill::Pattern(_, _, _) | Fill::Nope => Err(unsupported()),
     }
 }
 
@@ -4795,7 +4779,7 @@ fn duplicate_key(cell: &CellRec) -> Result<Option<DupKey>, Error> {
                 Ok(Some(DupKey::Text(text.to_lowercase())))
             }
         }
-        Shown::Err => Err(unsupported()),
+        Shown::Err(_) => Err(unsupported()),
     }
 }
 
@@ -5003,7 +4987,7 @@ fn text_hit(
 ) -> Result<bool, Error> {
     if matches!(
         cells.get(&(col, row)).map(|cell| &cell.shown),
-        Some(Shown::Err)
+        Some(Shown::Err(_))
     ) {
         return Err(unsupported());
     }
@@ -5353,6 +5337,27 @@ mod tests {
         assert!(parse_format("yyyy-mm-dd").is_err());
         assert!(parse_format("[$-409]yyyy/mm/dd").is_err());
         assert!(parse_format("$#,##0.00;[Red]($#,##0.00)").is_err());
+    }
+
+    #[test]
+    fn cached_error_codes_match_excel_range_text() {
+        for code in [
+            "#DIV/0!", "#N/A", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#NULL!",
+        ] {
+            assert!(known_error_code(code));
+            assert_eq!(
+                label_text(&Shown::Err(code.into()), &NumFmt::General, false).unwrap(),
+                code
+            );
+        }
+        assert!(!known_error_code("#SPILL!"));
+        assert!(!known_error_code("#CALC!"));
+        assert!(!known_error_code("#DIV/0"));
+        // 文字字面量走 Text，与 t=e 区分
+        assert_eq!(
+            label_text(&Shown::Text("#DIV/0!".into()), &NumFmt::General, false).unwrap(),
+            "#DIV/0!"
+        );
     }
 
     #[test]

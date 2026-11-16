@@ -143,3 +143,100 @@ fn datetime_named_formats_export_png() {
     assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
     assert!(png.len() > 100);
 }
+
+#[test]
+fn cached_div0_error_exports_png() {
+    let path = tmp("error-div0");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 1 }]
+            }]
+        }
+    }));
+    rewrite_a1_cell(&path, r#"<c r="A1" t="e"><v>#DIV/0!</v></c>"#);
+    let png = export_png(&path);
+    assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+}
+
+#[test]
+fn unknown_spill_error_still_not_implemented() {
+    let path = tmp("error-spill");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": 1 }]
+            }]
+        }
+    }));
+    rewrite_a1_cell(&path, r#"<c r="A1" t="e"><v>#SPILL!</v></c>"#);
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": path.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": path.with_extension("png").to_string_lossy(),
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn text_literal_div0_still_exports_as_text() {
+    let path = tmp("error-literal");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "#DIV/0!" }]
+            }]
+        }
+    }));
+    let png = export_png(&path);
+    assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+}
+
+fn rewrite_a1_cell(path: &Path, cell_xml: &str) {
+    use std::io::{Cursor, Read, Write};
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipArchive, ZipWriter};
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/worksheets/sheet1.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                let start = xml.find(r#"<c r="A1""#).expect("A1 cell");
+                let rest = &xml[start..];
+                let end_rel = rest.find("</c>").expect("</c>") + 4;
+                let mut next = String::new();
+                next.push_str(&xml[..start]);
+                next.push_str(cell_xml);
+                next.push_str(&xml[start + end_rel..]);
+                data = next.into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+    }
+    std::fs::write(path, out.into_inner()).unwrap();
+}
