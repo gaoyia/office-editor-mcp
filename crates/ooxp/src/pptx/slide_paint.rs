@@ -11,6 +11,8 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
+#[cfg(windows)]
+use crate::xlsx::scale_device_rgba;
 use crate::xlsx::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
     fill_device_round_rect, fill_device_stroked_rect, Face,
@@ -1546,7 +1548,7 @@ fn paint_chart(
     let png = crate::xlsx::render_clustered_chart(&doc.root, w as u32, h as u32, theme)
         .map_err(|_| unsupported())?;
     let image = decode_png(&png)?;
-    paint_image(rgb, width, height, x, y, w as u32, h as u32, &image, None);
+    paint_image(rgb, width, height, x, y, w as u32, h as u32, &image, None)?;
     Ok(())
 }
 
@@ -3244,7 +3246,7 @@ fn paint_blip_fill(
     let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
     paint_image_covered(
         rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop, cover,
-    );
+    )?;
     Ok(())
 }
 
@@ -3295,7 +3297,7 @@ fn blit_pic(
     let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
     paint_image(
         rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop,
-    );
+    )?;
     Ok(())
 }
 
@@ -3436,7 +3438,7 @@ fn paint_image(
     dest_h: u32,
     image: &Rgba,
     crop: Option<(u32, u32, u32, u32)>,
-) {
+) -> Result<(), Error> {
     paint_image_covered(
         rgb,
         width,
@@ -3448,7 +3450,7 @@ fn paint_image(
         image,
         crop,
         |_, _| 255,
-    );
+    )
 }
 
 fn paint_image_covered(
@@ -3462,18 +3464,79 @@ fn paint_image_covered(
     image: &Rgba,
     crop: Option<(u32, u32, u32, u32)>,
     cover: impl Fn(i32, i32) -> u8,
+) -> Result<(), Error> {
+    if dest_w == 0 || dest_h == 0 {
+        return Ok(());
+    }
+    let (sx0, sy0, src_w, src_h) = match crop {
+        Some((x, y, w, h)) => (x, y, w, h),
+        None => (0, 0, image.w, image.h),
+    };
+    if src_w == dest_w && src_h == dest_h {
+        blit_image_window(
+            rgb, width, height, dest_x, dest_y, dest_w, dest_h, image, sx0, sy0, cover,
+        );
+        return Ok(());
+    }
+    // 缩放裁剪另案；这里只放大未裁的整图。缩小未对照官方，整页失败。
+    if crop.is_some() || dest_w < src_w || dest_h < src_h || dest_w > MAX_PX || dest_h > MAX_PX {
+        return Err(unsupported());
+    }
+    #[cfg(windows)]
+    {
+        let Some(scaled) = scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h) else {
+            return Err(unsupported());
+        };
+        let scaled = Rgba {
+            w: dest_w,
+            h: dest_h,
+            px: scaled,
+        };
+        blit_image_window(
+            rgb, width, height, dest_x, dest_y, dest_w, dest_h, &scaled, 0, 0, cover,
+        );
+    }
+    #[cfg(not(windows))]
+    {
+        // 非 Windows 没有 GDI+ 对照路径。不透明图沿用原来的最近邻，不声称与 Office 差 0。
+        // 带透明像素的放大不能静默用最近邻冒充成功。
+        if !image_is_opaque(image) {
+            return Err(unsupported());
+        }
+        blit_image_nearest(
+            rgb, width, height, dest_x, dest_y, dest_w, dest_h, image, cover,
+        );
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn image_is_opaque(image: &Rgba) -> bool {
+    image.px.chunks_exact(4).all(|px| px[3] == 255)
+}
+
+fn blit_image_window(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    dest_x: i32,
+    dest_y: i32,
+    dest_w: u32,
+    dest_h: u32,
+    image: &Rgba,
+    sx0: u32,
+    sy0: u32,
+    cover: impl Fn(i32, i32) -> u8,
 ) {
-    let (sx0, sy0) = crop.map(|(x, y, _, _)| (x, y)).unwrap_or((0, 0));
     for row in 0..dest_h {
         let y = dest_y + row as i32;
         if y < 0 || y >= height as i32 {
             continue;
         }
-        let sy = if crop.is_some() {
-            sy0 + row
-        } else {
-            ((row as u64 * image.h as u64) / dest_h as u64).min(image.h as u64 - 1) as u32
-        };
+        let sy = sy0 + row;
+        if sy >= image.h {
+            continue;
+        }
         for col in 0..dest_w {
             let x = dest_x + col as i32;
             if x < 0 || x >= width as i32 {
@@ -3483,11 +3546,56 @@ fn paint_image_covered(
             if mask == 0 {
                 continue;
             }
-            let sx = if crop.is_some() {
-                sx0 + col
-            } else {
-                ((col as u64 * image.w as u64) / dest_w as u64).min(image.w as u64 - 1) as u32
-            };
+            let sx = sx0 + col;
+            if sx >= image.w {
+                continue;
+            }
+            let si = ((sy as usize) * (image.w as usize) + sx as usize) * 4;
+            let mut src = [
+                image.px[si],
+                image.px[si + 1],
+                image.px[si + 2],
+                image.px[si + 3],
+            ];
+            if mask < 255 {
+                src[3] = ((u16::from(src[3]) * u16::from(mask) + 127) / 255) as u8;
+            }
+            let di = ((y as usize) * (width as usize) + x as usize) * 3;
+            let dst = [rgb[di], rgb[di + 1], rgb[di + 2]];
+            let mixed = over(dst, src);
+            rgb[di..di + 3].copy_from_slice(&mixed);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn blit_image_nearest(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    dest_x: i32,
+    dest_y: i32,
+    dest_w: u32,
+    dest_h: u32,
+    image: &Rgba,
+    cover: impl Fn(i32, i32) -> u8,
+) {
+    for row in 0..dest_h {
+        let y = dest_y + row as i32;
+        if y < 0 || y >= height as i32 {
+            continue;
+        }
+        let sy = ((row as u64 * image.h as u64) / dest_h as u64).min(image.h as u64 - 1) as u32;
+        for col in 0..dest_w {
+            let x = dest_x + col as i32;
+            if x < 0 || x >= width as i32 {
+                continue;
+            }
+            let mask = cover(x, y);
+            if mask == 0 {
+                continue;
+            }
+            let sx = ((col as u64 * image.w as u64) / dest_w as u64).min(image.w as u64 - 1) as u32;
             let si = ((sy as usize) * (image.w as usize) + sx as usize) * 4;
             let mut src = [
                 image.px[si],

@@ -819,6 +819,34 @@ mod win {
         fn GdipSetPenStartCap(pen: *mut c_void, cap: i32) -> i32;
         fn GdipSetPenEndCap(pen: *mut c_void, cap: i32) -> i32;
         fn GdipDeletePen(pen: *mut c_void) -> i32;
+
+        fn GdipSetInterpolationMode(graphics: *mut c_void, mode: i32) -> i32;
+        fn GdipSetCompositingMode(graphics: *mut c_void, mode: i32) -> i32;
+        fn GdipSetCompositingQuality(graphics: *mut c_void, quality: i32) -> i32;
+        fn GdipCreateImageAttributes(attr: *mut *mut c_void) -> i32;
+        fn GdipSetImageAttributesWrapMode(
+            attr: *mut c_void,
+            wrap: i32,
+            color: u32,
+            clamp: i32,
+        ) -> i32;
+        fn GdipDisposeImageAttributes(attr: *mut c_void) -> i32;
+        fn GdipDrawImageRectRect(
+            graphics: *mut c_void,
+            image: *mut c_void,
+            dst_x: f32,
+            dst_y: f32,
+            dst_w: f32,
+            dst_h: f32,
+            src_x: f32,
+            src_y: f32,
+            src_w: f32,
+            src_h: f32,
+            src_unit: i32,
+            attrs: *mut c_void,
+            callback: *mut c_void,
+            callback_data: *mut c_void,
+        ) -> i32;
     }
 
     const SMOOTHING_ANTIALIAS: i32 = 4;
@@ -826,6 +854,12 @@ mod win {
     const PIXEL_OFFSET_NONE: i32 = 3;
     const LINE_JOIN_ROUND: i32 = 2;
     const LINE_CAP_FLAT: i32 = 0;
+
+    const INTERPOLATION_HIGH_QUALITY_BICUBIC: i32 = 7;
+    const COMPOSITING_MODE_SOURCE_COPY: i32 = 1;
+    const COMPOSITING_QUALITY_HIGH_QUALITY: i32 = 2;
+    const WRAP_MODE_TILE_FLIP_XY: i32 = 3;
+    const SMOOTHING_NONE: i32 = 3;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -1479,6 +1513,125 @@ mod win {
         }
         true
     }
+    /// 用公开 GDI+ HighQualityBicubic、TileFlipXY 与半像素偏移放大 RGBA 源图。
+    /// 失败或尚未启动 GDI+ 时返回 None。1:1 拷贝与不支持的缩小由调用方处理。
+    pub fn scale_device_rgba(
+        src: &[u8],
+        src_w: u32,
+        src_h: u32,
+        dest_w: u32,
+        dest_h: u32,
+    ) -> Option<Vec<u8>> {
+        if src_w == 0 || src_h == 0 || dest_w == 0 || dest_h == 0 {
+            return None;
+        }
+        if src_w > i32::MAX as u32
+            || src_h > i32::MAX as u32
+            || dest_w > i32::MAX as u32
+            || dest_h > i32::MAX as u32
+        {
+            return None;
+        }
+        if src.len() != (src_w as usize) * (src_h as usize) * 4 {
+            return None;
+        }
+        gdiplus_token()?;
+        let sw = src_w as i32;
+        let sh = src_h as i32;
+        let dw = dest_w as i32;
+        let dh = dest_h as i32;
+        let mut src_pixels = vec![0u32; (src_w as usize) * (src_h as usize)];
+        for (i, chunk) in src.as_chunks::<4>().0.iter().enumerate() {
+            src_pixels[i] = (u32::from(chunk[3]) << 24)
+                | (u32::from(chunk[0]) << 16)
+                | (u32::from(chunk[1]) << 8)
+                | u32::from(chunk[2]);
+        }
+        let mut dest_pixels = vec![0u32; (dest_w as usize) * (dest_h as usize)];
+        let ok = unsafe {
+            let mut src_bmp = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                sw,
+                sh,
+                sw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                src_pixels.as_mut_ptr().cast(),
+                &mut src_bmp,
+            ) != 0
+                || src_bmp.is_null()
+            {
+                return None;
+            }
+            GdipBitmapSetResolution(src_bmp, 96.0, 96.0);
+            let mut dest_bmp = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                dw,
+                dh,
+                dw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                dest_pixels.as_mut_ptr().cast(),
+                &mut dest_bmp,
+            ) != 0
+                || dest_bmp.is_null()
+            {
+                GdipDisposeImage(src_bmp);
+                return None;
+            }
+            GdipBitmapSetResolution(dest_bmp, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(dest_bmp, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(dest_bmp);
+                GdipDisposeImage(src_bmp);
+                return None;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_NONE);
+            GdipSetPixelOffsetMode(graphics, PIXEL_OFFSET_HALF);
+            GdipSetInterpolationMode(graphics, INTERPOLATION_HIGH_QUALITY_BICUBIC);
+            GdipSetCompositingMode(graphics, COMPOSITING_MODE_SOURCE_COPY);
+            GdipSetCompositingQuality(graphics, COMPOSITING_QUALITY_HIGH_QUALITY);
+            let mut attrs = std::ptr::null_mut();
+            if GdipCreateImageAttributes(&mut attrs) != 0 || attrs.is_null() {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(dest_bmp);
+                GdipDisposeImage(src_bmp);
+                return None;
+            }
+            GdipSetImageAttributesWrapMode(attrs, WRAP_MODE_TILE_FLIP_XY, 0, 0);
+            let status = GdipDrawImageRectRect(
+                graphics,
+                src_bmp,
+                0.0,
+                0.0,
+                dest_w as f32,
+                dest_h as f32,
+                0.0,
+                0.0,
+                src_w as f32,
+                src_h as f32,
+                UNIT_PIXEL,
+                attrs,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            );
+            GdipDisposeImageAttributes(attrs);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(dest_bmp);
+            GdipDisposeImage(src_bmp);
+            status == 0
+        };
+        if !ok {
+            return None;
+        }
+        let mut out = Vec::with_capacity(dest_pixels.len() * 4);
+        for px in dest_pixels {
+            out.push(((px >> 16) & 0xff) as u8);
+            out.push(((px >> 8) & 0xff) as u8);
+            out.push((px & 0xff) as u8);
+            out.push(((px >> 24) & 0xff) as u8);
+        }
+        Some(out)
+    }
 
     fn page_pixel(rgb: &[u8], page_w: u32, page_h: u32, x: i32, y: i32) -> [u8; 3] {
         if x < 0 || y < 0 || x >= page_w as i32 || y >= page_h as i32 {
@@ -1653,6 +1806,40 @@ mod win {
     }
 
     #[test]
+    fn scale_device_rgba_matches_office_2x2_to_4x4() {
+        let src = [
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+        ];
+        let got = scale_device_rgba(&src, 2, 2, 4, 4).expect("GDI+ should scale");
+        let want: [[u8; 3]; 16] = [
+            [0xFF, 0x00, 0x00],
+            [0xCD, 0x40, 0x00],
+            [0x34, 0xBD, 0x00],
+            [0x00, 0xFF, 0x00],
+            [0xBF, 0x00, 0x40],
+            [0x9F, 0x40, 0x30],
+            [0x61, 0xBD, 0x11],
+            [0x40, 0xFF, 0x00],
+            [0x42, 0x00, 0xBD],
+            [0x61, 0x40, 0x8E],
+            [0x9D, 0xBD, 0x31],
+            [0xBD, 0xFF, 0x00],
+            [0x00, 0x00, 0xFF],
+            [0x32, 0x40, 0xD4],
+            [0xCA, 0xBD, 0x49],
+            [0xFF, 0xFF, 0x00],
+        ];
+        for (i, color) in want.iter().enumerate() {
+            let o = i * 4;
+            assert_eq!(
+                [got[o], got[o + 1], got[o + 2], got[o + 3]],
+                [color[0], color[1], color[2], 255],
+                "pixel {i}"
+            );
+        }
+    }
+
+    #[test]
     fn chart_text_antialiases() {
         let face = Face::open(13.0, false).expect("本机应有图表字体");
         let mut smooth = 0;
@@ -1669,7 +1856,7 @@ mod win {
 #[cfg(windows)]
 pub use win::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, fill_device_stroked_rect, Face,
+    fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba, Face,
 };
 
 #[cfg(not(windows))]
@@ -1786,4 +1973,9 @@ pub fn fill_device_stroked_rect(
     _: u32,
 ) -> bool {
     false
+}
+
+#[cfg(not(windows))]
+pub fn scale_device_rgba(_: &[u8], _: u32, _: u32, _: u32, _: u32) -> Option<Vec<u8>> {
+    None
 }
