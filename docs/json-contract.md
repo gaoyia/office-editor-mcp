@@ -2545,7 +2545,8 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 本页没有这张表时用版式的，再没有就用母版 `clrMap`。`bg1` 先换成表里的名字，再到主题里取 `srgbClr` 或 `sysClr/@lastClr`
 - `bgRef` 的 `idx` 为 `0` 或 `1000` 时铺白，不再继承更下层
 - `idx` 从 `1001` 起指向 `bgFillStyleLst`，`1` 到 `999` 指向 `fillStyleLst`。那一档必须是没有变换的 `phClr` 纯色，再用 `bgRef` 上的颜色代替
-- 半透明、带颜色变换的主题色、渐变和图片页底仍不认。这一层已经写了页底时铺白，不改用更下层
+- 半透明、带颜色变换的主题色、渐变页底仍不认。这一层已经写了页底但画不成时铺白，不改用更下层
+- 没有旋转、没有裁剪、没有平铺、没有 `fillRect` 偏移、拉伸铺满的不透明嵌入 PNG 页底，在 Windows 上按与图片放大同一套公开 GDI+（`InterpolationMode.HighQualityBicubic`、`WrapMode.TileFlipXY`、`PixelOffsetMode.Half`）画到整页，**包括源与页同尺寸的 1:1**，不走 `p:pic` 的逐字节拷贝。关系从拥有该页底的部件（本页、版式或母版）解析。官方 `pptx-preview-page-bg-image` 覆盖 1280×720 与 960×720 页、1:1 / 2× / 4×、版式与母版继承、矩形与图片遮盖，均为 `differ=0`、`maxDelta=0`（2026-11-17 03:59:14–04:00:04 Asia/Shanghai）。透明、平铺、裁剪、缩小或不透明条件不满足的图片页底铺白，不把 t93u 残差接受扩到页底。非 Windows 没有这条 GDI+ 对照路径，不声称与 Office 差 0
 - 位置和尺寸用 `a:off` 与 `a:ext`，同一套 96 dpi。后画的盖住先画的，超出页面的部分裁掉
 - `p:pic` 和形状 `blipFill` 里的嵌入 PNG。目标宽高都等于源像素时原样拷贝。没有 `srcRect`、且目标宽和高都不小于源时，Windows 上按 GDI+ `InterpolationMode.HighQualityBicubic`、`WrapMode.TileFlipXY`、`PixelOffsetMode.Half` 放大，与 PowerPoint 16.0 对齐。不透明图（全部 alpha=255）官方对照多种源尺寸、整数与非整数倍率、不均匀拉伸、形状填充和左缘裁切，均为 `differ=0`、`maxDelta=0`
 - 带透明通道的放大在 Windows 上先按同一套插值，再叠到已画内容上。用户 t93u 验收范围只限当前图片放大及其透明度：位置、目标尺寸和边界必须与官方一致，色彩/alpha 混合可以有残差。官方 `pptx-preview-scale-image` 透明 2×2→4×4 页记录为 `differ=13`、`maxDelta=2`，几何锚点通过；不把这页写成像素差 0，也不放宽全局 MaxDelta。t93u 的残差接受不扩到渐变、半透明纯色矩形或其它绘制

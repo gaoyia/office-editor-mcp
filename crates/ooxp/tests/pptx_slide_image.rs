@@ -54,6 +54,18 @@ fn pixel(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
     [rgb[i], rgb[i + 1], rgb[i + 2]]
 }
 
+fn decode_rgb(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
+    let (w, h, buf) = decode_png(bytes);
+    if buf.len() == (w as usize) * (h as usize) * 3 {
+        return (w, h, buf);
+    }
+    let mut out = Vec::with_capacity((w as usize) * (h as usize) * 3);
+    for px in buf.as_chunks::<4>().0 {
+        out.extend_from_slice(&px[..3]);
+    }
+    (w, h, out)
+}
+
 #[test]
 fn solid_background_and_png_are_copied_at_96_dpi() {
     let src = tmp("src");
@@ -167,6 +179,432 @@ fn missing_page_background_is_white() {
     .to_string())
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn opaque_page_background_one_to_one_is_stable() {
+    let png = unique_pattern_png(96, 96);
+    let (w, h, rgb) = export_page_bg_slide(png.clone(), 96, 96, None);
+    let (_, _, again) = export_page_bg_slide(png, 96, 96, None);
+    assert_eq!((w, h), (96, 96));
+    assert_eq!(rgb, again, "1:1 页底应稳定走同一条设备滤波");
+    assert_ne!(pixel(&rgb, w, 0, 0), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 0, 0), pixel(&rgb, w, 95, 95));
+}
+
+#[test]
+fn opaque_page_background_scale_up_matches_full_page_picture() {
+    let png = unique_pattern_png(48, 48);
+    let (bw, bh, bg_rgb) = export_page_bg_slide(png.clone(), 96, 96, None);
+    let (pw, ph, pic_rgb) = export_full_page_picture_slide(png, 96, 96);
+    assert_eq!((bw, bh), (96, 96));
+    assert_eq!((pw, ph), (96, 96));
+    assert_eq!(bg_rgb, pic_rgb, "页底拉伸应与铺满整页的图片同一条路径");
+    assert_ne!(pixel(&bg_rgb, 96, 0, 0), pixel(&bg_rgb, 96, 95, 95));
+}
+
+#[test]
+fn solid_rect_covers_opaque_page_background() {
+    let png = unique_pattern_png(96, 96);
+    let (_, _, base) = export_page_bg_slide(png.clone(), 96, 96, None);
+    let (w, h, rgb) = export_page_bg_slide(png, 96, 96, Some(([0x20, 0x30, 0x40], 16, 16, 32, 32)));
+    assert_eq!((w, h), (96, 96));
+    assert_eq!(pixel(&rgb, w, 0, 0), pixel(&base, 96, 0, 0));
+    assert_eq!(pixel(&rgb, w, 95, 95), pixel(&base, 96, 95, 95));
+    assert_eq!(pixel(&rgb, w, 16, 16), [0x20, 0x30, 0x40]);
+    assert_eq!(pixel(&rgb, w, 47, 47), [0x20, 0x30, 0x40]);
+    assert_eq!(pixel(&rgb, w, 15, 16), pixel(&base, 96, 15, 16));
+    assert_eq!(pixel(&rgb, w, 48, 16), pixel(&base, 96, 48, 16));
+}
+
+#[test]
+fn transparent_page_background_stays_white() {
+    let png = rgba_png(96, 96, &vec![[0x11, 0x22, 0x33, 128]; 96 * 96]);
+    let (w, h, rgb) = export_page_bg_slide(png, 96, 96, None);
+    assert_eq!((w, h), (96, 96));
+    for y in 0..h {
+        for x in 0..w {
+            assert_eq!(
+                pixel(&rgb, w, x, y),
+                [255, 255, 255],
+                "t93u 不扩到透明页底 at {x},{y}"
+            );
+        }
+    }
+}
+
+#[test]
+fn layout_picture_page_background_is_inherited() {
+    let png = unique_pattern_png(96, 96);
+    let (lw, lh, layout_rgb) =
+        export_hosted_page_bg(png.clone(), 96, 96, "master:1/layout:1", None, None, vec![]);
+    let (sw, sh, slide_rgb) = export_page_bg_slide(png, 96, 96, None);
+    assert_eq!((lw, lh), (96, 96));
+    assert_eq!((sw, sh), (96, 96));
+    assert_eq!(layout_rgb, slide_rgb, "版式图片页底应与本页同图一致");
+}
+
+#[test]
+fn master_picture_page_background_is_inherited() {
+    let png = unique_pattern_png(96, 96);
+    let (mw, mh, master_rgb) =
+        export_hosted_page_bg(png.clone(), 96, 96, "master:1", None, None, vec![]);
+    let (sw, sh, slide_rgb) = export_page_bg_slide(png, 96, 96, None);
+    assert_eq!((mw, mh), (96, 96));
+    assert_eq!((sw, sh), (96, 96));
+    assert_eq!(master_rgb, slide_rgb, "母版图片页底应与本页同图一致");
+}
+
+#[test]
+fn slide_picture_page_background_wins_over_layout() {
+    let layout_png = unique_pattern_png(96, 96);
+    let mut slide_px = Vec::with_capacity(96 * 96);
+    for i in 0..(96 * 96) {
+        slide_px.push([
+            ((i * 13 + 8) % 256) as u8,
+            ((i * 29 + 40) % 256) as u8,
+            ((i * 61 + 3) % 256) as u8,
+            255,
+        ]);
+    }
+    let slide_png = rgba_png(96, 96, &slide_px);
+    let (w, h, rgb) = export_hosted_page_bg(
+        layout_png,
+        96,
+        96,
+        "master:1/layout:1",
+        Some(slide_png.clone()),
+        None,
+        vec![],
+    );
+    assert_eq!((w, h), (96, 96));
+    let src = decode_rgb(&slide_png);
+    assert_eq!(rgb, src.2, "本页图片页底应盖住版式页底");
+}
+
+#[test]
+fn transparent_slide_page_background_does_not_inherit_layout() {
+    let layout_png = unique_pattern_png(96, 96);
+    let slide_png = rgba_png(96, 96, &vec![[0x11, 0x22, 0x33, 128]; 96 * 96]);
+    let (w, h, rgb) = export_hosted_page_bg(
+        layout_png,
+        96,
+        96,
+        "master:1/layout:1",
+        Some(slide_png),
+        None,
+        vec![],
+    );
+    assert_eq!((w, h), (96, 96));
+    for y in [0u32, 48, 95] {
+        for x in [0u32, 48, 95] {
+            assert_eq!(
+                pixel(&rgb, w, x, y),
+                [255, 255, 255],
+                "本页透明页底铺白，不继承版式图 at {x},{y}"
+            );
+        }
+    }
+}
+
+#[test]
+fn picture_covers_opaque_page_background() {
+    let bg = unique_pattern_png(96, 96);
+    let over = rgba_png(16, 16, &vec![[0x20, 0x30, 0x40, 255]; 16 * 16]);
+    let (w, h, rgb) = export_hosted_page_bg(
+        bg.clone(),
+        96,
+        96,
+        "slide:1",
+        None,
+        Some((over, 16, 16, 16, 16)),
+        vec![],
+    );
+    assert_eq!((w, h), (96, 96));
+    let (_, _, base) = export_page_bg_slide(bg, 96, 96, None);
+    assert_eq!(pixel(&rgb, w, 0, 0), pixel(&base, 96, 0, 0));
+    assert_eq!(pixel(&rgb, w, 15, 16), pixel(&base, 96, 15, 16));
+    assert_eq!(pixel(&rgb, w, 32, 16), pixel(&base, 96, 32, 16));
+    assert_eq!(pixel(&rgb, w, 16, 16), [0x20, 0x30, 0x40]);
+    assert_eq!(pixel(&rgb, w, 31, 31), [0x20, 0x30, 0x40]);
+}
+
+#[test]
+fn layout_and_master_shapes_cover_opaque_page_background() {
+    let bg = unique_pattern_png(96, 96);
+    let (w, h, rgb) = export_hosted_page_bg(
+        bg.clone(),
+        96,
+        96,
+        "slide:1",
+        None,
+        None,
+        vec![
+            cover_rect("master:1/layout:1", "EE4455", 16, 16, 32, 16),
+            cover_rect("master:1", "112233", 16, 48, 32, 16),
+            cover_rect("slide:1", "00AA66", 24, 16, 16, 16),
+        ],
+    );
+    assert_eq!((w, h), (96, 96));
+    let (_, _, base) = export_page_bg_slide(bg, 96, 96, None);
+    assert_eq!(pixel(&rgb, w, 0, 0), pixel(&base, 96, 0, 0));
+    assert_eq!(pixel(&rgb, w, 95, 95), pixel(&base, 96, 95, 95));
+    assert_eq!(pixel(&rgb, w, 16, 16), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 23, 16), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 24, 16), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 39, 31), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&rgb, w, 16, 48), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 47, 63), [0x11, 0x22, 0x33]);
+}
+
+fn unique_pattern_png(w: u32, h: u32) -> Vec<u8> {
+    let mut px = Vec::with_capacity((w * h) as usize);
+    for i in 0..(w * h) {
+        px.push([
+            ((i * 41) % 256) as u8,
+            ((i * 73 + 20) % 256) as u8,
+            ((i * 17 + 90) % 256) as u8,
+            255,
+        ]);
+    }
+    rgba_png(w, h, &px)
+}
+
+fn export_page_bg_slide(
+    png: Vec<u8>,
+    page_w: u32,
+    page_h: u32,
+    rect: Option<([u8; 3], i64, i64, i64, i64)>,
+) -> (u32, u32, Vec<u8>) {
+    let src = tmp("page-bg-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp("page-bg-deck");
+    let mut ops = vec![
+        json!({
+            "op": "setSlideSize",
+            "id": "pptx:presentation",
+            "cx": (page_w as i64) * 9525,
+            "cy": (page_h as i64) * 9525
+        }),
+        json!({
+            "op": "setPageBackground",
+            "id": "slide:1",
+            "color": "FFFFFF",
+            "fill": { "kind": "picture", "file": png_path.to_string_lossy() }
+        }),
+        json!({ "op": "deleteShape", "id": shape_id }),
+    ];
+    if let Some((color, x, y, cx, cy)) = rect {
+        ops.push(json!({
+            "op": "insertShape",
+            "id": "slide:1",
+            "prst": "rect",
+            "text": "",
+            "x": x * 9525,
+            "y": y * 9525,
+            "cx": cx * 9525,
+            "cy": cy * 9525,
+            "fill": format!("{:02X}{:02X}{:02X}", color[0], color[1], color[2]),
+            "line": { "color": null }
+        }));
+    }
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": ops
+    }));
+    let out = tmp("page-bg-out").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_png(&std::fs::read(&out).unwrap())
+}
+
+fn export_full_page_picture_slide(png: Vec<u8>, page_w: u32, page_h: u32) -> (u32, u32, Vec<u8>) {
+    let src = tmp("page-pic-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp("page-pic-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setSlideSize",
+                "id": "pptx:presentation",
+                "cx": (page_w as i64) * 9525,
+                "cy": (page_h as i64) * 9525
+            },
+            { "op": "setPageBackground", "id": "slide:1", "color": "FFFFFF" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": 0,
+                "y": 0,
+                "cx": (page_w as i64) * 9525,
+                "cy": (page_h as i64) * 9525
+            }
+        ]
+    }));
+    let out = tmp("page-pic-out").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_png(&std::fs::read(&out).unwrap())
+}
+
+fn export_hosted_page_bg(
+    png: Vec<u8>,
+    page_w: u32,
+    page_h: u32,
+    host: &str,
+    slide_png: Option<Vec<u8>>,
+    overlay: Option<(Vec<u8>, i64, i64, i64, i64)>,
+    shapes: Vec<serde_json::Value>,
+) -> (u32, u32, Vec<u8>) {
+    let src = tmp("page-bg-host-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let mut ops = vec![
+        json!({
+            "op": "setSlideSize",
+            "id": "pptx:presentation",
+            "cx": (page_w as i64) * 9525,
+            "cy": (page_h as i64) * 9525
+        }),
+        json!({
+            "op": "setPageBackground",
+            "id": host,
+            "color": "FFFFFF",
+            "fill": { "kind": "picture", "file": png_path.to_string_lossy() }
+        }),
+        json!({ "op": "deleteShape", "id": shape_id }),
+    ];
+    if let Some(slide_png) = slide_png {
+        let slide_path = src.with_extension("slide.png");
+        std::fs::write(&slide_path, slide_png).unwrap();
+        ops.push(json!({
+            "op": "setPageBackground",
+            "id": "slide:1",
+            "color": "FFFFFF",
+            "fill": { "kind": "picture", "file": slide_path.to_string_lossy() }
+        }));
+    }
+    if let Some((pic, x, y, cx, cy)) = overlay {
+        let over_path = src.with_extension("over.png");
+        std::fs::write(&over_path, pic).unwrap();
+        ops.push(json!({
+            "op": "insertPicture",
+            "id": "slide:1",
+            "file": over_path.to_string_lossy(),
+            "x": x * 9525,
+            "y": y * 9525,
+            "cx": cx * 9525,
+            "cy": cy * 9525
+        }));
+    }
+    ops.extend(shapes);
+    let deck = tmp("page-bg-host-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": ops
+    }));
+    let out = tmp("page-bg-host-out").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_png(&std::fs::read(&out).unwrap())
+}
+
+fn cover_rect(id: &str, fill: &str, x: i64, y: i64, cx: i64, cy: i64) -> serde_json::Value {
+    json!({
+        "op": "insertShape",
+        "id": id,
+        "prst": "rect",
+        "text": "",
+        "x": x * 9525,
+        "y": y * 9525,
+        "cx": cx * 9525,
+        "cy": cy * 9525,
+        "fill": fill,
+        "line": { "color": null }
+    })
 }
 
 #[test]
