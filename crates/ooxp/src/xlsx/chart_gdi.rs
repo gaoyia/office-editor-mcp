@@ -1526,8 +1526,9 @@ mod win {
     }
 
     /// 从整张源图的窗口 `sx,sy,sw,sh` 放大到 `dest_w×dest_h`。
-    /// 必须按页面上的目标原点 `dest_x,dest_y` 进 GDI+：Office 的高质量双三次
-    /// 在部分裁剪倍率下会随目标 Y 分成两档，先裁成新图或画在 (0,0) 的紧位图会对不上。
+    /// 按页面上的真实目标原点 `dest_x,dest_y` 进入 GDI+（公开的 `PixelOffsetMode.Half`
+    /// 与 `DrawImage` 目标矩形相位在目标位图/Graphics 坐标系里）。先抽出裁剪窗口，
+    /// 或画在 (0,0) 的紧位图，会对不上部分裁剪倍率。这不是针对某个 dest_y 的特判。
     pub fn scale_device_rgba_window(
         src: &[u8],
         src_w: u32,
@@ -1541,7 +1542,6 @@ mod win {
         dest_w: u32,
         dest_h: u32,
     ) -> Option<Vec<u8>> {
-        let _ = dest_x;
         if src_w == 0 || src_h == 0 || sw == 0 || sh == 0 || dest_w == 0 || dest_h == 0 {
             return None;
         }
@@ -1558,16 +1558,20 @@ mod win {
             return None;
         }
         gdiplus_token()?;
+        let origin_x = dest_x.min(0);
         let origin_y = dest_y.min(0);
+        let draw_x = dest_x.checked_sub(origin_x)?;
         let draw_y = dest_y.checked_sub(origin_y)?;
+        let buf_w = (draw_x as u64).checked_add(u64::from(dest_w))?;
         let buf_h = (draw_y as u64).checked_add(u64::from(dest_h))?;
-        if buf_h > i32::MAX as u64 {
+        if buf_w > i32::MAX as u64 || buf_h > i32::MAX as u64 {
             return None;
         }
+        let buf_w = buf_w as u32;
         let buf_h = buf_h as u32;
         let img_w = src_w as i32;
         let img_h = src_h as i32;
-        let dw = dest_w as i32;
+        let bw = buf_w as i32;
         let buf_hi = buf_h as i32;
         let mut src_pixels = vec![0u32; (src_w as usize) * (src_h as usize)];
         for (i, chunk) in src.as_chunks::<4>().0.iter().enumerate() {
@@ -1576,7 +1580,7 @@ mod win {
                 | (u32::from(chunk[1]) << 8)
                 | u32::from(chunk[2]);
         }
-        let mut dest_pixels = vec![0u32; (dest_w as usize) * (buf_h as usize)];
+        let mut dest_pixels = vec![0u32; (buf_w as usize) * (buf_h as usize)];
         let ok = unsafe {
             let mut src_bmp = std::ptr::null_mut();
             if GdipCreateBitmapFromScan0(
@@ -1594,9 +1598,9 @@ mod win {
             GdipBitmapSetResolution(src_bmp, 96.0, 96.0);
             let mut dest_bmp = std::ptr::null_mut();
             if GdipCreateBitmapFromScan0(
-                dw,
+                bw,
                 buf_hi,
-                dw * 4,
+                bw * 4,
                 PIXEL_FORMAT_32BPP_ARGB,
                 dest_pixels.as_mut_ptr().cast(),
                 &mut dest_bmp,
@@ -1630,7 +1634,7 @@ mod win {
             let status = GdipDrawImageRectRect(
                 graphics,
                 src_bmp,
-                0.0,
+                draw_x as f32,
                 draw_y as f32,
                 dest_w as f32,
                 dest_h as f32,
@@ -1652,14 +1656,17 @@ mod win {
         if !ok {
             return None;
         }
-        let row0 = (draw_y as usize) * (dest_w as usize);
-        let count = (dest_w as usize) * (dest_h as usize);
-        let mut out = Vec::with_capacity(count * 4);
-        for px in dest_pixels[row0..row0 + count].iter().copied() {
-            out.push(((px >> 16) & 0xff) as u8);
-            out.push(((px >> 8) & 0xff) as u8);
-            out.push((px & 0xff) as u8);
-            out.push(((px >> 24) & 0xff) as u8);
+        let buf_w_us = buf_w as usize;
+        let dw_us = dest_w as usize;
+        let mut out = Vec::with_capacity(dw_us * (dest_h as usize) * 4);
+        for row in 0..dest_h as usize {
+            let start = (draw_y as usize + row) * buf_w_us + draw_x as usize;
+            for px in dest_pixels[start..start + dw_us].iter().copied() {
+                out.push(((px >> 16) & 0xff) as u8);
+                out.push(((px >> 8) & 0xff) as u8);
+                out.push((px & 0xff) as u8);
+                out.push(((px >> 24) & 0xff) as u8);
+            }
         }
         Some(out)
     }
