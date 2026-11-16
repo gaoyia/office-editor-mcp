@@ -425,7 +425,7 @@ fn paint_sp(
         "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
             paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
-        "curvedConnector2" | "curvedConnector3" => {
+        "curvedConnector2" | "curvedConnector3" | "curvedConnector4" | "curvedConnector5" => {
             paint_curve(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
         _ => Err(unsupported()),
@@ -455,7 +455,7 @@ fn paint_cxn(
         "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
             paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
-        "curvedConnector2" | "curvedConnector3" => {
+        "curvedConnector2" | "curvedConnector3" | "curvedConnector4" | "curvedConnector5" => {
             paint_curve(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
         _ => Err(unsupported()),
@@ -735,10 +735,6 @@ fn elbow_adj(sp_pr: &Element, name: &str) -> i64 {
         .unwrap_or(50_000)
 }
 
-fn elbow_adj1(sp_pr: &Element) -> i64 {
-    elbow_adj(sp_pr, "adj1")
-}
-
 fn elbow_points(
     prst: &str,
     x: i64,
@@ -801,6 +797,7 @@ fn paint_elbow_line(
 }
 
 /// 弯曲连接符。`curvedConnector2` 是一段三次贝塞尔，`curvedConnector3` 是带 `adj1` 的两段三次贝塞尔。
+/// `curvedConnector4` / `curvedConnector5` 按同一套 ECMA-376 预设再加 `adj2` / `adj3` 的多段三次贝塞尔。
 /// 不透明实线 1 或 2 像素，可带翻转。1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽。
 /// 控制点按 ECMA-376 预设几何做 EMU 整数运算后再换成分数像素。
 fn paint_curve(
@@ -855,7 +852,18 @@ fn paint_curve(
     if sw != 1 && sw != 2 {
         return Err(unsupported());
     }
-    let pts = curve_points(prst, x, y, cx, cy, flip_h, flip_v, elbow_adj1(sp_pr));
+    let pts = curve_points(
+        prst,
+        x,
+        y,
+        cx,
+        cy,
+        flip_h,
+        flip_v,
+        elbow_adj(sp_pr, "adj1"),
+        elbow_adj(sp_pr, "adj2"),
+        elbow_adj(sp_pr, "adj3"),
+    );
     if pts.is_empty() {
         return Err(unsupported());
     }
@@ -873,7 +881,9 @@ fn curve_points(
     cy: i64,
     flip_h: bool,
     flip_v: bool,
-    adj: i64,
+    adj1: i64,
+    adj2: i64,
+    adj3: i64,
 ) -> Vec<(f32, f32)> {
     let w = cx;
     let h = cy;
@@ -884,7 +894,7 @@ fn curve_points(
             vec![(0, 0), (wd2, 0), (w, hd2), (w, h)]
         }
         "curvedConnector3" => {
-            let x2 = (w as i128 * adj as i128 / 100_000) as i64;
+            let x2 = (w as i128 * adj1 as i128 / 100_000) as i64;
             let x1 = x2 / 2;
             let x3 = (w + x2) / 2;
             let hd4 = h / 4;
@@ -897,6 +907,61 @@ fn curve_points(
                 (x2, vc),
                 (x2, y3),
                 (x3, h),
+                (w, h),
+            ]
+        }
+        "curvedConnector4" => {
+            let x2 = (w as i128 * adj1 as i128 / 100_000) as i64;
+            let x1 = x2 / 2;
+            let x3 = (w + x2) / 2;
+            let x4 = (x2 + x3) / 2;
+            let x5 = (x3 + w) / 2;
+            let y4 = (h as i128 * adj2 as i128 / 100_000) as i64;
+            let y1 = y4 / 2;
+            let y2 = y1 / 2;
+            let y3 = (y1 + y4) / 2;
+            let y5 = (h + y4) / 2;
+            vec![
+                (0, 0),
+                (x1, 0),
+                (x2, y2),
+                (x2, y1),
+                (x2, y3),
+                (x4, y4),
+                (x3, y4),
+                (x5, y4),
+                (w, y5),
+                (w, h),
+            ]
+        }
+        "curvedConnector5" => {
+            let x3 = (w as i128 * adj1 as i128 / 100_000) as i64;
+            let x6 = (w as i128 * adj3 as i128 / 100_000) as i64;
+            let x1 = (x3 + x6) / 2;
+            let x2 = x3 / 2;
+            let x4 = (x3 + x1) / 2;
+            let x5 = (x6 + x1) / 2;
+            let x7 = (x6 + w) / 2;
+            let y4 = (h as i128 * adj2 as i128 / 100_000) as i64;
+            let y1 = y4 / 2;
+            let y2 = y1 / 2;
+            let y3 = (y1 + y4) / 2;
+            let y5 = (h + y4) / 2;
+            let y6 = (y5 + y4) / 2;
+            let y7 = (y5 + h) / 2;
+            vec![
+                (0, 0),
+                (x2, 0),
+                (x3, y2),
+                (x3, y1),
+                (x3, y3),
+                (x4, y4),
+                (x1, y4),
+                (x5, y4),
+                (x6, y6),
+                (x6, y5),
+                (x6, y7),
+                (x7, h),
                 (w, h),
             ]
         }
@@ -4882,6 +4947,213 @@ mod tests {
         assert_ne!(pixel(&b5, w, 240, 240), [255, 255, 255]);
         assert_ne!(pixel(&b5, w, 288, 288), [255, 255, 255]);
         assert_eq!(pixel(&b5, w, 200, 120), [255, 255, 255]);
+    }
+
+    #[test]
+    fn curved4_and_curved5_follow_the_preset_guides() {
+        let x = 914_400;
+        let y = 914_400;
+        let cx = 1_828_800;
+        let cy = 1_828_800;
+        let c4 = curve_points(
+            "curvedConnector4",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            c4,
+            vec![
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (192.0, 120.0),
+                (192.0, 144.0),
+                (192.0, 168.0),
+                (216.0, 192.0),
+                (240.0, 192.0),
+                (264.0, 192.0),
+                (288.0, 240.0),
+                (288.0, 288.0)
+            ]
+        );
+        let c4h = curve_points(
+            "curvedConnector4",
+            x,
+            y,
+            cx,
+            cy,
+            true,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            c4h,
+            vec![
+                (288.0, 96.0),
+                (240.0, 96.0),
+                (192.0, 120.0),
+                (192.0, 144.0),
+                (192.0, 168.0),
+                (168.0, 192.0),
+                (144.0, 192.0),
+                (120.0, 192.0),
+                (96.0, 240.0),
+                (96.0, 288.0)
+            ]
+        );
+        let c5 = curve_points(
+            "curvedConnector5",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            25_000,
+            50_000,
+            75_000,
+        );
+        assert_eq!(
+            c5,
+            vec![
+                (96.0, 96.0),
+                (120.0, 96.0),
+                (144.0, 120.0),
+                (144.0, 144.0),
+                (144.0, 168.0),
+                (168.0, 192.0),
+                (192.0, 192.0),
+                (216.0, 192.0),
+                (240.0, 216.0),
+                (240.0, 240.0),
+                (240.0, 264.0),
+                (264.0, 288.0),
+                (288.0, 288.0)
+            ]
+        );
+        let c5d = curve_points(
+            "curvedConnector5",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            c5d,
+            vec![
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (192.0, 120.0),
+                (192.0, 144.0),
+                (192.0, 168.0),
+                (192.0, 192.0),
+                (192.0, 192.0),
+                (192.0, 192.0),
+                (192.0, 216.0),
+                (192.0, 240.0),
+                (192.0, 264.0),
+                (240.0, 288.0),
+                (288.0, 288.0)
+            ]
+        );
+        let c3 = curve_points(
+            "curvedConnector3",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            25_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            c3,
+            vec![
+                (96.0, 96.0),
+                (120.0, 96.0),
+                (144.0, 144.0),
+                (144.0, 192.0),
+                (144.0, 240.0),
+                (216.0, 288.0),
+                (288.0, 288.0)
+            ]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_multi_curve_keeps_the_turns() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut c4 = blank(w, h);
+        assert!(paint_curve_line(
+            &mut c4,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (192.0, 120.0),
+                (192.0, 144.0),
+                (192.0, 168.0),
+                (216.0, 192.0),
+                (240.0, 192.0),
+                (264.0, 192.0),
+                (288.0, 240.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_ne!(pixel(&c4, w, 96, 96), [255, 255, 255]);
+        assert_ne!(pixel(&c4, w, 192, 144), [255, 255, 255]);
+        assert_ne!(pixel(&c4, w, 240, 192), [255, 255, 255]);
+        assert_ne!(pixel(&c4, w, 288, 288), [255, 255, 255]);
+        assert_eq!(pixel(&c4, w, 130, 200), [255, 255, 255]);
+        let mut c5 = blank(w, h);
+        assert!(paint_curve_line(
+            &mut c5,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (120.0, 96.0),
+                (144.0, 120.0),
+                (144.0, 144.0),
+                (144.0, 168.0),
+                (168.0, 192.0),
+                (192.0, 192.0),
+                (216.0, 192.0),
+                (240.0, 216.0),
+                (240.0, 240.0),
+                (240.0, 264.0),
+                (264.0, 288.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_ne!(pixel(&c5, w, 96, 96), [255, 255, 255]);
+        assert_ne!(pixel(&c5, w, 144, 144), [255, 255, 255]);
+        assert_ne!(pixel(&c5, w, 192, 192), [255, 255, 255]);
+        assert_ne!(pixel(&c5, w, 240, 240), [255, 255, 255]);
+        assert_ne!(pixel(&c5, w, 288, 288), [255, 255, 255]);
+        assert_eq!(pixel(&c5, w, 200, 120), [255, 255, 255]);
     }
 
     #[cfg(windows)]

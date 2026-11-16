@@ -2115,6 +2115,74 @@ fn curved_connectors_paint_c2_and_c3() {
     assert_eq!(pixel(&rgb, w, 288, 288), [191, 191, 191]);
 }
 
+#[test]
+fn curved_connectors_paint_four_and_five_segments() {
+    let src = tmp("curve45-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "connectors": [{ "prst": "curvedConnector4", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] },
+                { "connectors": [{ "prst": "curvedConnector5", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] }
+            ]
+        }
+    }));
+
+    let c4 = tmp("curve-c4");
+    rewrite_named(&src, &c4, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("curve-c4-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c4.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_ne!(pixel(&rgb, w, 96, 96), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 192, 144), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 240, 192), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 288, 288), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 130, 200), [255, 255, 255]);
+
+    let c5 = tmp("curve-c5");
+    rewrite_named(&src, &c5, |name, xml| {
+        if name != "ppt/slides/slide2.xml" {
+            return xml;
+        }
+        let xml = swap(
+            xml,
+            "prst=\"curvedConnector5\"><a:avLst/>",
+            "prst=\"curvedConnector5\"><a:avLst><a:gd name=\"adj1\" fmla=\"val 25000\"/><a:gd name=\"adj2\" fmla=\"val 50000\"/><a:gd name=\"adj3\" fmla=\"val 75000\"/></a:avLst>",
+        );
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("curve-c5-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c5.to_string_lossy(),
+        "id": "slide:2",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_ne!(pixel(&rgb, w, 96, 96), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 144, 144), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 192, 192), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 240, 240), [255, 255, 255]);
+    assert_ne!(pixel(&rgb, w, 288, 288), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 200, 120), [255, 255, 255]);
+}
+
 fn slide1_xml(path: &Path) -> String {
     let bytes = std::fs::read(path).unwrap();
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
