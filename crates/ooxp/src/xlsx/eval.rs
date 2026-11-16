@@ -238,6 +238,10 @@ pub(crate) struct FormulaSession {
 }
 
 impl FormulaSession {
+    pub(crate) fn date1904(&self) -> bool {
+        self.book.date1904
+    }
+
     pub(crate) fn open(pkg: &Package, sheet_name: &str) -> Result<Option<Self>, Error> {
         let wb_part = opc::office_document_part(pkg)?;
         let wb_rels = Relationships::from_package(pkg, &wb_part)?;

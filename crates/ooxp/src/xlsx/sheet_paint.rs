@@ -1324,6 +1324,23 @@ enum NumFmt {
     Blank(u8),
     /// 货币/多段（无 `[颜色]`/`[条件]`）。按正/负/零选段；字面量段；`_` 跳宽按空格进显示串。
     Sections(Vec<NumSection>),
+    /// 内置 14–22 与点名自定义 `yyyy/mm/dd`。方括号/其它自定义日期码仍 NI。
+    DateTime(DateTimePat),
+}
+
+/// 本切片锁定的日期时间图案（英文月缩写；时间段里的 `m` 为分钟）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DateTimePat {
+    MdYy,
+    DMmmYy,
+    DMmm,
+    MmmYy,
+    HmmAmpm,
+    HmmssAmpm,
+    Hmm,
+    Hmmss,
+    MdYyHmm,
+    YyyyMmDd,
 }
 
 /// 一段数字格式（公开 OOXML 分号分段 + Excel 选段规则）。
@@ -2111,6 +2128,37 @@ fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
     Ok(edges)
 }
 
+fn strip_format_escapes(code: &str) -> String {
+    let mut out = String::with_capacity(code.len());
+    let mut chars = code.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+            continue;
+        }
+        out.push(ch);
+    }
+    out
+}
+
+fn named_datetime_pat(code: &str) -> Option<DateTimePat> {
+    match code {
+        "yyyy/mm/dd" => Some(DateTimePat::YyyyMmDd),
+        "m/d/yy" => Some(DateTimePat::MdYy),
+        "d-mmm-yy" => Some(DateTimePat::DMmmYy),
+        "d-mmm" => Some(DateTimePat::DMmm),
+        "mmm-yy" => Some(DateTimePat::MmmYy),
+        "h:mm AM/PM" | "h:mm am/pm" => Some(DateTimePat::HmmAmpm),
+        "h:mm:ss AM/PM" | "h:mm:ss am/pm" => Some(DateTimePat::HmmssAmpm),
+        "h:mm" => Some(DateTimePat::Hmm),
+        "h:mm:ss" => Some(DateTimePat::Hmmss),
+        "m/d/yy h:mm" => Some(DateTimePat::MdYyHmm),
+        _ => None,
+    }
+}
+
 fn builtin_fmt(id: u32) -> Option<NumFmt> {
     match id {
         0 | 49 => Some(NumFmt::General),
@@ -2119,6 +2167,15 @@ fn builtin_fmt(id: u32) -> Option<NumFmt> {
         3 => Some(NumFmt::IntComma),
         9 => Some(NumFmt::Percent(0)),
         10 => Some(NumFmt::Percent(2)),
+        14 => Some(NumFmt::DateTime(DateTimePat::MdYy)),
+        15 => Some(NumFmt::DateTime(DateTimePat::DMmmYy)),
+        16 => Some(NumFmt::DateTime(DateTimePat::DMmm)),
+        17 => Some(NumFmt::DateTime(DateTimePat::MmmYy)),
+        18 => Some(NumFmt::DateTime(DateTimePat::HmmAmpm)),
+        19 => Some(NumFmt::DateTime(DateTimePat::HmmssAmpm)),
+        20 => Some(NumFmt::DateTime(DateTimePat::Hmm)),
+        21 => Some(NumFmt::DateTime(DateTimePat::Hmmss)),
+        22 => Some(NumFmt::DateTime(DateTimePat::MdYyHmm)),
         _ => None,
     }
 }
@@ -2143,6 +2200,11 @@ fn parse_format(code: &str) -> Result<NumFmt, Error> {
         return Ok(NumFmt::Sections(sections));
     }
     let code = code.trim();
+    // 去掉格式码里的 `\` 转义后再匹配点名日期/时间图案（Excel 常写 `m/d/yy\ h:mm`）。
+    let unlocked = strip_format_escapes(code);
+    if let Some(pat) = named_datetime_pat(&unlocked) {
+        return Ok(NumFmt::DateTime(pat));
+    }
     if code.eq_ignore_ascii_case("general") {
         return Ok(NumFmt::General);
     }
@@ -4148,7 +4210,8 @@ fn paint_labels(
             continue;
         }
         let fmt = styles.fmt_of(cell.style)?;
-        let text = label_text(&cell.shown, &fmt)?;
+        let date1904 = session.as_ref().map(|s| s.date1904()).unwrap_or(false);
+        let text = label_text(&cell.shown, &fmt, date1904)?;
         if text.is_empty() {
             continue;
         }
@@ -4198,7 +4261,7 @@ fn paint_labels(
     Ok(())
 }
 
-fn label_text(shown: &Shown, fmt: &NumFmt) -> Result<String, Error> {
+fn label_text(shown: &Shown, fmt: &NumFmt, date1904: bool) -> Result<String, Error> {
     let hide_text = matches!(fmt, NumFmt::Blank(4));
     match shown {
         Shown::Empty => Ok(String::new()),
@@ -4218,12 +4281,12 @@ fn label_text(shown: &Shown, fmt: &NumFmt) -> Result<String, Error> {
         Shown::Bool(true) => Ok("TRUE".into()),
         Shown::Bool(false) => Ok("FALSE".into()),
         Shown::Num(_) if matches!(fmt, NumFmt::Blank(_)) => Ok(String::new()),
-        Shown::Num(n) => format_num(*n, fmt),
+        Shown::Num(n) => format_num(*n, fmt, date1904),
         Shown::Err => Ok(String::new()),
     }
 }
 
-fn format_num(n: f64, fmt: &NumFmt) -> Result<String, Error> {
+fn format_num(n: f64, fmt: &NumFmt, date1904: bool) -> Result<String, Error> {
     if !n.is_finite() {
         return Err(unsupported());
     }
@@ -4234,6 +4297,64 @@ fn format_num(n: f64, fmt: &NumFmt) -> Result<String, Error> {
         NumFmt::Percent(digits) => format!("{}%", format_fixed(n * 100.0, *digits)),
         NumFmt::Blank(_) => String::new(),
         NumFmt::Sections(sections) => format_sections(n, sections)?,
+        NumFmt::DateTime(pat) => format_datetime(n, *pat, date1904)?,
+    })
+}
+
+const MONTH_MMM: [&str; 12] = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+fn excel_hms(serial: f64) -> Result<(u32, u32, u32), Error> {
+    // 日小数部分 → 时分秒；与 Excel 显示一致按秒四舍五入。
+    let frac = serial - serial.floor();
+    let mut secs = (frac * 86_400.0).round() as i64;
+    if secs < 0 {
+        return Err(unsupported());
+    }
+    if secs >= 86_400 {
+        secs = 0;
+    }
+    let h = (secs / 3600) as u32;
+    let m = ((secs % 3600) / 60) as u32;
+    let s = (secs % 60) as u32;
+    Ok((h, m, s))
+}
+
+fn hour_12(h24: u32) -> (u32, &'static str) {
+    let ampm = if h24 >= 12 { "PM" } else { "AM" };
+    let h = match h24 % 12 {
+        0 => 12,
+        x => x,
+    };
+    (h, ampm)
+}
+
+fn format_datetime(n: f64, pat: DateTimePat, date1904: bool) -> Result<String, Error> {
+    let (y, month, day) = super::eval::excel_ymd(n, date1904).ok_or_else(unsupported)?;
+    if !(1..=12).contains(&month) {
+        return Err(unsupported());
+    }
+    let (hh, mm, ss) = excel_hms(n)?;
+    let yy = y.rem_euclid(100) as u32;
+    let mmm = MONTH_MMM[(month as usize) - 1];
+    Ok(match pat {
+        DateTimePat::MdYy => format!("{month}/{day}/{yy:02}"),
+        DateTimePat::DMmmYy => format!("{day}-{mmm}-{yy:02}"),
+        DateTimePat::DMmm => format!("{day}-{mmm}"),
+        DateTimePat::MmmYy => format!("{mmm}-{yy:02}"),
+        DateTimePat::HmmAmpm => {
+            let (h, ap) = hour_12(hh);
+            format!("{h}:{mm:02} {ap}")
+        }
+        DateTimePat::HmmssAmpm => {
+            let (h, ap) = hour_12(hh);
+            format!("{h}:{mm:02}:{ss:02} {ap}")
+        }
+        DateTimePat::Hmm => format!("{hh}:{mm:02}"),
+        DateTimePat::Hmmss => format!("{hh}:{mm:02}:{ss:02}"),
+        DateTimePat::MdYyHmm => format!("{month}/{day}/{yy:02} {hh}:{mm:02}"),
+        DateTimePat::YyyyMmDd => format!("{y:04}/{month:02}/{day:02}"),
     })
 }
 
@@ -5117,44 +5238,53 @@ mod tests {
         for code in ["$#,##0.00", r"\$#,##0.00"] {
             let currency = parse_format(code).unwrap();
             assert_eq!(
-                label_text(&Shown::Num(1234.5), &currency).unwrap(),
+                label_text(&Shown::Num(1234.5), &currency, false).unwrap(),
                 "$1,234.50"
             );
             assert_eq!(
-                label_text(&Shown::Num(-1234.5), &currency).unwrap(),
+                label_text(&Shown::Num(-1234.5), &currency, false).unwrap(),
                 "-$1,234.50"
             );
-            assert_eq!(label_text(&Shown::Num(0.0), &currency).unwrap(), "$0.00");
+            assert_eq!(
+                label_text(&Shown::Num(0.0), &currency, false).unwrap(),
+                "$0.00"
+            );
         }
 
         for code in ["$#,##0.00;($#,##0.00)", r"\$#,##0.00;\(\$#,##0.00\)"] {
             let paren = parse_format(code).unwrap();
             assert_eq!(
-                label_text(&Shown::Num(1234.5), &paren).unwrap(),
+                label_text(&Shown::Num(1234.5), &paren, false).unwrap(),
                 "$1,234.50"
             );
             assert_eq!(
-                label_text(&Shown::Num(-1234.5), &paren).unwrap(),
+                label_text(&Shown::Num(-1234.5), &paren, false).unwrap(),
                 "($1,234.50)"
             );
-            assert_eq!(label_text(&Shown::Num(0.0), &paren).unwrap(), "$0.00");
+            assert_eq!(
+                label_text(&Shown::Num(0.0), &paren, false).unwrap(),
+                "$0.00"
+            );
         }
 
         let zero_dash = parse_format("\\$#,##0.00;\\(\\$#,##0.00\\);\"-\"").unwrap();
-        assert_eq!(label_text(&Shown::Num(0.0), &zero_dash).unwrap(), "-");
         assert_eq!(
-            label_text(&Shown::Num(-42.0), &zero_dash).unwrap(),
+            label_text(&Shown::Num(0.0), &zero_dash, false).unwrap(),
+            "-"
+        );
+        assert_eq!(
+            label_text(&Shown::Num(-42.0), &zero_dash, false).unwrap(),
             "($42.00)"
         );
 
         // 会计跳宽 `_`：Excel Text 正数尾空格。
         let acct = parse_format(r"\$#,##0.00_);\(\$#,##0.00\)").unwrap();
         assert_eq!(
-            label_text(&Shown::Num(1234.5), &acct).unwrap(),
+            label_text(&Shown::Num(1234.5), &acct, false).unwrap(),
             "$1,234.50 "
         );
         assert_eq!(
-            label_text(&Shown::Num(-1234.5), &acct).unwrap(),
+            label_text(&Shown::Num(-1234.5), &acct, false).unwrap(),
             "($1,234.50)"
         );
 
@@ -5162,6 +5292,67 @@ mod tests {
         assert!(parse_format("$#,##0.00;[Red]($#,##0.00)").is_err());
         assert!(parse_format("[>=100]0;0").is_err());
         assert!(parse_format("¥#,##0.00").is_err());
+    }
+
+    #[test]
+    fn datetime_builtin_and_yyyy_mm_dd_match_excel_range_text() {
+        // Excel 16 Range.Text oracle：serial 44941.6046875 = 2023-01-15 14:30:45（1900 系）
+        let n = 44941.6046875;
+        let cases = [
+            (DateTimePat::MdYy, "1/15/23"),
+            (DateTimePat::DMmmYy, "15-Jan-23"),
+            (DateTimePat::DMmm, "15-Jan"),
+            (DateTimePat::MmmYy, "Jan-23"),
+            (DateTimePat::HmmAmpm, "2:30 PM"),
+            (DateTimePat::HmmssAmpm, "2:30:45 PM"),
+            (DateTimePat::Hmm, "14:30"),
+            (DateTimePat::Hmmss, "14:30:45"),
+            (DateTimePat::MdYyHmm, "1/15/23 14:30"),
+            (DateTimePat::YyyyMmDd, "2023/01/15"),
+        ];
+        for (pat, want) in cases {
+            let fmt = NumFmt::DateTime(pat);
+            assert_eq!(
+                label_text(&Shown::Num(n), &fmt, false).unwrap(),
+                want,
+                "{pat:?}"
+            );
+        }
+        assert!(matches!(
+            parse_format("yyyy/mm/dd").unwrap(),
+            NumFmt::DateTime(DateTimePat::YyyyMmDd)
+        ));
+        assert!(matches!(
+            builtin_fmt(14),
+            Some(NumFmt::DateTime(DateTimePat::MdYy))
+        ));
+        assert!(matches!(
+            builtin_fmt(22),
+            Some(NumFmt::DateTime(DateTimePat::MdYyHmm))
+        ));
+        // 1900 假闰日
+        assert_eq!(
+            label_text(
+                &Shown::Num(60.0),
+                &NumFmt::DateTime(DateTimePat::YyyyMmDd),
+                false
+            )
+            .unwrap(),
+            "1900/02/29"
+        );
+        // 歧义/未点名自定义 NI；方括号仍 NI
+        assert!(matches!(
+            parse_format("m/d/yy").unwrap(),
+            NumFmt::DateTime(DateTimePat::MdYy)
+        ));
+        assert!(matches!(
+            parse_format(r"m/d/yy\ h:mm").unwrap(),
+            NumFmt::DateTime(DateTimePat::MdYyHmm)
+        ));
+        assert!(parse_format("m/d/yyyy").is_err());
+        assert!(parse_format("yyyy-mm-dd").is_err());
+        assert!(parse_format("[$-409]yyyy/mm/dd").is_err());
+        assert!(parse_format("$#,##0.00;[Red]($#,##0.00)").is_err());
     }
 
     #[test]
@@ -5183,23 +5374,23 @@ mod tests {
         // `;;; ` 第四段为空格字面量（Excel 文本段），合法 Sections。
         assert!(matches!(parse_format(";;; ").unwrap(), NumFmt::Sections(_)));
         assert_eq!(
-            label_text(&Shown::Num(123.0), &NumFmt::Blank(3)).unwrap(),
+            label_text(&Shown::Num(123.0), &NumFmt::Blank(3), false).unwrap(),
             ""
         );
         assert_eq!(
-            label_text(&Shown::Text("字".into()), &NumFmt::Blank(3)).unwrap(),
+            label_text(&Shown::Text("字".into()), &NumFmt::Blank(3), false).unwrap(),
             "字"
         );
         assert_eq!(
-            label_text(&Shown::Text("字".into()), &NumFmt::Blank(4)).unwrap(),
+            label_text(&Shown::Text("字".into()), &NumFmt::Blank(4), false).unwrap(),
             ""
         );
         assert_eq!(
-            label_text(&Shown::Bool(true), &NumFmt::Blank(4)).unwrap(),
+            label_text(&Shown::Bool(true), &NumFmt::Blank(4), false).unwrap(),
             ""
         );
         assert_eq!(
-            label_text(&Shown::Bool(true), &NumFmt::Blank(2)).unwrap(),
+            label_text(&Shown::Bool(true), &NumFmt::Blank(2), false).unwrap(),
             "TRUE"
         );
     }
