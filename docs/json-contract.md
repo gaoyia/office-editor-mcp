@@ -2465,7 +2465,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 已用区域里每一行都隐藏时，高度是 1，整行留白，不画网格。每一列都隐藏时，宽度是 1，整列留白。行和列都隐藏时是 1×1 的白
 - 合并跨过隐藏行或隐藏列时，按剩下的可见格子铺满锚点。锚点自己被隐藏、合并仍伸进可见格子时，照样铺
 - 条件格式的区域含隐藏行或隐藏列时，整表报 `NotImplemented`
-- `sheetView` 的 `rightToLeft` 为真，且没有要画的文字、没有条件格式、没有自动筛选时，把整张图水平翻转。有文字、条件格式或自动筛选时仍报 `NotImplemented`
+- `sheetView` 的 `rightToLeft` 为真，且没有条件格式、没有自动筛选时：无文字则整图水平翻转；有拉丁/CJK 文字时先翻转非文字层，再在翻转后的格子坐标用同一套 `Face::width`/`draw_cells` 正写（不 Unicode 反序、不镜像字形）。`alignment/@readingOrder` 为 `2`，或文本含强 RTL 文种（阿拉伯/希伯来等）时仍整表 `NotImplemented`（与列镜像不同语义；逐字前进宽不能冒充 bidi shaping）。条件格式或自动筛选在 RTL 下仍 `NotImplemented`
 - 文字认左、中、右和常规。常规时数字靠右，文字靠左，布尔居中。垂直认上、中、下。左缘留白是该字体平均字宽的一半，右缘留 2 像素。字与字的间距用 GDI 前进宽度，不跟整段字符串的排版步进
 - `wrapText` 为真或单元格文本含硬换行 `\n` 时按单元格内宽软断多行；`indent` 0–15，每级缩进为 3 个 `0` 字宽（与绘制同一套 `Face::width`，不用 Word 排版步进）。多行块按垂直对齐整体摆放。`textRotation` 非 0、`shrinkToFit`、两端对齐/fill/justify/distributed 仍整表 `NotImplemented`。不照搬 Word 行距或断词。
 - 单元格 `t="e"` 且 `<v>` 为 `#NULL!` / `#DIV/0!` / `#VALUE!` / `#REF!` / `#NAME?` / `#NUM!` / `#N/A` 时按该串画字（常规对齐同文字靠左）。其它错误码报 `NotImplemented`。共享弦里的同形文字仍是文字，不是错误值。
