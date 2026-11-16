@@ -1805,16 +1805,14 @@ impl PivotAnswer {
                 if !put_pick(&mut row_pick, i, item) {
                     return None;
                 }
-            } else if let Some(i) = self
-                .col_fields
-                .iter()
-                .position(|name| name.eq_ignore_ascii_case(field))
-            {
+            } else {
+                let i = self
+                    .col_fields
+                    .iter()
+                    .position(|name| name.eq_ignore_ascii_case(field))?;
                 if !put_pick(&mut col_pick, i, item) {
                     return None;
                 }
-            } else {
-                return None;
             }
         }
         let row_path = axis_prefix(&row_pick)?;

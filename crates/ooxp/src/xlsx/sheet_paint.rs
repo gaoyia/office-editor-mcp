@@ -1259,7 +1259,7 @@ fn decode_opaque_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Error> {
         png::ColorType::Rgb => raw.to_vec(),
         png::ColorType::Rgba => {
             let mut out = Vec::with_capacity(raw.len() / 4 * 3);
-            for chunk in raw.chunks_exact(4) {
+            for chunk in raw.as_chunks::<4>().0 {
                 if chunk[3] != 255 {
                     return Err(unsupported());
                 }

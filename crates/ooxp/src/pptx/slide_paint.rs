@@ -2271,7 +2271,7 @@ fn decode_png(bytes: &[u8]) -> Result<Rgba, Error> {
     let px = match frame.color_type {
         png::ColorType::Rgb => {
             let mut out = Vec::with_capacity(raw.len() / 3 * 4);
-            for chunk in raw.chunks_exact(3) {
+            for chunk in raw.as_chunks::<3>().0 {
                 out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
             }
             out
@@ -2353,7 +2353,7 @@ fn over(dst: [u8; 3], src: [u8; 4]) -> [u8; 3] {
 }
 
 fn fill(rgb: &mut [u8], color: [u8; 3]) {
-    for px in rgb.chunks_exact_mut(3) {
+    for px in rgb.as_chunks_mut::<3>().0 {
         px.copy_from_slice(&color);
     }
 }

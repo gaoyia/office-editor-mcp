@@ -1175,9 +1175,8 @@ fn set_nested_xfrm_ext(el: &mut Element, cx: Option<i64>, cy: Option<i64>) {
             }
         }
     }
-    let n = el.children.len();
-    for i in 0..n {
-        if let Node::Element(c) = &mut el.children[i] {
+    for child in &mut el.children {
+        if let Node::Element(c) = child {
             set_nested_xfrm_ext(c, cx, cy);
         }
     }

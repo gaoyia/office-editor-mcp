@@ -37,9 +37,8 @@ pub(crate) fn pin_walk(
             }
         }
         PinStep::Descend => {
-            let len = el.children.len();
-            for i in 0..len {
-                if let Node::Element(child) = &mut el.children[i] {
+            for child in &mut el.children {
+                if let Node::Element(child) = child {
                     pin_walk(child, n, family, step);
                 }
             }

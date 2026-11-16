@@ -836,9 +836,8 @@ fn patch_object_walk(
         }
         return false;
     }
-    let n = el.children.len();
-    for i in 0..n {
-        if let Node::Element(e) = &mut el.children[i] {
+    for child in &mut el.children {
+        if let Node::Element(e) = child {
             if patch_object_walk(e, idx, key, cx, cy) {
                 return true;
             }

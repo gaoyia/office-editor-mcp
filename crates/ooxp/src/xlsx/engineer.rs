@@ -62,7 +62,7 @@ fn places_width(places: Option<f64>, digits: usize) -> Result<Option<usize>, &'s
 }
 
 fn digamma(m: i32) -> f64 {
-    const GAMMA: f64 = 0.577_215_664_901_532_9;
+    const GAMMA: f64 = std::f64::consts::EULER_GAMMA;
     let mut harmonic = 0.0;
     for i in 1..m {
         harmonic += 1.0 / f64::from(i);
