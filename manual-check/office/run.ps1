@@ -184,6 +184,8 @@ $order = @(
     'docx-glossary'
     'docx-font-embed'
     'docx-page-bg'
+    'docx-page-image'
+    'docx-calibri-image'
     'docx-theme-bg-remain'
     'docx-groups'
     'docx-drawing-shape'
