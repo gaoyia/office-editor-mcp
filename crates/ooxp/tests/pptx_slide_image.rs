@@ -1543,6 +1543,31 @@ fn axis_aligned_connectors_paint_and_a_diagonal_fails() {
     assert_eq!(pixel(&rgb, w, 288, 96), [64, 64, 64]);
     assert_eq!(pixel(&rgb, w, 96, 95), [255, 255, 255]);
 
+    let one_px_v = tmp("line-1v");
+    rewrite_named(&src, &one_px_v, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        let xml = swap(xml, "cx=\"1828800\"", "cx=\"0\"");
+        let xml = swap(xml, "cy=\"762000\"", "cy=\"1828800\"");
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("line-1v-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": one_px_v.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 96, 100), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 288), [32, 32, 32]);
+    assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 97, 96), [255, 255, 255]);
+
     let out = tmp("line-diag-png").with_extension("png");
     let err = run(&json!({
         "schemaVersion": 1,
