@@ -422,7 +422,7 @@ fn paint_sp(
         "line" | "straightConnector1" => {
             paint_line(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
-        "bentConnector2" | "bentConnector3" => {
+        "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
             paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
         "curvedConnector2" | "curvedConnector3" => {
@@ -452,7 +452,7 @@ fn paint_cxn(
         "line" | "straightConnector1" => {
             paint_line(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
-        "bentConnector2" | "bentConnector3" => {
+        "bentConnector2" | "bentConnector3" | "bentConnector4" | "bentConnector5" => {
             paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
         "curvedConnector2" | "curvedConnector3" => {
@@ -646,6 +646,7 @@ fn paint_v_line(
 }
 
 /// 直角折线连接符。`bentConnector2` 是 L，`bentConnector3` 是带 `adj1` 的 Z。
+/// `bentConnector4` 带 `adj1` / `adj2`，`bentConnector5` 再带 `adj3`，转折按 ECMA-376 预设几何。
 /// 不透明实线 1 或 2 像素，可带翻转。1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽。
 fn paint_elbow(
     pkg: &Package,
@@ -699,7 +700,18 @@ fn paint_elbow(
     if sw != 1 && sw != 2 {
         return Err(unsupported());
     }
-    let pts = elbow_points(prst, x, y, cx, cy, flip_h, flip_v, elbow_adj1(sp_pr));
+    let pts = elbow_points(
+        prst,
+        x,
+        y,
+        cx,
+        cy,
+        flip_h,
+        flip_v,
+        elbow_adj(sp_pr, "adj1"),
+        elbow_adj(sp_pr, "adj2"),
+        elbow_adj(sp_pr, "adj3"),
+    );
     if pts.is_empty() {
         return Err(unsupported());
     }
@@ -709,18 +721,22 @@ fn paint_elbow(
     Ok(())
 }
 
-fn elbow_adj1(sp_pr: &Element) -> i64 {
+fn elbow_adj(sp_pr: &Element, name: &str) -> i64 {
     sp_pr
         .child_by_local("prstGeom")
         .and_then(|geom| geom.child_by_local("avLst"))
         .and_then(|list| {
             list.element_children()
-                .find(|el| el.attr("name") == Some("adj1"))
+                .find(|el| el.attr("name") == Some(name))
         })
         .and_then(|gd| gd.attr("fmla"))
         .and_then(|fmla| fmla.strip_prefix("val "))
         .and_then(|raw| raw.parse::<i64>().ok())
         .unwrap_or(50_000)
+}
+
+fn elbow_adj1(sp_pr: &Element) -> i64 {
+    elbow_adj(sp_pr, "adj1")
 }
 
 fn elbow_points(
@@ -731,12 +747,35 @@ fn elbow_points(
     cy: i64,
     flip_h: bool,
     flip_v: bool,
-    adj: i64,
+    adj1: i64,
+    adj2: i64,
+    adj3: i64,
 ) -> Vec<(f32, f32)> {
-    let mid = x + (cx as i128 * adj as i128 / 100_000) as i64;
+    let along = |len: i64, adj: i64| (len as i128 * adj as i128 / 100_000) as i64;
     let raw = match prst {
         "bentConnector2" => vec![(x, y), (x + cx, y), (x + cx, y + cy)],
-        "bentConnector3" => vec![(x, y), (mid, y), (mid, y + cy), (x + cx, y + cy)],
+        "bentConnector3" => {
+            let mid = x + along(cx, adj1);
+            vec![(x, y), (mid, y), (mid, y + cy), (x + cx, y + cy)]
+        }
+        "bentConnector4" => {
+            let x1 = x + along(cx, adj1);
+            let y2 = y + along(cy, adj2);
+            vec![(x, y), (x1, y), (x1, y2), (x + cx, y2), (x + cx, y + cy)]
+        }
+        "bentConnector5" => {
+            let x1 = x + along(cx, adj1);
+            let y2 = y + along(cy, adj2);
+            let x3 = x + along(cx, adj3);
+            vec![
+                (x, y),
+                (x1, y),
+                (x1, y2),
+                (x3, y2),
+                (x3, y + cy),
+                (x + cx, y + cy),
+            ]
+        }
         _ => return Vec::new(),
     };
     raw.into_iter()
@@ -4678,6 +4717,171 @@ mod tests {
         assert_eq!(pixel(&two, w, 288, 95), [96, 96, 96]);
         assert_eq!(pixel(&two, w, 288, 287), [0, 0, 0]);
         assert_eq!(pixel(&two, w, 288, 288), [255, 255, 255]);
+    }
+
+    #[test]
+    fn bent4_and_bent5_follow_the_preset_guides() {
+        let x = 914_400;
+        let y = 914_400;
+        let cx = 1_828_800;
+        let cy = 1_828_800;
+        let px = |pt: (f32, f32)| (pt.0, pt.1);
+        let b4 = elbow_points(
+            "bentConnector4",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            b4.iter().copied().map(px).collect::<Vec<_>>(),
+            vec![
+                (96.0, 96.0),
+                (192.0, 96.0),
+                (192.0, 192.0),
+                (288.0, 192.0),
+                (288.0, 288.0)
+            ]
+        );
+        let b4h = elbow_points(
+            "bentConnector4",
+            x,
+            y,
+            cx,
+            cy,
+            true,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            b4h.iter().copied().map(px).collect::<Vec<_>>(),
+            vec![
+                (288.0, 96.0),
+                (192.0, 96.0),
+                (192.0, 192.0),
+                (96.0, 192.0),
+                (96.0, 288.0)
+            ]
+        );
+        let b5 = elbow_points(
+            "bentConnector5",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            25_000,
+            50_000,
+            75_000,
+        );
+        assert_eq!(
+            b5.iter().copied().map(px).collect::<Vec<_>>(),
+            vec![
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (144.0, 192.0),
+                (240.0, 192.0),
+                (240.0, 288.0),
+                (288.0, 288.0)
+            ]
+        );
+        let b5d = elbow_points(
+            "bentConnector5",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            50_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            b5d.iter().copied().map(px).collect::<Vec<_>>(),
+            vec![
+                (96.0, 96.0),
+                (192.0, 96.0),
+                (192.0, 192.0),
+                (192.0, 192.0),
+                (192.0, 288.0),
+                (288.0, 288.0)
+            ]
+        );
+        let mid = elbow_points(
+            "bentConnector3",
+            x,
+            y,
+            cx,
+            cy,
+            false,
+            false,
+            25_000,
+            50_000,
+            50_000,
+        );
+        assert_eq!(
+            mid.iter().copied().map(px).collect::<Vec<_>>(),
+            vec![(96.0, 96.0), (144.0, 96.0), (144.0, 288.0), (288.0, 288.0)]
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_multi_elbow_keeps_the_turns() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut b4 = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut b4,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (192.0, 96.0),
+                (192.0, 192.0),
+                (288.0, 192.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_ne!(pixel(&b4, w, 96, 96), [255, 255, 255]);
+        assert_ne!(pixel(&b4, w, 144, 96), [255, 255, 255]);
+        assert_ne!(pixel(&b4, w, 192, 144), [255, 255, 255]);
+        assert_ne!(pixel(&b4, w, 240, 192), [255, 255, 255]);
+        assert_ne!(pixel(&b4, w, 288, 240), [255, 255, 255]);
+        assert_eq!(pixel(&b4, w, 240, 144), [255, 255, 255]);
+        let mut b5 = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut b5,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (144.0, 192.0),
+                (240.0, 192.0),
+                (240.0, 288.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_ne!(pixel(&b5, w, 96, 96), [255, 255, 255]);
+        assert_ne!(pixel(&b5, w, 144, 144), [255, 255, 255]);
+        assert_ne!(pixel(&b5, w, 192, 192), [255, 255, 255]);
+        assert_ne!(pixel(&b5, w, 240, 240), [255, 255, 255]);
+        assert_ne!(pixel(&b5, w, 288, 288), [255, 255, 255]);
+        assert_eq!(pixel(&b5, w, 200, 120), [255, 255, 255]);
     }
 
     #[cfg(windows)]
