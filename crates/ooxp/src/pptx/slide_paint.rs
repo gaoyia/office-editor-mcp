@@ -1268,7 +1268,8 @@ fn paint_text_block(
                     continue;
                 };
                 let draw_top = cursor_y + (line_ascent - face.line_height());
-                face.draw(&span, cursor_x, draw_top, line.color, |cx, cy, ink, cov| {
+                // 幻灯片独立路径：Windows 单元格基线，不改图表共用的 typographic draw。
+                face.draw_slide(&span, cursor_x, draw_top, line.color, |cx, cy, ink, cov| {
                     blend(rgb, width, height, cx, cy, ink, cov);
                 });
                 cursor_x += face.width(&span);
@@ -1674,7 +1675,9 @@ fn srgb_mix(start: u8, end: u8, share: f64) -> u8 {
 /// 画椭圆。有描边时外接矩形右和下各加 1 像素，和 PowerPoint 16.0 序号圆一致。
 /// 边缘交给 GDI+ 的抗锯齿。GDI+ 不可用时退回半像素覆盖。
 fn fill_ellipse(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) {
-    if oval.grad.is_some() && oval.stroke.is_none() && fill_ellipse_device_grad(rgb, width, height, oval)
+    if oval.grad.is_some()
+        && oval.stroke.is_none()
+        && fill_ellipse_device_grad(rgb, width, height, oval)
     {
         return;
     }
@@ -1703,7 +1706,9 @@ fn fill_ellipse_device_grad(rgb: &mut [u8], width: u32, height: u32, oval: &Oval
             }
             let px = map.x + lx;
             let py = map.y + ly;
-            paint_grad_cover(rgb, width, height, px, py, oval.grad, oval.fill, x, y, w, h, cov);
+            paint_grad_cover(
+                rgb, width, height, px, py, oval.grad, oval.fill, x, y, w, h, cov,
+            );
         }
     }
     true
@@ -3476,4 +3481,89 @@ mod tests {
         assert!((line_em(&line(48.0)) - 57.6).abs() < 1e-9);
         assert!((line_em(&line(96.0)) - 115.2).abs() < 1e-9);
     }
+
+    #[cfg(windows)]
+    #[test]
+    fn slide_multiline_layout_follows_windows_cell_and_120_pitch() {
+        // 验收：行距 1.2 倍字号；首墨走 Windows 单元格模型。
+        // Office 16.0 金图 12/18/24 磅与此对齐，36/48/72 磅金图再高 1 像素。
+        // 不要求灰阶与 Slide.Export 逐像素一致。
+        let line = |pt: f64| TextLine {
+            text: "AAAA".to_string(),
+            px: (pt * 96.0 / 72.0) as f32,
+            bold: false,
+            color: [0, 0, 0],
+            latin: "Calibri".to_string(),
+            ea: String::new(),
+            cs: String::new(),
+            sym: String::new(),
+            lang: String::new(),
+            align: "l".to_string(),
+        };
+        let office_first = [
+            (12.0, 5),
+            (18.0, 7),
+            (24.0, 9),
+            (36.0, 14),
+            (48.0, 19),
+            (72.0, 29),
+        ];
+        for (pt, office_dy) in office_first {
+            let width = 400u32;
+            let height = 400u32;
+            let mut rgb = vec![255u8; (width * height * 3) as usize];
+            let row = line(pt);
+            let pitch = line_em(&row);
+            let second = TextLine {
+                text: "BBBB".to_string(),
+                ..line(pt)
+            };
+            paint_text_block(&[row, second], 0, 0, 400, 400, "t", &mut rgb, width, height);
+            let ink_rows: Vec<i32> = (0..height as i32)
+                .filter(|&y| {
+                    (0..width as i32).any(|x| {
+                        let i = (y as usize * width as usize + x as usize) * 3;
+                        rgb[i] < 254 || rgb[i + 1] < 254 || rgb[i + 2] < 254
+                    })
+                })
+                .collect();
+            assert!(ink_rows.len() >= 2, "pt={pt} 应画出墨迹");
+            let first = ink_rows[0];
+            // 第二行首墨：在第一行首墨加一个行距附近寻找新的墨迹带。
+            let expected_second = (f64::from(first) + pitch).round() as i32;
+            let second_ink = ink_rows
+                .iter()
+                .copied()
+                .find(|&y| (y - expected_second).abs() <= 1)
+                .unwrap_or_else(|| {
+                    panic!("pt={pt} 找不到第二行首墨, first={first}, expect~{expected_second}, rows={ink_rows:?}")
+                });
+            let face = Face::open_named((pt * 96.0 / 72.0) as f32, false, "Calibri").expect("Calibri");
+            let mut cell_first = None;
+            face.draw_slide("AAAA", 0.0, 0.0, [0, 0, 0], |_, y, _, cov| {
+                if cov > 0 {
+                    cell_first = Some(cell_first.map_or(y, |v: i32| v.min(y)));
+                }
+            });
+            let cell_dy = cell_first.expect("cell ink");
+            assert_eq!(first, cell_dy, "pt={pt} 块排版首墨应等于单元格模型");
+            assert!(
+                (second_ink - first - pitch.round() as i32).abs() <= 1,
+                "pt={pt} pitch first={first} second={second_ink} em={pitch}"
+            );
+            let residual = first - office_dy;
+            if pt <= 24.0 {
+                assert_eq!(
+                    residual, 0,
+                    "pt={pt} 应对齐 Office 首墨 {office_dy}, 实际 {first}"
+                );
+            } else {
+                assert_eq!(
+                    residual, 1,
+                    "pt={pt} 相对 Office 首墨 {office_dy} 的已知残余应是 +1, 实际 first={first}"
+                );
+            }
+        }
+    }
+
 }

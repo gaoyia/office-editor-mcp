@@ -363,6 +363,23 @@ mod win {
             self.draw_gray8(text, x, top, color, &mut blend);
         }
 
+        /// 幻灯片文字走 Windows 单元格坐标：基线 = 字顶 + tmAscent，再用 GDI
+        /// GetGlyphOutline 灰阶落点。这是布局近似，不保证与 PowerPoint 16.0
+        /// Slide.Export 的字形灰阶逐像素一致。图表仍用上面的 typographic draw。
+        pub fn draw_slide(
+            &self,
+            text: &str,
+            x: f64,
+            top: f64,
+            color: [u8; 3],
+            mut blend: impl FnMut(i32, i32, [u8; 3], u8),
+        ) {
+            if text.is_empty() {
+                return;
+            }
+            self.draw_gray8(text, x, top, color, &mut blend);
+        }
+
         fn draw_gray8(
             &self,
             text: &str,
@@ -1055,6 +1072,32 @@ mod win {
     }
 
     #[test]
+    fn slide_text_first_ink_follows_windows_cell() {
+        // 布局近似：首墨 = tmAscent - GetGlyphOutline('A').originY。
+        // 与 Office 16.0 金图相比，12/18/24 磅对齐，36/48/72 磅会低 1 像素。
+        for pt in [12.0f32, 18.0, 24.0, 36.0, 48.0, 72.0] {
+            let px = pt * 96.0 / 72.0;
+            let face = Face::open_named(px, false, "Calibri").expect("本机应有 Calibri");
+            let metrics = face.metrics('A').expect("A");
+            let expected = (face.line_height() - f64::from(metrics.glyph_origin_y)).round() as i32;
+            let mut first = None;
+            face.draw_slide("A", 0.0, 0.0, [0, 0, 0], |_, y, _, cov| {
+                if cov > 0 {
+                    first = Some(first.map_or(y, |v: i32| v.min(y)));
+                }
+            });
+            let got = first.expect("应画出墨迹");
+            assert_eq!(
+                got,
+                expected,
+                "pt={pt} first-ink={got} cell={expected} ascent={} originY={}",
+                face.line_height(),
+                metrics.glyph_origin_y
+            );
+        }
+    }
+
+    #[test]
     fn chart_text_antialiases() {
         let face = Face::open(13.0, false).expect("本机应有图表字体");
         let mut smooth = 0;
@@ -1109,6 +1152,17 @@ impl Face {
     }
 
     pub fn draw(&self, _: &str, _: f64, _: f64, _: [u8; 3], _: impl FnMut(i32, i32, [u8; 3], u8)) {}
+
+    pub fn draw_slide(
+        &self,
+        text: &str,
+        x: f64,
+        top: f64,
+        color: [u8; 3],
+        blend: impl FnMut(i32, i32, [u8; 3], u8),
+    ) {
+        self.draw(text, x, top, color, blend);
+    }
 
     pub fn draw_cells(
         &self,

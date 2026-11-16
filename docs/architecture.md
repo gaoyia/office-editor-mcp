@@ -48,7 +48,7 @@ xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、形状文字、簇状柱形图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
-两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。写成 `a:br` 的换行也会预览出来。
+两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。写成 `a:br` 的换行也会预览出来。形状文字按布局近似排（Windows 单元格基线、默认 1.2 倍行距），不保证与 PowerPoint 16.0 的字形灰阶逐像素一致，细节见 [json-contract.md](json-contract.md)。
 
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
 
