@@ -1672,31 +1672,37 @@ fn paint_table(
     x: i32,
     y: i32,
 ) -> Result<(), Error> {
-    let cols: Vec<i32> = tbl
+    let col_emus: Vec<i64> = tbl
         .child_by_local("tblGrid")
         .map(|grid| {
             grid.element_children()
                 .filter(|el| el.local_name() == "gridCol")
-                .map(|col| emu_px(col.attr("w").and_then(|raw| raw.parse().ok()).unwrap_or(0)))
+                .map(|col| col.attr("w").and_then(|raw| raw.parse().ok()).unwrap_or(0))
                 .collect()
         })
         .unwrap_or_default();
     let fonts = minor_fonts(pkg);
     let header_style = header_is_bold_light(tbl);
-    let mut py = y;
-    for (row_index, tr) in tbl
+    let rows: Vec<&Element> = tbl
         .element_children()
         .filter(|el| el.local_name() == "tr")
-        .enumerate()
-    {
-        let rh = emu_px(tr.attr("h").and_then(|raw| raw.parse().ok()).unwrap_or(0));
-        let mut px = x;
+        .collect();
+    let row_emus: Vec<i64> = rows
+        .iter()
+        .map(|tr| tr.attr("h").and_then(|raw| raw.parse().ok()).unwrap_or(0))
+        .collect();
+    let xs = table_grid_edges(x, &col_emus);
+    let ys = table_grid_edges(y, &row_emus);
+    for (row_index, tr) in rows.iter().enumerate() {
+        let py = *ys.get(row_index).unwrap_or(&y);
+        let rh = ys.get(row_index + 1).copied().unwrap_or(py) - py;
         for (i, tc) in tr
             .element_children()
             .filter(|el| el.local_name() == "tc")
             .enumerate()
         {
-            let cw = cols.get(i).copied().unwrap_or(0);
+            let px = *xs.get(i).unwrap_or(&x);
+            let cw = xs.get(i + 1).copied().unwrap_or(px) - px;
             if tc.attr_local("gridSpan").is_some()
                 || tc.attr_local("rowSpan").is_some_and(|v| v != "1")
                 || tc.attr_local("hMerge").is_some()
@@ -1711,6 +1717,21 @@ fn paint_table(
             if let Some(color) = fill {
                 fill_rect(rgb, width, height, px, py, cw, rh, color);
             }
+        }
+    }
+    if should_paint_default_table_grid(tbl) {
+        paint_default_table_grid(rgb, width, height, &xs, &ys);
+    }
+    for (row_index, tr) in rows.iter().enumerate() {
+        let py = *ys.get(row_index).unwrap_or(&y);
+        let rh = ys.get(row_index + 1).copied().unwrap_or(py) - py;
+        for (i, tc) in tr
+            .element_children()
+            .filter(|el| el.local_name() == "tc")
+            .enumerate()
+        {
+            let px = *xs.get(i).unwrap_or(&x);
+            let cw = xs.get(i + 1).copied().unwrap_or(px) - px;
             paint_cell_text(
                 tc,
                 &fonts,
@@ -1723,11 +1744,105 @@ fn paint_table(
                 width,
                 height,
             );
-            px += cw;
         }
-        py += rh;
     }
     Ok(())
+}
+
+const TABLE_GRID_LN: &[&str] = &["lnL", "lnR", "lnT", "lnB", "lnTlToBr", "lnBlToTr"];
+/// 去掉表样式且单元格没有显式边线时，PowerPoint 16.0 用 2 像素、50% 黑叠在已有像素上画网格。
+const DEFAULT_TABLE_GRID_PX: i32 = 2;
+
+fn should_paint_default_table_grid(tbl: &Element) -> bool {
+    if let Some(pr) = tbl.child_by_local("tblPr") {
+        if pr.child_by_local("tableStyleId").is_some() || pr.child_by_local("tableStyle").is_some()
+        {
+            return false;
+        }
+    }
+    !tbl.element_children()
+        .filter(|el| el.local_name() == "tr")
+        .flat_map(|tr| tr.element_children())
+        .filter(|el| el.local_name() == "tc")
+        .any(|tc| {
+            tc.child_by_local("tcPr").is_some_and(|pr| {
+                TABLE_GRID_LN
+                    .iter()
+                    .any(|name| pr.child_by_local(name).is_some())
+            })
+        })
+}
+
+fn paint_default_table_grid(rgb: &mut [u8], width: u32, height: u32, xs: &[i32], ys: &[i32]) {
+    if xs.len() < 2 || ys.len() < 2 {
+        return;
+    }
+    if !paint_default_table_grid_gdi(rgb, width, height, xs, ys) {
+        paint_default_table_grid_sharp(rgb, width, height, xs, ys);
+    }
+}
+
+fn table_grid_edges(origin: i32, spans: &[i64]) -> Vec<i32> {
+    let mut edges = Vec::with_capacity(spans.len() + 1);
+    edges.push(origin);
+    let mut acc = 0i64;
+    for &span in spans {
+        acc = acc.saturating_add(span);
+        edges.push(origin.saturating_add(emu_px(acc)));
+    }
+    edges
+}
+
+fn paint_default_table_grid_gdi(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    xs: &[i32],
+    ys: &[i32],
+) -> bool {
+    let x0 = xs[0];
+    let x1 = xs[xs.len() - 1];
+    let y0 = ys[0];
+    let y1 = ys[ys.len() - 1];
+    let mut ok = true;
+    // 每条网格线单独描一次：交点是两次 50% 黑叠色，不能用闭合折线一次覆盖。
+    for &x in xs {
+        ok &= fill_device_line(x, y0, x, y1, DEFAULT_TABLE_GRID_PX, |px, py, cov| {
+            blend_half_black(rgb, width, height, px, py, cov)
+        });
+    }
+    for &y in ys {
+        ok &= fill_device_line(x0, y, x1, y, DEFAULT_TABLE_GRID_PX, |px, py, cov| {
+            blend_half_black(rgb, width, height, px, py, cov)
+        });
+    }
+    ok
+}
+
+fn paint_default_table_grid_sharp(rgb: &mut [u8], width: u32, height: u32, xs: &[i32], ys: &[i32]) {
+    let y0 = ys[0];
+    let y1 = ys[ys.len() - 1];
+    let x0 = xs[0];
+    let x1 = xs[xs.len() - 1];
+    for &x in xs {
+        for py in (y0 - 1)..=y1 {
+            for px in (x - 1)..=x {
+                blend_half_black(rgb, width, height, px, py, 255);
+            }
+        }
+    }
+    for &y in ys {
+        for px in (x0 - 1)..=x1 {
+            for py in (y - 1)..=y {
+                blend_half_black(rgb, width, height, px, py, 255);
+            }
+        }
+    }
+}
+
+fn blend_half_black(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, cov: u8) {
+    let alpha = ((u16::from(cov) * 128 + 127) / 255) as u8;
+    blend_src_over(rgb, width, height, x, y, [0, 0, 0], alpha);
 }
 
 /// PowerPoint 中等样式 2 - 强调 1。包里通常只有这个 GUID，样式正文不在部件里。
@@ -4426,6 +4541,52 @@ mod tests {
         assert!(!header_is_bold_light(
             &crate::xml::parse(other.as_bytes()).unwrap().root
         ));
+    }
+
+    #[test]
+    fn default_table_grid_is_two_pixel_half_black() {
+        let w = 48u32;
+        let h = 32u32;
+        let mut rgb = vec![0u8; (w * h * 3) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 3) as usize;
+                let color = if (8..24).contains(&x) && (8..24).contains(&y) {
+                    [0x00, 0xAA, 0x00]
+                } else {
+                    [0xAA, 0xBB, 0xCC]
+                };
+                rgb[i..i + 3].copy_from_slice(&color);
+            }
+        }
+        paint_default_table_grid(&mut rgb, w, h, &[8, 24], &[8, 24]);
+        let at = |x: i32, y: i32| {
+            let i = ((y as u32 * w + x as u32) * 3) as usize;
+            [rgb[i], rgb[i + 1], rgb[i + 2]]
+        };
+        assert_eq!(at(7, 16), [0x55, 0x5D, 0x66], "左边外侧");
+        assert_eq!(at(8, 16), [0x00, 0x55, 0x00], "左边内侧");
+        assert_eq!(at(9, 16), [0x00, 0xAA, 0x00], "左边内侧下一列仍是填色");
+        assert_eq!(at(23, 16), [0x00, 0x55, 0x00], "右边内侧");
+        assert_eq!(at(24, 16), [0x55, 0x5D, 0x66], "右边外侧");
+        assert_eq!(at(16, 7), [0x55, 0x5D, 0x66], "上边外侧");
+        assert_eq!(at(16, 8), [0x00, 0x55, 0x00], "上边内侧");
+        assert_eq!(at(16, 23), [0x00, 0x55, 0x00], "下边内侧");
+        assert_eq!(at(16, 24), [0x55, 0x5D, 0x66], "下边外侧");
+        assert_eq!(at(4, 16), [0xAA, 0xBB, 0xCC], "框外页底不动");
+        assert_eq!(at(8, 8), [0x00, 0x2A, 0x00], "内角两次 50% 叠在填色上");
+    }
+
+    #[test]
+    fn table_grid_edges_round_the_cumulative_emu() {
+        assert_eq!(
+            table_grid_edges(192, &[812800, 812800, 812800]),
+            vec![192, 277, 363, 448]
+        );
+        assert_eq!(
+            table_grid_edges(384, &[914400, 914400]),
+            vec![384, 480, 576]
+        );
     }
 
     #[test]

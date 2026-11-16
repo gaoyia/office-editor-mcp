@@ -291,6 +291,7 @@ $order = @(
     'pptx-preview-crop-scale-image'
     'pptx-preview-rot-rect-image'
     'pptx-preview-round-rect-image'
+    'pptx-preview-table-border-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'
