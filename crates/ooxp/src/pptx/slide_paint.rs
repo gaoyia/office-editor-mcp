@@ -13,7 +13,7 @@ use super::shape;
 use super::ExportedMedia;
 use crate::xlsx::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, fill_device_stroked_rect, Face,
+    fill_device_rotated_rect, fill_device_round_rect, fill_device_stroked_rect, Face,
 };
 #[cfg(windows)]
 use crate::xlsx::{scale_device_rgba, scale_device_rgba_window};
@@ -933,9 +933,15 @@ fn paint_rect(
             return Ok(());
         }
     }
+    if paint_rotated_opaque_rect(pkg, part, sp, sp_pr, chain, rgb, width, height)? {
+        return Ok(());
+    }
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Ok(());
     };
+    if non_right_angle(sp_pr) {
+        return Err(unsupported());
+    }
     if rotated(sp_pr) {
         if sp_pr.child_by_local("gradFill").is_some() || sp_pr.child_by_local("blipFill").is_some()
         {
@@ -3182,6 +3188,110 @@ const FULL_TURN: i64 = 21_600_000;
 
 /// 绕矩形中心转 90 度的倍数。90 和 270 换成宽高对调后的外接矩形。
 /// 转完落不到整数 EMU，或角度不是直角，就跳过。
+fn non_right_angle(sp_pr: &Element) -> bool {
+    let Some(raw) = sp_pr
+        .child_by_local("xfrm")
+        .and_then(|xfrm| xfrm.attr("rot"))
+    else {
+        return false;
+    };
+    raw.parse::<i64>()
+        .ok()
+        .is_some_and(|n| n.rem_euclid(FULL_TURN) % RIGHT_ANGLE != 0)
+}
+
+fn shape_has_text(sp: &Element) -> bool {
+    fn walk(el: &Element) -> bool {
+        if el.local_name() == "t" && !el.text_content().trim().is_empty() {
+            return true;
+        }
+        el.element_children().any(walk)
+    }
+    walk(sp)
+}
+
+/// 没有描边的不透明纯色矩形，绕中心做非直角旋转。Windows 上走公开 GDI+ 变换填充。
+fn paint_rotated_opaque_rect(
+    pkg: &Package,
+    part: &str,
+    sp: &Element,
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<bool, Error> {
+    if !non_right_angle(sp_pr) {
+        return Ok(false);
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Ok(false);
+    };
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    if prst != "rect" {
+        return Ok(false);
+    }
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return Ok(false);
+    }
+    if !line_is_clear(sp_pr) {
+        return Ok(false);
+    }
+    if crate::xml::attr_is_true(xfrm, "flipH") || crate::xml::attr_is_true(xfrm, "flipV") {
+        return Ok(false);
+    }
+    if shape_has_text(sp) {
+        return Ok(false);
+    }
+    let color = if let Some(fill) = sp_pr.child_by_local("solidFill") {
+        if let Some(color) = opaque_rgb(fill) {
+            color
+        } else if let Some(color) = scheme_rect_color(pkg, part, sp_pr)? {
+            color
+        } else {
+            return Ok(false);
+        }
+    } else {
+        return Ok(false);
+    };
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
+    if cx <= 0 || cy <= 0 {
+        return Ok(false);
+    }
+    let raw = xfrm.attr("rot").and_then(|s| s.parse::<i64>().ok());
+    let Some(n) = raw else {
+        return Ok(false);
+    };
+    let deg = (n.rem_euclid(FULL_TURN) as f32) / 60_000.0;
+    let painted = fill_device_rotated_rect(
+        rgb,
+        width,
+        height,
+        emu_f(x) as f32,
+        emu_f(y) as f32,
+        emu_f(cx) as f32,
+        emu_f(cy) as f32,
+        deg,
+        color,
+    );
+    if painted {
+        return Ok(true);
+    }
+    if cfg!(windows) {
+        return Err(unsupported());
+    }
+    Ok(false)
+}
+
 fn turned_box(x: i64, y: i64, cx: i64, cy: i64, rot: Option<&str>) -> Option<(i64, i64, i64, i64)> {
     let Some(raw) = rot else {
         return Some((x, y, cx, cy));
