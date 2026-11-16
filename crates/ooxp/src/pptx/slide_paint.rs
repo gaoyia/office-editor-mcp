@@ -349,6 +349,7 @@ fn visit(
                 }
                 blit_pic(pkg, slide_part, child, chain, rgb, width, height)?;
             }
+            "cxnSp" => paint_cxn(pkg, slide_part, child, chain, rgb, width, height)?,
             "sp" => paint_sp(pkg, slide_part, child, chain, rgb, width, height)?,
             "graphicFrame" => paint_frame(pkg, slide_part, child, chain, rgb, width, height)?,
             "grpSp" => {
@@ -412,7 +413,156 @@ fn paint_sp(
         "rect" => paint_rect(pkg, part, sp, sp_pr, chain, rgb, width, height),
         "ellipse" => paint_ellipse(pkg, part, sp, sp_pr, chain, rgb, width, height),
         "roundRect" => paint_round(pkg, part, sp, sp_pr, chain, rgb, width, height),
+        "line" | "straightConnector1" => {
+            paint_line(pkg, part, sp, sp_pr, chain, rgb, width, height)
+        }
         _ => Err(unsupported()),
+    }
+}
+
+fn paint_cxn(
+    pkg: &Package,
+    part: &str,
+    cxn: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    let Some(sp_pr) = cxn.child_by_local("spPr") else {
+        return Ok(());
+    };
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    match prst {
+        "line" | "straightConnector1" => {
+            paint_line(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+        }
+        _ => Err(unsupported()),
+    }
+}
+
+/// 水平或垂直的直线 / 直连接线。一条边的 EMU 必须是 0。斜线、弯曲连接符仍整页失败。
+fn paint_line(
+    pkg: &Package,
+    part: &str,
+    sp: &Element,
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return Err(unsupported());
+    }
+    if sp_pr.child_by_local("solidFill").is_some()
+        || sp_pr.child_by_local("gradFill").is_some()
+        || sp_pr.child_by_local("blipFill").is_some()
+        || sp_pr.child_by_local("pattFill").is_some()
+    {
+        return Err(unsupported());
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Err(unsupported());
+    };
+    if xfrm.attr("flipH").is_some() || xfrm.attr("flipV").is_some() {
+        return Err(unsupported());
+    }
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let Some((x, y, cx, cy)) = turned_box(x, y, cx, cy, xfrm.attr("rot")) else {
+        return Err(unsupported());
+    };
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
+    if (cx == 0) == (cy == 0) {
+        return Err(unsupported());
+    }
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let sw = stroke_f.round().max(0.0) as i32;
+    if sw != 1 && sw != 2 {
+        return Err(unsupported());
+    }
+    if cy == 0 {
+        paint_h_line(
+            rgb,
+            width,
+            height,
+            emu_px(x),
+            emu_px(x + cx),
+            emu_px(y),
+            sw,
+            color,
+        );
+        return Ok(());
+    }
+    if sw != 2 {
+        return Err(unsupported());
+    }
+    paint_v_line(
+        rgb,
+        width,
+        height,
+        emu_px(x),
+        emu_px(y),
+        emu_px(y + cy),
+        sw,
+        color,
+    );
+    Ok(())
+}
+
+/// 1 像素横线两端是约 75% 覆盖；2 像素横线是实心，不含终点像素，并向上加一像素。
+fn paint_h_line(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x0: i32,
+    x1: i32,
+    y: i32,
+    sw: i32,
+    color: [u8; 3],
+) {
+    let (lo, hi) = if x0 <= x1 { (x0, x1) } else { (x1, x0) };
+    if sw == 2 {
+        for py in (y - 1)..y + 1 {
+            for px in lo..hi {
+                blend(rgb, width, height, px, py, color, 255);
+            }
+        }
+        return;
+    }
+    for px in lo..=hi {
+        let cov = if px == lo || px == hi { 191 } else { 255 };
+        blend(rgb, width, height, px, y, color, cov);
+    }
+}
+
+/// 2 像素竖线与横线同一套取整。1 像素竖线端点覆盖率尚未对齐，整页失败。
+fn paint_v_line(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y0: i32,
+    y1: i32,
+    sw: i32,
+    color: [u8; 3],
+) {
+    if sw != 2 {
+        return;
+    }
+    let (lo, hi) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
+    for px in (x - 1)..x + 1 {
+        for py in lo..hi {
+            blend(rgb, width, height, px, py, color, 255);
+        }
     }
 }
 
@@ -814,6 +964,74 @@ fn stroke_width_f(sp_pr: &Element) -> f64 {
         .and_then(|ln| ln.attr("w"))
         .unwrap_or("9525");
     raw.parse::<i64>().map(emu_f).unwrap_or(0.0).max(0.0)
+}
+
+/// 直线描边色：显式 `a:ln/a:solidFill`，或 `p:style` 的 `lnRef` 主题色。宽度缺省按 1 像素。
+fn line_stroke(
+    pkg: &Package,
+    part: &str,
+    sp: &Element,
+    sp_pr: &Element,
+) -> Result<([u8; 3], f64), Error> {
+    if let Some(ln) = sp_pr.child_by_local("ln") {
+        if ln.child_by_local("noFill").is_some() {
+            return Err(unsupported());
+        }
+        let fill = ln.child_by_local("solidFill").ok_or_else(unsupported)?;
+        let color = solid_line_color(pkg, part, fill)?;
+        return Ok((color, stroke_width_f(sp_pr)));
+    }
+    let Some(reference) = sp
+        .child_by_local("style")
+        .and_then(|style| style.child_by_local("lnRef"))
+    else {
+        return Err(unsupported());
+    };
+    let Some(clr) = only_child(reference) else {
+        return Err(unsupported());
+    };
+    let color = match clr.local_name() {
+        "srgbClr" => {
+            let (rgb, alpha) = rgba_of_color(clr).ok_or_else(unsupported)?;
+            if alpha != 255 {
+                return Err(unsupported());
+            }
+            rgb
+        }
+        "schemeClr" => scheme_rgb(pkg, part, clr).ok_or_else(unsupported)?,
+        _ => return Err(unsupported()),
+    };
+    Ok((color, 1.0))
+}
+
+fn solid_line_color(pkg: &Package, part: &str, fill: &Element) -> Result<[u8; 3], Error> {
+    if let Some(clr) = fill.child_by_local("srgbClr") {
+        let (color, alpha) = rgba_of(fill).ok_or_else(unsupported)?;
+        if alpha != 255 {
+            return Err(unsupported());
+        }
+        let _ = clr;
+        return Ok(color);
+    }
+    if let Some(clr) = fill.child_by_local("schemeClr") {
+        return scheme_rgb(pkg, part, clr).ok_or_else(unsupported);
+    }
+    Err(unsupported())
+}
+
+fn rgba_of_color(clr: &Element) -> Option<([u8; 3], u8)> {
+    if clr.local_name() != "srgbClr" {
+        return None;
+    }
+    for child in clr.element_children() {
+        if child.local_name() != "alpha" {
+            return None;
+        }
+        if child.attr("val").unwrap_or("") != "100000" {
+            return None;
+        }
+    }
+    Some((parse_rgb(clr.attr("val")?)?, 255))
 }
 
 fn stroke_color(sp_pr: &Element) -> Result<Option<[u8; 3]>, Error> {
@@ -3480,6 +3698,61 @@ mod tests {
         assert!((line_em(&line(24.0)) - 28.8).abs() < 1e-9);
         assert!((line_em(&line(48.0)) - 57.6).abs() < 1e-9);
         assert!((line_em(&line(96.0)) - 115.2).abs() < 1e-9);
+    }
+
+    fn blank(w: u32, h: u32) -> Vec<u8> {
+        vec![255; (w * h * 3) as usize]
+    }
+
+    #[test]
+    fn a_two_pixel_horizontal_line_is_a_solid_block() {
+        let w = 400u32;
+        let h = 200u32;
+        let mut rgb = blank(w, h);
+        paint_h_line(&mut rgb, w, h, 96, 288, 96, 2, [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 95), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 287, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 288, 96), [255, 255, 255]);
+        assert_eq!(pixel(&rgb, w, 96, 97), [255, 255, 255]);
+        assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
+    }
+
+    #[test]
+    fn a_two_pixel_vertical_line_is_a_solid_block() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut rgb = blank(w, h);
+        paint_v_line(&mut rgb, w, h, 96, 96, 288, 2, [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 95, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 287), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 288), [255, 255, 255]);
+        assert_eq!(pixel(&rgb, w, 97, 96), [255, 255, 255]);
+    }
+
+    #[test]
+    fn a_one_pixel_horizontal_line_has_three_quarter_caps() {
+        let w = 400u32;
+        let h = 200u32;
+        let mut rgb = blank(w, h);
+        paint_h_line(&mut rgb, w, h, 96, 288, 96, 1, [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 96, 96), [64, 64, 64]);
+        assert_eq!(pixel(&rgb, w, 97, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 287, 96), [0, 0, 0]);
+        assert_eq!(pixel(&rgb, w, 288, 96), [64, 64, 64]);
+        assert_eq!(pixel(&rgb, w, 96, 95), [255, 255, 255]);
+        assert_eq!(pixel(&rgb, w, 96, 97), [255, 255, 255]);
+        let mut red = blank(w, h);
+        paint_h_line(&mut red, w, h, 96, 288, 96, 1, [238, 68, 85]);
+        assert_eq!(pixel(&red, w, 97, 96), [238, 68, 85]);
+        assert_ne!(pixel(&red, w, 96, 96), [238, 68, 85]);
+        assert_ne!(pixel(&red, w, 96, 96), [255, 255, 255]);
+    }
+
+    fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {
+        let i = (y as usize * w as usize + x as usize) * 3;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
     }
 
     #[cfg(windows)]
