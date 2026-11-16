@@ -345,6 +345,7 @@ fn an_unknown_formula_fails_the_sheet() {
     );
 }
 
+#[cfg(windows)]
 fn quiet_row(rgb: &[u8], width: u32, y: u32, color: [u8; 3]) {
     for x in 1..width {
         assert_eq!(pixel(rgb, width, x, y), color, "({x},{y})");
@@ -352,6 +353,7 @@ fn quiet_row(rgb: &[u8], width: u32, y: u32, color: [u8; 3]) {
     assert_eq!(pixel(rgb, width, 0, y), [255, 255, 255], "外框 ({y})");
 }
 
+#[cfg(windows)]
 fn rank_book(cells: serde_json::Value, rule: serde_json::Value) -> PathBuf {
     let src = tmp("src");
     run_ok(json!({
