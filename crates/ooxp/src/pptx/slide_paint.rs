@@ -502,12 +502,19 @@ fn paint_line(
         );
         return Ok(());
     }
-    let y0 = emu_px(y);
-    let y1 = emu_px(y + cy);
-    if sw == 1 && y0 == y1 {
+    if sw != 2 {
         return Err(unsupported());
     }
-    paint_v_line(rgb, width, height, emu_px(x), y0, y1, sw, color);
+    paint_v_line(
+        rgb,
+        width,
+        height,
+        emu_px(x),
+        emu_px(y),
+        emu_px(y + cy),
+        sw,
+        color,
+    );
     Ok(())
 }
 
@@ -537,7 +544,7 @@ fn paint_h_line(
     }
 }
 
-/// 2 像素竖线与横线同一套取整。1 像素竖线只涂一列，起点约 5/8 覆盖、终点约 7/8 覆盖。
+/// 2 像素竖线与横线同一套取整。1 像素竖线端点覆盖率尚未对齐，整页失败。
 fn paint_v_line(
     rgb: &mut [u8],
     width: u32,
@@ -548,24 +555,14 @@ fn paint_v_line(
     sw: i32,
     color: [u8; 3],
 ) {
-    let (lo, hi) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
-    if sw == 2 {
-        for px in (x - 1)..x + 1 {
-            for py in lo..hi {
-                blend(rgb, width, height, px, py, color, 255);
-            }
-        }
+    if sw != 2 {
         return;
     }
-    for py in lo..=hi {
-        let cov = if py == lo {
-            159
-        } else if py == hi {
-            223
-        } else {
-            255
-        };
-        blend(rgb, width, height, x, py, color, cov);
+    let (lo, hi) = if y0 <= y1 { (y0, y1) } else { (y1, y0) };
+    for px in (x - 1)..x + 1 {
+        for py in lo..hi {
+            blend(rgb, width, height, px, py, color, 255);
+        }
     }
 }
 
@@ -3751,27 +3748,6 @@ mod tests {
         assert_eq!(pixel(&red, w, 97, 96), [238, 68, 85]);
         assert_ne!(pixel(&red, w, 96, 96), [238, 68, 85]);
         assert_ne!(pixel(&red, w, 96, 96), [255, 255, 255]);
-    }
-
-    #[test]
-    fn a_one_pixel_vertical_line_has_asymmetric_caps() {
-        let w = 400u32;
-        let h = 400u32;
-        let mut rgb = blank(w, h);
-        paint_v_line(&mut rgb, w, h, 96, 96, 288, 1, [0, 0, 0]);
-        assert_eq!(pixel(&rgb, w, 96, 96), [96, 96, 96]);
-        assert_eq!(pixel(&rgb, w, 96, 97), [0, 0, 0]);
-        assert_eq!(pixel(&rgb, w, 96, 287), [0, 0, 0]);
-        assert_eq!(pixel(&rgb, w, 96, 288), [32, 32, 32]);
-        assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
-        assert_eq!(pixel(&rgb, w, 97, 96), [255, 255, 255]);
-        assert_eq!(pixel(&rgb, w, 96, 95), [255, 255, 255]);
-        assert_eq!(pixel(&rgb, w, 96, 289), [255, 255, 255]);
-        let mut red = blank(w, h);
-        paint_v_line(&mut red, w, h, 96, 96, 288, 1, [238, 68, 85]);
-        assert_eq!(pixel(&red, w, 96, 100), [238, 68, 85]);
-        assert_eq!(pixel(&red, w, 96, 96), [244, 138, 149]);
-        assert_eq!(pixel(&red, w, 96, 288), [240, 91, 106]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {

@@ -16,7 +16,6 @@ Invoke-OoxpRequest @{
             @{ connectors = @(@{ prst = 'straightConnector1'; x = 914400; y = 914400; cx = 1828800; cy = 762000 }) }
             @{ connectors = @(@{ prst = 'line'; x = 914400; y = 914400; cx = 9525; cy = 762000 }) }
             @{ connectors = @(@{ prst = 'line'; x = 914400; y = 914400; cx = 1828800; cy = 762000 }) }
-            @{ connectors = @(@{ prst = 'line'; x = 914400; y = 914400; cx = 1828800; cy = 762000 }) }
         )
     }
 } 'pptx-preview-line-create' | Out-Null
@@ -47,7 +46,6 @@ Copy-Item -Force $src $deck
 Set-SlideExt $deck 'ppt/slides/slide1.xml' '1828800' '0' '19050'
 Set-SlideExt $deck 'ppt/slides/slide2.xml' '0' '1828800' '19050'
 Set-SlideExt $deck 'ppt/slides/slide3.xml' '1828800' '0' '9525'
-Set-SlideExt $deck 'ppt/slides/slide4.xml' '0' '1828800' '9525'
 
 $ppt = Ensure-MsPpt $deck
 $diffScript = [IO.Path]::Combine($PSScriptRoot, '..', '..', 'pixel-diff.ps1')
@@ -55,7 +53,6 @@ $cases = @(
     @{ tag = 'h2'; id = 'slide:1'; n = 1; title = '2px horizontal' }
     @{ tag = 'v2'; id = 'slide:2'; n = 2; title = '2px vertical' }
     @{ tag = 'h1'; id = 'slide:3'; n = 3; title = '1px horizontal' }
-    @{ tag = 'v1'; id = 'slide:4'; n = 4; title = '1px vertical' }
 )
 foreach ($case in $cases) {
     $lib = Get-OutPath ("pptx-preview-line-{0}-lib.png" -f $case.tag)
