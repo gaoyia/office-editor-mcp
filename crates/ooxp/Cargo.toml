@@ -11,7 +11,6 @@ description = "Office Open XML Patch：用领域 JSON 读写 .xlsx / .docx / .pp
 # `time` 的默认时间会调用系统时钟。wasm32 没有这项，所以只在本机依赖里打开。
 zip = { workspace = true, default-features = false, features = ["deflate", "deflate64", "aes-crypto"] }
 quick-xml = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
