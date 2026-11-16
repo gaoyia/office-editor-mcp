@@ -1064,6 +1064,143 @@ mod win {
         true
     }
 
+    /// 把不透明纯色圆角矩形画在真实页面坐标上：公开 GDI+ `FillPath`，抗锯齿与半像素偏移，
+    /// 实际颜色叠在已有页像素上。不要先在白底上抽覆盖率再混合——那条路径拐角会差 1，
+    /// 再对 `floor(r)` 窗外强制 255 还会盖住相切处的抗锯齿。渐变仍走原来的覆盖率回调，不改。
+    pub fn fill_device_opaque_round_rect(
+        rgb: &mut [u8],
+        page_w: u32,
+        page_h: u32,
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        radius: f64,
+        color: [u8; 3],
+    ) -> bool {
+        if w <= 0 || h <= 0 || gdiplus_token().is_none() {
+            return false;
+        }
+        if page_w == 0 || page_h == 0 || rgb.len() != (page_w as usize) * (page_h as usize) * 3 {
+            return false;
+        }
+        let pad = 4i32;
+        let origin_x = x.saturating_sub(pad);
+        let origin_y = y.saturating_sub(pad);
+        let Some(far_x) = x.checked_add(w).and_then(|v| v.checked_add(pad)) else {
+            return false;
+        };
+        let Some(far_y) = y.checked_add(h).and_then(|v| v.checked_add(pad)) else {
+            return false;
+        };
+        let Some(buf_w) = far_x.checked_sub(origin_x).filter(|&v| v > 0) else {
+            return false;
+        };
+        let Some(buf_h) = far_y.checked_sub(origin_y).filter(|&v| v > 0) else {
+            return false;
+        };
+        if buf_w > i32::MAX / 4 || buf_h > i32::MAX / 4 {
+            return false;
+        }
+        let mut pixels = vec![0xFFFF_FFFFu32; (buf_w as usize) * (buf_h as usize)];
+        for py in 0..buf_h {
+            for px in 0..buf_w {
+                let [r, g, b] = page_pixel(rgb, page_w, page_h, origin_x + px, origin_y + py);
+                pixels[(py as usize) * (buf_w as usize) + (px as usize)] =
+                    0xFF00_0000 | (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
+            }
+        }
+        let argb = 0xFF00_0000
+            | (u32::from(color[0]) << 16)
+            | (u32::from(color[1]) << 8)
+            | u32::from(color[2]);
+        let max_r = f64::from(w.min(h)) / 2.0;
+        let r = radius.clamp(0.0, max_r) as f32;
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                buf_w,
+                buf_h,
+                buf_w * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, PIXEL_OFFSET_HALF);
+            let mut brush = std::ptr::null_mut();
+            if GdipCreateSolidFill(argb, &mut brush) != 0 || brush.is_null() {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            let translated = GdipTranslateWorldTransform(
+                graphics,
+                -(origin_x as f32),
+                -(origin_y as f32),
+                MATRIX_ORDER_PREPEND,
+            ) == 0;
+            let status = if !translated {
+                1
+            } else if r <= 0.0 {
+                GdipFillRectangle(graphics, brush, x as f32, y as f32, w as f32, h as f32)
+            } else {
+                let fx = x as f32;
+                let fy = y as f32;
+                let fw = w as f32;
+                let fh = h as f32;
+                let d = r * 2.0;
+                let mut path = std::ptr::null_mut();
+                let ok = GdipCreatePath(0, &mut path) == 0
+                    && !path.is_null()
+                    && GdipAddPathArc(path, fx, fy, d, d, 180.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx + fw - d, fy, d, d, 270.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx + fw - d, fy + fh - d, d, d, 0.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx, fy + fh - d, d, d, 90.0, 90.0) == 0
+                    && GdipClosePathFigure(path) == 0
+                    && GdipFillPath(graphics, brush, path) == 0;
+                if !path.is_null() {
+                    GdipDeletePath(path);
+                }
+                if ok {
+                    0
+                } else {
+                    1
+                }
+            };
+            GdipDeleteBrush(brush);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            status == 0
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..buf_h {
+            for px in 0..buf_w {
+                let pix = pixels[(py as usize) * (buf_w as usize) + (px as usize)];
+                let color = [
+                    ((pix >> 16) & 0xff) as u8,
+                    ((pix >> 8) & 0xff) as u8,
+                    (pix & 0xff) as u8,
+                ];
+                set_page_pixel(rgb, page_w, page_h, origin_x + px, origin_y + py, color);
+            }
+        }
+        true
+    }
+
     /// 用 GDI+ 抗锯齿画不透明实线斜线。1 像素用无像素偏移，2 像素用半像素偏移。
     /// 与 PowerPoint 16.0 的 `Slide.Export` 对齐。回调坐标是页面像素，覆盖率从 0 到 255。
     pub fn fill_device_line(
@@ -2097,9 +2234,9 @@ mod win {
 
 #[cfg(windows)]
 pub use win::{
-    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_rotated_rect, fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba,
-    scale_device_rgba_window, Face,
+    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_opaque_round_rect,
+    fill_device_polyline, fill_device_rotated_rect, fill_device_round_rect,
+    fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window, Face,
 };
 
 #[cfg(not(windows))]
@@ -2177,6 +2314,21 @@ pub fn fill_device_round_rect(
     _: i32,
     _: f64,
     _: impl FnMut(i32, i32, u8),
+) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_opaque_round_rect(
+    _: &mut [u8],
+    _: u32,
+    _: u32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: f64,
+    _: [u8; 3],
 ) -> bool {
     false
 }
