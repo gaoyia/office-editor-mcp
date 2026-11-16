@@ -232,7 +232,21 @@ mod win {
                 .unwrap_or_else(|| self.width(text))
         }
 
+        /// GenericTypographic + 与 draw 相同的 STRING_FORMAT_TYPO 测宽。
+        /// 用于 Word 拉丁换行决策：逐字 GetGlyphOutline 前进宽之和偏大，会过早断行。
+        pub fn typo_width(&self, text: &str) -> f64 {
+            self.measure_typo(text).unwrap_or_else(|| self.width(text))
+        }
+
         fn measure_layout(&self, text: &str) -> Option<f64> {
+            self.measure_string(text, false)
+        }
+
+        fn measure_typo(&self, text: &str) -> Option<f64> {
+            self.measure_string(text, true)
+        }
+
+        fn measure_string(&self, text: &str, typographic: bool) -> Option<f64> {
             if text.is_empty() || gdiplus_token().is_none() {
                 return None;
             }
@@ -280,6 +294,22 @@ mod win {
                     GdipDisposeImage(bitmap);
                     return None;
                 }
+                let mut format = std::ptr::null_mut();
+                if typographic {
+                    let mut generic = std::ptr::null_mut();
+                    if GdipStringFormatGetGenericTypographic(&mut generic) != 0
+                        || GdipCloneStringFormat(generic, &mut format) != 0
+                        || format.is_null()
+                    {
+                        GdipDeleteFont(font);
+                        GdipDeleteFontFamily(family);
+                        GdipDeleteGraphics(graphics);
+                        GdipDisposeImage(bitmap);
+                        return None;
+                    }
+                    // GenericTypographic 是共享对象，只删 clone。
+                    GdipSetStringFormatFlags(format, STRING_FORMAT_TYPO);
+                }
                 let layout = RectF {
                     x: 0.0,
                     y: 0.0,
@@ -298,11 +328,14 @@ mod win {
                     chars.len() as i32,
                     font,
                     &layout,
-                    std::ptr::null_mut(),
+                    format,
                     &mut bounds,
                     std::ptr::null_mut(),
                     std::ptr::null_mut(),
                 );
+                if !format.is_null() {
+                    GdipDeleteStringFormat(format);
+                }
                 GdipDeleteFont(font);
                 GdipDeleteFontFamily(family);
                 GdipDeleteGraphics(graphics);
@@ -2269,6 +2302,10 @@ impl Face {
     }
 
     pub fn layout_width(&self, text: &str) -> f64 {
+        self.width(text)
+    }
+
+    pub fn typo_width(&self, text: &str) -> f64 {
         self.width(text)
     }
 

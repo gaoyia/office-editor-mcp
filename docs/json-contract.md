@@ -2624,10 +2624,10 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
-- 可以画没有可见内容的页，或 Windows 上单节、单段的不透明拉丁（ASCII）Calibri 正文（同一段可按空格换行，行距与空段分页同一档）。一节，节属性在 `w:body` 末尾
+- 可以画没有可见内容的页，或 Windows 上单节、单段的不透明拉丁（ASCII）Calibri 正文（同一段可按空格换行（GDI+ GenericTypographic 测宽；可排宽扣左缩进），行距与空段分页同一档并按半磅字号比例）。一节，节属性在 `w:body` 末尾
 - 没有页眉、页脚、页面边框、行号、文档网格，也没有多栏。有字页不允许非零 `gutter`，垂直对齐只接受 top
 - 文档默认字体必须是 Calibri，默认字号 11 磅（`w:sz` 为 22）。默认段落样式没有额外段属性
-- 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页。有字页只接受恰好一段；同一段拉丁按空格贪心换行，单词本身宽于正文区或换行后总高度超出本页剩余正文高时报 `NotImplemented`
+- 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页。有字页只接受恰好一段；同一段拉丁按空格贪心换行（`Face::typo_width`，与绘制同套 StringFormat；不按逐字 GetGlyphOutline 前进宽之和）。可排宽度为页左右边距之间减去左/start 缩进。单词本身宽于可排区或换行后总高度超出本页剩余正文高时报 `NotImplemented`
 - 有字页可带左/start 缩进和段前间距；段后、首行/悬挂/右缩进必须为 0 或缺省；对齐只接受 left/start。run 可带 `sz` / 匹配的 `szCs`，`rFonts` 的 ascii/hAnsi 须为 Calibri 或沿用默认，颜色只接受 auto 或 000000
 - 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。非 Windows 对有字页报 `NotImplemented`。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可
 - 宽高按该节 `w:pgSz` 的 twip，96 dpi，`twip × 96 / 1440` 四舍五入成像素

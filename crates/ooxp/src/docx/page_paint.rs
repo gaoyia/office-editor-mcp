@@ -89,8 +89,13 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
             }
             // 正文区内从段前之后剩余高度：body_h - before。
             let remain_h = body_h.saturating_sub(line.before_twip.max(0));
+            // 可排宽度扣左/start 缩进，与 Word 正文区一致。
+            let content_w = body_w.saturating_sub(line.indent_twip.max(0));
+            if content_w <= 0 {
+                return Err(unsupported());
+            }
             Some(layout_wrapped_lines(
-                &line.text, line.sz, left_twip, top_twip, body_w, remain_h,
+                &line.text, line.sz, left_twip, top_twip, content_w, remain_h,
             )?)
         }
         None => None,
@@ -118,13 +123,13 @@ fn layout_wrapped_lines(
     remain_body_h_twip: i64,
 ) -> Result<Vec<TextLine>, Error> {
     let rows = wrap_latin_lines(text, sz, body_w_twip)?;
-    let need = line_offset_twip(rows.len() as u64)?;
+    let need = line_offset_twip(rows.len() as u64, sz)?;
     if need > remain_body_h_twip {
         return Err(unsupported());
     }
     let mut out = Vec::with_capacity(rows.len());
     for (i, row) in rows.into_iter().enumerate() {
-        let y = top_twip.saturating_add(line_offset_twip(i as u64)?);
+        let y = top_twip.saturating_add(line_offset_twip(i as u64, sz)?);
         out.push(TextLine {
             text: row,
             sz,
@@ -136,8 +141,12 @@ fn layout_wrapped_lines(
     Ok(out)
 }
 
-fn line_offset_twip(line_index: u64) -> Result<i64, Error> {
-    let n = line_index.saturating_mul(LINE_NUM) / LINE_DEN;
+/// ????????????? `2500/2048`???????????11 ? ? `sz=22` ? `LINE_NUM`??
+fn line_offset_twip(line_index: u64, sz: u32) -> Result<i64, Error> {
+    let n = line_index
+        .saturating_mul(u64::from(sz))
+        .saturating_mul(25_000)
+        / LINE_DEN;
     i64::try_from(n).map_err(|_| unsupported())
 }
 
@@ -153,35 +162,58 @@ fn wrap_latin_lines(text: &str, sz: u32, body_w_twip: i64) -> Result<Vec<String>
         let px = pt * 96.0 / 72.0;
         let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
         let max_w = f64::from(twip_px_unclamped(body_w_twip)?);
-        if face.width(text) <= max_w {
+        if face.typo_width(text) <= max_w {
             return Ok(vec![text.to_string()]);
         }
+        // ASCII 空格贪心：断在最后一个仍放得下的空格；断点空格留在上行（与 Word 16.0 一致）。
+        // 不 collapse 多空格。
         let mut lines: Vec<String> = Vec::new();
-        let mut cur = String::new();
-        for word in text.split(' ') {
-            if word.is_empty() {
+        let mut start = 0usize;
+        let chars: Vec<char> = text.chars().collect();
+        let mut i = 0usize;
+        let mut last_space: Option<usize> = None;
+        while i < chars.len() {
+            if chars[i] == ' ' {
+                last_space = Some(i);
+            }
+            let end = i + 1;
+            let candidate: String = chars[start..end].iter().collect();
+            if face.typo_width(&candidate) <= max_w {
+                i += 1;
                 continue;
             }
-            if face.width(word) > max_w {
+            let Some(sp) = last_space.filter(|&sp| sp >= start) else {
+                return Err(unsupported());
+            };
+            // 上行含断点空格。
+            let line: String = chars[start..=sp].iter().collect();
+            if line.trim().is_empty() {
                 return Err(unsupported());
             }
-            let candidate = if cur.is_empty() {
-                word.to_string()
-            } else {
-                format!("{cur} {word}")
-            };
-            if face.width(&candidate) <= max_w {
-                cur = candidate;
-            } else {
-                if cur.is_empty() {
+            lines.push(line);
+            start = sp + 1;
+            last_space = None;
+            i = start;
+            if start >= chars.len() {
+                break;
+            }
+            // 单个词本身超宽
+            if chars[start] != ' ' {
+                let mut j = start;
+                while j < chars.len() && chars[j] != ' ' {
+                    j += 1;
+                }
+                let word: String = chars[start..j].iter().collect();
+                if face.typo_width(&word) > max_w {
                     return Err(unsupported());
                 }
-                lines.push(std::mem::take(&mut cur));
-                cur = word.to_string();
             }
         }
-        if !cur.is_empty() {
-            lines.push(cur);
+        if start < chars.len() {
+            let rest: String = chars[start..].iter().collect();
+            if !rest.is_empty() {
+                lines.push(rest);
+            }
         }
         if lines.is_empty() {
             return Err(unsupported());
@@ -574,7 +606,7 @@ fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine) -> Resul
         let px = pt * 96.0 / 72.0;
         let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
         let body_w = f64::from(twip_px_unclamped(line.body_w_twip)?);
-        if face.width(&line.text) > body_w {
+        if face.typo_width(&line.text) > body_w {
             return Err(unsupported());
         }
         let x = f64::from(twip_px_unclamped(line.left_twip)?);
