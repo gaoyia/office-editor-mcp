@@ -1534,24 +1534,49 @@ fn fill_gradient(
             if px < 0 || px >= width as i32 {
                 continue;
             }
-            let (color, alpha) = grad_at(&grad, col, row, w, h);
-            blend(rgb, width, height, px, py, color, alpha);
+            if grad_is_translucent(&grad) {
+                let (color, alpha) = grad_at_f(&grad, col, row, w, h);
+                blend_f(rgb, width, height, px, py, color, alpha);
+            } else {
+                let (color, alpha) = grad_at(&grad, col, row, w, h);
+                blend(rgb, width, height, px, py, color, alpha);
+            }
         }
     }
+}
+
+fn grad_along(grad: &LinearGrad, col: i32, row: i32, w: i32, h: i32) -> f64 {
+    if w <= 0 || h <= 0 {
+        return 0.0;
+    }
+    let turn = grad.ang.rem_euclid(FULL_TURN);
+    let quarter = turn / RIGHT_ANGLE;
+    match quarter {
+        1 => (f64::from(row) + 0.5) / f64::from(h),
+        2 => (f64::from(w - 1 - col) + 0.5) / f64::from(w),
+        3 => (f64::from(h - 1 - row) + 0.5) / f64::from(h),
+        _ => (f64::from(col) + 0.5) / f64::from(w),
+    }
+}
+
+fn grad_is_translucent(grad: &LinearGrad) -> bool {
+    grad.start.alpha < 255 || grad.end.alpha < 255
 }
 
 fn grad_at(grad: &LinearGrad, col: i32, row: i32, w: i32, h: i32) -> ([u8; 3], u8) {
     if w <= 0 || h <= 0 {
         return (grad.start.color, grad.start.alpha);
     }
-    let turn = grad.ang.rem_euclid(FULL_TURN);
-    let quarter = turn / RIGHT_ANGLE;
-    let along = match quarter {
-        1 => (f64::from(row) + 0.5) / f64::from(h),
-        2 => (f64::from(w - 1 - col) + 0.5) / f64::from(w),
-        3 => (f64::from(h - 1 - row) + 0.5) / f64::from(h),
-        _ => (f64::from(col) + 0.5) / f64::from(w),
-    };
+    let along = grad_along(grad, col, row, w, h);
+    if grad_is_translucent(grad) {
+        let color = [
+            srgb_mix(grad.start.color[0], grad.end.color[0], along),
+            srgb_mix(grad.start.color[1], grad.end.color[1], along),
+            srgb_mix(grad.start.color[2], grad.end.color[2], along),
+        ];
+        let alpha = mix_alpha(grad.start.alpha, grad.end.alpha, along);
+        return (color, alpha);
+    }
     let share = grad_weight(along);
     let color = [
         gamma_mix(grad.start.color[0], grad.end.color[0], share),
@@ -1559,6 +1584,30 @@ fn grad_at(grad: &LinearGrad, col: i32, row: i32, w: i32, h: i32) -> ([u8; 3], u
         gamma_mix(grad.start.color[2], grad.end.color[2], share),
     ];
     let alpha = mix_alpha(grad.start.alpha, grad.end.alpha, share);
+    (color, alpha)
+}
+
+/// 半透明两色渐变在 sRGB 里按像素中心线性插值，alpha 也按同一 t，不走不透明的伽马权重。
+fn grad_at_f(grad: &LinearGrad, col: i32, row: i32, w: i32, h: i32) -> ([f64; 3], f64) {
+    if w <= 0 || h <= 0 {
+        return (
+            [
+                f64::from(grad.start.color[0]),
+                f64::from(grad.start.color[1]),
+                f64::from(grad.start.color[2]),
+            ],
+            f64::from(grad.start.alpha) / 255.0,
+        );
+    }
+    let along = grad_along(grad, col, row, w, h);
+    let color = [
+        srgb_mix_f(grad.start.color[0], grad.end.color[0], along),
+        srgb_mix_f(grad.start.color[1], grad.end.color[1], along),
+        srgb_mix_f(grad.start.color[2], grad.end.color[2], along),
+    ];
+    let alpha = (f64::from(grad.start.alpha)
+        + (f64::from(grad.end.alpha) - f64::from(grad.start.alpha)) * along)
+        / 255.0;
     (color, alpha)
 }
 
@@ -1605,6 +1654,14 @@ fn gamma_mix(start: u8, end: u8, share: f64) -> u8 {
     let to = (f64::from(end) / 255.0).powf(2.2);
     let mixed = (from + (to - from) * share).clamp(0.0, 1.0);
     (mixed.powf(1.0 / 2.2) * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+fn srgb_mix_f(start: u8, end: u8, share: f64) -> f64 {
+    f64::from(start) + (f64::from(end) - f64::from(start)) * share
+}
+
+fn srgb_mix(start: u8, end: u8, share: f64) -> u8 {
+    srgb_mix_f(start, end, share).round().clamp(0.0, 255.0) as u8
 }
 
 /// 画椭圆。有描边时外接矩形右和下各加 1 像素，和 PowerPoint 16.0 序号圆一致。
@@ -2141,6 +2198,24 @@ fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3]
     for (k, src) in color.into_iter().enumerate() {
         let dst = u16::from(rgb[i + k]);
         rgb[i + k] = ((u16::from(src) * c + dst * (255 - c) + 127) / 255) as u8;
+    }
+}
+
+/// 半透明渐变用浮点 sRGB 源色和 0..1 的 alpha 叠在已有像素上。
+/// Office 16.0 对 96 宽、alpha 50000 的红到蓝，端点和中点与四舍五入后的结果一致。
+fn blend_f(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [f64; 3], alpha: f64) {
+    if alpha <= 0.0 || x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+        return;
+    }
+    let i = (y as usize * width as usize + x as usize) * 3;
+    let a = alpha.clamp(0.0, 1.0);
+    for (k, src) in color.into_iter().enumerate() {
+        if a >= 1.0 {
+            rgb[i + k] = src.round().clamp(0.0, 255.0) as u8;
+        } else {
+            let dst = f64::from(rgb[i + k]);
+            rgb[i + k] = (src * a + dst * (1.0 - a)).round().clamp(0.0, 255.0) as u8;
+        }
     }
 }
 
@@ -3250,5 +3325,40 @@ mod tests {
         assert_eq!(&rgb[..3], &mixed);
         assert_ne!(&rgb[..3], &[0xAA, 0xBB, 0xCC]);
         assert_ne!(&rgb[..3], &[255, 0, 0]);
+    }
+
+    #[test]
+    fn translucent_red_blue_gradient_matches_srgb_float_composite() {
+        let mut rgb = vec![0u8; 96 * 3];
+        for px in rgb.chunks_mut(3) {
+            px.copy_from_slice(&[0xAA, 0xBB, 0xCC]);
+        }
+        fill_gradient(
+            &mut rgb,
+            96,
+            1,
+            0,
+            0,
+            96,
+            1,
+            LinearGrad {
+                start: GradStop {
+                    color: [255, 0, 0],
+                    alpha: 128,
+                },
+                end: GradStop {
+                    color: [0, 0, 255],
+                    alpha: 128,
+                },
+                ang: 0,
+            },
+        );
+        let at = |x: usize| [rgb[x * 3], rgb[x * 3 + 1], rgb[x * 3 + 2]];
+        // 与 Office 16.0 96x48 半透明红到蓝金样的端点和中点一致。
+        assert_eq!(at(0), [212, 93, 102]);
+        assert_eq!(at(48), [148, 93, 166]);
+        assert_eq!(at(95), [85, 93, 229]);
+        assert_ne!(at(24), at(0));
+        assert_ne!(at(24), at(95));
     }
 }
