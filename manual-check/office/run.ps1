@@ -284,6 +284,7 @@ $order = @(
     'pptx-preview-elbow-image'
     'pptx-preview-curve-image'
     'pptx-preview-stroke-image'
+    'pptx-preview-alpha-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'

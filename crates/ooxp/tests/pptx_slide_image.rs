@@ -496,7 +496,103 @@ fn later_rect_covers_earlier_and_the_page_clips() {
     assert_eq!(pixel(&rgb, w, 0, 192), [0x00, 0xFF, 0x00]);
     assert_eq!(pixel(&rgb, w, 1, 239), [0x00, 0xFF, 0x00]);
     assert_eq!(pixel(&rgb, w, 2, 192), [0xAA, 0xBB, 0xCC]);
-    assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+    // 50% `EE4455` 叠在页底 `AABBCC` 上，与 PowerPoint 16.0 一致。
+    assert_eq!(pixel(&rgb, w, 384, 96), [0xCC, 0x7F, 0x91]);
+}
+
+#[test]
+fn translucent_solid_rects_blend_over_the_page() {
+    let src = tmp("alpha-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "0000FF", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "FFFFFF", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "000000", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "00FF00", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 25000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 75000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 10000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [
+                { "text": "", "prst": "rect", "fill": "EE4455", "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 },
+                { "text": "", "prst": "rect", "fill": { "type": "solid", "color": "0000FF", "alpha": 50000 }, "x": 2057400, "y": 914400, "cx": 914400, "cy": 457200 }
+            ] },
+            { "shapes": [
+                { "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 },
+                { "text": "", "prst": "rect", "fill": { "type": "solid", "color": "0000FF", "alpha": 50000 }, "x": 2057400, "y": 914400, "cx": 914400, "cy": 457200 }
+            ] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": 1828800, "y": 914400, "cx": 914400, "cy": 457200 }] },
+            { "shapes": [{ "text": "", "prst": "rect", "fill": { "type": "solid", "color": "EE4455", "alpha": 50000 }, "x": -9525, "y": 1828800, "cx": 28575, "cy": 457200 }] }
+        ] }
+    }));
+    let deck = tmp("alpha-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:2", "color": "FFFFFF" },
+            { "op": "setPageBackground", "id": "slide:3", "color": "000000" },
+            { "op": "setPageBackground", "id": "slide:4", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:5", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:6", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:7", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:8", "color": "112233" },
+            { "op": "setPageBackground", "id": "slide:9", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:10", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:11", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:12", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:13", "color": "AABBCC" },
+            { "op": "setPageBackground", "id": "slide:15", "color": "AABBCC" }
+        ]
+    }));
+    let sample = |id: &str, x: u32, y: u32| -> [u8; 3] {
+        let tag = id.replace(":", "-");
+        let out = tmp(&format!("alpha-{tag}")).with_extension("png");
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "exportSlideImage",
+            "path": deck.to_string_lossy(),
+            "id": id,
+            "output": out.to_string_lossy()
+        }));
+        let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+        pixel(&rgb, w, x, y)
+    };
+    assert_eq!(sample("slide:1", 220, 110), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:1", 192, 96), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:1", 287, 143), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:1", 10, 10), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(sample("slide:2", 220, 110), [0xF6, 0xA1, 0xAA]);
+    assert_eq!(sample("slide:3", 220, 110), [0x77, 0x22, 0x2B]);
+    assert_eq!(sample("slide:4", 220, 110), [0x55, 0x5D, 0xE6]);
+    assert_eq!(sample("slide:5", 220, 110), [0xD5, 0xDD, 0xE6]);
+    assert_eq!(sample("slide:6", 220, 110), [0x55, 0x5D, 0x66]);
+    assert_eq!(sample("slide:7", 220, 110), [0x55, 0xDD, 0x66]);
+    assert_eq!(sample("slide:8", 220, 110), [0x7F, 0x33, 0x44]);
+    assert_eq!(sample("slide:9", 220, 110), [0xBB, 0x9D, 0xAE]);
+    assert_eq!(sample("slide:10", 220, 110), [0xDD, 0x62, 0x73]);
+    assert_eq!(sample("slide:11", 220, 110), [0xB1, 0xAF, 0xC0]);
+    // 不透明红 (192..287) 与 50% 蓝 (216..311) 重叠。
+    assert_eq!(sample("slide:12", 200, 110), [0xEE, 0x44, 0x55]);
+    assert_eq!(sample("slide:12", 260, 110), [0x77, 0x22, 0xAA]);
+    assert_eq!(sample("slide:12", 310, 110), [0x55, 0x5D, 0xE6]);
+    assert_eq!(sample("slide:13", 200, 110), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:13", 260, 110), [0x66, 0x3F, 0xC8]);
+    assert_eq!(sample("slide:13", 310, 110), [0x55, 0x5D, 0xE6]);
+    assert_eq!(sample("slide:14", 220, 110), [0xF6, 0xA1, 0xAA]);
+    assert_eq!(sample("slide:14", 10, 10), [0xFF, 0xFF, 0xFF]);
+    assert_eq!(sample("slide:15", 0, 192), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:15", 1, 192), [0xCC, 0x7F, 0x91]);
+    assert_eq!(sample("slide:15", 2, 192), [0xAA, 0xBB, 0xCC]);
 }
 
 #[test]
