@@ -712,7 +712,23 @@ pub(crate) fn install_paint(sp: &mut Element, fill: Element) {
             "grpFill",
         ],
     );
-    sp_pr.push_element(fill);
+    // CT_ShapeProperties: fill 在 xfrm/geom 之后、ln/效果之前。
+    // 追加到末尾会让 Office 16.0 丢掉乱序的 blipFill。
+    let at = sp_pr
+        .children
+        .iter()
+        .position(|node| {
+            if let crate::xml::Node::Element(el) = node {
+                matches!(
+                    el.local_name(),
+                    "ln" | "scene3d" | "sp3d" | "effectLst" | "effectDag" | "extLst"
+                )
+            } else {
+                false
+            }
+        })
+        .unwrap_or(sp_pr.children.len());
+    sp_pr.children.insert(at, crate::xml::Node::Element(fill));
 }
 
 pub(crate) fn paint_for_page(

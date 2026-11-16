@@ -1383,6 +1383,93 @@ fn round_rect_and_ellipse_gradients_are_painted() {
 }
 
 #[test]
+fn shape_blip_fill_is_written_before_line() {
+    let png_path = tmp("blip-order").with_extension("png");
+    std::fs::write(&png_path, solid_png(8, 8, [0x22, 0x88, 0x44])).unwrap();
+
+    let created = tmp("blip-order-create");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": created.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{
+            "text": "",
+            "fill": { "type": "blip", "file": png_path.to_string_lossy() },
+            "x": 1828800,
+            "y": 914400,
+            "cx": 914400,
+            "cy": 914400
+        }] }] }
+    }));
+    let created_xml = slide1_xml(&created);
+    assert!(
+        created_xml.contains("</a:blipFill><a:ln>"),
+        "create 的 blipFill 必须写在 ln 之前，否则 Office 16.0 不画图片填充：{created_xml}"
+    );
+    assert!(
+        !created_xml.contains("</a:ln><a:blipFill>"),
+        "{created_xml}"
+    );
+
+    let src = tmp("blip-order-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let inserted = tmp("blip-order-insert");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": inserted.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": { "type": "blip", "file": png_path.to_string_lossy() },
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 914400
+            }
+        ]
+    }));
+    let inserted_xml = slide1_xml(&inserted);
+    assert!(
+        inserted_xml.contains("</a:blipFill><a:ln>"),
+        "insertShape 的 blipFill 必须写在 ln 之前：{inserted_xml}"
+    );
+    assert!(
+        !inserted_xml.contains("</a:ln><a:blipFill>"),
+        "{inserted_xml}"
+    );
+}
+
+fn slide1_xml(path: &Path) -> String {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name("ppt/slides/slide1.xml").unwrap();
+    let mut xml = String::new();
+    file.read_to_string(&mut xml).unwrap();
+    xml
+}
+
+#[test]
 fn shape_text_newline_keeps_the_second_line() {
     let src = tmp("multiline-src");
     run_ok(json!({
