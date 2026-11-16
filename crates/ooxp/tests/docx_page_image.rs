@@ -268,6 +268,65 @@ fn single_paragraph_latin_wrap_is_drawn() {
 
 #[cfg(windows)]
 #[test]
+fn wrap11_breaks_after_eleven_on_first_line() {
+    // Word 16.0 COM / Typographic MeasureString：第一行以 "eleven" 结尾（断点空格可省略）。
+    let wrap = create_text(
+        "wrap11",
+        "This line is intentionally long enough that it should not fit on one A4 content width at Calibri eleven point without wrapping in Word.",
+    );
+    let png = export(&wrap, "page:1").unwrap();
+    let (w, h, rgb) = decode_png(&png);
+    assert_eq!((w, h), (794, 1123));
+    // 两行墨迹：第一行约 590 宽，第二行明显更短。
+    let mut row_ink = vec![false; h as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 3) as usize;
+            if rgb[i] != 255 || rgb[i + 1] != 255 || rgb[i + 2] != 255 {
+                row_ink[y as usize] = true;
+                break;
+            }
+        }
+    }
+    let mut bands: Vec<(u32, u32, u32, u32)> = Vec::new();
+    let mut start: Option<u32> = None;
+    for y in 0..=h {
+        let ink = y < h && row_ink[y as usize];
+        if ink && start.is_none() {
+            start = Some(y);
+        } else if !ink {
+            if let Some(s) = start {
+                let end = y - 1;
+                let mut min_x = w;
+                let mut max_x = 0u32;
+                for yy in s..=end {
+                    for x in 0..w {
+                        let i = ((yy * w + x) * 3) as usize;
+                        if rgb[i] != 255 || rgb[i + 1] != 255 || rgb[i + 2] != 255 {
+                            min_x = min_x.min(x);
+                            max_x = max_x.max(x);
+                        }
+                    }
+                }
+                bands.push((min_x, s, max_x - min_x + 1, end - s + 1));
+                start = None;
+            }
+        }
+    }
+    assert_eq!(bands.len(), 2, "expected two wrapped lines, got {bands:?}");
+    let (x0, y0, w0, h0) = bands[0];
+    let (x1, y1, w1, h1) = bands[1];
+    assert_eq!((x0, y0), (96, 100));
+    assert!((96..=97).contains(&x1), "line1 x {x1}");
+    assert_eq!(h0, h1);
+    // Typographic 断点：第一行含 eleven，宽约 590；第二行更短。
+    assert!((589..=591).contains(&w0), "line0 width {w0}");
+    assert!(w1 < 220, "line1 width {w1}");
+    assert_eq!(y1, 118);
+}
+
+#[cfg(windows)]
+#[test]
 fn second_paragraph_is_not_drawn() {
     let src = tmp("two-para");
     run_ok(json!({
