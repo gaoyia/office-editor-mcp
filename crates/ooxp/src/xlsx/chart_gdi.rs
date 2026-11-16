@@ -965,7 +965,20 @@ mod win {
                 if cov == 0 {
                     continue;
                 }
-                blend(x - pad + px, y - pad + py, cov);
+                // Office 16.0 在圆角矩形的竖直直边上是整像素实心：左右列贴着外接矩形，
+                // 外侧一列仍是页底。GDI+ FillPath 会把这两列画成约 96% 覆盖。拐角窗口仍用 GDI+ 抗锯齿。
+                let wx = x - pad + px;
+                let wy = y - pad + py;
+                let corner = r.floor() as i32;
+                let in_box = wx >= x && wx < x + w && wy >= y && wy < y + h;
+                let in_corner = corner > 0
+                    && in_box
+                    && ((wx < x + corner && wy < y + corner)
+                        || (wx >= x + w - corner && wy < y + corner)
+                        || (wx < x + corner && wy >= y + h - corner)
+                        || (wx >= x + w - corner && wy >= y + h - corner));
+                let cov = if in_box && !in_corner { 255 } else { cov };
+                blend(wx, wy, cov);
             }
         }
         true
@@ -993,6 +1006,30 @@ mod win {
             e_m21: Fixed { fract: 0, value: 0 },
             e_m22: Fixed { fract: 0, value: 1 },
         }
+    }
+
+    #[test]
+    fn device_round_rect_straight_edges_are_opaque() {
+        // 竖直直边中点应为完全覆盖；外接矩形外侧一列不应被涂成实心。
+        let (x, y, w, h) = (384, 96, 192, 96);
+        let mut mid_left = 0u8;
+        let mut mid_right = 0u8;
+        let mut outside_left = 0u8;
+        let ok = fill_device_round_rect(x, y, w, h, 16.00032, |px, py, cov| {
+            if px == x && py == y + h / 2 {
+                mid_left = cov;
+            }
+            if px == x + w - 1 && py == y + h / 2 {
+                mid_right = cov;
+            }
+            if px == x - 1 && py == y + h / 2 {
+                outside_left = cov;
+            }
+        });
+        assert!(ok, "本机应能走 GDI+");
+        assert_eq!(mid_left, 255);
+        assert_eq!(mid_right, 255);
+        assert_eq!(outside_left, 0);
     }
 
     #[test]
