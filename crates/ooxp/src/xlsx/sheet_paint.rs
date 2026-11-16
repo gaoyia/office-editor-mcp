@@ -16,7 +16,7 @@ use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{Package, Relationships};
-use crate::xml::Element;
+use crate::xml::{Element, Node};
 
 use super::a1::{self, CellRef};
 use super::chart_gdi::Face;
@@ -3851,7 +3851,7 @@ fn paint_rules(
     }
     for (_, areas, rule) in &rules {
         if rule.attr("type") == Some("dataBar") {
-            paint_bar(canvas, cells, xs, ys, c0, r0, areas, rule)?;
+            paint_bar(canvas, sheet, cells, xs, ys, c0, r0, areas, rule)?;
         }
     }
     Ok(())
@@ -4339,6 +4339,7 @@ fn cell_is(op: &str, value: f64, args: &[f64]) -> Result<bool, Error> {
 
 fn paint_bar(
     canvas: &mut Canvas,
+    sheet: &Element,
     cells: &HashMap<(u32, u32), CellRec>,
     xs: &Axis,
     ys: &Axis,
@@ -4350,21 +4351,28 @@ fn paint_bar(
     let Some(bar) = rule.child_by_local("dataBar") else {
         return Err(unsupported());
     };
-    let cfvos = bar.children_by_local("cfvo");
-    if cfvos.len() != 2 {
-        return Err(unsupported());
-    }
     let values = area_numbers(cells, areas);
-    if values.iter().any(|n| *n < 0.0) {
-        return Err(unsupported());
-    }
-    let min = cfvo_value(cfvos[0], &values)?;
-    let max = cfvo_value(cfvos[1], &values)?;
     let color = bar
         .child_by_local("color")
         .and_then(|el| el.attr("rgb"))
         .and_then(parse_rgb)
         .ok_or_else(unsupported)?;
+    // 主题色-only / 无 rgb：仍 NI（本刀不扩 theme 解析进数据条）。
+    if let Some(x14) = x14_data_bar(sheet, rule) {
+        return paint_bar_x14(
+            canvas, cells, xs, ys, c0, r0, areas, bar, x14, &values, color,
+        );
+    }
+    // 无 x14：只画非负 ECMA 渐变条（历史行为）。
+    if values.iter().any(|n| *n < 0.0) {
+        return Err(unsupported());
+    }
+    let cfvos = bar.children_by_local("cfvo");
+    if cfvos.len() != 2 {
+        return Err(unsupported());
+    }
+    let min = cfvo_value(cfvos[0], &values)?;
+    let max = cfvo_value(cfvos[1], &values)?;
     for ((col, row), cell) in cells {
         let Shown::Num(n) = cell.shown else {
             continue;
@@ -4384,6 +4392,274 @@ fn paint_bar(
             ((n - min) / (max - min)).clamp(0.0, 1.0)
         };
         // Excel 缺省最短 10%、最长 90%。列宽 103 时内宽是 100。
+        let len = ((10.0 + 80.0 * t) / 100.0 * f64::from(usable)).round() as i32;
+        let len = len.clamp(1, width - 2);
+        let bx = x0 + 2;
+        let by = y0 + 2;
+        let bh = (height - 4).max(1);
+        for dx in 0..len {
+            let fade = if len <= 1 {
+                0.0
+            } else {
+                f64::from(dx) / f64::from(len - 1) * 0.81
+            };
+            let rgb = mix(color, [255, 255, 255], fade);
+            for dy in 0..bh {
+                canvas.put(bx + dx, by + dy, rgb);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 工作表 `extLst` / `{78C0D931-…}` 里按 cfRule `x14:id` 找 `x14:dataBar`。
+fn x14_data_bar<'a>(sheet: &'a Element, rule: &Element) -> Option<&'a Element> {
+    let id = cf_rule_x14_id(rule)?;
+    let ext = sheet.child_by_local("extLst")?;
+    for node in &ext.children {
+        let Node::Element(el) = node else { continue };
+        if el.local_name() != "ext" {
+            continue;
+        }
+        let uri = el.attr("uri").unwrap_or("");
+        if !uri.eq_ignore_ascii_case("{78C0D931-6437-407D-A8EE-F0AAD7539E65}") {
+            continue;
+        }
+        let Some(list) = el.child_by_local("conditionalFormattings") else {
+            continue;
+        };
+        for block in list.children_by_local("conditionalFormatting") {
+            for cf in block.children_by_local("cfRule") {
+                if cf.attr("type") != Some("dataBar") {
+                    continue;
+                }
+                if cf.attr("id").map(str::trim) != Some(id.as_str()) {
+                    continue;
+                }
+                if let Some(bar) = cf.child_by_local("dataBar") {
+                    return Some(bar);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn cf_rule_x14_id(rule: &Element) -> Option<String> {
+    let ext_lst = rule.child_by_local("extLst")?;
+    for node in &ext_lst.children {
+        let Node::Element(ext) = node else { continue };
+        if ext.local_name() != "ext" {
+            continue;
+        }
+        let uri = ext.attr("uri").unwrap_or("");
+        if !uri.eq_ignore_ascii_case("{B025F937-C7B1-47D3-B67F-A62EFF666E3E}") {
+            continue;
+        }
+        let id_el = ext.child_by_local("id")?;
+        let text = id_el.text_content();
+        let text = text.trim();
+        if text.is_empty() {
+            return None;
+        }
+        return Some(text.to_string());
+    }
+    None
+}
+
+fn attr_is_zero_or_false(el: &Element, name: &str) -> bool {
+    match el.attr(name).map(str::trim) {
+        Some("0") => true,
+        Some(s) if s.eq_ignore_ascii_case("false") => true,
+        _ => false,
+    }
+}
+
+fn attr_is_one_or_true(el: &Element, name: &str) -> bool {
+    match el.attr(name).map(str::trim) {
+        Some("1") => true,
+        Some(s) if s.eq_ignore_ascii_case("true") => true,
+        _ => false,
+    }
+}
+
+/// x14 实心 + `axisPosition=middle`：正右负左；`gradient=0`；`minLength=0`/`maxLength=100`。
+/// 负色：`negativeBarColorSameAsPositive=0` 时用 `negativeFillColor` rgb，否则用正色。
+/// 轴色：`axisColor` rgb。其它 axis/cfvo/border/direction/theme NI。
+fn paint_bar_x14(
+    canvas: &mut Canvas,
+    cells: &HashMap<(u32, u32), CellRec>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+    areas: &[(CellRef, CellRef)],
+    ecma_bar: &Element,
+    x14: &Element,
+    values: &[f64],
+    pos_color: [u8; 3],
+) -> Result<(), Error> {
+    if !attr_is_zero_or_false(x14, "gradient") {
+        // 渐变 x14：有负数则 NI；全非负时退回 ECMA 渐变路径由调用方…此处直接 NI 以免混 PPT/单元格渐变。
+        // 全非负且无特殊轴时，仍可用 ECMA 子树重画：
+        if values.iter().any(|n| *n < 0.0) {
+            return Err(unsupported());
+        }
+        let cfvos = ecma_bar.children_by_local("cfvo");
+        if cfvos.len() != 2 {
+            return Err(unsupported());
+        }
+        let min = cfvo_value(cfvos[0], values)?;
+        let max = cfvo_value(cfvos[1], values)?;
+        return paint_bar_ecma_gradient(canvas, cells, xs, ys, c0, r0, areas, min, max, pos_color);
+    }
+    match x14.attr("axisPosition").map(str::trim) {
+        Some("middle") => {}
+        _ => return Err(unsupported()),
+    }
+    let min_len = x14.attr("minLength").unwrap_or("0").trim();
+    let max_len = x14.attr("maxLength").unwrap_or("100").trim();
+    if min_len != "0" || max_len != "100" {
+        return Err(unsupported());
+    }
+    if attr_is_one_or_true(x14, "border") {
+        return Err(unsupported());
+    }
+    if let Some(dir) = x14.attr("direction").map(str::trim) {
+        if !dir.is_empty() && !dir.eq_ignore_ascii_case("leftToRight") {
+            return Err(unsupported());
+        }
+    }
+    // MS：有 x14 cfvo 时应忽略 ECMA cfvo。本刀只认 min/max。
+    let cfvos = {
+        let x = x14.children_by_local("cfvo");
+        if x.len() == 2 {
+            x
+        } else {
+            let e = ecma_bar.children_by_local("cfvo");
+            if e.len() != 2 {
+                return Err(unsupported());
+            }
+            e
+        }
+    };
+    for cfvo in &cfvos {
+        match cfvo.attr("type").map(str::trim) {
+            Some("min") | Some("max") => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    let _min = cfvo_value(cfvos[0], values)?;
+    let _max = cfvo_value(cfvos[1], values)?;
+    let extent = values.iter().map(|n| n.abs()).fold(0.0_f64, f64::max);
+    // MS：negativeFillColor 仅当 negativeBarColorSameAsPositive=false 时存在。
+    // Excel 有时省略该属性但仍写 negativeFillColor——有该元素则用负色。
+    let neg_same = match x14.attr("negativeBarColorSameAsPositive").map(str::trim) {
+        Some("0") => false,
+        Some(s) if s.eq_ignore_ascii_case("false") => false,
+        Some("1") => true,
+        Some(s) if s.eq_ignore_ascii_case("true") => true,
+        None => x14.child_by_local("negativeFillColor").is_none(),
+        Some(_) => return Err(unsupported()),
+    };
+    let neg_color = if neg_same {
+        pos_color
+    } else {
+        x14.child_by_local("negativeFillColor")
+            .and_then(|el| el.attr("rgb"))
+            .and_then(parse_rgb)
+            .ok_or_else(unsupported)?
+    };
+    let axis_color = x14
+        .child_by_local("axisColor")
+        .and_then(|el| el.attr("rgb"))
+        .and_then(parse_rgb)
+        .unwrap_or([0, 0, 0]);
+
+    for ((col, row), cell) in cells {
+        let Shown::Num(n) = cell.shown else {
+            continue;
+        };
+        if !in_areas(*col, *row, areas) {
+            continue;
+        }
+        let Some((x0, y0, x1, y1)) = cell_rect(xs, ys, c0, r0, *col, *row) else {
+            continue;
+        };
+        let width = x1 - x0;
+        let height = y1 - y0;
+        if width < 6 || height < 5 {
+            continue;
+        }
+        let by = y0 + 2;
+        let bh = (height - 4).max(1);
+        let axis = x0 + width / 2;
+        let left_max = (axis - (x0 + 2)).max(0);
+        let right_max = ((x1 - 2) - axis).max(0);
+        let half = left_max.max(right_max);
+        // 轴线
+        for dy in 0..bh {
+            canvas.put(axis, by + dy, axis_color);
+        }
+        if n == 0.0 || extent < 1e-12 || half <= 0 {
+            continue;
+        }
+        let len = ((n.abs() / extent) * f64::from(half)).round() as i32;
+        let len = len.clamp(0, half);
+        if len <= 0 {
+            continue;
+        }
+        if n > 0.0 {
+            let max_len = right_max.min(half);
+            let len = len.min(max_len);
+            for dx in 1..=len {
+                for dy in 0..bh {
+                    canvas.put(axis + dx, by + dy, pos_color);
+                }
+            }
+        } else {
+            let max_len = left_max.min(half);
+            let len = len.min(max_len);
+            for dx in 1..=len {
+                for dy in 0..bh {
+                    canvas.put(axis - dx, by + dy, neg_color);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn paint_bar_ecma_gradient(
+    canvas: &mut Canvas,
+    cells: &HashMap<(u32, u32), CellRec>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+    areas: &[(CellRef, CellRef)],
+    min: f64,
+    max: f64,
+    color: [u8; 3],
+) -> Result<(), Error> {
+    for ((col, row), cell) in cells {
+        let Shown::Num(n) = cell.shown else {
+            continue;
+        };
+        if !in_areas(*col, *row, areas) {
+            continue;
+        }
+        let Some((x0, y0, x1, y1)) = cell_rect(xs, ys, c0, r0, *col, *row) else {
+            continue;
+        };
+        let width = x1 - x0;
+        let height = y1 - y0;
+        let usable = (width - 3).max(1);
+        let t = if (max - min).abs() < 1e-12 {
+            1.0
+        } else {
+            ((n - min) / (max - min)).clamp(0.0, 1.0)
+        };
         let len = ((10.0 + 80.0 * t) / 100.0 * f64::from(usable)).round() as i32;
         let len = len.clamp(1, width - 2);
         let bx = x0 + 2;

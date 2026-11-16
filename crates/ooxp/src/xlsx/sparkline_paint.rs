@@ -110,9 +110,11 @@ pub(crate) fn render_columns(
 
 /// 盈亏（SpreadsheetML `type=stacked`）。横向与柱形同一套 `column_x`。
 /// 纵轴上沿 5、下沿 `height-4`（含）；绘图高 `height-8` 对半：正值铺上半、负值铺下半；`0` 与空槽不画。
-/// 颜色：正=`series`；负在 `negative` 着色打开时用 `negative` 色，否则仍用 `series`。无抗锯齿。
-/// 证据：Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）G2 `+/-` 实心 `#376092`/`#D00000`，
-/// 半高分界与缺省 20px 行的 5..=10 / 11..=16 一致；全 0 仅边框无柱。
+/// 颜色参数来自调用方（OOXML `colorSeries`/`colorNegative` 解析结果）；本函数不写死样本色。
+/// 缺元素时的缺省 rgb（`376092`/`D00000`）只在 `sparkline.rs` 解析侧对齐 Excel 新建写入；
+/// 有元素但无 `rgb`（theme/tint）→ 上游 NI。上沿/下沿是 CopyPicture 几何常数，不是单样本硬编码色。
+/// 证据：Excel 16.0 CopyPicture（2026-11-17 Asia/Shanghai）G2 `+/-` 缺省色实心与 20px 行 5..=10/11..=16；
+/// 全 0 无柱；另有自定义色/高宽单元。
 pub(crate) fn render_win_loss(
     width: u32,
     height: u32,
@@ -401,5 +403,40 @@ mod tests {
         assert_eq!(at_m(16, 5), [255, 255, 255]); // empty slot 1 would be (16,24)
         assert_eq!(at_m(28, 5), [255, 255, 255]); // zero slot 2 (28,36)
         assert_eq!(at_m(40, 11), neg); // slot 3 column_x(64,5,3)=(40,48)
+    }
+
+    #[test]
+    fn win_loss_respects_custom_colors_and_height() {
+        // 颜色与高宽来自调用方（OOXML colorSeries/colorNegative / 格子像素），不是探针写死。
+        let series = [0x11, 0x22, 0x33];
+        let neg = [0xaa, 0xbb, 0xcc];
+        let values = [Some(2.0), Some(-3.0)];
+        let png = render_win_loss(80, 24, &values, series, neg, true).unwrap();
+        let (w, h, px) = decode_rgb(&png);
+        assert_eq!((w, h), (80, 24));
+        let at = |x: u32, y: u32| {
+            let i = ((y * w + x) * 3) as usize;
+            [px[i], px[i + 1], px[i + 2]]
+        };
+        // h=24 → bottom=20, plot=16, half=8 → pos 5..=12, neg 13..=20
+        let (px0, _) = column_x(80, 2, 0).unwrap();
+        let (nx0, _) = column_x(80, 2, 1).unwrap();
+        assert_eq!(at(px0 as u32, 5), series);
+        assert_eq!(at(px0 as u32, 12), series);
+        assert_eq!(at(px0 as u32, 13), [255, 255, 255]);
+        assert_eq!(at(nx0 as u32, 13), neg);
+        assert_eq!(at(nx0 as u32, 20), neg);
+    }
+
+    #[test]
+    fn win_loss_without_negative_flag_uses_series_color() {
+        let series = [0x37, 0x60, 0x92];
+        let neg = [0xd0, 0x00, 0x00];
+        let values = [Some(-1.0)];
+        let png = render_win_loss(64, 20, &values, series, neg, false).unwrap();
+        let (w, _, px) = decode_rgb(&png);
+        let (x0, _) = column_x(64, 1, 0).unwrap();
+        let i = ((11u32 * w + x0 as u32) * 3) as usize;
+        assert_eq!([px[i], px[i + 1], px[i + 2]], series);
     }
 }

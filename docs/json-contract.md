@@ -2420,7 +2420,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 柱形不读自定义轴。有负数、空格子、横坐标、日期轴、从右到左，或宽小于 6、高小于 9，报 `NotImplemented`
 - 柱形的高点、低点、首点和末点换成对应颜色的纯色。同一根柱同时命中时，按低点、高点、首点、末点的顺序留第一种。并列的极值每根都换色。没有写出颜色时用 `D00000`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形上的 `markers` 不改变像素。负值着色打开但每个点都不是负数时，也不改变像素
-- 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（缺省 `376092`），`negative` 为真时负色用 `colorNegative`（缺省 `D00000`），否则负值仍用系列色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`dateAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
+- 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（元素缺省时回落 Excel 新建缺省 `376092`；有元素无 `rgb` 则 NI），`negative` 为真时负色用 `colorNegative`（元素缺省回落 `D00000`；有元素无 `rgb` 则 NI），否则负值仍用系列色。paint 不写死样本色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`dateAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
 - 折线上的标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
 - 源格子落在隐藏的行或列上，且没有 `displayHidden`，报 `NotImplemented`。`displayHidden` 为真时，隐藏格子的缓存照样画
 - docx 与 pptx 报 `InvalidField`
@@ -2474,7 +2474,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 格式码只有分号、分成两段到四段且每段都空时，数字不画。四段时文字和布尔也不画。两段、三段仍画文字和布尔。无方括号的货币/多段（含 OOXML `\$` `\(` `\)` 转义、会计 `_` 跳宽、正/负/零选段、引号字面量段）按 Excel 选段规则画成与 `Range.Text` 一致的串；带方括号的颜色/条件格式仍报 `NotImplemented`。未知骨架不静默当 General
 - 公式有 `<v>` 或内联结果时用这份缓存，共享公式的从属格也一样。没有缓存时用库里的求值，包括 `IF` 的文字。算不了报 `NotImplemented`
 - 合并单元格按锚点的样式铺满。合并区域跨出已用区域报 `NotImplemented`
-- 数据条只认最小、最大两档。长度从列内可用宽度的 10% 到 90%，并向白色淡出。负数报 `NotImplemented`
+- 数据条：无 x14 时只认最小/最大两档，长度从列内可用宽度的 10% 到 90% 并向白色淡出，区域内有负数报 `NotImplemented`。有 x14 `dataBar` 且 `gradient=0`、`axisPosition=middle`、`minLength=0`/`maxLength=100`、cfvo 仅 min/max、无 border、方向缺省或 LTR 时画实心条：格内中轴，正右负左，长度按 `|v|/max(|values|)` 占半宽；正色取 ECMA `color/@rgb`；`negativeBarColorSameAsPositive` 为假（或省略属性但仍有 `negativeFillColor`）时负色取 `negativeFillColor/@rgb`，否则同正色；轴色取 `axisColor/@rgb`（缺省黑）；零值只画轴。其它 axisPosition/cfvo/border/direction、主题色-only、带负数的 x14 渐变条报 `NotImplemented`。不把 PPT/单元格渐变参数搬进数据条
 - 色阶认两档或三档。百分位用 `PERCENTILE.INC`，颜色按 RGB 混合
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
