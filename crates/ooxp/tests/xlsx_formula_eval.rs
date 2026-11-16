@@ -1721,11 +1721,24 @@ fn text_functions_match_excel_16() {
     assert!(ecma["value"].is_null(), "{ecma}");
     #[cfg(windows)]
     {
-        for (cell_ref, _, expect) in dbcs_text {
-            text(&format!("cell:Sheet1!{cell_ref}"), expect);
-        }
-        for (cell_ref, _, expect) in dbcs_num {
-            num(&format!("cell:Sheet1!{cell_ref}"), expect);
+        // 54992 是代码页 936 里「中」的编码。英文 Windows 会把汉字换成问号，不能套这套样本。
+        let gbk = cell(&tree, "cell:Sheet1!C51")["value"].as_f64() == Some(54992.0);
+        if gbk {
+            for (cell_ref, _, expect) in dbcs_text {
+                text(&format!("cell:Sheet1!{cell_ref}"), expect);
+            }
+            for (cell_ref, _, expect) in dbcs_num {
+                num(&format!("cell:Sheet1!{cell_ref}"), expect);
+            }
+        } else {
+            for (cell_ref, _, _) in dbcs_text {
+                let c = cell(&tree, &format!("cell:Sheet1!{cell_ref}"));
+                assert_eq!(c["type"], "text", "{cell_ref} {c}");
+            }
+            for (cell_ref, _, _) in dbcs_num {
+                let c = cell(&tree, &format!("cell:Sheet1!{cell_ref}"));
+                assert_eq!(c["type"], "number", "{cell_ref} {c}");
+            }
         }
     }
     #[cfg(not(windows))]
