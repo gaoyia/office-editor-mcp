@@ -12,8 +12,9 @@ use super::picture;
 use super::shape;
 use super::ExportedMedia;
 use crate::xlsx::{
-    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_rotated_rect, fill_device_round_rect, fill_device_stroked_rect, Face,
+    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_opaque_round_rect,
+    fill_device_polyline, fill_device_rotated_rect, fill_device_round_rect,
+    fill_device_stroked_rect, Face,
 };
 #[cfg(windows)]
 use crate::xlsx::{scale_device_rgba, scale_device_rgba_window};
@@ -2601,6 +2602,9 @@ fn fill_round_device(
 ) -> bool {
     if !fill.on {
         return true;
+    }
+    if grad.is_none() && fill.alpha == 255 {
+        return fill_device_opaque_round_rect(rgb, width, height, x, y, w, h, radius_f, fill.color);
     }
     fill_device_round_rect(x, y, w, h, radius_f, |px, py, cov| {
         paint_grad_cover(rgb, width, height, px, py, grad, fill, x, y, w, h, cov);
