@@ -1,6 +1,7 @@
 //! 幻灯片只读栅格化。先铺页底，再按文档顺序画形状、图、表和文字。
-//! 页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。画不了的对象让整页失败，不交出缺一块的图。
-//! 不写回包，像素不进 inspect。
+//! 页底用本页、版式或母版上没有颜色变换的纯色，或没有旋转、没有裁剪、拉伸铺满的不透明嵌入 PNG。
+//! 没有或画不了时铺白，不再往下继承。画不了的对象让整页失败，不交出缺一块的图。
+//! 不写回包，像素不进 inspect。t93u 的透明放大残差接受不扩到页底。
 
 use std::io::Cursor;
 
@@ -37,9 +38,8 @@ pub fn export_slide_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let (cx, cy) = picture::canvas_size(&pres.root);
     let width = emu_span(cx)?;
     let height = emu_span(cy)?;
-    let bg = page_fill(&pkg, &slide.part, &doc.root)?;
     let mut rgb = vec![0u8; (width as usize) * (height as usize) * 3];
-    fill(&mut rgb, bg);
+    paint_page_background(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     paint_inherited(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     paint_tree(&pkg, &slide.part, &doc.root, &mut rgb, width, height)?;
     let png = encode_png(width, height, &rgb)?;
@@ -89,7 +89,14 @@ const WHITE: [u8; 3] = [255, 255, 255];
 
 /// 本页有 `p:bg` 就用本页，否则用版式，再否则用母版。
 /// 这一层写了页底但画不成纯色时铺白，不再往下继承。
-fn page_fill(pkg: &Package, slide_part: &str, slide: &Element) -> Result<[u8; 3], Error> {
+fn paint_page_background(
+    pkg: &Package,
+    slide_part: &str,
+    slide: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
     let layout_part = linked_part(pkg, slide_part, "/slideLayout")?;
     let layout_doc = match &layout_part {
         Some(part) => Some(super::list_pin::parse_part(pkg, part)?),
@@ -117,12 +124,112 @@ fn page_fill(pkg: &Package, slide_part: &str, slide: &Element) -> Result<[u8; 3]
         master_doc.as_ref().map(|doc| &doc.root),
     );
     let theme = theme_doc.as_ref().map(|doc| &doc.root);
-    let bg = page_bg(slide)
-        .or_else(|| layout_doc.as_ref().and_then(|doc| page_bg(&doc.root)))
-        .or_else(|| master_doc.as_ref().and_then(|doc| page_bg(&doc.root)));
-    Ok(bg
-        .and_then(|el| resolve_bg(el, map, theme))
-        .unwrap_or(WHITE))
+    let layers: [(&str, &Element); 3] = [
+        (slide_part, slide),
+        (
+            layout_part.as_deref().unwrap_or(""),
+            layout_doc.as_ref().map(|doc| &doc.root).unwrap_or(slide),
+        ),
+        (
+            master_part.as_deref().unwrap_or(""),
+            master_doc.as_ref().map(|doc| &doc.root).unwrap_or(slide),
+        ),
+    ];
+    for (idx, (part, root)) in layers.iter().enumerate() {
+        let has_doc = matches!(idx, 0)
+            || (idx == 1 && layout_doc.is_some())
+            || (idx == 2 && master_doc.is_some());
+        if !has_doc {
+            continue;
+        }
+        let Some(bg) = page_bg(root) else {
+            continue;
+        };
+        if let Some(color) = resolve_bg(bg, map, theme) {
+            fill(rgb, color);
+            return Ok(());
+        }
+        if let Some(pr) = bg.child_by_local("bgPr") {
+            if let Some(fill) = page_blip_fill(pr) {
+                if paint_opaque_page_blip(pkg, part, fill, rgb, width, height) {
+                    return Ok(());
+                }
+            }
+        }
+        // 这一层已经写了页底但画不成：铺白，不再继承。
+        fill(rgb, WHITE);
+        return Ok(());
+    }
+    fill(rgb, WHITE);
+    Ok(())
+}
+
+fn page_blip_fill(pr: &Element) -> Option<&Element> {
+    if pr
+        .attr("shadeToTitle")
+        .is_some_and(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+    {
+        return None;
+    }
+    let mut fill = None;
+    for child in pr.element_children() {
+        match child.local_name() {
+            "blipFill" if fill.is_none() => fill = Some(child),
+            "effectLst" if child.element_children().next().is_none() => {}
+            _ => return None,
+        }
+    }
+    fill
+}
+
+/// 只画没有旋转、没有裁剪、拉伸铺满、全部不透明的嵌入 PNG。其余页底图返回 false，由调用方铺白。
+/// 不走 t93u 对透明放大的残差接受。
+fn paint_opaque_page_blip(
+    pkg: &Package,
+    part: &str,
+    fill: &Element,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> bool {
+    if fill.child_by_local("tile").is_some() || fill_rect_moves(fill) {
+        return false;
+    }
+    if let Some(rect) = fill.child_by_local("srcRect") {
+        let cropped = ["l", "t", "r", "b"].iter().any(|name| {
+            rect.attr(name)
+                .is_some_and(|raw| raw.parse::<i64>().ok().is_some_and(|v| v != 0))
+        });
+        if cropped {
+            return false;
+        }
+    }
+    let Ok(image) = load_blip_png(pkg, part, fill) else {
+        return false;
+    };
+    if !image_is_opaque(&image) {
+        return false;
+    }
+    if image.w > width || image.h > height {
+        return false;
+    }
+    // 1:1 也走已验收的公开 GDI+ 路径（HighQualityBicubic、TileFlipXY、Half），
+    // 不走 insertPicture 的逐字节拷贝。Office 页底在源与页同尺寸时仍经这条滤波。
+    // 不把 t93u 扩到页底。
+    #[cfg(windows)]
+    {
+        let Some(scaled) = scale_device_rgba(&image.px, image.w, image.h, width, height) else {
+            return false;
+        };
+        let scaled = Rgba {
+            w: width,
+            h: height,
+            px: scaled,
+        };
+        paint_image(rgb, width, height, 0, 0, width, height, &scaled, None).is_ok()
+    }
+    #[cfg(not(windows))]
+    paint_image(rgb, width, height, 0, 0, width, height, &image, None).is_ok()
 }
 
 fn page_bg(root: &Element) -> Option<&Element> {
@@ -3853,9 +3960,8 @@ fn paint_image_covered(
     Ok(())
 }
 
-#[cfg(not(windows))]
 fn image_is_opaque(image: &Rgba) -> bool {
-    image.px.chunks_exact(4).all(|px| px[3] == 255)
+    image.px.as_chunks::<4>().0.iter().all(|px| px[3] == 255)
 }
 
 #[cfg(not(windows))]
