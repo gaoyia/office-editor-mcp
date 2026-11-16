@@ -50,3 +50,7 @@
 ## 官方对照续（2026-11-17 04:59 Asia/Shanghai）
 
 `Export-WordPdfBounded`（60s）下空白 A4 的 `ExportAsFixedFormat(..., 17)` **写出了 PDF**（约 2 秒内 `exists=True`；作业内 Word Pid 9872，未 `-CloseOffice`，未杀进程）。`pdf-to-png.ps1 -Dpi 96` 日志写 `w=794x1123`，但落盘金样实际为 **873×1235**（`HorizontalResolution≈105.6`），库图 794×1123。`pixel-diff` 原文 `size-differ left=873x1235 right=794x1123`（页 1 与 52 空段页 2 相同）。本机 `LOGPIXELSX=106`。PDF `/MediaBox[ 0 0 595.32 841.92]`，WinRT `PdfPage.Size` 为 793.76×1122.56；公开 `PdfPageRenderOptions.DestinationWidth/Height` 设为 794×1123 仍得到 873×1235。不改系统缩放、不把金样缩小后冒充差 0。步骤 2 仍 ❌；有界超时机制保留（挂起与尺寸阻塞都记 FAIL，不 PASS/SKIP）。
+
+## 2026-11-17 05:12 后续
+
+空页 `docx-page-image` 在修好 `pdf-to-png` 后已官方差 0（见父计划）。同轮 `docx-calibri-image` 在导出金样前因用例脚本写只读 `$PID` 崩溃（FAIL CRASHED），步骤 2 仍 ❌。下一刀先修该脚本变量名，再跑有字页 PDF→PNG。

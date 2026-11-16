@@ -3799,6 +3799,73 @@ fn horizontal_merge_with_default_grid_is_not_implemented() {
 }
 
 #[test]
+fn horizontal_merge_fill_spans_columns_with_nofill_borders() {
+    // 无 tableStyleId；JSON borders null 会去掉 ln*（见 setTableCellBorders 合同），
+    // 因此用 OOXML 写入六边显式 a:noFill，合法脱离默认灰边后再横向合并。
+    let deck = tmp("hmerge-nofill");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 1,
+                    "cols": 2,
+                    "tableStyleId": null,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 1828800,
+                    "cy": 914400,
+                    "cells": [[{ "text": "", "fill": "00AA00" }, { "text": "", "fill": "EE4455" }]]
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("hmerge-nofill-painted");
+    rewrite_slide(&deck, &painted, |xml| {
+        let nofill = concat!(
+            "<a:lnL><a:noFill/></a:lnL>",
+            "<a:lnR><a:noFill/></a:lnR>",
+            "<a:lnT><a:noFill/></a:lnT>",
+            "<a:lnB><a:noFill/></a:lnB>",
+            "<a:lnTlToBr><a:noFill/></a:lnTlToBr>",
+            "<a:lnBlToTr><a:noFill/></a:lnBlToTr>",
+        );
+        let mut out = xml;
+        let mut from = 0usize;
+        for _ in 0..2 {
+            let rel = out[from..].find("<a:tcPr>").expect("tcPr");
+            let at = from + rel + "<a:tcPr>".len();
+            out.insert_str(at, nofill);
+            from = at + nofill.len();
+        }
+        let first = out.find("<a:tc>").expect("first tc");
+        out.insert_str(first + 5, " gridSpan=\"2\"");
+        let second = out[first + 10..].find("<a:tc>").expect("second tc") + first + 10;
+        out.insert_str(second + 5, " hMerge=\"1\"");
+        out
+    });
+    let out = tmp("hmerge-nofill.png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    let mid_left = pixel(&rgb, w, 192 + 40, 96 + 40);
+    let mid_right = pixel(&rgb, w, 192 + 140, 96 + 40);
+    assert_eq!(mid_left, [0x00, 0xAA, 0x00], "left of merge {mid_left:?}");
+    assert_eq!(
+        mid_right,
+        [0x00, 0xAA, 0x00],
+        "right of merge should keep anchor fill {mid_right:?}"
+    );
+}
+
+#[test]
 fn vertical_merge_is_not_implemented() {
     let deck = tmp("vmerge");
     run_ok(json!({
