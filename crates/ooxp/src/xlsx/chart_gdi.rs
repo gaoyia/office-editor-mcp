@@ -801,6 +801,12 @@ mod win {
             points: *const PointF,
             count: i32,
         ) -> i32;
+        fn GdipDrawBeziers(
+            graphics: *mut c_void,
+            pen: *mut c_void,
+            points: *const PointF,
+            count: i32,
+        ) -> i32;
         fn GdipSetPenLineJoin(pen: *mut c_void, join: i32) -> i32;
         fn GdipSetPenStartCap(pen: *mut c_void, cap: i32) -> i32;
         fn GdipSetPenEndCap(pen: *mut c_void, cap: i32) -> i32;
@@ -1227,6 +1233,117 @@ mod win {
         true
     }
 
+    /// 用 GDI+ 抗锯齿画不透明实线三次贝塞尔连接符。1 像素用无像素偏移，2 像素用半像素偏移，圆角接缝，平头线帽。
+    /// 与 PowerPoint 16.0 的 `Slide.Export` 对齐。控制点按 EMU 整数运算后再换成分数像素。回调坐标是页面像素，覆盖率从 0 到 255。
+    /// `points` 的个数必须是 4、7、10…（一段或首尾相接的多段三次贝塞尔）。
+    pub fn fill_device_beziers(
+        points: &[(f32, f32)],
+        width_px: i32,
+        mut blend: impl FnMut(i32, i32, u8),
+    ) -> bool {
+        if (width_px != 1 && width_px != 2) || gdiplus_token().is_none() {
+            return false;
+        }
+        if points.len() < 4 || !(points.len() - 1).is_multiple_of(3) {
+            return false;
+        }
+        let pad = width_px + 3;
+        let mut min_x = i32::MAX;
+        let mut min_y = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut max_y = i32::MIN;
+        for &(x, y) in points {
+            if !x.is_finite() || !y.is_finite() {
+                return false;
+            }
+            min_x = min_x.min(x.floor() as i32 - pad);
+            min_y = min_y.min(y.floor() as i32 - pad);
+            max_x = max_x.max(x.ceil() as i32 + pad);
+            max_y = max_y.max(y.ceil() as i32 + pad);
+        }
+        let bw = max_x.saturating_sub(min_x).saturating_add(1);
+        let bh = max_y.saturating_sub(min_y).saturating_add(1);
+        if bw <= 0 || bh <= 0 {
+            return false;
+        }
+        let mut pixels = vec![0xFFFF_FFFFu32; (bw as usize) * (bh as usize)];
+        let offset = if width_px == 1 {
+            PIXEL_OFFSET_NONE
+        } else {
+            PIXEL_OFFSET_HALF
+        };
+        let gdi_pts: Vec<PointF> = points
+            .iter()
+            .map(|&(x, y)| PointF {
+                x: x - min_x as f32,
+                y: y - min_y as f32,
+            })
+            .collect();
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                bw,
+                bh,
+                bw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, offset);
+            let mut pen = std::ptr::null_mut();
+            if GdipCreatePen1(0xFF00_0000, width_px as f32, UNIT_PIXEL, &mut pen) != 0
+                || pen.is_null()
+            {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPenLineJoin(pen, LINE_JOIN_ROUND);
+            GdipSetPenStartCap(pen, LINE_CAP_FLAT);
+            GdipSetPenEndCap(pen, LINE_CAP_FLAT);
+            let status = GdipDrawBeziers(graphics, pen, gdi_pts.as_ptr(), gdi_pts.len() as i32);
+            GdipDeletePen(pen);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            status == 0
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..bh {
+            for px in 0..bw {
+                let row = pixels[py as usize * bw as usize + px as usize];
+                let red = ((row >> 16) & 0xff) as u8;
+                let green = ((row >> 8) & 0xff) as u8;
+                let blue = (row & 0xff) as u8;
+                if red == 255 && green == 255 && blue == 255 {
+                    continue;
+                }
+                let cov = (255 - u16::from(red))
+                    .max(255 - u16::from(green))
+                    .max(255 - u16::from(blue))
+                    .min(255) as u8;
+                if cov == 0 {
+                    continue;
+                }
+                blend(min_x + px, min_y + py, cov);
+            }
+        }
+        true
+    }
+
     fn gdiplus_token() -> Option<usize> {
         static TOKEN: OnceLock<Option<usize>> = OnceLock::new();
         *TOKEN.get_or_init(|| unsafe {
@@ -1393,7 +1510,8 @@ mod win {
 
 #[cfg(windows)]
 pub use win::{
-    fill_device_ellipse, fill_device_line, fill_device_polyline, fill_device_round_rect, Face,
+    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
+    fill_device_round_rect, Face,
 };
 
 #[cfg(not(windows))]
@@ -1488,5 +1606,10 @@ pub fn fill_device_line(
 }
 #[cfg(not(windows))]
 pub fn fill_device_polyline(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_beziers(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
     false
 }

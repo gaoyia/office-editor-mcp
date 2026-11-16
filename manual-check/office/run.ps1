@@ -282,6 +282,7 @@ $order = @(
     'pptx-preview-line-image'
     'pptx-preview-diag-image'
     'pptx-preview-elbow-image'
+    'pptx-preview-curve-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'
