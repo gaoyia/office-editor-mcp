@@ -460,3 +460,52 @@ fn unknown_op_and_mixed_keys_fail() {
     let err = help(serde_json::json!({"op": "setCell", "name": "inspectScope"})).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn hints_cover_z_order_anim_id_and_slide_preview_limits() {
+    let picture = help(serde_json::json!({"name": "pptxPictureCreate"})).unwrap();
+    let index = picture["fields"]["properties"]["index"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(index.contains("0 是最底层"));
+    assert!(index.contains("spTree"));
+
+    let insert_pic = help(serde_json::json!({"format": "pptx", "op": "insertPicture"})).unwrap();
+    let index = insert_pic["fields"]["properties"]["index"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(index.contains("仅 pptx"));
+    assert!(index.contains("0 是最底层"));
+
+    let insert_shape = help(serde_json::json!({"format": "pptx", "op": "insertShape"})).unwrap();
+    let index = insert_shape["fields"]["properties"]["index"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(index.contains("0 是最底层"));
+
+    let anim = help(serde_json::json!({"format": "pptx", "op": "insertAnim"})).unwrap();
+    let id = anim["fields"]["properties"]["id"]["description"]
+        .as_str()
+        .unwrap();
+    assert!(id.contains("slide:1/shape:9"));
+    assert!(id.contains("shape: 9"));
+    let limits = anim["limits"].as_str().unwrap();
+    assert!(limits.contains("slide:1/shape:9"));
+
+    let created = help(serde_json::json!({"name": "pptxAnimCreate"})).unwrap();
+    let desc = created["description"].as_str().unwrap();
+    assert!(desc.contains("1 起序号"));
+    assert!(desc.contains("slide:1/shape:9"));
+
+    let export = help(serde_json::json!({"name": "exportSlideImageRequest"})).unwrap();
+    let limits = export["limits"].as_str().unwrap();
+    assert!(limits.contains("不透明"));
+    assert!(limits.contains("blipFill"));
+    assert!(limits.contains("第一个文本 run"));
+    assert!(limits.contains("圆角矩形和椭圆上的渐变填充不支持"));
+
+    let set_props = help(serde_json::json!({"op": "setProps"})).unwrap();
+    let desc = set_props["description"].as_str().unwrap();
+    assert!(desc.contains("creator"));
+    assert!(desc.contains("不要写 author"));
+}

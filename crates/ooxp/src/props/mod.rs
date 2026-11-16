@@ -385,7 +385,7 @@ fn deny_prefixed(obj: &Map<String, Value>, prefix: &str, allowed: &[&str]) -> Re
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
             return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
+                unknown_props_field(k, allowed),
                 format!("{prefix}.{k}"),
             ));
         }
@@ -746,12 +746,24 @@ fn deny_op_keys(obj: &Map<String, Value>, i: usize, allowed: &[&str]) -> Result<
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
             return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
+                unknown_props_field(k, allowed),
                 format!("ops[{i}].{k}"),
             ));
         }
     }
     Ok(())
+}
+
+fn unknown_props_field(field: &str, allowed: &[&str]) -> ErrorKind {
+    if field.eq_ignore_ascii_case("author") && allowed.contains(&"creator") {
+        ErrorKind::UnknownPropsAuthor {
+            field: field.to_string(),
+        }
+    } else {
+        ErrorKind::UnknownField {
+            field: field.to_string(),
+        }
+    }
 }
 
 fn require_root_id(obj: &Map<String, Value>, i: usize, root_id: &str) -> Result<(), Error> {

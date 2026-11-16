@@ -439,6 +439,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - `setShapePos` 的 `x` 与 `y` 一个都不给、`setShapeSize` 的 `cx` 与 `cy` 一个都不给、`setShapeFill` / `setShapeLine` 缺 `color`，或无边框时仍给 `width`，报 `InvalidField`
 - `setShapeFormat` 除 `op` 与 `id` 外一个字段都不给、`sz` 小于 100、`align` 不是 `l` / `ctr` / `r` / `just`、`textAnchor` 不是 `t` / `ctr` / `b` / `just` / `dist`、`underline` 不是 `sng` / `none` / `dbl`、或 `font` / `eastAsiaFont` 为空串，报 `InvalidField`
 - `setShapeFormat` 的 `spcBef` / `spcAft` / `lnSpc` 的 `type` 不是 `pts` / `pct`、或缺 `type` / `val`，报 `InvalidField`
+- `spcBef` / `spcAft` / `lnSpc` 写成数字而不是对象时，也报 `InvalidField`。英文是 `lnSpc must be an object with type pts or pct and an integer val`，中文是 `lnSpc 必须是对象，含 type（pts 或 pct）和整数 val`
 - `setShapeFormat` 的 `spc` 超出 -400000–400000、`kern` 小于 0，报 `InvalidField`；`kern` 大于 400000、`spcPts` 的 `val` 大于 158400 报 `TruncatedLimit`
 - `setShapeFormat` 同时给 `color` 与 `textFill`，或 `textFill.type` 不是 `none` / `gradient`，或渐变 `stops` 少于两项，报 `InvalidField`
 - `setShapeFormat` 的 `textOutline` 缺 `color` 或 `width`，报 `InvalidField`
@@ -1176,6 +1177,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - docx 与 pptx 上发 `exportSheetImage` 报 `InvalidField`
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 图带旋转、要缩放的裁剪，或还有别的画不了的对象，`exportSlideImage` 报 `NotImplemented`。页底画不了时铺白，不因此报错
+- 两色渐变不是不透明的 `srgbClr`，或画在圆角矩形、椭圆上，`exportSlideImage` 报 `NotImplemented`。形状上的 `blipFill` 可能被跳过而不报错。create 写入的 `a:br` 换行目前只预览一段的第一个文本 run，这不是单独的错误码
 - 幻灯片上的组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。子矩形也可以绕自己的中心转 90 度的倍数，并和组合自己的直角或翻转叠在一起。子矩形自己的水平或垂直翻转不改变这块纯色。组合可以再套一层。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。其它角度整页报 `NotImplemented`
 - 没有描边的实心矩形，填充可以是不透明 `srgbClr`，或没有颜色变换的 `schemeClr`。线写成 `noFill` 时，旁边的虚线和空的效果列表不画。带了颜色变换，或主题里没有这一档，报 `NotImplemented`
 - xlsx 与 docx 上发 `exportSlideImage` 报 `InvalidField`
@@ -1191,6 +1193,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - docx create 只给 `password`、不给限制编辑种类，报 `InvalidField`
 - `setShowPr` 五个字段一个都不给、或 `type` 不是 `present` / `browse` / `kiosk`，报 `InvalidField`
 - `setProps` 八个可写字段一个都不给、`setCustomProp` 的 `name` 为空、`type` 不认识或与 `value` 对不上，报 `InvalidField`
+- create / `setProps` 写 `author` 仍报 `InvalidField`，不放宽校验。英文是 `Unknown field: author. Office Author is creator, not author`，中文是 `不认识的字段：author。Office 的 Author 对应 creator，不是 author`
 - `deleteCustomProp` 的 id 不是 `prop:{name}` 报 `InvalidId`
 - 找不到该名报 `IdNotFound`
 

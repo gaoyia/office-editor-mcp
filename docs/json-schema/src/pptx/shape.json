@@ -308,15 +308,21 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "仅 pptx。从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "pptx only. 0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         },
         "before": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之前。",
+          "descriptionEn": "pptx only. Insert before this direct spTree child on the same host."
         },
         "after": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之后。",
+          "descriptionEn": "pptx only. Insert after this direct spTree child on the same host."
         },
         "from": {
           "type": "string",

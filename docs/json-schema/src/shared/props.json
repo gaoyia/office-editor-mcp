@@ -63,7 +63,9 @@
             "$ref": "#/$defs/createCustomProp"
           }
         }
-      }
+      },
+      "description": "文档属性。Office 的 Author 是 creator，不要写 author。",
+      "descriptionEn": "Document properties. Office Author is creator; do not write author."
     },
     "createCustomProp": {
       "type": "object",
@@ -370,8 +372,8 @@
       ]
     },
     "setPropsOp": {
-      "description": "改标题、作者这类文档属性。",
-      "descriptionEn": "Change document properties such as title and author.",
+      "description": "改 title、creator 这类文档属性。Office 的 Author 是 creator，不要写 author。",
+      "descriptionEn": "Change document properties such as title and creator. Office Author is creator; do not write author.",
       "limits": "这八个字段至少给一个，否则报 InvalidField。未点名的字段留下，含 Application、页数/字数、HeadingPairs、TitlesOfParts、Slides，以及未点名的公司名。 不要写 DigSig。不要改 lastModifiedBy、created、modified。出现这些只读键报 UnknownField。id 不是格式根报 InvalidId。 缺 core.xml 或 app.xml 时，只要这条 op 点到了对应部件里的字段，就按需新建部件、根关系和 Content Type Override。",
       "limitsEn": "Give at least one of these eight fields, or InvalidField is returned. Fields that were not named stay, including Application, page and word counts, HeadingPairs, TitlesOfParts, Slides, and a company name that was not named. Do not write DigSig. Do not change lastModifiedBy, created, or modified. Those read-only keys return UnknownField. An id that is not the format root returns InvalidId. If core.xml or app.xml is missing, and this op names a field in the corresponding part, create the part, the root relationship, and the Content Type Override as needed.",
       "type": "object",

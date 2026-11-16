@@ -51,6 +51,10 @@
 
 `inspect` 默认不把整份文件倒出来，也不把媒体字节塞进树。`apply` 的入参是操作列表，不能是整棵 inspect 树。
 
+pptx 页上的图层顺序看 `pictures[].index`，以及 `insertPicture` / `insertShape` 的 `index` / `before` / `after`。`index` 为 `0` 时插到当前 `spTree` 内容子元素的最底层，后写的兄弟仍在上面。`setPicturePos` 只改 `x` / `y`。真正的页背景请用 `setPageBackground`。具体字段调用 `help`，或看 `docs/json-contract-pptx.md`。
+
+`exportSlideImage` 并不总能预览出 `create` 写得进去的全部内容。不透明两色渐变只画在矩形上，形状上的 `blipFill` 可能会被跳过，文本里的换行目前只预览一段的第一个文本 run。限制见 `help` 和 `docs/json-contract.md`。
+
 ## 安装与构建
 
 从 crates.io 装命令行：`cargo install ooxp-cli`。库用 `cargo add ooxp`。源码构建需要 Rust 2021 edition：

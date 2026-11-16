@@ -51,6 +51,10 @@ Production use and commercial use require a commercial license from the author. 
 
 `inspect` does not dump the whole file by default, and it does not put media bytes in the tree. The input to `apply` is a list of operations, not a whole inspect tree.
 
+On a pptx slide, z-order is `pictures[].index` and the `index` / `before` / `after` fields of `insertPicture` and `insertShape`. `index` `0` is the bottom of the current `spTree` content children; later siblings stay on top. `setPicturePos` only sets `x` / `y`. A true page background is `setPageBackground`. Call `help` or see `docs/json-contract-pptx.md` for the exact fields.
+
+`exportSlideImage` does not always preview everything `create` can write. Opaque two-stop gradients are drawn only on rectangles, a shape `blipFill` may be skipped, and a newline in shape text currently previews as the first text run only. The limits are in `help` and `docs/json-contract.md`.
+
 ## Install and build
 
 Install the command line from crates.io with `cargo install ooxp-cli`. Add the library with `cargo add ooxp`. Building from source needs Rust 2021 edition:

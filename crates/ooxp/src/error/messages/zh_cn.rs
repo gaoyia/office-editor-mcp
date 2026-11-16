@@ -16,12 +16,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::UnsupportedSchema => "schemaVersion 必须是 1".into(),
         ErrorKind::UnsupportedAction { action } => format!("不支持的 action：{action}"),
         ErrorKind::UnknownField { field } => format!("不认识的字段：{field}"),
+        ErrorKind::UnknownPropsAuthor { field } => {
+            format!("不认识的字段：{field}。Office 的 Author 对应 creator，不是 author")
+        }
         ErrorKind::CannotInferFormat { path } => format!("无法从路径推断格式：{path}"),
         ErrorKind::UnsupportedFormat { format } => format!("不支持的 format：{format}"),
         ErrorKind::MissingField { field } => format!("缺少 {field}"),
         ErrorKind::PackageRequired => "缺少文件字节".into(),
         ErrorKind::WrongType { field, expected } => {
-            format!("{field} 必须是{}", type_name(*expected))
+            if *expected == TypeName::Object
+                && matches!(field.as_str(), "lnSpc" | "spcBef" | "spcAft")
+            {
+                format!("{field} 必须是对象，含 type（pts 或 pct）和整数 val")
+            } else {
+                format!("{field} 必须是{}", type_name(*expected))
+            }
         }
         ErrorKind::EmptyArray { field } => format!("{field} 不能为空"),
         ErrorKind::OutOfRange { field, min, max } => {
@@ -1257,7 +1266,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "这张图还不能画出 PNG。目前只画簇状柱形图，而且宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "这一页还有画不了的对象。目前能画白底或没有颜色变换的纯色页底，含本页、版式和母版上的主题色。还画没有旋转的 PNG、整像素且不缩放的裁剪、直角矩形、圆角矩形、椭圆、两色渐变、形状里的文字、簇状柱形图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。宽高要落在 1 到 4096 像素之间".into()
+            "这一页还有画不了的对象。目前能画白底或没有颜色变换的纯色页底，含本页、版式和母版上的主题色。还画没有旋转的 PNG、整像素且不缩放的裁剪、直角矩形、圆角矩形、椭圆、形状里的文字、簇状柱形图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。两色直线渐变只画在矩形上，且两档必须不透明（alpha 为 100000 或省略）。圆角矩形和椭圆上的渐变填充不支持。形状上的 blipFill 不画，可能会跳过而不报错。create 时文本里的换行会写成 a:br，但预览器目前只画一段里的第一个文本 run。宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::PageImageUnsupported => {
             "这一页还不能画出 PNG。目前只画没有字的页：单节、空段、Calibri 11 磅、没有页眉页脚。有字、表格和图还不画".into()
