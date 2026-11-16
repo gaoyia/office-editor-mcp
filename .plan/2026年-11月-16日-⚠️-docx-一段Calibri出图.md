@@ -1,6 +1,6 @@
 # Word 一段 Calibri 出图
 
-状态：⚠️ 库已画出单节单段一行的不透明拉丁 Calibri；官方 Word PDF 金样本轮未写出
+状态：⚠️ 库已画出；官方 8 样本 PDF→PNG 已跑通（尺寸门开）；像素均为灰阶 AA 残差，不放宽容差
 日期：2026-11-16
 分类：部分实现
 
@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 0 | 契约写明本切片接受的正文条件 | ✅ 见 `docs/json-contract.md` `exportPageImage` |
 | 1 | 画出这一档有字页 | ✅ Windows 上走已有公开 GDI+ `Face::draw`（`AntiAliasGridFit`）。非 Windows 仍 `NotImplemented` |
-| 2 | 手测 PDF→PNG 金样；位置和黑框对齐，非文字像素差 0 | ❌ 官方金样本轮未写出，见下方记录 |
+| 2 | 手测 PDF→PNG 金样；位置和黑框对齐，非文字像素差 0 | ⚠️ 2026-11-17 05:18–05:19 Asia/Shanghai：8/8 PDF PASS，金样均为 794×1123；px 全 FAIL（灰阶）；bbox 6/8 精确对齐 |
 
 验收时：非文字像素必须 `differ=0`、`maxDelta=0`。字形灰度仍按 C25 第 0 段暂缓，位置和黑框大小要对齐；不把灰阶差靠放宽容差算通过。幻灯片已交付的多行文本是布局近似、不保证文字逐像素一致，见已合入 main 的 `.plan/2026年-11月-16日-✅-pptx-多行文本布局近似.md`（用户 t66u 验收），不要在本切片里重开文字灰度 MaxDelta=0，也不借用该许可把 Word 字页标成整页通过。
 
@@ -54,3 +54,19 @@
 ## 2026-11-17 05:12 后续
 
 空页 `docx-page-image` 在修好 `pdf-to-png` 后已官方差 0（见父计划）。同轮 `docx-calibri-image` 在导出金样前因用例脚本写只读 `$PID` 崩溃（FAIL CRASHED），步骤 2 仍 ❌。下一刀先修该脚本变量名，再跑有字页 PDF→PNG。
+## 官方对照（2026-11-17 05:18:34–05:19:44 Asia/Shanghai）
+
+修好用例只读 `$PID`→`$paraId` 后，`docx-calibri-image` 8 独立样本全跑（有界 Export-WordPdfBounded，未杀 WINWORD）：
+
+| 样本 | pdf | px 原文 | bbox |
+| --- | --- | --- | --- |
+| a11 | PASS | differ=30 maxDelta=28 | PASS lib=gold 96,101 9×9 |
+| hello11 | PASS | differ=155 maxDelta=255 | FAIL lib=97,100 31×10 gold=30×10 宽 |
+| abc11 | PASS | differ=107 maxDelta=221 | PASS 96,100 23×10 |
+| sz12 | PASS | differ=32 maxDelta=28 | PASS 96,101 9×10 |
+| sz24 | PASS | differ=106 maxDelta=137 | FAIL lib=96,106 18×20 gold=18×21 高 |
+| indent | PASS | differ=32 maxDelta=62 | PASS 144,101 9×9 |
+| before | PASS | differ=30 maxDelta=28 | PASS 96,117 9×9 |
+| margin | PASS | differ=32 maxDelta=62 | PASS 144,149 9×9 |
+
+残差分布（a11 代表）：`residualBBox` 与墨迹盒重合 9×9；**全部为等通道灰阶差**（nonGrayPair=0）；delta 直方图以个位数～28 为主。hello/sz24 另有 1 像素黑框差。按 C25 第 0 段字形灰度暂缓，**不加大 MaxDelta、不样本写死、不借用 PPT 文字近似**。步骤 2 保持未整页差 0。缺新的公开通用抗锯齿证据前不开放参数搜索。

@@ -1,11 +1,11 @@
-# 把已有 PDF 的一页栅格化成 PNG。
+﻿# 把已有 PDF 的一页栅格化成 PNG。
 # 用 Windows 自带的 Windows.Data.Pdf。不调用 Word，也不做分页。
 # 这一步只把金样 PDF 变成图。库自己画 PNG，不调用本脚本。
 #
 #   pwsh -NoProfile -File .\manual-check\pdf-to-png.ps1 -Pdf a.pdf -Out a.png
 #   pwsh -NoProfile -File .\manual-check\pdf-to-png.ps1 -Pdf a.pdf -Out a.png -Page 2 -Dpi 96
 #
-# DestinationWidth/Height 在 WinRT 里是 DIP，不是物理像素。进程若处在
+# DestinationWidth/Height：WinRT 官方文档定义为 DIP（不是物理像素）。进程若处在
 # 非 96 LOGPIXELS（例如 106）下，直接把 Round(Size*Dpi/96) 赋给 Destination*
 # 会得到约 ×(LOGPIXELS/96) 的物理 PNG（794→873）。本脚本以目标物理像素为准，
 # 必要时二次设置 Destination*（仍走 RenderToStreamAsync，不做 PNG 事后拉伸）。
@@ -115,7 +115,11 @@ try {
     $bytes = Render-PdfPageBytes $pdfPage $destW $destH
     $got = Get-PngPixelSize $bytes
 
-    # 若 WinRT 把 Destination DIP 再乘了进程 DPI 比例，二次用 Destination 反推目标物理像素。
+    # WinRT 官方：DestinationWidth/Height 是 DIP（device-independent pixels），不是物理像素
+    #（learn.microsoft.com PdfPageRenderOptions.DestinationWidth）。本机实测在 LOGPIXELS≠96 时，
+    # 直接把目标物理像素写入 Destination 会得到更大的 PNG（例如 106 时约 ×106/96）。
+    # 进程/线程 DPI awareness API 实测不改变该出图像素。以下以目标物理像素为准，
+    # 必要时反推并微调 Destination（仍走 RenderToStreamAsync；禁止事后拉伸 PNG）。
     if ($got.W -ne $targetW -or $got.H -ne $targetH) {
         if ($got.W -lt 1 -or $got.H -lt 1) { throw "首轮栅格化 PNG 尺寸无效：$($got.W)x$($got.H)" }
         $destW2 = [int][Math]::Round($targetW * [double]$destW / $got.W)
@@ -124,9 +128,33 @@ try {
         if ($destH2 -lt 1) { $destH2 = 1 }
         $bytes = Render-PdfPageBytes $pdfPage ([uint32]$destW2) ([uint32]$destH2)
         $got2 = Get-PngPixelSize $bytes
+        # 取整偶发偏 1：在 ±3 内微调 Destination，仍原生渲染，不拉伸。
         if ($got2.W -ne $targetW -or $got2.H -ne $targetH) {
-            throw ("pdf-to-png 物理像素未达标：目标={0}x{1} 首轮dest={2}x{3}->png={4}x{5} 次轮dest={6}x{7}->png={8}x{9}（未做 PNG 拉伸）" -f `
-                $targetW, $targetH, $destW, $destH, $got.W, $got.H, $destW2, $destH2, $got2.W, $got2.H)
+            $bestBytes = $bytes
+            $bestGot = $got2
+            $bestDW = $destW2
+            $bestDH = $destH2
+            $found = $false
+            for ($dw = [Math]::Max(1, $destW2 - 3); $dw -le ($destW2 + 3); $dw++) {
+                for ($dh = [Math]::Max(1, $destH2 - 3); $dh -le ($destH2 + 3); $dh++) {
+                    if ($dw -eq $destW2 -and $dh -eq $destH2) { continue }
+                    $tryBytes = Render-PdfPageBytes $pdfPage ([uint32]$dw) ([uint32]$dh)
+                    $tryGot = Get-PngPixelSize $tryBytes
+                    if ($tryGot.W -eq $targetW -and $tryGot.H -eq $targetH) {
+                        $bytes = $tryBytes
+                        $got2 = $tryGot
+                        $destW2 = $dw
+                        $destH2 = $dh
+                        $found = $true
+                        break
+                    }
+                }
+                if ($found) { break }
+            }
+            if (-not $found) {
+                throw ("pdf-to-png 物理像素未达标：目标={0}x{1} 首轮dest={2}x{3}->png={4}x{5} 次轮dest={6}x{7}->png={8}x{9}（未做 PNG 拉伸）" -f `
+                    $targetW, $targetH, $destW, $destH, $got.W, $got.H, $bestDW, $bestDH, $bestGot.W, $bestGot.H)
+            }
         }
         $destW = [uint32]$destW2
         $destH = [uint32]$destH2

@@ -64,11 +64,11 @@ function New-CalibriDoc($spec) {
             format        = 'docx'
             scope         = @{ from = 1; maxParas = 4 }
         } ('docx-calibri-{0}-inspect' -f $spec.tag)
-        $pid = [string]$tree.paragraphs[0].id
-        $ops += , @{ op = 'setRunFormat'; id = ($pid + '/run:1'); sz = [int]$spec.sz }
+        $paraId = [string]$tree.paragraphs[0].id
+        $ops += , @{ op = 'setRunFormat'; id = ($paraId + '/run:1'); sz = [int]$spec.sz }
     }
     if ($spec.left) {
-        if (-not $pid) {
+        if (-not $paraId) {
             $tree = Invoke-OoxpTree @{
                 schemaVersion = 1
                 action        = 'inspect'
@@ -76,12 +76,12 @@ function New-CalibriDoc($spec) {
                 format        = 'docx'
                 scope         = @{ from = 1; maxParas = 4 }
             } ('docx-calibri-{0}-inspect' -f $spec.tag)
-            $pid = [string]$tree.paragraphs[0].id
+            $paraId = [string]$tree.paragraphs[0].id
         }
-        $ops += , @{ op = 'setParaFormat'; id = $pid; left = [int]$spec.left }
+        $ops += , @{ op = 'setParaFormat'; id = $paraId; left = [int]$spec.left }
     }
     if ($spec.before) {
-        if (-not $pid) {
+        if (-not $paraId) {
             $tree = Invoke-OoxpTree @{
                 schemaVersion = 1
                 action        = 'inspect'
@@ -89,9 +89,9 @@ function New-CalibriDoc($spec) {
                 format        = 'docx'
                 scope         = @{ from = 1; maxParas = 4 }
             } ('docx-calibri-{0}-inspect' -f $spec.tag)
-            $pid = [string]$tree.paragraphs[0].id
+            $paraId = [string]$tree.paragraphs[0].id
         }
-        $ops += , @{ op = 'setParaFormat'; id = $pid; before = [int]$spec.before }
+        $ops += , @{ op = 'setParaFormat'; id = $paraId; before = [int]$spec.before }
     }
     if ($spec.marginLeft -or $spec.marginTop) {
         $ops += , @{
