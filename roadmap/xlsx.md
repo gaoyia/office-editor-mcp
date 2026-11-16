@@ -196,3 +196,5 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-斜线边框出图.md` — thin/medium 实线斜线；gold 256×110@106 vs lib 223×100 pxBlocked；等线行高 14.25 纠偏。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-渐变填充出图.md` — SpreadsheetML 两停点不透明 linear（sRGB mix，非 PPT gamma）；path/theme/alpha NI；CopyPicture 203×60@106 vs lib 177×54 pxBlocked；等线 11→14.25 COM 来源写入契约。
+
+本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。

@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2385,7 +2385,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ## exportSparklineImage
 
-按迷你图组 id 把这一组里的一条折线或非负柱形画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里只有这条线或这些柱，没有格子的文字、填充和边框。
+按迷你图组 id 把这一组里的一条折线、非负柱形或盈亏（`stacked`）画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。图里只有这条线或这些柱，没有格子的文字、填充和边框。
 
 ``json
 {
@@ -2420,7 +2420,8 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 柱形不读自定义轴。有负数、空格子、横坐标、日期轴、从右到左，或宽小于 6、高小于 9，报 `NotImplemented`
 - 柱形的高点、低点、首点和末点换成对应颜色的纯色。同一根柱同时命中时，按低点、高点、首点、末点的顺序留第一种。并列的极值每根都换色。没有写出颜色时用 `D00000`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形上的 `markers` 不改变像素。负值着色打开但每个点都不是负数时，也不改变像素
-- 盈亏，以及折线上的标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
+- 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（缺省 `376092`），`negative` 为真时负色用 `colorNegative`（缺省 `D00000`），否则负值仍用系列色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`dateAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
+- 折线上的标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
 - 源格子落在隐藏的行或列上，且没有 `displayHidden`，报 `NotImplemented`。`displayHidden` 为真时，隐藏格子的缓存照样画
 - docx 与 pptx 报 `InvalidField`
 - 找不到组报 `IdNotFound`。id 不是迷你图组 id 报 `InvalidId`
