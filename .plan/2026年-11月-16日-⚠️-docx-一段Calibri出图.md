@@ -35,7 +35,7 @@
 - 04:32:46–04:40:54 `ExportAsFixedFormat(..., 17)`：已打开 `docx-page-image.docx`（Pid 30208，Visible，无 Repair 窗），持续占 CPU（约 7.7s 升至 149s），工作集约 242 MB，无 PDF 写到 out 或常见目录。未加 `-CloseOffice`。
 - 04:41:16–04:43:01 同一份空白 A4 再试公开 `SaveAs2(..., 17)`（Pid 17480）：同样打开成功后持续占 CPU，约 90 秒仍无 PDF。
 
-未调用私有接口，未把 Office COM 当作库 renderer。因金样未写出，本轮没有官方 `differ` / `maxDelta` / 墨迹盒数字，步骤 2 保持 ❌，计划保持 ⚠️。官方用例仍走该公开路径，不把超时杀进程写进默认验收（以免误伤个人 Word）。
+未调用私有接口，未把 Office COM 当作库 renderer。因金样未写出，本轮没有官方 `differ` / `maxDelta` / 墨迹盒数字，步骤 2 保持 ❌，计划保持 ⚠️。官方用例仍走该公开路径；`Export-WordPdfBounded` 用 Start-Job/Wait-Job 60s 有界等待，超时记 FAIL blocked，只停作业 PowerShell，不杀 WINWORD、不 CloseOffice、不把超时算 PASS/SKIP。
 
 ## 不做
 
@@ -47,3 +47,6 @@
 - 不在这一份里做换行、多段分页、表格、图或页眉
 - 不把幻灯片文字的布局近似结论直接套到 Word 整页通过标准上
 - 不在金样导出挂起时无限改字体 API 参数
+## 官方对照续（2026-11-17 04:59 Asia/Shanghai）
+
+`Export-WordPdfBounded`（60s）下空白 A4 的 `ExportAsFixedFormat(..., 17)` **写出了 PDF**（约 2 秒内 `exists=True`；作业内 Word Pid 9872，未 `-CloseOffice`，未杀进程）。`pdf-to-png.ps1 -Dpi 96` 日志写 `w=794x1123`，但落盘金样实际为 **873×1235**（`HorizontalResolution≈105.6`），库图 794×1123。`pixel-diff` 原文 `size-differ left=873x1235 right=794x1123`（页 1 与 52 空段页 2 相同）。本机 `LOGPIXELSX=106`。PDF `/MediaBox[ 0 0 595.32 841.92]`，WinRT `PdfPage.Size` 为 793.76×1122.56；公开 `PdfPageRenderOptions.DestinationWidth/Height` 设为 794×1123 仍得到 873×1235。不改系统缩放、不把金样缩小后冒充差 0。步骤 2 仍 ❌；有界超时机制保留（挂起与尺寸阻塞都记 FAIL，不 PASS/SKIP）。

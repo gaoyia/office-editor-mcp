@@ -3,7 +3,8 @@
 # 也不借用幻灯片文字的布局近似许可。位置和黑框另记，不替代像素门。
 # 2026-11-17 04:32:46–04:40:54 与 04:41:16–04:43:01（Asia/Shanghai）：Word 16.0 对空白 A4 的
 # ExportAsFixedFormat(..., 17) 与 SaveAs2(..., 17) 都在写出 PDF 前持续占 CPU、不落盘。
-# 本用例仍走该公开金样路径；未改容差、未改金样、未改用私有接口。
+# 本用例仍走该公开金样路径；用 Export-WordPdfBounded（Start-Job/Wait-Job 60s）有界等待。
+# 超时记 FAIL blocked，不记 PASS/SKIP，不 Stop-Process WINWORD，不 -CloseOffice。首次 blocked 后其余样本不再开新的 Word PDF 作业。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -131,10 +132,9 @@ foreach ($spec in $specs) {
     $docs += , (New-CalibriDoc $spec)
 }
 
-$word = Ensure-MsWord $docs[0]
-Write-Log ("docx-calibri after Ensure docs=" + $word.Documents.Count + " visible=" + $word.Visible + " cap=" + $word.Caption)
 $diffScript = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\pixel-diff.ps1'))
 $pngScript = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\pdf-to-png.ps1'))
+$script:WordPdfBlocked = $false
 
 for ($i = 0; $i -lt $specs.Count; $i++) {
     $spec = $specs[$i]
@@ -152,24 +152,28 @@ for ($i = 0; $i -lt $specs.Count; $i++) {
 
     $pdf = Get-OutPath ('docx-calibri-{0}.pdf' -f $spec.tag)
     $gold = Get-OutPath ('docx-calibri-{0}-gold.png' -f $spec.tag)
-    $doc = $null
-    try {
-        Write-Log ('docx-calibri-{0} opening {1} docs={2}' -f $spec.tag, $docPath, $word.Documents.Count)
-        $doc = Open-WordDoc $word $docPath
-        Write-Log ('docx-calibri-{0} opened name={1}' -f $spec.tag, $doc.Name)
-        $cap = ''
-        if (Get-Command Get-WordCaption -ErrorAction SilentlyContinue) {
-            $cap = Get-WordCaption $word
-        }
-        if (Test-Path $pdf) { Remove-Item -Force $pdf }
-        Write-Log ('docx-calibri-{0} export pdf={1} cap={2}' -f $spec.tag, $pdf, $cap)
-        $doc.ExportAsFixedFormat($pdf, 17)
-        Write-Log ('docx-calibri-{0} export done exists={1}' -f $spec.tag, (Test-Path $pdf))
-        $ok = (Test-Path $pdf) -and ($cap -notmatch 'Repair')
-        Add-Check ('docx-calibri-{0}-pdf' -f $spec.tag) $ok ('pdf={0} caption={1} {2}' -f $pdf, $cap, $spec.title)
+
+    if ($script:WordPdfBlocked) {
+        $msg = 'blocked: prior ExportAsFixedFormat timed out; not starting another Word PDF job'
+        Add-Check ('docx-calibri-{0}-pdf' -f $spec.tag) $false $msg
+        Add-Check ('docx-calibri-{0}-px' -f $spec.tag) $false $msg
+        Add-Check ('docx-calibri-{0}-bbox' -f $spec.tag) $false $msg
+        continue
     }
-    finally {
-        Close-WordDoc $doc
+
+    $exp = Export-WordPdfBounded -DocPath $docPath -PdfPath $pdf -TimeoutSec 60
+    Write-Log ('docx-calibri-{0}-pdf {1}' -f $spec.tag, $exp.Detail)
+    Add-Check ('docx-calibri-{0}-pdf' -f $spec.tag) ([bool]$exp.Ok) ([string]$exp.Detail)
+    if ($exp.Blocked) {
+        $script:WordPdfBlocked = $true
+        Add-Check ('docx-calibri-{0}-px' -f $spec.tag) $false 'blocked: no gold PDF (ExportAsFixedFormat timed out)'
+        Add-Check ('docx-calibri-{0}-bbox' -f $spec.tag) $false 'blocked: no gold PDF (ExportAsFixedFormat timed out)'
+        continue
+    }
+    if (-not $exp.Ok) {
+        Add-Check ('docx-calibri-{0}-px' -f $spec.tag) $false ('blocked-by-pdf-fail: {0}' -f $exp.Detail)
+        Add-Check ('docx-calibri-{0}-bbox' -f $spec.tag) $false ('blocked-by-pdf-fail: {0}' -f $exp.Detail)
+        continue
     }
 
     if (Test-Path $gold) { Remove-Item -Force $gold }
@@ -179,10 +183,10 @@ for ($i = 0; $i -lt $specs.Count; $i++) {
     $diff = Get-OutPath ('docx-calibri-{0}-diff.png' -f $spec.tag)
     $line = & $diffScript -Left $gold -Right $lib -Out $diff -MaxDelta 0
     $code = $LASTEXITCODE
-    $text = ($line | Out-String).Trim()
-    Write-Log ('docx-calibri-{0}-px exit={1} {2}' -f $spec.tag, $code, $text)
-    $pxOk = ($code -ne 2) -and ($text -match 'differ=0\b') -and ($text -match 'maxDelta=0\b')
-    Add-Check ('docx-calibri-{0}-px' -f $spec.tag) $pxOk ('exit={0} {1}' -f $code, $text)
+    $textPx = ($line | Out-String).Trim()
+    Write-Log ('docx-calibri-{0}-px exit={1} {2}' -f $spec.tag, $code, $textPx)
+    $pxOk = ($code -ne 2) -and ($textPx -match 'differ=0\b') -and ($textPx -match 'maxDelta=0\b')
+    Add-Check ('docx-calibri-{0}-px' -f $spec.tag) $pxOk ('exit={0} {1}' -f $code, $textPx)
 
     $libBox = Get-InkBox $lib
     $goldBox = Get-InkBox $gold

@@ -539,3 +539,53 @@ function Get-CustomPropFromZip([string]$path, [string]$name) {
     if ($m.Success) { return $m.Groups[1].Value }
     return $null
 }
+# Word 文档 → PDF（格式 17）有界等待。沿用 opc-resave 的 Start-Job / Wait-Job。
+# 超时只 Stop-Job / Remove-Job 该作业的 PowerShell，不 Stop-Process WINWORD，
+# 不 CloseOffice，不把超时记成 PASS 或 SKIP（调用方应 Add-Check FAIL + blocked 原文）。
+function Export-WordPdfBounded {
+    param(
+        [Parameter(Mandatory = $true)][string]$DocPath,
+        [Parameter(Mandatory = $true)][string]$PdfPath,
+        [int]$TimeoutSec = 60
+    )
+    $libDir = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '.'))
+    if (Test-Path -LiteralPath $PdfPath) { Remove-Item -LiteralPath $PdfPath -Force }
+    Write-Log ("Export-WordPdfBounded start timeout=${TimeoutSec}s doc=$DocPath pdf=$PdfPath")
+    $job = Start-Job -ScriptBlock {
+        param($libDir, $docPath, $pdfPath)
+        $ErrorActionPreference = 'Stop'
+        . (Join-Path $libDir 'bootstrap.ps1')
+        Initialize-Suite -Name 'office'
+        $word = Ensure-MsWord $docPath
+        $doc = $null
+        try {
+            $doc = Open-WordDoc $word $docPath
+            $doc.ExportAsFixedFormat($pdfPath, 17)
+        }
+        finally {
+            if ($null -ne $doc) { Close-WordDoc $doc }
+        }
+        if (-not (Test-Path -LiteralPath $pdfPath)) { throw "pdf missing after ExportAsFixedFormat: $pdfPath" }
+        return 'exported'
+    } -ArgumentList $libDir, $DocPath, $PdfPath
+
+    if (Wait-Job $job -Timeout $TimeoutSec) {
+        $err = @($job.ChildJobs[0].Error)
+        $out = Receive-Job $job -ErrorAction SilentlyContinue
+        Remove-Job $job -Force -ErrorAction SilentlyContinue
+        if ($err.Count) {
+            return @{ Ok = $false; Blocked = $false; Detail = ([string]$err[0]) }
+        }
+        $exists = Test-Path -LiteralPath $PdfPath
+        return @{ Ok = $exists; Blocked = $false; Detail = ("pdf=$PdfPath exists=$exists out=$out") }
+    }
+
+    Write-Log ("Export-WordPdfBounded BLOCKED jobId=$($job.Id) after ${TimeoutSec}s — Stop-Job only, not WINWORD")
+    Stop-Job $job -ErrorAction SilentlyContinue
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    return @{
+        Ok = $false
+        Blocked = $true
+        Detail = ("blocked: ExportAsFixedFormat exceeded ${TimeoutSec}s; Stop-Job only, no Office kill; pdf missing")
+    }
+}
