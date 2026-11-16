@@ -280,6 +280,7 @@ $order = @(
     'pptx-scheme-rect-image'
     'pptx-preview-fill-image'
     'pptx-preview-line-image'
+    'pptx-preview-diag-image'
     'pptx-shape-format'
     'pptx-shape-spacing'
     'pptx-text-fill'

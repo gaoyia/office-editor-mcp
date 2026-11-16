@@ -1462,7 +1462,7 @@ fn shape_blip_fill_is_written_before_line() {
 }
 
 #[test]
-fn axis_aligned_connectors_paint_and_a_diagonal_fails() {
+fn axis_aligned_connectors_paint_and_a_diagonal_paints() {
     let src = tmp("line-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -1569,16 +1569,18 @@ fn axis_aligned_connectors_paint_and_a_diagonal_fails() {
     assert_eq!(pixel(&rgb, w, 97, 96), [255, 255, 255]);
 
     let out = tmp("line-diag-png").with_extension("png");
-    let err = run(&json!({
+    run_ok(json!({
         "schemaVersion": 1,
         "action": "exportSlideImage",
         "path": src.to_string_lossy(),
         "id": "slide:1",
         "output": out.to_string_lossy()
-    })
-    .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 288, 176), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
 }
 
 fn slide1_xml(path: &Path) -> String {
