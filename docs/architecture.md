@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、不透明两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。两色渐变必须不透明（`alpha` 为 `100000` 或省略），且只画在矩形上；圆角矩形和椭圆上的渐变填充不支持。形状上的 `blipFill` 不画，可能会跳过而不报错。create 时文本里的换行会写成 `a:br`，但预览器目前只画一段里的第一个文本 run，所以能创建出来不等于能预览出来。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -47,8 +47,8 @@ xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作�
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、不透明两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
-两色渐变必须不透明，且只画在矩形上。形状上的 `blipFill` 可能会被跳过。文本换行目前只预览一段的第一个 run。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、形状文字、簇状柱形图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
+两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。写成 `a:br` 的换行也会预览出来。
 
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
 
@@ -611,7 +611,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportSlideImage
 
-调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素。页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。然后按文档顺序画 PNG、矩形、圆角矩形、椭圆、矩形上的不透明两色直线渐变、形状里的文字、簇状柱形图和纯色单元格的表。形状上的 `blipFill` 不画，可能会跳过。文本里的换行目前只预览一段的第一个 run。单元格文字按 run 的字号来画；没写字号时用 18 磅，并按单元格边距靠左靠上。缺字体时用主题 minor。中等样式 2 - 强调 1 的首行加粗、白字。幻灯片上的簇状柱形图不画 Excel 的圆角外框。有标题时，绘图区比 Excel 再低 7 像素。右侧图例按 GDI+ 默认排版宽度留空，类目槽不用字形前进宽度来撑。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的。半透明椭圆叠在已画像素上，描边只留外接矩形外侧的一圈。超出页面的部分裁掉。包不写回。像素不进 inspect。图带旋转或裁剪，或还有别的对象，则整页失败。xlsx 与 docx 直接拒绝。
+调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素。页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。然后按文档顺序画 PNG、矩形、圆角矩形、椭圆、两色直线渐变（可带透明度，画在矩形、圆角矩形和椭圆上）、形状上的拉伸图片填充、形状里的文字（含 `a:br` 换行后的后续行）、簇状柱形图和纯色单元格的表。平铺、带颜色变换或不对齐的 `blipFill` 不再静默跳过，整页失败。单元格文字按 run 的字号来画；没写字号时用 18 磅，并按单元格边距靠左靠上。缺字体时用主题 minor。中等样式 2 - 强调 1 的首行加粗、白字。幻灯片上的簇状柱形图不画 Excel 的圆角外框。有标题时，绘图区比 Excel 再低 7 像素。右侧图例按 GDI+ 默认排版宽度留空，类目槽不用字形前进宽度来撑。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的。半透明椭圆叠在已画像素上，描边只留外接矩形外侧的一圈。超出页面的部分裁掉。包不写回。像素不进 inspect。图带旋转或裁剪，或还有别的对象，则整页失败。xlsx 与 docx 直接拒绝。
 
 没有描边的实心矩形，填充也可以是没有颜色变换的 `schemeClr`。线写成 `noFill` 时，旁边的虚线和空的效果列表不画。取色和页底同一套配色表、主题槽。带了颜色变换，或主题里没有这一档，整页失败。
 

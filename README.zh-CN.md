@@ -53,7 +53,7 @@
 
 pptx 页上的图层顺序看 `pictures[].index`，以及 `insertPicture` / `insertShape` 的 `index` / `before` / `after`。`index` 为 `0` 时插到当前 `spTree` 内容子元素的最底层，后写的兄弟仍在上面。`setPicturePos` 只改 `x` / `y`。真正的页背景请用 `setPageBackground`。具体字段调用 `help`，或看 `docs/json-contract-pptx.md`。
 
-`exportSlideImage` 并不总能预览出 `create` 写得进去的全部内容。不透明两色渐变只画在矩形上，形状上的 `blipFill` 可能会被跳过，文本里的换行目前只预览一段的第一个文本 run。限制见 `help` 和 `docs/json-contract.md`。
+`exportSlideImage` 可以预览矩形、圆角矩形和椭圆上的两色直线渐变（含透明度）、形状上拉伸的 `blipFill`，以及写成 `a:br` 的换行。仍画不了的变体会让整页失败，不再静默跳过。限制见 `help` 和 `docs/json-contract.md`。
 
 ## 安装与构建
 
