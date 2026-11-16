@@ -3056,10 +3056,11 @@ theme 色仍不展开成 RGB。备注表、母版表同样认。
 | --- | --- |
 | `op` | 必须是 `"setTableCellBorders"` |
 | `id` | 单元格 id |
-| `left` / `right` / `top` / `bottom` / `tl2br` / `bl2tr` | 可选。边对象或 `null`（去掉该 `ln*`） |
+| `left` / `right` / `top` / `bottom` / `tl2br` / `bl2tr` | 可选。边对象或 `null`（**去掉**该 `ln*`，不是写成 `a:noFill`） |
 
 边对象必须有 `color`（六位 RGB）与 `width`（EMU 正整数）。可选 `dash`（`ST_PresetLineDashVal` 原文，或 `null` 去掉 `prstDash`）。
 六个边键至少一个，否则报 `InvalidField`。写入 `a:solidFill/a:srgbClr` 与 `@w`。不写箭头、`miter`。
+**与 inspect 的不对称**：读侧缺边或该边是 `a:noFill` 都报 `null`；写侧 `null` 只删除 `ln*`，不会写入显式 `a:ln*/a:noFill`。需要显式 noFill 时须直接改 OOXML（或其它会写入该子元的路径），不能靠 JSON `borders: null`。
 找不到该格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / docx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/pptx-apply-table-cell-fill.json`。
