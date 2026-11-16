@@ -17,7 +17,7 @@ xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
-docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节、单段、一行的不透明拉丁 Calibri 正文，写成 PNG。像素不进 inspect。换行、多段、表格、图和页眉还不画。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，写成 PNG。像素不进 inspect。第二段、表格、图和页眉还不画。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段、一行的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。换行、多段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2624,16 +2624,16 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
-- 可以画没有可见内容的页，或 Windows 上单节、单段、一行的不透明拉丁（ASCII）Calibri 正文。一节，节属性在 `w:body` 末尾
+- 可以画没有可见内容的页，或 Windows 上单节、单段的不透明拉丁（ASCII）Calibri 正文（同一段可按空格换行，行距与空段分页同一档）。一节，节属性在 `w:body` 末尾
 - 没有页眉、页脚、页面边框、行号、文档网格，也没有多栏。有字页不允许非零 `gutter`，垂直对齐只接受 top
 - 文档默认字体必须是 Calibri，默认字号 11 磅（`w:sz` 为 22）。默认段落样式没有额外段属性
-- 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页。有字页只接受恰好一段且不换行，超宽报 `NotImplemented`
+- 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页。有字页只接受恰好一段；同一段拉丁按空格贪心换行，单词本身宽于正文区或换行后总高度超出本页剩余正文高时报 `NotImplemented`
 - 有字页可带左/start 缩进和段前间距；段后、首行/悬挂/右缩进必须为 0 或缺省；对齐只接受 left/start。run 可带 `sz` / 匹配的 `szCs`，`rFonts` 的 ascii/hAnsi 须为 Calibri 或沿用默认，颜色只接受 auto 或 000000
 - 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。非 Windows 对有字页报 `NotImplemented`。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可
 - 宽高按该节 `w:pgSz` 的 twip，96 dpi，`twip × 96 / 1440` 四舍五入成像素
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 页边距缺了按 1440 twip。正文区放不下一行报 `NotImplemented`
-- 表格、图、分节符、换行、第二段，或空段行距不是上面这一档，报 `NotImplemented`
+- 表格、图、分节符、第二段正文，或空段行距不是上面这一档，报 `NotImplemented`
 - xlsx 与 pptx 报 `InvalidField`
 - id 不是 `page:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 成功时 `contentType` 为 `image/png`。源包不写回
