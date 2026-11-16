@@ -1421,7 +1421,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::PageImageUnsupported => {
-            "This page cannot be drawn to PNG yet. Only a page with no text is drawn: one section, empty paragraphs, Calibri 11 pt, and no header or footer. Text, tables, and pictures are not drawn yet"
+            "This page cannot be drawn to PNG yet. Supported: one section; empty pages; Latin Calibri paragraphs (wrap/spacing/indent); opaque inline PNG whose extent pixels match the source (no scale). Floating wrap, crop, transparency, mixed text+picture, tables, headers, and explicit line/pagination controls are not drawn"
                 .into()
         }
         ErrorKind::SparklineImageUnsupported => {
