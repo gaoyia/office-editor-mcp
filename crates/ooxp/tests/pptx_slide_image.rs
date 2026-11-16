@@ -1,4 +1,4 @@
-//! exportSlideImage：页底、PNG、实心矩形、形状图片填充、渐变和多行文本。没有本页页底时铺白。
+//! exportSlideImage：页底、PNG、实心矩形、形状图片填充、渐变、多行文本，以及水平或垂直的直线。没有本页页底时铺白。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -1459,6 +1459,101 @@ fn shape_blip_fill_is_written_before_line() {
         !inserted_xml.contains("</a:ln><a:blipFill>"),
         "{inserted_xml}"
     );
+}
+
+#[test]
+fn axis_aligned_connectors_paint_and_a_diagonal_fails() {
+    let src = tmp("line-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "connectors": [{ "prst": "straightConnector1", "x": 914400, "y": 914400, "cx": 1828800, "cy": 762000 }] },
+                { "connectors": [{ "prst": "line", "x": 914400, "y": 914400, "cx": 1828800, "cy": 762000 }] }
+            ]
+        }
+    }));
+
+    let two_px_h = tmp("line-2h");
+    rewrite_slide(&src, &two_px_h, |xml| {
+        let xml = swap(xml, "cy=\"762000\"", "cy=\"0\"");
+        swap(xml, "w=\"12700\"", "w=\"19050\"")
+    });
+    let out = tmp("line-2h-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": two_px_h.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 95), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 287, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 96, 97), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
+
+    let two_px_v = tmp("line-2v");
+    rewrite_named(&src, &two_px_v, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        let xml = swap(xml, "cx=\"1828800\"", "cx=\"0\"");
+        let xml = swap(xml, "cy=\"762000\"", "cy=\"1828800\"");
+        swap(xml, "w=\"12700\"", "w=\"19050\"")
+    });
+    let out = tmp("line-2v-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": two_px_v.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 95, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 287), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 288), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 97, 96), [255, 255, 255]);
+
+    let one_px_h = tmp("line-1h");
+    rewrite_slide(&src, &one_px_h, |xml| {
+        let xml = swap(xml, "cy=\"762000\"", "cy=\"0\"");
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("line-1h-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": one_px_h.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 100, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 96, 95), [255, 255, 255]);
+
+    let out = tmp("line-diag-png").with_extension("png");
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": src.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
 fn slide1_xml(path: &Path) -> String {
