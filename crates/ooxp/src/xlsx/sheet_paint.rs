@@ -1322,6 +1322,19 @@ enum NumFmt {
     Percent(u32),
     /// 段数是 2、3 或 4，每段都空。4 段时文字和布尔也不画。
     Blank(u8),
+    /// 货币/多段（无 `[颜色]`/`[条件]`）。按正/负/零选段；字面量段；`_` 跳宽按空格进显示串。
+    Sections(Vec<NumSection>),
+}
+
+/// 一段数字格式（公开 OOXML 分号分段 + Excel 选段规则）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NumSection {
+    /// 仅字面量（如 `"-"`），忽略数值本身。
+    literal: Option<String>,
+    prefix: String,
+    suffix: String,
+    digits: u32,
+    thousands: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2111,17 +2124,25 @@ fn builtin_fmt(id: u32) -> Option<NumFmt> {
 }
 
 fn parse_format(code: &str) -> Result<NumFmt, Error> {
+    if code.contains('[') {
+        // 方括号颜色/条件：本切片继续 NI（计划：对不上的方括号条件继续失败）。
+        return Err(unsupported());
+    }
     if code.contains(';') {
-        let parts: Vec<&str> = code.split(';').collect();
+        let parts = split_format_sections(code)?;
         if (2..=4).contains(&parts.len()) && parts.iter().all(|part| part.is_empty()) {
             return Ok(NumFmt::Blank(parts.len() as u8));
         }
-        return Err(unsupported());
+        if !(1..=4).contains(&parts.len()) {
+            return Err(unsupported());
+        }
+        let mut sections = Vec::with_capacity(parts.len());
+        for part in parts {
+            sections.push(parse_num_section(part)?);
+        }
+        return Ok(NumFmt::Sections(sections));
     }
     let code = code.trim();
-    if code.contains('[') {
-        return Err(unsupported());
-    }
     if code.eq_ignore_ascii_case("general") {
         return Ok(NumFmt::General);
     }
@@ -2131,7 +2152,186 @@ fn parse_format(code: &str) -> Result<NumFmt, Error> {
     if let Some(body) = code.strip_suffix('%') {
         return Ok(NumFmt::Percent(zeros(body)?));
     }
+    // 单段货币等（含 `$` / `#,##0`）走 Sections(1)。
+    if code.contains('$') || code.contains('#') {
+        return Ok(NumFmt::Sections(vec![parse_num_section(code)?]));
+    }
     Ok(NumFmt::Fixed(zeros(code)?))
+}
+
+fn split_format_sections(code: &str) -> Result<Vec<&str>, Error> {
+    let mut parts = Vec::new();
+    let mut start = 0usize;
+    let mut in_quote = false;
+    let bytes = code.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == b'"' {
+            in_quote = !in_quote;
+            i += 1;
+            continue;
+        }
+        if b == b'\\' && i + 1 < bytes.len() {
+            i += 2;
+            continue;
+        }
+        if b == b';' && !in_quote {
+            parts.push(&code[start..i]);
+            start = i + 1;
+        }
+        i += 1;
+    }
+    if in_quote {
+        return Err(unsupported());
+    }
+    parts.push(&code[start..]);
+    Ok(parts)
+}
+
+fn parse_num_section(raw: &str) -> Result<NumSection, Error> {
+    // 不 trim：尾空格段（如 `;;; `）在 Excel 里是字面空格，不能静默吃掉。
+    if raw.is_empty() {
+        return Ok(NumSection {
+            literal: Some(String::new()),
+            prefix: String::new(),
+            suffix: String::new(),
+            digits: 0,
+            thousands: false,
+        });
+    }
+    let s = raw;
+    // 整段只是引号字面量。
+    if let Some(inner) = s.strip_prefix('"').and_then(|rest| rest.strip_suffix('"')) {
+        if !inner.contains('"') {
+            return Ok(NumSection {
+                literal: Some(inner.to_string()),
+                prefix: String::new(),
+                suffix: String::new(),
+                digits: 0,
+                thousands: false,
+            });
+        }
+    }
+
+    let mut prefix = String::new();
+    let mut suffix = String::new();
+    let mut digits = 0u32;
+    let mut thousands = false;
+    let mut saw_num = false;
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' => {
+                let mut lit = String::new();
+                loop {
+                    let Some(c) = chars.next() else {
+                        return Err(unsupported());
+                    };
+                    if c == '"' {
+                        break;
+                    }
+                    lit.push(c);
+                }
+                if saw_num {
+                    suffix.push_str(&lit);
+                } else {
+                    prefix.push_str(&lit);
+                }
+            }
+            '_' => {
+                let Some(_) = chars.next() else {
+                    return Err(unsupported());
+                };
+                // 跳宽：显示串与 Excel Range.Text 对齐为空格（非其它字体宽度泛化）。
+                if saw_num {
+                    suffix.push(' ');
+                } else {
+                    prefix.push(' ');
+                }
+            }
+            '\\' => {
+                // OOXML 转义：`\$` `\(` `\)` 等 → 字面量（Excel 存盘常见）。
+                let Some(next) = chars.next() else {
+                    return Err(unsupported());
+                };
+                if saw_num {
+                    suffix.push(next);
+                } else {
+                    prefix.push(next);
+                }
+            }
+            '(' | ')' | '$' => {
+                if saw_num {
+                    suffix.push(ch);
+                } else {
+                    prefix.push(ch);
+                }
+            }
+            '#' | '0' | ',' | '.' => {
+                // 把连续数字骨架收成 thousands + digits。
+                let mut body = String::new();
+                body.push(ch);
+                while let Some(c) = chars.peek().copied() {
+                    if matches!(c, '#' | '0' | ',' | '.') {
+                        body.push(c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if body.contains(',') {
+                    thousands = true;
+                }
+                if let Some((_, frac)) = body.split_once('.') {
+                    if !frac.chars().all(|c| c == '0') {
+                        return Err(unsupported());
+                    }
+                    digits = frac.len() as u32;
+                } else {
+                    digits = 0;
+                }
+                // 必须是 #,##0 / 0 / 0.00 一类。
+                let int_part = body.split('.').next().unwrap_or("");
+                let ok = int_part == "0"
+                    || int_part == "#,##0"
+                    || int_part == "#,###"
+                    || int_part.chars().all(|c| c == '#' || c == '0' || c == ',');
+                if !ok && int_part != "#,##0" {
+                    // 再收紧：只接受常见货币骨架。
+                    if !(int_part.contains('0') && int_part.chars().all(|c| "#,0".contains(c))) {
+                        return Err(unsupported());
+                    }
+                }
+                saw_num = true;
+            }
+            ' ' => {
+                if saw_num {
+                    suffix.push(' ');
+                } else {
+                    prefix.push(' ');
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if !saw_num {
+        // 无数字骨架：整段当字面量（含仅空格的文本段）。
+        return Ok(NumSection {
+            literal: Some(s.to_string()),
+            prefix: String::new(),
+            suffix: String::new(),
+            digits: 0,
+            thousands: false,
+        });
+    }
+    Ok(NumSection {
+        literal: None,
+        prefix,
+        suffix,
+        digits,
+        thousands,
+    })
 }
 
 fn zeros(body: &str) -> Result<u32, Error> {
@@ -4003,7 +4203,17 @@ fn label_text(shown: &Shown, fmt: &NumFmt) -> Result<String, Error> {
     match shown {
         Shown::Empty => Ok(String::new()),
         Shown::Text(text) if hide_text => Ok(String::new()),
-        Shown::Text(text) => Ok(text.clone()),
+        Shown::Text(text) => match fmt {
+            NumFmt::Sections(sections) if sections.len() >= 4 => {
+                let sec = &sections[3];
+                if let Some(lit) = &sec.literal {
+                    Ok(lit.clone())
+                } else {
+                    Ok(format!("{}{}{}", sec.prefix, text, sec.suffix))
+                }
+            }
+            _ => Ok(text.clone()),
+        },
         Shown::Bool(_) if hide_text => Ok(String::new()),
         Shown::Bool(true) => Ok("TRUE".into()),
         Shown::Bool(false) => Ok("FALSE".into()),
@@ -4023,7 +4233,72 @@ fn format_num(n: f64, fmt: &NumFmt) -> Result<String, Error> {
         NumFmt::Fixed(digits) => format_fixed(n, *digits),
         NumFmt::Percent(digits) => format!("{}%", format_fixed(n * 100.0, *digits)),
         NumFmt::Blank(_) => String::new(),
+        NumFmt::Sections(sections) => format_sections(n, sections)?,
     })
+}
+
+fn pick_section_index(n: f64, n_sections: usize) -> usize {
+    // Excel：1 段全用；2 段正+零 / 负；3+ 段正 / 负 / 零。
+    if n_sections >= 3 && n == 0.0 {
+        2
+    } else if n < 0.0 && n_sections >= 2 {
+        1
+    } else {
+        0
+    }
+}
+
+fn format_sections(n: f64, sections: &[NumSection]) -> Result<String, Error> {
+    if sections.is_empty() || sections.len() > 4 {
+        return Err(unsupported());
+    }
+    let idx = pick_section_index(n, sections.len());
+    let sec = &sections[idx];
+    if let Some(lit) = &sec.literal {
+        return Ok(lit.clone());
+    }
+    let abs = n.abs();
+    let body = if sec.thousands {
+        format_comma_abs(abs, sec.digits)
+    } else {
+        format_fixed(abs, sec.digits)
+    };
+    let core = format!("{}{}{}", sec.prefix, body, sec.suffix);
+    if n < 0.0 && idx == 0 {
+        // 单段（负值仍走正段）时 Excel 在货币前加 `-`（如 `-$1,234.50`）。
+        Ok(format!("-{core}"))
+    } else {
+        Ok(core)
+    }
+}
+
+fn format_comma_abs(n: f64, digits: u32) -> String {
+    let scale = 10f64.powi(digits as i32);
+    let v = (n * scale).round() / scale;
+    let v = if v == 0.0 { 0.0 } else { v };
+    let int_part = v.trunc().abs() as u64;
+    let mut rest = int_part;
+    let mut parts = Vec::new();
+    if rest == 0 {
+        parts.push("0".to_string());
+    }
+    while rest > 0 {
+        let chunk = rest % 1000;
+        rest /= 1000;
+        if rest > 0 {
+            parts.push(format!("{chunk:03}"));
+        } else {
+            parts.push(chunk.to_string());
+        }
+    }
+    parts.reverse();
+    let head = parts.join(",");
+    if digits == 0 {
+        head
+    } else {
+        let frac = ((v.fract().abs() * scale).round() as u64) % (10u64.pow(digits));
+        format!("{head}.{frac:0width$}", width = digits as usize)
+    }
 }
 
 fn format_general(n: f64) -> String {
@@ -4833,6 +5108,63 @@ mod tests {
     }
 
     #[test]
+    fn currency_and_multi_section_match_excel_range_text() {
+        // Excel 16 Range.Text oracle（本机 COM 实测）：
+        // $#,##0.00 → $1,234.50 / -$1,234.50 / $0.00
+        // $#,##0.00;($#,##0.00) → $1,234.50 / ($1,234.50)
+        // $#,##0.00;($#,##0.00);"-" → 零段 "-"
+        // 人读码与 OOXML 存盘转义码（styles.xml 实测）都要对上 Excel Range.Text。
+        for code in ["$#,##0.00", r"\$#,##0.00"] {
+            let currency = parse_format(code).unwrap();
+            assert_eq!(
+                label_text(&Shown::Num(1234.5), &currency).unwrap(),
+                "$1,234.50"
+            );
+            assert_eq!(
+                label_text(&Shown::Num(-1234.5), &currency).unwrap(),
+                "-$1,234.50"
+            );
+            assert_eq!(label_text(&Shown::Num(0.0), &currency).unwrap(), "$0.00");
+        }
+
+        for code in ["$#,##0.00;($#,##0.00)", r"\$#,##0.00;\(\$#,##0.00\)"] {
+            let paren = parse_format(code).unwrap();
+            assert_eq!(
+                label_text(&Shown::Num(1234.5), &paren).unwrap(),
+                "$1,234.50"
+            );
+            assert_eq!(
+                label_text(&Shown::Num(-1234.5), &paren).unwrap(),
+                "($1,234.50)"
+            );
+            assert_eq!(label_text(&Shown::Num(0.0), &paren).unwrap(), "$0.00");
+        }
+
+        let zero_dash = parse_format("\\$#,##0.00;\\(\\$#,##0.00\\);\"-\"").unwrap();
+        assert_eq!(label_text(&Shown::Num(0.0), &zero_dash).unwrap(), "-");
+        assert_eq!(
+            label_text(&Shown::Num(-42.0), &zero_dash).unwrap(),
+            "($42.00)"
+        );
+
+        // 会计跳宽 `_`：Excel Text 正数尾空格。
+        let acct = parse_format(r"\$#,##0.00_);\(\$#,##0.00\)").unwrap();
+        assert_eq!(
+            label_text(&Shown::Num(1234.5), &acct).unwrap(),
+            "$1,234.50 "
+        );
+        assert_eq!(
+            label_text(&Shown::Num(-1234.5), &acct).unwrap(),
+            "($1,234.50)"
+        );
+
+        // 未知方括号条件/颜色仍 NI；未知不静默当 General。
+        assert!(parse_format("$#,##0.00;[Red]($#,##0.00)").is_err());
+        assert!(parse_format("[>=100]0;0").is_err());
+        assert!(parse_format("¥#,##0.00").is_err());
+    }
+
+    #[test]
     fn short_dimension_still_covers_later_cells() {
         let xml = br#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1"/><sheetData><row r="1"><c r="A1"/><c r="C2"><v>1</v></c></row></sheetData></worksheet>"#;
         let doc = crate::xml::parse(xml).unwrap();
@@ -4846,8 +5178,10 @@ mod tests {
         assert!(matches!(parse_format(";;;").unwrap(), NumFmt::Blank(4)));
         assert!(matches!(parse_format(";;").unwrap(), NumFmt::Blank(3)));
         assert!(matches!(parse_format(";").unwrap(), NumFmt::Blank(2)));
-        assert!(parse_format("0;").is_err());
-        assert!(parse_format(";;; ").is_err());
+        // `0;` 现为合法两段（正显 / 负隐），不再 NI。
+        assert!(matches!(parse_format("0;").unwrap(), NumFmt::Sections(_)));
+        // `;;; ` 第四段为空格字面量（Excel 文本段），合法 Sections。
+        assert!(matches!(parse_format(";;; ").unwrap(), NumFmt::Sections(_)));
         assert_eq!(
             label_text(&Shown::Num(123.0), &NumFmt::Blank(3)).unwrap(),
             ""
