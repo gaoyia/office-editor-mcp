@@ -14,7 +14,7 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。像素不进 inspect。有字、表格和图还不画。
@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2560,7 +2560,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 矩形上的渐变仍不能带描边。圆角矩形和椭圆上的渐变可以带不透明描边
 - 档位不在两端、不是直线 `a:lin`、颜色不是 `srgbClr`，或形状带了旋转，整页失败
 - `p:cxnSp` 或形状上的 `line`、`straightConnector1`，在没有翻转、并且宽或高有一边的 EMU 是 0 时，画水平或垂直直线。描边是不透明 `srgbClr`，或 `p:style` 里 `lnRef` 的主题色
-- 描边宽度四舍五入到 1 或 2 像素。2 像素是实心，不含终点那一像素，并往坐标较小的一侧加一像素。1 像素横线两端按约 75% 覆盖。1 像素竖线只涂一列，起点（坐标较小的一端）按约 5/8 覆盖，终点按约 7/8 覆盖。宽和高都不为 0 的不透明实线斜线，笔画像素四舍五入为 1 或 2 时也可以画，并可带 `flipH` / `flipV` 表示方向；抗锯齿与 PowerPoint 16.0 对齐。`bentConnector2` 与 `bentConnector3` 的不透明实线直角折线，笔画像素四舍五入为 1 或 2 时也可以画，并可带 `flipH` / `flipV`。`bentConnector3` 的转折取 `adj1`（单位是宽度的十万分之一，缺省 50000），转折点可以不是整像素。弯曲连接符、`bentConnector4` / `bentConnector5`、其它宽度、虚线、箭头、非平头线帽或带旋转的直线整页失败
+- 描边宽度四舍五入到 1 或 2 像素。2 像素是实心，不含终点那一像素，并往坐标较小的一侧加一像素。1 像素横线两端按约 75% 覆盖。1 像素竖线只涂一列，起点（坐标较小的一端）按约 5/8 覆盖，终点按约 7/8 覆盖。宽和高都不为 0 的不透明实线斜线，笔画像素四舍五入为 1 或 2 时也可以画，并可带 `flipH` / `flipV` 表示方向；抗锯齿与 PowerPoint 16.0 对齐。`bentConnector2` 与 `bentConnector3` 的不透明实线直角折线，笔画像素四舍五入为 1 或 2 时也可以画，并可带 `flipH` / `flipV`。`bentConnector3` 的转折取 `adj1`（单位是宽度的十万分之一，缺省 50000），转折点可以不是整像素。`curvedConnector2` 与 `curvedConnector3` 的不透明实线弯曲连接符，笔画像素四舍五入为 1 或 2 时也可以画，并可带 `flipH` / `flipV`。几何按预设三次贝塞尔；`curvedConnector3` 的控制点取 `adj1`（单位是宽度的十万分之一，缺省 50000），控制点可以不是整像素。`curvedConnector4` / `curvedConnector5`、`bentConnector4` / `bentConnector5`、其它宽度、虚线、箭头、非平头线帽或带旋转的直线整页失败
 - 形状上的 `blipFill`（图片填充）按拉伸铺进没有旋转的矩形、圆角矩形和椭圆。`p:pic` 图片会画
 - 平铺、`fillRect` 偏移、对不齐或还要缩放的裁剪、非 PNG、`a:blip` 上带颜色变换，或矩形上的图片填充还带描边，整页失败，不再静默跳过
 - create 把文本里的 `\n` 写成段落里的 `a:br` 加后续 run。预览器按这些换行画出后续行。同一行里多个 run 目前共用第一个 run 的字号和颜色

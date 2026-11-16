@@ -69,7 +69,8 @@ pub use sheet_paint::export_sheet_image;
 pub use sparkline::export_sparkline_image;
 
 pub(crate) use chart_gdi::{
-    fill_device_ellipse, fill_device_line, fill_device_polyline, fill_device_round_rect, Face,
+    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
+    fill_device_round_rect, Face,
 };
 
 pub(crate) fn render_clustered_chart(

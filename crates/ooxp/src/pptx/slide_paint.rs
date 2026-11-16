@@ -12,7 +12,8 @@ use super::picture;
 use super::shape;
 use super::ExportedMedia;
 use crate::xlsx::{
-    fill_device_ellipse, fill_device_line, fill_device_polyline, fill_device_round_rect, Face,
+    fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
+    fill_device_round_rect, Face,
 };
 
 const EMU_PER_INCH: f64 = 914_400.0;
@@ -421,6 +422,9 @@ fn paint_sp(
         "bentConnector2" | "bentConnector3" => {
             paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
+        "curvedConnector2" | "curvedConnector3" => {
+            paint_curve(pkg, part, sp, sp_pr, chain, rgb, width, height)
+        }
         _ => Err(unsupported()),
     }
 }
@@ -448,11 +452,14 @@ fn paint_cxn(
         "bentConnector2" | "bentConnector3" => {
             paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
+        "curvedConnector2" | "curvedConnector3" => {
+            paint_curve(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+        }
         _ => Err(unsupported()),
     }
 }
 
-/// 水平、垂直或角到角的直线 / 直连接线。直角折线见 `paint_elbow`。弯曲连接符仍整页失败。
+/// 水平、垂直或角到角的直线 / 直连接线。直角折线见 `paint_elbow`。弯曲连接符见 `paint_curve`。
 fn paint_line(
     pkg: &Package,
     part: &str,
@@ -747,6 +754,132 @@ fn paint_elbow_line(
     color: [u8; 3],
 ) -> bool {
     fill_device_polyline(pts, sw, |px, py, cov| {
+        blend(rgb, width, height, px, py, color, cov);
+    })
+}
+
+/// 弯曲连接符。`curvedConnector2` 是一段三次贝塞尔，`curvedConnector3` 是带 `adj1` 的两段三次贝塞尔。
+/// 不透明实线 1 或 2 像素，可带翻转。1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽。
+/// 控制点按 ECMA-376 预设几何做 EMU 整数运算后再换成分数像素。
+fn paint_curve(
+    pkg: &Package,
+    part: &str,
+    sp: &Element,
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return Err(unsupported());
+    }
+    if sp_pr.child_by_local("solidFill").is_some()
+        || sp_pr.child_by_local("gradFill").is_some()
+        || sp_pr.child_by_local("blipFill").is_some()
+        || sp_pr.child_by_local("pattFill").is_some()
+    {
+        return Err(unsupported());
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Err(unsupported());
+    };
+    if xfrm.attr("rot").is_some_and(|raw| {
+        raw.parse::<i64>()
+            .ok()
+            .is_some_and(|n| n.rem_euclid(FULL_TURN) != 0)
+    }) {
+        return Err(unsupported());
+    }
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    let flip_h = crate::xml::attr_is_true(xfrm, "flipH");
+    let flip_v = crate::xml::attr_is_true(xfrm, "flipV");
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
+    if cx == 0 && cy == 0 {
+        return Err(unsupported());
+    }
+    reject_fancy_line(sp_pr)?;
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let sw = stroke_f.round().max(0.0) as i32;
+    if sw != 1 && sw != 2 {
+        return Err(unsupported());
+    }
+    let pts = curve_points(prst, x, y, cx, cy, flip_h, flip_v, elbow_adj1(sp_pr));
+    if pts.is_empty() {
+        return Err(unsupported());
+    }
+    if !paint_curve_line(rgb, width, height, &pts, sw, color) {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+fn curve_points(
+    prst: &str,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    flip_h: bool,
+    flip_v: bool,
+    adj: i64,
+) -> Vec<(f32, f32)> {
+    let w = cx;
+    let h = cy;
+    let raw = match prst {
+        "curvedConnector2" => {
+            let wd2 = w / 2;
+            let hd2 = h / 2;
+            vec![(0, 0), (wd2, 0), (w, hd2), (w, h)]
+        }
+        "curvedConnector3" => {
+            let x2 = (w as i128 * adj as i128 / 100_000) as i64;
+            let x1 = x2 / 2;
+            let x3 = (w + x2) / 2;
+            let hd4 = h / 4;
+            let vc = h / 2;
+            let y3 = (h as i128 * 3 / 4) as i64;
+            vec![
+                (0, 0),
+                (x1, 0),
+                (x2, hd4),
+                (x2, vc),
+                (x2, y3),
+                (x3, h),
+                (w, h),
+            ]
+        }
+        _ => return Vec::new(),
+    };
+    raw.into_iter()
+        .map(|(px, py)| {
+            let px = x + px;
+            let py = y + py;
+            let px = if flip_h { x + cx - (px - x) } else { px };
+            let py = if flip_v { y + cy - (py - y) } else { py };
+            (emu_f(px) as f32, emu_f(py) as f32)
+        })
+        .collect()
+}
+
+fn paint_curve_line(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    pts: &[(f32, f32)],
+    sw: i32,
+    color: [u8; 3],
+) -> bool {
+    fill_device_beziers(pts, sw, |px, py, cov| {
         blend(rgb, width, height, px, py, color, cov);
     })
 }
@@ -4090,6 +4223,94 @@ mod tests {
         assert_eq!(pixel(&two, w, 288, 95), [96, 96, 96]);
         assert_eq!(pixel(&two, w, 288, 287), [0, 0, 0]);
         assert_eq!(pixel(&two, w, 288, 288), [255, 255, 255]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_curve_matches_office_coverage() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut c2 = blank(w, h);
+        assert!(paint_curve_line(
+            &mut c2,
+            w,
+            h,
+            &[(96.0, 96.0), (192.0, 96.0), (288.0, 192.0), (288.0, 288.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&c2, w, 96, 96), [96, 96, 96]);
+        assert_eq!(pixel(&c2, w, 97, 96), [64, 64, 64]);
+        assert_eq!(pixel(&c2, w, 192, 96), [255, 255, 255]);
+        assert_eq!(pixel(&c2, w, 205, 136), [64, 64, 64]);
+        assert_eq!(pixel(&c2, w, 288, 285), [0, 0, 0]);
+        assert_eq!(pixel(&c2, w, 288, 288), [32, 32, 32]);
+        let mut flipped = blank(w, h);
+        assert!(paint_curve_line(
+            &mut flipped,
+            w,
+            h,
+            &[(96.0, 288.0), (192.0, 288.0), (288.0, 192.0), (288.0, 96.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&flipped, w, 96, 288), [64, 64, 64]);
+        assert_eq!(pixel(&flipped, w, 288, 96), [96, 96, 96]);
+        assert_eq!(pixel(&flipped, w, 288, 97), [0, 0, 0]);
+        let mut c3 = blank(w, h);
+        assert!(paint_curve_line(
+            &mut c3,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (144.0, 96.0),
+                (192.0, 144.0),
+                (192.0, 192.0),
+                (192.0, 240.0),
+                (240.0, 288.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&c3, w, 96, 96), [96, 96, 96]);
+        assert_eq!(pixel(&c3, w, 192, 192), [8, 8, 8]);
+        assert_eq!(pixel(&c3, w, 285, 288), [0, 0, 0]);
+        assert_eq!(pixel(&c3, w, 288, 288), [64, 64, 64]);
+        let mut frac = blank(w, h);
+        assert!(paint_curve_line(
+            &mut frac,
+            w,
+            h,
+            &[
+                (96.0, 96.0),
+                (124.8, 96.0),
+                (153.6, 144.0),
+                (153.6, 192.0),
+                (153.6, 240.0),
+                (220.8, 288.0),
+                (288.0, 288.0)
+            ],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&frac, w, 153, 192), [167, 167, 167]);
+        assert_eq!(pixel(&frac, w, 154, 192), [88, 88, 88]);
+        let mut two = blank(w, h);
+        assert!(paint_curve_line(
+            &mut two,
+            w,
+            h,
+            &[(96.0, 96.0), (192.0, 96.0), (288.0, 192.0), (288.0, 288.0)],
+            2,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&two, w, 96, 96), [32, 32, 32]);
+        assert_eq!(pixel(&two, w, 96, 95), [88, 88, 88]);
+        assert_eq!(pixel(&two, w, 234, 163), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 288, 287), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 288, 288), [191, 191, 191]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {

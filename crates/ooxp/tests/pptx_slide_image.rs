@@ -1625,7 +1625,11 @@ fn bent_connectors_paint_l_and_z() {
         if name != "ppt/slides/slide1.xml" {
             return xml;
         }
-        let xml = swap(xml, "<a:xfrm><a:off x=\"914400\"", "<a:xfrm flipV=\"1\"><a:off x=\"914400\"");
+        let xml = swap(
+            xml,
+            "<a:xfrm><a:off x=\"914400\"",
+            "<a:xfrm flipV=\"1\"><a:off x=\"914400\"",
+        );
         swap(xml, "w=\"12700\"", "w=\"9525\"")
     });
     let out = tmp("elbow-b2v-png").with_extension("png");
@@ -1690,6 +1694,120 @@ fn bent_connectors_paint_l_and_z() {
     assert_eq!(pixel(&rgb, w, 96, 95), [0, 0, 0]);
     assert_eq!(pixel(&rgb, w, 288, 95), [96, 96, 96]);
     assert_eq!(pixel(&rgb, w, 288, 288), [255, 255, 255]);
+}
+
+#[test]
+fn curved_connectors_paint_c2_and_c3() {
+    let src = tmp("curve-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "connectors": [{ "prst": "curvedConnector2", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] },
+                { "connectors": [{ "prst": "curvedConnector3", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] }
+            ]
+        }
+    }));
+
+    let c2 = tmp("curve-c2");
+    rewrite_named(&src, &c2, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("curve-c2-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c2.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 97, 96), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 192, 96), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 205, 136), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [32, 32, 32]);
+
+    let c2v = tmp("curve-c2v");
+    rewrite_named(&src, &c2v, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        let xml = swap(
+            xml,
+            "<a:xfrm><a:off x=\"914400\"",
+            "<a:xfrm flipV=\"1\"><a:off x=\"914400\"",
+        );
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("curve-c2v-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c2v.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 288), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 288, 97), [0, 0, 0]);
+
+    let c3 = tmp("curve-c3");
+    rewrite_named(&src, &c3, |name, xml| {
+        if name != "ppt/slides/slide2.xml" {
+            return xml;
+        }
+        let xml = swap(
+            xml,
+            "prst=\"curvedConnector3\"><a:avLst/>",
+            "prst=\"curvedConnector3\"><a:avLst><a:gd name=\"adj1\" fmla=\"val 30000\"/></a:avLst>",
+        );
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("curve-c3-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c3.to_string_lossy(),
+        "id": "slide:2",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 153, 192), [167, 167, 167]);
+    assert_eq!(pixel(&rgb, w, 154, 192), [88, 88, 88]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [64, 64, 64]);
+
+    let c32 = tmp("curve-c32");
+    rewrite_named(&src, &c32, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        swap(xml, "w=\"12700\"", "w=\"19050\"")
+    });
+    let out = tmp("curve-c32-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": c32.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [32, 32, 32]);
+    assert_eq!(pixel(&rgb, w, 96, 95), [88, 88, 88]);
+    assert_eq!(pixel(&rgb, w, 234, 163), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [191, 191, 191]);
 }
 
 fn slide1_xml(path: &Path) -> String {
