@@ -801,7 +801,8 @@ fn paint_group(
     cells: &CellCache,
 ) -> Result<Vec<u8>, Error> {
     let column = is_plain_column(group);
-    if !column && !is_plain_line(group) {
+    let win_loss = is_plain_win_loss(group);
+    if !column && !win_loss && !is_plain_line(group) {
         return Err(image_unsupported());
     }
     let item = only_sparkline(group)?;
@@ -836,6 +837,31 @@ fn paint_group(
         let colors = column_colors(group, &values, color)?;
         return super::sparkline_paint::render_columns(width, height, &values, &colors);
     }
+    if win_loss {
+        let axis_min = axis_end(group, "minAxisType", "manualMin")?;
+        let axis_max = axis_end(group, "maxAxisType", "manualMax")?;
+        if axis_min.is_some() || axis_max.is_some() {
+            return Err(image_unsupported());
+        }
+        // span 对盈亏无折线语义；本刀只认 gap/zero（空与 0 都不画柱）。
+        match display_empty(group) {
+            SparkEmpty::Gap | SparkEmpty::Zero => {}
+            SparkEmpty::Span => return Err(image_unsupported()),
+        }
+        let mut values = Vec::with_capacity(cached.len());
+        for value in &cached {
+            values.push(win_loss_point(value)?);
+        }
+        let neg = negative_rgb(group)?;
+        return super::sparkline_paint::render_win_loss(
+            width,
+            height,
+            &values,
+            color,
+            neg,
+            attr_on(group, "negative"),
+        );
+    }
     let values = cached.iter().map(point_of).collect();
     let spec = super::sparkline_paint::LineSpec {
         values,
@@ -869,6 +895,21 @@ fn is_plain_line(group: &Element) -> bool {
 
 fn is_plain_column(group: &Element) -> bool {
     group.attr("type").is_some_and(|raw| raw.trim() == "column") && column_flags(group)
+}
+
+/// 盈亏：`type=stacked`。本刀不画坐标轴/日期轴/RTL/首末高低标记。
+fn is_plain_win_loss(group: &Element) -> bool {
+    group
+        .attr("type")
+        .is_some_and(|raw| raw.trim() == "stacked")
+        && !attr_on(group, "displayXAxis")
+        && !attr_on(group, "dateAxis")
+        && !attr_on(group, "rightToLeft")
+        && !attr_on(group, "markers")
+        && !attr_on(group, "high")
+        && !attr_on(group, "low")
+        && !attr_on(group, "first")
+        && !attr_on(group, "last")
 }
 
 /// 柱形上的标记不改变像素。负值着色只在出现负数时才改画面，那种柱仍不画。
@@ -1011,6 +1052,27 @@ fn line_weight_px(group: &Element) -> Result<f64, Error> {
 
 fn point_of(value: &Value) -> Option<f64> {
     value.as_f64().filter(|n| n.is_finite())
+}
+
+/// 空格子是 `Null`→不画；有限数字保留符号；错误值等非数字 NI。
+fn win_loss_point(value: &Value) -> Result<Option<f64>, Error> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    match value.as_f64() {
+        Some(n) if n.is_finite() => Ok(Some(n)),
+        _ => Err(image_unsupported()),
+    }
+}
+
+fn negative_rgb(group: &Element) -> Result<[u8; 3], Error> {
+    let Some(el) = group.child_by_local("colorNegative") else {
+        return Ok([0xd0, 0x00, 0x00]);
+    };
+    let Some(raw) = el.attr("rgb") else {
+        return Err(image_unsupported());
+    };
+    parse_series_rgb(raw).ok_or_else(image_unsupported)
 }
 
 fn in_merge(sheet: &Element, cell: CellRef) -> bool {
