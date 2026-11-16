@@ -672,16 +672,24 @@ fn grouped_rects_keep_their_boxes_and_scaled_groups_map_first() {
             "<a:xfrm rot=\"5400000\"><a:off x=\"1828800\" y=\"914400\"/><a:ext cx=\"1828800\"",
         )
     });
-    let err = run(&json!({
+    let turned_png = tmp("grp-rot-png").with_extension("png");
+    run_ok(json!({
         "schemaVersion": 1,
         "action": "exportSlideImage",
         "path": turned.to_string_lossy(),
         "id": "slide:1",
-        "output": tmp("grp-rot-png").with_extension("png").to_string_lossy()
-    })
-    .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+        "output": turned_png.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&turned_png).unwrap());
+    // 组合绕中心顺时针转 90 度后，左块在上，右块在下，外接框是 48×192。
+    assert_eq!(pixel(&rgb, w, 264, 24), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 311, 119), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&rgb, w, 264, 120), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 311, 215), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 263, 24), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 264, 23), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 312, 24), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 264, 216), [0xAA, 0xBB, 0xCC]);
 }
 
 #[test]

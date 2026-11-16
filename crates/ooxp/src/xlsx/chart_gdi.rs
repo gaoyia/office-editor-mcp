@@ -866,14 +866,20 @@ mod win {
     }
 
     #[test]
-    fn chart_text_uses_dengxian() {
+    fn chart_text_prefers_dengxian() {
         let face = Face::open(13.0, true).expect("本机应有图表字体");
         let name = face.text_face();
+        if name == "等线" || name.eq_ignore_ascii_case("DengXian") {
+            assert_eq!(face.width("1400"), 28.0);
+            return;
+        }
+        // 没有等线时按名单退到雅黑或 Calibri。前进宽度随字体变，不再套等线的 28。
         assert!(
-            name == "等线" || name.eq_ignore_ascii_case("DengXian"),
+            name == "微软雅黑"
+                || name.eq_ignore_ascii_case("Microsoft YaHei")
+                || name.eq_ignore_ascii_case("Calibri"),
             "实际字体是 {name}"
         );
-        assert_eq!(face.width("1400"), 28.0);
     }
 
     #[test]

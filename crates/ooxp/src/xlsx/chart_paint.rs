@@ -1497,7 +1497,16 @@ mod tests {
             "本机应有图表字体"
         );
         assert_eq!(grid_right(&column_chart("S1")), 576 - INSET_RIGHT);
-        assert_eq!(grid_right(&column_chart("South")), 498);
+        let px = (10.0_f64 * 96.0 / 72.0) as f32;
+        let face = super::super::chart_gdi::Face::open(px, false).expect("本机应有图表字体");
+        let widest = face.layout_width("South") as i32;
+        let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + widest + LEGEND_PAD;
+        let edge = 576 - need.max(INSET_RIGHT);
+        assert!(
+            edge < 576 - INSET_RIGHT,
+            "长名字应把绘图区向左推 edge={edge}"
+        );
+        assert_eq!(grid_right(&column_chart("South")), edge);
     }
 
     #[test]
