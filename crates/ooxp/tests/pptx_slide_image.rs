@@ -1583,6 +1583,115 @@ fn axis_aligned_connectors_paint_and_a_diagonal_paints() {
     assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
 }
 
+#[test]
+fn bent_connectors_paint_l_and_z() {
+    let src = tmp("elbow-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "connectors": [{ "prst": "bentConnector2", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] },
+                { "connectors": [{ "prst": "bentConnector3", "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] }
+            ]
+        }
+    }));
+
+    let b2 = tmp("elbow-b2");
+    rewrite_named(&src, &b2, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("elbow-b2-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": b2.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [48, 48, 48]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [32, 32, 32]);
+    assert_eq!(pixel(&rgb, w, 200, 96), [0, 0, 0]);
+
+    let b2v = tmp("elbow-b2v");
+    rewrite_named(&src, &b2v, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        let xml = swap(xml, "<a:xfrm><a:off x=\"914400\"", "<a:xfrm flipV=\"1\"><a:off x=\"914400\"");
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("elbow-b2v-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": b2v.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 288), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [16, 16, 16]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [96, 96, 96]);
+
+    let b3 = tmp("elbow-b3");
+    rewrite_named(&src, &b3, |name, xml| {
+        if name != "ppt/slides/slide2.xml" {
+            return xml;
+        }
+        let xml = swap(
+            xml,
+            "prst=\"bentConnector3\"><a:avLst/>",
+            "prst=\"bentConnector3\"><a:avLst><a:gd name=\"adj1\" fmla=\"val 25000\"/></a:avLst>",
+        );
+        swap(xml, "w=\"12700\"", "w=\"9525\"")
+    });
+    let out = tmp("elbow-b3-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": b3.to_string_lossy(),
+        "id": "slide:2",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [64, 64, 64]);
+    assert_eq!(pixel(&rgb, w, 144, 96), [48, 48, 48]);
+    assert_eq!(pixel(&rgb, w, 144, 288), [16, 16, 16]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [64, 64, 64]);
+
+    let b32 = tmp("elbow-b32");
+    rewrite_named(&src, &b32, |name, xml| {
+        if name != "ppt/slides/slide1.xml" {
+            return xml;
+        }
+        swap(xml, "w=\"12700\"", "w=\"19050\"")
+    });
+    let out = tmp("elbow-b32-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": b32.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 96, 95), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 288, 95), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [255, 255, 255]);
+}
+
 fn slide1_xml(path: &Path) -> String {
     let bytes = std::fs::read(path).unwrap();
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();

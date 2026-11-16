@@ -11,7 +11,9 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
-use crate::xlsx::{fill_device_ellipse, fill_device_line, fill_device_round_rect, Face};
+use crate::xlsx::{
+    fill_device_ellipse, fill_device_line, fill_device_polyline, fill_device_round_rect, Face,
+};
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const DPI: f64 = 96.0;
@@ -416,6 +418,9 @@ fn paint_sp(
         "line" | "straightConnector1" => {
             paint_line(pkg, part, sp, sp_pr, chain, rgb, width, height)
         }
+        "bentConnector2" | "bentConnector3" => {
+            paint_elbow(pkg, part, sp, sp_pr, chain, rgb, width, height)
+        }
         _ => Err(unsupported()),
     }
 }
@@ -440,11 +445,14 @@ fn paint_cxn(
         "line" | "straightConnector1" => {
             paint_line(pkg, part, cxn, sp_pr, chain, rgb, width, height)
         }
+        "bentConnector2" | "bentConnector3" => {
+            paint_elbow(pkg, part, cxn, sp_pr, chain, rgb, width, height)
+        }
         _ => Err(unsupported()),
     }
 }
 
-/// 水平、垂直或角到角的直线 / 直连接线。弯曲连接符仍整页失败。
+/// 水平、垂直或角到角的直线 / 直连接线。直角折线见 `paint_elbow`。弯曲连接符仍整页失败。
 fn paint_line(
     pkg: &Package,
     part: &str,
@@ -625,6 +633,122 @@ fn paint_v_line(
         };
         blend(rgb, width, height, x, py, color, cov);
     }
+}
+
+/// 直角折线连接符。`bentConnector2` 是 L，`bentConnector3` 是带 `adj1` 的 Z。
+/// 不透明实线 1 或 2 像素，可带翻转。1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽。
+fn paint_elbow(
+    pkg: &Package,
+    part: &str,
+    sp: &Element,
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+) -> Result<(), Error> {
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return Err(unsupported());
+    }
+    if sp_pr.child_by_local("solidFill").is_some()
+        || sp_pr.child_by_local("gradFill").is_some()
+        || sp_pr.child_by_local("blipFill").is_some()
+        || sp_pr.child_by_local("pattFill").is_some()
+    {
+        return Err(unsupported());
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Err(unsupported());
+    };
+    if xfrm.attr("rot").is_some_and(|raw| {
+        raw.parse::<i64>()
+            .ok()
+            .is_some_and(|n| n.rem_euclid(FULL_TURN) != 0)
+    }) {
+        return Err(unsupported());
+    }
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    let flip_h = crate::xml::attr_is_true(xfrm, "flipH");
+    let flip_v = crate::xml::attr_is_true(xfrm, "flipV");
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
+    if cx == 0 && cy == 0 {
+        return Err(unsupported());
+    }
+    reject_fancy_line(sp_pr)?;
+    let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
+    let sw = stroke_f.round().max(0.0) as i32;
+    if sw != 1 && sw != 2 {
+        return Err(unsupported());
+    }
+    let pts = elbow_points(prst, x, y, cx, cy, flip_h, flip_v, elbow_adj1(sp_pr));
+    if pts.is_empty() {
+        return Err(unsupported());
+    }
+    if !paint_elbow_line(rgb, width, height, &pts, sw, color) {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+fn elbow_adj1(sp_pr: &Element) -> i64 {
+    sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.child_by_local("avLst"))
+        .and_then(|list| {
+            list.element_children()
+                .find(|el| el.attr("name") == Some("adj1"))
+        })
+        .and_then(|gd| gd.attr("fmla"))
+        .and_then(|fmla| fmla.strip_prefix("val "))
+        .and_then(|raw| raw.parse::<i64>().ok())
+        .unwrap_or(50_000)
+}
+
+fn elbow_points(
+    prst: &str,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    flip_h: bool,
+    flip_v: bool,
+    adj: i64,
+) -> Vec<(f32, f32)> {
+    let mid = x + (cx as i128 * adj as i128 / 100_000) as i64;
+    let raw = match prst {
+        "bentConnector2" => vec![(x, y), (x + cx, y), (x + cx, y + cy)],
+        "bentConnector3" => vec![(x, y), (mid, y), (mid, y + cy), (x + cx, y + cy)],
+        _ => return Vec::new(),
+    };
+    raw.into_iter()
+        .map(|(px, py)| {
+            let px = if flip_h { x + cx - (px - x) } else { px };
+            let py = if flip_v { y + cy - (py - y) } else { py };
+            (emu_f(px) as f32, emu_f(py) as f32)
+        })
+        .collect()
+}
+
+fn paint_elbow_line(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    pts: &[(f32, f32)],
+    sw: i32,
+    color: [u8; 3],
+) -> bool {
+    fill_device_polyline(pts, sw, |px, py, cov| {
+        blend(rgb, width, height, px, py, color, cov);
+    })
 }
 
 fn paint_rect(
@@ -3895,6 +4019,77 @@ mod tests {
         ));
         assert_eq!(pixel(&two, w, 96, 96), [8, 8, 8]);
         assert_eq!(pixel(&two, w, 97, 97), [0, 0, 0]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_elbow_matches_office_coverage() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut l = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut l,
+            w,
+            h,
+            &[(96.0, 96.0), (288.0, 96.0), (288.0, 288.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&l, w, 96, 96), [64, 64, 64]);
+        assert_eq!(pixel(&l, w, 200, 96), [0, 0, 0]);
+        assert_eq!(pixel(&l, w, 288, 96), [48, 48, 48]);
+        assert_eq!(pixel(&l, w, 288, 200), [0, 0, 0]);
+        assert_eq!(pixel(&l, w, 288, 288), [32, 32, 32]);
+        let mut flipped = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut flipped,
+            w,
+            h,
+            &[(96.0, 288.0), (288.0, 288.0), (288.0, 96.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&flipped, w, 96, 288), [64, 64, 64]);
+        assert_eq!(pixel(&flipped, w, 288, 288), [16, 16, 16]);
+        assert_eq!(pixel(&flipped, w, 288, 96), [96, 96, 96]);
+        let mut z = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut z,
+            w,
+            h,
+            &[(96.0, 96.0), (144.0, 96.0), (144.0, 288.0), (288.0, 288.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&z, w, 96, 96), [64, 64, 64]);
+        assert_eq!(pixel(&z, w, 144, 96), [48, 48, 48]);
+        assert_eq!(pixel(&z, w, 144, 288), [16, 16, 16]);
+        assert_eq!(pixel(&z, w, 288, 288), [64, 64, 64]);
+        let mut frac = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut frac,
+            w,
+            h,
+            &[(96.0, 96.0), (153.6, 96.0), (153.6, 288.0), (288.0, 288.0)],
+            1,
+            [0, 0, 0]
+        ));
+        assert_ne!(pixel(&frac, w, 153, 200), [255, 255, 255]);
+        assert_ne!(pixel(&frac, w, 154, 200), [255, 255, 255]);
+        let mut two = blank(w, h);
+        assert!(paint_elbow_line(
+            &mut two,
+            w,
+            h,
+            &[(96.0, 96.0), (288.0, 96.0), (288.0, 288.0)],
+            2,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&two, w, 96, 96), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 96, 95), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 288, 95), [96, 96, 96]);
+        assert_eq!(pixel(&two, w, 288, 287), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 288, 288), [255, 255, 255]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {
