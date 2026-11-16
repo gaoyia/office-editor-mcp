@@ -1522,13 +1522,35 @@ mod win {
         dest_w: u32,
         dest_h: u32,
     ) -> Option<Vec<u8>> {
-        if src_w == 0 || src_h == 0 || dest_w == 0 || dest_h == 0 {
+        scale_device_rgba_window(src, src_w, src_h, 0, 0, src_w, src_h, 0, 0, dest_w, dest_h)
+    }
+
+    /// 从整张源图的窗口 `sx,sy,sw,sh` 放大到 `dest_w×dest_h`。
+    /// 必须按页面上的目标原点 `dest_x,dest_y` 进 GDI+：Office 的高质量双三次
+    /// 在部分裁剪倍率下会随目标 Y 分成两档，先裁成新图或画在 (0,0) 的紧位图会对不上。
+    pub fn scale_device_rgba_window(
+        src: &[u8],
+        src_w: u32,
+        src_h: u32,
+        sx: u32,
+        sy: u32,
+        sw: u32,
+        sh: u32,
+        dest_x: i32,
+        dest_y: i32,
+        dest_w: u32,
+        dest_h: u32,
+    ) -> Option<Vec<u8>> {
+        let _ = dest_x;
+        if src_w == 0 || src_h == 0 || sw == 0 || sh == 0 || dest_w == 0 || dest_h == 0 {
             return None;
         }
         if src_w > i32::MAX as u32
             || src_h > i32::MAX as u32
             || dest_w > i32::MAX as u32
             || dest_h > i32::MAX as u32
+            || sx.checked_add(sw).is_none_or(|end| end > src_w)
+            || sy.checked_add(sh).is_none_or(|end| end > src_h)
         {
             return None;
         }
@@ -1536,10 +1558,17 @@ mod win {
             return None;
         }
         gdiplus_token()?;
-        let sw = src_w as i32;
-        let sh = src_h as i32;
+        let origin_y = dest_y.min(0);
+        let draw_y = dest_y.checked_sub(origin_y)?;
+        let buf_h = (draw_y as u64).checked_add(u64::from(dest_h))?;
+        if buf_h > i32::MAX as u64 {
+            return None;
+        }
+        let buf_h = buf_h as u32;
+        let img_w = src_w as i32;
+        let img_h = src_h as i32;
         let dw = dest_w as i32;
-        let dh = dest_h as i32;
+        let buf_hi = buf_h as i32;
         let mut src_pixels = vec![0u32; (src_w as usize) * (src_h as usize)];
         for (i, chunk) in src.as_chunks::<4>().0.iter().enumerate() {
             src_pixels[i] = (u32::from(chunk[3]) << 24)
@@ -1547,13 +1576,13 @@ mod win {
                 | (u32::from(chunk[1]) << 8)
                 | u32::from(chunk[2]);
         }
-        let mut dest_pixels = vec![0u32; (dest_w as usize) * (dest_h as usize)];
+        let mut dest_pixels = vec![0u32; (dest_w as usize) * (buf_h as usize)];
         let ok = unsafe {
             let mut src_bmp = std::ptr::null_mut();
             if GdipCreateBitmapFromScan0(
-                sw,
-                sh,
-                sw * 4,
+                img_w,
+                img_h,
+                img_w * 4,
                 PIXEL_FORMAT_32BPP_ARGB,
                 src_pixels.as_mut_ptr().cast(),
                 &mut src_bmp,
@@ -1566,7 +1595,7 @@ mod win {
             let mut dest_bmp = std::ptr::null_mut();
             if GdipCreateBitmapFromScan0(
                 dw,
-                dh,
+                buf_hi,
                 dw * 4,
                 PIXEL_FORMAT_32BPP_ARGB,
                 dest_pixels.as_mut_ptr().cast(),
@@ -1602,13 +1631,13 @@ mod win {
                 graphics,
                 src_bmp,
                 0.0,
-                0.0,
+                draw_y as f32,
                 dest_w as f32,
                 dest_h as f32,
-                0.0,
-                0.0,
-                src_w as f32,
-                src_h as f32,
+                sx as f32,
+                sy as f32,
+                sw as f32,
+                sh as f32,
                 UNIT_PIXEL,
                 attrs,
                 std::ptr::null_mut(),
@@ -1623,8 +1652,10 @@ mod win {
         if !ok {
             return None;
         }
-        let mut out = Vec::with_capacity(dest_pixels.len() * 4);
-        for px in dest_pixels {
+        let row0 = (draw_y as usize) * (dest_w as usize);
+        let count = (dest_w as usize) * (dest_h as usize);
+        let mut out = Vec::with_capacity(count * 4);
+        for px in dest_pixels[row0..row0 + count].iter().copied() {
             out.push(((px >> 16) & 0xff) as u8);
             out.push(((px >> 8) & 0xff) as u8);
             out.push((px & 0xff) as u8);
@@ -1840,6 +1871,71 @@ mod win {
     }
 
     #[test]
+    fn scale_device_rgba_window_matches_office_center_crop() {
+        // 4x4 独特色块，中心 2x2 放到 4x4，目标在 y=96，与 PowerPoint 16.0 差 0。
+        let mut src = Vec::new();
+        for (r, g, b) in [
+            (0xFFu8, 0x00, 0x00),
+            (0x00, 0xFF, 0x00),
+            (0x00, 0x00, 0xFF),
+            (0xFF, 0xFF, 0x00),
+            (0xFF, 0x00, 0xFF),
+            (0x00, 0xFF, 0xFF),
+            (0x11, 0x22, 0x33),
+            (0x44, 0x55, 0x66),
+            (0x77, 0x88, 0x99),
+            (0xAA, 0xBB, 0xCC),
+            (0xDD, 0xEE, 0xFF),
+            (0x01, 0x02, 0x03),
+            (0x04, 0x05, 0x06),
+            (0x07, 0x08, 0x09),
+            (0x0A, 0x0B, 0x0C),
+            (0x0D, 0x0E, 0x0F),
+        ] {
+            src.extend_from_slice(&[r, g, b, 255]);
+        }
+        let got = scale_device_rgba_window(&src, 4, 4, 1, 1, 2, 2, 192, 96, 4, 4)
+            .expect("GDI+ should scale a source window");
+        let want: [[u8; 3]; 16] = [
+            [0x3E, 0xC9, 0xC0],
+            [0x00, 0xCA, 0xA8],
+            [0x00, 0x5A, 0x79],
+            [0x21, 0x24, 0x58],
+            [0x62, 0xCA, 0xFF],
+            [0x3F, 0xDF, 0xE4],
+            [0x46, 0x9B, 0x97],
+            [0x49, 0x54, 0x5E],
+            [0x8B, 0xBB, 0xE7],
+            [0x9C, 0xE2, 0xF4],
+            [0xAE, 0xD9, 0xDD],
+            [0x89, 0x96, 0x9C],
+            [0x79, 0x81, 0x8D],
+            [0x9F, 0xA4, 0xB4],
+            [0xB2, 0xBB, 0xC7],
+            [0x85, 0x90, 0x99],
+        ];
+        for (i, color) in want.iter().enumerate() {
+            let o = i * 4;
+            assert_eq!(
+                [got[o], got[o + 1], got[o + 2], got[o + 3]],
+                [color[0], color[1], color[2], 255],
+                "pixel {i}"
+            );
+        }
+    }
+
+    #[test]
+    fn uncropped_scale_matches_at_dest_y_96() {
+        let src = [
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
+        ];
+        let at_origin = scale_device_rgba(&src, 2, 2, 4, 4).expect("GDI+ should scale");
+        let at_dest = scale_device_rgba_window(&src, 2, 2, 0, 0, 2, 2, 192, 96, 4, 4)
+            .expect("GDI+ should scale at dest_y");
+        assert_eq!(at_origin, at_dest);
+    }
+
+    #[test]
     fn chart_text_antialiases() {
         let face = Face::open(13.0, false).expect("本机应有图表字体");
         let mut smooth = 0;
@@ -1856,7 +1952,8 @@ mod win {
 #[cfg(windows)]
 pub use win::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba, Face,
+    fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window,
+    Face,
 };
 
 #[cfg(not(windows))]
@@ -1977,5 +2074,22 @@ pub fn fill_device_stroked_rect(
 
 #[cfg(not(windows))]
 pub fn scale_device_rgba(_: &[u8], _: u32, _: u32, _: u32, _: u32) -> Option<Vec<u8>> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn scale_device_rgba_window(
+    _: &[u8],
+    _: u32,
+    _: u32,
+    _: u32,
+    _: u32,
+    _: u32,
+    _: u32,
+    _: i32,
+    _: i32,
+    _: u32,
+    _: u32,
+) -> Option<Vec<u8>> {
     None
 }

@@ -11,12 +11,12 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
-#[cfg(windows)]
-use crate::xlsx::scale_device_rgba;
 use crate::xlsx::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
     fill_device_round_rect, fill_device_stroked_rect, Face,
 };
+#[cfg(windows)]
+use crate::xlsx::{scale_device_rgba, scale_device_rgba_window};
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const DPI: f64 = 96.0;
@@ -3243,7 +3243,7 @@ fn paint_blip_fill(
         return Ok(());
     }
     let image = load_blip_png(pkg, slide_part, fill)?;
-    let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
+    let crop = source_window(fill, image.w, image.h)?;
     paint_image_covered(
         rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop, cover,
     )?;
@@ -3294,21 +3294,19 @@ fn blit_pic(
     let dest_y = emu_px(y);
     let dest_w = dest_w as u32;
     let dest_h = dest_h as u32;
-    let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
+    let crop = source_window(fill, image.w, image.h)?;
     paint_image(
         rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop,
     )?;
     Ok(())
 }
 
-/// 裁剪四边落到整像素，且裁完尺寸等于目标时，返回原图上的这块。
-/// 没有裁剪时返回 `None`，沿用原来的取样。对不齐的裁剪让整页失败。
+/// 裁剪四边落到整像素时，返回原图上的这块。没有裁剪时返回 `None`。
+/// 半像素百分比或空窗口让整页失败。目标尺寸是否等于裁完尺寸由绘制路径决定。
 fn source_window(
     el: &Element,
     image_w: u32,
     image_h: u32,
-    dest_w: u32,
-    dest_h: u32,
 ) -> Result<Option<(u32, u32, u32, u32)>, Error> {
     let fill = if el.local_name() == "blipFill" {
         el
@@ -3342,7 +3340,7 @@ fn source_window(
     let Some(src_h) = image_h.checked_sub(top).and_then(|h| h.checked_sub(bottom)) else {
         return Err(unsupported());
     };
-    if src_w == 0 || src_h == 0 || src_w != dest_w || src_h != dest_h {
+    if src_w == 0 || src_h == 0 {
         return Err(unsupported());
     }
     Ok(Some((left, top, src_w, src_h)))
@@ -3478,13 +3476,22 @@ fn paint_image_covered(
         );
         return Ok(());
     }
-    // 缩放裁剪另案；这里只放大未裁的整图。缩小未对照官方，整页失败。
-    if crop.is_some() || dest_w < src_w || dest_h < src_h || dest_w > MAX_PX || dest_h > MAX_PX {
+    // 缩小，或一边放大一边缩小，未对照官方，整页失败。
+    if dest_w < src_w || dest_h < src_h || dest_w > MAX_PX || dest_h > MAX_PX {
         return Err(unsupported());
     }
     #[cfg(windows)]
     {
-        let Some(scaled) = scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h) else {
+        // 未裁的放大仍走原来的紧凑目标位图，避免改动已验收的纯放大路径。
+        // 裁后再放要把源矩形画在原图上，并按目标 dest_y 取相位。
+        let scaled = if sx0 == 0 && sy0 == 0 && src_w == image.w && src_h == image.h {
+            scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h)
+        } else {
+            scale_device_rgba_window(
+                &image.px, image.w, image.h, sx0, sy0, src_w, src_h, dest_x, dest_y, dest_w, dest_h,
+            )
+        };
+        let Some(scaled) = scaled else {
             return Err(unsupported());
         };
         let scaled = Rgba {
@@ -3500,11 +3507,14 @@ fn paint_image_covered(
     {
         // 非 Windows 没有 GDI+ 对照路径。不透明图沿用原来的最近邻，不声称与 Office 差 0。
         // 带透明像素的放大不能静默用最近邻冒充成功。
-        if !image_is_opaque(image) {
+        let Some(source) = crop_rgba(image, sx0, sy0, src_w, src_h) else {
+            return Err(unsupported());
+        };
+        if !image_is_opaque(&source) {
             return Err(unsupported());
         }
         blit_image_nearest(
-            rgb, width, height, dest_x, dest_y, dest_w, dest_h, image, cover,
+            rgb, width, height, dest_x, dest_y, dest_w, dest_h, &source, cover,
         );
     }
     Ok(())
@@ -3513,6 +3523,28 @@ fn paint_image_covered(
 #[cfg(not(windows))]
 fn image_is_opaque(image: &Rgba) -> bool {
     image.px.chunks_exact(4).all(|px| px[3] == 255)
+}
+
+#[cfg(not(windows))]
+fn crop_rgba(image: &Rgba, sx: u32, sy: u32, sw: u32, sh: u32) -> Option<Rgba> {
+    if sx.checked_add(sw).is_none_or(|end| end > image.w)
+        || sy.checked_add(sh).is_none_or(|end| end > image.h)
+    {
+        return None;
+    }
+    if sx == 0 && sy == 0 && sw == image.w && sh == image.h {
+        return Some(Rgba {
+            w: image.w,
+            h: image.h,
+            px: image.px.clone(),
+        });
+    }
+    let mut px = Vec::with_capacity((sw as usize) * (sh as usize) * 4);
+    for row in 0..sh {
+        let i = (((sy + row) as usize) * (image.w as usize) + sx as usize) * 4;
+        px.extend_from_slice(&image.px[i..i + (sw as usize) * 4]);
+    }
+    Some(Rgba { w: sw, h: sh, px })
 }
 
 fn blit_image_window(
@@ -3961,11 +3993,7 @@ mod tests {
     fn one_to_one_crop_keeps_the_source_pixels() {
         let xml = r#"<p:pic xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:blipFill><a:blip r:embed="rId2"/><a:srcRect l="25000" t="25000" r="25000" b="25000"/><a:stretch><a:fillRect/></a:stretch></p:blipFill></p:pic>"#;
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        assert_eq!(
-            source_window(&doc.root, 4, 4, 2, 2).unwrap(),
-            Some((1, 1, 2, 2))
-        );
-        assert!(source_window(&doc.root, 4, 4, 4, 4).is_err());
+        assert_eq!(source_window(&doc.root, 4, 4).unwrap(), Some((1, 1, 2, 2)));
     }
 
     #[test]

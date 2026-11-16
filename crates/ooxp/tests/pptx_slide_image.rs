@@ -2493,3 +2493,544 @@ fn shrinking_a_picture_is_not_implemented() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
+
+fn unique_4x4_png() -> Vec<u8> {
+    let mut px = Vec::with_capacity(16);
+    for (r, g, b) in [
+        (0xFFu8, 0x00, 0x00),
+        (0x00, 0xFF, 0x00),
+        (0x00, 0x00, 0xFF),
+        (0xFF, 0xFF, 0x00),
+        (0xFF, 0x00, 0xFF),
+        (0x00, 0xFF, 0xFF),
+        (0x11, 0x22, 0x33),
+        (0x44, 0x55, 0x66),
+        (0x77, 0x88, 0x99),
+        (0xAA, 0xBB, 0xCC),
+        (0xDD, 0xEE, 0xFF),
+        (0x01, 0x02, 0x03),
+        (0x04, 0x05, 0x06),
+        (0x07, 0x08, 0x09),
+        (0x0A, 0x0B, 0x0C),
+        (0x0D, 0x0E, 0x0F),
+    ] {
+        px.push([r, g, b, 255]);
+    }
+    rgba_png(4, 4, &px)
+}
+
+fn unique_8x8_png() -> Vec<u8> {
+    let mut px = Vec::with_capacity(64);
+    for i in 0..64u32 {
+        px.push([
+            ((i * 41) % 256) as u8,
+            ((i * 73 + 20) % 256) as u8,
+            ((i * 17 + 90) % 256) as u8,
+            255,
+        ]);
+    }
+    rgba_png(8, 8, &px)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn export_cropped_picture_slide(
+    png: &[u8],
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    bg: &str,
+    tag: &str,
+) -> (u32, u32, Vec<u8>) {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp(&format!("{tag}-deck"));
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": bg },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": x,
+                "y": y,
+                "cx": cx,
+                "cy": cy
+            }
+        ]
+    }));
+    let cropped = tmp(&format!("{tag}-crop"));
+    let rect =
+        format!("<a:blip r:embed=\"rId2\"/><a:srcRect l=\"{l}\" t=\"{t}\" r=\"{r}\" b=\"{b}\"/>");
+    rewrite_slide(&deck, &cropped, |xml| {
+        xml.replace("<a:blip r:embed=\"rId2\"/>", &rect)
+    });
+    let out = tmp(&format!("{tag}-out")).with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": cropped.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_png(&std::fs::read(&out).unwrap())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn export_cropped_should_fail(
+    png: &[u8],
+    cx: i64,
+    cy: i64,
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    tag: &str,
+) {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp(&format!("{tag}-deck"));
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": 1828800,
+                "y": 914400,
+                "cx": cx,
+                "cy": cy
+            }
+        ]
+    }));
+    let cropped = tmp(&format!("{tag}-crop"));
+    let rect =
+        format!("<a:blip r:embed=\"rId2\"/><a:srcRect l=\"{l}\" t=\"{t}\" r=\"{r}\" b=\"{b}\"/>");
+    rewrite_slide(&deck, &cropped, |xml| {
+        xml.replace("<a:blip r:embed=\"rId2\"/>", &rect)
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": cropped.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp(&format!("{tag}-out")).with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[cfg(windows)]
+#[test]
+fn crop_then_scale_up_matches_office_on_windows() {
+    let png4 = unique_4x4_png();
+    let png8 = unique_8x8_png();
+    let bg = [0xAA, 0xBB, 0xCC];
+    let x = 1828800i64;
+    let y = 914400i64;
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, y, 38100, 38100, 25000, 25000, 25000, 25000, "AABBCC", "cs-c2to4",
+    );
+    assert_eq!(w, 1280);
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0x3EC9C0, 0x00CAA8, 0x005A79, 0x212458],
+            &[0x62CAFF, 0x3FDFE4, 0x469B97, 0x49545E],
+            &[0x8BBBE7, 0x9CE2F4, 0xAED9DD, 0x89969C],
+            &[0x79818D, 0x9FA4B4, 0xB2BBC7, 0x859099],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 4, 4, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, y, 57150, 76200, 25000, 0, 0, 0, "AABBCC", "cs-left",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0x42C700, 0x00B844, 0x0042D2, 0x4337DA, 0xCCBA53, 0xFFFF00],
+            &[0x3DC944, 0x00BF6D, 0x0047A6, 0x2F299D, 0x9B9051, 0xD6DB21],
+            &[0x3EC9C0, 0x00CAA8, 0x005A79, 0x212458, 0x5B584E, 0x7D8A54],
+            &[0x62CAFF, 0x3FDFE4, 0x469B97, 0x49545E, 0x363A4E, 0x2E3A54],
+            &[0x8BBBE7, 0x9CE2F4, 0xAED9DD, 0x89969C, 0x363B4B, 0x080D22],
+            &[0x79818D, 0x9FA4B4, 0xB2BBC7, 0x859099, 0x303438, 0x000000],
+            &[0x323033, 0x463F46, 0x4E4E54, 0x3C4044, 0x191B1C, 0x050504],
+            &[0x000000, 0x000000, 0x000000, 0x000000, 0x070708, 0x0E0F10],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 6, 8, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, y, 76200, 57150, 0, 25000, 0, 0, "AABBCC", "cs-top96",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[
+                0xFF00C3, 0xC24CC3, 0x3FC9C2, 0x00CAA9, 0x005B79, 0x212457, 0x5A574E, 0x7C8855,
+            ],
+            &[
+                0xE02AF8, 0xB668FD, 0x63CAFF, 0x40E0E5, 0x489C99, 0x4A555F, 0x363A4E, 0x2D3953,
+            ],
+            &[
+                0x9A67C5, 0x9687D1, 0x8BBBE6, 0x9DE1F4, 0xAFDADD, 0x89979D, 0x363B4B, 0x070C21,
+            ],
+            &[
+                0x4D686A, 0x5D7177, 0x787F8B, 0x9FA3B2, 0xB1B9C6, 0x858F98, 0x303438, 0x000000,
+            ],
+            &[
+                0x172C23, 0x202D29, 0x312F32, 0x443E45, 0x4C4C52, 0x3B3F43, 0x191B1C, 0x050505,
+            ],
+            &[
+                0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x070708, 0x0E0F10,
+            ],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 8, 6, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, 0, 76200, 57150, 0, 25000, 0, 0, "AABBCC", "cs-top0",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        0,
+        &[
+            &[
+                0xFF00C2, 0xC24CC1, 0x3EC9C0, 0x00CAA8, 0x005A79, 0x212458, 0x5B584E, 0x7D8A54,
+            ],
+            &[
+                0xE129F8, 0xB668FD, 0x62CAFF, 0x3FDFE4, 0x469B97, 0x49545E, 0x363A4E, 0x2E3A54,
+            ],
+            &[
+                0x9C66C6, 0x9787D3, 0x8BBBE7, 0x9CE2F4, 0xAED9DD, 0x89969C, 0x363B4B, 0x080D22,
+            ],
+            &[
+                0x4E686B, 0x5E7178, 0x79818D, 0x9FA4B4, 0xB2BBC7, 0x859099, 0x303438, 0x000000,
+            ],
+            &[
+                0x172D24, 0x212E2A, 0x323033, 0x463F46, 0x4E4E54, 0x3C4044, 0x191B1C, 0x050504,
+            ],
+            &[
+                0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x070708, 0x0E0F10,
+            ],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 0, 8, 6, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, y, 47625, 47625, 25000, 25000, 25000, 25000, "AABBCC", "cs-c2to5",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0x49C0B6, 0x00DAAB, 0x009490, 0x00396F, 0x272559],
+            &[0x5DC2F9, 0x23E1E7, 0x26B4AE, 0x296771, 0x383D4F],
+            &[0x7EC1FF, 0x6DE4FF, 0x7EDCDF, 0x7EACAA, 0x677177],
+            &[0x8CAACB, 0x9FCAE1, 0xBAE0EE, 0xB7CFD8, 0x89949C],
+            &[0x707680, 0x8E8E9C, 0xA7ABBB, 0xA4ADB9, 0x788189],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 5, 5, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4,
+        x,
+        y,
+        57150,
+        38100,
+        25000,
+        25000,
+        25000,
+        25000,
+        "AABBCC",
+        "cs-c2to6x4",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0x52BBC0, 0x09DDB9, 0x00BBA0, 0x006D81, 0x033065, 0x2B2754],
+            &[0x6EBEFF, 0x45E1FF, 0x41D9D8, 0x46A9A3, 0x497376, 0x474C58],
+            &[0x8CB3E3, 0x8ED2F1, 0xA2E5F4, 0xAFE0E2, 0xA3BDC2, 0x7C868E],
+            &[0x747D89, 0x8B909E, 0xA5ABBB, 0xB3BCC7, 0xA3AEBA, 0x78818A],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 6, 4, bg);
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png8,
+        x,
+        y,
+        133350,
+        152400,
+        12500,
+        0,
+        0,
+        0,
+        "AABBCC",
+        "cs-c8left",
+    );
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[
+                0x143E56, 0x2B6567, 0x408C7E, 0x54CA8E, 0x69F797, 0x7CCD9E, 0x926AA7, 0xAE33AF,
+                0xD156B8, 0xFEA2C0, 0xFFD2C9, 0xCEADD2, 0x5848DB, 0x0000E0,
+            ],
+            &[
+                0x2A5393, 0x408584, 0x55B266, 0x6ECD57, 0x8BC95E, 0xA8986A, 0xBC6074, 0xB7577C,
+                0xA68185, 0xADA78D, 0xBDA496, 0x9E799F, 0x563FA8, 0x1D14AD,
+            ],
+            &[
+                0x4E78DA, 0x65B0A7, 0x7AD94E, 0x91C71B, 0xAD8A1E, 0xD05A32, 0xE25D3B, 0xB98743,
+                0x6CAF4C, 0x46A154, 0x57655D, 0x653A66, 0x5A3B6F, 0x4E4474,
+            ],
+            &[
+                0x81B0E2, 0xA2D0B3, 0xB6CB5A, 0xB09626, 0x9F5929, 0xA6513D, 0xB68047, 0x92AA4F,
+                0x45A758, 0x1A7260, 0x2C3569, 0x522772, 0x6D4F7B, 0x7F7580,
+            ],
+            &[
+                0xA4D7A4, 0xCACB98, 0xDC8E79, 0xB35968, 0x67546E, 0x427E7B, 0x52AE84, 0x59A68C,
+                0x466A95, 0x40349D, 0x552EA6, 0x754DAF, 0x927AB8, 0xA59BBD,
+            ],
+            &[
+                0x92C55F, 0x9C9654, 0xAD595F, 0x884F6F, 0x3C7E78, 0x11A980, 0x23A689, 0x457291,
+                0x60349A, 0x7C21A2, 0x9948AB, 0xB485B4, 0xC9B3BD, 0xD6CEC2,
+            ],
+            &[
+                0x5A8744, 0x395817, 0x485321, 0x4F7D3A, 0x3CAD44, 0x36A54B, 0x4B6954, 0x68335C,
+                0x852D65, 0xA1486D, 0xBC7576, 0xD6AA7F, 0xEAD588, 0xF6EF8D,
+            ],
+            &[
+                0x2F5857, 0x074F26, 0x197D28, 0x3BA83C, 0x56A546, 0x72714E, 0x8F3357, 0xAC205F,
+                0xC14868, 0xBC8570, 0xA9B179, 0xA7C682, 0xBAC38B, 0xCCBB90,
+            ],
+            &[
+                0x2F5A76, 0x2D7D67, 0x41AC6D, 0x5EA47A, 0x7B6883, 0x97328B, 0xB32C94, 0xD5479C,
+                0xE774A5, 0xBEB2AD, 0x72DAB6, 0x4BC8BF, 0x5B8BC9, 0x7357CE,
+            ],
+            &[
+                0x498462, 0x68A86E, 0x85A477, 0xA2707F, 0xB73288, 0xB21F90, 0xA04799, 0xA784A1,
+                0xB8B1AA, 0x93CDB1, 0x47C8BA, 0x1F99C8, 0x305AD8, 0x482BE2,
+            ],
+            &[
+                0x6EAB2C, 0x8DA439, 0xA96743, 0xCB314A, 0xDD2B53, 0xB4465B, 0x687364, 0x43B16C,
+                0x53D975, 0x5AC77C, 0x488A85, 0x455B92, 0x5854A0, 0x6A58A8,
+            ],
+            &[
+                0xA59D33, 0xA86F3C, 0x973145, 0x9D1E4D, 0xAE4656, 0x89835E, 0x3DB067, 0x12CC6F,
+                0x24C778, 0x469285, 0x61548D, 0x804B7E, 0x9C7A5F, 0xAEA54E,
+            ],
+            &[
+                0xCD6071, 0xAA317A, 0x5F2B83, 0x39458B, 0x4A7294, 0x50AF9C, 0x3ED8A5, 0x37C7AD,
+                0x4B8AB6, 0x6854CA, 0x854ED0, 0xA5719D, 0xBFA343, 0xD0C812,
+            ],
+            &[
+                0xBC357D, 0x802286, 0x334A8F, 0x0C8197, 0x1EA7A0, 0x41C3A8, 0x5CC5B1, 0x7397B9,
+                0x895AC3, 0xA04AD7, 0xB571DD, 0xB894A9, 0xAD9B4F, 0xA19B1D,
+            ],
+            &[
+                0x7E3546, 0x41494F, 0x2C7558, 0x30AE60, 0x45D169, 0x63BF71, 0x80887A, 0x995782,
+                0xAF538B, 0xCD7898, 0xDFA19F, 0xBC9A90, 0x746371, 0x3B395F,
+            ],
+            &[
+                0x493E12, 0x116F1B, 0x2E9724, 0x5BCA2C, 0x72EA35, 0x84B63D, 0x9A5346, 0xAE284E,
+                0xC45657, 0xE9A35D, 0xF9C766, 0xBA9877, 0x45338D, 0x000099,
+            ],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 14, 16, bg);
+}
+
+#[cfg(windows)]
+#[test]
+fn crop_then_scale_up_dest_y_phase_matches_office_on_windows() {
+    // 顶裁 4x3→8x6：官方与 GDI+ 在 y=0/64 走低相位，y=66/96 走高相位，都差 0。
+    // y=65 官方已切到高相位，GDI+ 仍是低相位，颜色最多差 2，几何仍须对齐。
+    let png4 = unique_4x4_png();
+    let bg = [0xAA, 0xBB, 0xCC];
+    let x = 1828800i64;
+    let low: &[&[u32]] = &[
+        &[
+            0xFF00C2, 0xC24CC1, 0x3EC9C0, 0x00CAA8, 0x005A79, 0x212458, 0x5B584E, 0x7D8A54,
+        ],
+        &[
+            0xE129F8, 0xB668FD, 0x62CAFF, 0x3FDFE4, 0x469B97, 0x49545E, 0x363A4E, 0x2E3A54,
+        ],
+        &[
+            0x9C66C6, 0x9787D3, 0x8BBBE7, 0x9CE2F4, 0xAED9DD, 0x89969C, 0x363B4B, 0x080D22,
+        ],
+        &[
+            0x4E686B, 0x5E7178, 0x79818D, 0x9FA4B4, 0xB2BBC7, 0x859099, 0x303438, 0x000000,
+        ],
+        &[
+            0x172D24, 0x212E2A, 0x323033, 0x463F46, 0x4E4E54, 0x3C4044, 0x191B1C, 0x050504,
+        ],
+        &[
+            0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x070708, 0x0E0F10,
+        ],
+    ];
+    let high: &[&[u32]] = &[
+        &[
+            0xFF00C3, 0xC24CC3, 0x3FC9C2, 0x00CAA9, 0x005B79, 0x212457, 0x5A574E, 0x7C8855,
+        ],
+        &[
+            0xE02AF8, 0xB668FD, 0x63CAFF, 0x40E0E5, 0x489C99, 0x4A555F, 0x363A4E, 0x2D3953,
+        ],
+        &[
+            0x9A67C5, 0x9687D1, 0x8BBBE6, 0x9DE1F4, 0xAFDADD, 0x89979D, 0x363B4B, 0x070C21,
+        ],
+        &[
+            0x4D686A, 0x5D7177, 0x787F8B, 0x9FA3B2, 0xB1B9C6, 0x858F98, 0x303438, 0x000000,
+        ],
+        &[
+            0x172C23, 0x202D29, 0x312F32, 0x443E45, 0x4C4C52, 0x3B3F43, 0x191B1C, 0x050505,
+        ],
+        &[
+            0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x000000, 0x070708, 0x0E0F10,
+        ],
+    ];
+
+    for (y_emu, y_px, grid, tag) in [
+        (609600i64, 64u32, low, "cs-y64"),
+        (628650, 66, high, "cs-y66"),
+    ] {
+        let (w, _, rgb) = export_cropped_picture_slide(
+            &png4, x, y_emu, 76200, 57150, 0, 25000, 0, 0, "AABBCC", tag,
+        );
+        assert_grid(&rgb, w, 192, y_px, grid);
+        assert_box_outside(&rgb, w, 192, y_px, 8, 6, bg);
+    }
+
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png4, x, 619125, 76200, 57150, 0, 25000, 0, 0, "AABBCC", "cs-y65",
+    );
+    assert_box_outside(&rgb, w, 192, 65, 8, 6, bg);
+    let official = high;
+    let mut max_delta = 0u32;
+    let mut differ = 0u32;
+    for row in 0..6 {
+        for col in 0..8 {
+            let got = pixel(&rgb, w, 192 + col, 65 + row);
+            let want = rgb_at(official[row as usize][col as usize]);
+            let d = got
+                .iter()
+                .zip(want.iter())
+                .map(|(a, b)| u32::from(a.abs_diff(*b)))
+                .max()
+                .unwrap();
+            if d > 0 {
+                differ += 1;
+            }
+            max_delta = max_delta.max(d);
+        }
+    }
+    eprintln!("crop-scale dest_y=65 vs official high-phase differ={differ} maxDelta={max_delta}");
+    assert!(
+        max_delta <= 2,
+        "y=65 residual larger than the known phase offset maxDelta={max_delta}"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn transparent_crop_then_scale_up_keeps_geometry_on_windows() {
+    // 沿用已接受的放大插值后再 over。裁左上 2x2 再放到 4x4，不把 t93u 自动扩成零差声明。
+    let mut px = vec![[0x20u8, 0x20, 0x20, 255]; 16];
+    px[0] = [255, 0, 0, 255];
+    px[1] = [0, 255, 0, 128];
+    px[4] = [0, 0, 255, 0];
+    px[5] = [255, 255, 0, 64];
+    let png = rgba_png(4, 4, &px);
+    let (w, _, rgb) = export_cropped_picture_slide(
+        &png, 1828800, 914400, 38100, 38100, 0, 0, 50000, 50000, "AABBCC", "cs-alpha",
+    );
+    let bg = [0xAA, 0xBB, 0xCC];
+    assert_box_outside(&rgb, w, 192, 96, 4, 4, bg);
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xFF, 0x00, 0x00]);
+}
+
+#[test]
+fn shrinking_or_mixed_crop_scale_is_not_implemented() {
+    let png = unique_4x4_png();
+    // 中心 2x2 缩到 1x1
+    export_cropped_should_fail(&png, 9525, 9525, 25000, 25000, 25000, 25000, "cs-shrink");
+    // 一边放大一边缩小
+    export_cropped_should_fail(&png, 38100, 9525, 25000, 25000, 25000, 25000, "cs-mix-wh");
+    export_cropped_should_fail(&png, 9525, 38100, 25000, 25000, 25000, 25000, "cs-mix-hw");
+}
