@@ -4,7 +4,7 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, ErrorCode, RunOutput};
+use ooxp::{run, ErrorCode, Lang, RunOutput};
 use serde_json::{json, Value};
 use zip::ZipArchive;
 
@@ -431,4 +431,46 @@ fn set_props_rejects_wrong_id_and_empty_fields() {
         }]),
     );
     assert_eq!(e7.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn author_on_props_points_to_creator() {
+    let dest = seq_path("author-create", "pptx");
+    let _ = std::fs::remove_file(&dest);
+    let err = run_json(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": dest.to_string_lossy(),
+        "presentation": {
+            "props": { "author": "Alice" },
+            "slides": [{ "shapes": [{ "text": "标题" }] }]
+        }
+    }))
+    .unwrap_err();
+    assert!(!dest.exists(), "失败的 create 不应写出文件");
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("presentation.props.author"));
+    let en = err.to_json(Lang::En);
+    assert_eq!(
+        en["error"]["message"].as_str(),
+        Some("Unknown field: author. Office Author is creator, not author")
+    );
+    let zh = err.to_json(Lang::ZhCn);
+    assert_eq!(
+        zh["error"]["message"].as_str(),
+        Some("不认识的字段：author。Office 的 Author 对应 creator，不是 author")
+    );
+
+    let src = create_docx("author-set", Some(json!({ "creator": "ooxp" })));
+    let err = apply_err(
+        &src,
+        json!([{ "op": "setProps", "id": "docx:document", "author": "Alice" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("ops[0].author"));
+    let en = err.to_json(Lang::En);
+    assert_eq!(
+        en["error"]["message"].as_str(),
+        Some("Unknown field: author. Office Author is creator, not author")
+    );
 }

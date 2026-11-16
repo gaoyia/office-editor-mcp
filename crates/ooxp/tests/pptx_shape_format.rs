@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, ErrorCode, RunOutput};
+use ooxp::{run, ErrorCode, Lang, RunOutput};
 use serde_json::{json, Value};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
@@ -346,6 +346,31 @@ fn table_cell_spacing() {
 #[test]
 fn rejects_bad_spacing_and_kern() {
     let src = create_deck("bad-spc");
+    let dest = tmp("lnspc-number");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "lnSpc": 150000
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("ops[0].lnSpc"));
+    let en = err.to_json(Lang::En);
+    assert_eq!(
+        en["error"]["message"].as_str(),
+        Some("lnSpc must be an object with type pts or pct and an integer val")
+    );
+    let zh = err.to_json(Lang::ZhCn);
+    assert_eq!(
+        zh["error"]["message"].as_str(),
+        Some("lnSpc 必须是对象，含 type（pts 或 pct）和整数 val")
+    );
+    assert!(!dest.exists());
+
     let dest = tmp("bad-type");
     let err = apply(
         &src,

@@ -200,8 +200,8 @@
     "insertAnimOp": {
       "description": "给该页对象追加一条预设效果。",
       "descriptionEn": "Append one preset effect to that slide object.",
-      "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。",
-      "limitsEn": "Writes only a minimal <p:timing> tree matching a PowerPoint 16.0 Save As, and does not accept a timeline JSON submitted by the caller.",
+      "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。 id 必须是目标对象 id（如 slide:1/shape:9）。不要把 create 动画里的 shape 序号当成独立字段。",
+      "limitsEn": "Writes only a minimal <p:timing> tree matching a PowerPoint 16.0 Save As, and does not accept a timeline JSON submitted by the caller. id must be the target object id (for example slide:1/shape:9). Do not send the shape index from create anims as a separate field.",
       "type": "object",
       "required": [
         "op",
@@ -215,7 +215,9 @@
         },
         "id": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "目标对象 id，例如 slide:1/shape:9、slide:1/pic:1，以及 notes、master、layout、handout 形式。不要写 shape 字段。create 里 slides[].anims[] 用的是该页数组的 1 起序号（如 shape: 9），不是对象 id。",
+          "descriptionEn": "Target object id, for example slide:1/shape:9 or slide:1/pic:1, including notes, master, layout, and handout forms. There is no shape field. In create, slides[].anims[] uses a 1-based index into that slide's arrays (such as shape: 9), not an object id."
         },
         "type": {
           "$ref": "#/$defs/animType"

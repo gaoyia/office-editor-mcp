@@ -8458,8 +8458,8 @@
     "insertAnimOp": {
       "description": "给该页对象追加一条预设效果。",
       "descriptionEn": "Append one preset effect to that slide object.",
-      "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。",
-      "limitsEn": "Writes only a minimal <p:timing> tree matching a PowerPoint 16.0 Save As, and does not accept a timeline JSON submitted by the caller.",
+      "limits": "只写与 PowerPoint 16.0 另存同构的最小 <p:timing> 树，不接受调用方提交的时间轴 JSON。 id 必须是目标对象 id（如 slide:1/shape:9）。不要把 create 动画里的 shape 序号当成独立字段。",
+      "limitsEn": "Writes only a minimal <p:timing> tree matching a PowerPoint 16.0 Save As, and does not accept a timeline JSON submitted by the caller. id must be the target object id (for example slide:1/shape:9). Do not send the shape index from create anims as a separate field.",
       "type": "object",
       "required": [
         "op",
@@ -8473,7 +8473,9 @@
         },
         "id": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "目标对象 id，例如 slide:1/shape:9、slide:1/pic:1，以及 notes、master、layout、handout 形式。不要写 shape 字段。create 里 slides[].anims[] 用的是该页数组的 1 起序号（如 shape: 9），不是对象 id。",
+          "descriptionEn": "Target object id, for example slide:1/shape:9 or slide:1/pic:1, including notes, master, layout, and handout forms. There is no shape field. In create, slides[].anims[] uses a 1-based index into that slide's arrays (such as shape: 9), not an object id."
         },
         "type": {
           "$ref": "#/$defs/animType"
@@ -8841,7 +8843,9 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         }
       }
     },
@@ -8977,7 +8981,9 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         },
         "fields": {
           "type": "array",
@@ -9181,31 +9187,45 @@
         },
         "shape": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "picture": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "video": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "audio": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "table": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "chart": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "smartArt": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         }
       },
       "oneOf": [
@@ -9244,7 +9264,9 @@
             "smartArt"
           ]
         }
-      ]
+      ],
+      "description": "该页一条预设效果。用 shape / picture 等对该页 create 数组的 1 起序号，且恰好一个。不要写 op 或对象 id；apply 的 insertAnim 才用 slide:1/shape:9 这种 id。",
+      "descriptionEn": "One preset effect on this slide. Use exactly one of shape, picture, and the other array keys as a 1-based index into that slide's create arrays. Do not write op or an object id; apply insertAnim uses an id such as slide:1/shape:9."
     },
     "pptxOleCreate": {
       "type": "object",
@@ -10706,15 +10728,21 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "仅 pptx。从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "pptx only. 0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         },
         "before": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之前。",
+          "descriptionEn": "pptx only. Insert before this direct spTree child on the same host."
         },
         "after": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之后。",
+          "descriptionEn": "pptx only. Insert after this direct spTree child on the same host."
         },
         "from": {
           "type": "string",
@@ -16043,10 +16071,10 @@
       }
     },
     "exportSlideImageRequest": {
-      "description": "把 pptx 一页的纯色页底、PNG 和没有描边的实心矩形画成 PNG。",
-      "descriptionEn": "Draw a pptx slide's solid background, PNG pictures, and solid rectangles without a stroke to a PNG.",
-      "limits": "只读。不改源包，像素不进 inspect。页底用本页、版式或母版上没有颜色变换的不透明纯色，含主题色，没有或画不了时铺白。还画没有旋转翻转裁剪的 PNG，以及没有描边的不透明实心矩形。矩形的水平或垂直翻转不改变像素框，也可以绕中心转 90 度的倍数。组合里的这种矩形先转直角，再从内到外套每一层组合的直角或翻转。组合可以再套一层。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。矩形填充也可以是没有颜色变换的 schemeClr，取色和页底同一套。带了颜色变换则整页失败。后画的盖住先画的，超出页面的部分裁掉。半透明、文字、其它形状和图表不画。组合里的图、视频和音频报 NotImplemented。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
-      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Opaque solid page backgrounds without a color transform, including theme colors, come from the slide, then the layout, then the master. Missing or unrecognized backgrounds stay white. Unrotated, unflipped, uncropped PNG pictures are drawn. Opaque solid rectangles without a stroke are also drawn. A horizontal or vertical flip does not change that rectangle, and it may turn by a multiple of 90 degrees around its center. Inside a group, the rectangle turns first, then each surrounding group's quarter turn or flip is applied from the inside out. A group may contain another group. The inner group may also turn by a multiple of 90 degrees. The inner and outer groups may both turn by 90 degrees. A rectangle fill may also be a schemeClr with no color transform, resolved like the page background. A transformed schemeClr fails the page. Later objects cover earlier ones, and the part outside the page is clipped. Translucent fills, text, other shapes, and charts are not drawn. Pictures inside groups, video, and audio return NotImplemented. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
+      "description": "按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、不透明两色渐变、形状文字、簇状柱形图和纯色单元格的表写成 PNG。",
+      "descriptionEn": "Draw a pptx slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, opaque two-stop gradients, shape text, clustered column charts, and solid table cells to a PNG.",
+      "limits": "只读。不改源包，像素不进 inspect。页底用本页、版式或母版上没有颜色变换的不透明纯色，含主题色，没有或画不了时铺白。还画没有旋转的 PNG、整像素且不缩放的裁剪、矩形、圆角矩形、椭圆、形状里的文字、簇状柱形图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。两色直线渐变只画在矩形上，且两档必须不透明（alpha 为 100000 或省略）。圆角矩形和椭圆上的渐变填充不支持，会让整页失败。形状上的 blipFill 不画，可能会跳过而不报错；p:pic 图片会画。create 时文本里的换行会写成 a:br，但预览器目前只画一段里的第一个文本 run，所以能创建出来不等于能预览出来。画不了的对象让整页失败。宽或高超出 1 到 4096 像素也报 NotImplemented。xlsx 与 docx 报 InvalidField。",
+      "limitsEn": "Read only. Does not modify the source package, and pixels do not enter inspect. Opaque solid page backgrounds without a color transform, including theme colors, come from the slide, then the layout, then the master. Missing or unrecognized backgrounds stay white. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, shape text, clustered column charts, and solid table cells are drawn, including inside groups and on the master or layout. A two-stop linear gradient is drawn only on a rectangle, and only when both stops are opaque (alpha is 100000 or omitted). Gradient fill on a rounded rectangle or ellipse is not supported and fails the slide. A shape blipFill is not painted and may be skipped rather than failing the slide; p:pic pictures are drawn. Create text that contains a newline is written as a:br, but the previewer currently shows only the first text run in a paragraph, so a created slide may not match the preview. An object that cannot be drawn fails the slide. Width or height outside 1 to 4096 pixels also returns NotImplemented. xlsx and docx return InvalidField.",
       "type": "object",
       "comment": "output 必填。不得默认写成源 path。contentType 固定为 image/png。",
       "required": [
@@ -16116,8 +16144,8 @@
     "helpRequest": {
       "description": "查某个操作怎么填。",
       "descriptionEn": "Look up how to fill in an operation.",
-      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。本工具不支持预览。xlsx 的簇状柱形图可以按 exportChartImage 写成 PNG。xlsx 的折线迷你图可以按 exportSparklineImage 写成 PNG。xlsx 的已用区域可以按 exportSheetImage 写成 PNG。pptx 可以按 exportSlideImage 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。画不了的对象让整页失败。docx 没有字的页可以按 exportPageImage 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：Word、Excel，以及 WPS 的 kwps、ket，用 ExportAsFixedFormat 写成 PDF；PowerPoint 和 WPS 的 kwpp 用幻灯片的 Export 写成 PNG。本工具不调用它们。",
-      "limitsEn": "Search first, then open one operation. Do not guess fields, and do not reuse fields from another format. This tool does not preview a whole page. An xlsx clustered column chart can be written to PNG with exportChartImage. An xlsx line sparkline can be written to PNG with exportSparklineImage. An xlsx used range can be written to PNG with exportSheetImage. A pptx slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells can be written with exportSlideImage. An object that cannot be drawn fails the slide. Those pixels do not enter inspect. A docx page with no text can be written to PNG with exportPageImage. Pages with text are not drawn yet. If Microsoft Office or WPS is installed, export and then look: Word, Excel, and WPS kwps and ket use ExportAsFixedFormat to write a PDF; PowerPoint and WPS kwpp use the slide Export method to write a PNG. This tool does not call them.",
+      "limits": "先搜再打开。不要猜字段，也不要把别的格式的字段套过来。本工具不支持预览。xlsx 的簇状柱形图可以按 exportChartImage 写成 PNG。xlsx 的折线迷你图可以按 exportSparklineImage 写成 PNG。xlsx 的已用区域可以按 exportSheetImage 写成 PNG。pptx 可以按 exportSlideImage 把页底、PNG、矩形、圆角矩形、椭圆、不透明两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图。两色渐变必须不透明（alpha 为 100000 或省略），且只画在矩形上，圆角矩形和椭圆上的渐变填充不支持。形状上的 blipFill 不画，可能会跳过而不报错。create 时文本里的换行会写成 a:br，但预览器目前只画一段里的第一个文本 run，所以能创建出来不等于能预览出来。画不了的对象让整页失败。docx 没有字的页可以按 exportPageImage 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：Word、Excel，以及 WPS 的 kwps、ket，用 ExportAsFixedFormat 写成 PDF；PowerPoint 和 WPS 的 kwpp 用幻灯片的 Export 写成 PNG。本工具不调用它们。",
+      "limitsEn": "Search first, then open one operation. Do not guess fields, and do not reuse fields from another format. This tool does not preview a whole page. An xlsx clustered column chart can be written to PNG with exportChartImage. An xlsx line sparkline can be written to PNG with exportSparklineImage. An xlsx used range can be written to PNG with exportSheetImage. A pptx slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, opaque two-stop gradients, shape text, clustered column charts, and solid table cells can be written with exportSlideImage. Two-stop gradients must be opaque (alpha is 100000 or omitted) and are drawn only on rectangles, not on rounded rectangles or ellipses. A shape blipFill is not painted and may be skipped rather than failing the slide. Create text that contains a newline is written as a:br, but the previewer currently shows only the first text run in a paragraph, so a created slide may not match the preview. An object that cannot be drawn fails the slide. Those pixels do not enter inspect. A docx page with no text can be written to PNG with exportPageImage. Pages with text are not drawn yet. If Microsoft Office or WPS is installed, export and then look: Word, Excel, and WPS kwps and ket use ExportAsFixedFormat to write a PDF; PowerPoint and WPS kwpp use the slide Export method to write a PNG. This tool does not call them.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -16633,15 +16661,21 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "仅 pptx。从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "pptx only. 0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         },
         "before": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之前。",
+          "descriptionEn": "pptx only. Insert before this direct spTree child on the same host."
         },
         "after": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "仅 pptx。插到同一宿主 spTree 这个直接子对象之后。",
+          "descriptionEn": "pptx only. Insert after this direct spTree child on the same host."
         },
         "from": {
           "type": "string",
@@ -16814,7 +16848,9 @@
             "$ref": "#/$defs/createCustomProp"
           }
         }
-      }
+      },
+      "description": "文档属性。Office 的 Author 是 creator，不要写 author。",
+      "descriptionEn": "Document properties. Office Author is creator; do not write author."
     },
     "createCustomProp": {
       "type": "object",
@@ -17121,8 +17157,8 @@
       ]
     },
     "setPropsOp": {
-      "description": "改标题、作者这类文档属性。",
-      "descriptionEn": "Change document properties such as title and author.",
+      "description": "改 title、creator 这类文档属性。Office 的 Author 是 creator，不要写 author。",
+      "descriptionEn": "Change document properties such as title and creator. Office Author is creator; do not write author.",
       "limits": "这八个字段至少给一个，否则报 InvalidField。未点名的字段留下，含 Application、页数/字数、HeadingPairs、TitlesOfParts、Slides，以及未点名的公司名。 不要写 DigSig。不要改 lastModifiedBy、created、modified。出现这些只读键报 UnknownField。id 不是格式根报 InvalidId。 缺 core.xml 或 app.xml 时，只要这条 op 点到了对应部件里的字段，就按需新建部件、根关系和 Content Type Override。",
       "limitsEn": "Give at least one of these eight fields, or InvalidField is returned. Fields that were not named stay, including Application, page and word counts, HeadingPairs, TitlesOfParts, Slides, and a company name that was not named. Do not write DigSig. Do not change lastModifiedBy, created, or modified. Those read-only keys return UnknownField. An id that is not the format root returns InvalidId. If core.xml or app.xml is missing, and this op names a field in the corresponding part, create the part, the root relationship, and the Content Type Override as needed.",
       "type": "object",

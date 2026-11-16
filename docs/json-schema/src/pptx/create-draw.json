@@ -223,7 +223,9 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         }
       }
     },
@@ -359,7 +361,9 @@
         },
         "index": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "description": "从 0 起，只数当前 spTree 内容子元素（不含 nvGrpSpPr、grpSpPr、extLst）。0 是最底层，后写的兄弟仍在上面。",
+          "descriptionEn": "0-based among the current spTree content children (excluding nvGrpSpPr, grpSpPr, and extLst). 0 is the bottom; later siblings stay on top."
         },
         "fields": {
           "type": "array",
@@ -563,31 +567,45 @@
         },
         "shape": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "picture": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "video": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "audio": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "table": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "chart": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         },
         "smartArt": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "description": "对该页对应 create 数组的 1 起序号。不要写成 insertAnim 的对象 id。",
+          "descriptionEn": "A 1-based index into that slide's matching create array. Do not write an insertAnim object id."
         }
       },
       "oneOf": [
@@ -626,7 +644,9 @@
             "smartArt"
           ]
         }
-      ]
+      ],
+      "description": "该页一条预设效果。用 shape / picture 等对该页 create 数组的 1 起序号，且恰好一个。不要写 op 或对象 id；apply 的 insertAnim 才用 slide:1/shape:9 这种 id。",
+      "descriptionEn": "One preset effect on this slide. Use exactly one of shape, picture, and the other array keys as a 1-based index into that slide's create arrays. Do not write op or an object id; apply insertAnim uses an id such as slide:1/shape:9."
     },
     "pptxOleCreate": {
       "type": "object",

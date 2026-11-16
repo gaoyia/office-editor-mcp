@@ -16,12 +16,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::UnsupportedSchema => "schemaVersion must be 1".into(),
         ErrorKind::UnsupportedAction { action } => format!("Unsupported action: {action}"),
         ErrorKind::UnknownField { field } => format!("Unknown field: {field}"),
+        ErrorKind::UnknownPropsAuthor { field } => {
+            format!("Unknown field: {field}. Office Author is creator, not author")
+        }
         ErrorKind::CannotInferFormat { path } => format!("Cannot infer format from path: {path}"),
         ErrorKind::UnsupportedFormat { format } => format!("Unsupported format: {format}"),
         ErrorKind::MissingField { field } => format!("Missing {field}"),
         ErrorKind::PackageRequired => "Package bytes are required".into(),
         ErrorKind::WrongType { field, expected } => {
-            format!("{field} must be {}", type_name(*expected))
+            if *expected == TypeName::Object
+                && matches!(field.as_str(), "lnSpc" | "spcBef" | "spcAft")
+            {
+                format!("{field} must be an object with type pts or pct and an integer val")
+            } else {
+                format!("{field} must be {}", type_name(*expected))
+            }
         }
         ErrorKind::EmptyArray { field } => format!("{field} must not be empty"),
         ErrorKind::OutOfRange { field, min, max } => {
@@ -1408,7 +1417,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SlideImageUnsupported => {
-            "This slide still has an object that cannot be drawn. White backgrounds and solid page backgrounds without a color transform are drawn, including theme colors on the slide, layout, or master. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells are drawn, including inside groups and on the master or layout. The size must be 1 to 4096 pixels"
+            "This slide still has an object that cannot be drawn. White backgrounds and solid page backgrounds without a color transform are drawn, including theme colors on the slide, layout, or master. Unrotated PNG pictures, crops that stay on whole pixels and keep the same size, rectangles, rounded rectangles, ellipses, shape text, clustered column charts, and solid table cells are drawn, including inside groups and on the master or layout. A two-stop linear gradient is drawn only on a rectangle, and only when both stops are opaque (alpha is 100000 or omitted). Gradient fill on a rounded rectangle or ellipse is not supported. A shape blipFill is not painted and may be skipped rather than failing the slide. Create text that contains a newline is written as a:br, but the previewer currently shows only the first text run in a paragraph. The size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::PageImageUnsupported => {

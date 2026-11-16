@@ -716,6 +716,7 @@ define_error_kinds! {
     UnsupportedSchema => vec![Self::UnsupportedSchema],
     UnsupportedAction { action: String } => vec![Self::UnsupportedAction { action: "foo".into() }],
     UnknownField { field: String } => vec![Self::UnknownField { field: "x".into() }],
+    UnknownPropsAuthor { field: String } => vec![Self::UnknownPropsAuthor { field: "author".into() }],
     CannotInferFormat { path: String } => vec![Self::CannotInferFormat { path: "a.bin".into() }],
     UnsupportedFormat { format: String } => vec![Self::UnsupportedFormat { format: "xls".into() }],
     MissingField { field: String } => vec![Self::MissingField { field: "path".into() }],
@@ -1850,6 +1851,7 @@ impl ErrorKind {
             Self::CannotInferFormat { .. } | Self::UnsupportedFormat { .. } => UnsupportedFormat,
             Self::UnsupportedOp { .. } => UnsupportedOp,
             Self::UnknownField { .. }
+            | Self::UnknownPropsAuthor { .. }
             | Self::MissingField { .. }
             | Self::PackageRequired
             | Self::WrongType { .. }
