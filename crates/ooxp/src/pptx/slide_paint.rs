@@ -3483,7 +3483,7 @@ fn paint_image_covered(
     #[cfg(windows)]
     {
         // 未裁的放大仍走原来的紧凑目标位图，避免改动已验收的纯放大路径。
-        // 裁后再放要把源矩形画在原图上，并按目标 dest_y 取相位。
+        // 裁后再放要把源矩形画在原图上，并按页面上的真实 dest_x/dest_y 取相位。
         let scaled = if sx0 == 0 && sy0 == 0 && src_w == image.w && src_h == image.h {
             scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h)
         } else {

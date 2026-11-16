@@ -1,5 +1,5 @@
 ﻿# 不透明整像素裁剪后再放大，对照 PowerPoint 16.0 Slide.Export，要求 differ=0 / maxDelta=0。
-# 顶裁 dest_y=65 是已知相位差（官方已切高相位、GDI+ 仍低相位），只锁几何并记录原始像素残差，不放宽全局 MaxDelta=0。
+# 顶裁 dest_y=65 的不透明插值相位差（官方已切高相位、GDI+ 仍低相位）不在 t93u 透明度放宽范围，不得当作已接受；该页像素检查须照实失败并记录原文，不能靠只锁几何让套件 PASS 掩盖 maxDelta=2。
 # 透明裁剪后再放大沿用同一插值后再 over 的机制，只验收几何，颜色残差照实记录，不把 t93u 自动扩成零差。
 # 缩小或一边放大一边缩小不在本切片验收范围，不在本用例里冒充成功。
 
@@ -103,7 +103,7 @@ $specs = @(
     @{ tag = 'c4-top-y0'; title = 'top 4x3 to 8x6 at y=0'; file = $png4; x = 1828800; y = 0; cx = 76200; cy = 57150; l = 0; t = 25000; r = 0; b = 0; dw = 8; dh = 6; kind = 'pic'; expect = 'zero' }
     @{ tag = 'c4-top-y64'; title = 'top 4x3 to 8x6 at y=64'; file = $png4; x = 1828800; y = 609600; cx = 76200; cy = 57150; l = 0; t = 25000; r = 0; b = 0; dw = 8; dh = 6; kind = 'pic'; expect = 'zero' }
     @{ tag = 'c4-top-y66'; title = 'top 4x3 to 8x6 at y=66'; file = $png4; x = 1828800; y = 628650; cx = 76200; cy = 57150; l = 0; t = 25000; r = 0; b = 0; dw = 8; dh = 6; kind = 'pic'; expect = 'zero' }
-    @{ tag = 'c4-top-y65'; title = 'top 4x3 to 8x6 at y=65 phase'; file = $png4; x = 1828800; y = 619125; cx = 76200; cy = 57150; l = 0; t = 25000; r = 0; b = 0; dw = 8; dh = 6; kind = 'pic'; expect = 'phase' }
+    @{ tag = 'c4-top-y65'; title = 'top 4x3 to 8x6 at y=65 unaccepted opaque phase'; file = $png4; x = 1828800; y = 619125; cx = 76200; cy = 57150; l = 0; t = 25000; r = 0; b = 0; dw = 8; dh = 6; kind = 'pic'; expect = 'phase' }
     @{ tag = 'c4-center-2to4-shape'; title = 'center 2x2 to 4x4 shape blipFill'; file = $png4; x = 1828800; y = 914400; cx = 38100; cy = 38100; l = 25000; t = 25000; r = 25000; b = 25000; dw = 4; dh = 4; kind = 'shape'; expect = 'zero' }
     @{ tag = 'c4-tl-2to4a'; title = 'transparent top-left 2x2 to 4x4'; file = $pngA; x = 1828800; y = 914400; cx = 38100; cy = 38100; l = 0; t = 0; r = 50000; b = 50000; dw = 4; dh = 4; kind = 'pic'; expect = 'geometry' }
 )
@@ -251,7 +251,7 @@ for ($i = 0; $i -lt $specs.Count; $i++) {
         Add-Check ('pptx-preview-crop-scale-{0}-px' -f $spec.tag) $pxOk ('exit={0} {1}' -f $code, $text)
     }
     else {
-        Write-Log ('pptx-preview-crop-scale-{0}-residual (not a MaxDelta=0 gate) exit={1} {2}' -f $spec.tag, $code, $text)
+        Write-Log ('pptx-preview-crop-scale-{0}-residual exit={1} {2}' -f $spec.tag, $code, $text)
         $libBmp = [System.Drawing.Bitmap]::FromFile($lib)
         $goldBmp = [System.Drawing.Bitmap]::FromFile($gold)
         try {
@@ -268,6 +268,10 @@ for ($i = 0; $i -lt $specs.Count; $i++) {
             }
             $msg = if ($notes.Count -gt 0) { ($notes -join '; ') } else { 'geometry anchors ok' }
             Add-Check ('pptx-preview-crop-scale-{0}-geom' -f $spec.tag) $geoOk ('{0}; official {1}' -f $msg, $text)
+            if ($spec.expect -eq 'phase') {
+                $pxOk = ($code -ne 2) -and ($text -match 'differ=0\b') -and ($text -match 'maxDelta=0\b')
+                Add-Check ('pptx-preview-crop-scale-{0}-px' -f $spec.tag) $pxOk ('opaque interpolator phase residual is not in t93u and is not accepted; official {0}' -f $text)
+            }
         }
         finally {
             $libBmp.Dispose()

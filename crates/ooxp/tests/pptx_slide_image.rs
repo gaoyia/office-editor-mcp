@@ -2921,7 +2921,8 @@ fn crop_then_scale_up_matches_office_on_windows() {
 #[test]
 fn crop_then_scale_up_dest_y_phase_matches_office_on_windows() {
     // 顶裁 4x3→8x6：官方与 GDI+ 在 y=0/64 走低相位，y=66/96 走高相位，都差 0。
-    // y=65 官方已切到高相位，GDI+ 仍是低相位，颜色最多差 2，几何仍须对齐。
+    // y=65 官方已切到高相位、GDI+ 仍是低相位。这是未接受的不透明插值相位残差，
+    // 不在 t93u 透明度放宽范围；测试只锁几何，并防止残差变大，不把本切片标完成。
     let png4 = unique_4x4_png();
     let bg = [0xAA, 0xBB, 0xCC];
     let x = 1828800i64;
@@ -3003,7 +3004,7 @@ fn crop_then_scale_up_dest_y_phase_matches_office_on_windows() {
     eprintln!("crop-scale dest_y=65 vs official high-phase differ={differ} maxDelta={max_delta}");
     assert!(
         max_delta <= 2,
-        "y=65 residual larger than the known phase offset maxDelta={max_delta}"
+        "unaccepted y=65 opaque phase residual grew past known official maxDelta={max_delta}"
     );
 }
 
