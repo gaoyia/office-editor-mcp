@@ -1,6 +1,6 @@
 //! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的不透明拉丁 Calibri 正文，画成 PNG。
 //! 宽高按节的 `w:pgSz`，96 dpi，twip×96/1440 四舍五入。
-//! 有表、图、页眉页脚、第二段正文，或还没对齐的行距时不画。同一段拉丁空格换行已画；字形灰度仍暂缓。
+//! 有表、图、页眉页脚，或还没对齐的行距/分页控制时不画。单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 
@@ -12,8 +12,10 @@ use crate::xml::{self, Element, Node};
 use super::export::ExportedMedia;
 use super::styles;
 
-/// Calibri 11 磅单倍行距。hhea、typo、win 的行距单位都是 2500/2048。
-/// 分子是 11 磅 × 20 twip × 2500。
+/// Calibri 单倍行距倍数：本机 calibri.ttf 的 hhea / OS/2 typo / win 行框之和均为 **2500**，
+/// unitsPerEm = **2048**（字体指标，非样本拟合）。
+/// 半磅字号 sz 下行高 twip = sz * 20/2 * 2500 / 2048 = sz * 25000 / 2048。
+/// LINE_NUM = 默认 11 磅（sz=22）空段分页分子：22 * 25000。
 const LINE_NUM: u64 = 550_000;
 const LINE_DEN: u64 = 2048;
 const MAX_PX: u64 = 4096;
@@ -25,7 +27,7 @@ pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
     let doc_part = opc::office_document_part(&pkg)?;
     let doc = xml::parse(pkg.get(&doc_part)?)?;
     let layout = layout_of(&pkg, &doc_part, &doc.root)?;
-    if page > layout.pages {
+    if page == 0 || page as usize > layout.pages.len() {
         return Err(Error::with_path(ErrorKind::PageNotFound { n: page }, "id"));
     }
     let png = paint_page(&layout, page)?;
@@ -38,9 +40,8 @@ pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
 struct Layout {
     width: u32,
     height: u32,
-    pages: u32,
-    /// 单段换行后的各行。`None` 表示空白页。
-    lines: Option<Vec<TextLine>>,
+    /// 每页要画的行。下标 0 = page:1。
+    pages: Vec<Vec<TextLine>>,
 }
 
 struct TextLine {
@@ -56,8 +57,9 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
         return Err(unsupported());
     }
     let body = root.child_by_local("body").ok_or_else(unsupported)?;
-    let (paras, text, sect) = body_story(body)?;
-    if !sect_is_plain(sect, text.is_some()) || !uses_default_calibri(pkg, doc_part)? {
+    let (story, sect) = body_story(body)?;
+    let has_text = story.iter().any(|p| matches!(p, StoryPara::Text(_)));
+    if !sect_is_plain(sect, has_text) || !uses_default_calibri(pkg, doc_part)? {
         return Err(unsupported());
     }
     let page_w = page_twip(sect, "w")?;
@@ -80,73 +82,135 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
     }
     let width = twip_px(page_w)?;
     let height = twip_px(page_h)?;
-    let lines = match text {
-        Some(line) => {
-            let left_twip = left.saturating_add(line.indent_twip);
-            let top_twip = top.saturating_add(line.before_twip);
-            if left_twip < 0 || top_twip < 0 {
-                return Err(unsupported());
-            }
-            // 正文区内从段前之后剩余高度：body_h - before。
-            let remain_h = body_h.saturating_sub(line.before_twip.max(0));
-            // 可排宽度扣左/start 缩进，与 Word 正文区一致。
-            let content_w = body_w.saturating_sub(line.indent_twip.max(0));
-            if content_w <= 0 {
-                return Err(unsupported());
-            }
-            Some(layout_wrapped_lines(
-                &line.text, line.sz, left_twip, top_twip, content_w, remain_h,
-            )?)
-        }
-        None => None,
-    };
-    let pages = match &lines {
-        Some(_) => 1,
-        None => page_count(paras, body_h as u64)?,
-    };
+    let pages = layout_story(&story, left, top, body_w, body_h)?;
+    if pages.is_empty() {
+        return Err(unsupported());
+    }
     Ok(Layout {
         width,
         height,
         pages,
-        lines,
     })
 }
 
-/// 单段拉丁按空格换行。行距与空段分页同一档（`LINE_NUM`/`LINE_DEN` twip）。
-/// 单词本身宽于正文区、或换行后总高度超出本页剩余正文高，仍 `NotImplemented`。
-fn layout_wrapped_lines(
-    text: &str,
-    sz: u32,
-    left_twip: i64,
-    top_twip: i64,
-    body_w_twip: i64,
-    remain_body_h_twip: i64,
-) -> Result<Vec<TextLine>, Error> {
-    let rows = wrap_latin_lines(text, sz, body_w_twip)?;
-    let need = line_offset_twip(rows.len() as u64, sz)?;
-    if need > remain_body_h_twip {
+fn ensure_space(
+    pages: &mut Vec<Vec<TextLine>>,
+    y: &mut i64,
+    at_page_top: &mut bool,
+    margin_top: i64,
+    page_bottom: i64,
+    need: i64,
+) -> Result<(), Error> {
+    if need <= 0 {
+        return Ok(());
+    }
+    if *y + need <= page_bottom {
+        return Ok(());
+    }
+    if *at_page_top {
         return Err(unsupported());
     }
-    let mut out = Vec::with_capacity(rows.len());
-    for (i, row) in rows.into_iter().enumerate() {
-        let y = top_twip.saturating_add(line_offset_twip(i as u64, sz)?);
-        out.push(TextLine {
-            text: row,
-            sz,
-            left_twip,
-            top_twip: y,
-            body_w_twip,
-        });
+    pages.push(Vec::new());
+    *y = margin_top;
+    *at_page_top = true;
+    if *y + need > page_bottom {
+        return Err(unsupported());
     }
-    Ok(out)
+    Ok(())
 }
 
-/// ????????????? `2500/2048`???????????11 ? ? `sz=22` ? `LINE_NUM`??
+/// 多段流式排版。行距见 `line_advance_twip`（Calibri TTF 2500/2048）。
+/// 段前在段起始计入一次；换到新页顶后不再补段前。空段占一行默认 11 磅行高。
+fn layout_story(
+    story: &[StoryPara],
+    margin_left: i64,
+    margin_top: i64,
+    body_w: i64,
+    body_h: i64,
+) -> Result<Vec<Vec<TextLine>>, Error> {
+    // ??????????????floor(body_h * 2048 / 550000) ? ? ???
+    // ?? 52 ????????????/???????
+    let adv11 = line_advance_twip(DEFAULT_SZ)?;
+    let lines_fit = (body_h as u64).saturating_mul(LINE_DEN) / LINE_NUM;
+    let usable = (lines_fit as i64).saturating_mul(adv11).min(body_h);
+    let page_bottom = margin_top.saturating_add(usable);
+    let mut pages: Vec<Vec<TextLine>> = vec![Vec::new()];
+    let mut y = margin_top;
+    let mut at_page_top = true;
+
+    for para in story {
+        match para {
+            StoryPara::Empty { before, after } => {
+                let adv = adv11;
+                let before_use = (*before).max(0);
+                ensure_space(
+                    &mut pages,
+                    &mut y,
+                    &mut at_page_top,
+                    margin_top,
+                    page_bottom,
+                    before_use.saturating_add(adv),
+                )?;
+                // 换页后段前仍计（文档首页/段起始与 Word COM 一致；见 first-before 探针）。
+                let before_use = (*before).max(0);
+                y = y.saturating_add(before_use).saturating_add(adv);
+                at_page_top = false;
+                y = y.saturating_add((*after).max(0));
+            }
+            StoryPara::Text(line) => {
+                let content_w = body_w.saturating_sub(line.indent_twip.max(0));
+                if content_w <= 0 {
+                    return Err(unsupported());
+                }
+                let left_twip = margin_left.saturating_add(line.indent_twip);
+                if left_twip < 0 {
+                    return Err(unsupported());
+                }
+                let rows = wrap_latin_lines(&line.text, line.sz, content_w)?;
+                let adv = line_advance_twip(line.sz)?;
+                for (i, row) in rows.into_iter().enumerate() {
+                    let lead = if i == 0 { line.before_twip.max(0) } else { 0 };
+                    ensure_space(
+                        &mut pages,
+                        &mut y,
+                        &mut at_page_top,
+                        margin_top,
+                        page_bottom,
+                        lead.saturating_add(adv),
+                    )?;
+                    y = y.saturating_add(lead);
+                    pages.last_mut().ok_or_else(unsupported)?.push(TextLine {
+                        text: row,
+                        sz: line.sz,
+                        left_twip,
+                        top_twip: y,
+                        body_w_twip: content_w,
+                    });
+                    y = y.saturating_add(adv);
+                    at_page_top = false;
+                }
+                y = y.saturating_add(line.after_twip.max(0));
+            }
+        }
+    }
+    Ok(pages)
+}
+
+fn line_advance_twip(sz: u32) -> Result<i64, Error> {
+    line_offset_twip(1, sz)
+}
+
+/// Calibri 单倍：`sz` 半磅 × 25000 / 2048 twip（见文件头 Calibri TTF 2500/2048）。
 fn line_offset_twip(line_index: u64, sz: u32) -> Result<i64, Error> {
-    let n = line_index
-        .saturating_mul(u64::from(sz))
-        .saturating_mul(25_000)
-        / LINE_DEN;
+    // DEFAULT_SZ 走 LINE_NUM，与历史空段分页同一整数除法路径。
+    let n = if sz == DEFAULT_SZ {
+        line_index.saturating_mul(LINE_NUM) / LINE_DEN
+    } else {
+        line_index
+            .saturating_mul(u64::from(sz))
+            .saturating_mul(25_000)
+            / LINE_DEN
+    };
     i64::try_from(n).map_err(|_| unsupported())
 }
 
@@ -227,11 +291,16 @@ struct PendingText {
     sz: u32,
     indent_twip: i64,
     before_twip: i64,
+    after_twip: i64,
 }
 
-fn body_story(body: &Element) -> Result<(u32, Option<PendingText>, &Element), Error> {
-    let mut paras = 0u32;
-    let mut text: Option<PendingText> = None;
+enum StoryPara {
+    Empty { before: i64, after: i64 },
+    Text(PendingText),
+}
+
+fn body_story(body: &Element) -> Result<(Vec<StoryPara>, &Element), Error> {
+    let mut story: Vec<StoryPara> = Vec::new();
     let mut sect: Option<&Element> = None;
     let children: Vec<&Element> = body.element_children().collect();
     for (index, child) in children.iter().copied().enumerate() {
@@ -240,21 +309,7 @@ fn body_story(body: &Element) -> Result<(u32, Option<PendingText>, &Element), Er
                 if sect.is_some() {
                     return Err(unsupported());
                 }
-                match paragraph_kind(child)? {
-                    ParaKind::Empty => {
-                        if text.is_some() {
-                            return Err(unsupported());
-                        }
-                        paras = paras.saturating_add(1);
-                    }
-                    ParaKind::Text(line) => {
-                        if text.is_some() || paras != 0 {
-                            return Err(unsupported());
-                        }
-                        text = Some(line);
-                        paras = 1;
-                    }
-                }
+                story.push(paragraph_kind(child)?);
             }
             "sectPr" => {
                 if sect.is_some() || index + 1 != children.len() {
@@ -268,22 +323,21 @@ fn body_story(body: &Element) -> Result<(u32, Option<PendingText>, &Element), Er
     let Some(sect) = sect else {
         return Err(unsupported());
     };
-    Ok((paras, text, sect))
+    if story.is_empty() {
+        return Err(unsupported());
+    }
+    Ok((story, sect))
 }
 
-enum ParaKind {
-    Empty,
-    Text(PendingText),
-}
-
-fn paragraph_kind(p: &Element) -> Result<ParaKind, Error> {
+fn paragraph_kind(p: &Element) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
     let mut before = 0i64;
+    let mut after = 0i64;
     let mut run: Option<&Element> = None;
     for child in p.element_children() {
         match child.local_name() {
             "pPr" => {
-                parse_plain_ppr(child, &mut indent, &mut before)?;
+                parse_plain_ppr(child, &mut indent, &mut before, &mut after)?;
             }
             "r" if run.is_none() => run = Some(child),
             _ => return Err(unsupported()),
@@ -297,21 +351,27 @@ fn paragraph_kind(p: &Element) -> Result<ParaKind, Error> {
         }) {
             return Err(unsupported());
         }
-        return Ok(ParaKind::Empty);
+        return Ok(StoryPara::Empty { before, after });
     };
     let (text, sz) = plain_run(run)?;
     if text.is_empty() {
-        return Ok(ParaKind::Empty);
+        return Ok(StoryPara::Empty { before, after });
     }
-    Ok(ParaKind::Text(PendingText {
+    Ok(StoryPara::Text(PendingText {
         text,
         sz,
         indent_twip: indent,
         before_twip: before,
+        after_twip: after,
     }))
 }
 
-fn parse_plain_ppr(ppr: &Element, indent: &mut i64, before: &mut i64) -> Result<(), Error> {
+fn parse_plain_ppr(
+    ppr: &Element,
+    indent: &mut i64,
+    before: &mut i64,
+    after: &mut i64,
+) -> Result<(), Error> {
     for child in ppr.element_children() {
         match child.local_name() {
             "ind" => {
@@ -345,16 +405,14 @@ fn parse_plain_ppr(ppr: &Element, indent: &mut i64, before: &mut i64) -> Result<
                     let local = local_of(name);
                     match local {
                         "before" => *before = parse_twip(value)?,
-                        "after" => {
-                            if parse_twip(value)? != 0 {
-                                return Err(unsupported());
-                            }
-                        }
+                        "after" => *after = parse_twip(value)?,
                         "beforeAutospacing" | "afterAutospacing" => {
                             if value != "0" {
                                 return Err(unsupported());
                             }
                         }
+                        // 显式 line/lineRule：本切片只接受缺省单倍（Calibri 2500/2048）。
+                        "line" | "lineRule" => return Err(unsupported()),
                         _ => return Err(unsupported()),
                     }
                 }
@@ -370,7 +428,6 @@ fn parse_plain_ppr(ppr: &Element, indent: &mut i64, before: &mut i64) -> Result<
     }
     Ok(())
 }
-
 fn plain_run(run: &Element) -> Result<(String, u32), Error> {
     let mut sz = DEFAULT_SZ;
     let mut text = String::new();
@@ -563,16 +620,6 @@ fn margin(sect: &Element, local: &str) -> Result<i64, Error> {
     }
 }
 
-fn page_count(paras: u32, body_twips: u64) -> Result<u32, Error> {
-    let per = (body_twips.saturating_mul(LINE_DEN) / LINE_NUM) as u32;
-    if per == 0 {
-        return Err(unsupported());
-    }
-    let paras = paras.max(1);
-    Ok(paras.div_ceil(per))
-}
-
-/// `twip × 96 / 1440` 就是 `twip / 15`。正数四舍五入用 `(twip + 7) / 15`。
 fn twip_px(twip: i64) -> Result<u32, Error> {
     let n = u64::try_from(twip).map_err(|_| unsupported())?;
     let px = (n + 7) / 15;
@@ -584,11 +631,10 @@ fn twip_px(twip: i64) -> Result<u32, Error> {
 
 fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     let mut rgb = vec![255u8; (layout.width as usize) * (layout.height as usize) * 3];
-    if page == 1 {
-        if let Some(lines) = &layout.lines {
-            for line in lines {
-                paint_text(&mut rgb, layout.width, layout.height, line)?;
-            }
+    let idx = (page as usize).saturating_sub(1);
+    if let Some(lines) = layout.pages.get(idx) {
+        for line in lines {
+            paint_text(&mut rgb, layout.width, layout.height, line)?;
         }
     }
     encode_png(layout.width, layout.height, &rgb)
