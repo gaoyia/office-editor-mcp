@@ -11,7 +11,7 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
-use crate::xlsx::{fill_device_ellipse, Face};
+use crate::xlsx::{fill_device_ellipse, fill_device_round_rect, Face};
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const DPI: f64 = 96.0;
@@ -606,21 +606,38 @@ fn paint_round(
             );
         }
     }
-    fill_round(
-        rgb,
-        width,
-        height,
-        round.x,
-        round.y,
-        round.w,
-        round.h,
-        round.edge_r,
-        round.edge_b,
-        round.radius,
-        inset,
-        round.fill,
-        round.grad,
-    );
+    if inset == 0
+        && fill_round_device(
+            rgb,
+            width,
+            height,
+            round.x,
+            round.y,
+            round.w,
+            round.h,
+            round.radius_f,
+            round.fill,
+            round.grad,
+        )
+    {
+        // 无描边时用 GDI+ 圆角覆盖率铺渐变或纯色。
+    } else {
+        fill_round(
+            rgb,
+            width,
+            height,
+            round.x,
+            round.y,
+            round.w,
+            round.h,
+            round.edge_r,
+            round.edge_b,
+            round.radius,
+            inset,
+            round.fill,
+            round.grad,
+        );
+    }
     if let Some(color) = round.stroke {
         stroke_round(
             rgb,
@@ -1465,19 +1482,9 @@ fn piece_width(line: &TextLine, text: &str) -> f64 {
 }
 
 fn line_em(line: &TextLine) -> f64 {
-    let mut em = 0.0f64;
-    let mut seen: Vec<String> = Vec::new();
-    for ch in line.text.chars() {
-        let name = span_name(line, ch);
-        if seen.iter().any(|item| item == &name) {
-            continue;
-        }
-        seen.push(name.clone());
-        if let Some(face) = Face::open_named(line.px, line.bold, &name) {
-            em = em.max(face.em_box());
-        }
-    }
-    em
+    // Office 16.0 未写 lnSpc 时，18/36/72 磅 Calibri 行距是 29/58/115，合 1.2 倍字号像素经游标累加后四舍五入。
+    // 不用 GDI tmHeight（59/29/117），以免打乱图表共用的 Face::em_box。
+    f64::from(line.px) * 1.2
 }
 
 fn wrap_text(text: &str, max_w: f64, width: impl Fn(&str) -> f64) -> Vec<String> {
@@ -1667,10 +1674,39 @@ fn srgb_mix(start: u8, end: u8, share: f64) -> u8 {
 /// 画椭圆。有描边时外接矩形右和下各加 1 像素，和 PowerPoint 16.0 序号圆一致。
 /// 边缘交给 GDI+ 的抗锯齿。GDI+ 不可用时退回半像素覆盖。
 fn fill_ellipse(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) {
+    if oval.grad.is_some() && oval.stroke.is_none() && fill_ellipse_device_grad(rgb, width, height, oval)
+    {
+        return;
+    }
     if oval.grad.is_none() && fill_ellipse_device(rgb, width, height, oval) {
         return;
     }
     fill_ellipse_ramp(rgb, width, height, oval);
+}
+
+/// 渐变椭圆用 GDI+ 覆盖率，再按像素取渐变色。软件斜坡对不上 Office 16.0 的抗锯齿边。
+fn fill_ellipse_device_grad(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) -> bool {
+    if !oval.fill.on {
+        return true;
+    }
+    let Some((x, y, w, h)) = ellipse_device_box(oval, false) else {
+        return true;
+    };
+    let Some(map) = ellipse_coverage(x, y, w, h) else {
+        return false;
+    };
+    for ly in 0..map.h {
+        for lx in 0..map.w {
+            let cov = map.cov[ly as usize * map.w as usize + lx as usize];
+            if cov == 0 {
+                continue;
+            }
+            let px = map.x + lx;
+            let py = map.y + ly;
+            paint_grad_cover(rgb, width, height, px, py, oval.grad, oval.fill, x, y, w, h, cov);
+        }
+    }
+    true
 }
 
 /// 左上角和右下角四舍五入。有描边时宽高再加 1 像素。
@@ -1935,6 +1971,66 @@ fn ellipse_cover(px: i32, py: i32, cx: f64, cy: f64, rx: f64, ry: f64) -> f64 {
 
 fn cover_byte(cover: f64, alpha: u8) -> u8 {
     (cover * f64::from(alpha)).round().clamp(0.0, 255.0) as u8
+}
+
+fn paint_grad_cover(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    px: i32,
+    py: i32,
+    grad: Option<LinearGrad>,
+    fill: RgbaFill,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    cov: u8,
+) {
+    if cov == 0 {
+        return;
+    }
+    if let Some(grad) = grad {
+        if grad_is_translucent(&grad) {
+            let (color, alpha) = grad_at_f(&grad, px - x, py - y, w, h);
+            blend_f(
+                rgb,
+                width,
+                height,
+                px,
+                py,
+                color,
+                alpha * f64::from(cov) / 255.0,
+            );
+        } else {
+            let (color, alpha) = grad_at_px(&grad, px, py, x, y, w, h);
+            let cov = ((u16::from(cov) * u16::from(alpha) + 127) / 255) as u8;
+            blend(rgb, width, height, px, py, color, cov);
+        }
+        return;
+    }
+    let cov = ((u16::from(cov) * u16::from(fill.alpha) + 127) / 255) as u8;
+    blend(rgb, width, height, px, py, fill.color, cov);
+}
+
+fn fill_round_device(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    radius_f: f64,
+    fill: RgbaFill,
+    grad: Option<LinearGrad>,
+) -> bool {
+    if !fill.on {
+        return true;
+    }
+    fill_device_round_rect(x, y, w, h, radius_f, |px, py, cov| {
+        paint_grad_cover(rgb, width, height, px, py, grad, fill, x, y, w, h, cov);
+    })
 }
 
 fn fill_round(
@@ -3360,5 +3456,24 @@ mod tests {
         assert_eq!(at(95), [85, 93, 229]);
         assert_ne!(at(24), at(0));
         assert_ne!(at(24), at(95));
+    }
+
+    #[test]
+    fn default_line_spacing_is_120_percent_of_em() {
+        let line = |px: f32| TextLine {
+            text: "AAAA".to_string(),
+            px,
+            bold: false,
+            color: [0, 0, 0],
+            latin: "Calibri".to_string(),
+            ea: String::new(),
+            cs: String::new(),
+            sym: String::new(),
+            lang: String::new(),
+            align: "l".to_string(),
+        };
+        assert!((line_em(&line(24.0)) - 28.8).abs() < 1e-9);
+        assert!((line_em(&line(48.0)) - 57.6).abs() < 1e-9);
+        assert!((line_em(&line(96.0)) - 115.2).abs() < 1e-9);
     }
 }

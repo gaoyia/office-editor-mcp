@@ -748,6 +748,27 @@ mod win {
             width: f32,
             height: f32,
         ) -> i32;
+        fn GdipCreatePath(mode: i32, path: *mut *mut c_void) -> i32;
+        fn GdipAddPathArc(
+            path: *mut c_void,
+            x: f32,
+            y: f32,
+            width: f32,
+            height: f32,
+            start_angle: f32,
+            sweep: f32,
+        ) -> i32;
+        fn GdipClosePathFigure(path: *mut c_void) -> i32;
+        fn GdipFillPath(graphics: *mut c_void, brush: *mut c_void, path: *mut c_void) -> i32;
+        fn GdipDeletePath(path: *mut c_void) -> i32;
+        fn GdipFillRectangle(
+            graphics: *mut c_void,
+            brush: *mut c_void,
+            x: f32,
+            y: f32,
+            width: f32,
+            height: f32,
+        ) -> i32;
     }
 
     const SMOOTHING_ANTIALIAS: i32 = 4;
@@ -800,6 +821,109 @@ mod win {
             }
             let status =
                 GdipFillEllipse(graphics, brush, pad as f32, pad as f32, w as f32, h as f32);
+            GdipDeleteBrush(brush);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            status == 0
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..bh {
+            for px in 0..bw {
+                let row = pixels[py as usize * bw as usize + px as usize];
+                let red = ((row >> 16) & 0xff) as u8;
+                let green = ((row >> 8) & 0xff) as u8;
+                let blue = (row & 0xff) as u8;
+                if red == 255 && green == 255 && blue == 255 {
+                    continue;
+                }
+                let cov = (255 - u16::from(red))
+                    .max(255 - u16::from(green))
+                    .max(255 - u16::from(blue))
+                    .min(255) as u8;
+                if cov == 0 {
+                    continue;
+                }
+                blend(x - pad + px, y - pad + py, cov);
+            }
+        }
+        true
+    }
+
+    /// 用与椭圆相同的 GDI+ 抗锯齿和半像素偏移，填充圆角矩形。半径不超过短边的一半。
+    pub fn fill_device_round_rect(
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        radius: f64,
+        mut blend: impl FnMut(i32, i32, u8),
+    ) -> bool {
+        if w <= 0 || h <= 0 || gdiplus_token().is_none() {
+            return false;
+        }
+        let pad = 2i32;
+        let bw = w + pad * 2;
+        let bh = h + pad * 2;
+        let mut pixels = vec![0xFFFF_FFFFu32; (bw as usize) * (bh as usize)];
+        let max_r = f64::from(w.min(h)) / 2.0;
+        let r = radius.clamp(0.0, max_r) as f32;
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                bw,
+                bh,
+                bw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, PIXEL_OFFSET_HALF);
+            let mut brush = std::ptr::null_mut();
+            if GdipCreateSolidFill(0xFF00_0000, &mut brush) != 0 || brush.is_null() {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            let fx = pad as f32;
+            let fy = pad as f32;
+            let fw = w as f32;
+            let fh = h as f32;
+            let status = if r <= 0.0 {
+                GdipFillRectangle(graphics, brush, fx, fy, fw, fh)
+            } else {
+                let d = r * 2.0;
+                let mut path = std::ptr::null_mut();
+                let ok = GdipCreatePath(0, &mut path) == 0
+                    && !path.is_null()
+                    && GdipAddPathArc(path, fx, fy, d, d, 180.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx + fw - d, fy, d, d, 270.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx + fw - d, fy + fh - d, d, d, 0.0, 90.0) == 0
+                    && GdipAddPathArc(path, fx, fy + fh - d, d, d, 90.0, 90.0) == 0
+                    && GdipClosePathFigure(path) == 0
+                    && GdipFillPath(graphics, brush, path) == 0;
+                if !path.is_null() {
+                    GdipDeletePath(path);
+                }
+                if ok {
+                    0
+                } else {
+                    1
+                }
+            };
             GdipDeleteBrush(brush);
             GdipDeleteGraphics(graphics);
             GdipDisposeImage(bitmap);
@@ -945,7 +1069,7 @@ mod win {
 }
 
 #[cfg(windows)]
-pub use win::{fill_device_ellipse, Face};
+pub use win::{fill_device_ellipse, fill_device_round_rect, Face};
 
 #[cfg(not(windows))]
 pub struct Face;
@@ -1000,5 +1124,17 @@ impl Face {
 
 #[cfg(not(windows))]
 pub fn fill_device_ellipse(_: i32, _: i32, _: i32, _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_round_rect(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: f64,
+    _: impl FnMut(i32, i32, u8),
+) -> bool {
     false
 }
