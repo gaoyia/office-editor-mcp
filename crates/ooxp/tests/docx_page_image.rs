@@ -1,4 +1,4 @@
-//! exportPageImage：没有字的页画成白 PNG。单节单段（可拉丁空格换行）的不透明 Calibri 正文可画。
+//! exportPageImage：没有字的页画成白 PNG。单节多段（可空段、段前段后、左缩进、拉丁空格换行）不透明 Calibri 可画；显式 line/lineRule 仍 NI。
 
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -327,7 +327,7 @@ fn wrap11_breaks_after_eleven_on_first_line() {
 
 #[cfg(windows)]
 #[test]
-fn second_paragraph_is_not_drawn() {
+fn two_short_paragraphs_stack_on_one_page() {
     let src = tmp("two-para");
     run_ok(json!({
         "schemaVersion": 1,
@@ -335,8 +335,101 @@ fn second_paragraph_is_not_drawn() {
         "path": src.to_string_lossy(),
         "document": { "paragraphs": [{ "text": "A" }, { "text": "B" }] }
     }));
-    let err = export(&src, "page:1").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let png = export(&src, "page:1").unwrap();
+    let (w, h, rgb) = decode_png(&png);
+    assert_eq!((w, h), (794, 1123));
+    let (x, y, bw, bh) = ink_box(&rgb, w, h);
+    assert_eq!(x, 96);
+    assert_eq!(y, 101);
+    assert!(bh > 20, "expected two-line stack, got {bw}x{bh}");
+}
+
+#[cfg(windows)]
+#[test]
+fn empty_paragraph_between_texts_adds_a_line() {
+    let src = tmp("empty-mid");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "A" }, { "text": "" }, { "text": "B" }] }
+    }));
+    let png = export(&src, "page:1").unwrap();
+    let (w, h, rgb) = decode_png(&png);
+    let (_x, y, _bw, bh) = ink_box(&rgb, w, h);
+    assert!(bh > 30, "expected empty gap, y={y} h={bh}");
+}
+
+#[cfg(windows)]
+#[test]
+fn paragraph_after_spacing_pushes_second_line() {
+    let src = tmp("after-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "A" }, { "text": "B" }] }
+    }));
+    let base_png = export(&src, "page:1").unwrap();
+    let (_, _, brgb) = decode_png(&base_png);
+    let (_bx, _by, _bw, bh0) = ink_box(&brgb, 794, 1123);
+
+    let pid = first_para_id(&src);
+    let spaced = apply_ops(
+        &src,
+        json!([{ "op": "setParaFormat", "id": pid, "after": 240 }]),
+    );
+    let (_, _, srgb) = decode_png(&export(&spaced, "page:1").unwrap());
+    let (_sx, _sy, _sw, bh1) = ink_box(&srgb, 794, 1123);
+    // COM: after=12pt ≈16px at 96dpi；段后把第二行墨迹盒拉高。
+    assert!(
+        bh1 >= bh0 + 14,
+        "after=240 should enlarge stack by ~16px, base={bh0} spaced={bh1}"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn second_paragraph_left_indent_shifts_x() {
+    let src = tmp("indent-b-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "A" }, { "text": "B" }] }
+    }));
+    let RunOutput::Inspect(tree) = run_ok(json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "format": "docx",
+        "scope": { "from": 1, "maxParas": 4 }
+    })) else {
+        panic!("expected inspect");
+    };
+    let pid = tree["paragraphs"][1]["id"].as_str().unwrap().to_string();
+    let indented = apply_ops(
+        &src,
+        json!([{ "op": "setParaFormat", "id": pid, "left": 720 }]),
+    );
+    let (_, _, rgb) = decode_png(&export(&indented, "page:1").unwrap());
+    let (x, y, bw, bh) = ink_box(&rgb, 794, 1123);
+    assert_eq!(x, 96, "first letter stays at margin");
+    assert!(bw >= 48, "ink should span to indented B at x=144, got {bw}");
+    assert!(bh > 20, "two lines y={y} h={bh}");
+}
+
+#[cfg(windows)]
+#[test]
+fn explicit_line_spacing_is_not_implemented() {
+    let src = create_text("line-ni-src", "A");
+    let pid = first_para_id(&src);
+    let spaced = apply_ops(
+        &src,
+        json!([{ "op": "setParaFormat", "id": pid, "line": 480, "lineRule": "auto" }]),
+    );
+    let err = export(&spaced, "page:1").unwrap_err();
+    assert_eq!(err.code(), ooxp::ErrorCode::NotImplemented);
 }
 
 #[cfg(not(windows))]
