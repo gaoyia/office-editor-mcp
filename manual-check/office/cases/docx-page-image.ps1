@@ -1,5 +1,8 @@
 ﻿# docx 没有字的页。金样是 Word 16.0 导出 PDF，再按 96 dpi 栅格化。
 # 像素差用 pixel-diff 标红。红区要回绘制引擎修，不要加大 MaxDelta。
+# 2026-11-17 04:32:46–04:40:54 与 04:41:16–04:43:01（Asia/Shanghai）：Word 16.0 对空白 A4 的
+# ExportAsFixedFormat(..., 17) 与 SaveAs2(..., 17) 都在写出 PDF 前持续占 CPU、不落盘。
+# 本用例仍走该公开金样路径；未改容差、未改金样、未改用私有接口。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -27,10 +30,15 @@ $word = Ensure-MsWord $src
 $doc = $null
 $pdf = Get-OutPath 'docx-page-image.pdf'
 $gold = Get-OutPath 'docx-page-image-gold.png'
+Write-Log ("docx-page-image after Ensure docs=" + $word.Documents.Count + " visible=" + $word.Visible + " cap=" + $word.Caption)
 try {
+    Write-Log ("docx-page-image opening " + $src)
     $doc = Open-WordDoc $word $src
+    Write-Log ("docx-page-image opened name=" + $doc.Name + " full=" + $doc.FullName)
     if (Test-Path $pdf) { Remove-Item -Force $pdf }
+    Write-Log ("docx-page-image export pdf=" + $pdf)
     $doc.ExportAsFixedFormat($pdf, 17)
+    Write-Log ("docx-page-image export done exists=" + (Test-Path $pdf))
     Add-Check 'docx-page-image-pdf' (Test-Path $pdf) "pdf=$pdf"
 }
 finally {
@@ -85,10 +93,14 @@ public static class OoxpWordOpen {
 $pdf2 = Get-OutPath 'docx-page-image-52.pdf'
 $gold2 = Get-OutPath 'docx-page-image-52-gold.png'
 $doc2 = $null
+Write-Log ("docx-page-image-52 opening " + $many + " docs=" + $word.Documents.Count)
 try {
     $doc2 = [OoxpWordOpen]::Open($word, $many)
+    Write-Log ("docx-page-image-52 opened name=" + $doc2.Name)
     if (Test-Path $pdf2) { Remove-Item -Force $pdf2 }
+    Write-Log ("docx-page-image-52 export pdf=" + $pdf2)
     $doc2.ExportAsFixedFormat($pdf2, 17)
+    Write-Log ("docx-page-image-52 export done exists=" + (Test-Path $pdf2))
     Add-Check 'docx-page-image-52-pdf' (Test-Path $pdf2) "pdf=$pdf2"
 }
 finally { Close-WordDoc $doc2 }
