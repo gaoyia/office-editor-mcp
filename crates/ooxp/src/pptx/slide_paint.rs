@@ -919,6 +919,11 @@ fn paint_rect(
         paint_tx(sp, x, y, w, h, rgb, width, height);
         return Ok(());
     }
+    if let Some((color, alpha, x, y, w, h)) = translucent_rect(sp, chain) {
+        blend_rect(rgb, width, height, x, y, w, h, color, alpha);
+        paint_tx(sp, x, y, w, h, rgb, width, height);
+        return Ok(());
+    }
     if let Some((x, y, w, h)) = plain_box(sp, chain) {
         if let Some(color) = scheme_rect_color(pkg, part, sp_pr)? {
             fill_rect(rgb, width, height, x, y, w, h, color);
@@ -2858,6 +2863,33 @@ fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3]
     }
 }
 
+/// Office 16.0 / GDI+ 默认 SourceOver：源和目标各自按覆盖率四舍五入后再相加。
+/// 一次除法的 `blend` 在 50% 实心矩形上会差 1（`EE4455` 叠 `AABBCC` 得到 `CC7F90` 而不是 `CC7F91`），不能用在这里。
+fn blend_src_over(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    color: [u8; 3],
+    cov: u8,
+) {
+    if cov == 0 || x < 0 || y < 0 || x >= width as i32 || y >= height as i32 {
+        return;
+    }
+    let i = (y as usize * width as usize + x as usize) * 3;
+    if cov == 255 {
+        rgb[i..i + 3].copy_from_slice(&color);
+        return;
+    }
+    let c = u16::from(cov);
+    let inv = 255 - c;
+    for (k, src) in color.into_iter().enumerate() {
+        let dst = u16::from(rgb[i + k]);
+        rgb[i + k] = ((u16::from(src) * c + 127) / 255 + (dst * inv + 127) / 255) as u8;
+    }
+}
+
 /// 半透明渐变用浮点 sRGB 源色和 0..1 的 alpha 叠在已有像素上。
 /// Office 16.0 对 96 宽、alpha 50000 的红到蓝，端点和中点与四舍五入后的结果一致。
 fn blend_f(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [f64; 3], alpha: f64) {
@@ -2997,6 +3029,20 @@ fn plain_rect(
     let color = opaque_rgb(sp_pr.child_by_local("solidFill")?)?;
     let (x, y, w, h) = plain_box(sp, chain)?;
     Some((color, x, y, w, h))
+}
+
+/// 有 `a:alpha` 且不是不透明的 `srgbClr` 纯色矩形。几何与 `plain_rect` 相同。
+fn translucent_rect(
+    sp: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Option<([u8; 3], u8, i32, i32, i32, i32)> {
+    let sp_pr = sp.child_by_local("spPr")?;
+    let (color, alpha) = rgba_of(sp_pr.child_by_local("solidFill")?)?;
+    if alpha == 255 {
+        return None;
+    }
+    let (x, y, w, h) = plain_box(sp, chain)?;
+    Some((color, alpha, x, y, w, h))
 }
 
 /// 没有效果、没有描边的矩形像素框。填充另判。
@@ -3504,6 +3550,32 @@ fn fill_rect(
             }
             let i = (py as usize * width as usize + px as usize) * 3;
             rgb[i..i + 3].copy_from_slice(&color);
+        }
+    }
+}
+
+fn blend_rect(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    color: [u8; 3],
+    alpha: u8,
+) {
+    for row in 0..h {
+        let py = y + row;
+        if py < 0 || py >= height as i32 {
+            continue;
+        }
+        for col in 0..w {
+            let px = x + col;
+            if px < 0 || px >= width as i32 {
+                continue;
+            }
+            blend_src_over(rgb, width, height, px, py, color, alpha);
         }
     }
 }
@@ -4513,6 +4585,123 @@ mod tests {
         assert_eq!(pixel(&on_bg, w, 96, 96), [36, 38, 41]);
         assert_eq!(pixel(&on_bg, w, 288, 288), [12, 13, 14]);
         assert_eq!(pixel(&on_bg, w, 10, 10), [0xAA, 0xBB, 0xCC]);
+    }
+
+    #[test]
+    fn translucent_solid_rect_matches_office_src_over() {
+        let w = 40u32;
+        let h = 40u32;
+        let fill_bg = |rgb: &mut [u8], color: [u8; 3]| {
+            for px in rgb.chunks_mut(3) {
+                px.copy_from_slice(&color);
+            }
+        };
+        let mut rgb = vec![0u8; (w * h * 3) as usize];
+        fill_bg(&mut rgb, [0xAA, 0xBB, 0xCC]);
+        blend_rect(&mut rgb, w, h, 4, 4, 16, 8, [0xEE, 0x44, 0x55], 128);
+        assert_eq!(pixel(&rgb, w, 4, 4), [0xCC, 0x7F, 0x91]);
+        assert_eq!(pixel(&rgb, w, 19, 11), [0xCC, 0x7F, 0x91]);
+        assert_eq!(pixel(&rgb, w, 3, 4), [0xAA, 0xBB, 0xCC]);
+        // 一次除法的 blend 会得到 CC7F90，不能拿来画这一档。
+        let mut one_shot = [0xAA, 0xBB, 0xCC];
+        {
+            let c = 128u16;
+            for (k, src) in [0xEEu8, 0x44, 0x55].into_iter().enumerate() {
+                let dst = u16::from(one_shot[k]);
+                one_shot[k] = ((u16::from(src) * c + dst * (255 - c) + 127) / 255) as u8;
+            }
+        }
+        assert_eq!(one_shot, [0xCC, 0x7F, 0x90]);
+
+        let cases = [
+            (
+                [0xEE, 0x44, 0x55],
+                [0xFF, 0xFF, 0xFF],
+                128,
+                [0xF6, 0xA1, 0xAA],
+            ),
+            (
+                [0xEE, 0x44, 0x55],
+                [0x00, 0x00, 0x00],
+                128,
+                [0x77, 0x22, 0x2B],
+            ),
+            (
+                [0x00, 0x00, 0xFF],
+                [0xAA, 0xBB, 0xCC],
+                128,
+                [0x55, 0x5D, 0xE6],
+            ),
+            (
+                [0xFF, 0xFF, 0xFF],
+                [0xAA, 0xBB, 0xCC],
+                128,
+                [0xD5, 0xDD, 0xE6],
+            ),
+            (
+                [0x00, 0x00, 0x00],
+                [0xAA, 0xBB, 0xCC],
+                128,
+                [0x55, 0x5D, 0x66],
+            ),
+            (
+                [0x00, 0xFF, 0x00],
+                [0xAA, 0xBB, 0xCC],
+                128,
+                [0x55, 0xDD, 0x66],
+            ),
+            (
+                [0xEE, 0x44, 0x55],
+                [0x11, 0x22, 0x33],
+                128,
+                [0x7F, 0x33, 0x44],
+            ),
+            (
+                [0xEE, 0x44, 0x55],
+                [0xAA, 0xBB, 0xCC],
+                64,
+                [0xBB, 0x9D, 0xAE],
+            ),
+            (
+                [0xEE, 0x44, 0x55],
+                [0xAA, 0xBB, 0xCC],
+                191,
+                [0xDD, 0x62, 0x73],
+            ),
+            (
+                [0xEE, 0x44, 0x55],
+                [0xAA, 0xBB, 0xCC],
+                26,
+                [0xB1, 0xAF, 0xC0],
+            ),
+        ];
+        for (src, dst, cov, want) in cases {
+            let mut page = vec![0u8; (w * h * 3) as usize];
+            fill_bg(&mut page, dst);
+            blend_rect(&mut page, w, h, 8, 8, 8, 8, src, cov);
+            assert_eq!(
+                pixel(&page, w, 10, 10),
+                want,
+                "src={src:?} dst={dst:?} cov={cov}"
+            );
+        }
+
+        // 不透明红上面再叠 50% 蓝，以及两个 50% 连续叠在页底上。
+        let mut over = vec![0u8; (w * h * 3) as usize];
+        fill_bg(&mut over, [0xAA, 0xBB, 0xCC]);
+        fill_rect(&mut over, w, h, 4, 4, 16, 8, [0xEE, 0x44, 0x55]);
+        blend_rect(&mut over, w, h, 12, 4, 16, 8, [0x00, 0x00, 0xFF], 128);
+        assert_eq!(pixel(&over, w, 8, 6), [0xEE, 0x44, 0x55]);
+        assert_eq!(pixel(&over, w, 14, 6), [0x77, 0x22, 0xAA]);
+        assert_eq!(pixel(&over, w, 24, 6), [0x55, 0x5D, 0xE6]);
+
+        let mut two = vec![0u8; (w * h * 3) as usize];
+        fill_bg(&mut two, [0xAA, 0xBB, 0xCC]);
+        blend_rect(&mut two, w, h, 4, 4, 16, 8, [0xEE, 0x44, 0x55], 128);
+        blend_rect(&mut two, w, h, 12, 4, 16, 8, [0x00, 0x00, 0xFF], 128);
+        assert_eq!(pixel(&two, w, 8, 6), [0xCC, 0x7F, 0x91]);
+        assert_eq!(pixel(&two, w, 14, 6), [0x66, 0x3F, 0xC8]);
+        assert_eq!(pixel(&two, w, 24, 6), [0x55, 0x5D, 0xE6]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {
