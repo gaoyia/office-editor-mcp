@@ -319,7 +319,7 @@ fn dashes_and_double_follow_the_picture_pixel() {
 }
 
 #[test]
-fn diagonal_and_gradient_still_fail() {
+fn diagonal_flag_without_style_still_not_implemented() {
     let src = bordered();
     let diagonal = rewrite_part(&src, "xl/styles.xml", |xml| {
         xml.replacen("<border>", "<border diagonalUp=\"1\">", 1)
@@ -328,7 +328,11 @@ fn diagonal_and_gradient_still_fail() {
         export(&diagonal).unwrap_err().code(),
         ErrorCode::NotImplemented
     );
+}
 
+#[test]
+fn gradient_fill_still_not_implemented() {
+    let src = bordered();
     let gradient = rewrite_part(&src, "xl/styles.xml", |xml| {
         xml.replacen(
             "<patternFill patternType=\"none\"/>",
@@ -340,6 +344,95 @@ fn diagonal_and_gradient_still_fail() {
         export(&gradient).unwrap_err().code(),
         ErrorCode::NotImplemented
     );
+}
+
+#[test]
+fn solid_diagonal_thin_and_medium_export_png() {
+    let src = tmp("diag-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "B1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "B2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A1",
+                "border": {
+                    "diagonal": { "style": "thin", "color": { "rgb": "FFEE4455" } },
+                    "diagonalDown": true
+                }
+            },
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!B1",
+                "border": {
+                    "diagonal": { "style": "thin", "color": { "rgb": "FF0000FF" } },
+                    "diagonalUp": true
+                }
+            },
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A2",
+                "border": {
+                    "diagonal": { "style": "medium", "color": { "rgb": "FF112233" } },
+                    "diagonalDown": true,
+                    "diagonalUp": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "B", "width": 8.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 20.0 }
+        ]
+    }));
+    let png = export(&book).unwrap();
+    assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+    let (w, h, px) = decode_png(&png);
+    assert!(w > 10 && h > 10, "{w}x{h}");
+    let ink = px.chunks(3).filter(|c| *c != [255, 255, 255]).count();
+    assert!(ink > 10, "ink={ink}");
+}
+
+#[test]
+fn dashed_diagonal_still_not_implemented() {
+    let src = tmp("diag-dash-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-dash");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [{
+            "op": "setCellStyle",
+            "id": "cell:Sheet1!A1",
+            "border": {
+                "diagonal": { "style": "dashed", "color": { "rgb": "FFEE4455" } },
+                "diagonalDown": true
+            }
+        }]
+    }));
+    assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
 
 /// 第二行只有细右边框时，竖线含上边界。同一行另有细上边时，上边界留给上边。

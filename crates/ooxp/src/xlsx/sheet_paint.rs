@@ -1419,6 +1419,10 @@ struct Edges {
     right: Option<Edge>,
     top: Option<Edge>,
     bottom: Option<Edge>,
+    /// `border/@diagonalDown`：左上→右下。
+    diagonal_down: Option<Edge>,
+    /// `border/@diagonalUp`：左下→右上。
+    diagonal_up: Option<Edge>,
 }
 
 struct Xf {
@@ -2002,20 +2006,53 @@ fn pattern_channel(
 }
 
 fn parse_edges(border: &Element, palette: &Palette) -> Result<Edges, Error> {
-    if truthy(border.attr("diagonalUp")) || truthy(border.attr("diagonalDown")) {
+    let diag = parse_diagonal_edge(border, palette)?;
+    let down = if truthy(border.attr("diagonalDown")) {
+        diag
+    } else {
+        None
+    };
+    let up = if truthy(border.attr("diagonalUp")) {
+        diag
+    } else {
+        None
+    };
+    // 有对角标志但无可用 style，或 style 非本刀实线 1/2px → NI（不静默忽略）。
+    if (truthy(border.attr("diagonalDown")) || truthy(border.attr("diagonalUp"))) && diag.is_none()
+    {
         return Err(unsupported());
-    }
-    if let Some(el) = border.child_by_local("diagonal") {
-        if el.attr("style").is_some_and(|style| style != "none") {
-            return Err(unsupported());
-        }
     }
     Ok(Edges {
         left: parse_edge(border, "left", palette)?,
         right: parse_edge(border, "right", palette)?,
         top: parse_edge(border, "top", palette)?,
         bottom: parse_edge(border, "bottom", palette)?,
+        diagonal_down: down,
+        diagonal_up: up,
     })
+}
+
+/// 斜线只认 thin(1) / medium(2) 实线；色取 `<diagonal><color/>`。其它线型明确 NI。
+fn parse_diagonal_edge(border: &Element, palette: &Palette) -> Result<Option<Edge>, Error> {
+    let Some(el) = border.child_by_local("diagonal") else {
+        return Ok(None);
+    };
+    let Some(style) = el.attr("style") else {
+        return Ok(None);
+    };
+    if style == "none" {
+        return Ok(None);
+    }
+    let (kind, px) = match style {
+        "thin" => (LineKind::Solid, 1),
+        "medium" => (LineKind::Solid, 2),
+        _ => return Err(unsupported()),
+    };
+    let color = el
+        .child_by_local("color")
+        .and_then(|c| palette.resolve(c))
+        .unwrap_or([0, 0, 0]);
+    Ok(Some(Edge { kind, px, color }))
 }
 
 fn parse_edge(border: &Element, name: &str, palette: &Palette) -> Result<Option<Edge>, Error> {
@@ -2154,6 +2191,10 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
 }
 
 fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
+    // 条件格式斜线 / slantDashDot 另见差分虚线计划；本刀只做格子斜线。
+    if edges.diagonal_down.is_some() || edges.diagonal_up.is_some() {
+        return Err(unsupported());
+    }
     for edge in [edges.left, edges.right, edges.top, edges.bottom]
         .into_iter()
         .flatten()
@@ -2787,14 +2828,20 @@ fn same_face(font: &FontInfo, normal: &FontInfo) -> bool {
 
 /// 未写行高时的磅值。Calibri 11 是 15。10 磅微软雅黑是 16.5。
 fn auto_row_pt(name: &str, pt: f64) -> f64 {
+    // 等线/DengXian：中文 Excel Normal 行高约 14.25，不是雅黑那档 1.65×。
+    // RTL 探针 COM A1:B2=28.528pt（≈14.264×2）而旧算法 等线→18.15→lib 高 49，多出约 11px，非纯 DPI。
+    if name.eq_ignore_ascii_case("等线") || name.eq_ignore_ascii_case("DengXian") {
+        if (pt - 11.0).abs() < 0.05 {
+            return 14.25;
+        }
+        return pt * 15.0 / 11.0;
+    }
     const CJK: &[&str] = &[
         "微软雅黑",
         "宋体",
         "黑体",
-        "等线",
         "楷体",
         "仿宋",
-        "DengXian",
         "Microsoft YaHei",
         "SimSun",
         "SimHei",
@@ -3270,11 +3317,7 @@ fn paint_borders(
     let mut order = 0u32;
     for &(row, col, col_end, row_end) in rects {
         let mut edges = resolved_edges(sheet, styles, cells, session, col, row)?;
-        if edges.left.is_none()
-            && edges.right.is_none()
-            && edges.top.is_none()
-            && edges.bottom.is_none()
-        {
+        if !edges_present(edges) {
             continue;
         }
         // 边框属于写下它的那一格。合并矩形只用来丢掉伸进合并区内部的边。
@@ -3359,6 +3402,13 @@ fn paint_borders(
             bottom_inset,
             false,
         );
+        // 斜线：格子像素矩形真实边（[x0,x1)×[y0,y1)），不搬 PPT 端点偏移假设。
+        if let Some(edge) = edges.diagonal_down {
+            paint_cell_diagonal(canvas, x0, y0, x1, y1, true, edge);
+        }
+        if let Some(edge) = edges.diagonal_up {
+            paint_cell_diagonal(canvas, x0, y0, x1, y1, false, edge);
+        }
     }
     // 更粗的后画。同样粗时，右边缘盖住左边缘，其余保持格子的先后。
     strokes.sort_by_key(|stroke| (stroke.px, stroke.rank, stroke.order));
@@ -3366,6 +3416,68 @@ fn paint_borders(
         paint_line(canvas, &stroke);
     }
     Ok(())
+}
+
+/// `down=true`：左上→右下；`false`：左下→右上。仅 Solid 1/2px（parse 已挡其它）。
+fn paint_cell_diagonal(
+    canvas: &mut Canvas,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    down: bool,
+    edge: Edge,
+) {
+    if x1 <= x0 + 1 || y1 <= y0 + 1 {
+        return;
+    }
+    let (x_a, y_a, x_b, y_b) = if down {
+        (x0, y0, x1 - 1, y1 - 1)
+    } else {
+        (x0, y1 - 1, x1 - 1, y0)
+    };
+    paint_diag_segment(canvas, x_a, y_a, x_b, y_b, edge.color, edge.px);
+}
+
+fn paint_diag_segment(
+    canvas: &mut Canvas,
+    mut x0: i32,
+    mut y0: i32,
+    x1: i32,
+    y1: i32,
+    color: [u8; 3],
+    thickness: i32,
+) {
+    // Bresenham；厚度 2 时在主线两侧各补半像素朝较小坐标（与正交偶数宽约定一致）。
+    let dx = (x1 - x0).abs();
+    let sx = if x0 < x1 { 1 } else { -1 };
+    let dy = -(y1 - y0).abs();
+    let sy = if y0 < y1 { 1 } else { -1 };
+    let mut err = dx + dy;
+    loop {
+        put_thick(canvas, x0, y0, color, thickness);
+        if x0 == x1 && y0 == y1 {
+            break;
+        }
+        let e2 = 2 * err;
+        if e2 >= dy {
+            err += dy;
+            x0 += sx;
+        }
+        if e2 <= dx {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+fn put_thick(canvas: &mut Canvas, x: i32, y: i32, color: [u8; 3], thickness: i32) {
+    canvas.put(x, y, color);
+    if thickness >= 2 {
+        // 多出的一像素朝坐标较小侧（左/上），对齐正交 medium 约定。
+        canvas.put(x - 1, y, color);
+        canvas.put(x, y - 1, color);
+    }
 }
 
 struct Stroke {
@@ -3717,7 +3829,12 @@ fn expression_gaps(
 }
 
 fn edges_present(edges: Edges) -> bool {
-    edges.left.is_some() || edges.right.is_some() || edges.top.is_some() || edges.bottom.is_some()
+    edges.left.is_some()
+        || edges.right.is_some()
+        || edges.top.is_some()
+        || edges.bottom.is_some()
+        || edges.diagonal_down.is_some()
+        || edges.diagonal_up.is_some()
 }
 
 fn overlay_edges(base: Edges, over: Edges) -> Edges {
@@ -3726,6 +3843,8 @@ fn overlay_edges(base: Edges, over: Edges) -> Edges {
         right: over.right.or(base.right),
         top: over.top.or(base.top),
         bottom: over.bottom.or(base.bottom),
+        diagonal_down: over.diagonal_down.or(base.diagonal_down),
+        diagonal_up: over.diagonal_up.or(base.diagonal_up),
     }
 }
 
@@ -5338,6 +5457,10 @@ mod tests {
         let data = excel_row_px(auto_row_pt("微软雅黑", 10.0));
         assert_eq!(data, 22);
         assert_eq!(excel_row_px(auto_row_pt("Calibri", 11.0)), 20);
+        // 等线 11 = Normal 14.25pt → 19px；不得走雅黑 1.65×（否则 18.15→24，双行+框≈49）。
+        assert_eq!(auto_row_pt("等线", 11.0), 14.25);
+        assert_eq!(excel_row_px(auto_row_pt("等线", 11.0)), 19);
+        assert_eq!(auto_row_pt("DengXian", 11.0), 14.25);
         height += data * 7;
         assert_eq!(height, 418);
         assert_eq!(excel_row_px(20.0), 26);
