@@ -308,7 +308,7 @@ fn tools(lang: Lang) -> Value {
             ),
             tool(
                 "exportSlideImage",
-                say(lang, "按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图，写到 output。这些对象放在组合里、母版上和版式上也画。整像素且不缩放的裁剪也画。源文件保持不变，像素不进入 inspect 树。", "Draw a slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells to output by slide id, including inside groups and on the master or layout. A crop that stays on whole pixels and keeps the same size is drawn too. The source file stays unchanged, and the pixels do not enter the inspect tree."),
+                say(lang, "按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色渐变、形状文字、簇状柱形图和纯色单元格的表写成图，写到 output。这些对象放在组合里、母版上和版式上也画。整像素且不缩放的裁剪也画。Windows 上整像素裁剪后再放大、两边都不缩小的不透明 PNG 也画。缩小或一边放大一边缩小还不画。源文件保持不变，像素不进入 inspect 树。", "Draw a slide's background, PNG pictures, rectangles, rounded rectangles, ellipses, two-stop gradients, shape text, clustered column charts, and solid table cells to output by slide id, including inside groups and on the master or layout. A whole-pixel crop that keeps the same size is drawn too. On Windows, a whole-pixel crop or uncropped picture scaled up so neither destination edge is smaller than the source window is also drawn. Shrink or mixed-axis scale is not drawn yet. The source file stays unchanged, and the pixels do not enter the inspect tree."),
                 domain_properties(Action::ExportSlideImage, lang),
                 &["path", "id", "output"],
                 lang,
