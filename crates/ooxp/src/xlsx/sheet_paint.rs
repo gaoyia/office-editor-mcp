@@ -1380,6 +1380,12 @@ enum Fill {
     None,
     Solid([u8; 3]),
     Pattern(PatternKind, [u8; 3], [u8; 3]),
+    /// SpreadsheetML `gradientFill`：不透明两停点线性。与 DrawingML/PPT `gamma_mix` 无关。
+    Linear {
+        degree: f64,
+        start: [u8; 3],
+        end: [u8; 3],
+    },
     Nope,
 }
 
@@ -1910,8 +1916,8 @@ fn child_on(el: &Element, name: &str) -> bool {
 }
 
 fn read_fill(fill: &Element, palette: &Palette) -> Fill {
-    if fill.child_by_local("gradientFill").is_some() {
-        return Fill::Nope;
+    if let Some(grad) = fill.child_by_local("gradientFill") {
+        return read_linear_fill(grad);
     }
     let Some(pat) = fill.child_by_local("patternFill") else {
         return Fill::None;
@@ -1938,6 +1944,62 @@ fn read_fill(fill: &Element, palette: &Palette) -> Fill {
     }
 }
 
+/// SpreadsheetML `CT_GradientFill`：`type` 缺省/`linear`，两停点不透明 `rgb`（A=FF）。
+/// `degree` 缺省 0（左→右）；90 为上→下。插值是通道直线（与 colorScale 同 `mix`），
+/// **不是** PPT/DrawingML 的 `gamma_mix` / S 曲线。`path`、theme、indexed、alpha、多于两停 → Nope。
+fn read_linear_fill(grad: &Element) -> Fill {
+    let kind = grad.attr("type").unwrap_or("linear");
+    if !kind.eq_ignore_ascii_case("linear") {
+        return Fill::Nope;
+    }
+    let degree = match grad.attr("degree") {
+        Some(s) => match s.parse::<f64>() {
+            Ok(v) if v.is_finite() => v,
+            _ => return Fill::Nope,
+        },
+        None => 0.0,
+    };
+    let stops = grad.children_by_local("stop");
+    if stops.len() != 2 {
+        return Fill::Nope;
+    }
+    let mut parsed = Vec::with_capacity(2);
+    for stop in stops {
+        let pos = match stop.attr("position").and_then(|s| s.parse::<f64>().ok()) {
+            Some(v) if v.is_finite() => v,
+            _ => return Fill::Nope,
+        };
+        let Some(color) = stop.child_by_local("color") else {
+            return Fill::Nope;
+        };
+        // theme / indexed / auto / tint：本刀 NI。只要不透明 rgb。
+        if color.attr("theme").is_some()
+            || color.attr("indexed").is_some()
+            || color.attr("tint").is_some()
+            || truthy(color.attr("auto"))
+        {
+            return Fill::Nope;
+        }
+        let Some(hex) = color.attr("rgb") else {
+            return Fill::Nope;
+        };
+        let hex = hex.trim();
+        if hex.len() == 8 && !hex[..2].eq_ignore_ascii_case("ff") {
+            return Fill::Nope;
+        }
+        let Some(rgb) = parse_rgb(hex) else {
+            return Fill::Nope;
+        };
+        parsed.push((pos, rgb));
+    }
+    parsed.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    Fill::Linear {
+        degree,
+        start: parsed[0].1,
+        end: parsed[1].1,
+    }
+}
+
 /// 差分填充没写 `patternType`、只有 `bgColor` 时，Excel 把它画成纯色。
 fn dxf_fill_color(fill: &Element, palette: &Palette) -> Result<Option<[u8; 3]>, Error> {
     if fill.child_by_local("gradientFill").is_some() {
@@ -1958,8 +2020,8 @@ fn dxf_fill_color(fill: &Element, palette: &Palette) -> Result<Option<[u8; 3]>, 
     match read_fill(fill, palette) {
         Fill::None => Ok(None),
         Fill::Solid(rgb) => Ok(Some(rgb)),
-        // 条件格式里的图案还没和 Excel 对过。
-        Fill::Pattern(_, _, _) | Fill::Nope => Err(unsupported()),
+        // 条件格式里的图案 / 单元格渐变还没和 Excel 对过；渐变也不走 dxf 纯色捷径。
+        Fill::Pattern(_, _, _) | Fill::Linear { .. } | Fill::Nope => Err(unsupported()),
     }
 }
 
@@ -2828,8 +2890,11 @@ fn same_face(font: &FontInfo, normal: &FontInfo) -> bool {
 
 /// 未写行高时的磅值。Calibri 11 是 15。10 磅微软雅黑是 16.5。
 fn auto_row_pt(name: &str, pt: f64) -> f64 {
-    // 等线/DengXian：中文 Excel Normal 行高约 14.25，不是雅黑那档 1.65×。
-    // RTL 探针 COM A1:B2=28.528pt（≈14.264×2）而旧算法 等线→18.15→lib 高 49，多出约 11px，非纯 DPI。
+    // 等线/DengXian：COM Excel 16.0 StandardHeight / AutoFit 矩阵（2026-11-17 Asia/Shanghai）：
+    // 字号 10/11/空/StandardHeight → 14.25；12 → 15.75；18 → 23。
+    // 本刀只锁 11→14.25（与 sheetFormatPr 缺省 14.25 一致）；其它字号暂 pt*15/11，不拟合单例 delta。
+    // 不回归：Calibri 11 仍 15（COM AutoFit 亦见 14.25，契约保持 15）；雅黑仍 1.65×。
+    // RTL 探针曾误走雅黑 1.65→18.15→高 49，COM 两行≈28.5pt→≈38px，残差非纯 DPI。
     if name.eq_ignore_ascii_case("等线") || name.eq_ignore_ascii_case("DengXian") {
         if (pt - 11.0).abs() < 0.05 {
             return 14.25;
@@ -2967,6 +3032,46 @@ impl Canvas {
             for x in x0..=x1 {
                 let color = if pattern_on(kind, x, y) { fg } else { bg };
                 self.put(x, y, color);
+            }
+        }
+    }
+
+    /// SpreadsheetML 线性渐变。`degree` 与 ECMA-376 / MS Open XML：0 左→右，90 上→下。
+    /// 四角投影归一化后通道 `mix`（sRGB 直线）。不调用 PPT `gamma_mix`。
+    fn fill_linear(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        degree: f64,
+        start: [u8; 3],
+        end: [u8; 3],
+    ) {
+        let w = f64::from(x1 - x0);
+        let h = f64::from(y1 - y0);
+        let rad = degree.to_radians();
+        let (dx, dy) = (rad.cos(), rad.sin());
+        let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)];
+        let mut pmin = f64::INFINITY;
+        let mut pmax = f64::NEG_INFINITY;
+        for (cx, cy) in corners {
+            let p = cx * dx + cy * dy;
+            pmin = pmin.min(p);
+            pmax = pmax.max(p);
+        }
+        let span = pmax - pmin;
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let px = f64::from(x - x0);
+                let py = f64::from(y - y0);
+                let p = px * dx + py * dy;
+                let t = if span.abs() < 1e-9 {
+                    0.0
+                } else {
+                    (p - pmin) / span
+                };
+                self.put(x, y, mix(start, end, t));
             }
         }
     }
@@ -3234,6 +3339,9 @@ fn paint_cell(
     match fill {
         Fill::Solid(rgb) => canvas.fill_cell(x0, y0, x1, y1, rgb),
         Fill::Pattern(kind, fg, bg) => canvas.fill_pattern(x0, y0, x1, y1, kind, fg, bg),
+        Fill::Linear { degree, start, end } => {
+            canvas.fill_linear(x0, y0, x1, y1, degree, start, end)
+        }
         Fill::None | Fill::Nope => {}
     }
     Ok(())
@@ -5461,12 +5569,39 @@ mod tests {
         assert_eq!(auto_row_pt("等线", 11.0), 14.25);
         assert_eq!(excel_row_px(auto_row_pt("等线", 11.0)), 19);
         assert_eq!(auto_row_pt("DengXian", 11.0), 14.25);
+        // 非 11：不锁 COM 12→15.75 / 18→23，保持 pt*15/11，避免单例拟合。
+        assert!((auto_row_pt("等线", 12.0) - 12.0 * 15.0 / 11.0).abs() < 1e-9);
+        assert_eq!(auto_row_pt("Calibri", 11.0), 15.0);
+        assert!((auto_row_pt("微软雅黑", 10.0) - 16.5).abs() < 1e-9);
         height += data * 7;
         assert_eq!(height, 418);
         assert_eq!(excel_row_px(20.0), 26);
         assert_eq!(excel_row_px(22.0), 29);
         assert_eq!(excel_row_px(32.0), 42);
         assert_eq!(excel_row_px(26.0), 34);
+    }
+
+    #[test]
+    fn sheet_linear_fill_is_srgb_mix_not_ppt_gamma() {
+        // OOXML 示例色 FF92D050→FF0070C0；Excel ExportAsFixedFormat PDF 条带 RMSE(sRGB)≈0.68 vs gamma2.2≈18.5。
+        let c0 = [0x92, 0xd0, 0x50];
+        let c1 = [0x00, 0x70, 0xc0];
+        assert_eq!(mix(c0, c1, 0.0), c0);
+        assert_eq!(mix(c0, c1, 1.0), c1);
+        assert_eq!(mix(c0, c1, 0.5), [73, 160, 136]);
+        let mut canvas = Canvas::new(5, 3).unwrap();
+        canvas.fill_linear(0, 0, 4, 2, 0.0, c0, c1);
+        let at = |c: &Canvas, x: i32, y: i32| {
+            let i = (y * c.w + x) as usize * 3;
+            [c.px[i], c.px[i + 1], c.px[i + 2]]
+        };
+        assert_eq!(at(&canvas, 0, 1), c0);
+        assert_eq!(at(&canvas, 4, 1), c1);
+        assert_eq!(at(&canvas, 2, 1), mix(c0, c1, 0.5));
+        let mut canvas90 = Canvas::new(3, 5).unwrap();
+        canvas90.fill_linear(0, 0, 2, 4, 90.0, c0, c1);
+        assert_eq!(at(&canvas90, 1, 0), c0);
+        assert_eq!(at(&canvas90, 1, 4), c1);
     }
 
     #[test]

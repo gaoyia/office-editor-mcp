@@ -2456,7 +2456,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 没写 `defaultRowHeight` 时，缺省是 14.25 磅，19 像素
 - 写了 `defaultRowHeight` 但 `customHeight` 不是真时，不采用这个数字。缺省改用常规样式的行高。常规样式是 Calibri 11 磅时，这一档是 15 磅
 - `customHeight` 为真并且写了 `defaultRowHeight` 时，缺省就是这个磅值。这一行的字如果还是常规字体，不再加高
-- 要加高时，Calibri 11 磅按 15 磅。微软雅黑、宋体、黑体、等线、楷体、仿宋按字号乘 1.65。其余按字号乘 15/11。一行里取最高的
+- 要加高时，Calibri 11 磅按 15 磅。微软雅黑、宋体、黑体、楷体、仿宋（及 Microsoft YaHei / SimSun / SimHei）按字号乘 1.65。等线/DengXian 在 11 磅时按 14.25 磅（COM Excel 16.0 StandardHeight/AutoFit：10/11/空/Standard 均为 14.25；12→15.75、18→23 本刀仍用字号×15/11，不单例拟合）。其余按字号乘 15/11。一行里取最高的。不把 Calibri 11 改成 COM AutoFit 的 14.25，不把雅黑改离 1.65×
 - 合并盖住的行没有自己的格子时，仍按锚点的字加高。锚点被隐藏也一样。没被合并盖住、也没有格子的行保持上面的缺省
 - 宽和高是各格像素之和再加 1。这一像素是外框
 - 网格色是 `E0E0E0`。纯色填充盖住格子右缘和下缘那条网格。右边和下边的格子后画，盖住交界。上边和左边的外框最后仍画成网格色
@@ -2511,7 +2511,8 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。子矩形先绕自己的中心转 90 度的倍数，再按组的外框和子坐标框做整数比例，除法去掉余数，再翻转，再旋转。转完的子矩形要落在组的子坐标里。坐标从工作表左上角量起。锚点外接矩形要和转完、翻完之后的组外框按像素重合。里面的这种矩形可以跨格。子矩形的水平或垂直翻转不改变这块纯色，也可以和直角叠在一起。组合可以再套一层，换算从内到外。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。其它角度，或里面还有别的对象，报 `NotImplemented`
 - 没有描边的纯色矩形可以绕中心转 90 度的倍数，也可以水平或垂直翻转。锚点上的外接矩形就是要铺的那一块。线写成 `noFill` 时，旁边的虚线、斜接和隐藏线不画。其它角度、有描边、有字、不是矩形和其它图形，报 `NotImplemented`。隐藏行或隐藏列碰到这种图形也报 `NotImplemented`
 - 格子 `diagonalUp` / `diagonalDown` 且 `<diagonal style>` 为 `thin`（1 像素）或 `medium`（2 像素）实线时画斜线，色取 `diagonal/color`。其它斜线线型、只有方向标志没有 style、条件格式斜线仍报 `NotImplemented`
-- 渐变填充、认不出的图案、条件格式里的图案、图标集和其它还没画的条件格式，报 `NotImplemented`
+- `fills` 里 `gradientFill`：`type` 缺省或 `linear`、恰好两停点、每停不透明 `rgb`（8 位且 A=`FF`，或 6 位）时，按 `degree`（缺省 0=左→右，90=上→下）做通道直线插值（与条件格式 colorScale 同 `mix`）。这是 SpreadsheetML 单元格渐变，**不是** DrawingML/PPT 形状的 `gamma_mix`/S 曲线；PPT 渐变证伪不拿来挡本档，也不照抄 PPT 曲线。Excel 16.0 ExportAsFixedFormat PDF 对 FF92D050→FF0070C0 条带 RMSE(sRGB)≈0.68、gamma2.2≈18.5。`type=path`、theme/indexed/auto/tint、A≠FF、停点不是两个，仍报 `NotImplemented`
+- 认不出的图案、条件格式里的图案、图标集和其它还没画的条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到工作表报 `IdNotFound`。id 不是 `sheet:{name}` 报 `InvalidId`
