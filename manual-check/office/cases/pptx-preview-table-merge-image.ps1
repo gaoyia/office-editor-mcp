@@ -1,5 +1,7 @@
-﻿# 横向合并纯色单元格（带默认 tableStyleId，不走无样式灰边）。金样是 PowerPoint 16.0 的 Slide.Export。
-# 红区回绘制引擎修，不要加大 MaxDelta。纵向合并仍不画。不把文字灰度算进通过。
+﻿ 横向合并纯色单元格：无 tableStyleId + OOXML 六边显式 noFill，分离合并几何与样式描边。
+# JSON borders null 按合同是去掉 ln*，不能表达显式 noFill；本用例直接写合法 OOXML。
+# 金样是 PowerPoint 16.0 的 Slide.Export。红区回绘制引擎修，不要加大 MaxDelta。
+# 纵向合并仍不画。不把文字灰度算进通过。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -9,7 +11,7 @@ if (-not $global:OoxpSuiteName) { Initialize-Suite -Name 'office' }
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
-function Set-HMergeInSlide1([string]$src, [string]$dst) {
+function Set-HMergeNoFillInSlide1([string]$src, [string]$dst) {
     if (Test-Path $dst) { Remove-Item -Force $dst }
     [IO.File]::Copy($src, $dst, $true)
     $zip = [IO.Compression.ZipFile]::Open($dst, [IO.Compression.ZipArchiveMode]::Update)
@@ -19,6 +21,15 @@ function Set-HMergeInSlide1([string]$src, [string]$dst) {
         $sr = New-Object IO.StreamReader($entry.Open())
         $xml = $sr.ReadToEnd()
         $sr.Close()
+        $nofill = '<a:lnL><a:noFill/></a:lnL><a:lnR><a:noFill/></a:lnR><a:lnT><a:noFill/></a:lnT><a:lnB><a:noFill/></a:lnB><a:lnTlToBr><a:noFill/></a:lnTlToBr><a:lnBlToTr><a:noFill/></a:lnBlToTr>'
+        $from = 0
+        for ($n = 0; $n -lt 2; $n++) {
+            $rel = $xml.IndexOf('<a:tcPr>', $from)
+            if ($rel -lt 0) { throw "tcPr $n missing" }
+            $at = $rel + '<a:tcPr>'.Length
+            $xml = $xml.Insert($at, $nofill)
+            $from = $at + $nofill.Length
+        }
         $first = $xml.IndexOf('<a:tc>')
         if ($first -lt 0) { throw 'first tc missing' }
         $xml = $xml.Insert($first + 5, ' gridSpan="2"')
@@ -45,6 +56,7 @@ Invoke-OoxpRequest @{
         slides = @(, @{
             tables = @(, @{
                 rows = 1; cols = 2
+                tableStyleId = $null
                 x = 1828800; y = 914400; cx = 1828800; cy = 914400
                 cells = @(, @(
                     @{ text = ''; fill = '00AA00' }
@@ -56,7 +68,7 @@ Invoke-OoxpRequest @{
 } 'pptx-preview-table-merge-create' | Out-Null
 
 $mid = Get-OutPath 'pptx-preview-table-merge-mid.pptx'
-Set-HMergeInSlide1 $src $mid
+Set-HMergeNoFillInSlide1 $src $mid
 
 $deck = Get-OutPath 'pptx-preview-table-merge.pptx'
 if (Test-Path $deck) { Remove-Item -Force $deck }
