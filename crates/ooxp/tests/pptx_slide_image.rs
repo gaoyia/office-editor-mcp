@@ -684,10 +684,103 @@ fn quarter_turn_swaps_the_box_around_its_center() {
     assert_eq!(pixel(&rgb, w, 216, 71), [0xAA, 0xBB, 0xCC]);
     assert_eq!(pixel(&rgb, w, 264, 120), [0xAA, 0xBB, 0xCC]);
     assert_eq!(pixel(&rgb, w, 216, 168), [0xAA, 0xBB, 0xCC]);
+    // rot=100（约 0.00167 度）原先整块跳过。Windows 上已画非直角不透明纯色矩形，取中心。
+    #[cfg(windows)]
+    assert_eq!(pixel(&rgb, w, 432, 120), [0x11, 0x22, 0x33]);
+    #[cfg(not(windows))]
     assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
     assert_eq!(pixel(&rgb, w, 576, 96), [0x00, 0xAA, 0x66]);
     assert_eq!(pixel(&rgb, w, 671, 143), [0x00, 0xAA, 0x66]);
     assert_eq!(pixel(&rgb, w, 672, 96), [0xAA, 0xBB, 0xCC]);
+}
+
+#[cfg(windows)]
+#[test]
+fn non_right_angle_opaque_rects_keep_center_and_outside_on_windows() {
+    // 不透明无描边纯色矩形：多角度、方向、尺寸、原点。中心必须是填色，明显在外接盒外仍是页底。
+    let cases: &[(&str, i64, i64, i64, i64, i64)] = &[
+        ("rot45", 2_700_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot30", 1_800_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot15", 900_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot60", 3_600_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot120", 7_200_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot315", 18_900_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("rot225", 1_350_000, 1_828_800, 914_400, 609_600, 609_600),
+        ("wide45", 2_700_000, 1_828_800, 914_400, 914_400, 457_200),
+        ("tall30", 1_800_000, 1_828_800, 914_400, 304_800, 914_400),
+        (
+            "origin45", 2_700_000, 3_810_000, 1_905_000, 609_600, 609_600,
+        ),
+        ("near45", 2_700_000, 95_250, 1_905_000, 914_400, 457_200),
+    ];
+    let bg = [0xAA, 0xBB, 0xCC];
+    let fill = [0xEE, 0x44, 0x55];
+    for (tag, rot, x, y, cx, cy) in cases {
+        let src = tmp(&format!("{tag}-src"));
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": src.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+        }));
+        let tree = {
+            let RunOutput::Inspect(tree) = run_ok(json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": src.to_string_lossy(),
+                "scope": { "slide": 1 }
+            })) else {
+                panic!("inspect");
+            };
+            tree
+        };
+        let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+        let deck = tmp(&format!("{tag}-deck"));
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": deck.to_string_lossy(),
+            "ops": [
+                { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+                { "op": "deleteShape", "id": title },
+                {
+                    "op": "insertShape",
+                    "id": "slide:1",
+                    "fill": "EE4455",
+                    "x": x,
+                    "y": y,
+                    "cx": cx,
+                    "cy": cy
+                }
+            ]
+        }));
+        let turned = tmp(&format!("{tag}-rot"));
+        let needle =
+            format!("<a:xfrm><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/>");
+        let repl = format!(
+            "<a:xfrm rot=\"{rot}\"><a:off x=\"{x}\" y=\"{y}\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/>"
+        );
+        rewrite_slide(&deck, &turned, |xml| swap(xml, &needle, &repl));
+        let out = tmp(&format!("{tag}-png")).with_extension("png");
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "exportSlideImage",
+            "path": turned.to_string_lossy(),
+            "id": "slide:1",
+            "output": out.to_string_lossy()
+        }));
+        let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+        assert_eq!((w, h), (1280, 720));
+        let cx_px = ((*x as f64 + *cx as f64 / 2.0) * 96.0 / 914400.0).round() as u32;
+        let cy_px = ((*y as f64 + *cy as f64 / 2.0) * 96.0 / 914400.0).round() as u32;
+        assert_eq!(
+            pixel(&rgb, w, cx_px, cy_px),
+            fill,
+            "{tag} center ({cx_px},{cy_px})"
+        );
+        assert_eq!(pixel(&rgb, w, 10, 10), bg, "{tag} far background");
+    }
 }
 
 #[test]

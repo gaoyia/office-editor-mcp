@@ -819,6 +819,8 @@ mod win {
         fn GdipSetPenStartCap(pen: *mut c_void, cap: i32) -> i32;
         fn GdipSetPenEndCap(pen: *mut c_void, cap: i32) -> i32;
         fn GdipDeletePen(pen: *mut c_void) -> i32;
+        fn GdipTranslateWorldTransform(graphics: *mut c_void, dx: f32, dy: f32, order: i32) -> i32;
+        fn GdipRotateWorldTransform(graphics: *mut c_void, angle: f32, order: i32) -> i32;
 
         fn GdipSetInterpolationMode(graphics: *mut c_void, mode: i32) -> i32;
         fn GdipSetCompositingMode(graphics: *mut c_void, mode: i32) -> i32;
@@ -860,6 +862,7 @@ mod win {
     const COMPOSITING_QUALITY_HIGH_QUALITY: i32 = 2;
     const WRAP_MODE_TILE_FLIP_XY: i32 = 3;
     const SMOOTHING_NONE: i32 = 3;
+    const MATRIX_ORDER_PREPEND: i32 = 0;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -1513,6 +1516,142 @@ mod win {
         }
         true
     }
+
+    /// 用不透明纯色填充绕中心顺时针旋转的矩形。
+    /// 公开 GDI+：`TranslateTransform` 到中心、`RotateTransform`、`FillRectangle`，
+    /// 加上已有形状路径里的抗锯齿和半像素偏移。必须画在真实页面坐标上。
+    pub fn fill_device_rotated_rect(
+        rgb: &mut [u8],
+        page_w: u32,
+        page_h: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        deg: f32,
+        color: [u8; 3],
+    ) -> bool {
+        if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
+            return false;
+        }
+        if !x.is_finite() || !y.is_finite() || gdiplus_token().is_none() {
+            return false;
+        }
+        if page_w == 0 || page_h == 0 || rgb.len() != (page_w as usize) * (page_h as usize) * 3 {
+            return false;
+        }
+        let (min_x, min_y, max_x, max_y) = rotated_rect_bounds(x, y, w, h, deg);
+        let pad = 4.0;
+        let origin_x = (min_x - pad).floor() as i32;
+        let origin_y = (min_y - pad).floor() as i32;
+        let far_x = (max_x + pad).ceil() as i32;
+        let far_y = (max_y + pad).ceil() as i32;
+        let Some(buf_w) = far_x.checked_sub(origin_x).filter(|&v| v > 0) else {
+            return false;
+        };
+        let Some(buf_h) = far_y.checked_sub(origin_y).filter(|&v| v > 0) else {
+            return false;
+        };
+        if buf_w > i32::MAX / 4 || buf_h > i32::MAX / 4 {
+            return false;
+        }
+        let mut pixels = vec![0xFFFF_FFFFu32; (buf_w as usize) * (buf_h as usize)];
+        for py in 0..buf_h {
+            for px in 0..buf_w {
+                let [r, g, b] = page_pixel(rgb, page_w, page_h, origin_x + px, origin_y + py);
+                pixels[(py as usize) * (buf_w as usize) + (px as usize)] =
+                    0xFF00_0000 | (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b);
+            }
+        }
+        let argb = 0xFF00_0000
+            | (u32::from(color[0]) << 16)
+            | (u32::from(color[1]) << 8)
+            | u32::from(color[2]);
+        let cx = x + w / 2.0;
+        let cy = y + h / 2.0;
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                buf_w,
+                buf_h,
+                buf_w * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, PIXEL_OFFSET_HALF);
+            let mut brush = std::ptr::null_mut();
+            if GdipCreateSolidFill(argb, &mut brush) != 0 || brush.is_null() {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            let ok = GdipTranslateWorldTransform(
+                graphics,
+                -(origin_x as f32),
+                -(origin_y as f32),
+                MATRIX_ORDER_PREPEND,
+            ) == 0
+                && GdipTranslateWorldTransform(graphics, cx, cy, MATRIX_ORDER_PREPEND) == 0
+                && GdipRotateWorldTransform(graphics, deg, MATRIX_ORDER_PREPEND) == 0
+                && GdipFillRectangle(graphics, brush, -w / 2.0, -h / 2.0, w, h) == 0;
+            GdipDeleteBrush(brush);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            ok
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..buf_h {
+            for px in 0..buf_w {
+                let pix = pixels[(py as usize) * (buf_w as usize) + (px as usize)];
+                let color = [
+                    ((pix >> 16) & 0xff) as u8,
+                    ((pix >> 8) & 0xff) as u8,
+                    (pix & 0xff) as u8,
+                ];
+                set_page_pixel(rgb, page_w, page_h, origin_x + px, origin_y + py, color);
+            }
+        }
+        true
+    }
+
+    fn rotated_rect_bounds(x: f32, y: f32, w: f32, h: f32, deg: f32) -> (f32, f32, f32, f32) {
+        let cx = x + w / 2.0;
+        let cy = y + h / 2.0;
+        let rad = (deg as f64).to_radians();
+        let (c, s) = (rad.cos() as f32, rad.sin() as f32);
+        let corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
+        let mut min_x = f32::INFINITY;
+        let mut min_y = f32::INFINITY;
+        let mut max_x = f32::NEG_INFINITY;
+        let mut max_y = f32::NEG_INFINITY;
+        for (px, py) in corners {
+            let dx = px - cx;
+            let dy = py - cy;
+            let nx = cx + dx * c + dy * s;
+            let ny = cy - dx * s + dy * c;
+            min_x = min_x.min(nx);
+            min_y = min_y.min(ny);
+            max_x = max_x.max(nx);
+            max_y = max_y.max(ny);
+        }
+        (min_x, min_y, max_x, max_y)
+    }
+
     /// 用公开 GDI+ HighQualityBicubic、TileFlipXY 与半像素偏移放大 RGBA 源图。
     /// 失败或尚未启动 GDI+ 时返回 None。1:1 拷贝与不支持的缩小由调用方处理。
     pub fn scale_device_rgba(
@@ -1959,8 +2098,8 @@ mod win {
 #[cfg(windows)]
 pub use win::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window,
-    Face,
+    fill_device_rotated_rect, fill_device_round_rect, fill_device_stroked_rect, scale_device_rgba,
+    scale_device_rgba_window, Face,
 };
 
 #[cfg(not(windows))]
@@ -2075,6 +2214,21 @@ pub fn fill_device_stroked_rect(
     _: &mut [u8],
     _: u32,
     _: u32,
+) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_rotated_rect(
+    _: &mut [u8],
+    _: u32,
+    _: u32,
+    _: f32,
+    _: f32,
+    _: f32,
+    _: f32,
+    _: f32,
+    _: [u8; 3],
 ) -> bool {
     false
 }
