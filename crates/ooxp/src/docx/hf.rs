@@ -477,7 +477,7 @@ fn type_index(t: HfType) -> usize {
     }
 }
 
-fn explicit_refs(
+pub(crate) fn explicit_refs(
     sect: &Element,
     local: &str,
     kind: HfKind,
