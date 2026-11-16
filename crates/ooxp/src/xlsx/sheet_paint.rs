@@ -1432,6 +1432,8 @@ struct Xf {
     wrap: bool,
     /// `alignment/@indent`，0–15；每级约 3 个 `0` 字宽（与绘制同一套 `Face::width`）。
     indent: u32,
+    /// `alignment/@readingOrder`：0 上下文 / 1 LTR / 2 RTL。2 与强 RTL 文种出图 NI。
+    reading_order: u8,
 }
 
 struct Dxf {
@@ -1758,6 +1760,7 @@ impl Styles {
                 v_align: VAlign::Bottom,
                 wrap: false,
                 indent: 0,
+                reading_order: 0,
             }],
             formats: HashMap::new(),
             dxfs: Vec::new(),
@@ -1820,6 +1823,7 @@ impl Styles {
                 v_align: VAlign::Bottom,
                 wrap: false,
                 indent: 0,
+                reading_order: 0,
             });
         }
         let mut dxfs = Vec::new();
@@ -2066,8 +2070,8 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         .attr("numFmtId")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    let (h_align, v_align, wrap, indent) = match xf.child_by_local("alignment") {
-        None => (HAlign::General, VAlign::Bottom, false, 0u32),
+    let (h_align, v_align, wrap, indent, reading_order) = match xf.child_by_local("alignment") {
+        None => (HAlign::General, VAlign::Bottom, false, 0u32, 0u8),
         Some(al) => {
             // 旋转 / 缩小字体仍 NI（旋转与两端对齐另见计划）。
             if al.attr("textRotation").is_some_and(|v| v != "0") || truthy(al.attr("shrinkToFit")) {
@@ -2084,11 +2088,19 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
                     n
                 }
             };
+            // readingOrder 与 sheetView.rightToLeft 不同：前者是单元格双向，后者是列镜像。
+            let reading_order = match al.attr("readingOrder") {
+                None | Some("0") => 0u8,
+                Some("1") => 1u8,
+                Some("2") => 2u8,
+                Some(_) => return Err(unsupported()),
+            };
             (
                 read_h(al.attr("horizontal"))?,
                 read_v(al.attr("vertical"))?,
                 wrap,
                 indent,
+                reading_order,
             )
         }
     };
@@ -2101,6 +2113,7 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         v_align,
         wrap,
         indent,
+        reading_order,
     })
 }
 
@@ -3031,21 +3044,25 @@ fn paint(
     }
     paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
     let mut fonts = FontBook::default();
-    paint_labels(
-        &mut canvas,
-        &mut fonts,
-        styles,
-        cells,
-        &merges,
-        &covered,
-        &xs,
-        &ys,
-        c0,
-        r0,
-        sheet,
-        rtl,
-        session,
-    )?;
+    // sheetView RTL：无文字整图翻转已差 0。有文字时 Excel 只换列边、字仍正写——
+    // 先画非文字层再翻转，最后在翻转坐标系画字（不 Unicode 反序、不镜像字形）。
+    if !rtl {
+        paint_labels(
+            &mut canvas,
+            &mut fonts,
+            styles,
+            cells,
+            &merges,
+            &covered,
+            &xs,
+            &ys,
+            c0,
+            r0,
+            sheet,
+            false,
+            session,
+        )?;
+    }
     if draw_frame {
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     }
@@ -3065,6 +3082,21 @@ fn paint(
     paint_plain_rects(&mut canvas, shapes);
     if rtl {
         canvas.flip_horizontal();
+        paint_labels(
+            &mut canvas,
+            &mut fonts,
+            styles,
+            cells,
+            &merges,
+            &covered,
+            &xs,
+            &ys,
+            c0,
+            r0,
+            sheet,
+            true,
+            session,
+        )?;
     }
     Ok(canvas)
 }
@@ -4243,17 +4275,29 @@ fn paint_labels(
         if text.is_empty() {
             continue;
         }
-        // 从右到左时 Excel 仍正写文字，整图翻转会把字反过来。
-        if rtl {
+        // readingOrder=2 / 强 RTL 文种需要整段 bidi+shaping。
+        // Face::width 与 draw_cells 是逐字 glyph advance，接 DirectionRightToLeft 会测画错配——NI。
+        // 不把 Unicode 反序当 RTL；不与 sheetView.rightToLeft（列镜像）混同。
+        if xf.reading_order == 2 || has_strong_rtl(&text) {
             return Err(unsupported());
         }
         let Some(color) = font.color else {
             return Err(unsupported());
         };
         let color = dxf_color(sheet, styles, cells, col, row, session)?.unwrap_or(color);
+        // sheet RTL：调用方已翻转画布；格子 x 映到翻转后坐标，字仍 draw_cells 正写。
+        let (x0, x1) = if rtl {
+            (canvas.w - x1, canvas.w - x0)
+        } else {
+            (x0, x1)
+        };
         let mut clip_r = x1;
         if filter_hit(filter, col, row, col_end) {
-            clip_r = clip_r.min(x1 - 17);
+            clip_r = if rtl {
+                (x0 + 17).min(x1)
+            } else {
+                clip_r.min(x1 - 17)
+            };
         }
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
         let h_align = match xf.h_align {
@@ -4322,6 +4366,20 @@ fn paint_labels(
     }
     paint_filters(canvas, xs, ys, c0, r0, filter);
     Ok(())
+}
+
+/// Hebrew/Arabic strong RTL. sheetView RTL this slice: Latin/CJK upright only.
+fn has_strong_rtl(text: &str) -> bool {
+    text.chars().any(|ch| {
+        let n = ch as u32;
+        (0x0590..=0x05FF).contains(&n)
+            || (0x0600..=0x06FF).contains(&n)
+            || (0x0700..=0x074F).contains(&n)
+            || (0x0750..=0x077F).contains(&n)
+            || (0x08A0..=0x08FF).contains(&n)
+            || (0xFB1D..=0xFDFF).contains(&n)
+            || (0xFE70..=0xFEFF).contains(&n)
+    })
 }
 
 /// 单元格换行：硬换行 `\n` 分段，再按空格贪心软断；超长无空格词中断。

@@ -1,4 +1,4 @@
-//! 从右到左且没有文字时，整张图是从左到右那张的水平翻转。有文字仍不画。
+//! sheetView RTL: no-text flips; Latin/CJK text upright after column mirror; strong RTL + readingOrder=2 NI.
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -146,7 +146,7 @@ fn right_to_left_flips_a_sheet_without_text() {
 }
 
 #[test]
-fn right_to_left_with_text_is_rejected() {
+fn right_to_left_with_latin_text_exports_png() {
     let src = book();
     let written = tmp("text");
     run_ok(json!({
@@ -154,9 +154,83 @@ fn right_to_left_with_text_is_rejected() {
         "action": "apply",
         "path": src.to_string_lossy(),
         "output": written.to_string_lossy(),
-        "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": "AB" }]
+        "ops": [
+            { "op": "setCell", "id": "cell:Sheet1!A1", "value": "AB" },
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "left" } },
+            { "op": "setCell", "id": "cell:Sheet1!B1", "value": "CD" },
+            { "op": "setCellStyle", "id": "cell:Sheet1!B1", "align": { "horizontal": "right" } },
+            { "op": "setCell", "id": "cell:Sheet1!A2", "value": 12.0 }
+        ]
+    }));
+    let rtl_book = with_view(&written, "rightToLeft=\"1\"");
+    let png = export(&rtl_book).unwrap();
+    assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+    let (w, h, _) = decode_png(&png);
+    assert_eq!((w, h), (129, 41));
+}
+
+#[test]
+fn right_to_left_with_arabic_still_not_implemented() {
+    let src = book();
+    let written = tmp("ar");
+    let arabic = String::from_utf8(vec![
+        0xD9, 0x85, 0xD8, 0xB1, 0xD8, 0xAD, 0xD8, 0xA8, 0xD8, 0xA7,
+    ])
+    .unwrap();
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": written.to_string_lossy(),
+        "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": arabic }]
     }));
     let rtl_book = with_view(&written, "rightToLeft=\"1\"");
     let err = export(&rtl_book).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn reading_order_rtl_still_not_implemented() {
+    let src = book();
+    let written = tmp("ro2");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": written.to_string_lossy(),
+        "ops": [
+            { "op": "setCell", "id": "cell:Sheet1!A1", "value": "AB" },
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "left" } }
+        ]
+    }));
+    let bytes = std::fs::read(&written).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/styles.xml" {
+                let xml = String::from_utf8(data).unwrap();
+                data = xml
+                    .replacen(
+                        "<alignment horizontal=\"left\"",
+                        "<alignment horizontal=\"left\" readingOrder=\"2\"",
+                        1,
+                    )
+                    .into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    let injected = tmp("ro2-inj");
+    std::fs::write(&injected, out.into_inner()).unwrap();
+    let err = export(&injected).unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
