@@ -208,6 +208,45 @@ fn text_literal_div0_still_exports_as_text() {
     assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
 }
 
+#[test]
+fn wrap_and_indent_exports_png() {
+    let path = tmp("wrap-indent");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [
+                    { "ref": "A1", "value": "one two three four five" },
+                    { "ref": "B1", "value": "indent" },
+                    { "ref": "A2", "value": "line1\nline2" },
+                    { "ref": "B2", "value": "supercalifragilistic" }
+                ]
+            }]
+        }
+    }));
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": path.to_string_lossy(),
+        "ops": [
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "wrap": true, "horizontal": "left", "vertical": "top" } },
+            { "op": "setCellStyle", "id": "cell:Sheet1!B1", "align": { "wrap": true, "indent": 2, "horizontal": "left", "vertical": "top" } },
+            { "op": "setCellStyle", "id": "cell:Sheet1!A2", "align": { "wrap": true, "horizontal": "left", "vertical": "top" } },
+            { "op": "setCellStyle", "id": "cell:Sheet1!B2", "align": { "wrap": true, "horizontal": "left", "vertical": "top" } },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 45.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 45.0 },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 10.625 },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "B", "width": 10.625 }
+        ]
+    }));
+    let png = export_png(&path);
+    assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
+    assert!(png.len() > 100);
+}
+
 fn rewrite_a1_cell(path: &Path, cell_xml: &str) {
     use std::io::{Cursor, Read, Write};
     use zip::write::SimpleFileOptions;

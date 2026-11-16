@@ -1428,6 +1428,10 @@ struct Xf {
     num_fmt: u32,
     h_align: HAlign,
     v_align: VAlign,
+    /// `alignment/@wrapText`。
+    wrap: bool,
+    /// `alignment/@indent`，0–15；每级约 3 个 `0` 字宽（与绘制同一套 `Face::width`）。
+    indent: u32,
 }
 
 struct Dxf {
@@ -1752,6 +1756,8 @@ impl Styles {
                 num_fmt: 0,
                 h_align: HAlign::General,
                 v_align: VAlign::Bottom,
+                wrap: false,
+                indent: 0,
             }],
             formats: HashMap::new(),
             dxfs: Vec::new(),
@@ -1812,6 +1818,8 @@ impl Styles {
                 num_fmt: 0,
                 h_align: HAlign::General,
                 v_align: VAlign::Bottom,
+                wrap: false,
+                indent: 0,
             });
         }
         let mut dxfs = Vec::new();
@@ -2058,16 +2066,30 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         .attr("numFmtId")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    let (h_align, v_align) = match xf.child_by_local("alignment") {
-        None => (HAlign::General, VAlign::Bottom),
+    let (h_align, v_align, wrap, indent) = match xf.child_by_local("alignment") {
+        None => (HAlign::General, VAlign::Bottom, false, 0u32),
         Some(al) => {
-            if truthy(al.attr("wrapText"))
-                || al.attr("textRotation").is_some_and(|v| v != "0")
-                || al.attr("indent").is_some_and(|v| v != "0")
-            {
+            // 旋转 / 缩小字体仍 NI（旋转与两端对齐另见计划）。
+            if al.attr("textRotation").is_some_and(|v| v != "0") || truthy(al.attr("shrinkToFit")) {
                 return Err(unsupported());
             }
-            (read_h(al.attr("horizontal"))?, read_v(al.attr("vertical"))?)
+            let wrap = truthy(al.attr("wrapText"));
+            let indent = match al.attr("indent") {
+                None | Some("0") => 0u32,
+                Some(raw) => {
+                    let n: u32 = raw.parse().map_err(|_| unsupported())?;
+                    if n > 15 {
+                        return Err(unsupported());
+                    }
+                    n
+                }
+            };
+            (
+                read_h(al.attr("horizontal"))?,
+                read_v(al.attr("vertical"))?,
+                wrap,
+                indent,
+            )
         }
     };
     Ok(Xf {
@@ -2077,6 +2099,8 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         num_fmt,
         h_align,
         v_align,
+        wrap,
+        indent,
     })
 }
 
@@ -4232,7 +4256,6 @@ fn paint_labels(
             clip_r = clip_r.min(x1 - 17);
         }
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
-        let width = face.width(&text);
         let h_align = match xf.h_align {
             HAlign::Left => HAlign::Left,
             HAlign::Center => HAlign::Center,
@@ -4243,26 +4266,111 @@ fn paint_labels(
                 _ => HAlign::Left,
             },
         };
-        let x = match h_align {
-            HAlign::Left | HAlign::General => f64::from(x0) + face.cell_pad(),
-            HAlign::Center => f64::from(x0) + (f64::from(x1 - x0) - width) / 2.0,
-            HAlign::Right => f64::from(x1) - width - 2.0,
+        // 缩进：每级 3×`0` 字宽；与 draw_cells 同一套 Face::width，不用 Word typo_width。
+        let indent_px = if xf.indent == 0 {
+            0.0
+        } else {
+            face.width("0") * 3.0 * f64::from(xf.indent)
+        };
+        let pad = face.cell_pad();
+        let inner_left = f64::from(x0)
+            + pad
+            + match h_align {
+                HAlign::Right => 0.0,
+                _ => indent_px,
+            };
+        let inner_right = f64::from(clip_r)
+            - 2.0
+            - match h_align {
+                HAlign::Right => indent_px,
+                _ => 0.0,
+            };
+        let max_w = (inner_right - inner_left).max(1.0);
+        let lines = if xf.wrap || text.contains('\n') {
+            wrap_cell_lines(face, &text, max_w)
+        } else {
+            vec![text]
         };
         let em = face.em_box();
-        let top = match xf.v_align {
+        let block_h = em * lines.len() as f64;
+        let top0 = match xf.v_align {
             VAlign::Top => f64::from(y0) + 2.0,
-            VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - em) / 2.0,
-            VAlign::Bottom => f64::from(y1) - em - 1.0,
+            VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - block_h) / 2.0,
+            VAlign::Bottom => f64::from(y1) - block_h - 1.0,
         };
-        face.draw_cells(&text, x, top, color, |px, py, rgb, cov| {
-            if px < x0 || py < y0 || px >= clip_r || py >= y1 {
-                return;
+        for (i, line) in lines.iter().enumerate() {
+            if line.is_empty() {
+                continue;
             }
-            canvas.blend(px, py, rgb, cov);
-        });
+            let width = face.width(line);
+            let x = match h_align {
+                HAlign::Left | HAlign::General => inner_left,
+                HAlign::Center => {
+                    let span = (inner_right - inner_left).max(width);
+                    inner_left + (span - width) / 2.0
+                }
+                HAlign::Right => inner_right - width,
+            };
+            let top = top0 + em * i as f64;
+            face.draw_cells(line, x, top, color, |px, py, rgb, cov| {
+                if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                    return;
+                }
+                canvas.blend(px, py, rgb, cov);
+            });
+        }
     }
     paint_filters(canvas, xs, ys, c0, r0, filter);
     Ok(())
+}
+
+/// 单元格换行：硬换行 `\n` 分段，再按空格贪心软断；超长无空格词中断。
+/// 宽度一律 `Face::width`（与 `draw_cells` 同前进宽），不用 Word `typo_width`。
+fn wrap_cell_lines(face: &Face, text: &str, max_width: f64) -> Vec<String> {
+    let mut out = Vec::new();
+    for para in text.split('\n') {
+        if para.is_empty() {
+            out.push(String::new());
+            continue;
+        }
+        let chars: Vec<char> = para.chars().collect();
+        let mut start = 0usize;
+        let mut i = 0usize;
+        let mut last_space: Option<usize> = None;
+        while i < chars.len() {
+            let line: String = chars[start..=i].iter().collect();
+            if face.width(&line) <= max_width {
+                if chars[i] == ' ' {
+                    last_space = Some(i);
+                }
+                i += 1;
+                continue;
+            }
+            if i == start {
+                out.push(chars[i].to_string());
+                i += 1;
+                start = i;
+                last_space = None;
+                continue;
+            }
+            let break_at = match last_space {
+                Some(s) => s + 1,
+                None => i,
+            };
+            let piece: String = chars[start..break_at].iter().collect();
+            out.push(piece);
+            start = break_at;
+            last_space = None;
+            i = start;
+        }
+        if start < chars.len() {
+            out.push(chars[start..].iter().collect());
+        }
+    }
+    if out.is_empty() {
+        out.push(String::new());
+    }
+    out
 }
 
 fn label_text(shown: &Shown, fmt: &NumFmt, date1904: bool) -> Result<String, Error> {
@@ -5358,6 +5466,26 @@ mod tests {
             label_text(&Shown::Text("#DIV/0!".into()), &NumFmt::General, false).unwrap(),
             "#DIV/0!"
         );
+    }
+
+    #[test]
+    fn wrap_cell_lines_uses_face_width_breakpoints() {
+        let Some(face) = Face::open_cell(14.6667, false, false, "Calibri") else {
+            return;
+        };
+        let w0 = face.width("0");
+        assert!(w0 > 0.0);
+        // 窄到大约两个字宽，"one two" 应断成至少两行。
+        let max_w = face.width("one ") + 0.5;
+        let lines = wrap_cell_lines(&face, "one two three", max_w);
+        assert!(lines.len() >= 2, "lines={lines:?}");
+        assert!(lines.iter().all(|l| face.width(l) <= max_w + w0));
+        // 硬换行
+        let hard = wrap_cell_lines(&face, "a\nb", 1000.0);
+        assert_eq!(hard, vec!["a".to_string(), "b".to_string()]);
+        // 缩进像素公式：2 级 = 6 个 0 宽
+        let indent2 = face.width("0") * 3.0 * 2.0;
+        assert!((indent2 - face.width("000000")).abs() < 0.01);
     }
 
     #[test]
