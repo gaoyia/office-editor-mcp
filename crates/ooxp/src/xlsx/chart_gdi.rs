@@ -786,10 +786,21 @@ mod win {
             width: f32,
             height: f32,
         ) -> i32;
+        fn GdipCreatePen1(color: u32, width: f32, unit: i32, pen: *mut *mut c_void) -> i32;
+        fn GdipDrawLine(
+            graphics: *mut c_void,
+            pen: *mut c_void,
+            x1: f32,
+            y1: f32,
+            x2: f32,
+            y2: f32,
+        ) -> i32;
+        fn GdipDeletePen(pen: *mut c_void) -> i32;
     }
 
     const SMOOTHING_ANTIALIAS: i32 = 4;
     const PIXEL_OFFSET_HALF: i32 = 4;
+    const PIXEL_OFFSET_NONE: i32 = 3;
 
     /// 用 GDI+ 抗锯齿和半像素偏移，填充设备像素矩形里的椭圆。
     /// 回调坐标是页面像素，覆盖率从 0 到 255。
@@ -984,6 +995,104 @@ mod win {
         true
     }
 
+    /// 用 GDI+ 抗锯齿画不透明实线斜线。1 像素用无像素偏移，2 像素用半像素偏移。
+    /// 与 PowerPoint 16.0 的 `Slide.Export` 对齐。回调坐标是页面像素，覆盖率从 0 到 255。
+    pub fn fill_device_line(
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        width_px: i32,
+        mut blend: impl FnMut(i32, i32, u8),
+    ) -> bool {
+        if (width_px != 1 && width_px != 2) || gdiplus_token().is_none() {
+            return false;
+        }
+        let pad = width_px + 3;
+        let min_x = x0.min(x1) - pad;
+        let min_y = y0.min(y1) - pad;
+        let max_x = x0.max(x1) + pad;
+        let max_y = y0.max(y1) + pad;
+        let bw = max_x - min_x + 1;
+        let bh = max_y - min_y + 1;
+        if bw <= 0 || bh <= 0 {
+            return false;
+        }
+        let mut pixels = vec![0xFFFF_FFFFu32; (bw as usize) * (bh as usize)];
+        let offset = if width_px == 1 {
+            PIXEL_OFFSET_NONE
+        } else {
+            PIXEL_OFFSET_HALF
+        };
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                bw,
+                bh,
+                bw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, offset);
+            let mut pen = std::ptr::null_mut();
+            if GdipCreatePen1(0xFF00_0000, width_px as f32, UNIT_PIXEL, &mut pen) != 0
+                || pen.is_null()
+            {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            let status = GdipDrawLine(
+                graphics,
+                pen,
+                (x0 - min_x) as f32,
+                (y0 - min_y) as f32,
+                (x1 - min_x) as f32,
+                (y1 - min_y) as f32,
+            );
+            GdipDeletePen(pen);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            status == 0
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..bh {
+            for px in 0..bw {
+                let row = pixels[py as usize * bw as usize + px as usize];
+                let red = ((row >> 16) & 0xff) as u8;
+                let green = ((row >> 8) & 0xff) as u8;
+                let blue = (row & 0xff) as u8;
+                if red == 255 && green == 255 && blue == 255 {
+                    continue;
+                }
+                let cov = (255 - u16::from(red))
+                    .max(255 - u16::from(green))
+                    .max(255 - u16::from(blue))
+                    .min(255) as u8;
+                if cov == 0 {
+                    continue;
+                }
+                blend(min_x + px, min_y + py, cov);
+            }
+        }
+        true
+    }
+
     fn gdiplus_token() -> Option<usize> {
         static TOKEN: OnceLock<Option<usize>> = OnceLock::new();
         *TOKEN.get_or_init(|| unsafe {
@@ -1149,7 +1258,7 @@ mod win {
 }
 
 #[cfg(windows)]
-pub use win::{fill_device_ellipse, fill_device_round_rect, Face};
+pub use win::{fill_device_ellipse, fill_device_line, fill_device_round_rect, Face};
 
 #[cfg(not(windows))]
 pub struct Face;
@@ -1225,6 +1334,18 @@ pub fn fill_device_round_rect(
     _: i32,
     _: i32,
     _: f64,
+    _: impl FnMut(i32, i32, u8),
+) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_line(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
     _: impl FnMut(i32, i32, u8),
 ) -> bool {
     false

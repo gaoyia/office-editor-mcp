@@ -11,7 +11,7 @@ use crate::xml::Element;
 use super::picture;
 use super::shape;
 use super::ExportedMedia;
-use crate::xlsx::{fill_device_ellipse, fill_device_round_rect, Face};
+use crate::xlsx::{fill_device_ellipse, fill_device_line, fill_device_round_rect, Face};
 
 const EMU_PER_INCH: f64 = 914_400.0;
 const DPI: f64 = 96.0;
@@ -444,7 +444,7 @@ fn paint_cxn(
     }
 }
 
-/// 水平或垂直的直线 / 直连接线。一条边的 EMU 必须是 0。斜线、弯曲连接符仍整页失败。
+/// 水平、垂直或角到角的直线 / 直连接线。弯曲连接符仍整页失败。
 fn paint_line(
     pkg: &Package,
     part: &str,
@@ -473,42 +473,100 @@ fn paint_line(
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Err(unsupported());
     };
-    if xfrm.attr("flipH").is_some() || xfrm.attr("flipV").is_some() {
-        return Err(unsupported());
-    }
+    let flip_h = crate::xml::attr_is_true(xfrm, "flipH");
+    let flip_v = crate::xml::attr_is_true(xfrm, "flipV");
     let (x, y, cx, cy) = xfrm_box(xfrm);
     let Some((x, y, cx, cy)) = turned_box(x, y, cx, cy, xfrm.attr("rot")) else {
         return Err(unsupported());
     };
     let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
-    if (cx == 0) == (cy == 0) {
+    if cx == 0 && cy == 0 {
         return Err(unsupported());
     }
+    reject_fancy_line(sp_pr)?;
     let (color, stroke_f) = line_stroke(pkg, part, sp, sp_pr)?;
     let sw = stroke_f.round().max(0.0) as i32;
     if sw != 1 && sw != 2 {
         return Err(unsupported());
     }
-    if cy == 0 {
-        paint_h_line(
-            rgb,
-            width,
-            height,
-            emu_px(x),
-            emu_px(x + cx),
-            emu_px(y),
-            sw,
-            color,
-        );
+    if cx == 0 || cy == 0 {
+        if flip_h || flip_v {
+            return Err(unsupported());
+        }
+        if cy == 0 {
+            paint_h_line(
+                rgb,
+                width,
+                height,
+                emu_px(x),
+                emu_px(x + cx),
+                emu_px(y),
+                sw,
+                color,
+            );
+            return Ok(());
+        }
+        let y0 = emu_px(y);
+        let y1 = emu_px(y + cy);
+        if sw == 1 && y0 == y1 {
+            return Err(unsupported());
+        }
+        paint_v_line(rgb, width, height, emu_px(x), y0, y1, sw, color);
         return Ok(());
     }
-    let y0 = emu_px(y);
-    let y1 = emu_px(y + cy);
-    if sw == 1 && y0 == y1 {
+    let x0 = emu_px(if flip_h { x + cx } else { x });
+    let y0 = emu_px(if flip_v { y + cy } else { y });
+    let x1 = emu_px(if flip_h { x } else { x + cx });
+    let y1 = emu_px(if flip_v { y } else { y + cy });
+    if x0 == x1 && y0 == y1 {
         return Err(unsupported());
     }
-    paint_v_line(rgb, width, height, emu_px(x), y0, y1, sw, color);
+    if !paint_diag_line(rgb, width, height, x0, y0, x1, y1, sw, color) {
+        return Err(unsupported());
+    }
     Ok(())
+}
+
+/// 虚线、箭头和指定了非平头线帽的直线仍整页失败。
+fn reject_fancy_line(sp_pr: &Element) -> Result<(), Error> {
+    let Some(ln) = sp_pr.child_by_local("ln") else {
+        return Ok(());
+    };
+    if ln.attr("cap").is_some_and(|cap| cap != "flat") {
+        return Err(unsupported());
+    }
+    if ln.attr("cmpd").is_some() {
+        return Err(unsupported());
+    }
+    if let Some(dash) = ln.child_by_local("prstDash") {
+        if dash.attr("val").is_some_and(|val| val != "solid") {
+            return Err(unsupported());
+        }
+    }
+    if ln.child_by_local("custDash").is_some()
+        || ln.child_by_local("headEnd").is_some()
+        || ln.child_by_local("tailEnd").is_some()
+    {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+/// 1 像素和 2 像素不透明实线斜线走 GDI+ 抗锯齿，覆盖率与 PowerPoint 16.0 对齐。
+fn paint_diag_line(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    sw: i32,
+    color: [u8; 3],
+) -> bool {
+    fill_device_line(x0, y0, x1, y1, sw, |px, py, cov| {
+        blend(rgb, width, height, px, py, color, cov);
+    })
 }
 
 /// 1 像素横线两端是约 75% 覆盖；2 像素横线是实心，不含终点像素，并向上加一像素。
@@ -3772,6 +3830,71 @@ mod tests {
         assert_eq!(pixel(&red, w, 96, 100), [238, 68, 85]);
         assert_eq!(pixel(&red, w, 96, 96), [244, 138, 149]);
         assert_eq!(pixel(&red, w, 96, 288), [240, 91, 106]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_diagonal_matches_office_coverage() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut rgb = blank(w, h);
+        assert!(paint_diag_line(
+            &mut rgb,
+            w,
+            h,
+            96,
+            96,
+            288,
+            288,
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&rgb, w, 96, 96), [112, 112, 112]);
+        assert_eq!(pixel(&rgb, w, 97, 97), [64, 64, 64]);
+        assert_eq!(pixel(&rgb, w, 288, 288), [80, 80, 80]);
+        assert_eq!(pixel(&rgb, w, 95, 96), [255, 255, 255]);
+        let mut shallow = blank(w, h);
+        assert!(paint_diag_line(
+            &mut shallow,
+            w,
+            h,
+            96,
+            96,
+            288,
+            144,
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&shallow, w, 96, 96), [96, 96, 96]);
+        assert_eq!(pixel(&shallow, w, 288, 144), [64, 64, 64]);
+        let mut flipped = blank(w, h);
+        assert!(paint_diag_line(
+            &mut flipped,
+            w,
+            h,
+            288,
+            96,
+            96,
+            288,
+            1,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&flipped, w, 288, 96), [112, 112, 112]);
+        assert_eq!(pixel(&flipped, w, 96, 288), [80, 80, 80]);
+        let mut two = blank(w, h);
+        assert!(paint_diag_line(
+            &mut two,
+            w,
+            h,
+            96,
+            96,
+            288,
+            288,
+            2,
+            [0, 0, 0]
+        ));
+        assert_eq!(pixel(&two, w, 96, 96), [8, 8, 8]);
+        assert_eq!(pixel(&two, w, 97, 97), [0, 0, 0]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {
