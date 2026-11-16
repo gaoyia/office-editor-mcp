@@ -13,7 +13,7 @@ use super::shape;
 use super::ExportedMedia;
 use crate::xlsx::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, Face,
+    fill_device_round_rect, fill_device_stroked_rect, Face,
 };
 
 const EMU_PER_INCH: f64 = 914_400.0;
@@ -894,6 +894,26 @@ fn paint_rect(
     width: u32,
     height: u32,
 ) -> Result<(), Error> {
+    if let Some(stroked) = stroked_rect(pkg, part, sp_pr, chain)? {
+        if !paint_stroked_rect(
+            rgb,
+            width,
+            height,
+            stroked.x,
+            stroked.y,
+            stroked.w,
+            stroked.h,
+            stroked.fill,
+            stroked.stroke,
+            stroked.sw,
+        ) {
+            return Err(unsupported());
+        }
+        paint_tx(
+            sp, stroked.x, stroked.y, stroked.w, stroked.h, rgb, width, height,
+        );
+        return Ok(());
+    }
     if let Some((color, x, y, w, h)) = plain_rect(sp, chain) {
         fill_rect(rgb, width, height, x, y, w, h, color);
         paint_tx(sp, x, y, w, h, rgb, width, height);
@@ -2856,6 +2876,119 @@ fn blend_f(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [f64;
     }
 }
 
+/// 不透明实线直角矩形描边。线宽恰好是 1 或 2 像素（9525 / 19050 EMU）时，外角与 PowerPoint 16.0 对齐。
+/// 可带不透明实心填充或 `noFill`。缺省接缝用圆角，平头。带旋转、虚线、箭头或显式接缝的仍不画。
+struct StrokedRect {
+    fill: Option<[u8; 3]>,
+    stroke: [u8; 3],
+    sw: i32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+fn stroked_rect(
+    pkg: &Package,
+    part: &str,
+    sp_pr: &Element,
+    chain: &[super::layout_check::GroupXfrm],
+) -> Result<Option<StrokedRect>, Error> {
+    if sp_pr
+        .child_by_local("effectLst")
+        .is_some_and(|effects| effects.element_children().next().is_some())
+        || sp_pr.child_by_local("scene3d").is_some()
+        || sp_pr.child_by_local("sp3d").is_some()
+    {
+        return Ok(None);
+    }
+    let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
+        return Ok(None);
+    };
+    let prst = sp_pr
+        .child_by_local("prstGeom")
+        .and_then(|geom| geom.attr("prst"))
+        .unwrap_or("");
+    if prst != "rect" {
+        return Ok(None);
+    }
+    if xfrm.attr("rot").is_some_and(|raw| {
+        raw.parse::<i64>()
+            .ok()
+            .is_some_and(|n| n.rem_euclid(FULL_TURN) != 0)
+    }) {
+        return Ok(None);
+    }
+    if line_is_clear(sp_pr) {
+        return Ok(None);
+    }
+    if reject_fancy_line(sp_pr).is_err() {
+        return Ok(None);
+    }
+    if let Some(ln) = sp_pr.child_by_local("ln") {
+        if ln.attr("algn").is_some_and(|algn| algn != "ctr") {
+            return Ok(None);
+        }
+        if ln.child_by_local("miter").is_some()
+            || ln.child_by_local("bevel").is_some()
+            || ln.child_by_local("round").is_some()
+        {
+            return Ok(None);
+        }
+    }
+    let Some(stroke) = stroke_color(sp_pr)? else {
+        return Ok(None);
+    };
+    let stroke_f = stroke_width_f(sp_pr);
+    if stroke_f != 1.0 && stroke_f != 2.0 {
+        return Ok(None);
+    }
+    let sw = stroke_f as i32;
+    let fill = if sp_pr.child_by_local("noFill").is_some() {
+        None
+    } else if let Some(solid) = sp_pr.child_by_local("solidFill") {
+        if let Some(color) = opaque_rgb(solid) {
+            Some(color)
+        } else if let Some(color) = scheme_rect_color(pkg, part, sp_pr)? {
+            Some(color)
+        } else {
+            return Ok(None);
+        }
+    } else {
+        return Ok(None);
+    };
+    let (x, y, cx, cy) = xfrm_box(xfrm);
+    let (x, y, cx, cy) = super::layout_check::map_emu(x, y, cx, cy, chain);
+    let (x, y, w, h) = (emu_px(x), emu_px(y), emu_px(cx), emu_px(cy));
+    if w <= 0 || h <= 0 {
+        return Ok(None);
+    }
+    Ok(Some(StrokedRect {
+        fill,
+        stroke,
+        sw,
+        x,
+        y,
+        w,
+        h,
+    }))
+}
+
+fn paint_stroked_rect(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    fill: Option<[u8; 3]>,
+    stroke: [u8; 3],
+    sw: i32,
+) -> bool {
+    fill_device_stroked_rect(x, y, w, h, fill, stroke, sw, rgb, width, height)
+}
+
 fn plain_rect(
     sp: &Element,
     chain: &[super::layout_check::GroupXfrm],
@@ -4311,6 +4444,75 @@ mod tests {
         assert_eq!(pixel(&two, w, 234, 163), [0, 0, 0]);
         assert_eq!(pixel(&two, w, 288, 287), [0, 0, 0]);
         assert_eq!(pixel(&two, w, 288, 288), [191, 191, 191]);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_one_pixel_rect_stroke_matches_office_corners() {
+        let w = 400u32;
+        let h = 400u32;
+        let mut one = blank(w, h);
+        assert!(paint_stroked_rect(
+            &mut one,
+            w,
+            h,
+            96,
+            96,
+            192,
+            192,
+            Some([255, 255, 255]),
+            [0, 0, 0],
+            1
+        ));
+        assert_eq!(pixel(&one, w, 96, 96), [48, 48, 48]);
+        assert_eq!(pixel(&one, w, 288, 96), [48, 48, 48]);
+        assert_eq!(pixel(&one, w, 96, 288), [16, 16, 16]);
+        assert_eq!(pixel(&one, w, 288, 288), [16, 16, 16]);
+        assert_eq!(pixel(&one, w, 192, 96), [0, 0, 0]);
+        assert_eq!(pixel(&one, w, 96, 192), [0, 0, 0]);
+        assert_eq!(pixel(&one, w, 288, 192), [0, 0, 0]);
+        assert_eq!(pixel(&one, w, 192, 288), [0, 0, 0]);
+        assert_eq!(pixel(&one, w, 97, 97), [255, 255, 255]);
+        let mut two = blank(w, h);
+        assert!(paint_stroked_rect(
+            &mut two,
+            w,
+            h,
+            96,
+            96,
+            192,
+            192,
+            None,
+            [0, 0, 0],
+            2
+        ));
+        assert_eq!(pixel(&two, w, 95, 95), [120, 120, 120]);
+        assert_eq!(pixel(&two, w, 288, 95), [96, 96, 96]);
+        assert_eq!(pixel(&two, w, 288, 288), [32, 32, 32]);
+        assert_eq!(pixel(&two, w, 96, 96), [0, 0, 0]);
+        assert_eq!(pixel(&two, w, 192, 95), [0, 0, 0]);
+        let mut on_bg = blank(w, h);
+        for py in 0..h as i32 {
+            for px in 0..w as i32 {
+                let i = (py as usize * w as usize + px as usize) * 3;
+                on_bg[i..i + 3].copy_from_slice(&[0xAA, 0xBB, 0xCC]);
+            }
+        }
+        assert!(paint_stroked_rect(
+            &mut on_bg,
+            w,
+            h,
+            96,
+            96,
+            192,
+            192,
+            Some([255, 255, 255]),
+            [0, 0, 0],
+            1
+        ));
+        assert_eq!(pixel(&on_bg, w, 96, 96), [36, 38, 41]);
+        assert_eq!(pixel(&on_bg, w, 288, 288), [12, 13, 14]);
+        assert_eq!(pixel(&on_bg, w, 10, 10), [0xAA, 0xBB, 0xCC]);
     }
 
     fn pixel(rgb: &[u8], w: u32, x: i32, y: i32) -> [u8; 3] {

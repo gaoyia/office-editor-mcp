@@ -225,6 +225,53 @@ fn solid_rect_is_painted_and_stroke_or_text_is_not() {
 }
 
 #[test]
+fn rect_stroke_corners_cover_one_and_two_pixel_widths() {
+    let src = tmp("stroke-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [
+                { "shapes": [{ "text": "", "prst": "rect", "fill": "FFFFFF", "line": { "color": "000000", "width": 9525 }, "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] },
+                { "shapes": [{ "text": "", "prst": "rect", "fill": null, "line": { "color": "000000", "width": 19050 }, "x": 914400, "y": 914400, "cx": 1828800, "cy": 1828800 }] }
+            ]
+        }
+    }));
+    let out = tmp("stroke-1-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": src.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 96, 96), [48, 48, 48]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [48, 48, 48]);
+    assert_eq!(pixel(&rgb, w, 96, 288), [16, 16, 16]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [16, 16, 16]);
+    assert_eq!(pixel(&rgb, w, 192, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 120, 120), [255, 255, 255]);
+    let out = tmp("stroke-2-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": src.to_string_lossy(),
+        "id": "slide:2",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 95, 95), [120, 120, 120]);
+    assert_eq!(pixel(&rgb, w, 288, 95), [96, 96, 96]);
+    assert_eq!(pixel(&rgb, w, 288, 288), [32, 32, 32]);
+    assert_eq!(pixel(&rgb, w, 96, 96), [0, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 192, 95), [0, 0, 0]);
+}
+
+#[test]
 fn scheme_rect_uses_the_theme_slot_and_a_transform_fails() {
     let src = tmp("scheme-src");
     run_ok(json!({
