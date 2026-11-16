@@ -388,6 +388,8 @@ fn rank_book(cells: serde_json::Value, rule: serde_json::Value) -> PathBuf {
     hide_grid(&book)
 }
 
+// 格子里有要画的数字或文字。没有 GDI 时整表不画，不能在非 Windows 上拿缺字的图当通过。
+#[cfg(windows)]
 #[test]
 fn above_average_paints_only_the_strictly_greater_cell() {
     let dxf = json!({
@@ -412,6 +414,7 @@ fn above_average_paints_only_the_strictly_greater_cell() {
     quiet_row(&rgb, w, 50, RED);
 }
 
+#[cfg(windows)]
 #[test]
 fn population_stddev_top_rank_and_text_use_the_same_fill() {
     let dxf = json!({
@@ -466,6 +469,7 @@ fn population_stddev_top_rank_and_text_use_the_same_fill() {
     quiet_row(&rgb, w, 50, RED);
 }
 
+#[cfg(windows)]
 #[test]
 fn not_contains_paints_a_missing_cell() {
     let book = rank_book(
@@ -580,6 +584,7 @@ fn duplicate_book(
     dst
 }
 
+#[cfg(windows)]
 #[test]
 fn duplicate_values_paint_numeric_text_and_ignore_case() {
     let book = duplicate_book(
@@ -625,6 +630,7 @@ fn unparsed_numeric_text_fails_the_sheet() {
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
 
+#[cfg(windows)]
 #[test]
 fn unique_values_paint_only_the_single_occurrence() {
     let book = duplicate_book(
@@ -648,6 +654,7 @@ fn unique_values_paint_only_the_single_occurrence() {
     assert_eq!(pixel(&rgb, w, 7, 61), [255, 255, 255]);
 }
 
+#[cfg(windows)]
 #[test]
 fn blanks_fill_a_missing_cell_and_spaces() {
     let book = duplicate_book(
@@ -668,6 +675,7 @@ fn blanks_fill_a_missing_cell_and_spaces() {
     quiet_row(&rgb, w, 70, [255, 255, 255]);
 }
 
+#[cfg(windows)]
 #[test]
 fn not_contains_blanks_skips_empty_cells() {
     let book = duplicate_book(
@@ -688,6 +696,7 @@ fn not_contains_blanks_skips_empty_cells() {
     quiet_row(&rgb, w, 70, RED);
 }
 
+#[cfg(windows)]
 #[test]
 fn a_blank_rule_without_formula_does_not_fill() {
     let book = duplicate_book(
@@ -769,6 +778,7 @@ fn replace_cell_with_error(xml: &str, r: &str) -> String {
     format!("{}{cell}{}", &xml[..start], &xml[end..])
 }
 
+#[cfg(windows)]
 #[test]
 fn errors_fill_div0_and_leave_a_missing_cell() {
     let book = duplicate_book(
@@ -790,6 +800,7 @@ fn errors_fill_div0_and_leave_a_missing_cell() {
     quiet_row(&rgb, w, 70, RED);
 }
 
+#[cfg(windows)]
 #[test]
 fn not_contains_errors_paints_a_missing_cell() {
     let book = duplicate_book(
@@ -809,6 +820,7 @@ fn not_contains_errors_paints_a_missing_cell() {
     quiet_row(&rgb, w, 50, [255, 255, 255]);
 }
 
+#[cfg(windows)]
 #[test]
 fn an_error_rule_without_formula_does_not_fill() {
     let book = duplicate_book(
