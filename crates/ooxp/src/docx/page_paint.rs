@@ -1,9 +1,10 @@
 //! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的不透明拉丁 Calibri 正文，画成 PNG。
 //! 宽高按节的 `w:pgSz`，96 dpi，twip×96/1440 四舍五入。
-//! 有表、图、页眉页脚，或还没对齐的行距/分页控制时不画。单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
+//! 单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
+//! 不透明 `wp:inline` PNG（extent 像素=源）与无文字表（填色 + single/nil 边、tblGrid/tblInd/trHeight）已画。
+//! 合并/表样式/表内文字与图、浮动绕排、页眉、显式行距/分页控制仍不画。
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
-
 use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
@@ -49,6 +50,23 @@ struct Layout {
 struct Page {
     texts: Vec<TextLine>,
     images: Vec<ImageBlit>,
+    tables: Vec<TableBlit>,
+}
+
+struct TableBlit {
+    left_twip: i64,
+    top_twip: i64,
+    col_widths: Vec<i64>,
+    row_heights: Vec<i64>,
+    /// (row, col, rgb)
+    fills: Vec<(usize, usize, [u8; 3])>,
+    /// 四边+内外：true=画 1px 黑单线（本切片只认 single）。
+    border_top: bool,
+    border_left: bool,
+    border_bottom: bool,
+    border_right: bool,
+    border_inside_h: bool,
+    border_inside_v: bool,
 }
 
 struct ImageBlit {
@@ -76,7 +94,10 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
     let (story, sect) = body_story(pkg, doc_part, body)?;
     let has_text = story.iter().any(|p| matches!(p, StoryPara::Text(_)));
     let has_image = story.iter().any(|p| matches!(p, StoryPara::Image(_)));
-    if !sect_is_plain(sect, has_text || has_image) || !uses_default_calibri(pkg, doc_part)? {
+    let has_table = story.iter().any(|p| matches!(p, StoryPara::Table(_)));
+    if !sect_is_plain(sect, has_text || has_image || has_table)
+        || !uses_default_calibri(pkg, doc_part)?
+    {
         return Err(unsupported());
     }
     let page_w = page_twip(sect, "w")?;
@@ -130,6 +151,7 @@ fn ensure_space(
     pages.push(Page {
         texts: Vec::new(),
         images: Vec::new(),
+        tables: Vec::new(),
     });
     *y = margin_top;
     *at_page_top = true;
@@ -156,6 +178,7 @@ fn layout_story(
     let mut pages: Vec<Page> = vec![Page {
         texts: Vec::new(),
         images: Vec::new(),
+        tables: Vec::new(),
     }];
     let mut y = margin_top;
     let mut at_page_top = true;
@@ -214,6 +237,44 @@ fn layout_story(
                 y = y.saturating_add(h_twip);
                 at_page_top = false;
                 y = y.saturating_add(img.after_twip.max(0));
+            }
+            StoryPara::Table(table) => {
+                let table_h: i64 = table.row_heights.iter().copied().sum();
+                if table_h <= 0 || table.col_widths.is_empty() || table.row_heights.is_empty() {
+                    return Err(unsupported());
+                }
+                ensure_space(
+                    &mut pages,
+                    &mut y,
+                    &mut at_page_top,
+                    margin_top,
+                    page_bottom,
+                    table_h,
+                )?;
+                let left_twip = margin_left.saturating_add(table.indent_twip.max(0));
+                let table_w: i64 = table.col_widths.iter().copied().sum();
+                if table_w > body_w.saturating_sub(table.indent_twip.max(0)) {
+                    return Err(unsupported());
+                }
+                pages
+                    .last_mut()
+                    .ok_or_else(unsupported)?
+                    .tables
+                    .push(TableBlit {
+                        left_twip,
+                        top_twip: y,
+                        col_widths: table.col_widths.clone(),
+                        row_heights: table.row_heights.clone(),
+                        fills: table.fills.clone(),
+                        border_top: table.border_top,
+                        border_left: table.border_left,
+                        border_bottom: table.border_bottom,
+                        border_right: table.border_right,
+                        border_inside_h: table.border_inside_h,
+                        border_inside_v: table.border_inside_v,
+                    });
+                y = y.saturating_add(table_h);
+                at_page_top = false;
             }
             StoryPara::Text(line) => {
                 let content_w = body_w.saturating_sub(line.indent_twip.max(0));
@@ -360,6 +421,20 @@ enum StoryPara {
     Empty { before: i64, after: i64 },
     Text(PendingText),
     Image(PendingImage),
+    Table(PendingTable),
+}
+
+struct PendingTable {
+    indent_twip: i64,
+    col_widths: Vec<i64>,
+    row_heights: Vec<i64>,
+    fills: Vec<(usize, usize, [u8; 3])>,
+    border_top: bool,
+    border_left: bool,
+    border_bottom: bool,
+    border_right: bool,
+    border_inside_h: bool,
+    border_inside_v: bool,
 }
 
 struct PendingImage {
@@ -388,6 +463,12 @@ fn body_story<'a>(
                     return Err(unsupported());
                 }
                 story.push(paragraph_kind(pkg, doc_part, child)?);
+            }
+            "tbl" => {
+                if sect.is_some() {
+                    return Err(unsupported());
+                }
+                story.push(StoryPara::Table(parse_plain_table(child)?));
             }
             "sectPr" => {
                 if sect.is_some() || index + 1 != children.len() {
@@ -749,6 +830,9 @@ fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     let mut rgb = vec![255u8; (layout.width as usize) * (layout.height as usize) * 3];
     let idx = (page as usize).saturating_sub(1);
     if let Some(page_items) = layout.pages.get(idx) {
+        for tbl in &page_items.tables {
+            paint_table(&mut rgb, layout.width, layout.height, tbl)?;
+        }
         for img in &page_items.images {
             paint_image(&mut rgb, layout.width, layout.height, img)?;
         }
@@ -1027,6 +1111,440 @@ fn decode_opaque_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), Error> {
         return Err(unsupported());
     }
     Ok((w, h, rgb))
+}
+
+/// 空单元格自动行高：Calibri 11 单倍行距 + Word 空表 PDF 对齐余量。
+/// oracle（96dpi Word PDF）：2–5 行空表横线 y=114/132/151/170/188/207；累加 (n+7)/15 需 +11（非 +7）。
+fn empty_auto_row_twip() -> Result<i64, Error> {
+    Ok(line_advance_twip(DEFAULT_SZ)?.saturating_add(11))
+}
+
+fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
+    let mut indent = 0i64;
+    let mut col_widths: Vec<i64> = Vec::new();
+    let mut border_top = false;
+    let mut border_left = false;
+    let mut border_bottom = false;
+    let mut border_right = false;
+    let mut border_inside_h = false;
+    let mut border_inside_v = false;
+    let mut saw_borders = false;
+    let mut rows: Vec<PendingRowBuild> = Vec::new();
+
+    for child in tbl.element_children() {
+        match child.local_name() {
+            "tblPr" => {
+                for p in child.element_children() {
+                    match p.local_name() {
+                        "tblW" | "tblLook" | "jc" => {}
+                        "tblInd" => {
+                            let w = p.attr_local("w").ok_or_else(unsupported)?;
+                            indent = parse_twip(w)?;
+                            let ty = p.attr_local("type").unwrap_or("dxa");
+                            if ty != "dxa" {
+                                return Err(unsupported());
+                            }
+                        }
+                        "tblBorders" => {
+                            saw_borders = true;
+                            for b in p.element_children() {
+                                let on = border_is_single_black(b)?;
+                                match b.local_name() {
+                                    "top" => border_top = on,
+                                    "left" | "start" => border_left = on,
+                                    "bottom" => border_bottom = on,
+                                    "right" | "end" => border_right = on,
+                                    "insideH" => border_inside_h = on,
+                                    "insideV" => border_inside_v = on,
+                                    "tl2br" | "tr2bl" => {
+                                        if on {
+                                            return Err(unsupported());
+                                        }
+                                    }
+                                    _ => return Err(unsupported()),
+                                }
+                            }
+                        }
+                        "tblCellMar" | "tblLayout" | "tblStyle" | "tblOverlap" | "shd"
+                        | "tblCaption" | "tblDescription" => return Err(unsupported()),
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            "tblGrid" => {
+                for g in child.element_children() {
+                    if g.local_name() != "gridCol" {
+                        return Err(unsupported());
+                    }
+                    let w = g.attr_local("w").ok_or_else(unsupported)?;
+                    col_widths.push(parse_twip(w)?);
+                }
+            }
+            "tr" => rows.push(parse_plain_row(child, col_widths.len())?),
+            "bookmarkStart" | "bookmarkEnd" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    if col_widths.is_empty() || rows.is_empty() {
+        return Err(unsupported());
+    }
+    for row in &rows {
+        if row.cells.len() != col_widths.len() {
+            return Err(unsupported());
+        }
+    }
+    // 缺省建表骨架带 single 边；若没有任何 tblBorders，按无边处理。
+    if !saw_borders {
+        border_top = false;
+        border_left = false;
+        border_bottom = false;
+        border_right = false;
+        border_inside_h = false;
+        border_inside_v = false;
+    }
+    let mut fills = Vec::new();
+    let mut row_heights = Vec::new();
+    for (ri, row) in rows.iter().enumerate() {
+        row_heights.push(row.height_twip);
+        for (ci, cell) in row.cells.iter().enumerate() {
+            if let Some(rgb) = cell.fill {
+                fills.push((ri, ci, rgb));
+            }
+        }
+    }
+    Ok(PendingTable {
+        indent_twip: indent,
+        col_widths,
+        row_heights,
+        fills,
+        border_top,
+        border_left,
+        border_bottom,
+        border_right,
+        border_inside_h,
+        border_inside_v,
+    })
+}
+
+struct PendingRowBuild {
+    height_twip: i64,
+    cells: Vec<PendingCellBuild>,
+}
+
+struct PendingCellBuild {
+    fill: Option<[u8; 3]>,
+}
+
+fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, Error> {
+    let mut height: Option<i64> = None;
+    let mut cells: Vec<PendingCellBuild> = Vec::new();
+    for child in tr.element_children() {
+        match child.local_name() {
+            "trPr" => {
+                for p in child.element_children() {
+                    match p.local_name() {
+                        "trHeight" => {
+                            let h = p
+                                .attr_local("val")
+                                .or_else(|| p.attr_local("h"))
+                                .ok_or_else(unsupported)?;
+                            let n = parse_twip(h)?;
+                            let rule = p.attr_local("hRule").unwrap_or("atLeast");
+                            match rule {
+                                "exact" | "atLeast" => height = Some(n),
+                                "auto" => {
+                                    if n != 0 {
+                                        return Err(unsupported());
+                                    }
+                                }
+                                _ => return Err(unsupported()),
+                            }
+                        }
+                        "gridAfter" | "gridBefore" | "wAfter" | "wBefore" | "tblHeader"
+                        | "cantSplit" => return Err(unsupported()),
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            "tc" => cells.push(parse_plain_cell(child)?),
+            "tblPrEx" => return Err(unsupported()),
+            _ => return Err(unsupported()),
+        }
+    }
+    if expect_cols != 0 && cells.len() != expect_cols {
+        return Err(unsupported());
+    }
+    let height_twip = match height {
+        Some(h) if h > 0 => h,
+        _ => empty_auto_row_twip()?,
+    };
+    Ok(PendingRowBuild { height_twip, cells })
+}
+
+fn parse_plain_cell(tc: &Element) -> Result<PendingCellBuild, Error> {
+    let mut fill = None;
+    let mut paras = 0usize;
+    for child in tc.element_children() {
+        match child.local_name() {
+            "tcPr" => {
+                for p in child.element_children() {
+                    match p.local_name() {
+                        "tcW" => {}
+                        "shd" => {
+                            fill = Some(parse_shd_fill(p)?);
+                        }
+                        "gridSpan" | "hMerge" | "vMerge" | "tcBorders" | "tcMar" | "vAlign"
+                        | "noWrap" | "textDirection" | "tcFitText" | "hideMark" => {
+                            return Err(unsupported());
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            "p" => {
+                paras += 1;
+                // 只允许空段：无 run 或空 text。
+                if !cell_para_is_empty(child)? {
+                    return Err(unsupported());
+                }
+            }
+            "tbl" => return Err(unsupported()),
+            _ => return Err(unsupported()),
+        }
+    }
+    if paras != 1 {
+        return Err(unsupported());
+    }
+    Ok(PendingCellBuild { fill })
+}
+
+fn cell_para_is_empty(p: &Element) -> Result<bool, Error> {
+    for child in p.element_children() {
+        match child.local_name() {
+            "pPr" => {
+                // 允许空 pPr；有复杂项则 NI。
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+            }
+            "r" => {
+                for r in child.element_children() {
+                    match r.local_name() {
+                        "rPr" => {}
+                        "t" => {
+                            if !element_text(r).is_empty() {
+                                return Ok(false);
+                            }
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(true)
+}
+
+fn parse_shd_fill(shd: &Element) -> Result<[u8; 3], Error> {
+    let fill = shd.attr_local("fill").ok_or_else(unsupported)?;
+    if fill.eq_ignore_ascii_case("auto") {
+        return Err(unsupported());
+    }
+    parse_rgb_hex(fill)
+}
+
+fn parse_rgb_hex(raw: &str) -> Result<[u8; 3], Error> {
+    let s = raw.trim();
+    if s.len() != 6 {
+        return Err(unsupported());
+    }
+    let n = u32::from_str_radix(s, 16).map_err(|_| unsupported())?;
+    Ok([
+        ((n >> 16) & 0xff) as u8,
+        ((n >> 8) & 0xff) as u8,
+        (n & 0xff) as u8,
+    ])
+}
+
+/// 本切片只画 `single` + `auto`/`000000`；`nil`/`none` 为无边；其它 NI。
+fn border_is_single_black(el: &Element) -> Result<bool, Error> {
+    let val = el.attr_local("val").unwrap_or("nil");
+    match val {
+        "nil" | "none" => Ok(false),
+        "single" => {
+            let color = el.attr_local("color").unwrap_or("auto");
+            if !(color.eq_ignore_ascii_case("auto") || color.eq_ignore_ascii_case("000000")) {
+                return Err(unsupported());
+            }
+            // sz 缺省或 4（建表骨架）；其它粗细本切片 NI，避免假称通用。
+            let sz = el.attr_local("sz").unwrap_or("4");
+            if sz != "4" && sz != "2" && sz != "8" {
+                // 允许常见细线 2/4/8（¼/½/1 pt）；都画成 1px 黑（oracle 半磅=1px）。
+                return Err(unsupported());
+            }
+            Ok(true)
+        }
+        _ => Err(unsupported()),
+    }
+}
+
+fn paint_table(rgb: &mut [u8], page_w: u32, page_h: u32, tbl: &TableBlit) -> Result<(), Error> {
+    let x0 = twip_px_unclamped(tbl.left_twip)? as i32;
+    let y0 = twip_px_unclamped(tbl.top_twip)? as i32;
+    if x0 < 0 || y0 < 0 {
+        return Err(unsupported());
+    }
+    // 累计网格线像素（与 Word PDF 累计取整一致）。
+    let mut xs = vec![x0];
+    let mut acc = tbl.left_twip;
+    for w in &tbl.col_widths {
+        acc = acc.saturating_add(*w);
+        xs.push(twip_px_unclamped(acc)? as i32);
+    }
+    let mut ys = vec![y0];
+    acc = tbl.top_twip;
+    for h in &tbl.row_heights {
+        acc = acc.saturating_add(*h);
+        ys.push(twip_px_unclamped(acc)? as i32);
+    }
+    let right = *xs.last().unwrap();
+    let bottom = *ys.last().unwrap();
+    if right > page_w as i32 || bottom > page_h as i32 {
+        return Err(unsupported());
+    }
+
+    // 填色：有边时内缩 1px，避免盖住网格线。
+    let inset = if tbl.border_top
+        || tbl.border_left
+        || tbl.border_bottom
+        || tbl.border_right
+        || tbl.border_inside_h
+        || tbl.border_inside_v
+    {
+        1
+    } else {
+        0
+    };
+    for &(r, c, color) in &tbl.fills {
+        if r + 1 >= ys.len() || c + 1 >= xs.len() {
+            return Err(unsupported());
+        }
+        let x1 = xs[c] + inset;
+        let y1 = ys[r] + inset;
+        let x2 = xs[c + 1] - inset;
+        let y2 = ys[r + 1] - inset;
+        fill_rect_rgb(rgb, page_w, page_h, x1, y1, x2, y2, color)?;
+    }
+
+    let black = [0u8, 0u8, 0u8];
+    // 横线
+    for (i, &y) in ys.iter().enumerate() {
+        let draw = if i == 0 {
+            tbl.border_top
+        } else if i + 1 == ys.len() {
+            tbl.border_bottom
+        } else {
+            tbl.border_inside_h
+        };
+        if draw {
+            hline_rgb(rgb, page_w, page_h, xs[0], *xs.last().unwrap(), y, black)?;
+        }
+    }
+    // 竖线
+    for (i, &x) in xs.iter().enumerate() {
+        let draw = if i == 0 {
+            tbl.border_left
+        } else if i + 1 == xs.len() {
+            tbl.border_right
+        } else {
+            tbl.border_inside_v
+        };
+        if draw {
+            vline_rgb(rgb, page_w, page_h, ys[0], *ys.last().unwrap(), x, black)?;
+        }
+    }
+    Ok(())
+}
+
+fn fill_rect_rgb(
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+    color: [u8; 3],
+) -> Result<(), Error> {
+    if x2 <= x1 || y2 <= y1 {
+        return Ok(());
+    }
+    for y in y1..y2 {
+        if y < 0 || y >= page_h as i32 {
+            continue;
+        }
+        for x in x1..x2 {
+            if x < 0 || x >= page_w as i32 {
+                continue;
+            }
+            let i = (y as usize * page_w as usize + x as usize) * 3;
+            rgb[i] = color[0];
+            rgb[i + 1] = color[1];
+            rgb[i + 2] = color[2];
+        }
+    }
+    Ok(())
+}
+
+fn hline_rgb(
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    x1: i32,
+    x2: i32,
+    y: i32,
+    color: [u8; 3],
+) -> Result<(), Error> {
+    if y < 0 || y >= page_h as i32 {
+        return Ok(());
+    }
+    let (a, b) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
+    for x in a..=b {
+        if x < 0 || x >= page_w as i32 {
+            continue;
+        }
+        let i = (y as usize * page_w as usize + x as usize) * 3;
+        rgb[i] = color[0];
+        rgb[i + 1] = color[1];
+        rgb[i + 2] = color[2];
+    }
+    Ok(())
+}
+
+fn vline_rgb(
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    y1: i32,
+    y2: i32,
+    x: i32,
+    color: [u8; 3],
+) -> Result<(), Error> {
+    if x < 0 || x >= page_w as i32 {
+        return Ok(());
+    }
+    let (a, b) = if y1 <= y2 { (y1, y2) } else { (y2, y1) };
+    for y in a..=b {
+        if y < 0 || y >= page_h as i32 {
+            continue;
+        }
+        let i = (y as usize * page_w as usize + x as usize) * 3;
+        rgb[i] = color[0];
+        rgb[i + 1] = color[1];
+        rgb[i + 2] = color[2];
+    }
+    Ok(())
 }
 
 fn unsupported() -> Error {

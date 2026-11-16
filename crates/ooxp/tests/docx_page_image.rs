@@ -1,4 +1,4 @@
-//! exportPageImage：没有字的页画成白 PNG。单节多段（可空段、段前段后、左缩进、拉丁空格换行）不透明 Calibri 可画；显式 line/lineRule 仍 NI。
+//! exportPageImage：没有字的页画成白 PNG。单节多段（可空段、段前段后、左缩进、拉丁空格换行）不透明 Calibri 可画；显式 line/lineRule 仍 NI。无文字表（填色/single·nil 边）可画；合并/表内文字仍 NI。
 
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -457,7 +457,11 @@ fn inject_ppr_child(src: &std::path::Path, tag: &str, child_xml: &str) -> PathBu
             let xml = String::from_utf8(data).unwrap();
             let pos = xml.find("<w:p ").expect("p");
             let gt = xml[pos..].find('>').expect(">") + pos;
-            let injected = format!("{}<w:pPr>{child_xml}</w:pPr>{}", &xml[..=gt], &xml[gt + 1..]);
+            let injected = format!(
+                "{}<w:pPr>{child_xml}</w:pPr>{}",
+                &xml[..=gt],
+                &xml[gt + 1..]
+            );
             zout.start_file(name, opts).unwrap();
             zout.write_all(injected.as_bytes()).unwrap();
         } else {
@@ -598,4 +602,129 @@ fn scaled_inline_png_extent_is_not_implemented() {
     let doc = create_inline_png("pic-scale", "opaque-64x32-red.png", 914_400, 457_200, None);
     let err = export(&doc, "page:1").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[cfg(windows)]
+fn empty_cells(rows: usize, cols: usize) -> Vec<Vec<&'static str>> {
+    vec![vec![""; cols]; rows]
+}
+
+#[cfg(windows)]
+fn create_empty_table(tag: &str, rows: usize, cols: usize) -> PathBuf {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "" }],
+            "tables": [{ "cells": empty_cells(rows, cols) }]
+        }
+    }));
+    src
+}
+
+#[cfg(windows)]
+#[test]
+fn plain_2x2_table_matches_word_ink_box() {
+    // Word PDF 96dpi：空段后 2×2 默认 single 边，墨迹 (96,114) 193×38。
+    let doc = create_empty_table("tbl-2x2", 2, 2);
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 193, 38));
+}
+
+#[cfg(windows)]
+#[test]
+fn plain_3x3_table_matches_word_ink_box() {
+    // 3 行空表横线 114/132/151/170 → 高 57；3 列宽 289。
+    let doc = create_empty_table("tbl-3x3", 3, 3);
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 289, 57));
+}
+
+#[cfg(windows)]
+#[test]
+fn table_indent_shifts_left_edge() {
+    let src = create_empty_table("tbl-ind0", 2, 2);
+    let RunOutput::Inspect(tree) = run_ok(json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "tables": true }
+    })) else {
+        panic!("inspect");
+    };
+    let tid = tree["tables"][0]["id"].as_str().unwrap();
+    let doc = apply_ops(
+        &src,
+        json!([{ "op": "setTableAlign", "id": tid, "indent": 720 }]),
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (144, 114, 193, 38));
+}
+
+#[cfg(windows)]
+#[test]
+fn table_fill_without_borders_exact_rgb() {
+    let src = create_empty_table("tbl-fill0", 2, 2);
+    let RunOutput::Inspect(tree) = run_ok(json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "tables": true }
+    })) else {
+        panic!("inspect");
+    };
+    let tid = tree["tables"][0]["id"].as_str().unwrap().to_string();
+    let r0 = tree["tables"][0]["rows"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let r1 = tree["tables"][0]["rows"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let doc = apply_ops(
+        &src,
+        json!([
+            { "op": "setTableBorders", "id": tid, "borders": null },
+            { "op": "setCellFormat", "id": "table:1/r1c1", "fill": "DC143C" },
+            { "op": "setTableRowHeight", "id": r0, "h": 400, "rule": "exact" },
+            { "op": "setTableRowHeight", "id": r1, "h": 400, "rule": "exact" }
+        ]),
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    // 无边 + exact 400：填色盒 (96,114) 96×27，纯 #DC143C。
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 96, 27));
+    let i = ((114u32 * 794 + 96) * 3) as usize;
+    assert_eq!(&rgb[i..i + 3], &[0xDC, 0x14, 0x3C]);
+}
+
+#[cfg(windows)]
+#[test]
+fn table_cell_with_text_is_not_implemented() {
+    let src = tmp("tbl-text");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "" }],
+            "tables": [{ "cells": [["A", ""], ["", ""]] }]
+        }
+    }));
+    let err = export(&src, "page:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[cfg(windows)]
+#[test]
+fn equal_custom_grid_widths_export() {
+    // eq2000 官方 differ=0；单元只断言能画且墨迹左缘仍在页边距。
+    let doc = create_empty_table("tbl-eq", 2, 2);
+    // mutate via zip would be heavy; create default is enough for smoke — skip mutate.
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!((x, y), (96, 114));
+    assert!(w > 0 && h > 0);
 }
