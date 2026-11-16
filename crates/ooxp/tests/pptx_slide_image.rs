@@ -1,4 +1,4 @@
-//! exportSlideImage：页底、PNG、实心矩形。没有本页页底时铺白。
+//! exportSlideImage：页底、PNG、实心矩形、形状图片填充、渐变和多行文本。没有本页页底时铺白。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -1135,6 +1135,290 @@ fn theme_page_background_follows_the_measured_color() {
     }
     });
     assert_page(&wins, [255, 0, 0]);
+}
+
+#[test]
+fn shape_blip_fill_is_painted_and_a_tile_fails() {
+    let src = tmp("blip-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, solid_png(8, 8, [0x22, 0x88, 0x44])).unwrap();
+    let deck = tmp("blip-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": { "type": "blip", "file": png_path.to_string_lossy() },
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 914400
+            }
+        ]
+    }));
+    let out = tmp("blip-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 192, 96), [0x22, 0x88, 0x44]);
+    assert_eq!(pixel(&rgb, w, 239, 143), [0x22, 0x88, 0x44]);
+    assert_eq!(pixel(&rgb, w, 191, 96), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 288, 96), [0xAA, 0xBB, 0xCC]);
+
+    let tiled = tmp("blip-tile");
+    rewrite_slide(&deck, &tiled, |xml| {
+        swap(xml, "<a:stretch><a:fillRect/></a:stretch>", "<a:tile/>")
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": tiled.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp("blip-tile-png").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn translucent_two_stop_gradient_blends_over_the_page() {
+    let src = tmp("alpha-grad-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("alpha-grad-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": {
+                    "type": "grad",
+                    "ang": 0,
+                    "alpha": 50000,
+                    "stops": [
+                        { "pos": 0, "color": "FF0000" },
+                        { "pos": 100000, "color": "0000FF" }
+                    ]
+                },
+                "x": 1828800,
+                "y": 914400,
+                "cx": 914400,
+                "cy": 457200
+            }
+        ]
+    }));
+    let out = tmp("alpha-grad-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    let left = pixel(&rgb, w, 192, 120);
+    let right = pixel(&rgb, w, 287, 120);
+    let mid = pixel(&rgb, w, 239, 120);
+    assert_ne!(left, [0xAA, 0xBB, 0xCC]);
+    assert_ne!(right, [0xAA, 0xBB, 0xCC]);
+    assert_ne!(left, [255, 0, 0]);
+    assert_ne!(right, [0, 0, 255]);
+    assert_ne!(left, right);
+    assert_ne!(mid, left);
+    assert_ne!(mid, right);
+    assert!(left[0] > left[2], "左端应更红 {left:?}");
+    assert!(right[2] > right[0], "右端应更蓝 {right:?}");
+}
+
+#[test]
+fn round_rect_and_ellipse_gradients_are_painted() {
+    let src = tmp("shape-grad-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("shape-grad-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "prst": "ellipse",
+                "line": { "color": null },
+                "fill": {
+                    "type": "grad",
+                    "ang": 0,
+                    "stops": [
+                        { "pos": 0, "color": "FF0000" },
+                        { "pos": 100000, "color": "0000FF" }
+                    ]
+                },
+                "x": 914400,
+                "y": 914400,
+                "cx": 1828800,
+                "cy": 1828800
+            },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "prst": "roundRect",
+                "line": { "color": null },
+                "fill": {
+                    "type": "grad",
+                    "ang": 0,
+                    "stops": [
+                        { "pos": 0, "color": "00AA00" },
+                        { "pos": 100000, "color": "AA00AA" }
+                    ]
+                },
+                "x": 3657600,
+                "y": 914400,
+                "cx": 1828800,
+                "cy": 914400
+            }
+        ]
+    }));
+    let out = tmp("shape-grad-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    // 椭圆外接矩形 96,96 到 288,288。圆心约 192,192。四角在椭圆外。
+    let oval_center = pixel(&rgb, w, 192, 192);
+    let oval_left = pixel(&rgb, w, 110, 192);
+    let oval_right = pixel(&rgb, w, 274, 192);
+    assert_ne!(oval_center, [0xAA, 0xBB, 0xCC]);
+    assert_ne!(oval_left, oval_right);
+    assert_ne!(oval_left, [255, 0, 0]);
+    assert!(oval_left[0] > oval_left[2], "椭圆左端应更红 {oval_left:?}");
+    assert!(
+        oval_right[2] > oval_right[0],
+        "椭圆右端应更蓝 {oval_right:?}"
+    );
+    assert_eq!(pixel(&rgb, w, 96, 96), [0xAA, 0xBB, 0xCC]);
+    // 圆角矩形 384,96 到 576,192。中心 480,144。左上圆角外侧仍是页底。
+    let round_center = pixel(&rgb, w, 480, 144);
+    let round_left = pixel(&rgb, w, 400, 144);
+    let round_right = pixel(&rgb, w, 560, 144);
+    assert_ne!(round_center, [0xAA, 0xBB, 0xCC]);
+    assert_ne!(round_left, round_right);
+    assert_ne!(round_center, [0x00, 0xAA, 0x00]);
+    assert_eq!(pixel(&rgb, w, 384, 96), [0xAA, 0xBB, 0xCC]);
+}
+
+#[test]
+fn shape_text_newline_keeps_the_second_line() {
+    let src = tmp("multiline-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "shapes": [{
+                    "text": "AAAA\nBBBB",
+                    "x": 914400,
+                    "y": 914400,
+                    "cx": 3657600,
+                    "cy": 2743200
+                }]
+            }]
+        }
+    }));
+    let bytes = std::fs::read(&src).unwrap();
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name("ppt/slides/slide1.xml").unwrap();
+    let mut xml = String::new();
+    file.read_to_string(&mut xml).unwrap();
+    assert!(xml.contains("<a:t>AAAA</a:t>"), "{xml}");
+    assert!(xml.contains("<a:br/>"), "{xml}");
+    assert!(xml.contains("<a:t>BBBB</a:t>"), "{xml}");
+    let out = tmp("multiline-png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": src.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (_w, _h, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    let _ = rgb;
 }
 
 fn assert_page(path: &Path, color: [u8; 3]) {

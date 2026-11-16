@@ -53,7 +53,7 @@ Production use and commercial use require a commercial license from the author. 
 
 On a pptx slide, z-order is `pictures[].index` and the `index` / `before` / `after` fields of `insertPicture` and `insertShape`. `index` `0` is the bottom of the current `spTree` content children; later siblings stay on top. `setPicturePos` only sets `x` / `y`. A true page background is `setPageBackground`. Call `help` or see `docs/json-contract-pptx.md` for the exact fields.
 
-`exportSlideImage` does not always preview everything `create` can write. Opaque two-stop gradients are drawn only on rectangles, a shape `blipFill` may be skipped, and a newline in shape text currently previews as the first text run only. The limits are in `help` and `docs/json-contract.md`.
+`exportSlideImage` can preview two-stop linear gradients (including alpha) on rectangles, rounded rectangles, and ellipses, a stretched shape `blipFill`, and newlines written as `a:br`. Variants it still cannot draw fail the slide instead of being skipped. The limits are in `help` and `docs/json-contract.md`.
 
 ## Install and build
 

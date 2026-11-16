@@ -501,8 +501,9 @@ fn hints_cover_z_order_anim_id_and_slide_preview_limits() {
     let limits = export["limits"].as_str().unwrap();
     assert!(limits.contains("不透明"));
     assert!(limits.contains("blipFill"));
-    assert!(limits.contains("第一个文本 run"));
-    assert!(limits.contains("圆角矩形和椭圆上的渐变填充不支持"));
+    assert!(limits.contains("a:br"));
+    assert!(limits.contains("不再静默跳过"));
+    assert!(limits.contains("圆角矩形和椭圆"));
 
     let set_props = help(serde_json::json!({"op": "setProps"})).unwrap();
     let desc = set_props["description"].as_str().unwrap();

@@ -1177,7 +1177,7 @@ apply 出错时还可以有 `objectId` 与 `objectName`。两个字段都在构�
 - docx 与 pptx 上发 `exportSheetImage` 报 `InvalidField`
 - `exportSlideImage` 的 id 不是 `slide:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 图带旋转、要缩放的裁剪，或还有别的画不了的对象，`exportSlideImage` 报 `NotImplemented`。页底画不了时铺白，不因此报错
-- 两色渐变不是不透明的 `srgbClr`，或画在圆角矩形、椭圆上，`exportSlideImage` 报 `NotImplemented`。形状上的 `blipFill` 可能被跳过而不报错。create 写入的 `a:br` 换行目前只预览一段的第一个文本 run，这不是单独的错误码
+- 两色渐变不是 `srgbClr` 直线、档位不在两端、角度不是 90 度倍数，或矩形上的渐变还带描边，`exportSlideImage` 报 `NotImplemented`。形状上画不了的 `blipFill`（平铺、`fillRect` 偏移、对不齐的裁剪、非 PNG、带颜色变换，或矩形上还带描边）同样报 `NotImplemented`，不再静默跳过
 - 幻灯片上的组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。子矩形也可以绕自己的中心转 90 度的倍数，并和组合自己的直角或翻转叠在一起。子矩形自己的水平或垂直翻转不改变这块纯色。组合可以再套一层。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。其它角度整页报 `NotImplemented`
 - 没有描边的实心矩形，填充可以是不透明 `srgbClr`，或没有颜色变换的 `schemeClr`。线写成 `noFill` 时，旁边的虚线和空的效果列表不画。带了颜色变换，或主题里没有这一档，报 `NotImplemented`
 - xlsx 与 docx 上发 `exportSlideImage` 报 `InvalidField`

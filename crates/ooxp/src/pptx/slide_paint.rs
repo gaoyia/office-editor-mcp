@@ -410,8 +410,8 @@ fn paint_sp(
         .unwrap_or("");
     match prst {
         "rect" => paint_rect(pkg, part, sp, sp_pr, chain, rgb, width, height),
-        "ellipse" => paint_ellipse(sp, sp_pr, chain, rgb, width, height),
-        "roundRect" => paint_round(sp, sp_pr, chain, rgb, width, height),
+        "ellipse" => paint_ellipse(pkg, part, sp, sp_pr, chain, rgb, width, height),
+        "roundRect" => paint_round(pkg, part, sp, sp_pr, chain, rgb, width, height),
         _ => Err(unsupported()),
     }
 }
@@ -441,7 +441,11 @@ fn paint_rect(
     let Some(xfrm) = sp_pr.child_by_local("xfrm") else {
         return Ok(());
     };
-    if xfrm.attr("rot").is_some() {
+    if rotated(sp_pr) {
+        if sp_pr.child_by_local("gradFill").is_some() || sp_pr.child_by_local("blipFill").is_some()
+        {
+            return Err(unsupported());
+        }
         return Ok(());
     }
     let (x, y, cx, cy) = map_box(xfrm, chain);
@@ -454,17 +458,40 @@ fn paint_rect(
         return Ok(());
     }
     if sp_pr.child_by_local("gradFill").is_some() {
-        let (c0, c1, ang) = linear_gradient(sp_pr).ok_or_else(unsupported)?;
+        let grad = linear_gradient(sp_pr).ok_or_else(unsupported)?;
         if !line_is_clear(sp_pr) {
             return Err(unsupported());
         }
-        fill_gradient(rgb, width, height, x, y, w, h, c0, c1, ang);
+        fill_gradient(rgb, width, height, x, y, w, h, grad);
         paint_tx(sp, x, y, w, h, rgb, width, height);
+        return Ok(());
+    }
+    if let Some(fill) = sp_pr.child_by_local("blipFill") {
+        if !line_is_clear(sp_pr) {
+            return Err(unsupported());
+        }
+        paint_blip_fill(
+            pkg,
+            part,
+            fill,
+            x,
+            y,
+            w as u32,
+            h as u32,
+            rgb,
+            width,
+            height,
+            |_, _| 255,
+        )?;
+        paint_tx(sp, x, y, w, h, rgb, width, height);
+        return Ok(());
     }
     Ok(())
 }
 
 fn paint_ellipse(
+    pkg: &Package,
+    part: &str,
     sp: &Element,
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
@@ -475,6 +502,33 @@ fn paint_ellipse(
     let Some(oval) = oval_box(sp_pr, chain)? else {
         return Ok(());
     };
+    if let Some(fill) = sp_pr.child_by_local("blipFill") {
+        let (x, y, w, h) = (
+            oval.x.round() as i32,
+            oval.y.round() as i32,
+            oval.w.round() as i32,
+            oval.h.round() as i32,
+        );
+        if w > 0 && h > 0 {
+            let cx = oval.x + oval.w / 2.0;
+            let cy = oval.y + oval.h / 2.0;
+            let rx = oval.w / 2.0;
+            let ry = oval.h / 2.0;
+            paint_blip_fill(
+                pkg,
+                part,
+                fill,
+                x,
+                y,
+                w as u32,
+                h as u32,
+                rgb,
+                width,
+                height,
+                |px, py| cover_byte(ellipse_cover(px, py, cx, cy, rx, ry), 255),
+            )?;
+        }
+    }
     fill_ellipse(rgb, width, height, &oval);
     paint_tx(
         sp,
@@ -490,6 +544,8 @@ fn paint_ellipse(
 }
 
 fn paint_round(
+    pkg: &Package,
+    part: &str,
     sp: &Element,
     sp_pr: &Element,
     chain: &[super::layout_check::GroupXfrm],
@@ -500,6 +556,27 @@ fn paint_round(
     let Some(round) = round_box(sp_pr, chain)? else {
         return Ok(());
     };
+    if let Some(fill) = sp_pr.child_by_local("blipFill") {
+        paint_blip_fill(
+            pkg,
+            part,
+            fill,
+            round.x,
+            round.y,
+            round.w as u32,
+            round.h as u32,
+            rgb,
+            width,
+            height,
+            |px, py| {
+                if inside_round(px, py, round.x, round.y, round.w, round.h, round.radius) {
+                    255
+                } else {
+                    0
+                }
+            },
+        )?;
+    }
     let inset = round
         .stroke
         .map(|_| {
@@ -516,12 +593,15 @@ fn paint_round(
                 height,
                 round.x,
                 round.y,
+                round.w,
+                round.h,
                 round.edge_r,
                 round.edge_b,
                 inset,
                 round.radius_f,
                 round.stroke_f,
                 round.fill,
+                round.grad,
                 color,
             );
         }
@@ -539,6 +619,7 @@ fn paint_round(
         round.radius,
         inset,
         round.fill,
+        round.grad,
     );
     if let Some(color) = round.stroke {
         stroke_round(
@@ -566,6 +647,7 @@ struct Oval {
     w: f64,
     h: f64,
     fill: RgbaFill,
+    grad: Option<LinearGrad>,
     stroke: Option<[u8; 3]>,
     /// 描边宽度，单位是像素。12700 EMU 是 1.333。
     stroke_f: f64,
@@ -577,6 +659,7 @@ struct Round {
     w: i32,
     h: i32,
     fill: RgbaFill,
+    grad: Option<LinearGrad>,
     radius: i32,
     /// 圆角半径，单位是像素，保留 EMU 的小数。
     radius_f: f64,
@@ -603,12 +686,14 @@ fn oval_box(
     if w <= 0.0 || h <= 0.0 || emu_px(ecx) <= 0 || emu_px(ecy) <= 0 {
         return Ok(None);
     }
+    let (fill, grad) = shape_paint(sp_pr)?;
     Ok(Some(Oval {
         x: emu_f(ex),
         y: emu_f(ey),
         w,
         h,
-        fill: shape_fill(sp_pr)?,
+        fill,
+        grad,
         stroke: stroke_color(sp_pr)?,
         stroke_f: stroke_width_f(sp_pr),
     }))
@@ -629,12 +714,14 @@ fn round_box(
     if w <= 0 || h <= 0 {
         return Ok(None);
     }
+    let (fill, grad) = shape_paint(sp_pr)?;
     Ok(Some(Round {
         x,
         y,
         w,
         h,
-        fill: shape_fill(sp_pr)?,
+        fill,
+        grad,
         radius: round_radius(sp_pr, w, h),
         radius_f: round_radius_f(sp_pr, emu_f(ecx), emu_f(ecy)),
         stroke: stroke_color(sp_pr)?,
@@ -659,30 +746,45 @@ struct RgbaFill {
     on: bool,
 }
 
-fn shape_fill(sp_pr: &Element) -> Result<RgbaFill, Error> {
+fn empty_fill() -> RgbaFill {
+    RgbaFill {
+        color: [0, 0, 0],
+        alpha: 0,
+        on: false,
+    }
+}
+
+/// 纯色或两色直线渐变。图片填充由调用方另画。解析不了的渐变让整页失败。
+fn shape_paint(sp_pr: &Element) -> Result<(RgbaFill, Option<LinearGrad>), Error> {
     if sp_pr.child_by_local("noFill").is_some() {
-        return Ok(RgbaFill {
-            color: [0, 0, 0],
-            alpha: 0,
-            on: false,
-        });
+        return Ok((empty_fill(), None));
     }
     if let Some(fill) = sp_pr.child_by_local("solidFill") {
         let (color, alpha) = rgba_of(fill).ok_or_else(unsupported)?;
-        return Ok(RgbaFill {
-            color,
-            alpha,
-            on: true,
-        });
+        return Ok((
+            RgbaFill {
+                color,
+                alpha,
+                on: true,
+            },
+            None,
+        ));
+    }
+    if let Some(grad) = linear_gradient(sp_pr) {
+        return Ok((
+            RgbaFill {
+                color: grad.start.color,
+                alpha: grad.start.alpha,
+                on: true,
+            },
+            Some(grad),
+        ));
     }
     if sp_pr.child_by_local("gradFill").is_some() {
         return Err(unsupported());
     }
-    Ok(RgbaFill {
-        color: [0, 0, 0],
-        alpha: 0,
-        on: false,
-    })
+    // blipFill 由 paint_* 另画；这里不当成纯色，避免盖住图片。
+    Ok((empty_fill(), None))
 }
 
 fn stroke_px(sp_pr: &Element) -> i32 {
@@ -727,7 +829,20 @@ fn rgba_of(fill: &Element) -> Option<([u8; 3], u8)> {
     Some((parse_rgb(clr.attr("val")?)?, alpha))
 }
 
-fn linear_gradient(sp_pr: &Element) -> Option<([u8; 3], [u8; 3], i64)> {
+#[derive(Clone, Copy)]
+struct GradStop {
+    color: [u8; 3],
+    alpha: u8,
+}
+
+#[derive(Clone, Copy)]
+struct LinearGrad {
+    start: GradStop,
+    end: GradStop,
+    ang: i64,
+}
+
+fn linear_gradient(sp_pr: &Element) -> Option<LinearGrad> {
     let grad = sp_pr.child_by_local("gradFill")?;
     let stops: Vec<&Element> = grad
         .child_by_local("gsLst")?
@@ -741,8 +856,8 @@ fn linear_gradient(sp_pr: &Element) -> Option<([u8; 3], [u8; 3], i64)> {
     if pos(stops[0]) != Some(0) || pos(stops[1]) != Some(100_000) {
         return None;
     }
-    let c0 = opaque_rgb(stops[0])?;
-    let c1 = opaque_rgb(stops[1])?;
+    let (c0, a0) = rgba_of(stops[0])?;
+    let (c1, a1) = rgba_of(stops[1])?;
     let ang: i64 = grad
         .child_by_local("lin")?
         .attr("ang")
@@ -752,7 +867,17 @@ fn linear_gradient(sp_pr: &Element) -> Option<([u8; 3], [u8; 3], i64)> {
     if ang.rem_euclid(FULL_TURN) % RIGHT_ANGLE != 0 {
         return None;
     }
-    Some((c0, c1, ang))
+    Some(LinearGrad {
+        start: GradStop {
+            color: c0,
+            alpha: a0,
+        },
+        end: GradStop {
+            color: c1,
+            alpha: a1,
+        },
+        ang,
+    })
 }
 
 fn round_adj(sp_pr: &Element) -> i64 {
@@ -1005,29 +1130,36 @@ fn paint_cell_text(
     let anchor = pr.and_then(|el| el.attr("anchor")).unwrap_or("t");
     let mut lines = Vec::new();
     for para in tx.element_children().filter(|el| el.local_name() == "p") {
-        if let Some(line) = cell_line(para, fonts, header) {
-            lines.push(line);
-        }
+        lines.extend(cell_lines(para, fonts, header));
     }
     paint_text_block(&lines, left, top, right, bottom, anchor, rgb, width, height);
 }
 
-fn cell_line(para: &Element, fonts: &MinorFonts, header: bool) -> Option<TextLine> {
-    let mut line = para_line(para)?;
-    if line.latin.is_empty() {
-        line.latin.clone_from(&fonts.latin);
-    }
-    if line.ea.is_empty() {
-        line.ea.clone_from(&fonts.ea);
-    }
+fn cell_lines(para: &Element, fonts: &MinorFonts, header: bool) -> Vec<TextLine> {
     let rpr = run_rpr(para);
-    if header && rpr.and_then(|el| el.attr("b")).is_none() {
-        line.bold = true;
-    }
-    if header && rpr.and_then(|el| el.child_by_local("solidFill")).is_none() {
-        line.color = [255, 255, 255];
-    }
-    Some(line)
+    para_lines(para)
+        .into_iter()
+        .map(|mut line| {
+            if line.latin.is_empty() {
+                line.latin.clone_from(&fonts.latin);
+            }
+            if line.ea.is_empty() {
+                line.ea.clone_from(&fonts.ea);
+            }
+            if header && rpr.and_then(|el| el.attr("b")).is_none() {
+                line.bold = true;
+            }
+            if header && rpr.and_then(|el| el.child_by_local("solidFill")).is_none() {
+                line.color = [255, 255, 255];
+            }
+            line
+        })
+        .collect()
+}
+
+#[cfg(test)]
+fn cell_line(para: &Element, fonts: &MinorFonts, header: bool) -> Option<TextLine> {
+    cell_lines(para, fonts, header).into_iter().next()
 }
 
 fn run_rpr(para: &Element) -> Option<&Element> {
@@ -1059,10 +1191,7 @@ fn paint_tx(sp: &Element, x: i32, y: i32, w: i32, h: i32, rgb: &mut [u8], width:
     let anchor = body.and_then(|el| el.attr("anchor")).unwrap_or("t");
     let mut lines: Vec<TextLine> = Vec::new();
     for para in tx.element_children().filter(|el| el.local_name() == "p") {
-        let Some(line) = para_line(para) else {
-            continue;
-        };
-        lines.push(line);
+        lines.extend(para_lines(para));
     }
     paint_text_block(&lines, left, top, right, bottom, anchor, rgb, width, height);
 }
@@ -1145,15 +1274,47 @@ struct TextLine {
     align: String,
 }
 
-fn para_line(para: &Element) -> Option<TextLine> {
-    let run = para
-        .element_children()
-        .find(|el| el.local_name() == "r" && el.child_by_local("t").is_some())?;
-    let text = run.child_by_local("t")?.text_content();
-    if text.trim().is_empty() {
-        return None;
+fn para_lines(para: &Element) -> Vec<TextLine> {
+    let align = para
+        .child_by_local("pPr")
+        .and_then(|el| el.attr("algn"))
+        .unwrap_or("l")
+        .to_string();
+    let mut lines = Vec::new();
+    let mut text = String::new();
+    let mut rpr: Option<&Element> = None;
+    let mut flush = |text: &mut String, rpr: &mut Option<&Element>| {
+        if text.trim().is_empty() {
+            text.clear();
+            *rpr = None;
+            return;
+        }
+        lines.push(text_line(std::mem::take(text), rpr.take(), align.clone()));
+    };
+    for child in para.element_children() {
+        match child.local_name() {
+            "r" => {
+                if let Some(t) = child.child_by_local("t") {
+                    if rpr.is_none() {
+                        rpr = child.child_by_local("rPr");
+                    }
+                    text.push_str(&t.text_content());
+                }
+            }
+            "br" => flush(&mut text, &mut rpr),
+            _ => {}
+        }
     }
-    let rpr = run.child_by_local("rPr");
+    flush(&mut text, &mut rpr);
+    lines
+}
+
+#[cfg(test)]
+fn para_line(para: &Element) -> Option<TextLine> {
+    para_lines(para).into_iter().next()
+}
+
+fn text_line(text: String, rpr: Option<&Element>, align: String) -> TextLine {
     let sz = rpr
         .and_then(|el| el.attr("sz"))
         .and_then(|raw| raw.parse::<f32>().ok())
@@ -1165,12 +1326,7 @@ fn para_line(para: &Element) -> Option<TextLine> {
         .and_then(|el| el.child_by_local("solidFill"))
         .and_then(opaque_rgb)
         .unwrap_or([0, 0, 0]);
-    let align = para
-        .child_by_local("pPr")
-        .and_then(|el| el.attr("algn"))
-        .unwrap_or("l")
-        .to_string();
-    Some(TextLine {
+    TextLine {
         text,
         px: sz / 100.0 * 96.0 / 72.0,
         bold,
@@ -1181,7 +1337,7 @@ fn para_line(para: &Element) -> Option<TextLine> {
         sym: typeface(rpr, "sym"),
         lang: rpr.and_then(|el| el.attr("lang")).unwrap_or("").to_string(),
         align,
-    })
+    }
 }
 
 fn typeface(rpr: Option<&Element>, slot: &str) -> String {
@@ -1366,12 +1522,8 @@ fn fill_gradient(
     y: i32,
     w: i32,
     h: i32,
-    c0: [u8; 3],
-    c1: [u8; 3],
-    ang: i64,
+    grad: LinearGrad,
 ) {
-    let turn = ang.rem_euclid(FULL_TURN);
-    let quarter = turn / RIGHT_ANGLE;
     for row in 0..h {
         let py = y + row;
         if py < 0 || py >= height as i32 {
@@ -1382,21 +1534,62 @@ fn fill_gradient(
             if px < 0 || px >= width as i32 {
                 continue;
             }
-            let along = match quarter {
-                1 => (f64::from(row) + 0.5) / f64::from(h),
-                2 => (f64::from(w - 1 - col) + 0.5) / f64::from(w),
-                3 => (f64::from(h - 1 - row) + 0.5) / f64::from(h),
-                _ => (f64::from(col) + 0.5) / f64::from(w),
-            };
-            let share = grad_weight(along);
-            let color = [
-                gamma_mix(c0[0], c1[0], share),
-                gamma_mix(c0[1], c1[1], share),
-                gamma_mix(c0[2], c1[2], share),
-            ];
-            let i = (py as usize * width as usize + px as usize) * 3;
-            rgb[i..i + 3].copy_from_slice(&color);
+            let (color, alpha) = grad_at(&grad, col, row, w, h);
+            blend(rgb, width, height, px, py, color, alpha);
         }
+    }
+}
+
+fn grad_at(grad: &LinearGrad, col: i32, row: i32, w: i32, h: i32) -> ([u8; 3], u8) {
+    if w <= 0 || h <= 0 {
+        return (grad.start.color, grad.start.alpha);
+    }
+    let turn = grad.ang.rem_euclid(FULL_TURN);
+    let quarter = turn / RIGHT_ANGLE;
+    let along = match quarter {
+        1 => (f64::from(row) + 0.5) / f64::from(h),
+        2 => (f64::from(w - 1 - col) + 0.5) / f64::from(w),
+        3 => (f64::from(h - 1 - row) + 0.5) / f64::from(h),
+        _ => (f64::from(col) + 0.5) / f64::from(w),
+    };
+    let share = grad_weight(along);
+    let color = [
+        gamma_mix(grad.start.color[0], grad.end.color[0], share),
+        gamma_mix(grad.start.color[1], grad.end.color[1], share),
+        gamma_mix(grad.start.color[2], grad.end.color[2], share),
+    ];
+    let alpha = mix_alpha(grad.start.alpha, grad.end.alpha, share);
+    (color, alpha)
+}
+
+fn grad_at_px(
+    grad: &LinearGrad,
+    px: i32,
+    py: i32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> ([u8; 3], u8) {
+    grad_at(grad, px - x, py - y, w, h)
+}
+
+fn mix_alpha(start: u8, end: u8, share: f64) -> u8 {
+    let value = f64::from(start) + (f64::from(end) - f64::from(start)) * share;
+    value.round().clamp(0.0, 255.0) as u8
+}
+
+fn paint_color(oval: &Oval, px: i32, py: i32) -> ([u8; 3], u8) {
+    if let Some(grad) = oval.grad {
+        let (x, y, w, h) = (
+            oval.x.round() as i32,
+            oval.y.round() as i32,
+            oval.w.round() as i32,
+            oval.h.round() as i32,
+        );
+        grad_at_px(&grad, px, py, x, y, w, h)
+    } else {
+        (oval.fill.color, oval.fill.alpha)
     }
 }
 
@@ -1417,7 +1610,7 @@ fn gamma_mix(start: u8, end: u8, share: f64) -> u8 {
 /// 画椭圆。有描边时外接矩形右和下各加 1 像素，和 PowerPoint 16.0 序号圆一致。
 /// 边缘交给 GDI+ 的抗锯齿。GDI+ 不可用时退回半像素覆盖。
 fn fill_ellipse(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) {
-    if fill_ellipse_device(rgb, width, height, oval) {
+    if oval.grad.is_none() && fill_ellipse_device(rgb, width, height, oval) {
         return;
     }
     fill_ellipse_ramp(rgb, width, height, oval);
@@ -1630,14 +1823,15 @@ fn fill_ellipse_ramp(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) {
                     let outer = ellipse_cover(px, py, cx, cy, outer_rx, outer_ry);
                     let stroke_cov = (outer - fill_cov).clamp(0.0, 1.0);
                     if oval.fill.on && fill_cov > 0.0 {
+                        let (color, alpha) = paint_color(oval, px, py);
                         blend(
                             rgb,
                             width,
                             height,
                             px,
                             py,
-                            oval.fill.color,
-                            cover_byte(fill_cov, oval.fill.alpha),
+                            color,
+                            cover_byte(fill_cov, alpha),
                         );
                     }
                     if stroke_cov > 0.0 {
@@ -1655,14 +1849,15 @@ fn fill_ellipse_ramp(rgb: &mut [u8], width: u32, height: u32, oval: &Oval) {
                 }
             }
             if fill_cov > 0.0 {
+                let (color, alpha) = paint_color(oval, px, py);
                 blend(
                     rgb,
                     width,
                     height,
                     px,
                     py,
-                    oval.fill.color,
-                    cover_byte(fill_cov, oval.fill.alpha),
+                    color,
+                    cover_byte(fill_cov, alpha),
                 );
             }
         }
@@ -1698,6 +1893,7 @@ fn fill_round(
     radius: i32,
     inset: i32,
     fill: RgbaFill,
+    grad: Option<LinearGrad>,
 ) {
     if !fill.on {
         return;
@@ -1710,7 +1906,11 @@ fn fill_round(
                 continue;
             }
             if inside_round(px, py, x, y, w, h, radius) {
-                blend(rgb, width, height, px, py, fill.color, fill.alpha);
+                let (color, alpha) = match grad {
+                    Some(grad) => grad_at_px(&grad, px, py, x, y, w, h),
+                    None => (fill.color, fill.alpha),
+                };
+                blend(rgb, width, height, px, py, color, alpha);
             }
         }
     }
@@ -1738,12 +1938,15 @@ fn paint_round_corners(
     height: u32,
     x: i32,
     y: i32,
+    w: i32,
+    h: i32,
     edge_r: i32,
     edge_b: i32,
     inset: i32,
     radius_f: f64,
     stroke_f: f64,
     fill: RgbaFill,
+    grad: Option<LinearGrad>,
     stroke: [u8; 3],
 ) {
     if radius_f <= 0.0 || stroke_f <= 0.0 || inset <= 0 {
@@ -1777,13 +1980,17 @@ fn paint_round_corners(
                 if fill_cov <= 0.0 && stroke_cov <= 0.0 {
                     continue;
                 }
+                let (color, alpha) = match grad {
+                    Some(grad) if fill.on => grad_at_px(&grad, px, py, x, y, w, h),
+                    _ => (fill.color, fill.alpha),
+                };
                 let fill_cov = if fill.on {
-                    fill_cov * f64::from(fill.alpha) / 255.0
+                    fill_cov * f64::from(alpha) / 255.0
                 } else {
                     0.0
                 };
                 cover_pixel(
-                    rgb, width, height, px, py, fill.color, fill_cov, stroke, stroke_cov,
+                    rgb, width, height, px, py, color, fill_cov, stroke, stroke_cov,
                 );
             }
         }
@@ -2126,6 +2333,51 @@ fn is_media(pic: &Element) -> bool {
         })
 }
 
+fn paint_blip_fill(
+    pkg: &Package,
+    slide_part: &str,
+    fill: &Element,
+    dest_x: i32,
+    dest_y: i32,
+    dest_w: u32,
+    dest_h: u32,
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    cover: impl Fn(i32, i32) -> u8,
+) -> Result<(), Error> {
+    if dest_w == 0 || dest_h == 0 {
+        return Ok(());
+    }
+    let image = load_blip_png(pkg, slide_part, fill)?;
+    let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
+    paint_image_covered(
+        rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop, cover,
+    );
+    Ok(())
+}
+
+fn load_blip_png(pkg: &Package, slide_part: &str, fill: &Element) -> Result<Rgba, Error> {
+    let Some(blip) = fill.child_by_local("blip") else {
+        return Err(unsupported());
+    };
+    if blip
+        .element_children()
+        .any(|child| child.local_name() != "extLst")
+    {
+        return Err(unsupported());
+    }
+    let Some(rid) = blip.attr_local("embed").filter(|s| !s.is_empty()) else {
+        return Err(unsupported());
+    };
+    let part = opc::resolve_id(pkg, slide_part, rid)?;
+    let bytes = pkg.get(&part)?;
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(unsupported());
+    }
+    decode_png(bytes)
+}
+
 fn blit_pic(
     pkg: &Package,
     slide_part: &str,
@@ -2135,20 +2387,10 @@ fn blit_pic(
     width: u32,
     height: u32,
 ) -> Result<(), Error> {
-    let Some(rid) = pic
-        .child_by_local("blipFill")
-        .and_then(|fill| fill.child_by_local("blip"))
-        .and_then(|blip| blip.attr_local("embed"))
-        .filter(|s| !s.is_empty())
-    else {
+    let Some(fill) = pic.child_by_local("blipFill") else {
         return Err(unsupported());
     };
-    let part = opc::resolve_id(pkg, slide_part, rid)?;
-    let bytes = pkg.get(&part)?;
-    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Err(unsupported());
-    }
-    let image = decode_png(bytes)?;
+    let image = load_blip_png(pkg, slide_part, fill)?;
     let (x, y, cx, cy) = pic_box(pic, chain);
     let dest_w = emu_px(cx);
     let dest_h = emu_px(cy);
@@ -2159,7 +2401,7 @@ fn blit_pic(
     let dest_y = emu_px(y);
     let dest_w = dest_w as u32;
     let dest_h = dest_h as u32;
-    let crop = source_window(pic, image.w, image.h, dest_w, dest_h)?;
+    let crop = source_window(fill, image.w, image.h, dest_w, dest_h)?;
     paint_image(
         rgb, width, height, dest_x, dest_y, dest_w, dest_h, &image, crop,
     );
@@ -2169,15 +2411,22 @@ fn blit_pic(
 /// 裁剪四边落到整像素，且裁完尺寸等于目标时，返回原图上的这块。
 /// 没有裁剪时返回 `None`，沿用原来的取样。对不齐的裁剪让整页失败。
 fn source_window(
-    pic: &Element,
+    el: &Element,
     image_w: u32,
     image_h: u32,
     dest_w: u32,
     dest_h: u32,
 ) -> Result<Option<(u32, u32, u32, u32)>, Error> {
-    let Some(fill) = pic.child_by_local("blipFill") else {
+    let fill = if el.local_name() == "blipFill" {
+        el
+    } else if let Some(fill) = el.child_by_local("blipFill") {
+        fill
+    } else {
         return Ok(None);
     };
+    if fill.child_by_local("tile").is_some() || fill_rect_moves(fill) {
+        return Err(unsupported());
+    }
     let Some(rect) = fill.child_by_local("srcRect") else {
         return Ok(None);
     };
@@ -2189,9 +2438,6 @@ fn source_window(
     );
     if l == 0 && t == 0 && r == 0 && b == 0 {
         return Ok(None);
-    }
-    if fill.child_by_local("tile").is_some() || fill_rect_moves(fill) {
-        return Err(unsupported());
     }
     let left = percent_px(l, image_w).ok_or_else(unsupported)?;
     let top = percent_px(t, image_h).ok_or_else(unsupported)?;
@@ -2300,6 +2546,32 @@ fn paint_image(
     image: &Rgba,
     crop: Option<(u32, u32, u32, u32)>,
 ) {
+    paint_image_covered(
+        rgb,
+        width,
+        height,
+        dest_x,
+        dest_y,
+        dest_w,
+        dest_h,
+        image,
+        crop,
+        |_, _| 255,
+    );
+}
+
+fn paint_image_covered(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    dest_x: i32,
+    dest_y: i32,
+    dest_w: u32,
+    dest_h: u32,
+    image: &Rgba,
+    crop: Option<(u32, u32, u32, u32)>,
+    cover: impl Fn(i32, i32) -> u8,
+) {
     let (sx0, sy0) = crop.map(|(x, y, _, _)| (x, y)).unwrap_or((0, 0));
     for row in 0..dest_h {
         let y = dest_y + row as i32;
@@ -2316,18 +2588,25 @@ fn paint_image(
             if x < 0 || x >= width as i32 {
                 continue;
             }
+            let mask = cover(x, y);
+            if mask == 0 {
+                continue;
+            }
             let sx = if crop.is_some() {
                 sx0 + col
             } else {
                 ((col as u64 * image.w as u64) / dest_w as u64).min(image.w as u64 - 1) as u32
             };
             let si = ((sy as usize) * (image.w as usize) + sx as usize) * 4;
-            let src = [
+            let mut src = [
                 image.px[si],
                 image.px[si + 1],
                 image.px[si + 2],
                 image.px[si + 3],
             ];
+            if mask < 255 {
+                src[3] = ((u16::from(src[3]) * u16::from(mask) + 127) / 255) as u8;
+            }
             let di = ((y as usize) * (width as usize) + x as usize) * 3;
             let dst = [rgb[di], rgb[di + 1], rgb[di + 2]];
             let mixed = over(dst, src);
@@ -2675,9 +2954,17 @@ mod tests {
             0,
             1,
             720,
-            [0, 0, 0],
-            [255, 255, 255],
-            RIGHT_ANGLE,
+            LinearGrad {
+                start: GradStop {
+                    color: [0, 0, 0],
+                    alpha: 255,
+                },
+                end: GradStop {
+                    color: [255, 255, 255],
+                    alpha: 255,
+                },
+                ang: RIGHT_ANGLE,
+            },
         );
         let at = |y: usize| rgb[y * 3];
         assert_eq!(at(180), 105);
@@ -2693,9 +2980,17 @@ mod tests {
             0,
             1,
             720,
-            [0x0B, 0x25, 0x45],
-            [0x1B, 0x6C, 0xA8],
-            RIGHT_ANGLE,
+            LinearGrad {
+                start: GradStop {
+                    color: [0x0B, 0x25, 0x45],
+                    alpha: 255,
+                },
+                end: GradStop {
+                    color: [0x1B, 0x6C, 0xA8],
+                    alpha: 255,
+                },
+                ang: RIGHT_ANGLE,
+            },
         );
         assert_eq!(&navy[360 * 3..360 * 3 + 3], &[21, 82, 130]);
     }
@@ -2708,7 +3003,7 @@ mod tests {
             alpha: 255,
             on: true,
         };
-        fill_round(&mut rgb, 8, 6, 1, 1, 6, 4, 7, 5, 0, 0, fill);
+        fill_round(&mut rgb, 8, 6, 1, 1, 6, 4, 7, 5, 0, 0, fill, None);
         stroke_round(&mut rgb, 8, 6, 1, 1, 6, 4, 0, 1, 7, 5, [1, 2, 3]);
         assert_eq!(&rgb[(8 + 1) * 3..][..3], &[1, 2, 3]);
         assert_eq!(&rgb[(3 * 8 + 3) * 3..][..3], &[255, 255, 255]);
@@ -2728,15 +3023,32 @@ mod tests {
             24,
             1,
             1,
+            14,
+            20,
             15,
             21,
             inset,
             3.0,
             1.0,
             white,
+            None,
             [1, 2, 3],
         );
-        fill_round(&mut curved, 16, 24, 1, 1, 14, 20, 15, 21, 3, inset, white);
+        fill_round(
+            &mut curved,
+            16,
+            24,
+            1,
+            1,
+            14,
+            20,
+            15,
+            21,
+            3,
+            inset,
+            white,
+            None,
+        );
         stroke_round(
             &mut curved,
             16,
@@ -2783,6 +3095,7 @@ mod tests {
                 alpha: 255,
                 on: true,
             },
+            grad: None,
             stroke: Some([46, 117, 182]),
             stroke_f: 1.333,
         };
@@ -2864,6 +3177,7 @@ mod tests {
                     alpha: 26,
                     on: true,
                 },
+                grad: None,
                 stroke: Some([46, 117, 182]),
                 stroke_f: 1.333,
             },
@@ -2885,5 +3199,56 @@ mod tests {
         assert!(edge > 0.4 && edge < 0.6, "{edge}");
         assert_eq!(ellipse_cover(10, 10, 10.5, 10.5, 5.0, 5.0), 1.0);
         assert_eq!(ellipse_cover(10, 20, 10.5, 10.5, 5.0, 5.0), 0.0);
+    }
+
+    #[test]
+    fn para_lines_keep_text_after_a_break() {
+        let xml = r#"<a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:rPr sz="1800"><a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:latin typeface="Calibri"/></a:rPr><a:t>AAAA</a:t></a:r><a:br/><a:r><a:rPr sz="1800"><a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:latin typeface="Calibri"/></a:rPr><a:t>BBBB</a:t></a:r></a:p>"#;
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let lines = para_lines(&doc.root);
+        assert_eq!(
+            lines
+                .iter()
+                .map(|line| line.text.as_str())
+                .collect::<Vec<_>>(),
+            ["AAAA", "BBBB"]
+        );
+        assert_eq!(lines[1].color, [0x11, 0x22, 0x33]);
+        assert_eq!(lines[1].latin, "Calibri");
+        assert_eq!(para_line(&doc.root).unwrap().text, "AAAA");
+    }
+
+    #[test]
+    fn translucent_gradient_blends_over_the_page() {
+        let mut rgb = vec![0u8; 10 * 3];
+        for px in rgb.chunks_mut(3) {
+            px.copy_from_slice(&[0xAA, 0xBB, 0xCC]);
+        }
+        fill_gradient(
+            &mut rgb,
+            10,
+            1,
+            0,
+            0,
+            10,
+            1,
+            LinearGrad {
+                start: GradStop {
+                    color: [255, 0, 0],
+                    alpha: 128,
+                },
+                end: GradStop {
+                    color: [255, 0, 0],
+                    alpha: 128,
+                },
+                ang: 0,
+            },
+        );
+        let over =
+            |dst: u8, src: u8| ((u16::from(src) * 128 + u16::from(dst) * 127 + 127) / 255) as u8;
+        let mixed = [over(0xAA, 255), over(0xBB, 0), over(0xCC, 0)];
+        assert_eq!(&rgb[..3], &mixed);
+        assert_ne!(&rgb[..3], &[0xAA, 0xBB, 0xCC]);
+        assert_ne!(&rgb[..3], &[255, 0, 0]);
     }
 }
