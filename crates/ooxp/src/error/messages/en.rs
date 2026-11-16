@@ -1421,7 +1421,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::PageImageUnsupported => {
-            "This page cannot be drawn to PNG yet. Supported: one section; empty pages; Latin Calibri paragraphs (wrap/spacing/indent); opaque inline PNG whose extent pixels match the source (no scale). Floating wrap, crop, transparency, mixed text+picture, tables, headers, and explicit line/pagination controls are not drawn"
+            "This page cannot be drawn to PNG yet. Supported: one section; empty pages; Latin Calibri paragraphs (wrap/spacing/indent); opaque inline PNG whose extent pixels match the source (no scale); plain no-text tables (cell fill, single/nil borders, tblGrid/tblInd/trHeight). Floating wrap, crop, transparency, mixed text+picture, scaled pictures, merged/styled/text-in-table cells, headers, and explicit line/pagination controls are not drawn"
                 .into()
         }
         ErrorKind::SparklineImageUnsupported => {
