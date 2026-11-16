@@ -6537,6 +6537,10 @@ impl Book {
         if start == 0 {
             return ready_err(VALUE);
         }
+        // 查找串或原文写不进代码页时不写缓存。先按码元找到再只数前面的字节，会把落在汉字上的位置写成数字。
+        if bytes && (dbcs::encode(&needle).is_none() || dbcs::encode(&hay).is_none()) {
+            return Calc::Skip;
+        }
         let hay_units: Vec<u16> = hay.encode_utf16().collect();
         let needle_units: Vec<u16> = needle.encode_utf16().collect();
         let start0 = start - 1;
@@ -7450,6 +7454,7 @@ fn eq_ci(left: u16, right: u16) -> bool {
 }
 
 fn byte_index_at(text: &str, utf16_index: usize) -> Option<usize> {
+    dbcs::encode(text)?;
     let mut bytes = 0usize;
     let mut seen = 0usize;
     for ch in text.chars() {
@@ -10849,7 +10854,16 @@ fn replace_cache_pts(cache: &mut Element, values: &[Scalar]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_expr;
+    use super::{byte_index_at, parse_expr};
+
+    #[test]
+    fn byte_index_needs_the_whole_string_in_the_code_page() {
+        let got = byte_index_at("AbC 中文", 4);
+        #[cfg(windows)]
+        assert_eq!(got, Some(4));
+        #[cfg(not(windows))]
+        assert_eq!(got, None);
+    }
 
     #[test]
     fn sheet_ref_parses() {
