@@ -3538,7 +3538,8 @@ mod tests {
                 .unwrap_or_else(|| {
                     panic!("pt={pt} 找不到第二行首墨, first={first}, expect~{expected_second}, rows={ink_rows:?}")
                 });
-            let face = Face::open_named((pt * 96.0 / 72.0) as f32, false, "Calibri").expect("Calibri");
+            let face =
+                Face::open_named((pt * 96.0 / 72.0) as f32, false, "Calibri").expect("Calibri");
             let mut cell_first = None;
             face.draw_slide("AAAA", 0.0, 0.0, [0, 0, 0], |_, y, _, cov| {
                 if cov > 0 {
@@ -3566,4 +3567,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn round_rect_straight_edges_are_fully_covered() {
+        // Office 16.0 竖直直边是整像素实心。192x96、半径 16 时，左右列不得叠到页底。
+        let width = 200u32;
+        let height = 100u32;
+        let page = [170u8, 187, 204];
+        let mut rgb = Vec::new();
+        rgb.extend(std::iter::repeat_n(page, (width * height) as usize).flatten());
+        let fill = RgbaFill {
+            color: [0, 170, 0],
+            alpha: 255,
+            on: true,
+        };
+        assert!(fill_round_device(
+            &mut rgb, width, height, 4, 2, 192, 96, 16.0, fill, None,
+        ));
+        let at = |x: i32, y: i32| -> [u8; 3] {
+            let i = (y as usize * width as usize + x as usize) * 3;
+            [rgb[i], rgb[i + 1], rgb[i + 2]]
+        };
+        // 直边中点在 y=2+16 到 y=2+96-16 之间。
+        assert_eq!(at(4, 50), [0, 170, 0]);
+        assert_eq!(at(195, 50), [0, 170, 0]);
+        assert_eq!(at(3, 50), page);
+        assert_eq!(at(196, 50), page);
+
+        // 与手测页同一外接矩形：slide 上 (384,96) 192x96。
+        let width = 1280u32;
+        let height = 720u32;
+        let mut rgb = Vec::new();
+        rgb.extend(std::iter::repeat_n(page, (width * height) as usize).flatten());
+        assert!(fill_round_device(
+            &mut rgb, width, height, 384, 96, 192, 96, 16.00032, fill, None,
+        ));
+        let at = |x: i32, y: i32| -> [u8; 3] {
+            let i = (y as usize * width as usize + x as usize) * 3;
+            [rgb[i], rgb[i + 1], rgb[i + 2]]
+        };
+        assert_eq!(at(384, 144), [0, 170, 0], "left mid");
+        assert_eq!(at(575, 144), [0, 170, 0], "right mid");
+        assert_eq!(at(383, 144), page, "outside left");
+        assert_eq!(at(576, 144), page, "outside right");
+    }
 }
