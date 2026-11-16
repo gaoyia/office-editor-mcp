@@ -2057,3 +2057,439 @@ fn rewrite_named(src: &Path, dst: &Path, mut edit: impl FnMut(&str, String) -> S
     }
     std::fs::write(dst, out.into_inner()).unwrap();
 }
+
+fn rgba_png(w: u32, h: u32, px: &[[u8; 4]]) -> Vec<u8> {
+    assert_eq!(px.len(), (w as usize) * (h as usize));
+    let mut raw = Vec::with_capacity(px.len() * 4);
+    for p in px {
+        raw.extend_from_slice(p);
+    }
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, w, h);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&raw)
+        .unwrap();
+    out
+}
+
+fn pattern_2x2() -> Vec<[u8; 4]> {
+    vec![
+        [255, 0, 0, 255],
+        [0, 255, 0, 255],
+        [0, 0, 255, 255],
+        [255, 255, 0, 255],
+    ]
+}
+
+fn export_picture_slide(
+    png: &[u8],
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    bg: &str,
+    tag: &str,
+) -> (u32, u32, Vec<u8>) {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp(&format!("{tag}-deck"));
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": bg },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": x,
+                "y": y,
+                "cx": cx,
+                "cy": cy
+            }
+        ]
+    }));
+    let out = tmp(&format!("{tag}-out")).with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_png(&std::fs::read(&out).unwrap())
+}
+
+fn rgb_at(hex: u32) -> [u8; 3] {
+    [
+        ((hex >> 16) & 0xff) as u8,
+        ((hex >> 8) & 0xff) as u8,
+        (hex & 0xff) as u8,
+    ]
+}
+
+fn assert_grid(rgb: &[u8], w: u32, x0: u32, y0: u32, grid: &[&[u32]]) {
+    for (row, line) in grid.iter().enumerate() {
+        for (col, color) in line.iter().enumerate() {
+            assert_eq!(
+                pixel(rgb, w, x0 + col as u32, y0 + row as u32),
+                rgb_at(*color),
+                "px ({}, {})",
+                x0 + col as u32,
+                y0 + row as u32
+            );
+        }
+    }
+}
+
+fn assert_box_outside(rgb: &[u8], w: u32, x0: u32, y0: u32, bw: u32, bh: u32, bg: [u8; 3]) {
+    if x0 > 0 {
+        for row in 0..bh {
+            assert_eq!(pixel(rgb, w, x0 - 1, y0 + row), bg, "left of box");
+        }
+    }
+    if y0 > 0 {
+        for col in 0..bw {
+            assert_eq!(pixel(rgb, w, x0 + col, y0 - 1), bg, "above box");
+        }
+    }
+    for row in 0..bh {
+        assert_eq!(pixel(rgb, w, x0 + bw, y0 + row), bg, "right of box");
+    }
+    for col in 0..bw {
+        assert_eq!(pixel(rgb, w, x0 + col, y0 + bh), bg, "below box");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn patterned_png_scale_up_matches_office_on_windows() {
+    let png = rgba_png(2, 2, &pattern_2x2());
+    let bg = [0xAA, 0xBB, 0xCC];
+    let x = 1828800i64;
+    let y = 914400i64;
+    // 2x2 -> 4x4
+    let (w, _, rgb) = export_picture_slide(&png, x, y, 38100, 38100, "AABBCC", "scale-2to4");
+    assert_eq!(w, 1280);
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0xFF0000, 0xCD4000, 0x34BD00, 0x00FF00],
+            &[0xBF0040, 0x9F4030, 0x61BD11, 0x40FF00],
+            &[0x4200BD, 0x61408E, 0x9DBD31, 0xBDFF00],
+            &[0x0000FF, 0x3240D4, 0xCABD49, 0xFFFF00],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 4, 4, bg);
+
+    // 2x2 -> 5x5 非整数倍率
+    let (w, _, rgb) = export_picture_slide(&png, x, y, 47625, 47625, "AABBCC", "scale-2to5");
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0xFF0000, 0xFA1E00, 0x807F00, 0x05E100, 0x00FF00],
+            &[0xE1001E, 0xCA1E1B, 0x807F0F, 0x35E104, 0x1EFF00],
+            &[0x80007F, 0x801E70, 0x807F40, 0x7FE10F, 0x7FFF00],
+            &[0x1E00E1, 0x351EC6, 0x7F7F71, 0xCAE11A, 0xE1FF00],
+            &[0x0000FF, 0x051EFE, 0x7F7F91, 0xFAE122, 0xFFFF00],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 5, 5, bg);
+
+    // 2x2 -> 4x2 只放宽
+    let (w, _, rgb) = export_picture_slide(&png, x, y, 38100, 19050, "AABBCC", "scale-2to4x2");
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0xF5000A, 0xBA4007, 0x47BD03, 0x0AFF00],
+            &[0x0B00F4, 0x4640B6, 0xB8BD3F, 0xF4FF00],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 4, 2, bg);
+}
+
+#[cfg(windows)]
+#[test]
+fn shape_blip_scale_up_matches_picture_on_windows() {
+    let png = rgba_png(2, 2, &pattern_2x2());
+    let src = tmp("scale-shape-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp("scale-shape-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": { "type": "blip", "file": png_path.to_string_lossy() },
+                "x": 1828800,
+                "y": 914400,
+                "cx": 38100,
+                "cy": 38100
+            }
+        ]
+    }));
+    let out = tmp("scale-shape-out").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_grid(
+        &rgb,
+        w,
+        192,
+        96,
+        &[
+            &[0xFF0000, 0xCD4000, 0x34BD00, 0x00FF00],
+            &[0xBF0040, 0x9F4030, 0x61BD11, 0x40FF00],
+            &[0x4200BD, 0x61408E, 0x9DBD31, 0xBDFF00],
+            &[0x0000FF, 0x3240D4, 0xCABD49, 0xFFFF00],
+        ],
+    );
+    assert_box_outside(&rgb, w, 192, 96, 4, 4, [0xAA, 0xBB, 0xCC]);
+}
+
+#[cfg(windows)]
+#[test]
+fn left_clipped_scale_up_keeps_geometry_on_windows() {
+    let png = rgba_png(2, 2, &pattern_2x2());
+    let src = tmp("scale-clip-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp("scale-clip-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertShape",
+                "id": "slide:1",
+                "fill": { "type": "blip", "file": png_path.to_string_lossy() },
+                "x": -9525,
+                "y": 1828800,
+                "cx": 38100,
+                "cy": 38100
+            }
+        ]
+    }));
+    let out = tmp("scale-clip-out").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    // 4x4 的右 3 列落在 x=0..2，y=192..195
+    assert_grid(
+        &rgb,
+        w,
+        0,
+        192,
+        &[
+            &[0xCD4000, 0x34BD00, 0x00FF00],
+            &[0x9F4030, 0x61BD11, 0x40FF00],
+            &[0x61408E, 0x9DBD31, 0xBDFF00],
+            &[0x3240D4, 0xCABD49, 0xFFFF00],
+        ],
+    );
+    assert_eq!(pixel(&rgb, w, 3, 192), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 0, 191), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 0, 196), [0xAA, 0xBB, 0xCC]);
+}
+
+#[cfg(windows)]
+#[test]
+fn transparent_scale_up_keeps_geometry_on_windows() {
+    // t93u：透明混合可以有残差，但位置、目标尺寸和边界不得偏移。
+    let png = rgba_png(
+        2,
+        2,
+        &[
+            [255, 0, 0, 255],
+            [0, 255, 0, 128],
+            [0, 0, 255, 0],
+            [255, 255, 0, 64],
+        ],
+    );
+    let (w, _, rgb) =
+        export_picture_slide(&png, 1828800, 914400, 38100, 38100, "AABBCC", "scale-a");
+    let bg = [0xAA, 0xBB, 0xCC];
+    assert_box_outside(&rgb, w, 192, 96, 4, 4, bg);
+    assert_eq!(pixel(&rgb, w, 192, 96), [0xFF, 0x00, 0x00]);
+    assert_eq!(pixel(&rgb, w, 192, 99), bg);
+    assert_eq!(pixel(&rgb, w, 193, 99), bg);
+    // 对照官方混合，只记录残差，不用颜色容差掩盖位移。
+    let official: [[u32; 4]; 4] = [
+        [0xFF0000, 0xD82907, 0x7A9F41, 0x5BDB6D],
+        [0xEA2F33, 0xCB5A43, 0x8FAD62, 0x77D67A],
+        [0xC08B97, 0xB89C94, 0xABBE8E, 0xA8D18A],
+        [0xAABBCC, 0xAABBCC, 0xB6C4B0, 0xC0CD97],
+    ];
+    let mut max_delta = 0u32;
+    let mut differ = 0u32;
+    for y in 0..4 {
+        for x in 0..4 {
+            let got = pixel(&rgb, w, 192 + x, 96 + y);
+            let want = rgb_at(official[y as usize][x as usize]);
+            let d = got
+                .iter()
+                .zip(want.iter())
+                .map(|(a, b)| u32::from(a.abs_diff(*b)))
+                .max()
+                .unwrap();
+            if d > 0 {
+                differ += 1;
+            }
+            max_delta = max_delta.max(d);
+        }
+    }
+    // 几何已在上面锁死。残差照实记录，不要求 0，也不允许整块错成最近邻。
+    eprintln!("transparent 2x2->4x4 residual differ={differ} maxDelta={max_delta}");
+    assert!(
+        max_delta < 40,
+        "transparent residual too large maxDelta={max_delta}, likely not HQ bicubic"
+    );
+}
+
+#[test]
+fn shrinking_a_picture_is_not_implemented() {
+    let png = rgba_png(4, 4, &[[0x22, 0x88, 0x44, 255]; 16]);
+    let src = tmp("scale-shrink-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "标题" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let title = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let png_path = src.with_extension("png");
+    std::fs::write(&png_path, png).unwrap();
+    let deck = tmp("scale-shrink-deck");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "setPageBackground", "id": "slide:1", "color": "AABBCC" },
+            { "op": "deleteShape", "id": title },
+            {
+                "op": "insertPicture",
+                "id": "slide:1",
+                "file": png_path.to_string_lossy(),
+                "x": 1828800,
+                "y": 914400,
+                "cx": 19050,
+                "cy": 19050
+            }
+        ]
+    }));
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": tmp("scale-shrink-out").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
