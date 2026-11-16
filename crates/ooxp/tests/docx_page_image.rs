@@ -1,4 +1,4 @@
-//! exportPageImage：没有字的页画成白 PNG。单节单段一行的不透明 Calibri 正文可画。
+//! exportPageImage：没有字的页画成白 PNG。单节单段（可拉丁空格换行）的不透明 Calibri 正文可画。
 
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -250,14 +250,25 @@ fn text_and_position_samples_shift_with_size_and_origin() {
 
 #[cfg(windows)]
 #[test]
-fn wrapping_or_second_paragraph_is_not_drawn() {
+fn single_paragraph_latin_wrap_is_drawn() {
     let wrap = create_text(
         "wrap",
         "This line is intentionally long enough that it should not fit on one A4 content width at Calibri eleven point without wrapping in Word.",
     );
-    let err = export(&wrap, "page:1").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let png = export(&wrap, "page:1").unwrap();
+    let (w, h, rgb) = decode_png(&png);
+    assert_eq!((w, h), (794, 1123));
+    let (_x, y, _bw, bh) = ink_box(&rgb, w, h);
+    // 单行 Calibri 11 黑框高约 9px；换行后墨迹高度应明显更高。
+    assert!(
+        bh > 18,
+        "expected wrapped ink taller than one line, got y={y} h={bh}"
+    );
+}
 
+#[cfg(windows)]
+#[test]
+fn second_paragraph_is_not_drawn() {
     let src = tmp("two-para");
     run_ok(json!({
         "schemaVersion": 1,

@@ -1,6 +1,6 @@
-//! 把 docx 里没有可见内容的一页，或单节、单段、一行的不透明 Calibri 正文，画成 PNG。
+//! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的不透明拉丁 Calibri 正文，画成 PNG。
 //! 宽高按节的 `w:pgSz`，96 dpi，twip×96/1440 四舍五入。
-//! 有表、图、页眉页脚、换行、多段或还没对齐的行距时不画，避免拿近似图冒充。
+//! 有表、图、页眉页脚、第二段正文，或还没对齐的行距时不画。同一段拉丁空格换行已画；字形灰度仍暂缓。
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 
@@ -39,7 +39,8 @@ struct Layout {
     width: u32,
     height: u32,
     pages: u32,
-    text: Option<TextLine>,
+    /// 单段换行后的各行。`None` 表示空白页。
+    lines: Option<Vec<TextLine>>,
 }
 
 struct TextLine {
@@ -79,24 +80,22 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
     }
     let width = twip_px(page_w)?;
     let height = twip_px(page_h)?;
-    let text = match text {
+    let lines = match text {
         Some(line) => {
             let left_twip = left.saturating_add(line.indent_twip);
             let top_twip = top.saturating_add(line.before_twip);
             if left_twip < 0 || top_twip < 0 {
                 return Err(unsupported());
             }
-            Some(TextLine {
-                text: line.text,
-                sz: line.sz,
-                left_twip,
-                top_twip,
-                body_w_twip: body_w,
-            })
+            // 正文区内从段前之后剩余高度：body_h - before。
+            let remain_h = body_h.saturating_sub(line.before_twip.max(0));
+            Some(layout_wrapped_lines(
+                &line.text, line.sz, left_twip, top_twip, body_w, remain_h,
+            )?)
         }
         None => None,
     };
-    let pages = match &text {
+    let pages = match &lines {
         Some(_) => 1,
         None => page_count(paras, body_h as u64)?,
     };
@@ -104,8 +103,91 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
         width,
         height,
         pages,
-        text,
+        lines,
     })
+}
+
+/// 单段拉丁按空格换行。行距与空段分页同一档（`LINE_NUM`/`LINE_DEN` twip）。
+/// 单词本身宽于正文区、或换行后总高度超出本页剩余正文高，仍 `NotImplemented`。
+fn layout_wrapped_lines(
+    text: &str,
+    sz: u32,
+    left_twip: i64,
+    top_twip: i64,
+    body_w_twip: i64,
+    remain_body_h_twip: i64,
+) -> Result<Vec<TextLine>, Error> {
+    let rows = wrap_latin_lines(text, sz, body_w_twip)?;
+    let need = line_offset_twip(rows.len() as u64)?;
+    if need > remain_body_h_twip {
+        return Err(unsupported());
+    }
+    let mut out = Vec::with_capacity(rows.len());
+    for (i, row) in rows.into_iter().enumerate() {
+        let y = top_twip.saturating_add(line_offset_twip(i as u64)?);
+        out.push(TextLine {
+            text: row,
+            sz,
+            left_twip,
+            top_twip: y,
+            body_w_twip,
+        });
+    }
+    Ok(out)
+}
+
+fn line_offset_twip(line_index: u64) -> Result<i64, Error> {
+    let n = line_index.saturating_mul(LINE_NUM) / LINE_DEN;
+    i64::try_from(n).map_err(|_| unsupported())
+}
+
+fn wrap_latin_lines(text: &str, sz: u32, body_w_twip: i64) -> Result<Vec<String>, Error> {
+    #[cfg(not(windows))]
+    {
+        let _ = (text, sz, body_w_twip);
+        return Err(unsupported());
+    }
+    #[cfg(windows)]
+    {
+        let pt = (sz as f32) / 2.0;
+        let px = pt * 96.0 / 72.0;
+        let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
+        let max_w = f64::from(twip_px_unclamped(body_w_twip)?);
+        if face.width(text) <= max_w {
+            return Ok(vec![text.to_string()]);
+        }
+        let mut lines: Vec<String> = Vec::new();
+        let mut cur = String::new();
+        for word in text.split(' ') {
+            if word.is_empty() {
+                continue;
+            }
+            if face.width(word) > max_w {
+                return Err(unsupported());
+            }
+            let candidate = if cur.is_empty() {
+                word.to_string()
+            } else {
+                format!("{cur} {word}")
+            };
+            if face.width(&candidate) <= max_w {
+                cur = candidate;
+            } else {
+                if cur.is_empty() {
+                    return Err(unsupported());
+                }
+                lines.push(std::mem::take(&mut cur));
+                cur = word.to_string();
+            }
+        }
+        if !cur.is_empty() {
+            lines.push(cur);
+        }
+        if lines.is_empty() {
+            return Err(unsupported());
+        }
+        Ok(lines)
+    }
 }
 
 struct PendingText {
@@ -471,8 +553,10 @@ fn twip_px(twip: i64) -> Result<u32, Error> {
 fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     let mut rgb = vec![255u8; (layout.width as usize) * (layout.height as usize) * 3];
     if page == 1 {
-        if let Some(line) = &layout.text {
-            paint_text(&mut rgb, layout.width, layout.height, line)?;
+        if let Some(lines) = &layout.lines {
+            for line in lines {
+                paint_text(&mut rgb, layout.width, layout.height, line)?;
+            }
         }
     }
     encode_png(layout.width, layout.height, &rgb)
@@ -489,7 +573,7 @@ fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine) -> Resul
         let pt = (line.sz as f32) / 2.0;
         let px = pt * 96.0 / 72.0;
         let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
-        let body_w = twip_px(line.body_w_twip)? as f64;
+        let body_w = f64::from(twip_px_unclamped(line.body_w_twip)?);
         if face.width(&line.text) > body_w {
             return Err(unsupported());
         }
