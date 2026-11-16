@@ -786,6 +786,14 @@ mod win {
             width: f32,
             height: f32,
         ) -> i32;
+        fn GdipDrawRectangle(
+            graphics: *mut c_void,
+            pen: *mut c_void,
+            x: f32,
+            y: f32,
+            width: f32,
+            height: f32,
+        ) -> i32;
         fn GdipCreatePen1(color: u32, width: f32, unit: i32, pen: *mut *mut c_void) -> i32;
         fn GdipDrawLine(
             graphics: *mut c_void,
@@ -1344,6 +1352,156 @@ mod win {
         true
     }
 
+    /// 用 GDI+ 抗锯齿画不透明实线直角矩形描边。可带不透明实心填充。
+    /// 1 像素用无像素偏移，2 像素用半像素偏移，圆角接缝，平头线帽。
+    /// 外角半透明像素要叠在页面已有底色上，因此位图从目标像素初始化，再写回。
+    /// 与 PowerPoint 16.0 的 `Slide.Export` 对齐。
+    pub fn fill_device_stroked_rect(
+        x: i32,
+        y: i32,
+        w: i32,
+        h: i32,
+        fill: Option<[u8; 3]>,
+        stroke: [u8; 3],
+        width_px: i32,
+        rgb: &mut [u8],
+        page_w: u32,
+        page_h: u32,
+    ) -> bool {
+        if (width_px != 1 && width_px != 2) || w <= 0 || h <= 0 || gdiplus_token().is_none() {
+            return false;
+        }
+        let pad = width_px + 3;
+        let min_x = x.saturating_sub(pad);
+        let min_y = y.saturating_sub(pad);
+        let max_x = x.saturating_add(w).saturating_add(pad);
+        let max_y = y.saturating_add(h).saturating_add(pad);
+        let bw = max_x.saturating_sub(min_x).saturating_add(1);
+        let bh = max_y.saturating_sub(min_y).saturating_add(1);
+        if bw <= 0 || bh <= 0 {
+            return false;
+        }
+        let mut pixels = vec![0u32; (bw as usize) * (bh as usize)];
+        for py in 0..bh {
+            for px in 0..bw {
+                let color = page_pixel(rgb, page_w, page_h, min_x + px, min_y + py);
+                pixels[py as usize * bw as usize + px as usize] = 0xFF00_0000
+                    | (u32::from(color[0]) << 16)
+                    | (u32::from(color[1]) << 8)
+                    | u32::from(color[2]);
+            }
+        }
+        let offset = if width_px == 1 {
+            PIXEL_OFFSET_NONE
+        } else {
+            PIXEL_OFFSET_HALF
+        };
+        let fx = (x - min_x) as f32;
+        let fy = (y - min_y) as f32;
+        let fw = w as f32;
+        let fh = h as f32;
+        let stroke_argb = 0xFF00_0000
+            | (u32::from(stroke[0]) << 16)
+            | (u32::from(stroke[1]) << 8)
+            | u32::from(stroke[2]);
+        let drawn = unsafe {
+            let mut bitmap = std::ptr::null_mut();
+            if GdipCreateBitmapFromScan0(
+                bw,
+                bh,
+                bw * 4,
+                PIXEL_FORMAT_32BPP_ARGB,
+                pixels.as_mut_ptr().cast(),
+                &mut bitmap,
+            ) != 0
+                || bitmap.is_null()
+            {
+                return false;
+            }
+            GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+            let mut graphics = std::ptr::null_mut();
+            if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPageUnit(graphics, UNIT_PIXEL);
+            GdipSetSmoothingMode(graphics, SMOOTHING_ANTIALIAS);
+            GdipSetPixelOffsetMode(graphics, offset);
+            if let Some(fill) = fill {
+                let fill_argb = 0xFF00_0000
+                    | (u32::from(fill[0]) << 16)
+                    | (u32::from(fill[1]) << 8)
+                    | u32::from(fill[2]);
+                let mut brush = std::ptr::null_mut();
+                if GdipCreateSolidFill(fill_argb, &mut brush) != 0 || brush.is_null() {
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let status = GdipFillRectangle(graphics, brush, fx, fy, fw, fh);
+                GdipDeleteBrush(brush);
+                if status != 0 {
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+            }
+            let mut pen = std::ptr::null_mut();
+            if GdipCreatePen1(stroke_argb, width_px as f32, UNIT_PIXEL, &mut pen) != 0
+                || pen.is_null()
+            {
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                return false;
+            }
+            GdipSetPenLineJoin(pen, LINE_JOIN_ROUND);
+            GdipSetPenStartCap(pen, LINE_CAP_FLAT);
+            GdipSetPenEndCap(pen, LINE_CAP_FLAT);
+            let status = GdipDrawRectangle(graphics, pen, fx, fy, fw, fh);
+            GdipDeletePen(pen);
+            GdipDeleteGraphics(graphics);
+            GdipDisposeImage(bitmap);
+            status == 0
+        };
+        if !drawn {
+            return false;
+        }
+        for py in 0..bh {
+            for px in 0..bw {
+                let row = pixels[py as usize * bw as usize + px as usize];
+                let color = [
+                    ((row >> 16) & 0xff) as u8,
+                    ((row >> 8) & 0xff) as u8,
+                    (row & 0xff) as u8,
+                ];
+                set_page_pixel(rgb, page_w, page_h, min_x + px, min_y + py, color);
+            }
+        }
+        true
+    }
+
+    fn page_pixel(rgb: &[u8], page_w: u32, page_h: u32, x: i32, y: i32) -> [u8; 3] {
+        if x < 0 || y < 0 || x >= page_w as i32 || y >= page_h as i32 {
+            return [255, 255, 255];
+        }
+        let i = (y as usize * page_w as usize + x as usize) * 3;
+        if i + 2 >= rgb.len() {
+            return [255, 255, 255];
+        }
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    fn set_page_pixel(rgb: &mut [u8], page_w: u32, page_h: u32, x: i32, y: i32, color: [u8; 3]) {
+        if x < 0 || y < 0 || x >= page_w as i32 || y >= page_h as i32 {
+            return;
+        }
+        let i = (y as usize * page_w as usize + x as usize) * 3;
+        if i + 2 >= rgb.len() {
+            return;
+        }
+        rgb[i..i + 3].copy_from_slice(&color);
+    }
+
     fn gdiplus_token() -> Option<usize> {
         static TOKEN: OnceLock<Option<usize>> = OnceLock::new();
         *TOKEN.get_or_init(|| unsafe {
@@ -1511,7 +1669,7 @@ mod win {
 #[cfg(windows)]
 pub use win::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_polyline,
-    fill_device_round_rect, Face,
+    fill_device_round_rect, fill_device_stroked_rect, Face,
 };
 
 #[cfg(not(windows))]
@@ -1611,5 +1769,21 @@ pub fn fill_device_polyline(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8
 
 #[cfg(not(windows))]
 pub fn fill_device_beziers(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
+    false
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_stroked_rect(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: Option<[u8; 3]>,
+    _: [u8; 3],
+    _: i32,
+    _: &mut [u8],
+    _: u32,
+    _: u32,
+) -> bool {
     false
 }

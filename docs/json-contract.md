@@ -14,7 +14,7 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。像素不进 inspect。有字、表格和图还不画。
@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2550,7 +2550,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `p:pic` 里的嵌入 PNG。源图宽高和目标像素不同时，按最近邻取样。带透明通道的像素叠在已画内容上
 - `a:srcRect` 四边是从原图边缘向内的百分比。四边都落到整像素，并且裁完的宽高正好等于目标像素时，这块原图原样拷贝
 - 百分比落在像素中间，或裁完还要放大、缩小，整页失败。平铺和 `fillRect` 偏移也不画
-- 实心矩形：`prst` 为 `rect`，没有描边。线写成 `noFill` 时，旁边的虚线和空的效果列表不画。填充是不透明 `srgbClr`，或没有颜色变换的 `schemeClr`
+- 实心矩形：`prst` 为 `rect`。没有描边，或线写成 `noFill` 时，旁边的虚线和空的效果列表不画。填充是不透明 `srgbClr`，或没有颜色变换的 `schemeClr`。线宽恰好是 1 或 2 像素（9525 / 19050 EMU）的不透明实线描边也会画，外角与 PowerPoint 16.0 对齐：用 GDI+ `DrawRectangle` 抗锯齿绘制，1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽，叠在已有页底上。填充也可以是 `noFill`。其它线宽（包括默认 12700）、虚线、箭头、显式的 `miter` / `bevel` / `round`、`algn` 不是 `ctr`、带旋转、半透明填充或描边，整块形状仍不画，页面继续成功
 - `schemeClr` 按页底同一套配色表和主题取色。`sysClr` 用 `lastClr`。带了颜色变换，或主题里没有这一档，整页失败
 - `flipH` 和 `flipV` 不改变这块纯色
 - 矩形可以绕中心转 90 度的倍数。90 和 270 画成宽高对调后的外接矩形。其它角度的矩形整块留空
