@@ -1730,7 +1730,11 @@ fn text_functions_match_excel_16() {
     }
     #[cfg(not(windows))]
     {
-        for (cell_ref, _, _) in dbcs_text.iter().chain(dbcs_num.iter()) {
+        for (cell_ref, _, _) in dbcs_text {
+            let c = cell(&tree, &format!("cell:Sheet1!{cell_ref}"));
+            assert!(c["value"].is_null(), "{cell_ref} {c}");
+        }
+        for (cell_ref, _, _) in dbcs_num {
             let c = cell(&tree, &format!("cell:Sheet1!{cell_ref}"));
             assert!(c["value"].is_null(), "{cell_ref} {c}");
         }
