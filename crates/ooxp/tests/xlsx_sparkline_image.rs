@@ -1,4 +1,4 @@
-//! exportSparklineImage：一组里的一条折线，或没有负数的柱形，画成 PNG。
+//! exportSparklineImage：一组里的一条折线、没有负数的柱形，或盈亏（stacked）画成 PNG。
 //! 柱形的高点、低点、首点和末点换成纯色。折线上的标记不画。
 
 use std::io::Cursor;
@@ -355,7 +355,7 @@ fn column_markers_and_an_unused_negative_flag_keep_the_series() {
 }
 
 #[test]
-fn negatives_stacked_markers_and_missing_ids_are_rejected() {
+fn column_negatives_markers_axis_and_missing_ids_are_rejected() {
     let src = insert_line(&book("reject"));
     let negative = set_type(
         &insert_line(&book_with("neg", [-1, 1, 2])),
@@ -365,9 +365,19 @@ fn negatives_stacked_markers_and_missing_ids_are_rejected() {
     let err = export(&negative, "sheet:Sheet1/spark:1").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 
-    let stacked = set_type(&src, "stacked", "stacked");
-    let err = export(&stacked, "sheet:Sheet1/spark:1").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    // stacked 盈亏本刀可画：缺省 colorSeries/colorNegative 来自创建 写入的 Excel 缺省 rgb，
+    // 不是探针样本硬编码；自定义 rgb 另见 sparkline_paint 单元。
+    let stacked = set_type(
+        &insert_line(&book_with("wl", [-1, 1, 2])),
+        "stacked",
+        "stacked",
+    );
+    let bytes = export(&stacked, "sheet:Sheet1/spark:1").unwrap();
+    assert_eq!(&bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    let (w, h, rgb) = decode_png(&bytes);
+    assert_eq!((w, h), (64, 20));
+    // insert 缺省 negative=false：负半仍用系列色 #376092
+    assert_eq!(pixel(&rgb, w, 12, 14), SERIES);
 
     let high_line = tmp("high-line");
     run_ok(json!({
