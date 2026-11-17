@@ -3,6 +3,9 @@
 
 use fontdue::{Font, FontSettings};
 
+#[path = "chart_legend.rs"]
+mod legend;
+
 use crate::error::{Error, ErrorKind};
 use crate::xml::Element;
 
@@ -58,6 +61,7 @@ enum LegendPos {
     Left,
     Top,
     Bottom,
+    TopRight,
 }
 
 struct Series {
@@ -75,6 +79,7 @@ struct ColumnChart {
     vary_points: bool,
     grid: bool,
     legend: Option<LegendPos>,
+    legend_spec: legend::Spec,
     title: Option<String>,
     accents: [[u8; 3]; 6],
 }
@@ -276,7 +281,7 @@ pub(crate) fn render_chart(
     let chart = read_clustered_column(root, accents, cells, sheet)?;
     let font = font_bytes.and_then(|bytes| Font::from_bytes(bytes, FontSettings::default()).ok());
     let mut canvas = Canvas::new(width, height);
-    paint(&mut canvas, &chart, font.as_ref(), host);
+    paint(&mut canvas, &chart, font.as_ref(), host)?;
     encode_png(width, height, &canvas.px)
 }
 
@@ -389,6 +394,7 @@ fn read_clustered_column(
         vary_points,
         grid,
         legend: legend_pos(chart),
+        legend_spec: legend::Spec::read(root, accents)?,
         title: title_text(chart),
         accents,
     })
@@ -422,7 +428,13 @@ fn is_chart_wrapper(name: &str) -> bool {
     )
 }
 
-fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: ChartHost) {
+fn paint(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    host: ChartHost,
+) -> Result<(), Error> {
+    let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = (LABEL_PT * DPI / 72.0) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
     let title_face = chart
@@ -438,10 +450,10 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let axis_x = axis_x_of(widest_tick);
-    let plot_x = axis_x + 1;
+    let mut axis_x = axis_x_of(widest_tick);
+    let mut plot_x = axis_x + 1;
     let title_top = 4.0;
-    let plot_y = if chart.title.is_some() {
+    let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
             .map(|face| face.em_box().ceil() as i32)
@@ -460,8 +472,19 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
         INSET_TOP
     };
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
-    let plot_r = canvas.w as i32 - inset_right;
-    let plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_r = canvas.w as i32 - inset_right;
+    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    if !chart.legend_spec.legacy {
+        let reserve = legend_layout.reserve();
+        axis_x += reserve[0];
+        plot_x = axis_x + 1;
+        plot_y += reserve[1];
+        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_b -= reserve[3];
+        if plot_r <= plot_x || plot_b <= plot_y {
+            return Err(legend::unsupported());
+        }
+    }
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
@@ -513,10 +536,15 @@ fn paint(canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>, host: Ch
             INK,
         );
     }
-    draw_legend(canvas, chart, font, gdi.as_ref(), label_px, plot_r);
+    if chart.legend_spec.legacy {
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, plot_r);
+    } else {
+        legend_layout.draw(canvas, chart, font);
+    }
     if matches!(host, ChartHost::Excel) {
         canvas.stroke_border(BORDER);
     }
+    Ok(())
 }
 
 fn draw_cat_ticks(canvas: &mut Canvas, n: usize, x0: f64, x1: f64, axis_y: i32) {
@@ -875,6 +903,7 @@ fn legend_pos(chart: &Element) -> Option<LegendPos> {
         "l" => LegendPos::Left,
         "t" => LegendPos::Top,
         "b" => LegendPos::Bottom,
+        "tr" => LegendPos::TopRight,
         _ => LegendPos::Right,
     })
 }
