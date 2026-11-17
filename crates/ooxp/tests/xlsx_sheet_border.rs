@@ -760,7 +760,12 @@ fn formula_dashed_right_rhythm_matches_line_on() {
         ink.push(pixel(&px, w, x, y) == [0, 0, 0]);
     }
     let first = ink.iter().position(|&b| b).expect("dashed ink");
-    for (y, &bit) in ink.iter().enumerate().take((h as usize).saturating_sub(1)).skip(first) {
+    for (y, &bit) in ink
+        .iter()
+        .enumerate()
+        .take((h as usize).saturating_sub(1))
+        .skip(first)
+    {
         let along = y as i32 - 1;
         let expect = along.rem_euclid(4) != 3;
         assert_eq!(bit, expect, "y={y} phase");
