@@ -97,10 +97,11 @@ pub(crate) fn bitmap_px(
     sheet: &Element,
     anchor: &Element,
     kind: super::picture::AnchorKind,
+    geometry: &super::geometry::GeometryContext,
 ) -> Result<(u32, u32), Error> {
     let zoom = sheet_zoom(sheet);
     let (w, h) = match kind {
-        super::picture::AnchorKind::TwoCell => two_cell_px(sheet, anchor, zoom)?,
+        super::picture::AnchorKind::TwoCell => two_cell_px(sheet, anchor, zoom, geometry)?,
         _ => ext_px(anchor, zoom)?,
     };
     Ok((fit_px(w)?, fit_px(h)?))
@@ -158,12 +159,25 @@ fn row_px(sheet: &Element, row: u32) -> i64 {
     pt_to_px(def).max(1)
 }
 
-fn marker_x(sheet: &Element, col: u32, off: i64, zoom: u32) -> i64 {
+fn marker_x(
+    sheet: &Element,
+    col: u32,
+    off: i64,
+    zoom: u32,
+    geometry: &super::geometry::GeometryContext,
+) -> Result<i64, Error> {
     let mut px = 0i64;
     for c in 1..col {
-        px += zoomed(i64::from(super::layout::col_width_px(sheet, c)), zoom);
+        px += zoomed(
+            i64::from(
+                geometry
+                    .column_px(sheet, c)
+                    .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?,
+            ),
+            zoom,
+        );
     }
-    px + zoomed(emu_px(off), zoom)
+    Ok(px + zoomed(emu_px(off), zoom))
 }
 
 fn marker_y(sheet: &Element, row: u32, off: i64, zoom: u32) -> i64 {
@@ -174,13 +188,19 @@ fn marker_y(sheet: &Element, row: u32, off: i64, zoom: u32) -> i64 {
     px + zoomed(emu_px(off), zoom)
 }
 
-fn two_cell_px(sheet: &Element, anchor: &Element, zoom: u32) -> Result<(i64, i64), Error> {
+fn two_cell_px(
+    sheet: &Element,
+    anchor: &Element,
+    zoom: u32,
+    geometry: &super::geometry::GeometryContext,
+) -> Result<(i64, i64), Error> {
     let (from, from_x, from_y) = super::picture::read_marker(anchor.child_by_local("from"))?;
     let (to, to_x, to_y) = super::picture::read_marker(anchor.child_by_local("to"))?;
     let (Some(from), Some(to)) = (from, to) else {
         return ext_px(anchor, zoom);
     };
-    let w = marker_x(sheet, to.col, to_x, zoom) - marker_x(sheet, from.col, from_x, zoom);
+    let w = marker_x(sheet, to.col, to_x, zoom, geometry)?
+        - marker_x(sheet, from.col, from_x, zoom, geometry)?;
     let h = marker_y(sheet, to.row, to_y, zoom) - marker_y(sheet, from.row, from_y, zoom);
     Ok((w, h))
 }
@@ -1845,6 +1865,7 @@ mod tests {
             &sheet.root,
             &anchor.root,
             crate::xlsx::picture::AnchorKind::TwoCell,
+            &super::super::geometry::GeometryContext::calibri11(),
         )
         .unwrap();
         assert_eq!((w, h), (647, 252));
@@ -1861,6 +1882,7 @@ mod tests {
             &sheet.root,
             &anchor.root,
             crate::xlsx::picture::AnchorKind::OneCell,
+            &super::super::geometry::GeometryContext::calibri11(),
         )
         .unwrap();
         assert_eq!((w, h), (576, 336));

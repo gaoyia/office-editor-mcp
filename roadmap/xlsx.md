@@ -202,3 +202,6 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-超大区域切块.md` — tilePx 切块；stitch differ=0；默认 4096 NI 不绕；MAX_TILE_COUNT/总像素闸。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-差分虚线斜点划线.md` — CF dashed/slantDashDot；节律 oracle；整图 sizeDiffer。
+
+
+本分支共享缺陷修复：`.plan/2026年-11月-17日-⚠️-xlsx-共享列几何与尺寸链路.md`。Normal 字体固定 96 MDW、直接 OOXML 列宽以及 sheet/tiles/spark/twoCell 入口已共用；固定 96 维度回归通过，官方整图仍未全部通过。其它未开工功能保持暂停。

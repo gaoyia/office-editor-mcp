@@ -33,6 +33,7 @@ const MAX_TILE_COUNT: u32 = 1024;
 /// 全部切块像素合计上限（≈全图 RGB 体量）；与 MAX_TILE_COUNT 双闸。
 const MAX_TILE_TOTAL_PX: u64 = 64 * 1024 * 1024;
 const GRID: [u8; 3] = [224, 224, 224];
+#[cfg(test)]
 const DEFAULT_COL_PX: i32 = 64;
 /// 没写 `defaultRowHeight` 时的空行。Excel 的标准行高是 14.25 磅，19 像素。
 const DEFAULT_ROW_PT: f64 = 14.25;
@@ -54,7 +55,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
-    let cols = column_sizes(root, c0, c1)?;
+    let cols = column_sizes(root, &styles.geometry, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
     let theme = loaded_theme(&pkg, &wb_part, &rels);
     let shapes = plain_rects(
@@ -121,7 +122,7 @@ pub fn export_sheet_image_tiles(
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
-    let cols = column_sizes(root, c0, c1)?;
+    let cols = column_sizes(root, &styles.geometry, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
     let theme = loaded_theme(&pkg, &wb_part, &rels);
     let shapes = plain_rects(
@@ -585,7 +586,9 @@ fn rect_edges(
     }
     let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
     let from = from.ok_or_else(unsupported)?;
-    let x_from = axis_origin(from.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let x_from = axis_origin(from.col, c0, cols, &mut |col| {
+        column_px_of(sheet, styles, col)
+    })?;
     let y_from = axis_origin(from.row, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
@@ -604,7 +607,9 @@ fn rect_edges(
         AnchorKind::TwoCell => {
             let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
             let to = to.ok_or_else(unsupported)?;
-            let x_to = axis_origin(to.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
+            let x_to = axis_origin(to.col, c0, cols, &mut |col| {
+                column_px_of(sheet, styles, col)
+            })?;
             let y_to = axis_origin(to.row, r0, rows, &mut |row| {
                 row_px_one(sheet, styles, cells, row)
             })?;
@@ -650,12 +655,8 @@ fn axis_origin(
     }
 }
 
-fn column_px_of(sheet: &Element, col: u32) -> Result<i32, Error> {
-    let default = sheet
-        .child_by_local("sheetFormatPr")
-        .and_then(|el| el.attr("defaultColWidth"))
-        .and_then(|s| s.parse().ok());
-    column_px(sheet, col, default)
+fn column_px_of(sheet: &Element, styles: &Styles, col: u32) -> Result<i32, Error> {
+    styles.geometry.column_px(sheet, col)
 }
 
 fn row_px_one(
@@ -848,7 +849,7 @@ fn identity_group(
     let group = anchor.child_by_local("grpSp").ok_or_else(unsupported)?;
     let map = read_group_map(group)?;
     // 组里的 EMU 从 A1 左上角量起。格子下标从 1 起，不是从锚点那一格量起。
-    let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, col))?;
+    let origin_x = axis_origin(1, c0, cols, &mut |col| column_px_of(sheet, styles, col))?;
     let origin_y = axis_origin(1, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
@@ -1777,6 +1778,7 @@ struct Dxf {
 struct Styles {
     fonts: Vec<FontInfo>,
     normal_font: usize,
+    geometry: super::geometry::GeometryContext,
     fills: Vec<Fill>,
     xfs: Vec<Xf>,
     formats: HashMap<u32, String>,
@@ -2082,6 +2084,7 @@ impl Styles {
                 color: Some([0, 0, 0]),
             }],
             normal_font: 0,
+            geometry: super::geometry::GeometryContext::calibri11(),
             fills: vec![Fill::None, Fill::Nope],
             xfs: vec![Xf {
                 font: 0,
@@ -2126,7 +2129,7 @@ impl Styles {
                 color: Some([0, 0, 0]),
             });
         }
-        let normal_font = normal_font_index(root).min(fonts.len() - 1);
+        let normal_font = super::geometry::normal_font_index(root).min(fonts.len() - 1);
         let mut fills = Vec::new();
         if let Some(list) = root.child_by_local("fills") {
             for fill in list.children_by_local("fill") {
@@ -2167,6 +2170,7 @@ impl Styles {
         Ok(Self {
             fonts,
             normal_font,
+            geometry: super::geometry::GeometryContext::from_styles(root)?,
             fills,
             xfs,
             formats,
@@ -2996,58 +3000,22 @@ fn value_shown(cell: &Element, sst: &[String]) -> Result<Shown, Error> {
     }
 }
 
-fn column_sizes(sheet: &Element, c0: u32, c1: u32) -> Result<Vec<i32>, Error> {
-    let default = sheet
-        .child_by_local("sheetFormatPr")
-        .and_then(|el| el.attr("defaultColWidth"))
-        .and_then(|s| s.parse().ok());
-    let mut sizes = Vec::new();
-    for col in c0..=c1 {
-        sizes.push(column_px(sheet, col, default)?);
-    }
-    Ok(sizes)
+fn column_sizes(
+    sheet: &Element,
+    geometry: &super::geometry::GeometryContext,
+    c0: u32,
+    c1: u32,
+) -> Result<Vec<i32>, Error> {
+    (c0..=c1)
+        .map(|col| geometry.column_px(sheet, col))
+        .collect()
 }
 
-fn column_px(sheet: &Element, col: u32, default: Option<f64>) -> Result<i32, Error> {
-    for cols in sheet.children_by_local("cols") {
-        for el in cols.children_by_local("col") {
-            if truthy(el.attr("hidden")) {
-                let min = el.attr("min").and_then(|s| s.parse::<u32>().ok());
-                let max = el.attr("max").and_then(|s| s.parse::<u32>().ok());
-                if let (Some(min), Some(max)) = (min, max) {
-                    if col >= min && col <= max {
-                        // 隐藏列不占像素。XML 里的宽度留着，出图不用。
-                        return Ok(0);
-                    }
-                }
-            }
-            let Some(min) = el.attr("min").and_then(|s| s.parse::<u32>().ok()) else {
-                continue;
-            };
-            let Some(max) = el.attr("max").and_then(|s| s.parse::<u32>().ok()) else {
-                continue;
-            };
-            if col < min || col > max {
-                continue;
-            }
-            if let Some(width) = el.attr("width").and_then(|s| s.parse::<f64>().ok()) {
-                return Ok(excel_col_px(width).max(1));
-            }
-        }
-    }
-    Ok(match default {
-        Some(width) => excel_col_px(width).max(1),
-        None => DEFAULT_COL_PX,
-    })
-}
-
-/// Excel 把 OOXML `col/@width`（已含 padding 的字符宽单位）换成 **96 dpi** 像素。
-/// MDW=7：Calibri 11（Normal）在 96dpi 下 digit width 的规范取值；与销售看板金样 `excel_col_px(16.7109375)=117` 锁定。
-/// 不把本机 106 屏 MDW≈8 硬写进公式。高 DPI 存盘 width 相对 COM 点宽推导的 96dpi 目标可能偏短——记残差，不改 MDW。
+#[cfg(test)]
 fn excel_col_px(width: f64) -> i32 {
-    let mdw = 7.0f64;
-    let px = ((256.0 * width + (128.0 / mdw).floor()) / 256.0) * mdw;
-    px.floor() as i32
+    super::geometry::GeometryContext::calibri11()
+        .xml_width_px(width)
+        .unwrap()
 }
 
 struct RowBase {
@@ -3081,35 +3049,6 @@ fn row_base(sheet: &Element, styles: &Styles) -> RowBase {
         pt: DEFAULT_ROW_PT,
         lock_normal: false,
     }
-}
-
-fn normal_font_index(root: &Element) -> usize {
-    let Some(styles) = root.child_by_local("cellStyles") else {
-        return 0;
-    };
-    let Some(style) = styles
-        .children_by_local("cellStyle")
-        .into_iter()
-        .find(|el| {
-            el.attr("name")
-                .is_some_and(|name| name.eq_ignore_ascii_case("Normal"))
-        })
-    else {
-        return 0;
-    };
-    let xf_id = style
-        .attr("xfId")
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(0);
-    let Some(xfs) = root.child_by_local("cellStyleXfs") else {
-        return 0;
-    };
-    xfs.children_by_local("xf")
-        .into_iter()
-        .nth(xf_id)
-        .and_then(|xf| xf.attr("fontId"))
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0)
 }
 
 fn row_sizes(
@@ -6232,6 +6171,27 @@ fn encode_png(w: i32, h: i32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
 mod tests {
     use super::*;
 
+    #[cfg(windows)]
+    #[test]
+    fn outside_selection_columns_keep_normal_font_geometry() {
+        let doc = crate::xml::parse(
+            br#"<worksheet><cols><col min="1" max="6" width="10.125"/></cols></worksheet>"#,
+        )
+        .unwrap();
+        let font = crate::xml::parse(br#"<styleSheet><fonts><font><name val="Arial"/><sz val="11"/></font></fonts></styleSheet>"#).unwrap();
+        let mut styles = Styles::normal();
+        styles.geometry = super::super::geometry::GeometryContext::from_styles(&font.root).unwrap();
+        let cols = column_sizes(&doc.root, &styles.geometry, 3, 3).unwrap();
+        assert_eq!(cols, [81]);
+        assert_eq!(
+            axis_origin(1, 3, &cols, &mut |c| column_px_of(&doc.root, &styles, c)).unwrap(),
+            -162
+        );
+        assert_eq!(
+            axis_origin(6, 3, &cols, &mut |c| column_px_of(&doc.root, &styles, c)).unwrap(),
+            243
+        );
+    }
     #[test]
     fn sales_dashboard_canvas_matches_excel_copypicture() {
         let cols = [

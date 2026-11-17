@@ -2454,7 +2454,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `iconSet` 条件格式：cfvo/reverse/showValue/gte **选择语义**在库内可测；**出图仍 NotImplemented**（无公开可合法复现标准图标字形前不绘制）。最小锁定：`3Arrows` / `3ArrowsGray` / `3TrafficLights1`。不声称完整图标集或与 Excel 差 0。
 - 公式差分边框 `dashed` / `slantDashDot`：与格子边框共用绘制；`expression`+dxf 可出图。`cellIs` 带边框、差分对角线仍 NotImplemented。整图与 Excel CopyPicture 若屏 DPI≠96 可能 sizeDiffer，不以缩金样宣称差 0。
 - 像素对齐 Excel 16.0 的 `Range.CopyPicture`（`xlScreen`、`xlBitmap`）。不乘工作表 `zoomScale`
-- 显式列宽按 `floor(((256 * 宽度 + floor(128 / 7)) / 256) * 7)`。没写列宽、也没写 `defaultColWidth` 时是 64 像素
+- 工作表、切块、迷你图及图表 twoCell 锚点共用固定 96 dpi 的列几何；不读取本机显示 DPI。
+- 先按 `builtinId=0` 找 Normal 样式，再回退英文名 Normal 和字体 0。列宽的 MDW 是这个字体、字号及粗斜体在 96 dpi 下数字 0–9 的最大前进宽，不取格子的局部字体。
+- 显式 `col/@width` 和 `defaultColWidth` 都直接按 `floor(((256 * width + floor(128 / MDW)) / 256) * MDW)` 换像素，不经过 UI 两位小数字符宽，也不重复加 5 像素。
+- 没写上述宽度时，沿用 8.43 字符加 5 像素的缺省；Calibri 11 / MDW=7 仍为 64 像素，`16.7109375` 仍为 117 像素。
+- Windows 用公开 GDI 按固定像素字号测量，并核对实际字体名；缺字体或测量失败报 `NotImplemented`，不静默改成 MDW=7。非 Windows 仅对规范已知的普通 Calibri 11 使用 MDW=7，其它 Normal 字体暂不出图。
+- 本次不改变图表 zoomScale 与行高四舍五入、工作表行高截断的既有区别。106 dpi 的官方位图仍可能与 96 dpi 库图不同；字体像素量化不保证按 DPI 比例缩放后相同。
 - 写了行高就截断：`floor(round(磅 * 12700) / 9525)`。20 磅是 26，不是 27
 - 没写行高时，先取这一张表的缺省，再用格子里的字加高
 - 没写 `defaultRowHeight` 时，缺省是 14.25 磅，19 像素

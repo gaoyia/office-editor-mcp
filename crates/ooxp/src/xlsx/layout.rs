@@ -724,7 +724,10 @@ fn default_col_emu(sheet: &Element) -> i64 {
         .child_by_local("sheetFormatPr")
         .and_then(|e| e.attr_local("defaultColWidth"))
         .and_then(parse_xml_f64)
-        .map(chars_to_emu)
+        .map(|w| {
+            i64::from(super::geometry::xml_width_px(w, MAX_DIGIT_WIDTH).unwrap_or(1))
+                * EMU_PER_PIXEL
+        })
         .unwrap_or_else(|| chars_to_emu(DEFAULT_COL_CHARS))
 }
 
@@ -735,10 +738,6 @@ fn default_row_emu(sheet: &Element) -> i64 {
         .and_then(parse_xml_f64)
         .unwrap_or(DEFAULT_ROW_PT);
     points_to_emu(pt).max(1)
-}
-
-pub(crate) fn col_width_px(sheet: &Element, col: u32) -> u32 {
-    emu_to_px(col_width_emu(sheet, col))
 }
 
 pub(crate) fn row_height_px(sheet: &Element, row: u32) -> u32 {
@@ -773,7 +772,9 @@ fn col_width_emu(sheet: &Element, col: u32) -> i64 {
             };
             if col >= min && col <= max {
                 if let Some(w) = el.attr("width").and_then(parse_xml_f64) {
-                    return chars_to_emu(xml_width_to_chars(w)).max(1);
+                    return i64::from(
+                        super::geometry::xml_width_px(w, MAX_DIGIT_WIDTH).unwrap_or(1),
+                    ) * EMU_PER_PIXEL;
                 }
             }
         }
@@ -898,6 +899,22 @@ fn remove_attr(attrs: &mut Vec<(String, String)>, key: &str) {
 mod tests {
     use super::{chars_to_xml_width, xml_width_to_chars};
 
+    #[test]
+    fn stored_column_widths_bypass_ui_roundtrip_and_extra_padding() {
+        let doc = crate::xml::parse(br#"<worksheet><sheetFormatPr defaultColWidth="10"/><cols><col min="2" max="2" width="10.125"/></cols></worksheet>"#).unwrap();
+        assert_eq!(
+            super::col_width_emu(&doc.root, 1),
+            70 * super::EMU_PER_PIXEL
+        );
+        assert_eq!(
+            super::col_width_emu(&doc.root, 2),
+            71 * super::EMU_PER_PIXEL
+        );
+        assert_eq!(
+            super::col_origin_emu(&doc.root, 3),
+            141 * super::EMU_PER_PIXEL
+        );
+    }
     #[test]
     fn width_roundtrip_twenty() {
         let xml = chars_to_xml_width(20.0);
