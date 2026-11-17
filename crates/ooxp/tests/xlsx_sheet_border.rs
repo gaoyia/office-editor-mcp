@@ -657,7 +657,7 @@ fn formula_dotted_right_paints_like_a_cell_border() {
 }
 
 #[test]
-fn dashed_and_cell_is_borders_still_fail() {
+fn formula_dashed_and_slant_export_ok_cell_is_still_ni() {
     let src = tmp("dash-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -679,10 +679,7 @@ fn dashed_and_cell_is_borders_still_fail() {
             "dxf": { "border": { "right": { "style": "dashed", "color": { "rgb": "FF000000" } } } }
         }]
     }));
-    assert_eq!(
-        export(&dashed).unwrap_err().code(),
-        ErrorCode::NotImplemented
-    );
+    let _ = export(&dashed).expect("公式差分 dashed 应可出图");
 
     let slant = tmp("slant");
     run_ok(json!({
@@ -696,10 +693,7 @@ fn dashed_and_cell_is_borders_still_fail() {
             "dxf": { "border": { "right": { "style": "slantDashDot", "color": { "rgb": "FF000000" } } } }
         }]
     }));
-    assert_eq!(
-        export(&slant).unwrap_err().code(),
-        ErrorCode::NotImplemented
-    );
+    let _ = export(&slant).expect("公式差分 slantDashDot 应可出图");
 
     let cell_is = tmp("cellis");
     run_ok(json!({
@@ -716,5 +710,126 @@ fn dashed_and_cell_is_borders_still_fail() {
     assert_eq!(
         export(&cell_is).unwrap_err().code(),
         ErrorCode::NotImplemented
+    );
+}
+
+#[test]
+fn formula_dashed_right_rhythm_matches_line_on() {
+    // 与格子 dashed 同一套 paint_line：竖线 along=y，相位 along-1 后 r4!=3。
+    let src = tmp("fdash-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "A3", "value": "" },
+            { "ref": "A4", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("fdash");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 4, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A2:A4",
+                "type": "expression", "formulas": ["TRUE"],
+                "dxf": { "border": { "right": { "style": "dashed", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    let x = w - 1;
+    let mut ink = Vec::new();
+    for y in 0..h {
+        ink.push(pixel(&px, w, x, y) == [0, 0, 0]);
+    }
+    let first = ink.iter().position(|&b| b).expect("dashed ink");
+    for (y, &bit) in ink.iter().enumerate().take((h as usize).saturating_sub(1)).skip(first) {
+        let along = y as i32 - 1;
+        let expect = along.rem_euclid(4) != 3;
+        assert_eq!(bit, expect, "y={y} phase");
+    }
+}
+
+#[test]
+fn formula_slant_bottom_two_row_stagger() {
+    let src = tmp("fslant-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }, { "ref": "B1", "value": "" }, { "ref": "C1", "value": "" },
+            { "ref": "A2", "value": "" }, { "ref": "B2", "value": "" }, { "ref": "C2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("fslant");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1:C1",
+                "type": "expression", "formulas": ["TRUE"],
+                "dxf": { "border": { "bottom": { "style": "slantDashDot", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    // 找墨水最多的两行（2px slant）
+    let mut scores: Vec<(u32, u32)> = (0..h)
+        .map(|y| {
+            let n = (0..w).filter(|&x| pixel(&px, w, x, y) == [0, 0, 0]).count() as u32;
+            (n, y)
+        })
+        .collect();
+    scores.sort_by(|a, b| b.cmp(a));
+    let y0 = scores[0].1.min(scores[1].1);
+    let y1 = scores[0].1.max(scores[1].1);
+    assert_eq!(y1, y0 + 1, "slant should be 2px");
+    // boundary 行与邻行错位：同 x 不应整段同亮（允许部分重叠）
+    let mut same = 0u32;
+    let mut both = 0u32;
+    for x in 0..w {
+        let a = pixel(&px, w, x, y0) == [0, 0, 0];
+        let b = pixel(&px, w, x, y1) == [0, 0, 0];
+        if a || b {
+            both += 1;
+            if a && b {
+                same += 1;
+            }
+        }
+    }
+    assert!(both > 20, "slant ink present");
+    assert!(
+        same < both,
+        "two rows should stagger, same={same} both={both}"
     );
 }

@@ -1,6 +1,6 @@
-﻿# xlsx 公式差分的点线、发丝、双线和点划线。按格子边框画。
+﻿# xlsx 公式差分边框线型（含 dashed / slantDashDot）。按格子边框同一套 paint_line。
 # 金样是 Excel 16.0 的 CopyPicture，整张剪贴板，不裁边。红区回绘制引擎修，不要加大 MaxDelta。
-# dashed 和 slantDashDot 不在这张表里，这两种仍整表不做。
+# 屏 DPI≠96 时整图尺寸门可能 sizeDiffer/pxBlocked；节律以局部 ink/gap 证据为准，不把整图 PASS 建立在缩金样上。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -36,7 +36,8 @@ function Save-Clipboard([string]$path) {
 
 $styles = @(
     'dotted', 'hair', 'double', 'dashDot', 'dashDotDot',
-    'mediumDashed', 'mediumDashDot', 'mediumDashDotDot'
+    'mediumDashed', 'mediumDashDot', 'mediumDashDotDot',
+    'dashed', 'slantDashDot'
 )
 $black = @{ rgb = 'FF000000' }
 $rows = $styles.Count * 2

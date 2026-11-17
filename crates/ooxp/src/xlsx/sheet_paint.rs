@@ -2395,17 +2395,9 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
 }
 
 fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
-    // 条件格式斜线 / slantDashDot 另见差分虚线计划；本刀只做格子斜线。
+    // 条件格式斜线仍 NI。dashed / slantDashDot 与格子共用 paint_line（相位/末端以 oracle 为准）。
     if edges.diagonal_down.is_some() || edges.diagonal_up.is_some() {
         return Err(unsupported());
-    }
-    for edge in [edges.left, edges.right, edges.top, edges.bottom]
-        .into_iter()
-        .flatten()
-    {
-        if matches!(edge.kind, LineKind::Dashed | LineKind::SlantDashDot) {
-            return Err(unsupported());
-        }
     }
     Ok(edges)
 }
