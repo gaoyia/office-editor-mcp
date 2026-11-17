@@ -613,7 +613,9 @@ impl<'a> Layout<'a> {
                 let item = &self.items[*idx];
                 let ser = item.series;
                 let ky = y + (self.line - self.key) / 2.0;
-                canvas.fill_rect(
+                draw_plot_key(
+                    canvas,
+                    chart.kind,
                     x.round() as i32,
                     ky.round() as i32,
                     (x + self.key).round() as i32,

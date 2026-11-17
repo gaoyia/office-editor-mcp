@@ -382,16 +382,33 @@ fn export_clustered_column_png() {
         }]),
     )
     .unwrap();
-    let err = run(&json!({
+    let before_line = std::fs::read(&lined).unwrap();
+    let line_png_path = tmp("png-line-out").with_extension("png");
+    let RunOutput::Written {
+        content_type,
+        ops_applied,
+        ..
+    } = run(&json!({
         "schemaVersion": 1,
         "action": "exportChartImage",
         "path": lined.to_string_lossy(),
         "id": "sheet:Sheet1/chart:1",
-        "output": tmp("png-line-out").with_extension("png").to_string_lossy()
+        "output": line_png_path.to_string_lossy()
     })
     .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    .unwrap()
+    else {
+        panic!("exportChartImage 应对已支持的普通折线写出文件");
+    };
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert!(ops_applied.is_none());
+    assert_eq!(std::fs::read(&lined).unwrap(), before_line);
+    let line_png = std::fs::read(&line_png_path).unwrap();
+    assert_eq!(&line_png[0..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    let line_w = u32::from_be_bytes(line_png[16..20].try_into().unwrap());
+    let line_h = u32::from_be_bytes(line_png[20..24].try_into().unwrap());
+    assert_eq!((line_w, line_h), (576, 336));
+    assert_ne!(line_png, png, "折线导出不应复用簇状柱的像素");
 }
 
 #[test]
