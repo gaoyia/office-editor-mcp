@@ -230,3 +230,8 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 - 可见复杂/未支持配置诚实NI；隐藏宿主不影响其它内容；RTL/merged/非空文字宿主不伪造支持，dateAxis等暂停功能不恢复。
 - fmt、clippy all-targets/all-features -D warnings、全Rust1860 passed/0 failed/0 ignored、Python8、实际CLI build通过。P3/自动值轴/端点/Normal继承残差另核，不塞本片。
 - 证据：桌面 `office-editor-PR10-迷你图遗漏修复-20261117-134723`；详情 `.plan/2026年-11月-17日-⚠️-xlsx-工作表内嵌迷你图遗漏.md`。gold复用P0同SHA原生图，P1未重开Office、owner lock0。
+
+
+2026-11-17 P3（82圆角）：既有默认白底圆角PNG恢复coverage直出alpha，内部白/颜色及白底合成不变；合法但未支持的背景/描边/显式非圆角NI。整图及圆弧AA仍⚠️，不把17图四角透明恢复记全部通过；详圆角计划。自动值轴与暂停10项不在本片。
+
+验证：fmt、clippy all-targets/all-features -D warnings、完整Rust1864 passed/0 failed/0 ignored、Python8 passed、实际CLI build通过。17 chart四角RGBA=0；不透明内侧RGB差0、白底合成差0；16 sheet/16 spark字节不变。51项严格0 PASS/49 sizeDiffer/2 NI，原始gold未改。证据：桌面 `office-editor-PR10-圆角透明修复-20261117-135846`。
