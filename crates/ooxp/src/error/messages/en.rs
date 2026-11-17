@@ -1413,7 +1413,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::ChartImageUnsupported => {
-            "This chart cannot be drawn to PNG yet. Only clustered column charts, clustered bar charts, standard line charts, marked scatter charts, and standard area charts are drawn, and the size must be 1 to 4096 pixels"
+            "This chart cannot be drawn to PNG yet. Only clustered column charts, clustered bar charts, standard line charts, marked scatter charts, standard area charts, and standard pie charts are drawn, and the size must be 1 to 4096 pixels"
                 .into()
         }
         ErrorKind::SlideImageUnsupported => {

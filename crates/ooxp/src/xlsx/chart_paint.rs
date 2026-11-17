@@ -1,9 +1,10 @@
-//! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图和普通面积图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
+//! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
 
@@ -77,6 +78,7 @@ enum PlotKind {
     ClusteredBar,
     StandardLine,
     StandardArea,
+    Pie,
     Scatter { connect: bool },
 }
 
@@ -142,6 +144,10 @@ struct ColumnChart {
     title: Option<String>,
     accents: [[u8; 3]; 6],
     kind: PlotKind,
+    /// Pie first slice angle in degrees, clockwise from up. Unused for other kinds.
+    first_slice_ang: f64,
+    /// Pie per-point fill overrides (dPt). Empty for other kinds.
+    point_colors: Vec<Option<[u8; 3]>>,
 }
 
 struct Rect {
@@ -533,9 +539,38 @@ fn read_chart(
             }
             PlotKind::StandardArea
         }
+        "pieChart" => {
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if blanks != "gap" {
+                return Err(unsupported());
+            }
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            PlotKind::Pie
+        }
         _ => return Err(unsupported()),
     };
-    let vary = flag(wrapper, "varyColors").unwrap_or(false);
+    let vary = if kind == PlotKind::Pie {
+        flag(wrapper, "varyColors").unwrap_or(true)
+    } else {
+        flag(wrapper, "varyColors").unwrap_or(false)
+    };
     let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     let mut series = Vec::new();
@@ -585,6 +620,7 @@ fn read_chart(
                     marker_color: None,
                 }
             }
+            PlotKind::Pie => read_pie_series_style(ser, accents)?,
             PlotKind::Scatter { connect } => {
                 let mut style = read_line_series(ser, accents)?;
                 if !connect {
@@ -662,10 +698,48 @@ fn read_chart(
     if !between {
         return Err(unsupported());
     }
-    let vary_points = matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
+    let vary_points = (matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
         && vary
-        && series.len() == 1;
-    let (axis, axis_x, grid_x, cats_from_bottom) = if matches!(kind, PlotKind::Scatter { .. }) {
+        && series.len() == 1)
+        || (kind == PlotKind::Pie && vary);
+    let first_slice_ang = if kind == PlotKind::Pie {
+        pie_first_slice_ang(wrapper)?
+    } else {
+        0.0
+    };
+    let point_colors = if kind == PlotKind::Pie {
+        if series.len() != 1 {
+            return Err(unsupported());
+        }
+        let ser = wrapper
+            .element_children()
+            .find(|el| el.local_name() == "ser")
+            .ok_or_else(unsupported)?;
+        read_pie_point_colors(ser, accents, n)?
+    } else {
+        Vec::new()
+    };
+    if kind == PlotKind::Pie {
+        let values = &series[0].values;
+        if values
+            .iter()
+            .any(|v| v.is_some_and(|n| n.is_finite() && n < 0.0))
+        {
+            return Err(unsupported());
+        }
+        if !values
+            .iter()
+            .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
+        {
+            return Err(unsupported());
+        }
+        if legend_pos(chart).is_some() && !legend::Spec::read(root, accents)?.default_right_ink() {
+            return Err(unsupported());
+        }
+    }
+    let (axis, axis_x, grid_x, cats_from_bottom) = if matches!(kind, PlotKind::Pie) {
+        (axis::Spec::default(), None, false, true)
+    } else if matches!(kind, PlotKind::Scatter { .. }) {
         let (x, y) = axis::scatter_axes(plot)?;
         let grid_x = plot.element_children().any(|el| {
             el.local_name() == "valAx"
@@ -700,6 +774,8 @@ fn read_chart(
         title: title_text(chart),
         accents,
         kind,
+        first_slice_ang,
+        point_colors,
     })
 }
 
@@ -1164,6 +1240,216 @@ fn paint_bar(
     Ok(())
 }
 
+fn paint_pie(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    host: ChartHost,
+) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if chart.series.len() != 1 {
+        return Err(unsupported());
+    }
+    if chart.legend.is_some() && !chart.legend_spec.default_right_ink() {
+        return Err(unsupported());
+    }
+    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_face = chart
+        .title
+        .as_ref()
+        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+    let title_top = 4.0;
+    let plot_y = if chart.title.is_some() {
+        let band = title_face
+            .as_ref()
+            .map(|face| face.em_box().ceil() as i32)
+            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
+        let half = gdi
+            .as_ref()
+            .map(|face| face.line_height().ceil() as i32 / 2)
+            .unwrap_or(0);
+        let mut y = title_top as i32 + 2 * (band + half);
+        if matches!(host, ChartHost::Slide) {
+            y += TITLE_DROP as i32;
+        }
+        y
+    } else {
+        INSET_TOP
+    };
+    let inset_right = if chart.legend == Some(LegendPos::Right) {
+        pie_legend_right_inset(chart, font, gdi.as_ref(), label_px)
+    } else {
+        INSET_TOP
+    };
+    let plot_x = INSET_TOP;
+    let plot_r = canvas.w as i32 - inset_right;
+    let plot_b = canvas.h as i32 - INSET_TOP;
+    if plot_r <= plot_x || plot_b <= plot_y {
+        return Err(unsupported());
+    }
+    let plot = Rect {
+        x: f64::from(plot_x),
+        y: f64::from(plot_y),
+        w: f64::from(plot_r - plot_x),
+        h: f64::from(plot_b - plot_y),
+    };
+    draw_pie_slices(canvas, chart, &plot);
+    if let Some(title) = &chart.title {
+        let face = title_face.as_ref().or(gdi.as_ref());
+        let width = text_width(font, face, title, label_px);
+        let x = (f64::from(canvas.w) - width) / 2.0;
+        draw_text(
+            canvas,
+            font,
+            face,
+            title,
+            x,
+            title_top + TITLE_DROP,
+            label_px,
+            INK,
+        );
+    }
+    if chart.legend == Some(LegendPos::Right) {
+        let legend_plot_r = canvas.w as i32 - inset_right;
+        draw_pie_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+    }
+    if matches!(host, ChartHost::Excel) {
+        canvas.stroke_border(BORDER);
+    }
+    Ok(())
+}
+
+fn pie_slice_color(chart: &ColumnChart, index: usize) -> [u8; 3] {
+    if let Some(Some(color)) = chart.point_colors.get(index) {
+        return *color;
+    }
+    if chart.vary_points {
+        chart.accents[index % 6]
+    } else {
+        chart.series[0]
+            .color
+            .unwrap_or(chart.accents[chart.series[0].slot % 6])
+    }
+}
+
+fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
+    let ser = &chart.series[0];
+    chart
+        .categories
+        .iter()
+        .enumerate()
+        .filter_map(
+            |(index, name)| match ser.values.get(index).copied().flatten() {
+                Some(value) if value.is_finite() && value >= 0.0 => {
+                    Some((name.clone(), pie_slice_color(chart, index)))
+                }
+                _ => None,
+            },
+        )
+        .collect()
+}
+
+fn pie_legend_right_inset(
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+) -> i32 {
+    let from_layout = gdi.is_some();
+    let widest = pie_legend_items(chart)
+        .into_iter()
+        .map(|(name, _)| match gdi {
+            Some(face) => face.layout_width(&name),
+            None => text_width(font, None, &name, px),
+        })
+        .fold(0.0, f64::max);
+    let name_px = if from_layout {
+        widest as i32
+    } else {
+        widest.ceil() as i32
+    };
+    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + name_px + LEGEND_PAD;
+    need.max(INSET_RIGHT)
+}
+
+fn draw_pie_legend(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+    plot_r: i32,
+) {
+    let items = pie_legend_items(chart);
+    let n = items.len() as i32;
+    if n == 0 {
+        return;
+    }
+    let pitch = 24;
+    let block = pitch * (n - 1) + LEGEND_SWATCH;
+    let title_band = if chart.title.is_some() {
+        LEGEND_TITLE_BAND
+    } else {
+        0
+    };
+    let mut y = (title_band + canvas.h as i32 - block) / 2;
+    let x = plot_r + LEGEND_PLOT_GAP;
+    for (name, color) in items {
+        draw_plot_key(
+            canvas,
+            PlotKind::Pie,
+            x,
+            y,
+            x + LEGEND_SWATCH,
+            y + LEGEND_SWATCH,
+            color,
+        );
+        draw_text(
+            canvas,
+            font,
+            gdi,
+            &name,
+            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
+            f64::from(y - 2),
+            px,
+            INK,
+        );
+        y += pitch;
+    }
+}
+
+fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
+    let ser = &chart.series[0];
+    let sum: f64 = ser
+        .values
+        .iter()
+        .flatten()
+        .filter(|value| value.is_finite() && **value > 0.0)
+        .sum();
+    if !sum.is_finite() || sum <= 0.0 {
+        return;
+    }
+    let cx = plot.x + plot.w / 2.0;
+    let cy = plot.y + plot.h / 2.0;
+    let radius = plot.w.min(plot.h) / 2.0;
+    if radius <= 0.5 {
+        return;
+    }
+    let mut start = chart.first_slice_ang.rem_euclid(360.0);
+    for (index, value) in ser.values.iter().enumerate() {
+        let Some(value) = *value else {
+            continue;
+        };
+        if !value.is_finite() || value <= 0.0 {
+            continue;
+        }
+        let end = start + 360.0 * (value / sum);
+        canvas.fill_wedge(cx, cy, radius, start, end, pie_slice_color(chart, index));
+        start = end;
+    }
+}
+
 fn paint(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -1175,6 +1461,9 @@ fn paint(
     }
     if chart.kind == PlotKind::ClusteredBar {
         return paint_bar(canvas, chart, font, host);
+    }
+    if chart.kind == PlotKind::Pie {
+        return paint_pie(canvas, chart, font, host);
     }
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = (LABEL_PT * DPI / 72.0) as f32;
@@ -1280,8 +1569,8 @@ fn paint(
         PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardArea => draw_areas(canvas, chart, &plot, axis_min, axis_max),
-        PlotKind::ClusteredBar | PlotKind::Scatter { .. } => {
-            unreachable!("bar/scatter charts use dedicated paint")
+        PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
+            unreachable!("bar/pie/scatter charts use dedicated paint")
         }
     }
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
@@ -1532,7 +1821,7 @@ fn draw_plot_key(
     color: [u8; 3],
 ) {
     match kind {
-        PlotKind::ClusteredColumn | PlotKind::StandardArea => {
+        PlotKind::ClusteredColumn | PlotKind::StandardArea | PlotKind::Pie => {
             canvas.fill_rect(x0, y0, x1, y1, color)
         }
         PlotKind::ClusteredBar => {
@@ -2208,6 +2497,122 @@ fn read_line_marker(
     ))
 }
 
+fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let Some(el) = wrapper.child_by_local("firstSliceAng") else {
+        return Ok(0.0);
+    };
+    let angle = el
+        .attr_local("val")
+        .unwrap_or("0")
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+        .ok_or_else(unsupported)?;
+    if !(0.0..=360.0).contains(&angle) {
+        return Err(unsupported());
+    }
+    if (angle - 360.0).abs() < 1e-9 {
+        Ok(0.0)
+    } else {
+        Ok(angle)
+    }
+}
+
+fn read_pie_series_style(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    data_labels_hidden(ser.child_by_local("dLbls"))?;
+    for name in ["trendline", "errBars"] {
+        if ser.child_by_local(name).is_some() {
+            return Err(unsupported());
+        }
+    }
+    if let Some(explosion) = number_val(ser, "explosion") {
+        if explosion != 0.0 {
+            return Err(unsupported());
+        }
+    }
+    if let Some(sp) = ser.child_by_local("spPr") {
+        reject_pie_sp_pr(sp, accents)?;
+    }
+    Ok(LineSeriesStyle {
+        color: series_color(ser, accents),
+        visible: false,
+        width: 0.0,
+        marker: MarkerKind::None,
+        marker_color: None,
+    })
+}
+
+fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    for child in sp.element_children() {
+        match child.local_name() {
+            "solidFill" => {
+                if color_has_non_opaque_alpha(child) {
+                    return Err(unsupported());
+                }
+                let _ = color_of_slot(child, &accents).ok_or_else(unsupported)?;
+            }
+            "noFill" | "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
+            "ln" => {
+                let line = read_solid_ln(child, accents, 0.0)?;
+                if line.visible {
+                    return Err(unsupported());
+                }
+            }
+            "effectLst" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(())
+}
+
+fn read_pie_point_colors(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    n: usize,
+) -> Result<Vec<Option<[u8; 3]>>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if let Some(explosion) = number_val(ser, "explosion") {
+        if explosion != 0.0 {
+            return Err(unsupported());
+        }
+    }
+    let mut colors = vec![None; n];
+    for dpt in ser.element_children().filter(|el| el.local_name() == "dPt") {
+        let idx = number_val(dpt, "idx").ok_or_else(unsupported)?;
+        if !idx.is_finite() || idx < 0.0 || idx.fract() != 0.0 {
+            return Err(unsupported());
+        }
+        let idx = idx as usize;
+        if idx >= n || colors[idx].is_some() {
+            return Err(unsupported());
+        }
+        if let Some(explosion) = number_val(dpt, "explosion") {
+            if explosion != 0.0 {
+                return Err(unsupported());
+            }
+        }
+        for name in ["invertIfNegative", "marker", "bubble3D", "pictureOptions"] {
+            if dpt.child_by_local(name).is_some() {
+                return Err(unsupported());
+            }
+        }
+        if let Some(sp) = dpt.child_by_local("spPr") {
+            reject_pie_sp_pr(sp, accents)?;
+            if let Some(fill) = sp.child_by_local("solidFill") {
+                colors[idx] = Some(color_of_slot(fill, &accents).ok_or_else(unsupported)?);
+            }
+        }
+    }
+    Ok(colors)
+}
+
 struct AreaSeriesStyle {
     fill: Option<[u8; 3]>,
     line_visible: bool,
@@ -2653,6 +3058,27 @@ fn draw_text(
     }
 }
 
+fn angle_in_wedge(dx: f64, dy: f64, start_deg: f64, end_deg: f64) -> bool {
+    let span = end_deg - start_deg;
+    if span >= 360.0 - 1e-9 {
+        return true;
+    }
+    if span <= 1e-9 {
+        return false;
+    }
+    let mut deg = dx.atan2(-dy).to_degrees();
+    if deg < 0.0 {
+        deg += 360.0;
+    }
+    let start = start_deg.rem_euclid(360.0);
+    let end = start + span;
+    if end <= 360.0 {
+        deg >= start && deg < end
+    } else {
+        deg >= start || deg < (end - 360.0)
+    }
+}
+
 fn point_in_polygon(px: f64, py: f64, pts: &[(f64, f64)]) -> bool {
     let mut inside = false;
     let mut j = pts.len() - 1;
@@ -2761,6 +3187,53 @@ impl Canvas {
                 let py = f64::from(y) + 0.5;
                 if point_in_polygon(px, py, pts) {
                     self.blend(x, y, color, 255);
+                }
+            }
+        }
+    }
+
+    /// Clockwise wedge from `start_deg` (from up) to `end_deg`. The outer
+    /// rim uses the same coverage as filled circles; the angular range is half-open.
+    fn fill_wedge(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        radius: f64,
+        start_deg: f64,
+        end_deg: f64,
+        color: [u8; 3],
+    ) {
+        if radius <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !radius.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+        {
+            return;
+        }
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = radius + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let cov = coverage(dist, radius);
+                if cov == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    self.blend(x, y, color, cov);
                 }
             }
         }
@@ -4720,6 +5193,317 @@ mod tests {
         )
         .unwrap();
         // A supported line is not broken by the new arm.
+        render_line(&standard_line_xml(
+            &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
+            "",
+        ))
+        .unwrap();
+    }
+
+    fn pie_space(plot_body: &str, chart_extra: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {chart_extra}
+    <c:plotArea>
+      {plot_body}
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn standard_pie_xml(series: &str, chart_extra: &str, extra: &str) -> String {
+        pie_space(
+            &format!(
+                r#"<c:pieChart>
+        <c:varyColors val="1"/>
+        {series}
+        {extra}
+      </c:pieChart>"#
+            ),
+            chart_extra,
+        )
+    }
+
+    fn render_pie(xml: &str) -> Result<Vec<u8>, Error> {
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        render_rgb_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+    }
+
+    fn color_centroid(
+        rgb: &[u8],
+        w: u32,
+        h: u32,
+        target: [u8; 3],
+        tol: i16,
+    ) -> Option<(f64, f64, usize)> {
+        let mut sx = 0.0;
+        let mut sy = 0.0;
+        let mut n = 0usize;
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 3) as usize;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], target, tol) {
+                    sx += f64::from(x) + 0.5;
+                    sy += f64::from(y) + 0.5;
+                    n += 1;
+                }
+            }
+        }
+        (n > 0).then_some((sx / n as f64, sy / n as f64, n))
+    }
+
+    #[test]
+    fn standard_pie_assigns_point_colors_clockwise_from_up() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(1.0), Some(1.0), Some(1.0)], "");
+        let png = render_pie(&standard_pie_xml(&ser, "", "")).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let a3 = FALLBACK_ACCENTS[2];
+        let a4 = FALLBACK_ACCENTS[3];
+        let c1 = color_centroid(&rgb, w, h, a1, 2).expect("first slice color");
+        let c2 = color_centroid(&rgb, w, h, a2, 2).expect("second slice color");
+        let c3 = color_centroid(&rgb, w, h, a3, 2).expect("third slice color");
+        let c4 = color_centroid(&rgb, w, h, a4, 2).expect("fourth slice color");
+        let cx = (c1.0 + c2.0 + c3.0 + c4.0) / 4.0;
+        let cy = (c1.1 + c2.1 + c3.1 + c4.1) / 4.0;
+        // Clockwise from 12 o'clock: accent1 upper-right, 2 lower-right, 3 lower-left, 4 upper-left.
+        assert!(
+            c1.0 > cx && c1.1 < cy,
+            "first slice should sit in the upper-right; c1={c1:?} center=({cx},{cy})"
+        );
+        assert!(
+            c2.0 > cx && c2.1 > cy,
+            "second slice should sit in the lower-right; c2={c2:?}"
+        );
+        assert!(
+            c3.0 < cx && c3.1 > cy,
+            "third slice should sit in the lower-left; c3={c3:?}"
+        );
+        assert!(
+            c4.0 < cx && c4.1 < cy,
+            "fourth slice should sit in the upper-left; c4={c4:?}"
+        );
+        for (_, _, n) in [c1, c2, c3, c4] {
+            assert!(
+                n >= 80,
+                "each equal slice should cover a real area, got {n}"
+            );
+        }
+    }
+
+    #[test]
+    fn pie_first_slice_angle_rotates_and_dpt_overrides_color() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(1.0), Some(1.0), Some(1.0)], "");
+        let png = render_pie(&standard_pie_xml(
+            &ser,
+            "",
+            r#"<c:firstSliceAng val="90"/>"#,
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let a3 = FALLBACK_ACCENTS[2];
+        let a4 = FALLBACK_ACCENTS[3];
+        let c1 = color_centroid(&rgb, w, h, a1, 2).unwrap();
+        let c2 = color_centroid(&rgb, w, h, a2, 2).unwrap();
+        let c3 = color_centroid(&rgb, w, h, a3, 2).unwrap();
+        let c4 = color_centroid(&rgb, w, h, a4, 2).unwrap();
+        let cx = (c1.0 + c2.0 + c3.0 + c4.0) / 4.0;
+        let cy = (c1.1 + c2.1 + c3.1 + c4.1) / 4.0;
+        // Starting at 3 o'clock, first slice fills the lower-right quadrant.
+        assert!(
+            c1.0 > cx && c1.1 > cy,
+            "firstSliceAng=90 should move the first slice into the lower-right; c1={c1:?} center=({cx},{cy})"
+        );
+        assert!(
+            c2.0 < cx && c2.1 > cy,
+            "second slice should sit in the lower-left; c2={c2:?}"
+        );
+
+        let override_ser = line_ser(
+            0,
+            "S1",
+            &[Some(1.0), Some(1.0)],
+            r#"<c:dPt><c:idx val="0"/><c:spPr><a:solidFill><a:srgbClr val="CC0000"/></a:solidFill></c:spPr></c:dPt>"#,
+        );
+        let png = render_pie(&standard_pie_xml(&override_ser, "", "")).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let red = [0xCC, 0x00, 0x00];
+        let hits = color_centroid(&rgb, w, h, red, 2).expect("dPt solid fill");
+        assert!(
+            hits.2 >= 80,
+            "dPt should paint the first slice, got {}",
+            hits.2
+        );
+        // The second point still uses accent2, not accent1.
+        let a2 = FALLBACK_ACCENTS[1];
+        assert!(color_centroid(&rgb, w, h, a2, 2).is_some());
+    }
+
+    #[test]
+    fn pie_skips_blanks_keeps_zero_in_legend_and_slide_host_paints() {
+        let gapped = line_ser(0, "S1", &[Some(1.0), None, Some(1.0)], "");
+        let png = render_pie(&standard_pie_xml(
+            &gapped,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let a3 = FALLBACK_ACCENTS[2];
+        let c1 = color_centroid(&rgb, w, h, a1, 2).unwrap();
+        let c3 = color_centroid(&rgb, w, h, a3, 2).unwrap();
+        // Blank point is skipped: no accent2 wedge, first and third share the pie (right vs left).
+        assert!(
+            color_centroid(&rgb, w, h, a2, 2).is_none_or(|(_, _, n)| n < 8),
+            "a blank should not leave a filled slice in the missing category color"
+        );
+        assert!(c1.2 >= 80 && c3.2 >= 80);
+        assert!(
+            (c1.0 - c3.0).abs() > 20.0,
+            "the two remaining slices should sit on opposite sides"
+        );
+
+        let with_zero = line_ser(0, "S1", &[Some(1.0), Some(0.0), Some(1.0)], "");
+        let png = render_pie(&standard_pie_xml(&with_zero, "", "")).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        // Zero has no wedge, but the category remains in the legend swatch.
+        let zero_hits = color_centroid(&rgb, w, h, a2, 2).map(|c| c.2).unwrap_or(0);
+        assert!(
+            zero_hits > 0 && zero_hits < 80,
+            "a zero should appear in the legend, not as a slice; hits={zero_hits}"
+        );
+
+        let doc = crate::xml::parse(standard_pie_xml(&gapped, "", "").as_bytes()).unwrap();
+        let slide = render_rgb_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Slide,
+            None,
+            "",
+        )
+        .unwrap();
+        let (sw, _, srgb) = png_rgb(&slide);
+        assert_eq!(sw, 576);
+        assert!(color_centroid(&srgb, sw, 336, a1, 2).is_some());
+    }
+
+    #[test]
+    fn unsupported_pie_inputs_stay_not_implemented() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
+        let base = standard_pie_xml(&ser, "", "");
+        let two = format!(
+            "{}{}",
+            ser,
+            line_ser(1, "S2", &[Some(1.0), Some(2.0), Some(3.0)], "")
+        );
+        let cases = [
+            standard_pie_xml(
+                &line_ser(0, "S1", &[Some(1.0), Some(-2.0), Some(3.0)], ""),
+                "",
+                "",
+            ),
+            pie_space(
+                &format!(r#"<c:pieChart><c:varyColors val="1"/>{two}</c:pieChart>"#),
+                "",
+            ),
+            base.replace("<c:pieChart>", "<c:pie3DChart>")
+                .replace("</c:pieChart>", "</c:pie3DChart>"),
+            base.replace("<c:pieChart>", "<c:doughnutChart>")
+                .replace("</c:pieChart>", "</c:doughnutChart>"),
+            pie_space(
+                r#"<c:ofPieChart><c:ofPieType val="pie"/><c:varyColors val="1"/><c:ser>
+          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:ofPieChart>"#,
+                "",
+            ),
+            standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),
+            standard_pie_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:explosion val="10"/>"#,
+                ),
+                "",
+                "",
+            ),
+            standard_pie_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:dPt><c:idx val="0"/><c:explosion val="8"/></c:dPt>"#,
+                ),
+                "",
+                "",
+            ),
+            standard_pie_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                ),
+                "",
+                "",
+            ),
+            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="zero"/>"#, ""),
+            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#, ""),
+            base.replacen(
+                r#"</c:pieChart>"#,
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:pieChart>"#,
+                1,
+            ),
+            pie_space(
+                &format!(
+                    r#"<c:pieChart><c:varyColors val="1"/>{ser}</c:pieChart>
+       <c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>"#
+                ),
+                "",
+            ),
+            standard_pie_xml(&ser, "", "")
+                .replace(r#"<c:legendPos val="r"/>"#, r#"<c:legendPos val="l"/>"#),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err =
+                render_pie(xml).expect_err(&format!("pie case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "pie case {i} should stay NotImplemented"
+            );
+        }
+        // Omitted firstSliceAng and hidden labels stay supported; a column chart is unharmed.
+        render_pie(
+            &standard_pie_xml(&ser, r#"<c:dispBlanksAs val="gap"/>"#, "").replacen(
+                r#"</c:pieChart>"#,
+                r#"<c:dLbls><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showLegendKey val="0"/><c:showBubbleSize val="0"/></c:dLbls></c:pieChart>"#,
+                1,
+            ),
+        )
+        .unwrap();
         render_line(&standard_line_xml(
             &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
             "",
