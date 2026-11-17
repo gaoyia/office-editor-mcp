@@ -2743,3 +2743,8 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 领域 JSON 就是本文。库只认这一层。命令行的 `ooxp mcp` 会解析 JSON-RPC，但交给库之前只留下领域 JSON，`action` 用工具名补上。工具参数若只有 `requestPath`，命令行先读该文件，再把文件内容当作领域 JSON。`requestPath` 不是领域字段。外部调用方也可以自己包信封，把本文整个对象放进 `params`。
 不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格或段落字段去迁就 RPC。
+
+
+### 诊断语料与出图验收边界（2026-11-17 P0）
+
+`geometry-matrix.py` 的 100705 旧39项仅历史尺寸诊断，其中13个chart探针删除了公式引用源而保留缓存，不能据其Office空图验收内容。修复后的17组×3=51项在出图前核对actual cells、formula、cache、dimension、Normal/styleXF/font索引，并记录输入SHA。Office实际17个Series.Values为1/4/2、XValues为A/B/C；50个可出图满足固定96维度，但严格0 PASS/50 sizeDiffer/1既有隐藏源spark NI。此P0只修测试与展示，不改变renderer缓存优先、API支持范围、96dpi或像素容差；工作表内嵌spark遗漏、圆角alpha仍待独立修复。解释图白底合成不改变raw gold的RGBA严格比较。
