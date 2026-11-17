@@ -345,8 +345,7 @@ fn stamp(
     for y in min_y..=max_y {
         for x in min_x..=max_x {
             let dist = dist_to_seg(f64::from(x) + 0.5, f64::from(y) + 0.5, from, to);
-            // 1 像素宽的线，中心覆盖大约 0.75。Excel 16.0 的最暗像素不是纯色。
-            let cov = (half + 0.25 - dist).clamp(0.0, 1.0) as f32;
+            let cov = normal_box_coverage(dist, half);
             if cov <= 0.0 {
                 continue;
             }
@@ -356,6 +355,17 @@ fn stamp(
             }
         }
     }
+}
+
+/// Unit-width box filter along the stroke normal. Intersect the stroke interval
+/// [-radius, radius] with the pixel interval [distance-0.5, distance+0.5].
+/// Their overlap has length clamp(radius+0.5-distance, 0, min(1, 2*radius)).
+/// Thus a centered one-pixel strip is opaque, and a subpixel strip conserves
+/// its width instead of gaining opacity. For diagonal edges / circular caps
+/// this is a distance-filter approximation, not exact square-pixel area.
+/// Segment coverages are unioned with max by stamp, never repeatedly blended.
+fn normal_box_coverage(distance: f64, radius: f64) -> f32 {
+    (radius + 0.5 - distance).clamp(0.0, (2.0 * radius).min(1.0)) as f32
 }
 
 fn dist_to_seg(px: f64, py: f64, from: (f64, f64), to: (f64, f64)) -> f64 {
@@ -422,6 +432,102 @@ mod tests {
         buf.truncate(info.buffer_size());
         // expand to rgb8 if needed
         (info.width, info.height, buf)
+    }
+
+    #[test]
+    fn normal_box_filter_conserves_thin_and_thick_axis_aligned_widths() {
+        for weight in [0.25, 0.5, 1.0, 1.5, 2.0, 4.0] {
+            for phase in [0.0, 0.25, 0.5, 0.75] {
+                let mass: f64 = (-12..=12)
+                    .map(|row| {
+                        f64::from(normal_box_coverage(
+                            (f64::from(row) - phase).abs(),
+                            weight / 2.0,
+                        ))
+                    })
+                    .sum();
+                assert!(
+                    (mass - weight).abs() < 1e-6,
+                    "weight={weight}, phase={phase}, mass={mass}"
+                );
+            }
+        }
+        assert_eq!(normal_box_coverage(0.0, 0.5), 1.0);
+        assert_eq!(normal_box_coverage(0.0, 0.125), 0.25);
+        assert_eq!(normal_box_coverage(3.0, 0.5), 0.0);
+    }
+
+    #[test]
+    fn default_flat_line_has_source_color_and_composites_white_on_color() {
+        let mut spec = LineSpec {
+            values: vec![Some(2.0); 3],
+            empty: EmptyCells::Gap,
+            axis_min: None,
+            axis_max: None,
+            color: [55, 96, 146],
+            weight_px: 1.0,
+        };
+        let raster = raster_line(72, 20, &spec).unwrap();
+        assert_eq!(raster.composite_pixel(36, 5, [255; 3]), spec.color);
+        assert_eq!(raster.composite_pixel(0, 0, [40, 80, 120]), [40, 80, 120]);
+        spec.color = [255; 3];
+        let white = raster_line(72, 20, &spec).unwrap();
+        assert_eq!(white.composite_pixel(36, 5, [40, 80, 120]), [255; 3]);
+        assert_eq!(white.composite_pixel(0, 0, [40, 80, 120]), [40, 80, 120]);
+    }
+
+    #[test]
+    fn stroke_coverage_is_axis_symmetric_and_direction_independent() {
+        for weight in [0.5, 1.0, 2.0, 4.0] {
+            let mut horizontal = vec![0.0; 32 * 32];
+            let mut vertical = horizontal.clone();
+            let mut reversed = horizontal.clone();
+            stamp(&mut horizontal, 32, 32, (8.5, 16.5), (24.5, 16.5), weight);
+            stamp(&mut vertical, 32, 32, (16.5, 8.5), (16.5, 24.5), weight);
+            stamp(&mut reversed, 32, 32, (24.5, 16.5), (8.5, 16.5), weight);
+            assert_eq!(horizontal, reversed);
+            for y in 0..32 {
+                for x in 0..32 {
+                    assert_eq!(horizontal[y * 32 + x], vertical[x * 32 + y]);
+                }
+            }
+            let mut diagonal = vec![0.0; 32 * 32];
+            let mut back = diagonal.clone();
+            stamp(&mut diagonal, 32, 32, (8.5, 8.5), (24.5, 24.5), weight);
+            stamp(&mut back, 32, 32, (24.5, 24.5), (8.5, 8.5), weight);
+            assert_eq!(diagonal, back);
+            assert!(diagonal.iter().all(|v| (0.0..=1.0).contains(v)));
+        }
+    }
+
+    #[test]
+    fn overlapping_segments_union_coverage_once_at_bends_and_repeated_paths() {
+        let mut cover = vec![0.0; 32 * 32];
+        stamp(&mut cover, 32, 32, (5.5, 20.5), (16.5, 5.5), 1.0);
+        let once = cover.clone();
+        stamp(&mut cover, 32, 32, (5.5, 20.5), (16.5, 5.5), 1.0);
+        assert_eq!(once, cover);
+        stamp(&mut cover, 32, 32, (16.5, 5.5), (26.5, 20.5), 1.0);
+        assert_eq!(cover[5 * 32 + 16], 1.0);
+        assert!(cover.iter().all(|v| (0.0..=1.0).contains(v)));
+    }
+
+    #[test]
+    fn degenerate_round_segment_is_bounded_and_single_data_point_stays_empty() {
+        let mut cover = vec![0.0; 16 * 16];
+        stamp(&mut cover, 16, 16, (8.5, 8.5), (8.5, 8.5), 1.0);
+        assert_eq!(cover[8 * 16 + 8], 1.0);
+        assert_eq!(cover[0], 0.0);
+        let spec = LineSpec {
+            values: vec![Some(2.0)],
+            empty: EmptyCells::Gap,
+            axis_min: None,
+            axis_max: None,
+            color: [55, 96, 146],
+            weight_px: 1.0,
+        };
+        let raster = raster_line(16, 16, &spec).unwrap();
+        assert!(raster.coverage.iter().all(|v| *v == 0.0));
     }
 
     #[test]
