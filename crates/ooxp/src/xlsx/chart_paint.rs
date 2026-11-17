@@ -3,6 +3,8 @@
 
 use fontdue::{Font, FontSettings};
 
+#[path = "chart_axis.rs"]
+mod axis;
 #[path = "chart_legend.rs"]
 mod legend;
 
@@ -42,6 +44,7 @@ const CAT_MAJOR_IN: i32 = 3;
 const CAT_MINOR: i32 = 3;
 const CAT_MINOR_IN: i32 = 2;
 /// 数值轴一个主刻度分成 5 段，中间 4 道次刻度。实心部分向两侧各 2 像素。
+#[cfg(test)]
 const VAL_MINOR_PARTS: i32 = 5;
 const VAL_MINOR_ARM: i32 = 2;
 
@@ -80,6 +83,7 @@ struct ColumnChart {
     grid: bool,
     legend: Option<LegendPos>,
     legend_spec: legend::Spec,
+    axis: axis::Spec,
     title: Option<String>,
     accents: [[u8; 3]; 6],
 }
@@ -437,6 +441,7 @@ fn read_clustered_column(
         grid,
         legend: legend_pos(chart),
         legend_spec: legend::Spec::read(root, accents)?,
+        axis: axis::Spec::read(plot)?,
         title: title_text(chart),
         accents,
     })
@@ -483,7 +488,16 @@ fn paint(
         .title
         .as_ref()
         .and_then(|_| super::chart_gdi::Face::open(label_px, true));
-    let (axis_min, axis_max, step) = axis_range(&chart.series);
+    // Use the full supplied font line box, not just the GDI raster ascent.
+    // Glyph drawing can use the existing GDI fallback; label packing must reserve
+    // the larger declared line box so the two paths cannot over-pack the axis.
+    let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
+    let scale = axis::scale(
+        &chart.series,
+        chart.axis,
+        axis::interval_budget(canvas.h, em),
+    )?;
+    let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
@@ -533,22 +547,51 @@ fn paint(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if chart.grid {
+    let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
+        <= step * 1e-8;
+    if chart.grid && regular {
         for i in 0..=intervals {
             let y = plot_y + (i * (plot_b - plot_y) + intervals - 1) / intervals;
             canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
         }
     }
-    draw_value_minor_ticks(canvas, axis_x, plot_y, plot_b, intervals);
+    if chart.grid && !regular {
+        for value in &ticks {
+            let y = y_of(*value, axis_min, axis_max, &plot).ceil() as i32;
+            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+        }
+    }
+    let parts = step / scale.minor;
+    if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
+        draw_value_minor_ticks(
+            canvas,
+            axis_x,
+            plot_y,
+            plot_b,
+            intervals,
+            parts.round() as i32,
+        );
+    } else {
+        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+            let at_major = (value - axis_min) / step;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let y = y_of(value, axis_min, axis_max, &plot).round() as i32;
+            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+        }
+    }
     draw_bars(canvas, chart, &plot, axis_min, axis_max);
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
+    let category_y = y_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
+    canvas.hline_i(axis_x, plot_r, category_y, INK);
     draw_cat_ticks(
         canvas,
         chart.categories.len(),
         f64::from(axis_x),
         f64::from(plot_r + 1),
-        plot_b,
+        category_y,
     );
     draw_tick_labels(
         canvas,
@@ -562,6 +605,7 @@ fn paint(
         axis_min,
         axis_max,
         &chart.categories,
+        category_y,
     );
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -629,6 +673,7 @@ fn draw_value_minor_ticks(
     plot_y: i32,
     plot_b: i32,
     intervals: i32,
+    parts: i32,
 ) {
     let span = plot_b - plot_y;
     if intervals < 1 || span <= 0 {
@@ -638,8 +683,8 @@ fn draw_value_minor_ticks(
         let y0 = plot_y + (i * span + intervals - 1) / intervals;
         let y1 = plot_y + ((i + 1) * span + intervals - 1) / intervals;
         let gap = y1 - y0;
-        for k in 1..VAL_MINOR_PARTS {
-            let y = y0 + (k * gap + VAL_MINOR_PARTS / 2) / VAL_MINOR_PARTS;
+        for k in 1..parts {
+            let y = y0 + (k * gap + parts / 2) / parts;
             if y <= y0 || y >= y1 {
                 continue;
             }
@@ -709,6 +754,7 @@ fn draw_tick_labels(
     axis_min: f64,
     axis_max: f64,
     categories: &[String],
+    category_y: i32,
 ) {
     for (tick, label) in ticks.iter().zip(labels) {
         let y = y_of(*tick, axis_min, axis_max, plot);
@@ -727,7 +773,7 @@ fn draw_tick_labels(
     }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
-    let baseline = plot.y + plot.h + 10.0;
+    let baseline = f64::from(category_y) + 10.0;
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
@@ -807,85 +853,10 @@ fn legend_right_inset(
     need.max(INSET_RIGHT)
 }
 
+#[cfg(test)]
 fn axis_range(series: &[Series]) -> (f64, f64, f64) {
-    let mut min_v = 0.0_f64;
-    let mut max_v = 0.0_f64;
-    for ser in series {
-        for value in ser.values.iter().flatten() {
-            if !value.is_finite() {
-                continue;
-            }
-            min_v = min_v.min(*value);
-            max_v = max_v.max(*value);
-        }
-    }
-    if max_v.abs() < 1e-12 && min_v.abs() < 1e-12 {
-        return (0.0, 1.0, 0.2);
-    }
-    let pin_min = min_v >= 0.0;
-    let pin_max = max_v <= 0.0;
-    let lo = if pin_min { 0.0 } else { min_v };
-    let hi = if pin_max { 0.0 } else { max_v };
-    let span = (hi - lo).abs().max(1e-9);
-    let exp = span.log10().floor() as i32;
-    let mut best: Option<(f64, f64, f64)> = None;
-    for mag in (exp - 2)..=(exp + 1) {
-        for nice in [1.0_f64, 2.0, 5.0] {
-            let step = nice * 10f64.powi(mag);
-            let (axis_min, axis_max) = axis_ends(lo, hi, step, pin_min, pin_max);
-            if axis_max <= axis_min {
-                continue;
-            }
-            let intervals = ((axis_max - axis_min) / step).round() as i32;
-            if !(5..=10).contains(&intervals) {
-                continue;
-            }
-            let width = axis_max - axis_min;
-            let replace = match best {
-                None => true,
-                Some((old_w, old_step, _)) => {
-                    width < old_w - 1e-9 || ((width - old_w).abs() < 1e-9 && step < old_step)
-                }
-            };
-            if replace {
-                best = Some((width, step, axis_max));
-            }
-        }
-    }
-    if let Some((_, step, _)) = best {
-        let (axis_min, axis_max) = axis_ends(lo, hi, step, pin_min, pin_max);
-        return (axis_min, axis_max, step);
-    }
-    (0.0, 1.0, 0.2)
-}
-
-fn axis_ends(lo: f64, hi: f64, step: f64, pin_min: bool, pin_max: bool) -> (f64, f64) {
-    let mut axis_min = if pin_min {
-        0.0
-    } else {
-        (lo / step).floor() * step
-    };
-    let mut axis_max = if pin_max {
-        0.0
-    } else {
-        (hi / step).ceil() * step
-    };
-    // 数据贴到自动上限的 95% 以上时，Excel 16.0 再加一个步长。正好 95% 不加。
-    if !pin_max && past_headroom(hi, axis_max) {
-        axis_max += step;
-    }
-    if !pin_min && past_headroom_low(lo, axis_min) {
-        axis_min -= step;
-    }
-    (axis_min, axis_max)
-}
-
-fn past_headroom(value: f64, edge: f64) -> bool {
-    edge > 1e-12 && value > edge * 0.95 + edge * 1e-9
-}
-
-fn past_headroom_low(value: f64, edge: f64) -> bool {
-    edge < -1e-12 && value < edge * 0.95 - edge.abs() * 1e-9
+    let s = axis::scale(series, axis::Spec::default(), 10).unwrap();
+    (s.min, s.max, s.major)
 }
 
 fn tick_values(min: f64, max: f64, step: f64) -> Vec<f64> {
@@ -1946,7 +1917,7 @@ mod tests {
         assert_eq!(px(20, 0), (0x89, 0x89, 0x89));
         let mut canvas = Canvas::new(200, 40);
         draw_cat_ticks(&mut canvas, 2, 10.0, 190.0, 8);
-        draw_value_minor_ticks(&mut canvas, 20, 0, 25, 1);
+        draw_value_minor_ticks(&mut canvas, 20, 0, 25, 1, VAL_MINOR_PARTS);
         let ink = |x: i32, y: i32| {
             let i = (y as usize * canvas.w as usize + x as usize) * 3;
             canvas.px[i] < 40
