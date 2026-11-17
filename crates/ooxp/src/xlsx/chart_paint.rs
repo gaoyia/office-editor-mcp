@@ -622,8 +622,11 @@ fn paint(
             INK,
         );
     }
-    if chart.legend_spec.legacy {
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, plot_r);
+    if chart.legend_spec.default_right_ink() {
+        // An overlay must release plot space without changing the default legend.
+        // Anchor its ink at the same right edge, not at the expanded plot edge.
+        let legend_plot_r = canvas.w as i32 - inset_right;
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
     } else {
         legend_layout.draw(canvas, chart, font);
     }
