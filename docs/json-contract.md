@@ -12,7 +12,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图画成 PNG。像素不进 inspect。
-xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线或非负柱形画成 PNG。像素不进 inspect。
+xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏画成 PNG；合法日期轴按日期比例定位。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2422,11 +2422,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 柱形在每个点都是有限非负数、没有空格子时可以画。柱是纯色，没有抗锯齿。色用 `colorSeries` 的 `rgb`，没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形横向：格子宽减去 5 后按点数等分，槽从第 3 列像素起。第 i 根柱（从 0 起）占这一槽正中的三分之二。左缘是 `floor(3 + (i + 1/6) × 槽宽)`，右缘含端点是 `ceil(3 + (i + 5/6) × 槽宽) - 1`。右缘正好落在整数上时，这一列不画
 - 柱形纵向和折线同一段：上沿是 5，下沿含端点是高度减 4。绘图高是高度减 8。最小值和最大值取这些数自己。全部相同且大于 0 时每根柱都铺满。全部是 0 时不画。其余柱高是 `floor((值 - 最小) / (最大 - 最小) × (绘图高 - 1)) + 1`，底边贴下沿。值是 0 且最小值也是 0 时这一根不画，槽仍占着
-- 柱形不读自定义轴。有负数、空格子、横坐标、日期轴、从右到左，或宽小于 6、高小于 9，报 `NotImplemented`
+- 柱形不读自定义轴。有负数、空格子、横坐标、从右到左，或宽小于 6、高小于 9，报 `NotImplemented`
 - 柱形的高点、低点、首点和末点换成对应颜色的纯色。同一根柱同时命中时，按低点、高点、首点、末点的顺序留第一种。并列的极值每根都换色。没有写出颜色时用 `D00000`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形上的 `markers` 不改变像素。负值着色打开但每个点都不是负数时，也不改变像素
-- 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（元素缺省时回落 Excel 新建缺省 `376092`；有元素无 `rgb` 则 NI），`negative` 为真时负色用 `colorNegative`（元素缺省回落 `D00000`；有元素无 `rgb` 则 NI），否则负值仍用系列色。paint 不写死样本色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`dateAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
-- 折线上的标记、高点、低点、首点、末点、负值、横坐标、日期轴、从右到左，报 `NotImplemented`
+- 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（元素缺省时回落 Excel 新建缺省 `376092`；有元素无 `rgb` 则 NI），`negative` 为真时负色用 `colorNegative`（元素缺省回落 `D00000`；有元素无 `rgb` 则 NI），否则负值仍用系列色。paint 不写死样本色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。日期轴与折线、柱形共用下面这条规则。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
+- `dateAxis` 打开时，组上的 `xm:f` 必须是与数值等长的单行或单列有限日期序列（Excel 序列数）。点按 `(date-min)/(max-min)×(n-1)` 映射到分类轴同一套槽公式，不排序；反向日期可以从右画到左。等距日期与关闭日期轴像素一致。`n=1` 时即使日期相同也落在第 0 槽。至少两点但全部日期相同、日期缺失或非数值、长度不合、二维区域报 `NotImplemented`，不回退成等距分类轴。`dateAxis` 关闭时忽略组上的日期公式。隐藏日期格子与数值同一套 `displayHidden`。折线、非负柱形和盈亏在原有子集内都按此定位；柱宽仍按点数和格子宽计算，日期很近时柱可以重叠。`insertSparkline` / `setSparkline` 本片不写 `dateAxis` 或日期公式。官方 CopyPicture 对照仍未做，不把本片自测当成官方通过。
+- 折线上的标记、高点、低点、首点、末点、负值、横坐标、从右到左，报 `NotImplemented`
 - 源格子落在隐藏的行或列上，且没有 `displayHidden`，报 `NotImplemented`。`displayHidden` 为真时，隐藏格子的缓存照样画
 - docx 与 pptx 报 `InvalidField`
 - 找不到组报 `IdNotFound`。id 不是迷你图组 id 报 `InvalidId`
@@ -2752,9 +2753,9 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ### 工作表/tiles内嵌迷你图（既有painter接线，2026-11-17 P1）
 
-导出工作表的共同paint路径合成既有独立spark API支持的单宿主组：line、非负column及win-loss既有子集（不扩dateAxis/标记/主题等支持）。空、未合并、LTR可见宿主按工作表实际格w/h直接采样；宿主sqref计入used-range，无需物化c。每宿主保留原f32覆盖率并只采样一次，格底合成后再画边框/浮动对象；tiles按绝对坐标裁取，禁止PNG白色key或缩放。每宿主沿用4096边长限制，合计宿主raster像素64Mi上限。
+导出工作表的共同paint路径合成既有独立spark API支持的单宿主组：line、非负column及win-loss既有子集（合法日期轴按同一套槽公式比例定位；不扩标记/主题、不合法日期轴等支持）。空、未合并、LTR可见宿主按工作表实际格w/h直接采样；宿主sqref计入used-range，无需物化c。每宿主保留原f32覆盖率并只采样一次，格底合成后再画边框/浮动对象；tiles按绝对坐标裁取，禁止PNG白色key或缩放。每宿主沿用4096边长限制，合计宿主raster像素64Mi上限。
 
-隐藏/零尺寸宿主不绘制，也不因其不可见复杂配置拒整表。可见且已有独立接口不支持的隐藏源（displayHidden未开启）、多宿主组、日期轴、标记/样式等返回NI；sheet RTL、合并宿主、非空宿主文字的层序尚未官方锁定，同样诚实NI，不把合法配置叫畸形/异常。displayHidden=true沿用原能力。旧独立API行高round及chart/zoom合同不在本片盲统一。
+隐藏/零尺寸宿主不绘制，也不因其不可见复杂配置拒整表。可见且已有独立接口不支持的隐藏源（displayHidden未开启）、多宿主组、不合法日期轴、标记/样式等返回NI；sheet RTL、合并宿主、非空宿主文字的层序尚未官方锁定，同样诚实NI，不把合法配置叫畸形/异常。displayHidden=true沿用原能力。旧独立API行高round及chart/zoom合同不在本片盲统一。
 
 17组同SHA公平矩阵中16个支持sheet宿主对同尺寸独立painter像素差0、宿主外变化0；16个独立spark和17个chart PNG字节不变；实际CLI九块拼接与mono像素差0。完整51项49成功/2 NI（新增NI是原来成功却漏图的隐藏源sheet），严格0 PASS/49 sizeDiffer/2 NI；库内像素一致不是官方整图PASS。gold复用P0相同输入SHA/同range/chart的原生图，未缩放，P1未重复打开Office。
 

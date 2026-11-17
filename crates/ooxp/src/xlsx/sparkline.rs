@@ -911,6 +911,7 @@ fn raster_group(
             (width, height)
         }
     };
+    let dates = group_dates(group, pkg, sheets, sheet_name, sheet, cells, cached.len())?;
     let color = series_rgb(group)?;
     if column {
         let axis_min = axis_end(group, "minAxisType", "manualMin")?;
@@ -926,7 +927,13 @@ fn raster_group(
             }
         }
         let colors = column_colors(group, &values, color)?;
-        return super::sparkline_paint::raster_columns(width, height, &values, &colors);
+        return super::sparkline_paint::raster_columns(
+            width,
+            height,
+            &values,
+            &colors,
+            dates.as_deref(),
+        );
     }
     if win_loss {
         let axis_min = axis_end(group, "minAxisType", "manualMin")?;
@@ -951,6 +958,7 @@ fn raster_group(
             color,
             neg,
             attr_on(group, "negative"),
+            dates.as_deref(),
         );
     }
     let values = cached.iter().map(point_of).collect();
@@ -961,6 +969,7 @@ fn raster_group(
         axis_max: axis_end(group, "maxAxisType", "manualMax")?,
         color,
         weight_px: line_weight_px(group)?,
+        dates,
     };
     super::sparkline_paint::raster_line(width, height, &spec)
 }
@@ -973,7 +982,6 @@ fn plain_flags(group: &Element) -> bool {
         && !attr_on(group, "last")
         && !attr_on(group, "negative")
         && !attr_on(group, "displayXAxis")
-        && !attr_on(group, "dateAxis")
         && !attr_on(group, "rightToLeft")
 }
 
@@ -988,13 +996,12 @@ fn is_plain_column(group: &Element) -> bool {
     group.attr("type").is_some_and(|raw| raw.trim() == "column") && column_flags(group)
 }
 
-/// 盈亏：`type=stacked`。本刀不画坐标轴/日期轴/RTL/首末高低标记。
+/// 盈亏：`type=stacked`。本刀不画坐标轴/RTL/首末高低标记。日期轴在 raster_group 里另读。
 fn is_plain_win_loss(group: &Element) -> bool {
     group
         .attr("type")
         .is_some_and(|raw| raw.trim() == "stacked")
         && !attr_on(group, "displayXAxis")
-        && !attr_on(group, "dateAxis")
         && !attr_on(group, "rightToLeft")
         && !attr_on(group, "markers")
         && !attr_on(group, "high")
@@ -1005,7 +1012,7 @@ fn is_plain_win_loss(group: &Element) -> bool {
 
 /// 柱形上的标记不改变像素。负值着色只在出现负数时才改画面，那种柱仍不画。
 fn column_flags(group: &Element) -> bool {
-    !attr_on(group, "displayXAxis") && !attr_on(group, "dateAxis") && !attr_on(group, "rightToLeft")
+    !attr_on(group, "displayXAxis") && !attr_on(group, "rightToLeft")
 }
 
 /// 同一根柱同时命中时，按低点、高点、首点、末点留第一种。
@@ -1247,6 +1254,45 @@ fn range_hidden(sheet: &Element, start: CellRef, end: CellRef) -> bool {
         }
     }
     false
+}
+
+/// `dateAxis` 打开时，组上的 `xm:f` 必须是与数值等长的单行或单列有限数值（Excel 日期序列）。
+/// 不排序；缺日期、非数值、长度不合或 `n>=2` 且最大最小相同则 NI，不退回等距分类轴。
+fn group_dates(
+    group: &Element,
+    pkg: &Package,
+    sheets: &[super::inspect::SheetMeta],
+    sheet_name: &str,
+    sheet: &Element,
+    cells: &CellCache,
+    n_values: usize,
+) -> Result<Option<Vec<f64>>, Error> {
+    if !attr_on(group, "dateAxis") {
+        return Ok(None);
+    }
+    let raw = child_text(group, "f").ok_or_else(image_unsupported)?;
+    let (_, body) = split_formula(&raw).ok_or_else(image_unsupported)?;
+    let (start, end) = a1::parse_range(body).map_err(|_| image_unsupported())?;
+    if start.row != end.row && start.col != end.col {
+        return Err(image_unsupported());
+    }
+    let cached = range_values(&raw, sheet_name, cells).ok_or_else(image_unsupported)?;
+    if cached.len() != n_values {
+        return Err(image_unsupported());
+    }
+    let mut dates = Vec::with_capacity(cached.len());
+    for value in &cached {
+        match point_of(value) {
+            Some(n) if n.is_finite() => dates.push(n),
+            _ => return Err(image_unsupported()),
+        }
+    }
+    if !attr_on(group, "displayHidden")
+        && formula_touches_hidden(pkg, sheets, sheet_name, sheet, &raw)?
+    {
+        return Err(image_unsupported());
+    }
+    Ok(Some(dates))
 }
 
 fn image_unsupported() -> Error {

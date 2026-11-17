@@ -2,6 +2,8 @@
 //! 折线左右各留 2 像素，点落在等分格的正中。纵轴上沿 5 像素，下沿是高度减 4。
 //! 柱形槽从第 3 列起、右端留 2，柱占槽的三分之二。柱是纯色，没有抗锯齿。
 //! 盈亏复用同一套横向 `column_x`；正半区上沿→中线上一像素，负半区中线下一像素→下沿；0/空不画。
+//! 日期轴：用组上 `xm:f` 的数值序列（Excel 日期序列）把点放到时间比例位置，而不是按下标等距。
+//! 等距日期与原分类轴同一套公式，使连续等差日期与关闭日期轴的像素一致；不等距日期按 (date-min)/(max-min)*(n-1) 映射到该公式的槽坐标。不排序、不把缺日期或非数值日期当成等距轴。
 
 use crate::error::{Error, ErrorKind};
 
@@ -24,6 +26,8 @@ pub(crate) struct LineSpec {
     pub axis_max: Option<f64>,
     pub color: [u8; 3],
     pub weight_px: f64,
+    /// 与 `values` 等长的有限日期序列。`None` 表示分类轴（按下标等距）。
+    pub dates: Option<Vec<f64>>,
 }
 
 /// Unflattened host-cell raster. Keep the original f32 coverage so sheet fills
@@ -74,6 +78,11 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
     }
     let mut px = Raster::new(width, height);
     let n = spec.values.len();
+    if let Some(dates) = spec.dates.as_ref() {
+        if dates.len() != n {
+            return Err(unsupported());
+        }
+    }
     if n >= 2 {
         let plotted = plotted(spec);
         if !plotted.is_empty() {
@@ -83,7 +92,8 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
             for run in runs {
                 let mut prev: Option<(f64, f64)> = None;
                 for (index, value) in run {
-                    let here = point_xy(index, n, value, lo, hi, width, height);
+                    let u = slot_of(index, n, spec.dates.as_deref())?;
+                    let here = point_xy(u, n, value, lo, hi, width, height);
                     if let Some(from) = prev {
                         stamp(&mut cover, width, height, from, here, spec.weight_px);
                     }
@@ -109,6 +119,7 @@ pub(crate) fn raster_columns(
     height: u32,
     values: &[f64],
     colors: &[[u8; 3]],
+    dates: Option<&[f64]>,
 ) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
@@ -129,7 +140,8 @@ pub(crate) fn raster_columns(
         if bar <= 0 {
             continue;
         }
-        let Some((x0, x1)) = column_x(width, values.len(), index) else {
+        let u = slot_of(index, values.len(), dates)?;
+        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -161,6 +173,7 @@ pub(crate) fn raster_win_loss(
     series: [u8; 3],
     negative: [u8; 3],
     color_negatives: bool,
+    dates: Option<&[f64]>,
 ) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
@@ -187,7 +200,8 @@ pub(crate) fn raster_win_loss(
         if !n.is_finite() || *n == 0.0 {
             continue;
         }
-        let Some((x0, x1)) = column_x(width, values.len(), index) else {
+        let u = slot_of(index, values.len(), dates)?;
+        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -213,19 +227,66 @@ pub(crate) fn raster_win_loss(
 
 /// 槽宽是 `(宽 - 5) / 点数`。 `(宽 - 5) / 点数`。第 i 根柱的左右缘是 `3 + (i + 1/6) * 槽宽` 与 `3 + (i + 5/6) * 槽宽`。
 /// 左缘取 floor，右缘是不含端点的 ceil 再减 1。整数除法与这个取整相同。
+#[cfg(test)]
 fn column_x(width: u32, count: usize, index: usize) -> Option<(i32, i32)> {
+    column_x_at(width, count, index as f64)
+}
+
+fn column_x_at(width: u32, count: usize, u: f64) -> Option<(i32, i32)> {
+    if !u.is_finite() || count == 0 {
+        return None;
+    }
     let n = i64::try_from(count).ok()?;
-    let i = i64::try_from(index).ok()?;
     let span = i64::from(width) - 5;
     if n <= 0 || span <= 0 {
         return None;
     }
-    let den = 6_i64.checked_mul(n)?;
-    let x0 = 3 + (6 * i + 1).checked_mul(span)? / den;
-    let k = (6 * i + 5).checked_mul(span)?;
-    let q = k / den;
-    let x1 = 3 + if k % den == 0 { q - 1 } else { q };
+    let den = 6.0 * n as f64;
+    let start = (6.0 * u + 1.0) * span as f64 / den;
+    let end = (6.0 * u + 5.0) * span as f64 / den;
+    if !start.is_finite() || !end.is_finite() {
+        return None;
+    }
+    let x0 = 3 + start.floor() as i64;
+    let x1 = 3 + end.ceil() as i64 - 1;
     Some((i32::try_from(x0).ok()?, i32::try_from(x1).ok()?))
+}
+
+/// 日期轴把序列映射到分类槽坐标：等距日期时 `slot == index`，与关闭日期轴一致。
+/// `n == 1` 时落在唯一槽；`n >= 2` 且最大最小日期相同则无法定比例，报错。
+pub(crate) fn date_slot(dates: &[f64], index: usize) -> Result<f64, Error> {
+    let n = dates.len();
+    let date = *dates.get(index).ok_or_else(unsupported)?;
+    if !date.is_finite() {
+        return Err(unsupported());
+    }
+    if n == 1 {
+        return Ok(0.0);
+    }
+    let min = dates.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = dates.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !min.is_finite() || !max.is_finite() || (max - min).abs() < 1e-12 {
+        return Err(unsupported());
+    }
+    Ok((date - min) / (max - min) * (n as f64 - 1.0))
+}
+
+fn slot_of(index: usize, n: usize, dates: Option<&[f64]>) -> Result<f64, Error> {
+    match dates {
+        None => {
+            if index < n {
+                Ok(index as f64)
+            } else {
+                Err(unsupported())
+            }
+        }
+        Some(dates) => {
+            if dates.len() != n {
+                return Err(unsupported());
+            }
+            date_slot(dates, index)
+        }
+    }
 }
 
 fn bar_px(value: f64, lo: f64, hi: f64, plot_h: i32) -> i32 {
@@ -303,19 +364,11 @@ fn runs(empty: EmptyCells, plotted: &[(usize, f64)]) -> Vec<Vec<(usize, f64)>> {
     runs
 }
 
-/// 公式给出的是像素序号。画的时候落到该像素中心。
-fn point_xy(
-    index: usize,
-    n: usize,
-    value: f64,
-    lo: f64,
-    hi: f64,
-    width: u32,
-    height: u32,
-) -> (f64, f64) {
+/// 公式给出的是像素序号。画的时候落到该像素中心。`u` 是分类下标或日期映射后的槽坐标。
+fn point_xy(u: f64, n: usize, value: f64, lo: f64, hi: f64, width: u32, height: u32) -> (f64, f64) {
     let w = f64::from(width);
     let h = f64::from(height);
-    let x = (PAD_X + (index as f64 + 0.5) * (w - PAD_X * 2.0) / n as f64).round();
+    let x = (PAD_X + (u + 0.5) * (w - PAD_X * 2.0) / n as f64).round();
     let t = if (hi - lo).abs() < 1e-9 {
         1.0
     } else {
@@ -406,7 +459,7 @@ fn render(w: u32, h: u32, spec: &LineSpec) -> Result<Vec<u8>, Error> {
 }
 #[cfg(test)]
 fn render_columns(w: u32, h: u32, values: &[f64], colors: &[[u8; 3]]) -> Result<Vec<u8>, Error> {
-    raster_columns(w, h, values, colors)?.png()
+    raster_columns(w, h, values, colors, None)?.png()
 }
 #[cfg(test)]
 fn render_win_loss(
@@ -417,7 +470,7 @@ fn render_win_loss(
     negative: [u8; 3],
     flags: bool,
 ) -> Result<Vec<u8>, Error> {
-    raster_win_loss(w, h, values, series, negative, flags)?.png()
+    raster_win_loss(w, h, values, series, negative, flags, None)?.png()
 }
 
 #[cfg(test)]
@@ -466,6 +519,7 @@ mod tests {
             axis_max: None,
             color: [55, 96, 146],
             weight_px: 1.0,
+            dates: None,
         };
         let raster = raster_line(72, 20, &spec).unwrap();
         assert_eq!(raster.composite_pixel(36, 5, [255; 3]), spec.color);
@@ -525,6 +579,7 @@ mod tests {
             axis_max: None,
             color: [55, 96, 146],
             weight_px: 1.0,
+            dates: None,
         };
         let raster = raster_line(16, 16, &spec).unwrap();
         assert!(raster.coverage.iter().all(|v| *v == 0.0));
@@ -539,6 +594,7 @@ mod tests {
             axis_max: None,
             color: [55, 96, 146],
             weight_px: 1.0,
+            dates: None,
         };
         let raster = raster_line(64, 20, &spec).unwrap();
         let (_, _, rgb) = decode_rgb(&render(64, 20, &spec).unwrap());
@@ -569,7 +625,7 @@ mod tests {
 
     #[test]
     fn white_columns_retain_coverage_on_a_nonwhite_background() {
-        let raster = raster_columns(64, 20, &[1.0, 4.0, 2.0], &[[255; 3]; 3]).unwrap();
+        let raster = raster_columns(64, 20, &[1.0, 4.0, 2.0], &[[255; 3]; 3], None).unwrap();
         assert_eq!(raster.composite_pixel(30, 6, [40, 80, 120]), [255; 3]);
         assert_eq!(raster.composite_pixel(0, 0, [40, 80, 120]), [40, 80, 120]);
         let (_, _, px) =
@@ -649,5 +705,207 @@ mod tests {
         let (x0, _) = column_x(64, 1, 0).unwrap();
         let i = ((11u32 * w + x0 as u32) * 3) as usize;
         assert_eq!([px[i], px[i + 1], px[i + 2]], series);
+    }
+
+    fn line_spec(values: Vec<Option<f64>>, dates: Option<Vec<f64>>) -> LineSpec {
+        LineSpec {
+            values,
+            empty: EmptyCells::Gap,
+            axis_min: None,
+            axis_max: None,
+            color: [55, 96, 146],
+            weight_px: 1.0,
+            dates,
+        }
+    }
+
+    fn peak_x(rgb: &[u8], w: u32, h: u32, color: [u8; 3]) -> u32 {
+        // The highest plotted value sits nearest the top of the plot (y around TOP=5).
+        let mut best_y = h;
+        let mut sum = 0u64;
+        let mut n = 0u64;
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 3) as usize;
+                if [rgb[i], rgb[i + 1], rgb[i + 2]] == color {
+                    if y < best_y {
+                        best_y = y;
+                        sum = u64::from(x);
+                        n = 1;
+                    } else if y == best_y {
+                        sum += u64::from(x);
+                        n += 1;
+                    }
+                }
+            }
+        }
+        assert!(n > 0, "expected ink");
+        (sum / n) as u32
+    }
+
+    #[test]
+    fn column_x_at_matches_integer_slots() {
+        for width in [6u32, 16, 64, 72, 80, 128] {
+            for n in 1..=12 {
+                for i in 0..n {
+                    let via_int = column_x(width, n, i);
+                    let via_at = column_x_at(width, n, i as f64);
+                    assert_eq!(via_int, via_at, "width={width} n={n} i={i}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn equal_dates_match_category_axis_for_line_column_and_win_loss() {
+        let values = vec![Some(1.0), Some(4.0), Some(2.0)];
+        let equal = Some(vec![10.0, 11.0, 12.0]);
+        let cat = render(64, 20, &line_spec(values.clone(), None)).unwrap();
+        let dated = render(64, 20, &line_spec(values, equal.clone())).unwrap();
+        assert_eq!(cat, dated, "equal dates must not change a line");
+
+        let cols = [1.0, 4.0, 2.0];
+        let colors = [[55, 96, 146]; 3];
+        let cat = render_columns(64, 20, &cols, &colors).unwrap();
+        let dated = raster_columns(64, 20, &cols, &colors, equal.as_deref())
+            .unwrap()
+            .png()
+            .unwrap();
+        assert_eq!(cat, dated, "equal dates must not change columns");
+
+        let wl = [Some(1.0), Some(-1.0), Some(1.0)];
+        let series = [0x37, 0x60, 0x92];
+        let neg = [0xd0, 0x00, 0x00];
+        let cat = render_win_loss(64, 20, &wl, series, neg, true).unwrap();
+        let dated = raster_win_loss(64, 20, &wl, series, neg, true, equal.as_deref())
+            .unwrap()
+            .png()
+            .unwrap();
+        assert_eq!(cat, dated, "equal dates must not change win/loss");
+    }
+
+    #[test]
+    fn uneven_dates_move_the_peak_off_the_category_midpoint() {
+        let color = [55, 96, 146];
+        let values = vec![Some(1.0), Some(8.0), Some(1.0)];
+        let cat = decode_rgb(&render(64, 20, &line_spec(values.clone(), None)).unwrap());
+        let early = decode_rgb(
+            &render(
+                64,
+                20,
+                &line_spec(values.clone(), Some(vec![0.0, 1.0, 10.0])),
+            )
+            .unwrap(),
+        );
+        let late =
+            decode_rgb(&render(64, 20, &line_spec(values, Some(vec![0.0, 9.0, 10.0]))).unwrap());
+        assert_ne!(
+            cat.2, early.2,
+            "clustered early dates must not look equally spaced"
+        );
+        assert_ne!(
+            cat.2, late.2,
+            "clustered late dates must not look equally spaced"
+        );
+        let mid = peak_x(&cat.2, 64, 20, color);
+        let left = peak_x(&early.2, 64, 20, color);
+        let right = peak_x(&late.2, 64, 20, color);
+        assert!(
+            left < mid && mid < right,
+            "peak should follow the date, not the category mid; left={left} mid={mid} right={right}"
+        );
+    }
+
+    #[test]
+    fn reverse_dates_place_the_first_point_on_the_right() {
+        let color = [55, 96, 146];
+        // First value is the peak; with reversed dates it belongs on the right.
+        let values = vec![Some(8.0), Some(1.0), Some(1.0)];
+        let (_, _, rgb) =
+            decode_rgb(&render(64, 20, &line_spec(values, Some(vec![10.0, 5.0, 0.0]))).unwrap());
+        let peak = peak_x(&rgb, 64, 20, color);
+        assert!(
+            peak > 32,
+            "first point with the latest date should sit in the right half; peak={peak}"
+        );
+    }
+
+    #[test]
+    fn missing_value_keeps_date_positions_and_does_not_collapse() {
+        let color = [55, 96, 146];
+        // 等距日期 + gap：与分类轴相同（中间空点把线段拆开，两端单点不画）。
+        let cat = render(64, 20, &line_spec(vec![Some(1.0), None, Some(8.0)], None)).unwrap();
+        let dated = render(
+            64,
+            20,
+            &line_spec(
+                vec![Some(1.0), None, Some(8.0)],
+                Some(vec![10.0, 11.0, 12.0]),
+            ),
+        )
+        .unwrap();
+        assert_eq!(cat, dated);
+
+        // span 会跨过空值；末点在最后的日期上，不能被挤进中间空槽。
+        let mut spec = line_spec(vec![Some(1.0), None, Some(8.0)], Some(vec![0.0, 1.0, 10.0]));
+        spec.empty = EmptyCells::Span;
+        let (_, _, rgb) = decode_rgb(&render(64, 20, &spec).unwrap());
+        let peak = peak_x(&rgb, 64, 20, color);
+        assert!(
+            peak > 40,
+            "a high value on the last date should stay at the right; peak={peak}"
+        );
+    }
+
+    #[test]
+    fn duplicate_dates_share_an_x_and_uneven_columns_differ_from_category() {
+        let dates = [0.0, 0.0, 10.0];
+        assert!((date_slot(&dates, 0).unwrap() - date_slot(&dates, 1).unwrap()).abs() < 1e-12);
+        assert!((date_slot(&dates, 2).unwrap() - 2.0).abs() < 1e-12);
+        let cols = [1.0, 4.0, 2.0];
+        let colors = [[55, 96, 146], [200, 0, 0], [55, 96, 146]];
+        let cat = render_columns(64, 20, &cols, &colors).unwrap();
+        let dated = raster_columns(64, 20, &cols, &colors, Some(&dates))
+            .unwrap()
+            .png()
+            .unwrap();
+        assert_ne!(cat, dated);
+        let (x0_a, x1_a) = column_x_at(64, 3, date_slot(&dates, 0).unwrap()).unwrap();
+        let (x0_b, x1_b) = column_x_at(64, 3, date_slot(&dates, 1).unwrap()).unwrap();
+        assert_eq!((x0_a, x1_a), (x0_b, x1_b));
+    }
+
+    #[test]
+    fn unsupported_date_inputs_stay_not_implemented() {
+        // n>=2 且所有日期相同，无法定比例。
+        assert!(date_slot(&[5.0, 5.0, 5.0], 0).is_err());
+        let err = render(
+            64,
+            20,
+            &line_spec(
+                vec![Some(1.0), Some(2.0), Some(3.0)],
+                Some(vec![7.0, 7.0, 7.0]),
+            ),
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        let err = render(
+            64,
+            20,
+            &line_spec(vec![Some(1.0), Some(2.0)], Some(vec![1.0])),
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        let err = match raster_columns(
+            64,
+            20,
+            &[1.0, 2.0],
+            &[[55, 96, 146]; 2],
+            Some(&[f64::NAN, 1.0]),
+        ) {
+            Err(err) => err,
+            Ok(_) => panic!("non-finite dates should stay NotImplemented"),
+        };
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     }
 }
