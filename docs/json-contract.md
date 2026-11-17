@@ -11,7 +11,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 与 Markdown 冲突时以本文及分册为准。
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
-xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图或普通面积图画成 PNG。像素不进 inspect。
+xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏画成 PNG；合法日期轴按日期比例定位。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
@@ -136,7 +136,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图和普通面积图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2337,7 +2337,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ## exportChartImage
 
-按图表 id 把工作表或图表工作表上的簇状柱形图、簇状条形图、普通（非堆积、非百分比）折线图、带标记的散点图或普通（非堆积、非百分比）面积图画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
+按图表 id 把工作表或图表工作表上的簇状柱形图、簇状条形图、普通（非堆积、非百分比）折线图、带标记的散点图、普通（非堆积、非百分比）面积图或普通饼图画成 PNG，写到本地。只读。不改源包，不把像素放进 inspect。
 
 ``json
 {
@@ -2356,7 +2356,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `output` | 是 | 本地目标路径。缺了报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
-- 只画簇状柱形图，簇状条形图（`barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略），grouping 为 standard 或省略的 `lineChart`，scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的 `scatterChart`，以及 grouping 为 standard 或省略的 `areaChart`。系列、类目和系列名优先用图里的 `numCache`、`strCache` 或字面量。没有这些缓存时，公式必须是本簿一张表上的连续区域或单个格子，点用格子里已有的缓存。不算公式。区域对不上，或两边都没有缓存，报 `NotImplemented`
+- 只画簇状柱形图，簇状条形图（`barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略），grouping 为 standard 或省略的 `lineChart`，scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的 `scatterChart`，grouping 为 standard 或省略的 `areaChart`，以及恰好一条系列的 `pieChart`。系列、类目和系列名优先用图里的 `numCache`、`strCache` 或字面量。没有这些缓存时，公式必须是本簿一张表上的连续区域或单个格子，点用格子里已有的缓存。不算公式。区域对不上，或两边都没有缓存，报 `NotImplemented`
 - 宽高跟 Excel 16.0 的 `Chart.Export`。`twoCell` 按起止格的列宽和行高累加，不用占位的 `a:ext`
 - 每一列、每一行先换成 96 dpi 的像素，再乘工作表 `zoomScale`（缺省 100）后四舍五入，然后相加
 - `oneCell` 和 `absolute` 仍用 `a:ext` 的像素，再按同一个缩放四舍五入
@@ -2383,6 +2383,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 右侧图例的系列名整段留在图内。名字比缺省右边距宽时，绘图区右缘向左让。短名字仍用原来的边距
 - 这段留白用 GDI+ 默认排版宽度，截掉小数。字形前进宽度更窄，用它会把类目槽撑宽，柱越往右越偏
 - 面积图按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（`autoZero` 为零，零在轴外时取较近端）。正值在交叉之上、负值在下，相邻异号在交叉处剖开。系列按 `order` 先画后盖。缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。填充带透明、堆积、百分比堆积、三维、可见数据标签、空值按零或连线、标记、组合图报 `NotImplemented`。官方 Excel 16.0 `Chart.Export` / `Slide.Export` 对照尚未做，不把本片自测当成官方通过。
+- 普通饼图只画单系列 `pieChart`，没有坐标轴。`firstSliceAng` 缺省为 0，按从正上方起顺时针计量，360 与 0 相同。只给有限正值扇区，角度按正值之和比例分配；空值跳过扇区与图例项，零值不占角度但仍可出现在图例。`varyColors` 省略时视为开启，扇区按 accent 循环，`dPt` 上的不透明纯色可覆盖；关闭时用系列纯色。图例只画缺省右侧类目名，或没有图例。饼是绘图区内接圆。负值或没有有限正值、多系列、三维饼、圆环、复合饼、非零爆炸、可见数据标签、空值按零或连线、半透明或非纯色扇区、可见扇区描边、非缺省右侧类目图例报 `NotImplemented`。官方 Excel 16.0 `Chart.Export` / `Slide.Export` 对照尚未做，不把本片自测当成官方通过。
 - 不是上述已支持的类型，或类目图的 `crossBetween` 不是 `between`，报 `NotImplemented`
 - docx 与 pptx 报 `InvalidField`
 - 找不到图报 `IdNotFound`。id 不是图表 id 报 `InvalidId`

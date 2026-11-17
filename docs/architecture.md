@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图和普通面积图可以按 `exportChartImage` 写成 PNG。xlsx 的折线、非负柱形和盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线、非负柱形和盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页可以按 `exportPageImage` 写成 PNG，有字的页还不画。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -44,10 +44,10 @@ pptx 的 `exportMedia` 认幻灯片图、备注图、批注内图、母版 / 版
 docx 的 `exportMedia` 认图、OLE、墨迹画布、3D 与嵌入字体。图写出 `/word/media/…`，OLE 写出 embeddings，墨迹写出 `/word/ink/…`，3D 写出 GLB，`font:{n}` 写出 `/word/fonts/…`。
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
-xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图或普通面积图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
+xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏（stacked）画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。不改包，像素不进 inspect。docx 与 pptx 报 `InvalidField`。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。写成 `a:br` 的换行也会预览出来。形状文字按布局近似排（Windows 单元格基线、默认 1.2 倍行距），不保证与 PowerPoint 16.0 的字形灰阶逐像素一致，细节见 [json-contract.md](json-contract.md)。
 
 docx 另有 `exportPageImage`：按页 id 把没有字的一页写成 PNG。不改包，像素不进 inspect。有字的页报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
@@ -577,7 +577,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportChartImage
 
-调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，按起止格或 `a:ext` 取像素，读图表缓存。没有缓存时，读公式所指格子里已有的值。然后把簇状柱形图、簇状条形图、普通折线图、带标记的散点图或普通面积图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
+调用方给出源 xlsx、图表 id 和本地目标路径。库打开包，按起止格或 `a:ext` 取像素，读图表缓存。没有缓存时，读公式所指格子里已有的值。然后把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。包不写回。像素不进 inspect。不是这类图则失败。docx 与 pptx 直接拒绝。
 
 ### exportSparklineImage
 
@@ -611,7 +611,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportSlideImage
 
-调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素。页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。然后按文档顺序画 PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线（可带透明度，画在矩形、圆角矩形和椭圆上）、形状上的拉伸图片填充、形状里的文字（含 `a:br` 换行后的后续行）、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和纯色单元格的表。平铺、带颜色变换或不对齐的 `blipFill` 不再静默跳过，整页失败。单元格文字按 run 的字号来画；没写字号时用 18 磅，并按单元格边距靠左靠上。缺字体时用主题 minor。中等样式 2 - 强调 1 的首行加粗、白字。幻灯片上的簇状柱形图不画 Excel 的圆角外框。有标题时，绘图区比 Excel 再低 7 像素。右侧图例按 GDI+ 默认排版宽度留空，类目槽不用字形前进宽度来撑。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的。半透明椭圆叠在已画像素上，描边只留外接矩形外侧的一圈。超出页面的部分裁掉。包不写回。像素不进 inspect。图带旋转或裁剪，或还有别的对象，则整页失败。xlsx 与 docx 直接拒绝。
+调用方给出源 pptx、幻灯片 id 和本地目标路径。库打开包，按 `p:sldSz` 取像素。页底用本页、版式或母版上没有颜色变换的纯色，没有或画不了时铺白。然后按文档顺序画 PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线（可带透明度，画在矩形、圆角矩形和椭圆上）、形状上的拉伸图片填充、形状里的文字（含 `a:br` 换行后的后续行）、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表。平铺、带颜色变换或不对齐的 `blipFill` 不再静默跳过，整页失败。单元格文字按 run 的字号来画；没写字号时用 18 磅，并按单元格边距靠左靠上。缺字体时用主题 minor。中等样式 2 - 强调 1 的首行加粗、白字。幻灯片上的簇状柱形图不画 Excel 的圆角外框。有标题时，绘图区比 Excel 再低 7 像素。右侧图例按 GDI+ 默认排版宽度留空，类目槽不用字形前进宽度来撑。纯色矩形的 `flipH` 和 `flipV` 不改变像素框。后画的盖住先画的。半透明椭圆叠在已画像素上，描边只留外接矩形外侧的一圈。超出页面的部分裁掉。包不写回。像素不进 inspect。图带旋转或裁剪，或还有别的对象，则整页失败。xlsx 与 docx 直接拒绝。
 
 没有描边的实心矩形，填充也可以是没有颜色变换的 `schemeClr`。线写成 `noFill` 时，旁边的虚线和空的效果列表不画。取色和页底同一套配色表、主题槽。带了颜色变换，或主题里没有这一档，整页失败。
 
@@ -646,7 +646,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 ## 实现时允许的依赖（文档约定，代码阶段再写入 Cargo.toml）
 
 库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx / docx 写保护哈希可用 `sha2`、`getrandom`、`base64`。
-簇状柱形图、簇状条形图、普通折线图、带标记的散点图和普通面积图的 PNG 用 `png` 编码。外框是半径 14 的圆角。类目轴和数值轴都画主刻度、次刻度，刻度穿过轴线。数值轴横坐标是 9 加最宽刻度字宽再加 11。图里没写字体时，Windows 上用 GDI+ 的 AntiAliasGridFit 画 10 磅「等线」，标题加粗。别处用 `fontdue` 的 Calibri。没有这套字体时仍画柱和网格，不调用 Office。
+簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图的 PNG 用 `png` 编码。外框是半径 14 的圆角。类目轴和数值轴都画主刻度、次刻度，刻度穿过轴线。数值轴横坐标是 9 加最宽刻度字宽再加 11。图里没写字体时，Windows 上用 GDI+ 的 AntiAliasGridFit 画 10 磅「等线」，标题加粗。别处用 `fontdue` 的 Calibri。没有这套字体时仍画柱和网格，不调用 Office。
 禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
 
 ## 阶段边界
