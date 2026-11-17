@@ -1,4 +1,4 @@
-# Microsoft Office 这一轮的驱动。
+﻿# Microsoft Office 这一轮的驱动。
 
 #
 
@@ -186,6 +186,7 @@ $order = @(
     'xlsx-sheet-picture-image'
 
     'xlsx-sheet-crop-image'
+    'xlsx-sheet-crop-scale-image'
 
     'xlsx-chart-3d'
 

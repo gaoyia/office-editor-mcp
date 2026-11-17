@@ -1,4 +1,4 @@
-//! 工作表上不缩放的不透明 PNG，按原图像素贴上。整像素裁剪也贴这一块。
+//! 工作表上不透明 PNG：1:1 拷贝、整像素裁剪拷贝、整像素裁剪后再放大（两边都不缩小）。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -162,11 +162,40 @@ fn a_fractional_crop_fails_the_sheet() {
 }
 
 #[test]
-fn a_crop_that_still_scales_fails_the_sheet() {
+fn a_crop_that_upscales_paints_on_windows() {
+    // 4×4 图、目标 4×4，l=25000 裁掉左 1 列 → 源 3×4 再放大到 4×4。
     let book = book_with_picture(4 * 9525);
     let cropped = tmp("scale-crop");
     rewrite(&book, &cropped, |name, xml| {
         if name.starts_with("xl/drawings/drawing") {
+            inject_src_rects(xml, &[r#"<a:srcRect l="25000"/>"#]);
+        }
+    });
+    #[cfg(windows)]
+    {
+        let (w, h, rgb) = decode_png(&export(&cropped).unwrap());
+        assert_eq!((w, h), (65, 21));
+        // 放大后仍盖住目标框；角落不透明（具体滤波相位交给官方 oracle）。
+        assert_ne!(pixel(&rgb, w, 1, 1), [255, 255, 255]);
+        assert_ne!(pixel(&rgb, w, 4, 4), [255, 255, 255]);
+    }
+    #[cfg(not(windows))]
+    {
+        assert_eq!(
+            export(&cropped).unwrap_err().code(),
+            ErrorCode::NotImplemented
+        );
+    }
+}
+
+#[test]
+fn a_crop_that_downscales_fails_the_sheet() {
+    // 目标比裁完窗口更小：缩小 NI。
+    let book = book_with_picture(2 * 9525);
+    let cropped = tmp("down-crop");
+    rewrite(&book, &cropped, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            // 无裁时 4×4→2×4 已是缩小；加整像素左裁仍缩小。
             inject_src_rects(xml, &[r#"<a:srcRect l="25000"/>"#]);
         }
     });
