@@ -30,6 +30,7 @@ mdw={(canon(r['requestedFace']),float(r['pointSize']),int(r['targetDpi'])):int(r
 sem={(r['case'],r['kind']):r for r in read(base/'oracle-semantics.csv')}
 oracle={(r['case'],r['action']):r for r in read(base/'oracle.csv')}
 rows=[];cert=[];evidence=[]
+normal_evidence={r['sourceSha256']:r for r in read(out/'six-path-certificates.csv')} if (out/'six-path-certificates.csv').exists() else {}
 for r in read(base/'metrics.csv'):
     name,action=r['case'],r['action'];src=base/r['sourceWorkbook'];actual_sha=sha(src)
     source_ok=actual_sha==r['workbookSha256']
@@ -52,9 +53,12 @@ for r in read(base/'metrics.csv'):
         semantic_verified=boolstr(r['fixed96DimensionsPass']) and api_match,
         font_verified=fonts_ok,dpi_verified=True,ni=ni,raw_strict=r['strictResult'])
     why='同源SHA；OOXML/固定96维度；真实Normal字体；GDI96/106 MDW离散量化；COM/原生gold物理尺寸' if scope_result==PASS else '有效Normal/font继承与Office读取结果不一致，不能因尺寸偶合豁免' if not fonts_ok else '既有隐藏源displayHidden不支持' if ni else '需核实尺寸责任链'
+    if not fonts_ok and actual_sha in normal_evidence:
+        assert normal_evidence[actual_sha]['evidenceStatus']=='office_import_normalized_font_not_dpi_only'
+        why='Office载入/独立SaveCopy后的Normal字体语义已变（源Arial11 -> COM/canonical Calibri11），非仅DPI；库规范链96几何已验证，不回退font0/7。'
     cert.append(dict(matrix='original51',case=name,action=action,scope='shared_geometry_only',result=labels[scope_result],sourceSha256=actual_sha,rawStrict=r['strictResult'],evidence=why,predictedGoldWidth=predicted,predictedGoldHeight=pred_h,actualGoldWidth=r['goldWidth'],actualGoldHeight=r['goldHeight']))
     pending='曲角/描边AA及legend/plot布局未完成DPI-only证明' if action=='chart' else '独立spark端点/笔宽AA差异尚不能证明仅DPI；sheet内容已接线'
-    if not fonts_ok:pending+='；Normal继承待核，不属于已证DPI'
+    if not fonts_ok:pending+='；Normal语义与Office载入不同，规范链与导入归一化须分开，不属于已证DPI'
     whole=classify(ni=ni,unresolved=[pending])
     gold=base/(f'{name}-sheet-gold-raw.png' if action=='sheet' else f'{name}-{action}-gold.png')
     after=base/f'{name}-{action}-after.png'

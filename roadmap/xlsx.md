@@ -254,3 +254,10 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 
 2026-11-17 类别标签反证复核：1ec6eac0中的explicit“Office标签在绘图区底”是读图错误，已明确撤回。当前1ec实际exe重渲染与a81图片SHA相同；COM公开TickLabelPosition=4（NextToAxis），原生bbox证实双方均跟随0轴，原有130逻辑值成果不动。修正验收器/CSV，不制造renderer补丁。38项几何DPI通过不变；曲角/端点/其它布局待确认不变。详类别标签误报复核计划及桌面150736新证据，旧快照不覆盖。
+
+
+## 2026-11-17 Normal继承6路径有限核实（非renderer修复）
+
+2个合法样式族×3路径=6记录、4份源，库按builtin0→styleXF→font的规范链96几何6/6验证；Office实际Styles.Normal与独立SaveCopy后的Normal均为Calibri11，而源声明Arial11，已证明不只是name/xf编号归一化。此探针族中导入改变字体语义，不能算仅DPI，也不证明库应改font0。17组有限控制、实际cell字体与Normal分开、列/Chart点数、原始/保存副本XML及SHA均保存；canonical从未重开、不当新gold。
+
+DPI几何分子**38/49不变**，6 Normal路径仍需Office同语义可比证据，另5导出边界/2 NI不扩本片。6条规范链证书不是6功能/6整图通过；保留builtinId优先、非零xf及MDW96生产合同，不加7/8/font0回退。23 Python/语法/fmt/diff检查；无Rust改动，不冒称重跑1868。证据：桌面office-editor-PR10-Normal继承核实-20261117-151855；详Normal继承核实计划及normal-inheritance-report.py。
