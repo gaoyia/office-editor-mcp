@@ -24,6 +24,7 @@ use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
 use super::ExportedMedia;
+use crate::xlsx::fill_device_rotated_rect;
 use crate::xlsx::fill_device_stroked_rect;
 use crate::xlsx::scale_device_rgba_window;
 
@@ -502,8 +503,20 @@ struct SheetPng {
 
 enum Overlay {
     Fill(PlainRect),
+    /// 锚点组合上的非直角旋转：先按组缩放/翻转得到轴对齐框，再绕组中心旋转。
+    /// `(x, y, w, h)` 是旋转后中心处、旋转前尺寸的轴对齐框，单位是工作表像素（可含小数）。
+    RotatedFill(RotatedFill),
     Png(SheetPng),
     Spark(SheetSpark),
+}
+
+struct RotatedFill {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    deg: f32,
+    color: [u8; 3],
 }
 
 struct SheetSpark {
@@ -605,11 +618,9 @@ fn plain_rects(
                 if anchor.child_by_local("pic").is_some() || anchor.child_by_local("sp").is_some() {
                     return Err(unsupported());
                 }
-                for rect in identity_group(
+                out.extend(identity_group(
                     anchor, kind, sheet, styles, cells, c0, r0, cols, rows, theme,
-                )? {
-                    out.push(Overlay::Fill(rect));
-                }
+                )?);
                 return Ok(());
             }
             if !anchor_hits(anchor, kind, c0, r0, c1, r1)? {
@@ -972,7 +983,7 @@ fn identity_group(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
-) -> Result<Vec<PlainRect>, Error> {
+) -> Result<Vec<Overlay>, Error> {
     if kind != AnchorKind::TwoCell {
         return Err(unsupported());
     }
@@ -987,7 +998,15 @@ fn identity_group(
     if anchor_box != turned_box(&map, origin_x, origin_y)? {
         return Err(unsupported());
     }
-    let rects = group_rects(group, &[map], origin_x, origin_y, cols, rows, theme)?;
+    let rects = if map.quarter().is_some() {
+        group_rects(group, &[map], origin_x, origin_y, cols, rows, theme)?
+            .into_iter()
+            .map(Overlay::Fill)
+            .collect()
+    } else {
+        // 只锁锚点组合这一层的非直角；里层仍必须是已差 0 的直角/翻转/缩放。
+        group_rotated_overlays(group, &[map], origin_x, origin_y, cols, rows, theme)?
+    };
     if rects.is_empty() {
         return Err(unsupported());
     }
@@ -1023,7 +1042,7 @@ fn read_group_map(group: &Element) -> Result<GroupMap, Error> {
         ch_y,
         ch_cx,
         ch_cy,
-        quarter: group_quarter(xfrm)?,
+        rot: group_rot(xfrm)?,
         flip_h: truthy(xfrm.attr("flipH")),
         flip_v: truthy(xfrm.attr("flipV")),
     })
@@ -1068,6 +1087,186 @@ fn group_rects(
         }
     }
     Ok(rects)
+}
+
+/// 锚点组合为非直角时：里层仍按已锁定的直角链换算，得到外框坐标系里的轴对齐矩形，再绕组中心旋转。
+fn group_rotated_overlays(
+    group: &Element,
+    chain: &[GroupMap],
+    x_from: i32,
+    y_from: i32,
+    cols: &[i32],
+    rows: &[i32],
+    theme: Option<&LoadedTheme>,
+) -> Result<Vec<Overlay>, Error> {
+    let outer = chain.first().ok_or_else(unsupported)?;
+    if outer.quarter().is_some() {
+        return Err(unsupported());
+    }
+    let mut out = Vec::new();
+    for child in group.element_children() {
+        match child.local_name() {
+            "nvGrpSpPr" | "grpSpPr" => {}
+            "sp" => out.push(child_rotated_fill(
+                child, x_from, y_from, chain, cols, rows, theme,
+            )?),
+            "grpSp" => {
+                let inner = read_group_map(child)?;
+                if inner.quarter().is_none() {
+                    // 里层再转非直角后，外层非均匀缩放会把矩形拉成平行四边形；本切片不画假图。
+                    return Err(unsupported());
+                }
+                let mut next = chain.to_vec();
+                next.push(inner);
+                out.extend(group_rotated_overlays(
+                    child, &next, x_from, y_from, cols, rows, theme,
+                )?);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(out)
+}
+
+fn child_rotated_fill(
+    sp: &Element,
+    x_from: i32,
+    y_from: i32,
+    chain: &[GroupMap],
+    cols: &[i32],
+    rows: &[i32],
+    theme: Option<&LoadedTheme>,
+) -> Result<Overlay, Error> {
+    let (sx0, sy0, sx1, sy1) = child_frame_in_outer(sp, chain)?;
+    let map = chain.first().ok_or_else(unsupported)?;
+    if sx1 <= sx0 || sy1 <= sy0 {
+        return Err(unsupported());
+    }
+    let deg = rot_deg(map.rot);
+    let x = f64::from(x_from) + emu_to_px(map.off_x as f64 + sx0 as f64);
+    let y = f64::from(y_from) + emu_to_px(map.off_y as f64 + sy0 as f64);
+    let w = emu_to_px((sx1 - sx0) as f64);
+    let h = emu_to_px((sy1 - sy0) as f64);
+    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
+        return Err(unsupported());
+    }
+    let gcx = f64::from(x_from) + emu_to_px(map.off_x as f64 + map.cx as f64 / 2.0);
+    let gcy = f64::from(y_from) + emu_to_px(map.off_y as f64 + map.cy as f64 / 2.0);
+    let (ncx, ncy) = rotate_cw(x + w / 2.0, y + h / 2.0, gcx, gcy, deg);
+    let rx = (ncx - w / 2.0) as f32;
+    let ry = (ncy - h / 2.0) as f32;
+    let rw = w as f32;
+    let rh = h as f32;
+    let (min_x, min_y, max_x, max_y) = rotated_px_bounds(rx, ry, rw, rh, deg as f32);
+    let box_x0 = min_x.floor() as i32;
+    let box_y0 = min_y.floor() as i32;
+    let box_x1 = max_x.ceil() as i32;
+    let box_y1 = max_y.ceil() as i32;
+    if crosses_hidden(box_x0, box_y0, box_x1, box_y1, cols, rows) {
+        return Err(unsupported());
+    }
+    let rect = plain_rect_at(sp, theme, true, box_x0, box_y0, box_x1, box_y1)?;
+    let Some(color) = rect.fill else {
+        return Err(unsupported());
+    };
+    if rect.stroke.is_some() {
+        return Err(unsupported());
+    }
+    Ok(Overlay::RotatedFill(RotatedFill {
+        x: rx,
+        y: ry,
+        w: rw,
+        h: rh,
+        deg: deg as f32,
+        color,
+    }))
+}
+
+/// 把子矩形经里层直角链和外层缩放/翻转，落到锚点组合未旋转的外框坐标系。必须仍是轴对齐矩形。
+fn child_frame_in_outer(sp: &Element, chain: &[GroupMap]) -> Result<(i64, i64, i64, i64), Error> {
+    let map = chain.last().ok_or_else(unsupported)?;
+    let xfrm = sp
+        .child_by_local("spPr")
+        .and_then(|pr| pr.child_by_local("xfrm"))
+        .ok_or_else(unsupported)?;
+    let (x, y, w, h) = local_box(xfrm)?;
+    let x1_emu = x.checked_add(w).ok_or_else(unsupported)?;
+    let y1_emu = y.checked_add(h).ok_or_else(unsupported)?;
+    let ch_x1 = map.ch_x.checked_add(map.ch_cx).ok_or_else(unsupported)?;
+    let ch_y1 = map.ch_y.checked_add(map.ch_cy).ok_or_else(unsupported)?;
+    if x < map.ch_x || y < map.ch_y || x1_emu > ch_x1 || y1_emu > ch_y1 {
+        return Err(unsupported());
+    }
+    let mut corners = [(x, y), (x1_emu, y), (x1_emu, y1_emu), (x, y1_emu)];
+    for (index, map) in chain.iter().enumerate().rev() {
+        let mut next = [(0_i64, 0_i64); 4];
+        for (i, (px, py)) in corners.into_iter().enumerate() {
+            let sx = into_ext(px, map.ch_x, map.cx, map.ch_cx)?;
+            let sy = into_ext(py, map.ch_y, map.cy, map.ch_cy)?;
+            if index == 0 {
+                next[i] = flip_in_ext(map, sx, sy)?;
+            } else {
+                if map.quarter().is_none() {
+                    return Err(unsupported());
+                }
+                let (x2, y2) = place_twice(map, sx, sy)?;
+                if x2 % 2 != 0 || y2 % 2 != 0 {
+                    return Err(unsupported());
+                }
+                next[i] = (x2 / 2, y2 / 2);
+            }
+        }
+        corners = next;
+    }
+    axis_aligned_emu(corners)
+}
+
+fn flip_in_ext(map: &GroupMap, mut sx: i64, mut sy: i64) -> Result<(i64, i64), Error> {
+    if map.flip_h {
+        sx = map.cx.checked_sub(sx).ok_or_else(unsupported)?;
+    }
+    if map.flip_v {
+        sy = map.cy.checked_sub(sy).ok_or_else(unsupported)?;
+    }
+    Ok((sx, sy))
+}
+
+fn axis_aligned_emu(corners: [(i64, i64); 4]) -> Result<(i64, i64, i64, i64), Error> {
+    let min_x = corners.iter().map(|c| c.0).min().ok_or_else(unsupported)?;
+    let max_x = corners.iter().map(|c| c.0).max().ok_or_else(unsupported)?;
+    let min_y = corners.iter().map(|c| c.1).min().ok_or_else(unsupported)?;
+    let max_y = corners.iter().map(|c| c.1).max().ok_or_else(unsupported)?;
+    if min_x >= max_x || min_y >= max_y {
+        return Err(unsupported());
+    }
+    for &(x, y) in &corners {
+        if (x != min_x && x != max_x) || (y != min_y && y != max_y) {
+            return Err(unsupported());
+        }
+    }
+    Ok((min_x, min_y, max_x, max_y))
+}
+
+fn rotated_px_bounds(x: f32, y: f32, w: f32, h: f32, deg: f32) -> (f32, f32, f32, f32) {
+    let cx = f64::from(x) + f64::from(w) / 2.0;
+    let cy = f64::from(y) + f64::from(h) / 2.0;
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for (px, py) in [
+        (f64::from(x), f64::from(y)),
+        (f64::from(x) + f64::from(w), f64::from(y)),
+        (f64::from(x) + f64::from(w), f64::from(y) + f64::from(h)),
+        (f64::from(x), f64::from(y) + f64::from(h)),
+    ] {
+        let (nx, ny) = rotate_cw(px, py, cx, cy, f64::from(deg));
+        min_x = min_x.min(nx);
+        min_y = min_y.min(ny);
+        max_x = max_x.max(nx);
+        max_y = max_y.max(ny);
+    }
+    (min_x as f32, min_y as f32, max_x as f32, max_y as f32)
 }
 
 /// 子矩形先绕自己的中心转 90 度的倍数，得到外接矩形，再交给组去缩放和旋转。
@@ -1166,10 +1365,21 @@ struct GroupMap {
     ch_y: i64,
     ch_cx: i64,
     ch_cy: i64,
-    /// 顺时针 90 度的次数，0 到 3。屏幕坐标向下为正。
-    quarter: i64,
+    /// DrawingML `rot`，单位 1/60000 度，已折到 `[0, 21600000)`。顺时针，屏幕向下为正。
+    rot: i64,
     flip_h: bool,
     flip_v: bool,
+}
+
+impl GroupMap {
+    /// 直角倍数时返回 0..=3 的顺时针次数；其它角度是 `None`。
+    fn quarter(self) -> Option<i64> {
+        if self.rot % 5_400_000 == 0 {
+            Some(self.rot / 5_400_000)
+        } else {
+            None
+        }
+    }
 }
 
 fn child_rect(
@@ -1218,12 +1428,82 @@ fn child_rect(
 }
 
 fn turned_box(map: &GroupMap, x_from: i32, y_from: i32) -> Result<(i32, i32, i32, i32), Error> {
-    turned_edges(
-        map,
-        x_from,
-        y_from,
-        [(0, 0), (map.cx, 0), (map.cx, map.cy), (0, map.cy)],
-    )
+    if map.quarter().is_some() {
+        turned_edges(
+            map,
+            x_from,
+            y_from,
+            [(0, 0), (map.cx, 0), (map.cx, map.cy), (0, map.cy)],
+        )
+    } else {
+        angled_group_box(map, x_from, y_from)
+    }
+}
+
+/// 组外框绕组中心旋转后的轴对齐外接框。只用于锚点对照，不拿来铺色。
+fn angled_group_box(
+    map: &GroupMap,
+    x_from: i32,
+    y_from: i32,
+) -> Result<(i32, i32, i32, i32), Error> {
+    let deg = rot_deg(map.rot);
+    let gcx = map.off_x as f64 + map.cx as f64 / 2.0;
+    let gcy = map.off_y as f64 + map.cy as f64 / 2.0;
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    // 翻转不改变外框四个角的集合，外接框与未翻转时相同。
+    for (sx, sy) in [(0_i64, 0_i64), (map.cx, 0), (map.cx, map.cy), (0, map.cy)] {
+        let (rx, ry) = rotate_cw(
+            map.off_x as f64 + sx as f64,
+            map.off_y as f64 + sy as f64,
+            gcx,
+            gcy,
+            deg,
+        );
+        min_x = min_x.min(rx);
+        min_y = min_y.min(ry);
+        max_x = max_x.max(rx);
+        max_y = max_y.max(ry);
+    }
+    if !min_x.is_finite() || !min_y.is_finite() || !max_x.is_finite() || !max_y.is_finite() {
+        return Err(unsupported());
+    }
+    Ok((
+        x_from + round_emu(min_x)?,
+        y_from + round_emu(min_y)?,
+        x_from + round_emu(max_x)?,
+        y_from + round_emu(max_y)?,
+    ))
+}
+
+fn rot_deg(rot: i64) -> f64 {
+    (rot as f64) / 60_000.0
+}
+
+/// 顺时针、y 向下。与 DrawingML `rot` / GDI+ `RotateTransform` 同向。
+fn rotate_cw(px: f64, py: f64, cx: f64, cy: f64, deg: f64) -> (f64, f64) {
+    let rad = deg.to_radians();
+    let (c, s) = (rad.cos(), rad.sin());
+    let dx = px - cx;
+    let dy = py - cy;
+    (cx + dx * c - dy * s, cy + dx * s + dy * c)
+}
+
+fn round_emu(emu: f64) -> Result<i32, Error> {
+    if !emu.is_finite() || emu < 0.0 {
+        return Err(unsupported());
+    }
+    let px = (emu / 9_525.0).round();
+    if px > i32::MAX as f64 {
+        return Err(unsupported());
+    }
+    Ok(px as i32)
+}
+
+fn emu_to_px(emu: f64) -> f64 {
+    emu / 9_525.0
 }
 
 fn turned_edges(
@@ -1282,7 +1562,7 @@ fn place_twice(map: &GroupMap, mut sx: i64, mut sy: i64) -> Result<(i64, i64), E
         .ok_or_else(unsupported)?
         .checked_sub(map.cy)
         .ok_or_else(unsupported)?;
-    match map.quarter {
+    match map.quarter().ok_or_else(unsupported)? {
         0 => {}
         1 => {
             let next = dx2;
@@ -1320,14 +1600,19 @@ fn place_twice(map: &GroupMap, mut sx: i64, mut sy: i64) -> Result<(i64, i64), E
 }
 
 fn group_quarter(xfrm: &Element) -> Result<i64, Error> {
+    let rot = group_rot(xfrm)?;
+    if rot % 5_400_000 != 0 {
+        return Err(unsupported());
+    }
+    Ok(rot / 5_400_000)
+}
+
+fn group_rot(xfrm: &Element) -> Result<i64, Error> {
     let Some(raw) = xfrm.attr("rot") else {
         return Ok(0);
     };
     let n = raw.parse::<i64>().map_err(|_| unsupported())?;
-    if n.rem_euclid(5_400_000) != 0 {
-        return Err(unsupported());
-    }
-    Ok(n.rem_euclid(21_600_000) / 5_400_000)
+    Ok(n.rem_euclid(21_600_000))
 }
 
 /// `num` 是 EMU 的两倍。
@@ -1430,10 +1715,45 @@ fn fill_plain_rgb(canvas: &mut Canvas, x0: i32, y0: i32, x1: i32, y1: i32, color
     }
 }
 
-fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
+fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) -> Result<(), Error> {
+    let frame_top = if canvas.oy == 0 {
+        Some(canvas.px[..(canvas.w as usize * 3)].to_vec())
+    } else {
+        None
+    };
+    let frame_left = if canvas.ox == 0 {
+        let mut col = Vec::with_capacity(canvas.h as usize * 3);
+        for y in 0..canvas.h as usize {
+            let i = y * canvas.w as usize * 3;
+            col.extend_from_slice(&canvas.px[i..i + 3]);
+        }
+        Some(col)
+    } else {
+        None
+    };
     for shape in shapes {
         match shape {
             Overlay::Spark(_) => {}
+            Overlay::RotatedFill(shape) => {
+                if shape.w <= 0.0 || shape.h <= 0.0 {
+                    continue;
+                }
+                let painted = fill_device_rotated_rect(
+                    &mut canvas.px,
+                    canvas.w as u32,
+                    canvas.h as u32,
+                    shape.x - canvas.ox as f32,
+                    shape.y - canvas.oy as f32,
+                    shape.w,
+                    shape.h,
+                    shape.deg,
+                    shape.color,
+                );
+                if !painted {
+                    // 不把轴对齐外接框拿来充数，也不默默丢掉这个组合。
+                    return Err(unsupported());
+                }
+            }
             Overlay::Fill(shape) => {
                 let w = shape.x1 - shape.x0;
                 let h = shape.y1 - shape.y0;
@@ -1482,6 +1802,17 @@ fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
             }
         }
     }
+    // 上边和左边的外框盖住图形，含抗锯齿边缘落到第 0 行/列的部分。
+    if let Some(top) = frame_top {
+        canvas.px[..top.len()].copy_from_slice(&top);
+    }
+    if let Some(left) = frame_left {
+        for y in 0..canvas.h as usize {
+            let i = y * canvas.w as usize * 3;
+            canvas.px[i..i + 3].copy_from_slice(&left[y * 3..y * 3 + 3]);
+        }
+    }
+    Ok(())
 }
 
 /// 目标框正好等于要贴的像素时，按原图贴上。整像素裁剪且不缩放时贴这一块。
@@ -3757,7 +4088,7 @@ fn paint_window(
         c0,
         r0,
     )?;
-    paint_plain_rects(&mut canvas, shapes);
+    paint_plain_rects(&mut canvas, shapes)?;
     if rtl {
         canvas.flip_horizontal();
         paint_labels(
@@ -7030,5 +7361,52 @@ mod tests {
         let max_w = face.width("one ") + 0.5;
         assert!(cell_soft_wrapped(&face, "one two three", max_w, true));
         assert!(!cell_soft_wrapped(&face, "one two three", max_w, false));
+    }
+
+    fn sample_group_map(rot: i64) -> GroupMap {
+        GroupMap {
+            off_x: 95_250,
+            off_y: 95_250,
+            cx: 152_400,
+            cy: 152_400,
+            ch_x: 95_250,
+            ch_y: 95_250,
+            ch_cx: 152_400,
+            ch_cy: 152_400,
+            rot,
+            flip_h: false,
+            flip_v: false,
+        }
+    }
+
+    #[test]
+    fn rotate_cw_follows_clockwise_screen_axes() {
+        let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 90.0);
+        assert!((x).abs() < 1e-12, "{x}");
+        assert!((y - 1.0).abs() < 1e-12, "{y}");
+        let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 0.0);
+        assert!((x - 1.0).abs() < 1e-12);
+        assert!(y.abs() < 1e-12);
+    }
+
+    #[test]
+    fn a_square_quarter_turn_keeps_the_same_pixel_box() {
+        let map = sample_group_map(5_400_000);
+        assert_eq!(map.quarter(), Some(1));
+        assert_eq!(turned_box(&map, 0, 0).unwrap(), (10, 10, 26, 26));
+        assert_eq!(
+            turned_box(&sample_group_map(0), 0, 0).unwrap(),
+            (10, 10, 26, 26)
+        );
+    }
+
+    #[test]
+    fn a_45_degree_group_box_grows_and_is_not_the_unrotated_frame() {
+        let map = sample_group_map(2_700_000);
+        assert_eq!(map.quarter(), None);
+        let box_ = turned_box(&map, 0, 0).unwrap();
+        assert_ne!(box_, (10, 10, 26, 26));
+        // 中心 18px，半对角 76200*sqrt(2)/9525 ≈ 11.314，外接框 round 后是 7..29。
+        assert_eq!(box_, (7, 7, 29, 29));
     }
 }
