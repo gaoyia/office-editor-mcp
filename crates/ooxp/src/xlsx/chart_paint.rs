@@ -1,7 +1,8 @@
-//! 簇状柱形图、普通折线图和带标记的散点图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
+//! 簇状柱形图、簇状条形图、普通折线图和带标记的散点图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 
 use fontdue::{Font, FontSettings};
 
@@ -72,6 +73,7 @@ enum LegendPos {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PlotKind {
     ClusteredColumn,
+    ClusteredBar,
     StandardLine,
     Scatter { connect: bool },
 }
@@ -130,6 +132,8 @@ struct ColumnChart {
     axis: axis::Spec,
     axis_x: Option<axis::Spec>,
     grid_x: bool,
+    /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。柱形/折线不用。
+    cats_from_bottom: bool,
     title: Option<String>,
     accents: [[u8; 3]; 6],
     kind: PlotKind,
@@ -407,10 +411,33 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("clustered");
-            if dir != "col" || grouping != "clustered" {
+            if grouping != "clustered" {
                 return Err(unsupported());
             }
-            PlotKind::ClusteredColumn
+            if dir == "bar" {
+                data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+                let blanks = chart
+                    .child_by_local("dispBlanksAs")
+                    .and_then(|el| el.attr_local("val"))
+                    .unwrap_or("gap");
+                if blanks != "gap" {
+                    return Err(unsupported());
+                }
+                if flag(wrapper, "varyColors").unwrap_or(false)
+                    && wrapper
+                        .element_children()
+                        .filter(|el| el.local_name() == "ser")
+                        .count()
+                        != 1
+                {
+                    return Err(unsupported());
+                }
+            }
+            match dir {
+                "col" => PlotKind::ClusteredColumn,
+                "bar" => PlotKind::ClusteredBar,
+                _ => return Err(unsupported()),
+            }
         }
         "lineChart" => {
             let grouping = wrapper
@@ -507,7 +534,7 @@ fn read_chart(
         };
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let style = match kind {
-            PlotKind::ClusteredColumn => LineSeriesStyle {
+            PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
                 color: series_color(ser, accents),
                 visible: false,
                 width: 0.0,
@@ -591,8 +618,10 @@ fn read_chart(
     if !between {
         return Err(unsupported());
     }
-    let vary_points = kind == PlotKind::ClusteredColumn && vary && series.len() == 1;
-    let (axis, axis_x, grid_x) = if matches!(kind, PlotKind::Scatter { .. }) {
+    let vary_points = matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
+        && vary
+        && series.len() == 1;
+    let (axis, axis_x, grid_x, cats_from_bottom) = if matches!(kind, PlotKind::Scatter { .. }) {
         let (x, y) = axis::scatter_axes(plot)?;
         let grid_x = plot.element_children().any(|el| {
             el.local_name() == "valAx"
@@ -604,9 +633,12 @@ fn read_chart(
                 )
                 && el.child_by_local("majorGridlines").is_some()
         });
-        (y, Some(x), grid_x)
+        (y, Some(x), grid_x, true)
+    } else if kind == PlotKind::ClusteredBar {
+        let (spec, from_bottom) = axis::bar_axes(plot)?;
+        (spec, None, false, from_bottom)
     } else {
-        (axis::Spec::read(plot)?, None, false)
+        (axis::Spec::read(plot)?, None, false, true)
     };
     Ok(ColumnChart {
         categories,
@@ -620,6 +652,7 @@ fn read_chart(
         legend_spec: legend::Spec::read(root, accents)?,
         axis,
         axis_x,
+        cats_from_bottom,
         title: title_text(chart),
         accents,
         kind,
@@ -913,6 +946,180 @@ fn draw_scatter(
     }
 }
 
+fn paint_bar(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    host: ChartHost,
+) -> Result<(), Error> {
+    let legend_layout = legend::Layout::new(canvas, chart, font)?;
+    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_face = chart
+        .title
+        .as_ref()
+        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+    let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
+    let widest_cat = chart
+        .categories
+        .iter()
+        .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
+        .max()
+        .unwrap_or(0);
+    let mut axis_x = axis_x_of(widest_cat);
+    let mut plot_x = axis_x + 1;
+    let title_top = 4.0;
+    let mut plot_y = if chart.title.is_some() {
+        let band = title_face
+            .as_ref()
+            .map(|face| face.em_box().ceil() as i32)
+            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
+        let half = gdi
+            .as_ref()
+            .map(|face| face.line_height().ceil() as i32 / 2)
+            .unwrap_or(0);
+        let mut y = title_top as i32 + 2 * (band + half);
+        if matches!(host, ChartHost::Slide) {
+            y += TITLE_DROP as i32;
+        }
+        y
+    } else {
+        INSET_TOP
+    };
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let mut plot_r = canvas.w as i32 - inset_right;
+    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    if !chart.legend_spec.legacy {
+        let reserve = legend_layout.reserve();
+        axis_x += reserve[0];
+        plot_x = axis_x + 1;
+        plot_y += reserve[1];
+        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_b -= reserve[3];
+        if plot_r <= plot_x || plot_b <= plot_y {
+            return Err(legend::unsupported());
+        }
+    }
+    let plot = Rect {
+        x: f64::from(plot_x),
+        y: f64::from(plot_y),
+        w: f64::from(plot_r - plot_x),
+        h: f64::from(plot_b - plot_y),
+    };
+    // 数值轴在水平方向，间隔预算按绘图区宽度，occupancy=3，与散点 X 轴同一套公式。
+    let scale = axis::scale(
+        &chart.series,
+        chart.axis,
+        axis::interval_budget_span(plot.w, em, 3.0),
+    )?;
+    let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
+    let ticks = tick_values(axis_min, axis_max, step);
+    let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
+    let intervals = ticks.len().saturating_sub(1).max(1) as i32;
+    let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
+        <= step * 1e-8;
+    if chart.grid && regular {
+        for i in 0..=intervals {
+            let x = plot_x + (i * (plot_r - plot_x) + intervals - 1) / intervals;
+            canvas.vline_i(x, plot_y, plot_b, INK);
+        }
+    }
+    if chart.grid && !regular {
+        for value in &ticks {
+            let x = x_of(*value, axis_min, axis_max, &plot).round() as i32;
+            canvas.vline_i(x, plot_y, plot_b, INK);
+        }
+    }
+    let parts = step / scale.minor;
+    if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
+        draw_value_minor_ticks_x(
+            canvas,
+            plot_x,
+            plot_r,
+            plot_b,
+            intervals,
+            parts.round() as i32,
+        );
+    } else {
+        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+            let at_major = (value - axis_min) / step;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
+            canvas.vline_i(x, plot_b - VAL_MINOR_ARM, plot_b + VAL_MINOR_ARM, INK);
+        }
+    }
+    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
+    let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
+    canvas.vline_i(zero_x, plot_y, plot_b, INK);
+    canvas.hline_i(plot_x, plot_r, plot_b, INK);
+    draw_cat_ticks_y(
+        canvas,
+        chart.categories.len(),
+        plot.y,
+        plot.y + plot.h + 1.0,
+        zero_x,
+        chart.cats_from_bottom,
+    );
+    // 类目标签在左侧 inset，数值标签在底轴下方。
+    for (i, label) in chart.categories.iter().enumerate() {
+        let mid = category_mid_y(&plot, i, chart.categories.len(), chart.cats_from_bottom);
+        let w = text_width(font, gdi.as_ref(), label, label_px);
+        let h = text_height(font, label_px);
+        draw_text(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label,
+            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            mid - h / 2.0,
+            label_px,
+            INK,
+        );
+    }
+    let baseline = f64::from(plot_b) + 10.0;
+    for (tick, label) in ticks.iter().zip(&tick_labels) {
+        let w = text_width(font, gdi.as_ref(), label, label_px);
+        let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
+        draw_text(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label,
+            x,
+            baseline,
+            label_px,
+            INK,
+        );
+    }
+    if let Some(title) = &chart.title {
+        let face = title_face.as_ref().or(gdi.as_ref());
+        let width = text_width(font, face, title, label_px);
+        let x = (f64::from(canvas.w) - width) / 2.0;
+        draw_text(
+            canvas,
+            font,
+            face,
+            title,
+            x,
+            title_top + TITLE_DROP,
+            label_px,
+            INK,
+        );
+    }
+    if chart.legend_spec.default_right_ink() {
+        let legend_plot_r = canvas.w as i32 - inset_right;
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+    } else {
+        legend_layout.draw(canvas, chart, font);
+    }
+    if matches!(host, ChartHost::Excel) {
+        canvas.stroke_border(BORDER);
+    }
+    Ok(())
+}
+
 fn paint(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -921,6 +1128,9 @@ fn paint(
 ) -> Result<(), Error> {
     if matches!(chart.kind, PlotKind::Scatter { .. }) {
         return paint_scatter(canvas, chart, font, host);
+    }
+    if chart.kind == PlotKind::ClusteredBar {
+        return paint_bar(canvas, chart, font, host);
     }
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = (LABEL_PT * DPI / 72.0) as f32;
@@ -1025,7 +1235,9 @@ fn paint(
     match chart.kind {
         PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
-        PlotKind::Scatter { .. } => unreachable!("scatter charts use paint_scatter"),
+        PlotKind::ClusteredBar | PlotKind::Scatter { .. } => {
+            unreachable!("bar/scatter charts use dedicated paint")
+        }
     }
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
@@ -1214,6 +1426,10 @@ fn draw_plot_key(
 ) {
     match kind {
         PlotKind::ClusteredColumn => canvas.fill_rect(x0, y0, x1, y1, color),
+        PlotKind::ClusteredBar => {
+            let mid = (y0 + y1) / 2;
+            canvas.fill_rect(x0, mid - 1, x1, mid + 2, color);
+        }
         PlotKind::StandardLine | PlotKind::Scatter { connect: true } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
@@ -1224,6 +1440,124 @@ fn draw_plot_key(
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
             canvas.fill_circle(mid_x, mid_y, 2.0, color);
+        }
+    }
+}
+
+fn category_slot_origin(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> f64 {
+    let cats = cats.max(1) as f64;
+    let slot = (plot.h + 1.0) / cats;
+    if from_bottom {
+        plot.y + plot.h + 1.0 - slot * (index as f64 + 1.0)
+    } else {
+        plot.y + slot * index as f64
+    }
+}
+
+fn category_mid_y(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> f64 {
+    let cats = cats.max(1) as f64;
+    let slot = (plot.h + 1.0) / cats;
+    category_slot_origin(plot, index, cats as usize, from_bottom) + slot / 2.0
+}
+
+fn draw_clustered_bars(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+) {
+    let cats = chart.categories.len().max(1) as f64;
+    let n = chart.series.len().max(1) as f64;
+    let overlap = chart.overlap / 100.0;
+    let gap = chart.gap_width / 100.0;
+    let slot = (plot.h + 1.0) / cats;
+    let denom = n - (n - 1.0) * overlap + gap;
+    if denom <= 0.0 || slot <= 0.0 {
+        return;
+    }
+    let bar_h = slot / denom;
+    let cluster = bar_h * (n - (n - 1.0) * overlap);
+    let side = (slot - cluster) / 2.0;
+    let x_zero = x_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    for (ci, _) in chart.categories.iter().enumerate() {
+        let origin =
+            category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
+        for (si, ser) in chart.series.iter().enumerate() {
+            let Some(value) = ser.values[ci] else {
+                continue;
+            };
+            if !value.is_finite() {
+                continue;
+            }
+            let y = origin + si as f64 * bar_h * (1.0 - overlap);
+            let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let left = x_zero.min(x_val);
+            let w = (x_zero - x_val).abs();
+            if w < 0.2 || bar_h < 0.2 {
+                continue;
+            }
+            let color = if chart.vary_points {
+                chart.accents[ci % 6]
+            } else {
+                ser.color.unwrap_or(chart.accents[ser.slot % 6])
+            };
+            let x0 = left.round() as i32;
+            let x1 = (left + w).round() as i32;
+            let y0 = round_half_even(y);
+            let y1 = round_half_even(y + bar_h);
+            canvas.fill_rect(x0, y0, x1, y1, color);
+        }
+    }
+}
+
+fn draw_cat_ticks_y(
+    canvas: &mut Canvas,
+    n: usize,
+    y0: f64,
+    y1: f64,
+    axis_x: i32,
+    from_bottom: bool,
+) {
+    let n = n.max(1);
+    let slot = (y1 - y0) / n as f64;
+    if slot <= 0.0 {
+        return;
+    }
+    for i in 0..=n {
+        let t = if from_bottom { n - i } else { i };
+        let y = round_half_even(y0 + slot * t as f64);
+        canvas.hline_i(axis_x - CAT_MAJOR, axis_x + CAT_MAJOR_IN, y, INK);
+    }
+    for i in 0..n {
+        let t = if from_bottom { n - 1 - i } else { i };
+        let y = round_half_even(y0 + slot * (t as f64 + 0.5));
+        canvas.hline_i(axis_x - CAT_MINOR, axis_x + CAT_MINOR_IN, y, INK);
+    }
+}
+
+fn draw_value_minor_ticks_x(
+    canvas: &mut Canvas,
+    plot_x: i32,
+    plot_r: i32,
+    axis_y: i32,
+    intervals: i32,
+    parts: i32,
+) {
+    let span = plot_r - plot_x;
+    if intervals < 1 || span <= 0 {
+        return;
+    }
+    for i in 0..intervals {
+        let x0 = plot_x + (i * span + intervals - 1) / intervals;
+        let x1 = plot_x + ((i + 1) * span + intervals - 1) / intervals;
+        let gap = x1 - x0;
+        for k in 1..parts {
+            let x = x0 + (k * gap + parts / 2) / parts;
+            if x <= x0 || x >= x1 {
+                continue;
+            }
+            canvas.vline_i(x, axis_y - VAL_MINOR_ARM, axis_y + VAL_MINOR_ARM, INK);
         }
     }
 }
@@ -3551,5 +3885,325 @@ mod tests {
                 .replace(r#"<c:scatterStyle val="lineMarker"/>"#, ""),
         )
         .unwrap();
+    }
+
+    fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {chart_extra}
+    <c:plotArea>
+      {plot_body}
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="{cat_orient}"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn bar_xml(series: &str, chart_extra: &str, cat_orient: &str, dir: Option<&str>) -> String {
+        let dir_el = match dir {
+            Some(dir) => format!(r#"<c:barDir val="{dir}"/>"#),
+            None => String::new(),
+        };
+        bar_space(
+            &format!(
+                r#"<c:barChart>
+        {dir_el}
+        <c:grouping val="clustered"/>
+        <c:varyColors val="0"/>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>"#
+            ),
+            chart_extra,
+            cat_orient,
+        )
+    }
+
+    fn render_bar(xml: &str) -> Result<Vec<u8>, Error> {
+        render_line(xml)
+    }
+
+    fn centroid_y(
+        rgb: &[u8],
+        w: u32,
+        x0: u32,
+        x1: u32,
+        y0: u32,
+        y1: u32,
+        target: [u8; 3],
+        tol: i16,
+    ) -> Option<f64> {
+        let mut sum = 0u64;
+        let mut n = 0u64;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 3) as usize;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], target, tol) {
+                    sum += u64::from(y);
+                    n += 1;
+                }
+            }
+        }
+        (n > 0).then(|| sum as f64 / n as f64)
+    }
+
+    #[test]
+    fn clustered_bar_places_first_category_by_orientation() {
+        let series = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
+        let a1 = FALLBACK_ACCENTS[0];
+        let (w, h) = (576u32, 336u32);
+        // 长条在右半边：maxMin 时第一类在上，minMax 时第一类在下。
+        let top_xml = bar_xml(&series, "", "maxMin", Some("bar"));
+        let (_, _, top_rgb) = png_rgb(&render_bar(&top_xml).unwrap());
+        let top_right = count_in(&top_rgb, w, w / 2, w * 3 / 4, 20, h / 2, a1, 18);
+        let bot_right = count_in(&top_rgb, w, w / 2, w * 3 / 4, h / 2, h - 20, a1, 18);
+        assert!(
+            top_right > bot_right,
+            "maxMin should put the long first category in the top half; top={top_right} bottom={bot_right}"
+        );
+
+        let bot_xml = bar_xml(&series, "", "minMax", Some("bar"));
+        let (_, _, bot_rgb) = png_rgb(&render_bar(&bot_xml).unwrap());
+        let top_right = count_in(&bot_rgb, w, w / 2, w * 3 / 4, 20, h / 2, a1, 18);
+        let bot_right = count_in(&bot_rgb, w, w / 2, w * 3 / 4, h / 2, h - 20, a1, 18);
+        assert!(
+            bot_right > top_right,
+            "minMax should put the long first category in the bottom half; top={top_right} bottom={bot_right}"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_keeps_series_order_and_skips_missing_values() {
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let (w, h) = (576u32, 336u32);
+        // 单类两系列：系列 0 在类目轴方向的槽起点（第一类在上时是槽顶）。
+        let ordered = bar_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "S1", &[Some(8.0)], ""),
+                line_ser(1, "S2", &[Some(8.0)], "")
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let (_, _, rgb) = png_rgb(&render_bar(&ordered).unwrap());
+        let y1 = centroid_y(&rgb, w, 80, 450, 20, 300, a1, 18).expect("series 0 color");
+        let y2 = centroid_y(&rgb, w, 80, 450, 20, 300, a2, 18).expect("series 1 color");
+        assert!(
+            y1 < y2,
+            "series 0 should sit above series 1 when the category starts at the top; y1={y1} y2={y2}"
+        );
+
+        // 缺值不把后续条挤进空位：S1 只在第一类，S2 只在第二类。
+        let missing = bar_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "S1", &[Some(8.0), None], ""),
+                line_ser(1, "S2", &[None, Some(8.0)], "")
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let (_, _, miss) = png_rgb(&render_bar(&missing).unwrap());
+        let s1_top = count_in(&miss, w, 80, 450, 20, h / 2, a1, 18);
+        let s1_bot = count_in(&miss, w, 80, 450, h / 2, 300, a1, 18);
+        let s2_top = count_in(&miss, w, 80, 450, 20, h / 2, a2, 18);
+        let s2_bot = count_in(&miss, w, 80, 450, h / 2, 300, a2, 18);
+        assert!(
+            s1_top > s1_bot && s2_bot > s2_top,
+            "missing values should leave the other series in its own category; s1={s1_top}/{s1_bot} s2={s2_top}/{s2_bot}"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_grows_from_zero_and_differs_from_columns() {
+        let a1 = FALLBACK_ACCENTS[0];
+        let (w, h) = (576u32, 336u32);
+        let signed = bar_xml(
+            &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let png = render_bar(&signed).unwrap();
+        let (_, _, rgb) = png_rgb(&png);
+        let top_left = count_in(&rgb, w, 40, w / 2, 20, h / 2, a1, 18);
+        let top_right = count_in(&rgb, w, w / 2, 500, 20, h / 2, a1, 18);
+        let bot_left = count_in(&rgb, w, 40, w / 2, h / 2, 300, a1, 18);
+        let bot_right = count_in(&rgb, w, w / 2, 500, h / 2, 300, a1, 18);
+        assert!(
+            top_left > top_right,
+            "negative first category should grow left in the top half; left={top_left} right={top_right}"
+        );
+        assert!(
+            bot_right > bot_left,
+            "positive second category should grow right in the bottom half; left={bot_left} right={bot_right}"
+        );
+
+        let maxed = bar_xml(
+            &line_ser(0, "S1", &[Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let (_, _, max_rgb) = png_rgb(&render_bar(&maxed).unwrap());
+        let near_right = count_in(&max_rgb, w, 400, 520, 20, 300, a1, 18);
+        assert!(
+            near_right > 0,
+            "a maximum positive bar should reach the right of the value axis; count={near_right}"
+        );
+
+        // 同一组数据的柱形图是竖向的，像素不应与条形图相同。
+        let col_xml = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:varyColors val="0"/>
+"#
+        .to_string()
+            + &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], "")
+            + r#"
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/><c:majorGridlines/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#;
+        let col_png = render_bar(&col_xml).unwrap();
+        assert_ne!(
+            png, col_png,
+            "clustered bars and clustered columns should not paint the same pixels"
+        );
+        let (_, _, col_rgb) = png_rgb(&col_png);
+        let col_near_right = count_in(&col_rgb, w, 400, 520, 20, 300, a1, 18);
+        assert!(
+            near_right > col_near_right,
+            "a horizontal max bar should occupy the right value edge more than a vertical column; bar={near_right} col={col_near_right}"
+        );
+
+        // 省略 barDir 时 OOXML 缺省为 bar。
+        render_bar(&bar_xml(
+            &line_ser(0, "S1", &[Some(4.0)], ""),
+            "",
+            "maxMin",
+            None,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn clustered_bar_unsupported_inputs_stay_not_implemented() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0)], "");
+        let two = format!(
+            "{}{}",
+            line_ser(0, "S1", &[Some(1.0), Some(2.0)], ""),
+            line_ser(1, "S2", &[Some(3.0), Some(4.0)], "")
+        );
+        let base = bar_xml(&ser, "", "maxMin", Some("bar"));
+        let cases = [
+            bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
+                r#"grouping val="clustered""#,
+                r#"grouping val="stacked""#,
+                1,
+            ),
+            bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
+                r#"grouping val="clustered""#,
+                r#"grouping val="percentStacked""#,
+                1,
+            ),
+            bar_xml(
+                &ser,
+                r#"<c:dispBlanksAs val="zero"/>"#,
+                "maxMin",
+                Some("bar"),
+            ),
+            bar_xml(
+                &ser,
+                r#"<c:dispBlanksAs val="span"/>"#,
+                "maxMin",
+                Some("bar"),
+            ),
+            bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
+                r#"</c:barChart>"#,
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:barChart>"#,
+                1,
+            ),
+            bar_xml(&two, "", "maxMin", Some("bar")).replacen(
+                r#"varyColors val="0""#,
+                r#"varyColors val="1""#,
+                1,
+            ),
+            // 柱形轴位不能 silently 当条形画。
+            bar_xml(&ser, "", "maxMin", Some("bar"))
+                .replace(r#"<c:axPos val="l"/>"#, r#"<c:axPos val="b"/>"#),
+            bar_xml(&ser, "", "maxMax", Some("bar")),
+            base.replace("<c:catAx>", r#"<c:catAx><c:majorGridlines/>"#),
+            base.replacen(r#"<c:delete val="0"/>"#, r#"<c:delete val="1"/>"#, 1),
+            base.replace(
+                "<c:catAx>",
+                r#"<c:catAx><c:scaling><c:logBase val="10"/></c:scaling>"#,
+            )
+            .replacen(
+                r#"<c:scaling><c:orientation val="maxMin"/></c:scaling>"#,
+                "",
+                1,
+            ),
+            base.replace("</c:plotArea>", "<c:dateAx/></c:plotArea>"),
+            base.replace("<c:barChart>", "<c:bar3DChart>")
+                .replace("</c:barChart>", "</c:bar3DChart>"),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err =
+                render_bar(xml).expect_err(&format!("bar case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "bar case {i} should stay NotImplemented"
+            );
+        }
+        // 隐藏数据标签与空值缺口仍可画；gap 是缺省。
+        render_bar(&bar_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "maxMin",
+            Some("bar"),
+        )
+        .replacen(
+            r#"</c:barChart>"#,
+            r#"<c:dLbls><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showLegendKey val="0"/><c:showBubbleSize val="0"/></c:dLbls></c:barChart>"#,
+            1,
+        ))
+        .unwrap();
+        // 已支持的簇状柱仍可画，不因条形检查被误伤。
+        let col_ok = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+"#
+        .to_string()
+            + &ser
+            + r#"
+      </c:barChart>
+      <c:valAx><c:majorGridlines/></c:valAx>
+    </c:plotArea>
+  </c:chart>
+</c:chartSpace>"#;
+        render_bar(&col_ok).unwrap();
     }
 }

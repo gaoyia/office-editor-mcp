@@ -156,6 +156,69 @@ pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
     Ok((x.ok_or_else(unsupported)?, y.ok_or_else(unsupported)?))
 }
 
+/// 簇状条形图：类目轴在左（axPos=l），数值轴在下（axPos=b）。
+/// 类目 scaling 为 minMax 或省略时，第一类在下；maxMin 时第一类在上（Excel 默认条形图常见）。
+/// 返回 (数值轴, 第一类是否在下)。
+pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
+    if plot
+        .element_children()
+        .any(|e| matches!(e.local_name(), "dateAx" | "serAx"))
+    {
+        return Err(unsupported());
+    }
+    let cats: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .collect();
+    let vals: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .collect();
+    if cats.len() != 1 || vals.len() != 1 {
+        return Err(unsupported());
+    }
+    let cat = cats[0];
+    let val = vals[0];
+    let cat_pos = cat
+        .child_by_local("axPos")
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("");
+    let val_pos = val
+        .child_by_local("axPos")
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("");
+    if cat_pos != "l" || val_pos != "b" {
+        return Err(unsupported());
+    }
+    if cat
+        .child_by_local("delete")
+        .and_then(|e| e.attr_local("val"))
+        .is_some_and(|v| !matches!(v, "0" | "false" | "off"))
+    {
+        return Err(unsupported());
+    }
+    if cat.child_by_local("majorGridlines").is_some() {
+        return Err(unsupported());
+    }
+    let cat_orient = cat
+        .child_by_local("scaling")
+        .and_then(|s| s.child_by_local("orientation"))
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("minMax");
+    if cat
+        .child_by_local("scaling")
+        .is_some_and(|s| s.child_by_local("logBase").is_some())
+    {
+        return Err(unsupported());
+    }
+    let from_bottom = match cat_orient {
+        "minMax" => true,
+        "maxMin" => false,
+        _ => return Err(unsupported()),
+    };
+    Ok((Spec::read_axis(val)?, from_bottom))
+}
+
 pub(super) fn scale(series: &[Series], spec: Spec, budget: i32) -> Result<Scale, Error> {
     scale_values(
         series.iter().flat_map(|s| s.values.iter().copied()),
