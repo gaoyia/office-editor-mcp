@@ -749,11 +749,90 @@ pub fn export_sparkline_image(bytes: &[u8], id: &str) -> Result<super::ExportedM
     let sheet_part = super::picture::lookup_sheet_part(&pkg, &sheet_name, "id")?;
     let doc = crate::xml::parse(pkg.get(&sheet_part)?)?;
     let group = group_at(&doc.root, index, id)?;
-    let png = paint_group(&pkg, &sheets, &sheet_name, &doc.root, group, &cells)?;
+    let png = raster_group(&pkg, &sheets, &sheet_name, &doc.root, group, &cells, None)?.png()?;
     Ok(super::ExportedMedia {
         bytes: png,
         content_type: Some("image/png".to_string()),
     })
+}
+
+/// Host addresses also contribute to UsedRange when no materialized c exists.
+pub(crate) fn sheet_hosts(sheet: &Element) -> Result<Vec<a1::CellRef>, Error> {
+    let mut out = Vec::new();
+    for group in groups(sheet) {
+        out.extend(group_hosts(group)?);
+    }
+    Ok(out)
+}
+fn group_hosts(group: &Element) -> Result<Vec<a1::CellRef>, Error> {
+    let list = group
+        .child_by_local("sparklines")
+        .ok_or_else(image_unsupported)?;
+    let mut out = Vec::new();
+    for item in list.children_by_local("sparkline") {
+        let sqref = child_text(item, "sqref").ok_or_else(image_unsupported)?;
+        let (a, b) = a1::parse_range(sqref.trim()).map_err(|_| image_unsupported())?;
+        if a != b {
+            return Err(image_unsupported());
+        }
+        out.push(a);
+    }
+    Ok(out)
+}
+/// Parse only visible hosts, then reuse the standalone supported subset and full
+/// host raster once per export. Cropping it per tile never changes AA phase.
+pub(crate) fn sheet_rasters<F>(
+    pkg: &Package,
+    sheet_name: &str,
+    sheet: &Element,
+    mut viewport: F,
+) -> Result<Vec<(a1::CellRef, super::sparkline_paint::Raster)>, Error>
+where
+    F: FnMut(a1::CellRef) -> Result<Option<(u32, u32)>, Error>,
+{
+    let mut active = Vec::new();
+    let mut pixels = 0u64;
+    let mut seen = std::collections::HashSet::new();
+    for group in groups(sheet) {
+        for host in group_hosts(group)? {
+            let Some(size) = viewport(host)? else {
+                continue;
+            };
+            only_sparkline(group)?;
+            if !seen.insert((host.col, host.row)) {
+                return Err(image_unsupported());
+            }
+            pixels = pixels
+                .checked_add(u64::from(size.0) * u64::from(size.1))
+                .ok_or_else(image_unsupported)?;
+            if pixels > 64 * 1024 * 1024 {
+                return Err(image_unsupported());
+            }
+            active.push((group, host, size));
+        }
+    }
+    if active.is_empty() {
+        return Ok(Vec::new());
+    }
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let wb = crate::xml::parse(pkg.get(&wb_part)?)?;
+    let rels = crate::opc::Relationships::from_package(pkg, &wb_part)?;
+    let sheets = super::inspect::list_sheets(&wb.root, &rels, &wb_part, pkg)?;
+    let sst = super::inspect::load_shared_strings(pkg, &wb_part, &rels)?;
+    let refs: Vec<(&str, &str, &str)> = sheets
+        .iter()
+        .map(|s| (s.name.as_str(), s.part.as_str(), s.kind))
+        .collect();
+    let cells = CellCache::load(pkg, &refs, &sst)?;
+    active
+        .into_iter()
+        .map(|(group, host, size)| {
+            Ok((
+                host,
+                raster_group(pkg, &sheets, sheet_name, sheet, group, &cells, Some(size))?,
+            ))
+        })
+        .collect()
 }
 
 fn parse_export_id(id: &str) -> Result<(String, usize), Error> {
@@ -792,14 +871,16 @@ fn group_at<'a>(root: &'a Element, index: usize, id: &str) -> Result<&'a Element
     ))
 }
 
-fn paint_group(
+#[allow(clippy::too_many_arguments)]
+fn raster_group(
     pkg: &Package,
     sheets: &[super::inspect::SheetMeta],
     sheet_name: &str,
     sheet: &Element,
     group: &Element,
     cells: &CellCache,
-) -> Result<Vec<u8>, Error> {
+    host_size: Option<(u32, u32)>,
+) -> Result<super::sparkline_paint::Raster, Error> {
     let column = is_plain_column(group);
     let win_loss = is_plain_win_loss(group);
     if !column && !win_loss && !is_plain_line(group) {
@@ -818,12 +899,18 @@ fn paint_group(
     {
         return Err(image_unsupported());
     }
-    let geometry =
-        super::geometry::GeometryContext::from_package(pkg).map_err(|_| image_unsupported())?;
-    let width = geometry
-        .column_px(sheet, host.col)
-        .map_err(|_| image_unsupported())? as u32;
-    let height = layout::row_height_px(sheet, host.row);
+    let (width, height) = match host_size {
+        Some(size) => size,
+        None => {
+            let geometry = super::geometry::GeometryContext::from_package(pkg)
+                .map_err(|_| image_unsupported())?;
+            let width = geometry
+                .column_px(sheet, host.col)
+                .map_err(|_| image_unsupported())? as u32;
+            let height = layout::row_height_px(sheet, host.row);
+            (width, height)
+        }
+    };
     let color = series_rgb(group)?;
     if column {
         let axis_min = axis_end(group, "minAxisType", "manualMin")?;
@@ -839,7 +926,7 @@ fn paint_group(
             }
         }
         let colors = column_colors(group, &values, color)?;
-        return super::sparkline_paint::render_columns(width, height, &values, &colors);
+        return super::sparkline_paint::raster_columns(width, height, &values, &colors);
     }
     if win_loss {
         let axis_min = axis_end(group, "minAxisType", "manualMin")?;
@@ -857,7 +944,7 @@ fn paint_group(
             values.push(win_loss_point(value)?);
         }
         let neg = negative_rgb(group)?;
-        return super::sparkline_paint::render_win_loss(
+        return super::sparkline_paint::raster_win_loss(
             width,
             height,
             &values,
@@ -875,7 +962,7 @@ fn paint_group(
         color,
         weight_px: line_weight_px(group)?,
     };
-    super::sparkline_paint::render(width, height, &spec)
+    super::sparkline_paint::raster_line(width, height, &spec)
 }
 
 fn plain_flags(group: &Element) -> bool {

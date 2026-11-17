@@ -141,8 +141,18 @@ fn normal_font_matrix_matches_across_exports() {
 fn hidden_and_non_a1_columns_are_shared() {
     for (hidden, non_a1, expected) in [(true, false, 213), (false, true, 284)] {
         let book = corpus("Calibri", 11, false, hidden, non_a1);
-        let (w, h, _) = png(&book, "exportSheetImage", "sheet:Sheet1");
-        assert_eq!((w, h), (expected + 1, 21));
+        if hidden {
+            let out = temp("hidden-sheet-ni").with_extension("png");
+            let error = ooxp::run(&json!({"schemaVersion":1,"action":"exportSheetImage","path":book,"id":"sheet:Sheet1","output":out}).to_string()).unwrap_err();
+            assert_eq!(
+                error.code(),
+                ooxp::ErrorCode::NotImplemented,
+                "visible host references a hidden source: do not silently omit it"
+            );
+        } else {
+            let (w, h, _) = png(&book, "exportSheetImage", "sheet:Sheet1");
+            assert_eq!((w, h), (expected + 1, 21));
+        }
         let (cw, ch, _) = png(
             &chart(&book, non_a1),
             "exportChartImage",

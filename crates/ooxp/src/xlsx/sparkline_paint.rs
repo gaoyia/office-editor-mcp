@@ -26,14 +26,53 @@ pub(crate) struct LineSpec {
     pub weight_px: f64,
 }
 
-pub(crate) fn render(width: u32, height: u32, spec: &LineSpec) -> Result<Vec<u8>, Error> {
+/// Unflattened host-cell raster. Keep the original f32 coverage so sheet fills
+/// and tile windows use exactly the standalone painter's sampling/rounding.
+pub(crate) struct Raster {
+    pub width: u32,
+    pub height: u32,
+    rgb: Vec<u8>,
+    coverage: Vec<f32>,
+}
+impl Raster {
+    fn new(width: u32, height: u32) -> Self {
+        let n = width as usize * height as usize;
+        Self {
+            width,
+            height,
+            rgb: vec![255; n * 3],
+            coverage: vec![0.0; n],
+        }
+    }
+    pub fn composite_pixel(&self, x: u32, y: u32, dst: [u8; 3]) -> [u8; 3] {
+        let i = (y * self.width + x) as usize;
+        let cov = f64::from(self.coverage[i]);
+        let mut out = dst;
+        for (k, channel) in out.iter_mut().enumerate() {
+            let base = f64::from(*channel);
+            *channel = (base + (f64::from(self.rgb[i * 3 + k]) - base) * cov).round() as u8;
+        }
+        out
+    }
+    pub fn png(&self) -> Result<Vec<u8>, Error> {
+        let mut rgb = Vec::with_capacity(self.width as usize * self.height as usize * 3);
+        for y in 0..self.height {
+            for x in 0..self.width {
+                rgb.extend_from_slice(&self.composite_pixel(x, y, [255; 3]));
+            }
+        }
+        encode_png(self.width, self.height, &rgb)
+    }
+}
+
+pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Raster, Error> {
     if !(1..=MAX_PX).contains(&width) || !(1..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if !(spec.weight_px.is_finite() && spec.weight_px > 0.0) {
         return Err(unsupported());
     }
-    let mut px = vec![255u8; (width as usize) * (height as usize) * 3];
+    let mut px = Raster::new(width, height);
     let n = spec.values.len();
     if n >= 2 {
         let plotted = plotted(spec);
@@ -61,16 +100,16 @@ pub(crate) fn render(width: u32, height: u32, spec: &LineSpec) -> Result<Vec<u8>
             }
         }
     }
-    encode_png(width, height, &px)
+    Ok(px)
 }
 
 /// 非负柱形。宽至少 6、高至少 9，否则上下左右的留白叠在一起。
-pub(crate) fn render_columns(
+pub(crate) fn raster_columns(
     width: u32,
     height: u32,
     values: &[f64],
     colors: &[[u8; 3]],
-) -> Result<Vec<u8>, Error> {
+) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
@@ -80,7 +119,7 @@ pub(crate) fn render_columns(
     {
         return Err(unsupported());
     }
-    let mut px = vec![255u8; (width as usize) * (height as usize) * 3];
+    let mut px = Raster::new(width, height);
     let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let plot_h = height as i32 - 8;
@@ -105,7 +144,7 @@ pub(crate) fn render_columns(
             }
         }
     }
-    encode_png(width, height, &px)
+    Ok(px)
 }
 
 /// 盈亏（SpreadsheetML `type=stacked`）。横向与柱形同一套 `column_x`。
@@ -115,21 +154,21 @@ pub(crate) fn render_columns(
 /// 有元素但无 `rgb`（theme/tint）→ 上游 NI。上沿/下沿是 CopyPicture 几何常数，不是单样本硬编码色。
 /// 证据：Excel 16.0 CopyPicture（2026-11-17 Asia/Shanghai）G2 `+/-` 缺省色实心与 20px 行 5..=10/11..=16；
 /// 全 0 无柱；另有自定义色/高宽单元。
-pub(crate) fn render_win_loss(
+pub(crate) fn raster_win_loss(
     width: u32,
     height: u32,
     values: &[Option<f64>],
     series: [u8; 3],
     negative: [u8; 3],
     color_negatives: bool,
-) -> Result<Vec<u8>, Error> {
+) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if values.is_empty() {
         return Err(unsupported());
     }
-    let mut px = vec![255u8; (width as usize) * (height as usize) * 3];
+    let mut px = Raster::new(width, height);
     let top = 5_i32;
     let bottom = height as i32 - 4;
     let plot_h = bottom - top + 1;
@@ -169,7 +208,7 @@ pub(crate) fn render_win_loss(
             }
         }
     }
-    encode_png(width, height, &px)
+    Ok(px)
 }
 
 /// 槽宽是 `(宽 - 5) / 点数`。 `(宽 - 5) / 点数`。第 i 根柱的左右缘是 `3 + (i + 1/6) * 槽宽` 与 `3 + (i + 5/6) * 槽宽`。
@@ -201,9 +240,10 @@ fn bar_px(value: f64, lo: f64, hi: f64, plot_h: i32) -> i32 {
     h.clamp(0, plot_h)
 }
 
-fn put(px: &mut [u8], width: u32, x: u32, y: u32, color: [u8; 3]) {
-    let i = ((y as usize) * (width as usize) + x as usize) * 3;
-    px[i..i + 3].copy_from_slice(&color);
+fn put(px: &mut Raster, width: u32, x: u32, y: u32, color: [u8; 3]) {
+    let i = (y * width + x) as usize;
+    px.rgb[i * 3..i * 3 + 3].copy_from_slice(&color);
+    px.coverage[i] = 1.0;
 }
 
 fn plotted(spec: &LineSpec) -> Vec<(usize, f64)> {
@@ -329,12 +369,10 @@ fn dist_to_seg(px: f64, py: f64, from: (f64, f64), to: (f64, f64)) -> f64 {
     (px - (from.0 + t * dx)).hypot(py - (from.1 + t * dy))
 }
 
-fn blend(px: &mut [u8], width: u32, x: u32, y: u32, cov: f64, color: [u8; 3]) {
-    let i = ((y as usize) * (width as usize) + x as usize) * 3;
-    for (channel, src) in color.iter().enumerate() {
-        let dst = f64::from(px[i + channel]);
-        px[i + channel] = (dst + (f64::from(*src) - dst) * cov).round() as u8;
-    }
+fn blend(px: &mut Raster, width: u32, x: u32, y: u32, cov: f64, color: [u8; 3]) {
+    let i = (y * width + x) as usize;
+    px.rgb[i * 3..i * 3 + 3].copy_from_slice(&color);
+    px.coverage[i] = cov as f32;
 }
 
 fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
@@ -353,6 +391,26 @@ fn unsupported() -> Error {
 }
 
 #[cfg(test)]
+fn render(w: u32, h: u32, spec: &LineSpec) -> Result<Vec<u8>, Error> {
+    raster_line(w, h, spec)?.png()
+}
+#[cfg(test)]
+fn render_columns(w: u32, h: u32, values: &[f64], colors: &[[u8; 3]]) -> Result<Vec<u8>, Error> {
+    raster_columns(w, h, values, colors)?.png()
+}
+#[cfg(test)]
+fn render_win_loss(
+    w: u32,
+    h: u32,
+    values: &[Option<f64>],
+    series: [u8; 3],
+    negative: [u8; 3],
+    flags: bool,
+) -> Result<Vec<u8>, Error> {
+    raster_win_loss(w, h, values, series, negative, flags)?.png()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -364,6 +422,53 @@ mod tests {
         buf.truncate(info.buffer_size());
         // expand to rgb8 if needed
         (info.width, info.height, buf)
+    }
+
+    #[test]
+    fn line_float_coverage_composites_without_quantizing_or_restarting_sampling() {
+        let spec = LineSpec {
+            values: vec![Some(1.0), Some(4.0), Some(2.0)],
+            empty: EmptyCells::Gap,
+            axis_min: None,
+            axis_max: None,
+            color: [55, 96, 146],
+            weight_px: 1.0,
+        };
+        let raster = raster_line(64, 20, &spec).unwrap();
+        let (_, _, rgb) = decode_rgb(&render(64, 20, &spec).unwrap());
+        let mut fractional = 0;
+        for y in 0..20 {
+            for x in 0..64 {
+                let i = (y * 64 + x) as usize;
+                assert_eq!(
+                    raster.composite_pixel(x, y, [255; 3]),
+                    rgb[i * 3..i * 3 + 3]
+                );
+                let cov = f64::from(raster.coverage[i]);
+                if cov > 0.0 && cov < 1.0 {
+                    fractional += 1;
+                    let base = [40, 80, 120];
+                    let mut expected = base;
+                    for k in 0..3 {
+                        expected[k] = (f64::from(base[k])
+                            + (f64::from(spec.color[k]) - f64::from(base[k])) * cov)
+                            .round() as u8;
+                    }
+                    assert_eq!(raster.composite_pixel(x, y, base), expected);
+                }
+            }
+        }
+        assert!(fractional > 0);
+    }
+
+    #[test]
+    fn white_columns_retain_coverage_on_a_nonwhite_background() {
+        let raster = raster_columns(64, 20, &[1.0, 4.0, 2.0], &[[255; 3]; 3]).unwrap();
+        assert_eq!(raster.composite_pixel(30, 6, [40, 80, 120]), [255; 3]);
+        assert_eq!(raster.composite_pixel(0, 0, [40, 80, 120]), [40, 80, 120]);
+        let (_, _, px) =
+            decode_rgb(&render_columns(64, 20, &[1.0, 4.0, 2.0], &[[255; 3]; 3]).unwrap());
+        assert!(px.iter().all(|v| *v == 255));
     }
 
     #[test]
