@@ -198,6 +198,7 @@ mod tests {
                     .collect(),
                 color: None,
                 slot: 0,
+                ..Series::default()
             };
             let e = &row["explicit"];
             let spec = Spec {

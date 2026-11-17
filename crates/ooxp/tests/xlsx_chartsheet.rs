@@ -400,7 +400,7 @@ fn export_chartsheet_col_png_matches_chart_image() {
 }
 
 #[test]
-fn export_chartsheet_line_is_not_implemented() {
+fn export_chartsheet_standard_line_png_matches_chart_image() {
     let src = create_book("cs-line");
     let col = tmp("cs-line-col");
     apply(&src, &col, json!([insert_op()])).unwrap();
@@ -415,24 +415,44 @@ fn export_chartsheet_line_is_not_implemented() {
         }]),
     )
     .unwrap();
-    let err = run(&json!({
+    let before = std::fs::read(&lined).unwrap();
+    let sheet_png = tmp("cs-line-sheet").with_extension("png");
+    let chart_png = tmp("cs-line-chart").with_extension("png");
+    let RunOutput::Written {
+        content_type,
+        ops_applied,
+        ..
+    } = run(&json!({
         "schemaVersion": 1,
         "action": "exportSheetImage",
         "path": lined.to_string_lossy(),
         "id": "sheet:Chart1",
-        "output": tmp("cs-line-sheet").with_extension("png").to_string_lossy()
+        "output": sheet_png.to_string_lossy()
     })
     .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    let err = run(&json!({
+    .unwrap()
+    else {
+        panic!("exportSheetImage 应写出图表工作表上已支持的普通折线");
+    };
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert!(ops_applied.is_none());
+    let RunOutput::Written { .. } = run(&json!({
         "schemaVersion": 1,
         "action": "exportChartImage",
         "path": lined.to_string_lossy(),
         "id": "sheet:Chart1/chart:2",
-        "output": tmp("cs-line-chart").with_extension("png").to_string_lossy()
+        "output": chart_png.to_string_lossy()
     })
     .to_string())
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    .unwrap() else {
+        panic!("exportChartImage 应写出同一张图");
+    };
+    assert_eq!(std::fs::read(&lined).unwrap(), before);
+    let sheet = std::fs::read(&sheet_png).unwrap();
+    let chart = std::fs::read(&chart_png).unwrap();
+    assert_eq!(&sheet[0..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    assert_eq!(sheet, chart);
+    let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
+    let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
+    assert_eq!((width, height), (576, 336));
 }

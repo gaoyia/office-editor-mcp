@@ -1,5 +1,6 @@
-//! 簇状柱形图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
+//! 簇状柱形图和普通折线图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
 
@@ -67,11 +68,50 @@ enum LegendPos {
     TopRight,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PlotKind {
+    ClusteredColumn,
+    StandardLine,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum MarkerKind {
+    None,
+    Circle { diameter: f64 },
+}
+
+struct LineSeriesStyle {
+    color: Option<[u8; 3]>,
+    visible: bool,
+    width: f64,
+    marker: MarkerKind,
+    marker_color: Option<[u8; 3]>,
+}
+
 struct Series {
     name: String,
     values: Vec<Option<f64>>,
     color: Option<[u8; 3]>,
     slot: usize,
+    line_visible: bool,
+    line_width: f64,
+    marker: MarkerKind,
+    marker_color: Option<[u8; 3]>,
+}
+
+impl Default for Series {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            values: Vec::new(),
+            color: None,
+            slot: 0,
+            line_visible: false,
+            line_width: 0.0,
+            marker: MarkerKind::None,
+            marker_color: None,
+        }
+    }
 }
 
 struct ColumnChart {
@@ -86,6 +126,7 @@ struct ColumnChart {
     axis: axis::Spec,
     title: Option<String>,
     accents: [[u8; 3]; 6],
+    kind: PlotKind,
 }
 
 struct Rect {
@@ -287,7 +328,7 @@ pub(crate) fn render_chart(
     if matches!(host, ChartHost::Excel) {
         validate_default_frame(root)?;
     }
-    let chart = read_clustered_column(root, accents, cells, sheet)?;
+    let chart = read_chart(root, accents, cells, sheet)?;
     let font = font_bytes.and_then(|bytes| Font::from_bytes(bytes, FontSettings::default()).ok());
     let mut canvas = Canvas::new(width, height);
     paint(&mut canvas, &chart, font.as_ref(), host)?;
@@ -331,77 +372,123 @@ fn validate_default_frame(root: &Element) -> Result<(), Error> {
     Ok(())
 }
 
-fn read_clustered_column(
+fn read_chart(
     root: &Element,
     accents: [[u8; 3]; 6],
     cells: Option<&super::sparkline::CellCache>,
     sheet: &str,
 ) -> Result<ColumnChart, Error> {
-    let chart = root
-        .child_by_local("chart")
-        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
-    let plot = chart
-        .child_by_local("plotArea")
-        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
-    let mut bar = None;
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
+    let plot = chart.child_by_local("plotArea").ok_or_else(unsupported)?;
+    let mut wrapper = None;
     for child in plot.element_children() {
         if is_chart_wrapper(child.local_name()) {
-            if bar.is_some() || child.local_name() != "barChart" {
-                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            if wrapper.is_some() {
+                return Err(unsupported());
             }
-            bar = Some(child);
+            wrapper = Some(child);
         }
     }
-    let bar = bar.ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
-    let dir = bar
-        .child_by_local("barDir")
-        .and_then(|el| el.attr_local("val"))
-        .unwrap_or("bar");
-    let grouping = bar
-        .child_by_local("grouping")
-        .and_then(|el| el.attr_local("val"))
-        .unwrap_or("clustered");
-    if dir != "col" || grouping != "clustered" {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
-    }
-    let vary = flag(bar, "varyColors").unwrap_or(false);
-    let gap_width = number_val(bar, "gapWidth").unwrap_or(150.0);
-    let overlap = number_val(bar, "overlap").unwrap_or(0.0);
+    let wrapper = wrapper.ok_or_else(unsupported)?;
+    let kind = match wrapper.local_name() {
+        "barChart" => {
+            let dir = wrapper
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("bar");
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            if dir != "col" || grouping != "clustered" {
+                return Err(unsupported());
+            }
+            PlotKind::ClusteredColumn
+        }
+        "lineChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "smooth").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for child in wrapper.element_children() {
+                if matches!(
+                    child.local_name(),
+                    "dropLines" | "hiLowLines" | "upDownBars"
+                ) {
+                    return Err(unsupported());
+                }
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if blanks != "gap" {
+                return Err(unsupported());
+            }
+            PlotKind::StandardLine
+        }
+        _ => return Err(unsupported()),
+    };
+    let vary = flag(wrapper, "varyColors").unwrap_or(false);
+    let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+    let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     let mut series = Vec::new();
-    for ser in bar.element_children().filter(|el| el.local_name() == "ser") {
+    for ser in wrapper
+        .element_children()
+        .filter(|el| el.local_name() == "ser")
+    {
         let order = number_val(ser, "order").unwrap_or(series.len() as f64) as usize;
         let values = series_numbers(ser.child_by_local("val"), sheet, cells);
         if values.is_empty() {
             continue;
         }
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
-        let color = series_color(ser, accents);
+        let style = match kind {
+            PlotKind::ClusteredColumn => LineSeriesStyle {
+                color: series_color(ser, accents),
+                visible: false,
+                width: 0.0,
+                marker: MarkerKind::None,
+                marker_color: None,
+            },
+            PlotKind::StandardLine => read_line_series(ser, accents)?,
+        };
         if series.len() <= order {
-            series.resize_with(order + 1, || Series {
-                name: String::new(),
-                values: Vec::new(),
-                color: None,
-                slot: 0,
-            });
+            series.resize_with(order + 1, Series::default);
         }
         series[order] = Series {
             name,
             values,
-            color,
+            color: style.color,
             slot: order,
+            line_visible: style.visible,
+            line_width: style.width,
+            marker: style.marker,
+            marker_color: style.marker_color,
         };
     }
     series.retain(|ser| !ser.values.is_empty());
     if series.is_empty() {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        return Err(unsupported());
     }
     let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
     if n == 0 {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        return Err(unsupported());
     }
-    let mut categories = cache_labels(series_cat(bar));
+    let mut categories = cache_labels(series_cat(wrapper));
     if categories.is_empty() {
-        if let Some(text) = formula_text(series_cat(bar)) {
+        if let Some(text) = formula_text(series_cat(wrapper)) {
             if let Some(labels) = labels_from_cells(&text, sheet, cells) {
                 categories = labels;
             }
@@ -429,9 +516,9 @@ fn read_clustered_column(
                 == "between"
         });
     if !between {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        return Err(unsupported());
     }
-    let vary_points = vary && series.len() == 1;
+    let vary_points = kind == PlotKind::ClusteredColumn && vary && series.len() == 1;
     Ok(ColumnChart {
         categories,
         series,
@@ -444,6 +531,7 @@ fn read_clustered_column(
         axis: axis::Spec::read(plot)?,
         title: title_text(chart),
         accents,
+        kind,
     })
 }
 
@@ -581,7 +669,10 @@ fn paint(
             canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
         }
     }
-    draw_bars(canvas, chart, &plot, axis_min, axis_max);
+    match chart.kind {
+        PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
+    }
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     let category_y = y_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
@@ -692,6 +783,88 @@ fn draw_value_minor_ticks(
                 continue;
             }
             canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+        }
+    }
+}
+
+fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+    let cats = chart.categories.len().max(1) as f64;
+    let slot = (plot.w + 1.0) / cats;
+    if slot <= 0.0 {
+        return;
+    }
+    for ser in &chart.series {
+        let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
+        if ser.line_visible && ser.line_width > 0.0 {
+            let mut run = Vec::new();
+            for (ci, value) in ser.values.iter().enumerate() {
+                match value {
+                    Some(v) if v.is_finite() => {
+                        run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
+                    }
+                    _ => {
+                        stroke_run(canvas, &run, ser.line_width, color);
+                        run.clear();
+                    }
+                }
+            }
+            stroke_run(canvas, &run, ser.line_width, color);
+        }
+        if let MarkerKind::Circle { diameter } = ser.marker {
+            let radius = diameter / 2.0;
+            if radius <= 0.0 {
+                continue;
+            }
+            let marker_color = ser.marker_color.unwrap_or(color);
+            for (ci, value) in ser.values.iter().enumerate() {
+                let Some(v) = value else {
+                    continue;
+                };
+                if !v.is_finite() {
+                    continue;
+                }
+                let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max);
+                canvas.fill_circle(x, y, radius, marker_color);
+            }
+        }
+    }
+}
+
+fn line_point(
+    value: f64,
+    ci: usize,
+    slot: f64,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+) -> (f64, f64) {
+    let x = plot.x + slot * (ci as f64 + 0.5);
+    let y = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    (x, y)
+}
+
+fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3]) {
+    for pair in run.windows(2) {
+        canvas.stroke_segment(pair[0].0, pair[0].1, pair[1].0, pair[1].1, width, color);
+    }
+}
+
+fn draw_plot_key(
+    canvas: &mut Canvas,
+    kind: PlotKind,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    color: [u8; 3],
+) {
+    match kind {
+        PlotKind::ClusteredColumn => canvas.fill_rect(x0, y0, x1, y1, color),
+        PlotKind::StandardLine => {
+            let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
+            let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
+            canvas.stroke_segment(f64::from(x0), mid_y, f64::from(x1) - 1.0, mid_y, 2.0, color);
+            canvas.fill_circle(mid_x, mid_y, 2.0, color);
         }
     }
 }
@@ -810,7 +983,15 @@ fn draw_legend(
     let x = plot_r + LEGEND_PLOT_GAP;
     for ser in &chart.series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
-        canvas.fill_rect(x, y, x + LEGEND_SWATCH, y + LEGEND_SWATCH, color);
+        draw_plot_key(
+            canvas,
+            chart.kind,
+            x,
+            y,
+            x + LEGEND_SWATCH,
+            y + LEGEND_SWATCH,
+            color,
+        );
         draw_text(
             canvas,
             font,
@@ -1028,6 +1209,201 @@ fn series_name(
     labels_from_cells(&text, sheet, cells)?
         .into_iter()
         .find(|label| !label.is_empty())
+}
+
+fn read_line_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if flag(ser, "smooth").unwrap_or(false) {
+        return Err(unsupported());
+    }
+    data_labels_hidden(ser.child_by_local("dLbls"))?;
+    for name in ["dPt", "trendline", "errBars"] {
+        if ser.child_by_local(name).is_some() {
+            return Err(unsupported());
+        }
+    }
+    let mut visible = true;
+    let mut width = 2.25 * DPI / 72.0;
+    let mut color = None;
+    if let Some(sp) = ser.child_by_local("spPr") {
+        let style = read_line_sp_pr(sp, accents)?;
+        visible = style.visible;
+        width = style.width;
+        color = style.color;
+    }
+    if color.is_none() {
+        color = series_color(ser, accents);
+    }
+    let (marker, marker_color) = read_line_marker(ser, accents)?;
+    Ok(LineSeriesStyle {
+        color,
+        visible,
+        width,
+        marker,
+        marker_color,
+    })
+}
+
+fn read_line_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut visible = true;
+    let mut width = 2.25 * DPI / 72.0;
+    let mut color = None;
+    for child in sp.element_children() {
+        match child.local_name() {
+            "noFill" | "solidFill" => {}
+            "effectLst" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+            }
+            "ln" => {
+                let line = read_solid_ln(child, accents, width)?;
+                visible = line.visible;
+                width = line.width;
+                if line.color.is_some() {
+                    color = line.color;
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if color.is_none() {
+        if let Some(fill) = sp.child_by_local("solidFill") {
+            color = color_of_slot(fill, &accents);
+        }
+    }
+    Ok(LineSeriesStyle {
+        color,
+        visible,
+        width,
+        marker: MarkerKind::None,
+        marker_color: None,
+    })
+}
+
+fn read_solid_ln(
+    ln: &Element,
+    accents: [[u8; 3]; 6],
+    default_width: f64,
+) -> Result<LineSeriesStyle, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    for (attr, allowed) in [
+        ("cap", &["rnd"][..]),
+        ("cmpd", &["sng"][..]),
+        ("algn", &["ctr"][..]),
+    ] {
+        if let Some(val) = ln.attr_local(attr) {
+            if !allowed.contains(&val) {
+                return Err(unsupported());
+            }
+        }
+    }
+    for (name, _) in &ln.attrs {
+        let local = name.rsplit(':').next().unwrap_or(name.as_str());
+        if local == "xmlns" || name.starts_with("xmlns:") {
+            continue;
+        }
+        if !matches!(local, "w" | "cap" | "cmpd" | "algn") {
+            return Err(unsupported());
+        }
+    }
+    let width = ln
+        .attr_local("w")
+        .and_then(|raw| raw.parse::<f64>().ok())
+        .map(|emu| emu * DPI / EMU_PER_INCH)
+        .unwrap_or(default_width);
+    if !width.is_finite() || width < 0.0 {
+        return Err(unsupported());
+    }
+    let mut visible = true;
+    let mut color = None;
+    for child in ln.element_children() {
+        match child.local_name() {
+            "noFill" => visible = false,
+            "solidFill" => {
+                color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+            }
+            "prstDash" => {
+                let dash = child.attr_local("val").unwrap_or("solid");
+                if dash != "solid" {
+                    return Err(unsupported());
+                }
+            }
+            "miter" | "round" | "bevel" => {}
+            "effectLst" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if !visible {
+        color = None;
+    }
+    Ok(LineSeriesStyle {
+        color,
+        visible,
+        width,
+        marker: MarkerKind::None,
+        marker_color: None,
+    })
+}
+
+fn read_line_marker(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+) -> Result<(MarkerKind, Option<[u8; 3]>), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let Some(marker) = ser.child_by_local("marker") else {
+        return Ok((
+            MarkerKind::Circle {
+                diameter: 5.0 * DPI / 72.0,
+            },
+            None,
+        ));
+    };
+    let symbol = marker
+        .child_by_local("symbol")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("auto");
+    if symbol == "none" {
+        return Ok((MarkerKind::None, None));
+    }
+    if symbol != "auto" && symbol != "circle" {
+        return Err(unsupported());
+    }
+    let size_pt = number_val(marker, "size").unwrap_or(5.0);
+    if !size_pt.is_finite() || size_pt <= 0.0 {
+        return Err(unsupported());
+    }
+    let mut marker_color = None;
+    if let Some(sp) = marker.child_by_local("spPr") {
+        for child in sp.element_children() {
+            match child.local_name() {
+                "solidFill" => {
+                    marker_color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+                }
+                "noFill" => return Err(unsupported()),
+                "ln" => {
+                    let _ = read_solid_ln(child, accents, 1.0)?;
+                }
+                "effectLst" => {
+                    if child.element_children().next().is_some() {
+                        return Err(unsupported());
+                    }
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+    }
+    Ok((
+        MarkerKind::Circle {
+            diameter: size_pt * DPI / 72.0,
+        },
+        marker_color,
+    ))
 }
 
 fn series_color(ser: &Element, accents: [[u8; 3]; 6]) -> Option<[u8; 3]> {
@@ -1251,6 +1627,33 @@ fn hue(p: f64, q: f64, mut t: f64) -> u8 {
     (v * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
+fn data_labels_hidden(dlbls: Option<&Element>) -> Result<(), Error> {
+    let Some(dlbls) = dlbls else {
+        return Ok(());
+    };
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if dlbls
+        .element_children()
+        .any(|child| child.local_name() == "dLbl")
+    {
+        return Err(unsupported());
+    }
+    for name in [
+        "showLegendKey",
+        "showVal",
+        "showCatName",
+        "showSerName",
+        "showPercent",
+        "showBubbleSize",
+        "showLeaderLines",
+    ] {
+        if flag(dlbls, name).unwrap_or(false) {
+            return Err(unsupported());
+        }
+    }
+    Ok(())
+}
+
 fn flag(el: &Element, name: &str) -> Option<bool> {
     let child = el.child_by_local(name)?;
     Some(!matches!(
@@ -1353,6 +1756,11 @@ fn draw_text(
     }
 }
 
+fn coverage(dist: f64, radius: f64) -> u8 {
+    let cov = (radius + 0.5 - dist).clamp(0.0, 1.0);
+    (cov * 255.0 + 0.5) as u8
+}
+
 impl Canvas {
     fn encode_png(&self) -> Result<Vec<u8>, Error> {
         if let Some(alpha) = &self.alpha {
@@ -1416,6 +1824,65 @@ impl Canvas {
     fn vline_i(&mut self, x: i32, y0: i32, y1: i32, color: [u8; 3]) {
         for y in y0..=y1 {
             self.blend(x, y, color, 255);
+        }
+    }
+
+    fn stroke_segment(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, width: f64, color: [u8; 3]) {
+        if width <= 0.0 || !x0.is_finite() || !y0.is_finite() || !x1.is_finite() || !y1.is_finite()
+        {
+            return;
+        }
+        let radius = width / 2.0;
+        let pad = radius + 1.0;
+        let min_x = (x0.min(x1) - pad).floor() as i32;
+        let min_y = (y0.min(y1) - pad).floor() as i32;
+        let max_x = (x0.max(x1) + pad).ceil() as i32;
+        let max_y = (y0.max(y1) + pad).ceil() as i32;
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        let len2 = dx * dx + dy * dy;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dist = if len2 <= 1e-12 {
+                    let vx = px - x0;
+                    let vy = py - y0;
+                    (vx * vx + vy * vy).sqrt()
+                } else {
+                    let t = ((px - x0) * dx + (py - y0) * dy) / len2;
+                    let t = t.clamp(0.0, 1.0);
+                    let vx = px - (x0 + t * dx);
+                    let vy = py - (y0 + t * dy);
+                    (vx * vx + vy * vy).sqrt()
+                };
+                let cov = coverage(dist, radius);
+                if cov > 0 {
+                    self.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
+    fn fill_circle(&mut self, cx: f64, cy: f64, radius: f64, color: [u8; 3]) {
+        if radius <= 0.0 || !cx.is_finite() || !cy.is_finite() {
+            return;
+        }
+        let pad = radius + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dist = (px - cx).hypot(py - cy);
+                let cov = coverage(dist, radius);
+                if cov > 0 {
+                    self.blend(x, y, color, cov);
+                }
+            }
         }
     }
 
@@ -2059,6 +2526,7 @@ mod tests {
             values: vec![Some(max)],
             color: None,
             slot: 0,
+            ..Series::default()
         }
     }
 
@@ -2195,5 +2663,286 @@ mod tests {
         )
         .unwrap();
         assert!(png.len() > 100);
+    }
+
+    fn line_space(plot_body: &str, chart_extra: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {chart_extra}
+    <c:plotArea>
+      {plot_body}
+      <c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn standard_line_xml(series: &str, chart_extra: &str) -> String {
+        line_space(
+            &format!(
+                r#"<c:lineChart>
+        <c:grouping val="standard"/>
+        <c:varyColors val="0"/>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>"#
+            ),
+            chart_extra,
+        )
+    }
+
+    fn lit_pts(values: &[Option<f64>]) -> String {
+        values
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, value)| {
+                value.map(|v| format!(r#"<c:pt idx="{idx}"><c:v>{v}</c:v></c:pt>"#))
+            })
+            .collect()
+    }
+
+    fn line_ser(order: usize, name: &str, values: &[Option<f64>], extra: &str) -> String {
+        let cats: String = (0..values.len())
+            .map(|i| {
+                format!(
+                    r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#,
+                    (b'A' + i as u8) as char
+                )
+            })
+            .collect();
+        format!(
+            r#"<c:ser>
+          <c:order val="{order}"/>
+          <c:tx><c:v>{name}</c:v></c:tx>
+          {extra}
+          <c:cat><c:strLit>{cats}</c:strLit></c:cat>
+          <c:val><c:numLit>{pts}</c:numLit></c:val>
+        </c:ser>"#,
+            pts = lit_pts(values)
+        )
+    }
+
+    fn render_line(xml: &str) -> Result<Vec<u8>, Error> {
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        render_rgb_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+    }
+
+    fn png_rgb(png: &[u8]) -> (u32, u32, Vec<u8>) {
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let data = buf[..info.buffer_size()].to_vec();
+        assert_eq!(info.color_type, png::ColorType::Rgb);
+        (info.width, info.height, data)
+    }
+
+    fn near(a: [u8; 3], b: [u8; 3], tol: i16) -> bool {
+        (0..3).all(|i| (i16::from(a[i]) - i16::from(b[i])).abs() <= tol)
+    }
+
+    fn count_in(
+        rgb: &[u8],
+        w: u32,
+        x0: u32,
+        x1: u32,
+        y0: u32,
+        y1: u32,
+        target: [u8; 3],
+        tol: i16,
+    ) -> usize {
+        let mut n = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 3) as usize;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], target, tol) {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn standard_line_paints_series_colors_and_gap_breaks_the_stroke() {
+        let continuous = standard_line_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "S1", &[Some(20.0), Some(20.0), Some(20.0)], ""),
+                line_ser(1, "S2", &[Some(5.0), Some(15.0), Some(8.0)], "")
+            ),
+            "",
+        );
+        let png = render_line(&continuous).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        assert!(
+            count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+            "first series color should appear on the default line and markers"
+        );
+        assert!(
+            count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+            "second series color should appear on the default line and markers"
+        );
+
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let solid = standard_line_xml(
+            &line_ser(0, "S1", &[Some(20.0), Some(20.0), Some(20.0)], none),
+            "",
+        );
+        let gapped = standard_line_xml(
+            &line_ser(0, "S1", &[Some(20.0), None, Some(20.0)], none),
+            "",
+        );
+        let (_, _, solid_rgb) = png_rgb(&render_line(&solid).unwrap());
+        let (_, _, gap_rgb) = png_rgb(&render_line(&gapped).unwrap());
+        let mid0 = w / 3;
+        let mid1 = (w * 2) / 3;
+        let solid_mid = count_in(&solid_rgb, w, mid0, mid1, 0, h, a1, 24);
+        let gap_mid = count_in(&gap_rgb, w, mid0, mid1, 0, h, a1, 24);
+        assert!(
+            solid_mid >= 10,
+            "a continuous line should cross the middle category, got {solid_mid}"
+        );
+        assert_eq!(
+            gap_mid, 0,
+            "a missing value must break the stroke, not span the gap; got {gap_mid}"
+        );
+        let gap_sides = count_in(&gap_rgb, w, 0, mid0, 0, h, a1, 24)
+            + count_in(&gap_rgb, w, mid1, w, 0, h, a1, 24);
+        assert!(
+            gap_sides >= 8,
+            "the remaining points of a gapped series should still be drawn"
+        );
+    }
+
+    #[test]
+    fn line_marker_none_is_not_the_same_as_default_circle() {
+        let values = [Some(8.0), Some(16.0), Some(12.0)];
+        let default_xml = standard_line_xml(&line_ser(0, "S1", &values, ""), "");
+        let none_xml = standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &values,
+                r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+            ),
+            "",
+        );
+        let (_, _, default_rgb) = png_rgb(&render_line(&default_xml).unwrap());
+        let (_, _, none_rgb) = png_rgb(&render_line(&none_xml).unwrap());
+        let a1 = FALLBACK_ACCENTS[0];
+        let default_n = count_in(&default_rgb, 576, 0, 576, 0, 336, a1, 18);
+        let none_n = count_in(&none_rgb, 576, 0, 576, 0, 336, a1, 18);
+        assert!(
+            default_n > none_n,
+            "omitted markers should paint filled circles, so they must add ink; default={default_n} none={none_n}"
+        );
+        assert!(none_n >= 8, "a visible solid line should still leave ink");
+    }
+
+    #[test]
+    fn unsupported_line_inputs_stay_not_implemented() {
+        let base = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
+        let cases = [
+            standard_line_xml(&base, "")
+                .replace(r#"grouping val="standard""#, r#"grouping val="stacked""#),
+            standard_line_xml(&base, "").replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="percentStacked""#,
+            ),
+            standard_line_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0), Some(3.0)],
+                    r#"<c:smooth val="1"/>"#,
+                ),
+                "",
+            ),
+            standard_line_xml(&base, r#"<c:dispBlanksAs val="zero"/>"#),
+            standard_line_xml(&base, r#"<c:dispBlanksAs val="span"/>"#),
+            standard_line_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0), Some(3.0)],
+                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
+                ),
+                "",
+            ),
+            standard_line_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0), Some(3.0)],
+                    r#"<c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr>"#,
+                ),
+                "",
+            ),
+            standard_line_xml(&base, "").replace(r#"varyColors val="0""#, r#"varyColors val="1""#),
+            line_space(
+                r#"<c:line3DChart><c:grouping val="standard"/><c:ser>
+          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:line3DChart>"#,
+                "",
+            ),
+            line_space(
+                r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
+          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:barChart><c:lineChart><c:grouping val="standard"/><c:ser>
+          <c:order val="1"/><c:val><c:numLit><c:pt idx="0"><c:v>2</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:lineChart>"#,
+                "",
+            ),
+            line_space(
+                r#"<c:pieChart><c:ser>
+          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:pieChart>"#,
+                "",
+            ),
+            standard_line_xml(&base, "").replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "case {i} should stay NotImplemented"
+            );
+        }
+
+        // A supported standard line still renders, so the counterexamples are not a broken harness.
+        render_line(&standard_line_xml(&base, "")).unwrap();
+        render_line(&standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(1.0), Some(2.0), Some(3.0)],
+                r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
+            ),
+            r#"<c:dispBlanksAs val="gap"/>"#,
+        ))
+        .unwrap();
     }
 }
