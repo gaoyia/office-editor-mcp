@@ -222,6 +222,10 @@ mod win {
             String::from_utf16_lossy(&buf[..n as usize - 1])
         }
 
+        pub fn family_name(&self) -> &str {
+            &self.name
+        }
+
         pub fn width(&self, text: &str) -> f64 {
             text.chars().map(|ch| self.advance(ch)).sum()
         }

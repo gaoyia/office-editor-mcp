@@ -2080,7 +2080,7 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
     let draw = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let sheet = super::list_pin::parse_part(&pkg, &sheet_part)?;
-    let (width, height) = chart_bitmap_px(&draw.root, &sheet.root, &target.key)?;
+    let (width, height) = chart_bitmap_px(&pkg, &draw.root, &sheet.root, &target.key)?;
     let rid = find_chart_rid(&draw.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
@@ -2103,7 +2103,12 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     })
 }
 
-fn chart_bitmap_px(draw: &Element, sheet: &Element, key: &ChartKey) -> Result<(u32, u32), Error> {
+fn chart_bitmap_px(
+    pkg: &Package,
+    draw: &Element,
+    sheet: &Element,
+    key: &ChartKey,
+) -> Result<(u32, u32), Error> {
     let mut index = 0usize;
     let mut size = None;
     let mut failed = None;
@@ -2118,7 +2123,13 @@ fn chart_bitmap_px(draw: &Element, sheet: &Element, key: &ChartKey) -> Result<(u
         if !chart_hit(frame, key, index) {
             return Ok(());
         }
-        match super::chart_paint::bitmap_px(sheet, anchor, kind) {
+        let geometry = if matches!(kind, AnchorKind::TwoCell) {
+            super::geometry::GeometryContext::from_package(pkg)
+                .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?
+        } else {
+            super::geometry::GeometryContext::calibri11()
+        };
+        match super::chart_paint::bitmap_px(sheet, anchor, kind, &geometry) {
             Ok(px) => size = Some(px),
             Err(err) => failed = Some(err),
         }

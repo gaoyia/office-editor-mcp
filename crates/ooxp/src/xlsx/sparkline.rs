@@ -818,7 +818,11 @@ fn paint_group(
     {
         return Err(image_unsupported());
     }
-    let width = layout::col_width_px(sheet, host.col);
+    let geometry =
+        super::geometry::GeometryContext::from_package(pkg).map_err(|_| image_unsupported())?;
+    let width = geometry
+        .column_px(sheet, host.col)
+        .map_err(|_| image_unsupported())? as u32;
     let height = layout::row_height_px(sheet, host.row);
     let color = series_rgb(group)?;
     if column {

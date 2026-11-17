@@ -23,6 +23,7 @@ mod extlink;
 mod finance;
 mod form_control;
 mod formula;
+mod geometry;
 mod group;
 mod hf;
 mod hyperlink;
