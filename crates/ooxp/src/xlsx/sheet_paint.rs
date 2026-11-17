@@ -1760,6 +1760,10 @@ enum HAlign {
     Left,
     Center,
     Right,
+    /// 无软换行时按左对齐；发生软换行的两端对齐本切片仍 NI。
+    Justify,
+    /// 每一行恰好两个单词时左右顶齐；其余分散对齐仍 NI。
+    Distributed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1895,10 +1899,14 @@ struct Xf {
     v_align: VAlign,
     /// `alignment/@wrapText`。
     wrap: bool,
-    /// `alignment/@indent`，0–15；每级约 3 个 `0` 字宽（与绘制同一套 `Face::width`）。
+    /// `alignment/@indent`，0–15；每级 3 个空格宽（`Face::width(" ") * 3`，与绘制同一套 API）。
     indent: u32,
     /// `alignment/@readingOrder`：0 上下文 / 1 LTR / 2 RTL。2 与强 RTL 文种出图 NI。
     reading_order: u8,
+    /// `alignment/@textRotation`。0 为不旋转；非 0（含 Excel 堆积 255）在有字的格子上 NI。
+    rotation: u32,
+    /// `alignment/@justifyLastLine`。为真时本切片 NI，不静默忽略。
+    justify_last_line: bool,
 }
 
 struct Dxf {
@@ -2228,6 +2236,8 @@ impl Styles {
                 wrap: false,
                 indent: 0,
                 reading_order: 0,
+                rotation: 0,
+                justify_last_line: false,
             }],
             formats: HashMap::new(),
             dxfs: Vec::new(),
@@ -2291,6 +2301,8 @@ impl Styles {
                 wrap: false,
                 indent: 0,
                 reading_order: 0,
+                rotation: 0,
+                justify_last_line: false,
             });
         }
         let mut dxfs = Vec::new();
@@ -2627,40 +2639,62 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         .attr("numFmtId")
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    let (h_align, v_align, wrap, indent, reading_order) = match xf.child_by_local("alignment") {
-        None => (HAlign::General, VAlign::Bottom, false, 0u32, 0u8),
-        Some(al) => {
-            // 旋转 / 缩小字体仍 NI（旋转与两端对齐另见计划）。
-            if al.attr("textRotation").is_some_and(|v| v != "0") || truthy(al.attr("shrinkToFit")) {
-                return Err(unsupported());
-            }
-            let wrap = truthy(al.attr("wrapText"));
-            let indent = match al.attr("indent") {
-                None | Some("0") => 0u32,
-                Some(raw) => {
-                    let n: u32 = raw.parse().map_err(|_| unsupported())?;
-                    if n > 15 {
-                        return Err(unsupported());
-                    }
-                    n
+    let (h_align, v_align, wrap, indent, reading_order, rotation, justify_last_line) =
+        match xf.child_by_local("alignment") {
+            None => (
+                HAlign::General,
+                VAlign::Bottom,
+                false,
+                0u32,
+                0u8,
+                0u32,
+                false,
+            ),
+            Some(al) => {
+                // shrinkToFit 仍在读样式时 NI。非 0 textRotation 延到有字的格子再 NI。
+                if truthy(al.attr("shrinkToFit")) {
+                    return Err(unsupported());
                 }
-            };
-            // readingOrder 与 sheetView.rightToLeft 不同：前者是单元格双向，后者是列镜像。
-            let reading_order = match al.attr("readingOrder") {
-                None | Some("0") => 0u8,
-                Some("1") => 1u8,
-                Some("2") => 2u8,
-                Some(_) => return Err(unsupported()),
-            };
-            (
-                read_h(al.attr("horizontal"))?,
-                read_v(al.attr("vertical"))?,
-                wrap,
-                indent,
-                reading_order,
-            )
-        }
-    };
+                let rotation = match al.attr("textRotation") {
+                    None | Some("0") => 0u32,
+                    Some(raw) => {
+                        let n: u32 = raw.parse().map_err(|_| unsupported())?;
+                        // OOXML 记 0–180；Excel 另用 255 表示堆积竖排。其它值不认。
+                        if n > 180 && n != 255 {
+                            return Err(unsupported());
+                        }
+                        n
+                    }
+                };
+                let wrap = truthy(al.attr("wrapText"));
+                let indent = match al.attr("indent") {
+                    None | Some("0") => 0u32,
+                    Some(raw) => {
+                        let n: u32 = raw.parse().map_err(|_| unsupported())?;
+                        if n > 15 {
+                            return Err(unsupported());
+                        }
+                        n
+                    }
+                };
+                // readingOrder 与 sheetView.rightToLeft 不同：前者是单元格双向，后者是列镜像。
+                let reading_order = match al.attr("readingOrder") {
+                    None | Some("0") => 0u8,
+                    Some("1") => 1u8,
+                    Some("2") => 2u8,
+                    Some(_) => return Err(unsupported()),
+                };
+                (
+                    read_h(al.attr("horizontal"))?,
+                    read_v(al.attr("vertical"))?,
+                    wrap,
+                    indent,
+                    reading_order,
+                    rotation,
+                    truthy(al.attr("justifyLastLine")),
+                )
+            }
+        };
     Ok(Xf {
         font,
         fill,
@@ -2671,6 +2705,8 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
         wrap,
         indent,
         reading_order,
+        rotation,
+        justify_last_line,
     })
 }
 
@@ -2680,6 +2716,8 @@ fn read_h(value: Option<&str>) -> Result<HAlign, Error> {
         Some("left") => Ok(HAlign::Left),
         Some("center") => Ok(HAlign::Center),
         Some("right") => Ok(HAlign::Right),
+        Some("justify") => Ok(HAlign::Justify),
+        Some("distributed") => Ok(HAlign::Distributed),
         Some(_) => Err(unsupported()),
     }
 }
@@ -5300,10 +5338,15 @@ fn paint_labels(
             };
         }
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
+        if xf.rotation != 0 {
+            return Err(unsupported());
+        }
         let h_align = match xf.h_align {
             HAlign::Left => HAlign::Left,
             HAlign::Center => HAlign::Center,
             HAlign::Right => HAlign::Right,
+            HAlign::Justify => HAlign::Justify,
+            HAlign::Distributed => HAlign::Distributed,
             HAlign::General => match cell.shown {
                 Shown::Num(_) => HAlign::Right,
                 Shown::Bool(_) => HAlign::Center,
@@ -5319,6 +5362,7 @@ fn paint_labels(
         };
 
         let pad = face.cell_pad();
+        // distributed：ECMA 规定缩进同时加在左右内缘。
         let inner_left = f64::from(x0)
             + pad
             + match h_align {
@@ -5328,15 +5372,41 @@ fn paint_labels(
         let inner_right = f64::from(clip_r)
             - 2.0
             - match h_align {
-                HAlign::Right => indent_px,
+                HAlign::Right | HAlign::Distributed => indent_px,
                 _ => 0.0,
             };
         let max_w = (inner_right - inner_left).max(1.0);
+        if h_align == HAlign::Justify {
+            // ECMA：若没有任何一行发生换行，则不做两端对齐。本切片把这一档画成左对齐。
+            // 软换行后的词间加空、indent、justifyLastLine、数字/布尔的几何尚未锁定，保持 NI。
+            if xf.indent != 0
+                || xf.justify_last_line
+                || matches!(cell.shown, Shown::Num(_) | Shown::Bool(_))
+                || cell_soft_wrapped(face, &text, max_w, xf.wrap)
+            {
+                return Err(unsupported());
+            }
+        }
+        if h_align == HAlign::Distributed && xf.justify_last_line {
+            return Err(unsupported());
+        }
         let text = datetime_overflow_text(&cell.shown, &fmt, xf.wrap, face, &text, max_w);
         let lines = if xf.wrap || text.contains('\n') {
             wrap_cell_lines(face, &text, max_w)
         } else {
             vec![text]
+        };
+        if h_align == HAlign::Distributed
+            && lines
+                .iter()
+                .filter(|line| !line.is_empty())
+                .any(|line| split_two_words(line).is_none())
+        {
+            return Err(unsupported());
+        }
+        let h_align = match h_align {
+            HAlign::Justify => HAlign::Left,
+            other => other,
         };
         let em = face.em_box();
         let block_h = em * lines.len() as f64;
@@ -5349,22 +5419,32 @@ fn paint_labels(
             if line.is_empty() {
                 continue;
             }
+            let top = top0 + em * i as f64;
+            let mut paint = |x: f64, s: &str| {
+                face.draw_cells(s, x, top, color, |px, py, rgb, cov| {
+                    if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                        return;
+                    }
+                    canvas.blend(px, py, rgb, cov);
+                });
+            };
+            if h_align == HAlign::Distributed {
+                let (left_word, right_word) = split_two_words(line).ok_or_else(unsupported)?;
+                paint(inner_left, &left_word);
+                paint(inner_right - face.width(&right_word), &right_word);
+                continue;
+            }
             let width = face.width(line);
             let x = match h_align {
-                HAlign::Left | HAlign::General => inner_left,
+                HAlign::Left | HAlign::General | HAlign::Justify => inner_left,
                 HAlign::Center => {
                     let span = (inner_right - inner_left).max(width);
                     inner_left + (span - width) / 2.0
                 }
                 HAlign::Right => inner_right - width,
+                HAlign::Distributed => unreachable!("distributed already painted"),
             };
-            let top = top0 + em * i as f64;
-            face.draw_cells(line, x, top, color, |px, py, rgb, cov| {
-                if px < x0 || py < y0 || px >= clip_r || py >= y1 {
-                    return;
-                }
-                canvas.blend(px, py, rgb, cov);
-            });
+            paint(x, line);
         }
     }
     paint_filters(canvas, xs, ys, c0, r0, filter);
@@ -5432,6 +5512,25 @@ fn wrap_cell_lines(face: &Face, text: &str, max_width: f64) -> Vec<String> {
         out.push(String::new());
     }
     out
+}
+
+/// 软换行：`wrapText` 下因宽度把同一段拆成多行。硬 `\n` 本身不算。
+fn cell_soft_wrapped(face: &Face, text: &str, max_width: f64, wrap: bool) -> bool {
+    wrap && text
+        .split('\n')
+        .any(|para| !para.is_empty() && wrap_cell_lines(face, para, max_width).len() > 1)
+}
+
+/// 分散对齐本切片只画恰好两个单词的行。其它空白（如制表符）不拆。
+fn split_two_words(line: &str) -> Option<(String, String)> {
+    if line.chars().any(|ch| ch != ' ' && ch.is_whitespace()) {
+        return None;
+    }
+    let words: Vec<&str> = line.split(' ').filter(|w| !w.is_empty()).collect();
+    match words.as_slice() {
+        [a, b] => Some(((*a).to_string(), (*b).to_string())),
+        _ => None,
+    }
 }
 
 /// 仅日期时间数字：非换行且显示串宽过列内宽时填 `#`。不改 General / 普通数值 / 文本 / 错误值。
@@ -6903,5 +7002,33 @@ mod tests {
         assert!(in_areas(5, 2, &areas));
         assert!(!in_areas(3, 1, &areas));
         assert!(!in_areas(1, 1, &areas));
+    }
+
+    #[test]
+    fn split_two_words_accepts_exactly_two_space_separated_tokens() {
+        assert_eq!(split_two_words("ab cd"), Some(("ab".into(), "cd".into())));
+        assert_eq!(
+            split_two_words("  ab   cd  "),
+            Some(("ab".into(), "cd".into()))
+        );
+        assert_eq!(split_two_words("ab"), None);
+        assert_eq!(split_two_words("ab cd ef"), None);
+        assert_eq!(split_two_words(""), None);
+        assert_eq!(split_two_words("ab\tcd"), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn justify_without_soft_wrap_is_not_soft_wrapped() {
+        let Some(face) = Face::open_cell(14.6667, false, false, "Calibri") else {
+            return;
+        };
+        assert!(!cell_soft_wrapped(&face, "hello", 1000.0, false));
+        assert!(!cell_soft_wrapped(&face, "hello", 1000.0, true));
+        assert!(!cell_soft_wrapped(&face, "a\nb", 1000.0, false));
+        assert!(!cell_soft_wrapped(&face, "a\nb", 1000.0, true));
+        let max_w = face.width("one ") + 0.5;
+        assert!(cell_soft_wrapped(&face, "one two three", max_w, true));
+        assert!(!cell_soft_wrapped(&face, "one two three", max_w, false));
     }
 }
