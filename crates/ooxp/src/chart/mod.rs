@@ -1581,6 +1581,7 @@ pub fn convert_type(
     if current == target.as_str() {
         if matches!(target, ChartType::Bar | ChartType::Col) {
             set_bar_dir(space, target);
+            set_bar_layout(space, target);
         }
         if target == ChartType::OfPie {
             set_of_pie_type(space, &of_pie);
@@ -1597,6 +1598,7 @@ pub fn convert_type(
         && matches!(target, ChartType::Bar | ChartType::Col)
     {
         set_bar_dir(space, target);
+        set_bar_layout(space, target);
         return Ok(());
     }
     if target.needs_one_series() && series_count(space) != 1 {
@@ -2036,6 +2038,8 @@ pub fn build_chart_xml(
         ax_pair_scatter()
     } else if ty == ChartType::Surface {
         format!("{}{}", ax_pair(), ser_ax_xml())
+    } else if ty == ChartType::Bar {
+        ax_pair_bar()
     } else {
         ax_pair()
     };
@@ -2537,6 +2541,11 @@ fn ax_pair() -> String {
     r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#.into()
 }
 
+/// 簇状条形图：类目在左，数值在下。类目轴用 maxMin，使第一类落在上方（Excel 默认条形图写法）。
+fn ax_pair_bar() -> String {
+    r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="maxMin"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#.into()
+}
+
 fn ax_pair_scatter() -> String {
     r#"<c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:valAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#.into()
 }
@@ -2841,8 +2850,18 @@ fn retarget_axes(space: &mut Element, target: ChartType, from_xy: bool) {
                 );
             }
         } else if !has_cat && val_n == 0 {
-            append_axes(plot, &ax_pair());
+            append_axes(
+                plot,
+                &if target == ChartType::Bar {
+                    ax_pair_bar()
+                } else {
+                    ax_pair()
+                },
+            );
         }
+    }
+    if matches!(target, ChartType::Bar | ChartType::Col | ChartType::Line) {
+        set_bar_layout(space, target);
     }
     if target == ChartType::Surface {
         ensure_ser_ax(space);
@@ -2935,6 +2954,56 @@ fn append_axes(plot: &mut Element, xml: &str) {
         let mut root = doc.take_root();
         for n in root.take_children() {
             plot.children.push(n);
+        }
+    }
+}
+
+fn set_child_val(el: &mut Element, local: &str, val: &str) {
+    if let Some(child) = el.child_by_local_mut(local) {
+        let name = child
+            .attrs
+            .iter()
+            .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == "val")
+            .map(|(k, _)| k.clone())
+            .unwrap_or_else(|| "val".into());
+        child.set_attr(&name, val);
+        return;
+    }
+    el.children.insert(
+        0,
+        Node::Element(Element::new(format!("c:{local}")).with_attr("val", val)),
+    );
+}
+
+fn set_orientation(ax: &mut Element, val: &str) {
+    if let Some(scaling) = ax.child_by_local_mut("scaling") {
+        set_child_val(scaling, "orientation", val);
+        return;
+    }
+    let mut scaling = Element::new("c:scaling");
+    scaling.children.push(Node::Element(
+        Element::new("c:orientation").with_attr("val", val),
+    ));
+    ax.children.insert(0, Node::Element(scaling));
+}
+
+/// 条形：类目 axPos=l 且 orientation=maxMin，数值 axPos=b。
+/// 柱形/折线：类目 axPos=b 且 orientation=minMax，数值 axPos=l。
+fn set_bar_layout(space: &mut Element, target: ChartType) {
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    let bar = target == ChartType::Bar;
+    for ax in plot.element_children_mut() {
+        match ax.local_name() {
+            "catAx" => {
+                set_child_val(ax, "axPos", if bar { "l" } else { "b" });
+                set_orientation(ax, if bar { "maxMin" } else { "minMax" });
+            }
+            "valAx" => {
+                set_child_val(ax, "axPos", if bar { "b" } else { "l" });
+            }
+            _ => {}
         }
     }
 }
