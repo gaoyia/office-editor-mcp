@@ -273,7 +273,8 @@ fn rectangle_covers_an_interior_border_and_leaves_the_frame() {
 }
 
 #[test]
-fn a_rectangle_with_a_line_still_fails_the_sheet() {
+fn a_rectangle_with_9525_stroke_paints_on_windows() {
+    // insertShape 默认 w=9525 实线：本刀已接线，整表应成功（Windows GDI+）。
     let src = tmp("src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -294,10 +295,63 @@ fn a_rectangle_with_a_line_still_fails_the_sheet() {
             "anchor": "oneCell", "from": "A1", "cx": 95250, "cy": 95250
         }]
     }));
-    let err = run(&json!({
+    let out = tmp("out").with_extension("png");
+    let written = run(&json!({
         "schemaVersion": 1,
         "action": "exportSheetImage",
         "path": shaped.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": out.to_string_lossy(),
+    })
+    .to_string());
+    #[cfg(windows)]
+    {
+        assert!(written.is_ok(), "{written:?}");
+    }
+    #[cfg(not(windows))]
+    {
+        let err = written.unwrap_err();
+        let text = err.to_string();
+        assert!(
+            text.contains("工作表") || text.contains("worksheet"),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn a_rectangle_with_12700_stroke_still_fails_the_sheet() {
+    // 非 9525/19050 线宽仍整块 NI。
+    let src = tmp("src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }
+        ] }] }
+    }));
+    let shaped = tmp("shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [{
+            "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect",
+            "anchor": "oneCell", "from": "A1", "cx": 95250, "cy": 95250
+        }]
+    }));
+    let wide = tmp("wide12700");
+    rewrite(&shaped, &wide, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml.replace(r#"w="9525""#, r#"w="12700""#);
+        }
+    });
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": wide.to_string_lossy(),
         "id": "sheet:Sheet1",
         "output": tmp("out").with_extension("png").to_string_lossy(),
     })

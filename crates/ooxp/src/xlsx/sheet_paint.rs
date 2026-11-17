@@ -25,6 +25,7 @@ use super::inspect;
 use super::picture::{self, AnchorKind};
 use super::ExportedMedia;
 use crate::xlsx::fill_device_stroked_rect;
+use crate::xlsx::scale_device_rgba_window;
 
 const MAX_PX: i32 = 4096;
 /// 切块张数上限：`tilePx=1` 时防海量文件/编码爆炸；超限在分配任何块之前 NI。
@@ -1376,25 +1377,38 @@ fn sheet_png(
     let media = crate::opc::resolve_id(pkg, drawing_part, rid).map_err(|_| unsupported())?;
     let bytes = pkg.get(&media).map_err(|_| unsupported())?;
     let (image_w, image_h, rgb) = decode_opaque_png(bytes)?;
-    let rgb = match source_window(pic, image_w, image_h, w, h)? {
-        Some((left, top, _, _)) => crop_rgb(&rgb, image_w, left, top, w, h),
+    let rgb = match source_window(pic, image_w, image_h)? {
         None => {
+            // 无裁剪：仍只认 1:1 原像素拷贝。纯放大另案。
             if image_w != w || image_h != h {
                 return Err(unsupported());
             }
             rgb
         }
+        Some((left, top, src_w, src_h)) => {
+            if src_w == w && src_h == h {
+                crop_rgb(&rgb, image_w, left, top, w, h)
+            } else if src_w <= w && src_h <= h {
+                // 整像素裁剪后再放大（两边都不缩小）。缩小/一边放一边缩 → NI。
+                // 公开 GDI+：源矩形画在原图上，相位用真实 dest（与 PPT 同源路径）。
+                // Excel 是否同滤波另由 CopyPicture oracle 锁，不假定与 PPT 差 0。
+                scale_crop_rgb(
+                    &rgb, image_w, image_h, left, top, src_w, src_h, x0, y0, w, h,
+                )?
+            } else {
+                return Err(unsupported());
+            }
+        }
     };
     Ok(SheetPng { x0, y0, w, h, rgb })
 }
 
-/// 裁剪四边落到整像素，且裁完尺寸等于目标时，返回原图上的这块。没有裁剪时返回 `None`。
+/// 裁剪四边落到整像素时返回原图窗口。没有裁剪或全 0 时返回 `None`。
+/// 裁完尺寸可小于目标（本刀允许再放大）；半像素百分比仍 NI。
 fn source_window(
     pic: &Element,
     image_w: u32,
     image_h: u32,
-    dest_w: u32,
-    dest_h: u32,
 ) -> Result<Option<(u32, u32, u32, u32)>, Error> {
     let Some(rect) = pic
         .child_by_local("blipFill")
@@ -1421,10 +1435,45 @@ fn source_window(
     let Some(src_h) = image_h.checked_sub(top).and_then(|h| h.checked_sub(bottom)) else {
         return Err(unsupported());
     };
-    if src_w == 0 || src_h == 0 || src_w != dest_w || src_h != dest_h {
+    if src_w == 0 || src_h == 0 {
         return Err(unsupported());
     }
     Ok(Some((left, top, src_w, src_h)))
+}
+
+/// 不透明 RGB → RGBA → GDI+ 窗口放大 → RGB。透明通道本刀不扩。
+fn scale_crop_rgb(
+    rgb: &[u8],
+    image_w: u32,
+    image_h: u32,
+    left: u32,
+    top: u32,
+    src_w: u32,
+    src_h: u32,
+    dest_x: i32,
+    dest_y: i32,
+    dest_w: u32,
+    dest_h: u32,
+) -> Result<Vec<u8>, Error> {
+    if rgb.len() != (image_w as usize) * (image_h as usize) * 3 {
+        return Err(unsupported());
+    }
+    let mut rgba = Vec::with_capacity((image_w as usize) * (image_h as usize) * 4);
+    for chunk in rgb.as_chunks::<3>().0 {
+        rgba.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+    }
+    let scaled = scale_device_rgba_window(
+        &rgba, image_w, image_h, left, top, src_w, src_h, dest_x, dest_y, dest_w, dest_h,
+    )
+    .ok_or_else(unsupported)?;
+    if scaled.len() != (dest_w as usize) * (dest_h as usize) * 4 {
+        return Err(unsupported());
+    }
+    let mut out = Vec::with_capacity((dest_w as usize) * (dest_h as usize) * 3);
+    for chunk in scaled.as_chunks::<4>().0 {
+        out.extend_from_slice(&chunk[..3]);
+    }
+    Ok(out)
 }
 
 fn percent_attr(el: &Element, name: &str) -> Result<i64, Error> {
