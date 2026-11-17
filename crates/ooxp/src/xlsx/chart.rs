@@ -2103,6 +2103,53 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
     })
 }
 
+/// 图表工作表没有格子。按 export_chart_image 同一套规则导出该表上那一张已会画的图。
+pub(crate) fn export_chartsheet_image(
+    bytes: &[u8],
+    sheet_name: &str,
+) -> Result<super::ExportedMedia, Error> {
+    let pkg = Package::open_bytes(bytes.to_vec())?;
+    let sheet_part = picture::lookup_sheet_part(&pkg, sheet_name, "id")?;
+    let chart_id = primary_chartsheet_chart_id(&pkg, &sheet_part, sheet_name)?;
+    export_chart_image(bytes, &chart_id)
+}
+
+fn primary_chartsheet_chart_id(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_name: &str,
+) -> Result<String, Error> {
+    let mut found = None;
+    for drawing_part in picture::drawing_parts(pkg, sheet_part)? {
+        if found.is_some() {
+            break;
+        }
+        let doc = super::list_pin::parse_part(pkg, &drawing_part)?;
+        picture::walk_anchors(&doc.root, &mut |anchor, _kind| {
+            if found.is_some() {
+                return Ok(());
+            }
+            let Some(frame) = direct_chart_frame(anchor) else {
+                return Ok(());
+            };
+            let (raw, _) = cnv_of_frame(frame);
+            found = Some(match raw {
+                Some(id) if !id.is_empty() => format!("sheet:{sheet_name}/chart:{id}"),
+                _ => format!("sheet:{sheet_name}/chart:index:1"),
+            });
+            Ok(())
+        })?;
+    }
+    found.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ChartNotFound {
+                id: format!("sheet:{sheet_name}"),
+            },
+            "id",
+        )
+    })
+}
+
 fn chart_bitmap_px(
     pkg: &Package,
     draw: &Element,
