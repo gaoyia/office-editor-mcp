@@ -58,7 +58,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let cols = column_sizes(root, &styles.geometry, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
     let theme = loaded_theme(&pkg, &wb_part, &rels);
-    let shapes = plain_rects(
+    let mut shapes = plain_rects(
         &pkg,
         &sheet_part,
         root,
@@ -72,6 +72,9 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         &rows,
         theme.as_ref(),
     )?;
+    shapes.extend(embedded_sparks(
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+    )?);
     let canvas = paint(
         root,
         &styles,
@@ -125,7 +128,7 @@ pub fn export_sheet_image_tiles(
     let cols = column_sizes(root, &styles.geometry, c0, c1)?;
     let rows = row_sizes(root, &styles, &cells, r0, r1)?;
     let theme = loaded_theme(&pkg, &wb_part, &rels);
-    let shapes = plain_rects(
+    let mut shapes = plain_rects(
         &pkg,
         &sheet_part,
         root,
@@ -139,6 +142,9 @@ pub fn export_sheet_image_tiles(
         &rows,
         theme.as_ref(),
     )?;
+    shapes.extend(embedded_sparks(
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+    )?);
     let xs = Axis::new(&cols);
     let ys = Axis::new(&rows);
     let full_w = xs.bitmap();
@@ -350,11 +356,16 @@ fn used_range(sheet: &Element) -> Result<(u32, u32, u32, u32), Error> {
     // dimension 经常比格子小。两边都在时取并集，避免只画左上角，也避免画到界外时越界。
     let dim = dimension_box(sheet)?;
     let cells = cell_bounds(sheet)?;
-    match (dim, cells) {
-        (Some(dim), Some(cells)) => Ok(union_box(dim, cells)),
-        (Some(only), None) | (None, Some(only)) => Ok(only),
-        (None, None) => Err(unsupported()),
+    let mut bounds = match (dim, cells) {
+        (Some(dim), Some(cells)) => Some(union_box(dim, cells)),
+        (Some(only), None) | (None, Some(only)) => Some(only),
+        (None, None) => None,
+    };
+    for host in super::sparkline::sheet_hosts(sheet)? {
+        let b = (host.col, host.row, host.col, host.row);
+        bounds = Some(bounds.map_or(b, |previous| union_box(previous, b)));
     }
+    bounds.ok_or_else(unsupported)
 }
 
 fn dimension_box(sheet: &Element) -> Result<Option<(u32, u32, u32, u32)>, Error> {
@@ -449,6 +460,83 @@ struct SheetPng {
 enum Overlay {
     Fill(PlainRect),
     Png(SheetPng),
+    Spark(SheetSpark),
+}
+
+struct SheetSpark {
+    x0: i32,
+    y0: i32,
+    raster: super::sparkline_paint::Raster,
+}
+#[allow(clippy::too_many_arguments)]
+fn embedded_sparks(
+    pkg: &Package,
+    name: &str,
+    sheet: &Element,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+    rtl: bool,
+) -> Result<Vec<Overlay>, Error> {
+    let xs = Axis::new(cols);
+    let ys = Axis::new(rows);
+    let rasters = super::sparkline::sheet_rasters(pkg, name, sheet, |host| {
+        if host.col < c0 || host.row < r0 {
+            return Ok(None);
+        }
+        let c = (host.col - c0) as usize;
+        let r = (host.row - r0) as usize;
+        let (Some(&w), Some(&h)) = (cols.get(c), rows.get(r)) else {
+            return Ok(None);
+        };
+        if w == 0 || h == 0 {
+            return Ok(None);
+        }
+        // Sheet RTL must relocate, not mirror, an LTR spark. Text/RTL overlap is
+        // not yet oracle-verified; fail only when this visible host needs it.
+        if rtl
+            || cells.get(&(host.col, host.row)).is_some_and(|c| {
+                !matches!(&c.shown, Shown::Empty)
+                    && !matches!(&c.shown,Shown::Text(t) if t.is_empty())
+            })
+        {
+            return Err(unsupported());
+        }
+        Ok(Some((w as u32, h as u32)))
+    })?;
+    Ok(rasters
+        .into_iter()
+        .map(|(host, raster)| {
+            Overlay::Spark(SheetSpark {
+                x0: xs.origin[(host.col - c0) as usize],
+                y0: ys.origin[(host.row - r0) as usize],
+                raster,
+            })
+        })
+        .collect())
+}
+fn paint_sparks(canvas: &mut Canvas, shapes: &[Overlay]) {
+    for shape in shapes {
+        let Overlay::Spark(s) = shape else {
+            continue;
+        };
+        let x0 = s.x0.max(canvas.ox);
+        let y0 = s.y0.max(canvas.oy);
+        let x1 = (s.x0 + s.raster.width as i32).min(canvas.ox + canvas.w);
+        let y1 = (s.y0 + s.raster.height as i32).min(canvas.oy + canvas.h);
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y - canvas.oy) * canvas.w + x - canvas.ox) as usize * 3;
+                let dst = [canvas.px[i], canvas.px[i + 1], canvas.px[i + 2]];
+                let rgb = s
+                    .raster
+                    .composite_pixel((x - s.x0) as u32, (y - s.y0) as u32, dst);
+                canvas.px[i..i + 3].copy_from_slice(&rgb);
+            }
+        }
+    }
 }
 
 /// 压到区域上的图形：纯色矩形留下，其余仍让整表失败。
@@ -1302,6 +1390,7 @@ fn fill_plain_rgb(canvas: &mut Canvas, x0: i32, y0: i32, x1: i32, y1: i32, color
 fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
     for shape in shapes {
         match shape {
+            Overlay::Spark(_) => {}
             Overlay::Fill(shape) => {
                 let w = shape.x1 - shape.x0;
                 let h = shape.y1 - shape.y0;
@@ -3558,6 +3647,8 @@ fn paint_window(
             session,
         )?;
     }
+    // Spark is an in-cell layer: after fill/text, before borders and floating shapes.
+    paint_sparks(&mut canvas, shapes);
     if draw_frame {
         canvas.leading_frame(if grid_lines { GRID } else { [255, 255, 255] });
     }

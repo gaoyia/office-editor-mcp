@@ -2747,4 +2747,13 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 ### 诊断语料与出图验收边界（2026-11-17 P0）
 
-`geometry-matrix.py` 的 100705 旧39项仅历史尺寸诊断，其中13个chart探针删除了公式引用源而保留缓存，不能据其Office空图验收内容。修复后的17组×3=51项在出图前核对actual cells、formula、cache、dimension、Normal/styleXF/font索引，并记录输入SHA。Office实际17个Series.Values为1/4/2、XValues为A/B/C；50个可出图满足固定96维度，但严格0 PASS/50 sizeDiffer/1既有隐藏源spark NI。此P0只修测试与展示，不改变renderer缓存优先、API支持范围、96dpi或像素容差；工作表内嵌spark遗漏、圆角alpha仍待独立修复。解释图白底合成不改变raw gold的RGBA严格比较。
+`geometry-matrix.py` 的 100705 旧39项仅历史尺寸诊断，其中13个chart探针删除了公式引用源而保留缓存，不能据其Office空图验收内容。修复后的17组×3=51项在出图前核对actual cells、formula、cache、dimension、Normal/styleXF/font索引，并记录输入SHA。Office实际17个Series.Values为1/4/2、XValues为A/B/C；50个可出图满足固定96维度，但严格0 PASS/50 sizeDiffer/1既有隐藏源spark NI。此P0只修测试与展示，不改变renderer缓存优先、API支持范围、96dpi或像素容差；P0交付时工作表内嵌spark与圆角alpha仍待修；P1内嵌遗漏修复范围见下节，圆角alpha仍未修。解释图白底合成不改变raw gold的RGBA严格比较。
+
+
+### 工作表/tiles内嵌迷你图（既有painter接线，2026-11-17 P1）
+
+导出工作表的共同paint路径合成既有独立spark API支持的单宿主组：line、非负column及win-loss既有子集（不扩dateAxis/标记/主题等支持）。空、未合并、LTR可见宿主按工作表实际格w/h直接采样；宿主sqref计入used-range，无需物化c。每宿主保留原f32覆盖率并只采样一次，格底合成后再画边框/浮动对象；tiles按绝对坐标裁取，禁止PNG白色key或缩放。每宿主沿用4096边长限制，合计宿主raster像素64Mi上限。
+
+隐藏/零尺寸宿主不绘制，也不因其不可见复杂配置拒整表。可见且已有独立接口不支持的隐藏源（displayHidden未开启）、多宿主组、日期轴、标记/样式等返回NI；sheet RTL、合并宿主、非空宿主文字的层序尚未官方锁定，同样诚实NI，不把合法配置叫畸形/异常。displayHidden=true沿用原能力。旧独立API行高round及chart/zoom合同不在本片盲统一。
+
+17组同SHA公平矩阵中16个支持sheet宿主对同尺寸独立painter像素差0、宿主外变化0；16个独立spark和17个chart PNG字节不变；实际CLI九块拼接与mono像素差0。完整51项49成功/2 NI（新增NI是原来成功却漏图的隐藏源sheet），严格0 PASS/49 sizeDiffer/2 NI；库内像素一致不是官方整图PASS。gold复用P0相同输入SHA/同range/chart的原生图，未缩放，P1未重复打开Office。
