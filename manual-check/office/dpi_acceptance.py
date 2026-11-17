@@ -27,3 +27,8 @@ def classify(*, scope=None, source_verified=False, renderer_verified=False,
             and font_verified and dpi_verified) or unresolved:
         return PENDING
     return PASS
+
+
+def labels_between_axis_and_plot_bottom(axis_y, plot_bottom_y, ink_top, ink_bottom):
+    """Native coordinate relation only; does not infer COM/PNG coordinate origins."""
+    return axis_y < ink_top < ink_bottom < plot_bottom_y
