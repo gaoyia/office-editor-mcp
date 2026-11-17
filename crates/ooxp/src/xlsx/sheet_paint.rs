@@ -26,6 +26,10 @@ use super::picture::{self, AnchorKind};
 use super::ExportedMedia;
 
 const MAX_PX: i32 = 4096;
+/// 切块张数上限：`tilePx=1` 时防海量文件/编码爆炸；超限在分配任何块之前 NI。
+const MAX_TILE_COUNT: u32 = 1024;
+/// 全部切块像素合计上限（≈全图 RGB 体量）；与 MAX_TILE_COUNT 双闸。
+const MAX_TILE_TOTAL_PX: u64 = 64 * 1024 * 1024;
 const GRID: [u8; 3] = [224, 224, 224];
 const DEFAULT_COL_PX: i32 = 64;
 /// 没写 `defaultRowHeight` 时的空行。Excel 的标准行高是 14.25 磅，19 像素。
@@ -161,7 +165,20 @@ pub fn export_sheet_image_tiles(
             bytes: png,
         }]);
     }
-    let mut out = Vec::new();
+    // 超限切块：先算格网与总像素，失败不分配/不编码任何块（CLI 亦不会落盘）。
+    let tiles_x = ((full_w + tile_px - 1) / tile_px) as u32;
+    let tiles_y = ((full_h + tile_px - 1) / tile_px) as u32;
+    let tile_count = tiles_x.checked_mul(tiles_y).ok_or_else(unsupported)?;
+    if tile_count == 0 || tile_count > MAX_TILE_COUNT {
+        return Err(unsupported());
+    }
+    let total_px = (full_w as u64)
+        .checked_mul(full_h as u64)
+        .ok_or_else(unsupported)?;
+    if total_px > MAX_TILE_TOTAL_PX {
+        return Err(unsupported());
+    }
+    let mut out = Vec::with_capacity(tile_count as usize);
     let mut oy = 0;
     let mut row = 0u32;
     while oy < full_h {
@@ -4061,6 +4078,8 @@ fn paint_rules(
             "containsErrors" | "notContainsErrors" => {
                 let _ = error_mode(rule, areas)?;
             }
+            // iconSet：选择语义见 `icon_set` 模块；无合法字形资产前整表仍 NI（不冒充出图）。
+            "iconSet" => return Err(unsupported()),
             _ => return Err(unsupported()),
         }
     }
@@ -4445,6 +4464,13 @@ fn cfvo_value(el: &Element, values: &[f64]) -> Result<f64, Error> {
                 .and_then(|s| s.parse().ok())
                 .ok_or_else(unsupported)?;
             Ok(percentile_inc(values, pct))
+        }
+        "percent" => {
+            let pct = el
+                .attr("val")
+                .and_then(|s| s.parse().ok())
+                .ok_or_else(unsupported)?;
+            super::icon_set::percent_threshold(pct, values).ok_or_else(unsupported)
         }
         _ => Err(unsupported()),
     }

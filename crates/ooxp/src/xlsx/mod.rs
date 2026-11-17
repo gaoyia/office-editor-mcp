@@ -26,6 +26,7 @@ mod formula;
 mod group;
 mod hf;
 mod hyperlink;
+mod icon_set;
 mod ink;
 mod inspect;
 mod layout;

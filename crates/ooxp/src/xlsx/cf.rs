@@ -1257,12 +1257,33 @@ fn existing_data_bar(rule: &Element) -> Option<DataBarSpec> {
 }
 
 fn existing_icon_set(rule: &Element) -> Option<IconSetSpec> {
-    rule.child_by_local("iconSet").map(|_| IconSetSpec {
-        set: None,
-        cfvo: None,
-        show_value: None,
-        reverse: None,
-        percent: None,
+    let el = rule.child_by_local("iconSet")?;
+    let show_value = el
+        .attr("showValue")
+        .map(|s| s != "0" && !s.eq_ignore_ascii_case("false"));
+    let reverse = el
+        .attr("reverse")
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"));
+    let percent = el
+        .attr("percent")
+        .map(|s| s != "0" && !s.eq_ignore_ascii_case("false"));
+    let kids: Vec<CfvoSpec> = el
+        .children_by_local("cfvo")
+        .into_iter()
+        .map(|c| CfvoSpec {
+            type_: c.attr("type").unwrap_or("percent").to_string(),
+            val: c.attr("val").map(|s| s.to_string()),
+            gte: c
+                .attr("gte")
+                .map(|s| s != "0" && !s.eq_ignore_ascii_case("false")),
+        })
+        .collect();
+    Some(IconSetSpec {
+        set: el.attr("iconSet").map(|s| s.to_string()),
+        cfvo: if kids.is_empty() { None } else { Some(kids) },
+        show_value,
+        reverse,
+        percent,
     })
 }
 
