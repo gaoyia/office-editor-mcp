@@ -5,6 +5,7 @@
 //! 日期轴：用组上 `xm:f` 的数值序列（Excel 日期序列）把点放到时间比例位置，而不是按下标等距。
 //! 等距日期与原分类轴同一套公式，使连续等差日期与关闭日期轴的像素一致；不等距日期按 (date-min)/(max-min)*(n-1) 映射到该公式的槽坐标。不排序、不把缺日期或非数值日期当成等距轴。
 
+use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
 
 const PAD_X: f64 = 2.0;
@@ -35,15 +36,17 @@ pub(crate) struct LineSpec {
 pub(crate) struct Raster {
     pub width: u32,
     pub height: u32,
+    dpi: RenderDpi,
     rgb: Vec<u8>,
     coverage: Vec<f32>,
 }
 impl Raster {
-    fn new(width: u32, height: u32) -> Self {
+    fn new(width: u32, height: u32, dpi: RenderDpi) -> Self {
         let n = width as usize * height as usize;
         Self {
             width,
             height,
+            dpi,
             rgb: vec![255; n * 3],
             coverage: vec![0.0; n],
         }
@@ -65,18 +68,28 @@ impl Raster {
                 rgb.extend_from_slice(&self.composite_pixel(x, y, [255; 3]));
             }
         }
-        encode_png(self.width, self.height, &rgb)
+        encode_png(self.width, self.height, &rgb, self.dpi)
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Raster, Error> {
+    raster_line_at(width, height, spec, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn raster_line_at(
+    width: u32,
+    height: u32,
+    spec: &LineSpec,
+    dpi: RenderDpi,
+) -> Result<Raster, Error> {
     if !(1..=MAX_PX).contains(&width) || !(1..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if !(spec.weight_px.is_finite() && spec.weight_px > 0.0) {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
+    let mut px = Raster::new(width, height, dpi);
     let n = spec.values.len();
     if let Some(dates) = spec.dates.as_ref() {
         if dates.len() != n {
@@ -93,7 +106,7 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
                 let mut prev: Option<(f64, f64)> = None;
                 for (index, value) in run {
                     let u = slot_of(index, n, spec.dates.as_deref())?;
-                    let here = point_xy(u, n, value, lo, hi, width, height);
+                    let here = point_xy(u, n, value, lo, hi, width, height, dpi);
                     if let Some(from) = prev {
                         stamp(&mut cover, width, height, from, here, spec.weight_px);
                     }
@@ -114,12 +127,24 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
 }
 
 /// 非负柱形。宽至少 6、高至少 9，否则上下左右的留白叠在一起。
+#[allow(dead_code)]
 pub(crate) fn raster_columns(
     width: u32,
     height: u32,
     values: &[f64],
     colors: &[[u8; 3]],
     dates: Option<&[f64]>,
+) -> Result<Raster, Error> {
+    raster_columns_at(width, height, values, colors, dates, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn raster_columns_at(
+    width: u32,
+    height: u32,
+    values: &[f64],
+    colors: &[[u8; 3]],
+    dates: Option<&[f64]>,
+    dpi: RenderDpi,
 ) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
@@ -130,18 +155,18 @@ pub(crate) fn raster_columns(
     {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
+    let mut px = Raster::new(width, height, dpi);
     let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let plot_h = height as i32 - 8;
-    let bottom = height as i32 - 4;
+    let plot_h = height as i32 - dpi.scale_px(8);
+    let bottom = height as i32 - dpi.scale_px(4);
     for (index, value) in values.iter().enumerate() {
         let bar = bar_px(*value, lo, hi, plot_h);
         if bar <= 0 {
             continue;
         }
         let u = slot_of(index, values.len(), dates)?;
-        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
+        let Some((x0, x1)) = column_x_at_dpi(width, values.len(), u, dpi) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -166,6 +191,7 @@ pub(crate) fn raster_columns(
 /// 有元素但无 `rgb`（theme/tint）→ 上游 NI。上沿/下沿是 CopyPicture 几何常数，不是单样本硬编码色。
 /// 证据：Excel 16.0 CopyPicture（2026-11-17 Asia/Shanghai）G2 `+/-` 缺省色实心与 20px 行 5..=10/11..=16；
 /// 全 0 无柱；另有自定义色/高宽单元。
+#[allow(dead_code)]
 pub(crate) fn raster_win_loss(
     width: u32,
     height: u32,
@@ -175,15 +201,37 @@ pub(crate) fn raster_win_loss(
     color_negatives: bool,
     dates: Option<&[f64]>,
 ) -> Result<Raster, Error> {
+    raster_win_loss_at(
+        width,
+        height,
+        values,
+        series,
+        negative,
+        color_negatives,
+        dates,
+        RenderDpi::DEFAULT,
+    )
+}
+
+pub(crate) fn raster_win_loss_at(
+    width: u32,
+    height: u32,
+    values: &[Option<f64>],
+    series: [u8; 3],
+    negative: [u8; 3],
+    color_negatives: bool,
+    dates: Option<&[f64]>,
+    dpi: RenderDpi,
+) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if values.is_empty() {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
-    let top = 5_i32;
-    let bottom = height as i32 - 4;
+    let mut px = Raster::new(width, height, dpi);
+    let top = dpi.scale_px(5);
+    let bottom = height as i32 - dpi.scale_px(4);
     let plot_h = bottom - top + 1;
     if plot_h < 2 {
         return Err(unsupported());
@@ -201,7 +249,7 @@ pub(crate) fn raster_win_loss(
             continue;
         }
         let u = slot_of(index, values.len(), dates)?;
-        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
+        let Some((x0, x1)) = column_x_at_dpi(width, values.len(), u, dpi) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -232,12 +280,17 @@ fn column_x(width: u32, count: usize, index: usize) -> Option<(i32, i32)> {
     column_x_at(width, count, index as f64)
 }
 
+#[allow(dead_code)]
 fn column_x_at(width: u32, count: usize, u: f64) -> Option<(i32, i32)> {
+    column_x_at_dpi(width, count, u, RenderDpi::DEFAULT)
+}
+
+fn column_x_at_dpi(width: u32, count: usize, u: f64, dpi: RenderDpi) -> Option<(i32, i32)> {
     if !u.is_finite() || count == 0 {
         return None;
     }
     let n = i64::try_from(count).ok()?;
-    let span = i64::from(width) - 5;
+    let span = i64::from(width) - i64::from(dpi.scale_px(5));
     if n <= 0 || span <= 0 {
         return None;
     }
@@ -247,8 +300,9 @@ fn column_x_at(width: u32, count: usize, u: f64) -> Option<(i32, i32)> {
     if !start.is_finite() || !end.is_finite() {
         return None;
     }
-    let x0 = 3 + start.floor() as i64;
-    let x1 = 3 + end.ceil() as i64 - 1;
+    let origin = i64::from(dpi.scale_px(3));
+    let x0 = origin + start.floor() as i64;
+    let x1 = origin + end.ceil() as i64 - 1;
     Some((i32::try_from(x0).ok()?, i32::try_from(x1).ok()?))
 }
 
@@ -365,16 +419,28 @@ fn runs(empty: EmptyCells, plotted: &[(usize, f64)]) -> Vec<Vec<(usize, f64)>> {
 }
 
 /// 公式给出的是像素序号。画的时候落到该像素中心。`u` 是分类下标或日期映射后的槽坐标。
-fn point_xy(u: f64, n: usize, value: f64, lo: f64, hi: f64, width: u32, height: u32) -> (f64, f64) {
+fn point_xy(
+    u: f64,
+    n: usize,
+    value: f64,
+    lo: f64,
+    hi: f64,
+    width: u32,
+    height: u32,
+    dpi: RenderDpi,
+) -> (f64, f64) {
     let w = f64::from(width);
     let h = f64::from(height);
-    let x = (PAD_X + (u + 0.5) * (w - PAD_X * 2.0) / n as f64).round();
+    let pad = dpi.scale_f(PAD_X);
+    let top = dpi.scale_f(TOP);
+    let bottom = dpi.scale_f(BOTTOM);
+    let x = (pad + (u + 0.5) * (w - pad * 2.0) / n as f64).round();
     let t = if (hi - lo).abs() < 1e-9 {
         1.0
     } else {
         ((value - lo) / (hi - lo)).clamp(0.0, 1.0)
     };
-    let y = (TOP + (1.0 - t) * (h - TOP - BOTTOM)).round();
+    let y = (top + (1.0 - t) * (h - top - bottom)).round();
     (x + 0.5, y + 0.5)
 }
 
@@ -438,11 +504,20 @@ fn blend(px: &mut Raster, width: u32, x: u32, y: u32, cov: f64, color: [u8; 3]) 
     px.coverage[i] = cov as f32;
 }
 
-fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: u32, h: u32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    // 仅非默认 DPI 写入 pHYs，使省略 dpi / dpi=96 的既有 PNG 字节保持不变。
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);

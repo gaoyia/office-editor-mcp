@@ -3,15 +3,29 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{Package, Relationships};
 use crate::xml::Element;
 
+use super::render_dpi::RenderDpi;
+
 #[derive(Clone, Copy)]
 pub(crate) struct GeometryContext {
     mdw: f64,
+    dpi: RenderDpi,
 }
 
 impl GeometryContext {
     /// Canonical OOXML Calibri 11 / 96 dpi example; also the platform-independent fallback.
     pub(crate) const fn calibri11() -> Self {
-        Self { mdw: 7.0 }
+        Self {
+            mdw: 7.0,
+            dpi: RenderDpi::DEFAULT,
+        }
+    }
+
+    pub(crate) fn with_dpi(self, dpi: RenderDpi) -> Self {
+        Self { mdw: self.mdw, dpi }
+    }
+
+    pub(crate) fn dpi(self) -> RenderDpi {
+        self.dpi
     }
 
     pub(crate) fn from_package(pkg: &Package) -> Result<Self, Error> {
@@ -60,10 +74,15 @@ impl GeometryContext {
         }
         Ok(Self {
             mdw: normal_mdw(name, pt, bold, italic)?,
+            dpi: RenderDpi::DEFAULT,
         })
     }
 
     pub(crate) fn column_px(&self, sheet: &Element, col: u32) -> Result<i32, Error> {
+        Ok(self.dpi.scale_px(self.column_px_96(sheet, col)?))
+    }
+
+    fn column_px_96(&self, sheet: &Element, col: u32) -> Result<i32, Error> {
         for list in sheet.children_by_local("cols") {
             for node in list.children_by_local("col") {
                 let min = node.attr("min").and_then(|v| v.parse::<u32>().ok());
@@ -201,7 +220,10 @@ mod tests {
     fn default_and_hidden_columns_use_the_same_units() {
         let doc = crate::xml::parse(br#"<worksheet><sheetFormatPr defaultColWidth="10"/><cols><col min="2" max="2" width="10.125"/><col min="3" max="3" width="10.125" hidden="1"/></cols></worksheet>"#).unwrap();
         for (mdw, default, explicit) in [(7.0, 70, 71), (8.0, 80, 81)] {
-            let g = GeometryContext { mdw };
+            let g = GeometryContext {
+                mdw,
+                dpi: RenderDpi::DEFAULT,
+            };
             assert_eq!(g.column_px(&doc.root, 1).unwrap(), default);
             assert_eq!(g.column_px(&doc.root, 2).unwrap(), explicit);
             assert_eq!(g.column_px(&doc.root, 3).unwrap(), 0);

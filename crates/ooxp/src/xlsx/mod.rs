@@ -41,6 +41,8 @@ mod outline;
 mod picture;
 mod pivot;
 mod print;
+pub(crate) mod render_dpi;
+pub(crate) use render_dpi::RenderDpi;
 mod protect;
 mod request;
 mod shape;
@@ -59,7 +61,9 @@ mod view;
 
 pub(crate) use apply::apply_in;
 pub use apply::{apply, dry_run};
+#[allow(unused_imports)]
 pub use chart::export_chart_image;
+pub(crate) use chart::export_chart_image_at;
 pub use create::create;
 pub(crate) use create::create_in;
 #[allow(unused_imports)]
@@ -67,8 +71,12 @@ pub use create::create_with_workbook_ct;
 pub use inspect::inspect;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
+#[allow(unused_imports)]
 pub use sheet_paint::{export_sheet_image, export_sheet_image_tiles, SheetImageTile};
+pub(crate) use sheet_paint::{export_sheet_image_at, export_sheet_image_tiles_at};
+#[allow(unused_imports)]
 pub use sparkline::export_sparkline_image;
+pub(crate) use sparkline::export_sparkline_image_at;
 
 pub(crate) use chart_gdi::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_opaque_round_rect,

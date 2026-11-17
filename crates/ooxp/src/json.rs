@@ -96,11 +96,20 @@ pub fn envelope_fields(action: Action) -> &'static [&'static str] {
             "output",
             "locale",
             "tilePx",
+            "dpi",
+        ],
+        Action::ExportChartImage | Action::ExportSparklineImage => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "id",
+            "output",
+            "locale",
+            "dpi",
         ],
         Action::ExportMedia
         | Action::ExportChartData
-        | Action::ExportChartImage
-        | Action::ExportSparklineImage
         | Action::ExportSlideImage
         | Action::ExportPageImage => &[
             "schemaVersion",

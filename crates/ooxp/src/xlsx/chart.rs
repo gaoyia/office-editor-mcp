@@ -2,6 +2,7 @@
 
 use serde_json::{json, Map, Value};
 
+use super::render_dpi::RenderDpi;
 use crate::chart::{self, ChartRestrict, ChartType, CHARTEX_NS, CHART_NS};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
@@ -2073,21 +2074,30 @@ fn update_two_cell_to(
     })
 }
 
+#[allow(dead_code)]
 pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
+    export_chart_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_chart_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<super::ExportedMedia, Error> {
     let target = parse_chart_id_at(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let sheet_part = picture::lookup_sheet_part(&pkg, &target.sheet, "id")?;
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
     let draw = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let sheet = super::list_pin::parse_part(&pkg, &sheet_part)?;
-    let (width, height) = chart_bitmap_px(&pkg, &draw.root, &sheet.root, &target.key)?;
+    let (width, height) = chart_bitmap_px(&pkg, &draw.root, &sheet.root, &target.key, dpi)?;
     let rid = find_chart_rid(&draw.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
     let space = super::list_pin::parse_part(&pkg, &chart_part)?;
     let accents = super::chart_paint::theme_accents(pkg.get("/xl/theme/theme1.xml").ok());
     let cells = chart_cell_cache(&pkg)?;
-    let png = super::chart_paint::render_chart(
+    let png = super::chart_paint::render_chart_at(
         &space.root,
         width,
         height,
@@ -2096,6 +2106,7 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
         super::chart_paint::ChartHost::Excel,
         Some(&cells),
         &target.sheet,
+        dpi,
     )?;
     Ok(super::ExportedMedia {
         bytes: png,
@@ -2104,14 +2115,23 @@ pub fn export_chart_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia
 }
 
 /// 图表工作表没有格子。按 export_chart_image 同一套规则导出该表上那一张已会画的图。
+#[allow(dead_code)]
 pub(crate) fn export_chartsheet_image(
     bytes: &[u8],
     sheet_name: &str,
 ) -> Result<super::ExportedMedia, Error> {
+    export_chartsheet_image_at(bytes, sheet_name, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_chartsheet_image_at(
+    bytes: &[u8],
+    sheet_name: &str,
+    dpi: RenderDpi,
+) -> Result<super::ExportedMedia, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let sheet_part = picture::lookup_sheet_part(&pkg, sheet_name, "id")?;
     let chart_id = primary_chartsheet_chart_id(&pkg, &sheet_part, sheet_name)?;
-    export_chart_image(bytes, &chart_id)
+    export_chart_image_at(bytes, &chart_id, dpi)
 }
 
 fn primary_chartsheet_chart_id(
@@ -2155,6 +2175,7 @@ fn chart_bitmap_px(
     draw: &Element,
     sheet: &Element,
     key: &ChartKey,
+    dpi: RenderDpi,
 ) -> Result<(u32, u32), Error> {
     let mut index = 0usize;
     let mut size = None;
@@ -2173,8 +2194,9 @@ fn chart_bitmap_px(
         let geometry = if matches!(kind, AnchorKind::TwoCell) {
             super::geometry::GeometryContext::from_package(pkg)
                 .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?
+                .with_dpi(dpi)
         } else {
-            super::geometry::GeometryContext::calibri11()
+            super::geometry::GeometryContext::calibri11().with_dpi(dpi)
         };
         match super::chart_paint::bitmap_px(sheet, anchor, kind, &geometry) {
             Ok(px) => size = Some(px),

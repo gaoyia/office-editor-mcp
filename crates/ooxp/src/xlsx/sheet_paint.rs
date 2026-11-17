@@ -23,6 +23,7 @@ use super::chart_gdi::Face;
 use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
+use super::render_dpi::RenderDpi;
 use super::ExportedMedia;
 use crate::xlsx::fill_device_rotated_rect;
 use crate::xlsx::fill_device_stroked_rect;
@@ -39,11 +40,20 @@ const DEFAULT_COL_PX: i32 = 64;
 /// 没写 `defaultRowHeight` 时的空行。Excel 的标准行高是 14.25 磅，19 像素。
 const DEFAULT_ROW_PT: f64 = 14.25;
 
+#[allow(dead_code)]
 pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    export_sheet_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_sheet_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<ExportedMedia, Error> {
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     if sheet_kind_of(&pkg, &name)? == "chartsheet" {
-        return super::chart::export_chartsheet_image(bytes, &name);
+        return super::chart::export_chartsheet_image_at(bytes, &name, dpi);
     }
     let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
@@ -55,7 +65,8 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
-    let styles = load_styles(&pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(&pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi);
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -77,7 +88,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         theme.as_ref(),
     )?;
     shapes.extend(embedded_sparks(
-        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
     )?);
     let canvas = paint(
         root,
@@ -92,7 +103,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         &shapes,
         &mut session,
     )?;
-    let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+    let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
     Ok(ExportedMedia {
         bytes: png,
         content_type: Some("image/png".to_string()),
@@ -101,10 +112,20 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
 
 /// 切块导出：每块边长 ≤ `tile_px`（且 ≤ `MAX_PX`），不分配整表画布。
 /// 返回顺序行主序 `(row_idx, col_idx, png_bytes)`。单块未超限时仍走整图路径（与旧行为同像素）。
+#[allow(dead_code)]
 pub fn export_sheet_image_tiles(
     bytes: &[u8],
     id: &str,
     tile_px: i32,
+) -> Result<Vec<SheetImageTile>, Error> {
+    export_sheet_image_tiles_at(bytes, id, tile_px, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_sheet_image_tiles_at(
+    bytes: &[u8],
+    id: &str,
+    tile_px: i32,
+    dpi: RenderDpi,
 ) -> Result<Vec<SheetImageTile>, Error> {
     if !(1..=MAX_PX).contains(&tile_px) {
         return Err(unsupported());
@@ -112,7 +133,7 @@ pub fn export_sheet_image_tiles(
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     if sheet_kind_of(&pkg, &name)? == "chartsheet" {
-        let media = super::chart::export_chartsheet_image(bytes, &name)?;
+        let media = super::chart::export_chartsheet_image_at(bytes, &name, dpi)?;
         let (w, h) = png_size(&media.bytes).ok_or_else(unsupported)?;
         if w > tile_px as u32 || h > tile_px as u32 {
             return Err(unsupported());
@@ -137,7 +158,8 @@ pub fn export_sheet_image_tiles(
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
-    let styles = load_styles(&pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(&pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi);
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -159,7 +181,7 @@ pub fn export_sheet_image_tiles(
         theme.as_ref(),
     )?;
     shapes.extend(embedded_sparks(
-        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
     )?);
     let xs = Axis::new(&cols);
     let ys = Axis::new(&rows);
@@ -183,7 +205,7 @@ pub fn export_sheet_image_tiles(
             &shapes,
             &mut session,
         )?;
-        let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+        let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
         return Ok(vec![SheetImageTile {
             row: 0,
             col: 0,
@@ -229,7 +251,7 @@ pub fn export_sheet_image_tiles(
                 tw,
                 th,
             )?;
-            let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+            let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
             out.push(SheetImageTile {
                 row,
                 col,
@@ -535,10 +557,11 @@ fn embedded_sparks(
     cols: &[i32],
     rows: &[i32],
     rtl: bool,
+    dpi: RenderDpi,
 ) -> Result<Vec<Overlay>, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
-    let rasters = super::sparkline::sheet_rasters(pkg, name, sheet, |host| {
+    let rasters = super::sparkline::sheet_rasters_at(pkg, name, sheet, dpi, |host| {
         if host.col < c0 || host.row < r0 {
             return Ok(None);
         }
@@ -712,18 +735,19 @@ fn rect_edges(
     cols: &[i32],
     rows: &[i32],
 ) -> Result<(i32, i32, i32, i32), Error> {
+    let dpi = styles.geometry.dpi();
     if kind == AnchorKind::Absolute {
         let pos = anchor.child_by_local("pos").ok_or_else(unsupported)?;
         let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
-        let x0 = round_px(emu_attr(pos, "x")?)?;
-        let y0 = round_px(emu_attr(pos, "y")?)?;
+        let x0 = round_px_at(emu_attr(pos, "x")?, dpi)?;
+        let y0 = round_px_at(emu_attr(pos, "y")?, dpi)?;
         let cx = emu_attr(ext, "cx")?;
         let cy = emu_attr(ext, "cy")?;
         if cx <= 0 || cy <= 0 {
             return Err(unsupported());
         }
-        let x1 = x0 + round_px(cx)?;
-        let y1 = y0 + round_px(cy)?;
+        let x1 = x0 + round_px_at(cx, dpi)?;
+        let y1 = y0 + round_px_at(cy, dpi)?;
         return Ok((x0, y0, x1, y1));
     }
     let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
@@ -744,7 +768,10 @@ fn rect_edges(
             }
             let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
             let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
-            (x_from + round_px(x_end)?, y_from + round_px(y_end)?)
+            (
+                x_from + round_px_at(x_end, dpi)?,
+                y_from + round_px_at(y_end, dpi)?,
+            )
         }
         AnchorKind::TwoCell => {
             let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
@@ -755,15 +782,18 @@ fn rect_edges(
             let y_to = axis_origin(to.row, r0, rows, &mut |row| {
                 row_px_one(sheet, styles, cells, row)
             })?;
-            (x_to + round_px(to_x)?, y_to + round_px(to_y)?)
+            (
+                x_to + round_px_at(to_x, dpi)?,
+                y_to + round_px_at(to_y, dpi)?,
+            )
         }
         AnchorKind::Absolute => unreachable!("absolute handled above"),
         AnchorKind::RelSize | AnchorKind::AbsSize => {
             return Err(unsupported());
         }
     };
-    let x0 = x_from + round_px(col_off)?;
-    let y0 = y_from + round_px(row_off)?;
+    let x0 = x_from + round_px_at(col_off, dpi)?;
+    let y0 = y_from + round_px_at(row_off, dpi)?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
@@ -845,11 +875,16 @@ fn emu_attr(el: &Element, name: &str) -> Result<i64, Error> {
 }
 
 /// 9525 是奇数，EMU 除出来不会正好落在半像素上。
+#[allow(dead_code)]
 fn round_px(emu: i64) -> Result<i32, Error> {
+    round_px_at(emu, RenderDpi::DEFAULT)
+}
+
+fn round_px_at(emu: i64, dpi: RenderDpi) -> Result<i32, Error> {
     if emu < 0 {
         return Err(unsupported());
     }
-    let px = (emu as f64 / 9_525.0).round();
+    let px = dpi.emu_to_px_f(emu as f64).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
@@ -1492,10 +1527,14 @@ fn rotate_cw(px: f64, py: f64, cx: f64, cy: f64, deg: f64) -> (f64, f64) {
 }
 
 fn round_emu(emu: f64) -> Result<i32, Error> {
+    round_emu_at(emu, RenderDpi::DEFAULT)
+}
+
+fn round_emu_at(emu: f64, dpi: RenderDpi) -> Result<i32, Error> {
     if !emu.is_finite() || emu < 0.0 {
         return Err(unsupported());
     }
-    let px = (emu / 9_525.0).round();
+    let px = dpi.emu_to_px_f(emu).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
@@ -1503,7 +1542,11 @@ fn round_emu(emu: f64) -> Result<i32, Error> {
 }
 
 fn emu_to_px(emu: f64) -> f64 {
-    emu / 9_525.0
+    emu_to_px_at(emu, RenderDpi::DEFAULT)
+}
+
+fn emu_to_px_at(emu: f64, dpi: RenderDpi) -> f64 {
+    dpi.emu_to_px_f(emu)
 }
 
 fn turned_edges(
@@ -3586,7 +3629,7 @@ fn row_sizes(
         } else {
             row_auto_pt(sheet, styles, cells, row, &base)?
         };
-        let px = excel_row_px(pt);
+        let px = excel_row_px_at(pt, styles.geometry.dpi());
         if px < 1 {
             return Err(unsupported());
         }
@@ -3676,8 +3719,11 @@ fn auto_row_pt(name: &str, pt: f64) -> f64 {
 
 /// 自定义行高截断成像素。20 磅是 26，不是四舍五入的 27。
 fn excel_row_px(pt: f64) -> i32 {
-    let emu = (pt * 12_700.0).round();
-    (emu / 9_525.0).floor() as i32
+    excel_row_px_at(pt, RenderDpi::DEFAULT)
+}
+
+fn excel_row_px_at(pt: f64, dpi: RenderDpi) -> i32 {
+    dpi.excel_row_px(pt)
 }
 
 struct Axis {
@@ -4039,7 +4085,10 @@ fn paint_window(
         )?;
     }
     paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
-    let mut fonts = FontBook::default();
+    let mut fonts = FontBook {
+        dpi: styles.geometry.dpi(),
+        faces: Vec::new(),
+    };
     // sheetView RTL：无文字整图翻转已差 0。有文字时 Excel 只换列边、字仍正写——
     // 先画非文字层再翻转，最后在翻转坐标系画字（不 Unicode 反序、不镜像字形）。
     if !rtl {
@@ -5569,9 +5618,18 @@ fn cell_rect(
     Some((x0, y0, x1, y1))
 }
 
-#[derive(Default)]
 struct FontBook {
+    dpi: RenderDpi,
     faces: Vec<(String, i32, bool, bool, Face)>,
+}
+
+impl Default for FontBook {
+    fn default() -> Self {
+        Self {
+            dpi: RenderDpi::DEFAULT,
+            faces: Vec::new(),
+        }
+    }
 }
 
 impl FontBook {
@@ -5584,8 +5642,9 @@ impl FontBook {
         {
             return Ok(&self.faces[index].4);
         }
-        let px = (pt * 96.0 / 72.0) as f32;
-        let face = Face::open_cell(px, bold, italic, name).ok_or_else(unsupported)?;
+        let px = self.dpi.pt_to_px_font(pt) as f32;
+        let face =
+            Face::open_cell_dpi(px, bold, italic, name, self.dpi.get()).ok_or_else(unsupported)?;
         self.faces.push((name.to_string(), key, bold, italic, face));
         Ok(&self.faces.last().expect("刚放进去").4)
     }
@@ -6904,11 +6963,19 @@ fn paint_button(canvas: &mut Canvas, x: i32, y: i32) {
     }
 }
 
-fn encode_png(w: i32, h: i32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: i32, h: i32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w as u32, h as u32);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);

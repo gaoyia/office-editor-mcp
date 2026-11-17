@@ -14,6 +14,33 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏画成 PNG；合法日期轴按日期比例定位。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
+`exportChartImage`、`exportSparklineImage`、`exportSheetImage` 可写可选整数字段 `dpi`（24 到 600）。省略或 `96` 时与现有 96 dpi 出图像素一致。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸位图。只影响本次 PNG，不改源包，也不改系统 DPI。非默认 DPI 会写入 pHYs（像素/米）；省略或 96 不写该块，以免改既有字节。宽或高超出 1 到 4096 像素仍报 NotImplemented。`exportSlideImage` 与 `exportPageImage` 本切片不接受此字段。
+
+示例（库默认仍是 96；对照官方 106 dpi 窗口时显式传入）：
+
+```json
+{"schemaVersion":1,"action":"exportSparklineImage","path":"book.xlsx","id":"sheet:Sheet1/spark:1","output":"spark.png","dpi":106}
+```
+
+```json
+{"schemaVersion":1,"action":"exportChartImage","path":"book.xlsx","id":"sheet:Sheet1/chart:1","output":"chart.png","dpi":106}
+```
+
+```json
+{"schemaVersion":1,"action":"exportSheetImage","path":"book.xlsx","id":"sheet:Sheet1","output":"sheet.png","dpi":106}
+```
+
+命令行用 `--input` 读取同一份领域 JSON（文件路径，或 `-` 表示标准输入）。不要把 JSON 路径当作位置参数，命令行会拒绝并退出码 2。
+
+```text
+ooxp --input spark-106.json
+```
+
+`spark-106.json` 的内容即上面第一份 `exportSparklineImage` 请求。也可以：
+
+```text
+ooxp --input - < spark-106.json
+```
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
@@ -2412,7 +2439,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 一组里只能有一条迷你图，落点只能是一个格子。落在合并单元格里报 `NotImplemented`
-- 宽高是这个格子的列宽和行高，96 dpi，和布局用的像素同一套。缺省列 8.43 字符是 64 像素，缺省行 15 磅是 20 像素
+- 宽高是这个格子的列宽和行高，缺省 96 dpi，和布局用的像素同一套。缺省列 8.43 字符是 64 像素，缺省行 15 磅是 20 像素。请求 `dpi` 后按该 DPI 原生换算（64→`round(64*dpi/96)`，行高按 `round(emu*dpi/914400)`）
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 点用包里已有的格子缓存，不算公式。公式不是本簿一块连续区域时报 `NotImplemented`
 - 空格子按 `displayEmptyCellsAs`。缺省当 `zero`。`gap` 断开，`span` 跨过空格连线，`zero` 当 0
@@ -2420,7 +2447,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 纵轴上沿是 5 像素，下沿是高度减 4 的那一行。最小值和最大值取这条线自己的数。两者相同，线画在上沿
 - `minAxisType` / `maxAxisType` 缺省是 `individual`。`group` 在这一组只有一条时与它相同。`custom` 用 `manualMin` / `manualMax`，缺了或最小值不小于最大值时报 `NotImplemented`。超出轴端的数收到轴端
 - 线色用 `colorSeries` 的 `rgb`。没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
-- 线宽缺省 0.75 磅，按 96 dpi 换成像素
+- 线宽缺省 0.75 磅，按请求 DPI（缺省 96）换成像素
 - 柱形在每个点都是有限非负数、没有空格子时可以画。柱是纯色，没有抗锯齿。色用 `colorSeries` 的 `rgb`，没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形横向：格子宽减去 5 后按点数等分，槽从第 3 列像素起。第 i 根柱（从 0 起）占这一槽正中的三分之二。左缘是 `floor(3 + (i + 1/6) × 槽宽)`，右缘含端点是 `ceil(3 + (i + 5/6) × 槽宽) - 1`。右缘正好落在整数上时，这一列不画
 - 柱形纵向和折线同一段：上沿是 5，下沿含端点是高度减 4。绘图高是高度减 8。最小值和最大值取这些数自己。全部相同且大于 0 时每根柱都铺满。全部是 0 时不画。其余柱高是 `floor((值 - 最小) / (最大 - 最小) × (绘图高 - 1)) + 1`，底边贴下沿。值是 0 且最小值也是 0 时这一根不画，槽仍占着
@@ -2462,12 +2489,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `iconSet` 条件格式：cfvo/reverse/showValue/gte **选择语义**在库内可测；**出图仍 NotImplemented**（无公开可合法复现标准图标字形前不绘制）。最小锁定：`3Arrows` / `3ArrowsGray` / `3TrafficLights1`。不声称完整图标集或与 Excel 差 0。
 - 公式差分边框 `dashed` / `slantDashDot`：与格子边框共用绘制；`expression`+dxf 可出图。`cellIs` 带边框、差分对角线仍 NotImplemented。整图与 Excel CopyPicture 若屏 DPI≠96 可能 sizeDiffer，不以缩金样宣称差 0。
 - 像素对齐 Excel 16.0 的 `Range.CopyPicture`（`xlScreen`、`xlBitmap`）。不乘工作表 `zoomScale`
-- 工作表、切块、迷你图及图表 twoCell 锚点共用固定 96 dpi 的列几何；不读取本机显示 DPI。
+- 工作表、切块、迷你图及图表 twoCell 锚点共用同一套列几何。MDW 仍按 96 dpi 测量，再按请求 `dpi`（缺省 96）把像素比例放大；不读取本机显示 DPI，也不改系统 DPI。
 - 先按 `builtinId=0` 找 Normal 样式，再回退英文名 Normal 和字体 0。列宽的 MDW 是这个字体、字号及粗斜体在 96 dpi 下数字 0–9 的最大前进宽，不取格子的局部字体。
 - 显式 `col/@width` 和 `defaultColWidth` 都直接按 `floor(((256 * width + floor(128 / MDW)) / 256) * MDW)` 换像素，不经过 UI 两位小数字符宽，也不重复加 5 像素。
 - 没写上述宽度时，沿用 8.43 字符加 5 像素的缺省；Calibri 11 / MDW=7 仍为 64 像素，`16.7109375` 仍为 117 像素。
 - Windows 用公开 GDI 按固定像素字号测量，并核对实际字体名；缺字体或测量失败报 `NotImplemented`，不静默改成 MDW=7。非 Windows 仅对规范已知的普通 Calibri 11 使用 MDW=7，其它 Normal 字体暂不出图。
-- 本次不改变图表 zoomScale 与行高四舍五入、工作表行高截断的既有区别。106 dpi 的官方位图仍可能与 96 dpi 库图不同；字体像素量化不保证按 DPI 比例缩放后相同。
+- 图表 zoomScale 与行高四舍五入、工作表行高截断的既有区别仍在。请求 `dpi: 106` 后，图表 `a:ext` 按 `round(EMU*106/914400)` 取画布（例如 5486400×3200400 EMU 为 636×371），便于对照官方窗口 DPI；缺省列 64 按比例是 71，不一定等于官方 CopyPicture 的 72，106/96 不是所有宽高差的唯一原因。官方对照以尽力接近的几何/颜色/抗锯齿及实测尺寸报告，不再把 differ=0 当唯一完成门。这是 2026-11-18 用户明确放宽，不是把旧失败改写成已通过。
 - 写了行高就截断：`floor(round(磅 * 12700) / 9525)`。20 磅是 26，不是 27
 - 没写行高时，先取这一张表的缺省，再用格子里的字加高
 - 没写 `defaultRowHeight` 时，缺省是 14.25 磅，19 像素

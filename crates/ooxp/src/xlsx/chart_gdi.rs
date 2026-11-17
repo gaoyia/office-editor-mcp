@@ -123,7 +123,11 @@ mod win {
     impl Face {
         /// 按顺序找本机有的字体。图里没写字体时，Excel 16.0 用「等线」。
         pub fn open(px: f32, bold: bool) -> Option<Self> {
-            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
+            Self::open_dpi(px, bold, 96.0)
+        }
+
+        pub fn open_dpi(px: f32, bold: bool, dpi: f64) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / dpi) as f32;
             for name in FACES {
                 let Some(mut face) = Self::new(px, bold, false, name, pt) else {
                     continue;
@@ -153,7 +157,18 @@ mod win {
 
         /// 单元格文字。斜体只走这一条，图表字仍不加斜。
         pub fn open_cell(px: f32, bold: bool, italic: bool, name: &str) -> Option<Self> {
-            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
+            Self::open_cell_dpi(px, bold, italic, name, 96.0)
+        }
+
+        /// 与 `open_cell` 相同，但按导出 DPI 把像素字号换回磅值。
+        pub fn open_cell_dpi(
+            px: f32,
+            bold: bool,
+            italic: bool,
+            name: &str,
+            dpi: f64,
+        ) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / dpi) as f32;
             if !name.is_empty() && !name.starts_with('+') {
                 if let Some(mut face) = Self::new(px, bold, italic, name, pt) {
                     face.name = face.text_face();
@@ -2285,11 +2300,19 @@ impl Face {
         None
     }
 
+    pub fn open_dpi(_: f32, _: bool, _: f64) -> Option<Self> {
+        None
+    }
+
     pub fn open_named(_: f32, _: bool, _: &str) -> Option<Self> {
         None
     }
 
     pub fn open_cell(_: f32, _: bool, _: bool, _: &str) -> Option<Self> {
+        None
+    }
+
+    pub fn open_cell_dpi(_: f32, _: bool, _: bool, _: &str, _: f64) -> Option<Self> {
         None
     }
 
