@@ -70,6 +70,14 @@ fn coord(el: &Element, name: &str, mode: &str) -> Coordinate {
     }
 }
 impl Spec {
+    // Overlay changes plot reservation, not default legend keys or text packing.
+    // Keep the locked default-right ink independent of that layout-only flag.
+    pub(super) fn default_right_ink(&self) -> bool {
+        self.pos == Some(LegendPos::Right)
+            && self.style == TextStyle::default()
+            && self.manual.is_none()
+            && self.deleted.is_empty()
+    }
     pub(super) fn read(root: &Element, accents: [[u8; 3]; 6]) -> Result<Self, Error> {
         let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
         let pos = legend_pos(chart);
@@ -153,11 +161,7 @@ impl Spec {
                 }
             }
         }
-        result.legacy = result.pos == Some(LegendPos::Right)
-            && result.style == TextStyle::default()
-            && !result.overlay
-            && result.manual.is_none()
-            && result.deleted.is_empty();
+        result.legacy = result.default_right_ink() && !result.overlay;
         Ok(result)
     }
 }
@@ -713,5 +717,32 @@ mod tests {
             "<legend><layout><manualLayout><wMode val='edge'/><w val='.4'/></manualLayout></layout></legend>"
         )
         .is_err());
+    }
+}
+
+#[cfg(test)]
+mod overlay_ink_tests {
+    use super::*;
+    #[test]
+    fn overlay_is_independent_of_locked_default_right_ink() {
+        let mut spec = Spec {
+            legacy: true,
+            pos: Some(LegendPos::Right),
+            style: TextStyle::default(),
+            overlay: false,
+            manual: None,
+            deleted: Vec::new(),
+        };
+        assert!(spec.default_right_ink());
+        spec.overlay = true;
+        assert!(spec.default_right_ink());
+        spec.style.bold = true;
+        assert!(!spec.default_right_ink());
+        spec.style = TextStyle::default();
+        spec.deleted.push(0);
+        assert!(!spec.default_right_ink());
+        spec.deleted.clear();
+        spec.pos = Some(LegendPos::Bottom);
+        assert!(!spec.default_right_ink());
     }
 }

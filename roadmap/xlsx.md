@@ -292,3 +292,16 @@ DPI几何分子**38/49不变**，6 Normal路径仍需Office同语义可比证据
 完整cargo test -p ooxp为1873 passed/0failed/0ignored（新增5数学/颜色/对称/重复段/单点回归）；workspace clippy --all-targets --all-features -D warnings、fmt、真实cargo build -p ooxp-cli通过。全部38 Python通过；旧核反证及19c原图保留为明确historical，不删除旧test假通过。新exeSHA 28ddb1f2811f2ae8c20d6c580ff3c5577bdcced33f92eaf1096295074c499782；旧exe63beeb5539353f3b62f3de8e0b4e641f0ff063b87e945132348289a87c0beb69在新证据目录完整保留。
 
 证据：桌面office-editor-PR10-迷你图笔画修复-20261117-160458。原始before/after/gold及SHA、数学解释、metrics/host/tiles/日志；本片未重开Office或修改旧快照。仅修本PR既有迷你图笔画，不恢复暂停十项。
+
+
+## 2026-11-17 图例坐标与cc6收尾（按t128停止扩展）
+
+只用原7源，4源必要COM校准，0新源；同一baseline ChartObject在worksheet平移72/约36pt后，ChartArea.Left/Top跟随而Legend/LegendKey数值不变，Chart.Export PNG字节完全不变。说明这些属性不在同一worksheet坐标系；ChartArea.Width426/Height246亦不等于ChartObject432/252。PNG内部原点尚无完整证书，key纯色支持框/文字ink不当Legend.Rect；此前“中心-4pt是真库bug”不成立为证据，不硬补4pt。手动edge/factor组合合法，styled-right仍是style+manual+overlay，不按异常吞默认。
+
+已验证子范围分列：显式Arial18粗红2/2、手动w/h=172.8×75.6pt比例语义3/3、overlay不预留布尔语义2/2、系列色语义7/7；这些不同分母不相加，7整图仍缺绝对原点/自动布局细节证书。636×371与576×336外框由106/96解释，不用sizeDiff否决已验证子范围，也不豁免未证实布局。
+
+收尾中只修一处cc6确定回归：仅改overlay却使库缺省右图例key从8×8变7×7并改变文字排版，而Office两源key/legend属性完全相同。将锁定default-right ink与overlay绘图区预留解耦；保持原默认PNG，overlay仍释放plot空间，不改坐标/字体度量/手动布局、不增功能。7当前图仅overlay-only一张变化，6张字节不变；修后蓝key64像素与baseline相同，原baseline20个不透明字形点保留，overlay后方plot黑边不误当字形差。原17×3路径49 PNG字节不变/2同NI，sheet/spark/其它chart未回退。
+
+实际完整Rust1874 passed/0failed/0ignored；44 Python通过，fmt、workspace clippy全targets/features-Dwarnings、真实CLI build、语法/diff通过。新exeSHA见桌面minimal-fix-results.json，旧28ddb1f2完整exe保留。原1873与38是前片历史，不冒充本次。几何43/49不变，未称7功能/7整图PASS。
+
+证据：桌面office-editor-PR10-图例坐标核实-20261117-162104。四自有wb全部Close(false)、ownwb0、源SHA不变/独占读/锁0；无Save/Quit/kill/删锁/系统设置。当前必要检查与小回归修复已结束，按t128不继续追4pt、自动布局或其它项目；余绝对原点/自动边距/key与ink细节记录为限制，暂停十项不恢复。
