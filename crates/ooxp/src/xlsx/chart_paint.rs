@@ -1,8 +1,9 @@
-//! 簇状柱形图、簇状条形图、普通折线图和带标记的散点图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
+//! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图和普通面积图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
 
@@ -75,6 +76,7 @@ enum PlotKind {
     ClusteredColumn,
     ClusteredBar,
     StandardLine,
+    StandardArea,
     Scatter { connect: bool },
 }
 
@@ -101,6 +103,8 @@ struct Series {
     line_width: f64,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
+    /// Area stroke color when a solid outline is present. Lines keep this unset.
+    line_color: Option<[u8; 3]>,
     x_values: Vec<Option<f64>>,
 }
 
@@ -115,6 +119,7 @@ impl Default for Series {
             line_width: 0.0,
             marker: MarkerKind::None,
             marker_color: None,
+            line_color: None,
             x_values: Vec::new(),
         }
     }
@@ -502,6 +507,32 @@ fn read_chart(
             };
             PlotKind::Scatter { connect }
         }
+        "areaChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for child in wrapper.element_children() {
+                if matches!(child.local_name(), "dropLines") {
+                    return Err(unsupported());
+                }
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if blanks != "gap" {
+                return Err(unsupported());
+            }
+            PlotKind::StandardArea
+        }
         _ => return Err(unsupported()),
     };
     let vary = flag(wrapper, "varyColors").unwrap_or(false);
@@ -533,6 +564,7 @@ fn read_chart(
             (values, Vec::new())
         };
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
+        let mut line_color = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
                 color: series_color(ser, accents),
@@ -542,6 +574,17 @@ fn read_chart(
                 marker_color: None,
             },
             PlotKind::StandardLine => read_line_series(ser, accents)?,
+            PlotKind::StandardArea => {
+                let area = read_area_series(ser, accents)?;
+                line_color = area.line_color;
+                LineSeriesStyle {
+                    color: area.fill,
+                    visible: area.line_visible,
+                    width: area.line_width,
+                    marker: MarkerKind::None,
+                    marker_color: None,
+                }
+            }
             PlotKind::Scatter { connect } => {
                 let mut style = read_line_series(ser, accents)?;
                 if !connect {
@@ -562,6 +605,7 @@ fn read_chart(
             line_width: style.width,
             marker: style.marker,
             marker_color: style.marker_color,
+            line_color,
             x_values,
         };
     }
@@ -1235,6 +1279,7 @@ fn paint(
     match chart.kind {
         PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::StandardArea => draw_areas(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::ClusteredBar | PlotKind::Scatter { .. } => {
             unreachable!("bar/scatter charts use dedicated paint")
         }
@@ -1415,6 +1460,68 @@ fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3
     }
 }
 
+fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+    let cats = chart.categories.len().max(1) as f64;
+    let slot = (plot.w + 1.0) / cats;
+    if slot <= 0.0 {
+        return;
+    }
+    let zero_y = y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    for ser in &chart.series {
+        let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
+        let stroke = ser.line_color.unwrap_or(fill);
+        let mut run = Vec::new();
+        for (ci, value) in ser.values.iter().enumerate() {
+            match value {
+                Some(v) if v.is_finite() => {
+                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
+                }
+                _ => {
+                    fill_area_run(canvas, &run, zero_y, fill);
+                    if ser.line_visible && ser.line_width > 0.0 {
+                        stroke_run(canvas, &run, ser.line_width, stroke);
+                    }
+                    run.clear();
+                }
+            }
+        }
+        fill_area_run(canvas, &run, zero_y, fill);
+        if ser.line_visible && ser.line_width > 0.0 {
+            stroke_run(canvas, &run, ser.line_width, stroke);
+        }
+    }
+}
+
+fn fill_area_run(canvas: &mut Canvas, run: &[(f64, f64)], zero_y: f64, color: [u8; 3]) {
+    for pair in run.windows(2) {
+        fill_area_span(canvas, pair[0], pair[1], zero_y, color);
+    }
+}
+
+fn fill_area_span(
+    canvas: &mut Canvas,
+    start: (f64, f64),
+    end: (f64, f64),
+    zero_y: f64,
+    color: [u8; 3],
+) {
+    let (x0, y0) = start;
+    let (x1, y1) = end;
+    if ![x0, y0, x1, y1, zero_y].iter().all(|v| v.is_finite()) {
+        return;
+    }
+    let s0 = y0 - zero_y;
+    let s1 = y1 - zero_y;
+    if s0 * s1 < 0.0 {
+        let t = s0 / (s0 - s1);
+        let xc = x0 + t * (x1 - x0);
+        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (xc, zero_y)], color);
+        canvas.fill_polygon(&[(xc, zero_y), (x1, y1), (x1, zero_y)], color);
+    } else {
+        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (x1, y1), (x1, zero_y)], color);
+    }
+}
+
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -1425,7 +1532,9 @@ fn draw_plot_key(
     color: [u8; 3],
 ) {
     match kind {
-        PlotKind::ClusteredColumn => canvas.fill_rect(x0, y0, x1, y1, color),
+        PlotKind::ClusteredColumn | PlotKind::StandardArea => {
+            canvas.fill_rect(x0, y0, x1, y1, color)
+        }
         PlotKind::ClusteredBar => {
             let mid = (y0 + y1) / 2;
             canvas.fill_rect(x0, mid - 1, x1, mid + 2, color);
@@ -2099,6 +2208,101 @@ fn read_line_marker(
     ))
 }
 
+struct AreaSeriesStyle {
+    fill: Option<[u8; 3]>,
+    line_visible: bool,
+    line_width: f64,
+    line_color: Option<[u8; 3]>,
+}
+
+fn read_area_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<AreaSeriesStyle, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if flag(ser, "smooth").unwrap_or(false) {
+        return Err(unsupported());
+    }
+    data_labels_hidden(ser.child_by_local("dLbls"))?;
+    for name in ["dPt", "trendline", "errBars"] {
+        if ser.child_by_local(name).is_some() {
+            return Err(unsupported());
+        }
+    }
+    if let Some(marker) = ser.child_by_local("marker") {
+        let symbol = marker
+            .child_by_local("symbol")
+            .and_then(|el| el.attr_local("val"))
+            .unwrap_or("auto");
+        if symbol != "none" {
+            return Err(unsupported());
+        }
+    }
+    let mut fill = None;
+    let mut line_visible = false;
+    let mut line_width = 2.25 * DPI / 72.0;
+    let mut line_color = None;
+    if let Some(sp) = ser.child_by_local("spPr") {
+        for child in sp.element_children() {
+            match child.local_name() {
+                "solidFill" => {
+                    if color_has_non_opaque_alpha(child) {
+                        return Err(unsupported());
+                    }
+                    fill = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+                }
+                "noFill" => return Err(unsupported()),
+                "ln" => {
+                    if let Some(solid) = child.child_by_local("solidFill") {
+                        if color_has_non_opaque_alpha(solid) {
+                            return Err(unsupported());
+                        }
+                    }
+                    let line = read_solid_ln(child, accents, line_width)?;
+                    line_visible = line.visible;
+                    line_width = line.width;
+                    line_color = line.color;
+                }
+                "effectLst" => {
+                    if child.element_children().next().is_some() {
+                        return Err(unsupported());
+                    }
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+    }
+    Ok(AreaSeriesStyle {
+        fill,
+        line_visible,
+        line_width,
+        line_color,
+    })
+}
+
+fn color_has_non_opaque_alpha(slot: &Element) -> bool {
+    let Some(node) = slot
+        .child_by_local("srgbClr")
+        .or_else(|| slot.child_by_local("sysClr"))
+        .or_else(|| slot.child_by_local("schemeClr"))
+        .or_else(|| {
+            if matches!(slot.local_name(), "srgbClr" | "sysClr" | "schemeClr") {
+                Some(slot)
+            } else {
+                None
+            }
+        })
+    else {
+        return false;
+    };
+    node.element_children()
+        .any(|child| match child.local_name() {
+            "alpha" => child
+                .attr_local("val")
+                .and_then(|raw| raw.parse::<f64>().ok())
+                .is_none_or(|val| (val - 100_000.0).abs() > 1e-6),
+            "alphaMod" | "alphaOff" => true,
+            _ => false,
+        })
+}
+
 fn series_color(ser: &Element, accents: [[u8; 3]; 6]) -> Option<[u8; 3]> {
     let fill = ser.child_by_local("spPr")?.child_by_local("solidFill")?;
     color_of_slot(fill, &accents)
@@ -2449,6 +2653,23 @@ fn draw_text(
     }
 }
 
+fn point_in_polygon(px: f64, py: f64, pts: &[(f64, f64)]) -> bool {
+    let mut inside = false;
+    let mut j = pts.len() - 1;
+    for i in 0..pts.len() {
+        let (xi, yi) = pts[i];
+        let (xj, yj) = pts[j];
+        if (yi > py) != (yj > py) {
+            let x_int = (xj - xi) * (py - yi) / (yj - yi) + xi;
+            if px < x_int {
+                inside = !inside;
+            }
+        }
+        j = i;
+    }
+    inside
+}
+
 fn coverage(dist: f64, radius: f64) -> u8 {
     let cov = (radius + 0.5 - dist).clamp(0.0, 1.0);
     (cov * 255.0 + 0.5) as u8
@@ -2504,6 +2725,43 @@ impl Canvas {
         for y in y0..y1 {
             for x in x0..x1 {
                 self.blend(x, y, color, 255);
+            }
+        }
+    }
+
+    /// Opaque even-odd fill using pixel centers. Shared edges of split
+    /// trapezoids are not double-counted, and later series overwrite earlier ones.
+    fn fill_polygon(&mut self, pts: &[(f64, f64)], color: [u8; 3]) {
+        if pts.len() < 3 || pts.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
+            return;
+        }
+        let min_x = pts
+            .iter()
+            .map(|p| p.0)
+            .fold(f64::INFINITY, f64::min)
+            .floor() as i32;
+        let max_x = pts
+            .iter()
+            .map(|p| p.0)
+            .fold(f64::NEG_INFINITY, f64::max)
+            .ceil() as i32;
+        let min_y = pts
+            .iter()
+            .map(|p| p.1)
+            .fold(f64::INFINITY, f64::min)
+            .floor() as i32;
+        let max_y = pts
+            .iter()
+            .map(|p| p.1)
+            .fold(f64::NEG_INFINITY, f64::max)
+            .ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                if point_in_polygon(px, py, pts) {
+                    self.blend(x, y, color, 255);
+                }
             }
         }
     }
@@ -4205,5 +4463,267 @@ mod tests {
   </c:chart>
 </c:chartSpace>"#;
         render_bar(&col_ok).unwrap();
+    }
+
+    fn area_space(plot_body: &str, chart_extra: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {chart_extra}
+    <c:plotArea>
+      {plot_body}
+      <c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn standard_area_xml(series: &str, chart_extra: &str) -> String {
+        area_space(
+            &format!(
+                r#"<c:areaChart>
+        <c:grouping val="standard"/>
+        <c:varyColors val="0"/>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>"#
+            ),
+            chart_extra,
+        )
+    }
+
+    fn area_fill(hex: &str) -> String {
+        format!(r#"<c:spPr><a:solidFill><a:srgbClr val="{hex}"/></a:solidFill></c:spPr>"#)
+    }
+
+    fn render_area(xml: &str) -> Result<Vec<u8>, Error> {
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        render_rgb_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+    }
+
+    fn pixel_at(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * w + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    #[test]
+    fn standard_area_fills_to_zero_covers_later_series_and_breaks_on_gaps() {
+        let s1 = line_ser(
+            0,
+            "S1",
+            &[Some(2.0), Some(2.0), Some(2.0), Some(2.0)],
+            &area_fill("156082"),
+        );
+        let s2 = line_ser(
+            1,
+            "S2",
+            &[Some(1.0), Some(1.0), Some(1.0), Some(1.0)],
+            &area_fill("E97132"),
+        );
+        let png = render_area(&standard_area_xml(&format!("{s1}{s2}"), "")).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let a1 = [0x15, 0x60, 0x82];
+        let a2 = [0xE9, 0x71, 0x32];
+        assert!(
+            count_in(&rgb, w, 80, w - 80, 40, h - 40, a1, 2) >= 80,
+            "the lower series should remain visible above the covering series"
+        );
+        assert!(
+            count_in(&rgb, w, 80, w - 80, 40, h - 40, a2, 2) >= 80,
+            "the later series should cover the first near the baseline"
+        );
+
+        // Gap in the middle must not be filled across.
+        let gapped = line_ser(
+            0,
+            "S1",
+            &[Some(2.0), Some(2.0), None, Some(2.0), Some(2.0)],
+            &area_fill("156082"),
+        );
+        let png = render_area(&standard_area_xml(
+            &gapped,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert!(count_in(&rgb, w, 80, w - 80, 40, h - 40, a1, 2) >= 40);
+        // Mid-category of the missing point should stay near the plot background.
+        let cx = w / 2;
+        let mut mid_hits = 0usize;
+        for y in 40..h - 50 {
+            if near(pixel_at(&rgb, w, cx, y), a1, 8) {
+                mid_hits += 1;
+            }
+        }
+        assert!(
+            mid_hits < 8,
+            "a gap must not leave a filled band down the missing category, got {mid_hits}"
+        );
+    }
+
+    fn count_fill_band(rgb: &[u8], w: u32, x: u32, y0: u32, y1: u32, color: [u8; 3]) -> usize {
+        (y0..y1)
+            .filter(|&y| near(pixel_at(rgb, w, x, y), color, 8))
+            .count()
+    }
+
+    #[test]
+    fn standard_area_crosses_zero_and_slide_host_paints_fill() {
+        let ser = line_ser(
+            0,
+            "S1",
+            &[Some(2.0), Some(-2.0), Some(2.0)],
+            &area_fill("156082"),
+        );
+        let png = render_area(&standard_area_xml(&ser, "")).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a1 = [0x15, 0x60, 0x82];
+        // With +/- values the auto axis includes zero near mid-height.
+        // First category (near w/4) is positive: fill sits in the upper half.
+        // Second category (near w/2) is negative: fill sits in the lower half.
+        let left = w / 4;
+        let mid = w / 2;
+        let pos_above = count_fill_band(&rgb, w, left, 40, h / 2, a1);
+        let pos_below = count_fill_band(&rgb, w, left, h / 2, h - 40, a1);
+        let neg_above = count_fill_band(&rgb, w, mid, 40, h / 2, a1);
+        let neg_below = count_fill_band(&rgb, w, mid, h / 2, h - 40, a1);
+        assert!(
+            pos_above > 20 && pos_above > pos_below * 3,
+            "positive values should fill above the zero crossing; above={pos_above} below={pos_below}"
+        );
+        assert!(
+            neg_below > 20 && neg_below > neg_above * 3,
+            "negative values should fill below zero, not above; below={neg_below} above={neg_above}"
+        );
+
+        let doc = crate::xml::parse(standard_area_xml(&ser, "").as_bytes()).unwrap();
+        let slide = render_rgb_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Slide,
+            None,
+            "",
+        )
+        .unwrap();
+        let (sw, _, srgb) = png_rgb(&slide);
+        assert_eq!(sw, 576);
+        assert!(
+            count_in(&srgb, sw, 80, sw - 80, 40, 300, a1, 2) >= 80,
+            "slide host shares the area painter"
+        );
+    }
+
+    #[test]
+    fn unsupported_area_inputs_stay_not_implemented() {
+        let ser = line_ser(
+            0,
+            "S1",
+            &[Some(1.0), Some(2.0), Some(3.0)],
+            &area_fill("156082"),
+        );
+        let base = standard_area_xml(&ser, "");
+        let cases = [
+            base.replace(r#"grouping val="standard""#, r#"grouping val="stacked""#),
+            base.replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="percentStacked""#,
+            ),
+            base.replace("<c:areaChart>", "<c:area3DChart>")
+                .replace("</c:areaChart>", "</c:area3DChart>"),
+            base.replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+            standard_area_xml(&ser, r#"<c:dispBlanksAs val="zero"/>"#),
+            standard_area_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#),
+            base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
+            base.replacen(
+                r#"</c:areaChart>"#,
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:areaChart>"#,
+                1,
+            ),
+            base.replacen(r#"</c:areaChart>"#, r#"<c:dropLines/></c:areaChart>"#, 1),
+            standard_area_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                ),
+                "",
+            ),
+            standard_area_xml(
+                &line_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
+                ),
+                "",
+            ),
+            area_space(
+                r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
+          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:barChart><c:areaChart><c:grouping val="standard"/><c:ser>
+          <c:order val="1"/><c:val><c:numLit><c:pt idx="0"><c:v>2</c:v></c:pt></c:numLit></c:val>
+        </c:ser></c:areaChart>"#,
+                "",
+            ),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err =
+                render_area(xml).expect_err(&format!("area case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "area case {i} should stay NotImplemented"
+            );
+        }
+        // Omitted grouping, gap blanks, hidden labels, and marker none stay supported.
+        render_area(
+            &area_space(
+                &format!(
+                    r#"<c:areaChart>
+        <c:varyColors val="0"/>
+        {ser}
+        <c:dLbls><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showLegendKey val="0"/><c:showBubbleSize val="0"/></c:dLbls>
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>"#
+                ),
+                r#"<c:dispBlanksAs val="gap"/>"#,
+            )
+            .replacen(
+                &area_fill("156082"),
+                &format!(
+                    r#"{}<c:marker><c:symbol val="none"/></c:marker>"#,
+                    area_fill("156082")
+                ),
+                1,
+            ),
+        )
+        .unwrap();
+        // A supported line is not broken by the new arm.
+        render_line(&standard_line_xml(
+            &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
+            "",
+        ))
+        .unwrap();
     }
 }
