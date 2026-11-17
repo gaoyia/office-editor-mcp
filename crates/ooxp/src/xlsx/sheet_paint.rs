@@ -3665,6 +3665,17 @@ fn paint_window(
         session,
     )?;
     paint_text_number_marks(&mut canvas, cells, &merges, &covered, &xs, &ys, c0, r0)?;
+    paint_eval_error_marks(
+        &mut canvas,
+        sheet,
+        cells,
+        &merges,
+        &covered,
+        &xs,
+        &ys,
+        c0,
+        r0,
+    )?;
     paint_plain_rects(&mut canvas, shapes);
     if rtl {
         canvas.flip_horizontal();
@@ -5256,12 +5267,14 @@ fn paint_labels(
                 _ => HAlign::Left,
             },
         };
-        // 缩进：每级 3×`0` 字宽；与 draw_cells 同一套 Face::width，不用 Word typo_width。
+        // 缩进：OOXML 一级 = 3 个空格。用 Face::width（与 draw_cells 同 API），不用 Word typo_width。
+        // 不能用 3×`0`：多数字体里数字 0 比空格宽，会过早断行并裁掉无换行缩进文字。
         let indent_px = if xf.indent == 0 {
             0.0
         } else {
-            face.width("0") * 3.0 * f64::from(xf.indent)
+            face.width(" ") * 3.0 * f64::from(xf.indent)
         };
+
         let pad = face.cell_pad();
         let inner_left = f64::from(x0)
             + pad
@@ -5276,6 +5289,7 @@ fn paint_labels(
                 _ => 0.0,
             };
         let max_w = (inner_right - inner_left).max(1.0);
+        let text = datetime_overflow_text(&cell.shown, &fmt, xf.wrap, face, &text, max_w);
         let lines = if xf.wrap || text.contains('\n') {
             wrap_cell_lines(face, &text, max_w)
         } else {
@@ -5375,6 +5389,39 @@ fn wrap_cell_lines(face: &Face, text: &str, max_width: f64) -> Vec<String> {
         out.push(String::new());
     }
     out
+}
+
+/// 仅日期时间数字：非换行且显示串宽过列内宽时填 `#`。不改 General / 普通数值 / 文本 / 错误值。
+fn datetime_overflow_text(
+    shown: &Shown,
+    fmt: &NumFmt,
+    wrap: bool,
+    face: &Face,
+    text: &str,
+    max_w: f64,
+) -> String {
+    if wrap
+        || text.contains('\n')
+        || !matches!(shown, Shown::Num(_))
+        || !matches!(fmt, NumFmt::DateTime(_))
+        || face.width(text) <= max_w
+    {
+        return text.to_string();
+    }
+    datetime_overflow_hashes(face, max_w)
+}
+
+fn datetime_overflow_hashes(face: &Face, max_w: f64) -> String {
+    let unit = face.width("#");
+    if unit <= 0.0 {
+        return "#".into();
+    }
+    let n = (max_w / unit).floor() as usize;
+    if n == 0 {
+        String::new()
+    } else {
+        "#".repeat(n)
+    }
 }
 
 fn label_text(shown: &Shown, fmt: &NumFmt, date1904: bool) -> Result<String, Error> {
@@ -5686,17 +5733,91 @@ fn paint_text_number_marks(
         let y0 = ys.origin[(row - r0) as usize];
         let x1 = xs.origin[(col_end - c0) as usize + 1];
         let y1 = ys.origin[(row_end - r0) as usize + 1];
-        for i in 0..6 {
-            for k in 0..(6 - i) {
-                let x = x0 + 1 + k;
-                let y = y0 + 1 + i;
-                if x < x1 && y < y1 {
-                    canvas.put(x, y, TEXT_NUMBER_MARK);
-                }
+        paint_error_check_triangle(canvas, x0, y0, x1, y1);
+    }
+    Ok(())
+}
+
+/// Excel 错误检查绿三角（与「数字存成文字」同一套 UI 标记，不是单元格值）。
+/// 仅 `t=e` 点名错误；`#N/A` 与 `ignoredErrors/@evalError` 覆盖格不画；文字字面量不加。
+fn paint_eval_error_marks(
+    canvas: &mut Canvas,
+    sheet: &Element,
+    cells: &HashMap<(u32, u32), CellRec>,
+    merges: &[Merge],
+    covered: &HashSet<(u32, u32)>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+) -> Result<(), Error> {
+    let suppressed = ignored_eval_error_areas(sheet);
+    let mut jobs = Vec::new();
+    for merge in merges {
+        jobs.push((merge.c0, merge.r0, merge.c1, merge.r1));
+    }
+    let c1 = c0 + xs.origin.len() as u32 - 2;
+    let r1 = r0 + ys.origin.len() as u32 - 2;
+    for (col, row) in cells.keys() {
+        if *col < c0 || *row < r0 || *col > c1 || *row > r1 || covered.contains(&(*col, *row)) {
+            continue;
+        }
+        if merges
+            .iter()
+            .any(|merge| merge.c0 == *col && merge.r0 == *row)
+        {
+            continue;
+        }
+        jobs.push((*col, *row, *col, *row));
+    }
+    for (col, row, col_end, row_end) in jobs {
+        let Some(cell) = cells.get(&(col, row)) else {
+            continue;
+        };
+        if !should_paint_eval_error_mark(&cell.shown, in_areas(col, row, &suppressed)) {
+            continue;
+        }
+        let x0 = xs.origin[(col - c0) as usize];
+        let y0 = ys.origin[(row - r0) as usize];
+        let x1 = xs.origin[(col_end - c0) as usize + 1];
+        let y1 = ys.origin[(row_end - r0) as usize + 1];
+        paint_error_check_triangle(canvas, x0, y0, x1, y1);
+    }
+    Ok(())
+}
+
+fn ignored_eval_error_areas(sheet: &Element) -> Vec<(CellRef, CellRef)> {
+    let mut out = Vec::new();
+    for root in sheet.children_by_local("ignoredErrors") {
+        for err in root.children_by_local("ignoredError") {
+            if !crate::xml::attr_is_true_trimmed(err, "evalError") {
+                continue;
+            }
+            let Some(sqref) = err.attr("sqref") else {
+                continue;
+            };
+            if let Ok(areas) = parse_areas(sqref) {
+                out.extend(areas);
             }
         }
     }
-    Ok(())
+    out
+}
+
+fn should_paint_eval_error_mark(shown: &Shown, ignored: bool) -> bool {
+    matches!(shown, Shown::Err(code) if !ignored && known_error_code(code) && code != "#N/A")
+}
+
+fn paint_error_check_triangle(canvas: &mut Canvas, x0: i32, y0: i32, x1: i32, y1: i32) {
+    for i in 0..6 {
+        for k in 0..(6 - i) {
+            let x = x0 + 1 + k;
+            let y = y0 + 1 + i;
+            if x < x1 && y < y1 {
+                canvas.put(x, y, TEXT_NUMBER_MARK);
+            }
+        }
+    }
 }
 
 /// `Some(true)` 铺空白，`Some(false)` 铺非空白。没有公式时不铺。
@@ -6539,9 +6660,9 @@ mod tests {
         // 硬换行
         let hard = wrap_cell_lines(&face, "a\nb", 1000.0);
         assert_eq!(hard, vec!["a".to_string(), "b".to_string()]);
-        // 缩进像素公式：2 级 = 6 个 0 宽
-        let indent2 = face.width("0") * 3.0 * 2.0;
-        assert!((indent2 - face.width("000000")).abs() < 0.01);
+        // 缩进像素：2 级 = 6 个空格宽（OOXML 一级 3 spaces），不是 6 个 `0`。
+        let indent2 = face.width(" ") * 3.0 * 2.0;
+        assert!((indent2 - face.width("      ")).abs() < 0.01);
     }
 
     #[test]
@@ -6582,5 +6703,162 @@ mod tests {
             label_text(&Shown::Bool(true), &NumFmt::Blank(2), false).unwrap(),
             "TRUE"
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn wrap_indent_uses_three_spaces_not_zero_digit() {
+        let px = (11.0 * 96.0 / 72.0) as f32;
+        let Some(face) = Face::open_cell(px, false, false, "等线")
+            .or_else(|| Face::open_cell(px, false, false, "DengXian"))
+        else {
+            return;
+        };
+        let col_a = super::super::geometry::xml_width_px(10.625, 8.0).unwrap();
+        let col_c = super::super::geometry::xml_width_px(14.625, 8.0).unwrap();
+        let pad = face.cell_pad();
+        let max_w = |col: i32, indent: u32| {
+            (f64::from(col) - pad - 2.0 - face.width(" ") * 3.0 * f64::from(indent)).max(1.0)
+        };
+        let trimmed = |lines: Vec<String>| -> Vec<String> {
+            lines.into_iter().map(|s| s.trim().to_string()).collect()
+        };
+        let want = vec![
+            "one two".to_string(),
+            "three four".to_string(),
+            "five".to_string(),
+        ];
+        assert_eq!(
+            trimmed(wrap_cell_lines(
+                &face,
+                "one two three four five",
+                max_w(col_a, 0)
+            )),
+            want
+        );
+        assert_eq!(
+            trimmed(wrap_cell_lines(
+                &face,
+                "one two three four five",
+                max_w(col_a, 1)
+            )),
+            want
+        );
+        assert_eq!(
+            trimmed(wrap_cell_lines(
+                &face,
+                "one two three four five",
+                max_w(col_c, 2)
+            )),
+            want
+        );
+        assert!(face.width("indent") <= max_w(col_a, 2));
+        let old_zero = (f64::from(col_a) - pad - 2.0 - face.width("0") * 3.0 * 2.0).max(1.0);
+        assert!(face.width("indent") > old_zero);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn datetime_overflow_hashes_only_datetime_numbers() {
+        let px = (11.0 * 96.0 / 72.0) as f32;
+        let Some(face) = Face::open_cell(px, false, false, "Calibri")
+            .or_else(|| Face::open_cell(px, false, false, "等线"))
+        else {
+            return;
+        };
+        let text = "2023/01/15";
+        let wide = face.width(text);
+        let fmt = NumFmt::DateTime(DateTimePat::YyyyMmDd);
+        let hashes = datetime_overflow_text(
+            &Shown::Num(44941.6046875),
+            &fmt,
+            false,
+            &face,
+            text,
+            wide - 1.0,
+        );
+        assert!(!hashes.is_empty());
+        assert!(hashes.chars().all(|ch| ch == '#'));
+        assert!(face.width(&hashes) <= wide - 1.0 + 1e-6);
+        assert_eq!(
+            datetime_overflow_text(
+                &Shown::Num(44941.6046875),
+                &fmt,
+                false,
+                &face,
+                text,
+                wide + 8.0
+            ),
+            text
+        );
+        assert_eq!(
+            datetime_overflow_text(&Shown::Num(44941.6046875), &fmt, true, &face, text, 1.0),
+            text
+        );
+        assert_eq!(
+            datetime_overflow_text(
+                &Shown::Num(123456789.0),
+                &NumFmt::General,
+                false,
+                &face,
+                "123456789",
+                10.0
+            ),
+            "123456789"
+        );
+        assert_eq!(
+            datetime_overflow_text(&Shown::Text(text.into()), &fmt, false, &face, text, 1.0),
+            text
+        );
+        assert_eq!(
+            datetime_overflow_text(
+                &Shown::Err("#DIV/0!".into()),
+                &fmt,
+                false,
+                &face,
+                "#DIV/0!",
+                1.0
+            ),
+            "#DIV/0!"
+        );
+    }
+
+    #[test]
+    fn eval_error_mark_skips_na_text_and_ignored() {
+        assert!(should_paint_eval_error_mark(
+            &Shown::Err("#DIV/0!".into()),
+            false
+        ));
+        assert!(should_paint_eval_error_mark(
+            &Shown::Err("#NULL!".into()),
+            false
+        ));
+        assert!(!should_paint_eval_error_mark(
+            &Shown::Err("#N/A".into()),
+            false
+        ));
+        assert!(!should_paint_eval_error_mark(
+            &Shown::Err("#DIV/0!".into()),
+            true
+        ));
+        assert!(!should_paint_eval_error_mark(
+            &Shown::Text("#DIV/0!".into()),
+            false
+        ));
+        assert!(!should_paint_eval_error_mark(&Shown::Num(1.0), false));
+    }
+
+    #[test]
+    fn ignored_eval_error_areas_honor_eval_error_sqref_only() {
+        let doc = crate::xml::parse(
+            br#"<worksheet><ignoredErrors><ignoredError sqref="B1 D1:E2" evalError="1"/><ignoredError sqref="C1" numberStoredAsText="1"/></ignoredErrors></worksheet>"#,
+        )
+        .unwrap();
+        let areas = ignored_eval_error_areas(&doc.root);
+        assert!(in_areas(2, 1, &areas));
+        assert!(in_areas(4, 1, &areas));
+        assert!(in_areas(5, 2, &areas));
+        assert!(!in_areas(3, 1, &areas));
+        assert!(!in_areas(1, 1, &areas));
     }
 }
