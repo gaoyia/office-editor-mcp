@@ -1,4 +1,4 @@
-# xlsx sheet stroked solid rects. Gold = Excel 16.0 CopyPicture clipboard, no crop.
+﻿# xlsx sheet stroked solid rects. Gold = Excel 16.0 CopyPicture clipboard, no crop.
 # Absolute via oneCell@A1 then rewrite to absoluteAnchor (insertShape has no posX).
 # oneCell and twoCell kept as independent oracles (twoCell evidence not swapped).
 
@@ -162,7 +162,8 @@ Set-PartText $abs 'xl/drawings/drawing1.xml' {
         } else { $out.Add($b) | Out-Null }
     }
     $text = [string]::Join('', $out)
-    $extra = '<xdr:absoluteAnchor><xdr:pos x="' + [string](10 * $px) + '" y="' + [string](90 * $px) + '"/><xdr:ext cx="' + [string](14 * $px) + '" cy="' + [string](14 * $px) + '"/><xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="99" name="strokeHollow"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + [string](14 * $px) + '" cy="' + [string](14 * $px) + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></xdr:spPr><xdr:style/><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:clientData/></xdr:absoluteAnchor>'
+    # xdr:style is optional; an empty element violates CT_ShapeStyle's four required references.
+    $extra = '<xdr:absoluteAnchor><xdr:pos x="' + [string](10 * $px) + '" y="' + [string](90 * $px) + '"/><xdr:ext cx="' + [string](14 * $px) + '" cy="' + [string](14 * $px) + '"/><xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="99" name="strokeHollow"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + [string](14 * $px) + '" cy="' + [string](14 * $px) + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:clientData/></xdr:absoluteAnchor>'
     $text.Replace('</xdr:wsDr>', ($extra + '</xdr:wsDr>'))
 }
 
