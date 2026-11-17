@@ -6,6 +6,7 @@ import csv, hashlib, html, json, math, subprocess, sys
 from collections import Counter
 from pathlib import Path
 from PIL import Image, ImageDraw
+from chart_boundary_evidence import device_grid_px,device_span_px,rgba_equal
 from dpi_acceptance import classify, labels_between_axis_and_plot_bottom, PASS, DIFFERENCE, NI, PENDING
 out, base, legend, mdw_path = map(Path, sys.argv[1:])
 out.mkdir(exist_ok=True)
@@ -30,6 +31,10 @@ mdw={(canon(r['requestedFace']),float(r['pointSize']),int(r['targetDpi'])):int(r
 sem={(r['case'],r['kind']):r for r in read(base/'oracle-semantics.csv')}
 oracle={(r['case'],r['action']):r for r in read(base/'oracle.csv')}
 rows=[];cert=[];evidence=[]
+boundary_rows=json.loads((out/'public-boundary-properties.json').read_text(encoding='utf-8-sig')) if (out/'public-boundary-properties.json').exists() else []
+boundary_by_sha={r['sourceSha256']:r for r in boundary_rows if r['control']=='original'}
+if boundary_rows:
+    assert set(json.loads((out/'public-dpi.json').read_text(encoding='utf-8-sig')).values())=={106}
 normal_evidence={r['sourceSha256']:r for r in read(out/'six-path-certificates.csv')} if (out/'six-path-certificates.csv').exists() else {}
 for r in read(base/'metrics.csv'):
     name,action=r['case'],r['action'];src=base/r['sourceWorkbook'];actual_sha=sha(src)
@@ -48,11 +53,24 @@ for r in read(base/'metrics.csv'):
         pred_h=math.ceil(float(r['rangeHeightPt'])*106/72)
     else:
         pred_h=round(15*106/72)+(action=='sheet')
+    boundary = boundary_by_sha.get(actual_sha) if action=='chart' else None
+    if boundary is not None:
+        # Width is authoritative Double column/device grid, not ceil(Single shape).
+        assert sha(Path(boundary['fullName']))==actual_sha
+        assert boundary['chartType']==51 and canon(boundary['normalFont'])==canon(r['normalFont']) and boundary['normalPt']==float(r['normalPt'])
+        span=sum(device_grid_px(c['widthPt'],106) for c in boundary['columns'])
+        assert span==device_span_px(boundary['fromCellLeftPt'],boundary['toCellLeftPt'],106)
+        twin=next(t for t in boundary_rows if t['case']==boundary['case'] and t['control']=='coherent-frame')
+        assert sha(Path(boundary['nativePng']))==sha(Path(twin['nativePng']))
+        assert rgba_equal(Image.open(boundary['nativePng']),Image.open(base/f'{name}-chart-gold.png'))
+        predicted=span
     api_match=predicted==int(r['goldWidth'] or 0) and pred_h==int(r['goldHeight'] or 0)
     scope_result=classify(scope="shared_geometry_only",source_verified=source_ok,renderer_verified=True,
         semantic_verified=boolstr(r['fixed96DimensionsPass']) and api_match,
         font_verified=fonts_ok,dpi_verified=True,ni=ni,raw_strict=r['strictResult'])
     why='同源SHA；OOXML/固定96维度；真实Normal字体；GDI96/106 MDW离散量化；COM/原生gold物理尺寸' if scope_result==PASS else '有效Normal/font继承与Office读取结果不一致，不能因尺寸偶合豁免' if not fonts_ok else '既有隐藏源displayHidden不支持' if ni else '需核实尺寸责任链'
+    if boundary is not None and scope_result==PASS:
+        why='同源/字体/96几何通过；公开Double列宽+设备DPI精确栅格与PNG宽一致，旧ceil(Single Shape.Width)误判；frame一致性控制PNG字节相同。'
     if not fonts_ok and actual_sha in normal_evidence:
         assert normal_evidence[actual_sha]['evidenceStatus']=='office_import_normalized_font_not_dpi_only'
         why='Office载入/独立SaveCopy后的Normal字体语义已变（源Arial11 -> COM/canonical Calibri11），非仅DPI；库规范链96几何已验证，不回退font0/7。'

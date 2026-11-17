@@ -261,3 +261,12 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 2个合法样式族×3路径=6记录、4份源，库按builtin0→styleXF→font的规范链96几何6/6验证；Office实际Styles.Normal与独立SaveCopy后的Normal均为Calibri11，而源声明Arial11，已证明不只是name/xf编号归一化。此探针族中导入改变字体语义，不能算仅DPI，也不证明库应改font0。17组有限控制、实际cell字体与Normal分开、列/Chart点数、原始/保存副本XML及SHA均保存；canonical从未重开、不当新gold。
 
 DPI几何分子**38/49不变**，6 Normal路径仍需Office同语义可比证据，另5导出边界/2 NI不扩本片。6条规范链证书不是6功能/6整图通过；保留builtinId优先、非零xf及MDW96生产合同，不加7/8/font0回退。23 Python/语法/fmt/diff检查；无Rust改动，不冒称重跑1868。证据：桌面office-editor-PR10-Normal继承核实-20261117-151855；详Normal继承核实计划及normal-inheritance-report.py。
+
+
+## 2026-11-17 Chart.Export宽度边界5条核实（仅验收器修复）
+
+5个零off twoCell簇状柱图的旧ceil(ChartObject.Width*106/72)比原PNG多1，原因是将与Single ShapeRange相同的点数读回当作无限精确像素边界。公开Double列宽与同Worksheet左右端点通过IEEE754半ULP精确区间认证设备栅格，分别320/288/320/288/243px，与原PNG严格一致；不加epsilon、不容差，真多1px仍拒绝。
+
+五个新frame-ext一致性单变量控制Office PNG字节不变；十个新原生PNG均与旧gold字节相同，十个库输出与旧after字节相同。公开DPI均106，pHYs4173/m是整数米量化，非新显示DPI。ChartArea/PlotArea内侧原点未当PNG外框。只更新宽度责任链，未宣称通用导出舍入算法，未改renderer/96/576336zoom/高度/alpha。
+
+**最新几何DPI证书43/49（此前38历史值由此更新）**；本片5/5子范围通过，不代表5功能/43整图。Normal6仍待同语义oracle、2NI不变；其它AA/内容/样式残差仍分别保留，raw严格列仅诊断。29 Python/语法/fmt/diff验证，无Rust改动不冒称重跑全套。证据：桌面office-editor-PR10-导出边界核实-20261117-153629；chart-boundary-report.py/原始API/哈希/更新CSV。十个暂停新功能未恢复。
