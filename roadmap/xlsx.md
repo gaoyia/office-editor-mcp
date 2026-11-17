@@ -248,6 +248,9 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 用户允许**已证实仅DPI引起的像素差**通过；raw严格结果保留但不再一票否决。库固定96 contract不变，原始gold不缩放、不改色、不放宽正常配置。验收必须绑定source SHA/实际exe，核实内容、尺度、字体及合法继承、位置/anchor后才可豁免命名子范围；sizeDiffer、同尺寸或逻辑标量通过不能直接推出整图通过。曲角AA、spark端点、默认边距或布局若未证因，写待确认，真实缺内容/样式/标签位置差仍须修。
 
-当前原51几何子证书：**38通过（DPI豁免）/11待确认/2 NI**；11中6 Normal字体继承、5 chart导出1px边界舍入。轴26/27 case的130逻辑值、P1接线16/16、P3四角17/17分别是已通过子范围，不合并张数。完整图原51=49待确认/2NI；新27=1真实标签侧差异/25待确认/1NI；图例7待确认。raw严格49/26/7 sizeDiffer保留，不能当最终失败统计。
+当前原51几何子证书：**38通过（DPI豁免）/11待确认/2 NI**；11中6 Normal字体继承、5 chart导出1px边界舍入。轴26/27 case的130逻辑值、P1接线16/16、P3四角17/17分别是已通过子范围，不合并张数。完整图原51=49待确认/2NI；新27=26待确认/1NI；图例7待确认。raw严格49/26/7 sizeDiffer保留，不能当最终失败统计。
 
-本轮只验收/文档，renderer基线a81c49e6；原1868 Rust和8 Python日志保留，新策略再加10 Python测试。证据：桌面 `office-editor-PR10-DPI验收复核-20261117-145216`。详 `manual-check/office/dpi_acceptance.py`、`dpi-acceptance-report.py` 和DPI验收复核计划。COM图例中心-4pt尚未校准原点，禁止直接硬补；explicit类别标签侧确有非DPI差异，后续本PR已有范围修复。其它十项暂停新功能不恢复。
+本轮只验收/文档，renderer基线a81c49e6；原1868 Rust和8 Python日志保留，新策略再加10 Python测试。证据：桌面 `office-editor-PR10-DPI验收复核-20261117-145216`。详 `manual-check/office/dpi_acceptance.py`、`dpi-acceptance-report.py` 和DPI验收复核计划。COM图例中心-4pt尚未校准原点，禁止直接硬补；explicit类别标签侧此前读图误报已撤回：COM=4 NextToAxis且双方原生bbox均在零轴下/绘图区底之上，不修改renderer。其它十项暂停新功能不恢复。
+
+
+2026-11-17 类别标签反证复核：1ec6eac0中的explicit“Office标签在绘图区底”是读图错误，已明确撤回。当前1ec实际exe重渲染与a81图片SHA相同；COM公开TickLabelPosition=4（NextToAxis），原生bbox证实双方均跟随0轴，原有130逻辑值成果不动。修正验收器/CSV，不制造renderer补丁。38项几何DPI通过不变；曲角/端点/其它布局待确认不变。详类别标签误报复核计划及桌面150736新证据，旧快照不覆盖。

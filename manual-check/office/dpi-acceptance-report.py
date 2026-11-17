@@ -6,7 +6,7 @@ import csv, hashlib, html, json, math, subprocess, sys
 from collections import Counter
 from pathlib import Path
 from PIL import Image, ImageDraw
-from dpi_acceptance import classify, PASS, DIFFERENCE, NI, PENDING
+from dpi_acceptance import classify, labels_between_axis_and_plot_bottom, PASS, DIFFERENCE, NI, PENDING
 out, base, legend, mdw_path = map(Path, sys.argv[1:])
 out.mkdir(exist_ok=True)
 def read(p):
@@ -62,12 +62,10 @@ for r in read(base/'metrics.csv'):
 for r in read(base/'axis-scalar-results.csv'):
     name=r['case'];src=base/'axis-probes'/(name+'.xlsx');assert sha(src)==r['sourceSha256']
     is_ni=not boolstr(r['scalarMatched'])
-    # Native explicit compare was directly inspected: labels stay next to zero
-    # in library but below plot in Office. This is position, not raster scale.
-    known=['category_label_side'] if name=='explicit' and not is_ni else []
-    whole=classify(ni=is_ni,implementation=known,unresolved=['curve_aa_legend_layout_not_dpi_proven'])
+    # Previous explicit label-side claim was disproved: both images follow zero.
+    whole=classify(ni=is_ni,unresolved=['curve_aa_legend_layout_not_dpi_proven'])
     reason='四尺度+交点130值已匹配；曲角AA/legend布局待确认，不将标量通过提升为整图' if not is_ni else '窄范围非零自动下界已有NI'
-    if known:reason='原生explicit图：库A/B/C贴0交点，Office在绘图区底部；非DPI位置差异'
+    if name=='explicit' and not is_ni:reason='已撤回此前误报：COM TickLabelPosition=4 NextToAxis；原生bbox证明双方标签均在0轴下、绘图区底之上。标签侧子范围一致；整图AA仍待核。'
     rows.append(dict(matrix='axis27',case=name,action='chart',result=labels[whole],rawStrict=r['strictResult'],sourceSha256=r['sourceSha256'],geometryScope='独立EMU/固定96尺寸已验证；本表不据此豁免整图',reason=reason,after=str(base/'axis-probes'/f'{name}-after.png'),gold=str(base/'axis-probes'/f'{name}-gold.png'),wholeImageDpiWaived=False))
     cert.append(dict(matrix='axis27',case=name,action='chart',scope='axis_scalars_and_crossing_only',result='通过（独立COM逻辑值一致）' if not is_ni else labels[NI],sourceSha256=r['sourceSha256'],rawStrict=r['strictResult'],evidence='四尺度值+autoZero交点逐项相等；不代表标签侧/整图',predictedGoldWidth='',predictedGoldHeight='',actualGoldWidth='',actualGoldHeight=''))
 current=json.loads((out/'legend-current.json').read_text(encoding='utf-8'))
@@ -76,6 +74,17 @@ for r in current:
     assert r['exit']==0 and sha(Path(r['source']))==r['sourceSha256']
     assert old_com[r['case']]['sourceSha256'].lower()==r['sourceSha256']
     rows.append(dict(matrix='legend7',case=r['case'],action='chart',result=labels[PENDING],rawStrict='sizeDiffer',sourceSha256=r['sourceSha256'],geometryScope='固定96 chart框；未豁免整图',reason='字体/粗体/颜色/顺序已有子范围回归；自动/手动frame与key布局及AA尚无完整DPI-only证明',after=r['image'],gold=str(legend/(r['case']+'-gold.png')),wholeImageDpiWaived=False))
+# Optional measured proof corrects a prior human misread, never infers from size.
+if (out/'native-label-bbox.csv').exists():
+    com=json.loads((out/'public-axis-label-properties.json').read_text(encoding='utf-8-sig'))
+    assert com['categoryTickLabelPosition']==4 and com['valueCrossesAt']==0
+    case=next(r for r in rows if r['matrix']=='axis27' and r['case']=='explicit')
+    assert com['sourceSha256']==case['sourceSha256']
+    for r in read(out/'native-label-bbox.csv'):
+        assert sha(Path(r['image']))==r['sha256']
+        bbox=json.loads(r['abcBBox'])
+        assert labels_between_axis_and_plot_bottom(int(r['zeroLineY']),int(r['plotBottomY']),bbox[1],bbox[3])
+    cert.append(dict(matrix='axis27',case='explicit',action='chart',scope='category_label_side_only',result='通过（COM NextToAxis及原生相对位置一致）',sourceSha256=case['sourceSha256'],rawStrict=case['rawStrict'],evidence='双方ABC均在零轴下、绘图区底之上；撤回此前读图误报；不宣称字距/AA或整图通过',predictedGoldWidth='',predictedGoldHeight='',actualGoldWidth='',actualGoldHeight=''))
 write('逐项验收.csv',rows);write('子范围验收.csv',cert)
 counts={g:dict(Counter(r['result'] for r in rows if r['matrix']==g)) for g in ['original51','axis27','legend7']}
 geometry=Counter(r['result'] for r in cert if r['scope']=='shared_geometry_only')

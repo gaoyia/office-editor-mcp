@@ -1,5 +1,5 @@
 import unittest
-from dpi_acceptance import classify, PASS, DIFFERENCE, NI, PENDING
+from dpi_acceptance import classify, labels_between_axis_and_plot_bottom, PASS, DIFFERENCE, NI, PENDING
 
 class DpiAcceptanceTests(unittest.TestCase):
     def proof(self, **overrides):
@@ -30,6 +30,11 @@ class DpiAcceptanceTests(unittest.TestCase):
         self.assertEqual(classify(**self.proof(unresolved=['whole_image_unchecked'])), PENDING)
     def test_raw_pass_is_not_semantic_evidence(self):
         self.assertEqual(classify(raw_strict='PASS'), PENDING)
+
+    def test_explicit_native_labels_both_follow_zero_axis_not_plot_bottom(self):
+        self.assertTrue(labels_between_axis_and_plot_bottom(136, 166, 149, 158))
+        self.assertTrue(labels_between_axis_and_plot_bottom(167, 205, 181, 191))
+        self.assertFalse(labels_between_axis_and_plot_bottom(167, 205, 210, 220))
 
 if __name__ == '__main__':
     unittest.main()
