@@ -105,6 +105,7 @@ mod win {
         bold: bool,
         italic: bool,
         pt: f32,
+        dpi: f32,
     }
 
     impl Drop for Face {
@@ -129,7 +130,7 @@ mod win {
         pub fn open_dpi(px: f32, bold: bool, dpi: f64) -> Option<Self> {
             let pt = (f64::from(px) * 72.0 / dpi) as f32;
             for name in FACES {
-                let Some(mut face) = Self::new(px, bold, false, name, pt) else {
+                let Some(mut face) = Self::new(px, bold, false, name, pt, dpi) else {
                     continue;
                 };
                 let actual = face.text_face();
@@ -145,7 +146,7 @@ mod win {
         pub fn open_named(px: f32, bold: bool, name: &str) -> Option<Self> {
             let pt = (f64::from(px) * 72.0 / 96.0) as f32;
             if !name.is_empty() && !name.starts_with('+') {
-                if let Some(mut face) = Self::new(px, bold, false, name, pt) {
+                if let Some(mut face) = Self::new(px, bold, false, name, pt, 96.0) {
                     face.name = face.text_face();
                     if !face.name.is_empty() {
                         return Some(face);
@@ -170,21 +171,21 @@ mod win {
         ) -> Option<Self> {
             let pt = (f64::from(px) * 72.0 / dpi) as f32;
             if !name.is_empty() && !name.starts_with('+') {
-                if let Some(mut face) = Self::new(px, bold, italic, name, pt) {
+                if let Some(mut face) = Self::new(px, bold, italic, name, pt, dpi) {
                     face.name = face.text_face();
                     if !face.name.is_empty() {
                         return Some(face);
                     }
                 }
             }
-            Self::new(px, bold, italic, "Calibri", pt).map(|mut face| {
+            Self::new(px, bold, italic, "Calibri", pt, dpi).map(|mut face| {
                 face.name = face.text_face();
                 face
             })
         }
 
         /// `px` 是 96 dpi 下的像素字号。负高度让 GDI 按字符高度而不是单元格高度来建。
-        fn new(px: f32, bold: bool, italic: bool, name: &str, pt: f32) -> Option<Self> {
+        fn new(px: f32, bold: bool, italic: bool, name: &str, pt: f32, dpi: f64) -> Option<Self> {
             let height = -(px.round() as i32);
             if height == 0 {
                 return None;
@@ -224,6 +225,7 @@ mod win {
                     bold,
                     italic,
                     pt,
+                    dpi: dpi as f32,
                 })
             }
         }
@@ -287,7 +289,8 @@ mod win {
                 {
                     return None;
                 }
-                GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+                // UNIT_POINT 按位图 DPI 换像素；必须用建 Face 时的导出 DPI，不能写死 96。
+                GdipBitmapSetResolution(bitmap, self.dpi, self.dpi);
                 let mut graphics = std::ptr::null_mut();
                 if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
                     GdipDisposeImage(bitmap);
@@ -542,7 +545,8 @@ mod win {
                 {
                     return false;
                 }
-                GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+                // UNIT_POINT 按位图 DPI 换像素；必须用建 Face 时的导出 DPI，不能写死 96。
+                GdipBitmapSetResolution(bitmap, self.dpi, self.dpi);
                 let mut graphics = std::ptr::null_mut();
                 if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
                     GdipDisposeImage(bitmap);

@@ -318,3 +318,65 @@ fn slide_and_page_export_reject_dpi_field() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+#[cfg(windows)]
+fn dark_ink_bbox(rgb: &[u8], w: u32, h: u32) -> (i32, i32, i32, i32) {
+    let mut min_x = w as i32;
+    let mut min_y = h as i32;
+    let mut max_x = -1i32;
+    let mut max_y = -1i32;
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let i = ((y as u32 * w + x as u32) * 3) as usize;
+            // 网格是浅灰（通常 >= 200）。含抗锯齿的字形墨水，避免只量到近黑核、把浅边滤掉。
+            if rgb[i] < 180 && rgb[i + 1] < 180 && rgb[i + 2] < 180 {
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+    assert!(max_x >= min_x && max_y >= min_y, "应画出文字");
+    (min_x, min_y, max_x + 1, max_y + 1)
+}
+
+/// 单元格字形必须按请求 dpi 原生重画。曾经 GDI+ 位图分辨率写死 96，
+/// 106 只放大了格子、Calibri 11 仍是 96 dpi 字高。
+#[cfg(windows)]
+#[test]
+fn sheet_cell_text_at_106_dpi_is_native_not_96_glyphs() {
+    let path = tmp("cell-text", "xlsx");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "workbook": {
+            "sheets": [{
+                "name": "Sheet1",
+                "cells": [{ "ref": "A1", "value": "Hg" }]
+            }]
+        }
+    }));
+    let before = std::fs::read(&path).unwrap();
+    let at96 = export_bytes("exportSheetImage", &path, "sheet:Sheet1", Some(96)).unwrap();
+    let omitted = export_bytes("exportSheetImage", &path, "sheet:Sheet1", None).unwrap();
+    let at106 = export_bytes("exportSheetImage", &path, "sheet:Sheet1", Some(106)).unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), before, "导出不得改源包");
+    assert_eq!(at96, omitted);
+    assert_no_phys(&at96);
+    assert_phys_dpi(&at106, 106);
+    let (w96, h96, rgb96) = decode_png(&at96);
+    let (w106, h106, rgb106) = decode_png(&at106);
+    assert!(
+        w106 > w96 && h106 > h96,
+        "canvas 96={w96}x{h96} 106={w106}x{h106}"
+    );
+    let (_, y0_96, _, y1_96) = dark_ink_bbox(&rgb96, w96, h96);
+    let (_, y0_106, _, y1_106) = dark_ink_bbox(&rgb106, w106, h106);
+    let ink96 = y1_96 - y0_96;
+    let ink106 = y1_106 - y0_106;
+    assert!(
+        ink106 > ink96,
+        "106 dpi 字形应高于 96：96={ink96}px 106={ink106}px"
+    );
+}
