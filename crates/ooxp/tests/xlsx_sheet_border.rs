@@ -330,13 +330,29 @@ fn diagonal_flag_without_style_still_not_implemented() {
     );
 }
 
+/// ddc5a85d 起两停点不透明 linear 可画；本测试原期待 NI，属过期合同。
 #[test]
-fn gradient_fill_still_not_implemented() {
+fn linear_two_stop_gradient_fill_exports_png() {
     let src = bordered();
     let gradient = rewrite_part(&src, "xl/styles.xml", |xml| {
         xml.replacen(
             "<patternFill patternType=\"none\"/>",
             "<gradientFill degree=\"0\"><stop position=\"0\"><color rgb=\"FFEE4455\"/></stop><stop position=\"1\"><color rgb=\"FF112233\"/></stop></gradientFill>",
+            1,
+        )
+    });
+    let bytes = export(&gradient).unwrap();
+    assert_eq!(&bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+}
+
+/// `type=path` 等非本刀子集仍整表 NI。
+#[test]
+fn path_gradient_fill_still_not_implemented() {
+    let src = bordered();
+    let gradient = rewrite_part(&src, "xl/styles.xml", |xml| {
+        xml.replacen(
+            "<patternFill patternType=\"none\"/>",
+            "<gradientFill type=\"path\"><stop position=\"0\"><color rgb=\"FFEE4455\"/></stop><stop position=\"1\"><color rgb=\"FF112233\"/></stop></gradientFill>",
             1,
         )
     });
