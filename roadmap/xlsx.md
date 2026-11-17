@@ -208,3 +208,15 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 
 2026-11-17 PR10既有图例缺陷修复：见`.plan/2026年-11月-17日-⚠️-xlsx-图例样式与位置修复.md`。有效普通txPr样式、五位置、overlay、普通manualLayout与entry删除不再成功返回却静默丢失，复杂有效配置诚实NI；styled-right纠正为合法手动框/叠放组合，不称Office坏图。新增10项回归、全套1849通过；旧缺省右图PNG SHA不变。7组同源严格比较仍636×371 vs576×336，字体/边距/灰阶等残差保留，不把布局修复标整图✅。100705逐图有限复核继续在本次待办，其余十项新功能暂停。
+
+
+### 2026-11-17 P0：公平诊断语料修复（不是renderer验收）
+
+- [x] 修geometry-matrix保留chart A20:B23实际源、同步used dimension；每次出图前核对actual/formula/cache与样式索引；8条独立回归。
+- [x] 旧localized-normal明确为combined；新增四个单变量组。新分母17×3=51（50成功/1既有NI），Office17个chart实际值1/4/2及分类A/B/C全核验。
+- [x] 报告透明展示白底合成，raw gold/严格RGBA比较不变。
+- 100705的13×3仅历史尺寸诊断：其中13张chart缺实际公式源、缓存仍在，不能作内容验收；旧快照不改。
+- 新公平矩阵固定96维度50/50，renderer未改、before/after宽度变化0；严格0 PASS / 50 sizeDiffer / 1 NI，不把内容正确说成像素通过。
+- [ ] P1：工作表/tiles复用已有spark painter修内嵌内容遗漏；P3：圆角外alpha待对齐。Normal-font-only的Office规范化残差仍记录，不称合法XF异常。其它10项未开工功能继续暂停。
+- 验证：fmt、clippy all-targets/all-features -D warnings、全库1849 passed/0 failed/0 ignored、Python8 passed、实际CLI build；Office本轮自有wb=0、锁=0，无Quit。
+- 新证据：桌面 `office-editor-PR10-公平对照与遗漏修复-20261117-131235`（index/README/metrics/source SHA/Office实际Series与字体/原始PNG）。

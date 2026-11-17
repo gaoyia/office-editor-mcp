@@ -1,6 +1,7 @@
 """Fixed-96 column geometry regression corpus. Never rescale an oracle bitmap."""
 import argparse, csv, hashlib, json, subprocess, zipfile, xml.etree.ElementTree as ET
 from pathlib import Path
+from geometry_fixture import merge_chart_seed, used_dimension, rewrite_styles, validate_fixture
 from datetime import datetime, timezone, timedelta
 P = argparse.ArgumentParser()
 P.add_argument('phase', choices=['before', 'after'])
@@ -25,6 +26,8 @@ def run(req):
         raise RuntimeError(r.stdout + r.stderr)
     return r.stdout
 CASES = [('calibri11-explicit', 'Calibri', 11, 7, 'explicit', False, False, False), ('calibri11-default', 'Calibri', 11, 7, 'default', False, False, False), ('calibri11-absent', 'Calibri', 11, 7, 'absent', False, False, False), ('arial11-explicit', 'Arial', 11, 8, 'explicit', False, False, False), ('arial11-default', 'Arial', 11, 8, 'default', False, False, False), ('arial11-absent', 'Arial', 11, 8, 'absent', False, False, False), ('consolas11-explicit', 'Consolas', 11, 8, 'explicit', False, False, False), ('dengxian11-explicit', 'DengXian', 11, 8, 'explicit', False, False, False), ('dengxian11-absent', 'DengXian', 11, 8, 'absent', False, False, False), ('calibri14-explicit', 'Calibri', 14, 10, 'explicit', False, False, False), ('localized-normal', 'Arial', 11, 8, 'explicit', False, False, True), ('hidden-column', 'Calibri', 11, 7, 'explicit', True, False, False), ('non-a1', 'Arial', 11, 8, 'explicit', False, True, False)]
+# Retain the old combined case explicitly; these four isolate semantic variables.
+CASES += [('localized-normal-name-only', 'Calibri', 11, 7, 'explicit', False, False, 'name-only'), ('normal-xf-index-only', 'Calibri', 11, 7, 'explicit', False, False, 'xf-only'), ('normal-font-only', 'Arial', 11, 8, 'explicit', False, False, 'font-only'), ('cell-font-only', 'Calibri', 11, 7, 'explicit', False, False, 'cell-only')]
 if a.phase == 'before':
     src = OUT / 'seed.xlsx'
     run({'action': 'create', 'path': str(src), 'workbook': {'sheets': [{'name': 'Sheet1', 'cells': [{'ref': 'B1', 'value': 1}, {'ref': 'C1', 'value': 4}, {'ref': 'D1', 'value': 2}]}]}})
@@ -38,27 +41,10 @@ if a.phase == 'before':
                 for entry in z.infolist():
                     data = z.read(entry.filename)
                     if entry.filename == 'xl/styles.xml':
-                        st = ET.fromstring(data)
-                        fonts = st.find('m:fonts', N)
-                        font = fonts[0]
-                        if localized:
-                            font = ET.fromstring(ET.tostring(font))
-                            fonts.append(font)
-                            fonts.set('count', '2')
-                            xfs = st.find('m:cellStyleXfs', N)
-                            xf = ET.fromstring(ET.tostring(xfs[0]))
-                            xf.set('fontId', '1')
-                            xfs.append(xf)
-                            xfs.set('count', '2')
-                            normal = st.find('m:cellStyles/m:cellStyle', N)
-                            normal.set('name', '常规重命名')
-                            normal.set('xfId', '1')
-                            normal.set('builtinId', '0')
-                        font.find('m:name', N).set('val', face)
-                        font.find('m:sz', N).set('val', str(pt))
-                        data = ET.tostring(st, encoding='utf-8', xml_declaration=True)
+                        data = rewrite_styles(data, face, pt, localized)
                     elif entry.filename == 'xl/worksheets/sheet1.xml':
                         st = ET.fromstring(data)
+                        seed_sheet = ET.fromstring(data)
                         for tag in ['dimension', 'sheetViews', 'sheetFormatPr', 'cols', 'sheetData']:
                             for e in st.findall(f'm:{tag}', N):
                                 st.remove(e)
@@ -88,6 +74,9 @@ if a.phase == 'before':
                         for cr, v in zip(refs, [1, 4, 2]):
                             c = ET.SubElement(r, '{' + NS + '}c', {'r': cr})
                             ET.SubElement(c, '{' + NS + '}v').text = str(v)
+                        if kind == 'chart':
+                            merge_chart_seed(seed_sheet, sd)
+                        elems[0].set('ref', used_dimension(sd))
                         elems.append(sd)
                         for i, e in enumerate(elems):
                             st.insert(i, e)
@@ -105,10 +94,12 @@ if a.phase == 'before':
                         data = ET.tostring(st, encoding='utf-8', xml_declaration=True)
                     dst.writestr(entry, data)
 rows = []
+validations = {}
 for name, face, pt, mdw, mode, hidden, non_a1, localized in CASES:
     for action, kind, obj in [('exportSheetImage', 'sheet', 'sheet:Sheet1'), ('exportSparklineImage', 'sheet', 'sheet:Sheet1/spark:1'), ('exportChartImage', 'chart', 'sheet:Sheet1/chart:1')]:
         tag = {'exportSheetImage': 'sheet', 'exportSparklineImage': 'spark', 'exportChartImage': 'chart'}[action]
         book = OUT / f'{name}-{kind}.xlsx'
+        validations[book.name] = validate_fixture(book)
         output = OUT / f'{name}-{tag}-{a.phase}.png'
         if output.exists():
             output.unlink()
@@ -122,6 +113,7 @@ for name, face, pt, mdw, mode, hidden, non_a1, localized in CASES:
             w = h = 0
             error = str(e)
         rows.append(dict(case=name, action=tag, normalFont=face, normalPt=pt, mdw96=mdw, widthMode=mode, hidden=hidden, range=(('B2:E2' if non_a1 else 'A1:D1') if tag == 'sheet' else ('B2' if non_a1 else 'A1') if tag == 'spark' else ('anchor:B4:F14' if non_a1 else 'anchor:A3:E13')), width=w, height=h, error=error, workbookSha256=hashlib.sha256(book.read_bytes()).hexdigest()))
+(OUT / f'{a.phase}-fixture-validation.json').write_text(json.dumps(validations, ensure_ascii=False, indent=2), encoding='utf-8')
 with (OUT / f'{a.phase}.csv').open('w', encoding='utf-8-sig', newline='') as f:
     w = csv.DictWriter(f, rows[0])
     w.writeheader()
