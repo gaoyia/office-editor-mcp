@@ -2485,7 +2485,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 范围取 `dimension` 和有格子的外框的并集。只有一边时用那一边。两边都空报 `NotImplemented`
-- 可选 `tilePx`（1–4096）：按该边长切块导出，**不**先分配整表再裁。未超限时仍一张 PNG，像素与不加 `tilePx` 一致；超限时写出多张 `{stem}-r{row}c{col}.png`，响应 `paths` 列出全部路径，单块边长不超过 `tilePx`。不设 `tilePx` 时一边超过 4096 仍整表 `NotImplemented`（默认不绕上限）。`rightToLeft` 切块报 `NotImplemented` 切块张数上限 1024、全图合计像素上限 64Mi；超限在编码/落盘前 NotImplemented（`tilePx=1` 不留下海量文件）。中途落盘失败时已写出的分块文件可能残留。
+- 可选 `tilePx`（1–4096）：按该边长切块导出，**不**先分配整表再裁。未超限时仍一张 PNG，像素与不加 `tilePx` 一致；超限时写出多张 `{stem}-r{row}c{col}.png`，响应 `paths` 列出全部路径，单块边长不超过 `tilePx`。不设 `tilePx` 时一边超过 4096 仍整表 `NotImplemented`（默认不绕上限）。`rightToLeft` 切块报 `NotImplemented` 切块张数上限 1024、全图合计像素上限 64Mi；超限在编码/落盘前 NotImplemented（`tilePx=1` 不留下海量文件）。中途落盘失败时已写出的分块文件可能残留。 超限切块的官方对照（2026-11-18）：有界 65 列×16 行、网格关、Calibri 缺省列。Excel 16.0 窗口 DPI 106、Zoom=100 的全表 `Range.CopyPicture`（`xlScreen=1, xlBitmap=2`）成功为 4681×337（`1+65×72` 宽、`1+16×21` 高），未超内存。库 `tilePx=1024` 缝合 96=4161×321（`1+65×64`、`1+16×20`）、106=4616×353（`1+65×71`、`1+16×22`）。此为已知 Calibri MDW 在 106 下每列短 1 像素、每行高 1 像素，不是切块特有缺陷。内部块只在全表官方图上取窗才与库瓦片同一坐标系；对内部子范围再 `CopyPicture` 会在该子范围原点新画 `leading_frame`，不得与全表窗口或库内部块直接逐像素等同。库内部块不再画左框，与全表窗口一致。不以库内缝合差 0 冒充官方验收，也不把本对照写成整图通过。
 - `iconSet` 条件格式：cfvo/reverse/showValue/gte **选择语义**在库内可测；**出图仍 NotImplemented**（无公开可合法复现标准图标字形前不绘制）。最小锁定：`3Arrows` / `3ArrowsGray` / `3TrafficLights1`。不声称完整图标集或与 Excel 差 0。
 - 公式差分边框 `dashed` / `slantDashDot`：与格子边框共用绘制；`expression`+dxf 可出图。`cellIs` 带边框、差分对角线仍 NotImplemented。整图与 Excel CopyPicture 若屏 DPI≠96 可能 sizeDiffer，不以缩金样宣称差 0。
 - 像素对齐 Excel 16.0 的 `Range.CopyPicture`（`xlScreen`、`xlBitmap`）。不乘工作表 `zoomScale`
