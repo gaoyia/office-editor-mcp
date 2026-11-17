@@ -763,6 +763,10 @@ fn mark_errors(book: &Path, refs: &[&str]) -> PathBuf {
 }
 
 fn replace_cell_with_error(xml: &str, r: &str) -> String {
+    replace_cell_with_error_code(xml, r, "#DIV/0!")
+}
+
+fn replace_cell_with_error_code(xml: &str, r: &str, code: &str) -> String {
     let token = format!(r#"<c r="{r}""#);
     let start = xml.find(&token).unwrap_or_else(|| panic!("找不到 {r}"));
     let end = xml[start..].find("</c>").unwrap() + start + 4;
@@ -776,8 +780,37 @@ fn replace_cell_with_error(xml: &str, r: &str) -> String {
             format!(r#" s="{}""#, &rest[..n])
         })
         .unwrap_or_default();
-    let cell = format!(r#"<c r="{r}"{style} t="e"><v>#DIV/0!</v></c>"#);
+    let cell = format!(r#"<c r="{r}"{style} t="e"><v>{code}</v></c>"#);
     format!("{}{cell}{}", &xml[..start], &xml[end..])
+}
+
+fn mark_errors_code(book: &Path, refs: &[&str], code: &str) -> PathBuf {
+    let bytes = std::fs::read(book).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/worksheets/sheet1.xml" {
+                let mut xml = String::from_utf8(data).unwrap();
+                for cell in refs {
+                    xml = replace_cell_with_error_code(&xml, cell, code);
+                }
+                data = xml.into_bytes();
+            }
+            zip_out.start_file(&name, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    let dst = tmp("err-cells-code");
+    std::fs::write(&dst, out.into_inner()).unwrap();
+    dst
 }
 
 #[cfg(windows)]
@@ -852,8 +885,9 @@ fn a_foreign_error_formula_fails_the_sheet() {
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
 
+/// 201e258c 起点名七码（含 `#DIV/0!`）可画；本测试原期待整表 FAIL，属过期合同。
 #[test]
-fn a_visible_error_fails_the_sheet() {
+fn a_known_visible_error_exports_png() {
     let src = tmp("visible-err-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -863,5 +897,23 @@ fn a_visible_error_fails_the_sheet() {
     }));
     let book = hide_grid(&src);
     let book = mark_errors(&book, &["A1"]);
+    let bytes = export(&book).unwrap();
+    assert_eq!(&bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    let (w, h, _) = decode_png(&bytes);
+    assert!(w >= 1 && h >= 1, "known #DIV/0! should paint, got {w}x{h}");
+}
+
+/// 非点名错误码仍整表 `NotImplemented`（与 `xlsx_sheet_numfmt_image` 未知 `#SPILL!` 一致）。
+#[test]
+fn an_unknown_visible_error_fails_the_sheet() {
+    let src = tmp("visible-spill-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+    }));
+    let book = hide_grid(&src);
+    let book = mark_errors_code(&book, &["A1"], "#SPILL!");
     assert_eq!(export(&book).unwrap_err().code(), ErrorCode::NotImplemented);
 }
