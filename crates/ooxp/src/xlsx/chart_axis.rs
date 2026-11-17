@@ -1,5 +1,5 @@
-//! Linear clustered-column axis scalars. Nice-number search is bounded by label
-//! line capacity, not a universal 5..10 interval count. Office's general automatic
+//! Linear value-axis scalars. Nice-number search is bounded by label line
+//! capacity, not a universal 5..10 interval count. Office's general automatic
 //! algorithm is undocumented; nonzero automatic minima are explicitly out of scope.
 use super::{Element, Error, ErrorKind, Series, INSET_BOTTOM, INSET_TOP};
 #[derive(Clone, Copy, Default)]
@@ -37,6 +37,17 @@ impl Spec {
         let Some(axis) = axes.first() else {
             return Ok(Self::default());
         };
+        Self::read_axis(axis)
+    }
+
+    pub fn read_axis(axis: &Element) -> Result<Self, Error> {
+        if axis
+            .child_by_local("delete")
+            .and_then(|e| e.attr_local("val"))
+            .is_some_and(|v| !matches!(v, "0" | "false" | "off"))
+        {
+            return Err(unsupported());
+        }
         let scaling = axis.child_by_local("scaling");
         if scaling.is_some_and(|s| {
             s.child_by_local("logBase").is_some()
@@ -90,19 +101,79 @@ impl Spec {
 /// A full label line plus one raster-grid row, capped at the historic ten slots.
 /// Uses the existing fixed96 face metrics; never the current desktop DPI.
 pub(super) fn interval_budget(height: u32, label_em: f64) -> i32 {
-    let room = (f64::from(height) - f64::from(INSET_TOP + INSET_BOTTOM)).max(1.0);
-    (room / (label_em.max(1.0) + 1.0)).floor().clamp(1.0, 10.0) as i32
+    interval_budget_span(
+        f64::from(height) - f64::from(INSET_TOP + INSET_BOTTOM),
+        label_em,
+        1.0,
+    )
 }
+
+pub(super) fn interval_budget_span(span: f64, label_em: f64, occupancy: f64) -> i32 {
+    let room = span.max(1.0);
+    (room / (label_em.max(1.0) * occupancy.max(1.0) + 1.0))
+        .floor()
+        .clamp(1.0, 10.0) as i32
+}
+
+pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
+    if plot
+        .element_children()
+        .any(|e| matches!(e.local_name(), "catAx" | "dateAx" | "serAx"))
+    {
+        return Err(unsupported());
+    }
+    let axes: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .collect();
+    if axes.len() != 2 {
+        return Err(unsupported());
+    }
+    let mut x = None;
+    let mut y = None;
+    for axis in axes {
+        let pos = axis
+            .child_by_local("axPos")
+            .and_then(|e| e.attr_local("val"))
+            .unwrap_or("");
+        let spec = Spec::read_axis(axis)?;
+        match pos {
+            "b" | "t" => {
+                if x.is_some() {
+                    return Err(unsupported());
+                }
+                x = Some(spec);
+            }
+            "l" | "r" => {
+                if y.is_some() {
+                    return Err(unsupported());
+                }
+                y = Some(spec);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok((x.ok_or_else(unsupported)?, y.ok_or_else(unsupported)?))
+}
+
 pub(super) fn scale(series: &[Series], spec: Spec, budget: i32) -> Result<Scale, Error> {
+    scale_values(
+        series.iter().flat_map(|s| s.values.iter().copied()),
+        spec,
+        budget,
+    )
+}
+
+pub(super) fn scale_values(
+    values: impl Iterator<Item = Option<f64>>,
+    spec: Spec,
+    budget: i32,
+) -> Result<Scale, Error> {
     let mut raw_min = f64::INFINITY;
     let mut raw_max = f64::NEG_INFINITY;
-    for v in series
-        .iter()
-        .flat_map(|s| s.values.iter().flatten())
-        .filter(|v| v.is_finite())
-    {
-        raw_min = raw_min.min(*v);
-        raw_max = raw_max.max(*v);
+    for v in values.flatten().filter(|v| v.is_finite()) {
+        raw_min = raw_min.min(v);
+        raw_max = raw_max.max(v);
     }
     if !raw_min.is_finite() {
         raw_min = 0.0;

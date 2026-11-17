@@ -1,6 +1,7 @@
-//! 簇状柱形图和普通折线图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
+//! 簇状柱形图、普通折线图和带标记的散点图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 
 use fontdue::{Font, FontSettings};
 
@@ -72,6 +73,7 @@ enum LegendPos {
 enum PlotKind {
     ClusteredColumn,
     StandardLine,
+    Scatter { connect: bool },
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -97,6 +99,7 @@ struct Series {
     line_width: f64,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
+    x_values: Vec<Option<f64>>,
 }
 
 impl Default for Series {
@@ -110,6 +113,7 @@ impl Default for Series {
             line_width: 0.0,
             marker: MarkerKind::None,
             marker_color: None,
+            x_values: Vec::new(),
         }
     }
 }
@@ -124,6 +128,8 @@ struct ColumnChart {
     legend: Option<LegendPos>,
     legend_spec: legend::Spec,
     axis: axis::Spec,
+    axis_x: Option<axis::Spec>,
+    grid_x: bool,
     title: Option<String>,
     accents: [[u8; 3]; 6],
     kind: PlotKind,
@@ -438,6 +444,37 @@ fn read_chart(
             }
             PlotKind::StandardLine
         }
+        "scatterChart" => {
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if blanks != "gap" {
+                return Err(unsupported());
+            }
+            for child in wrapper.element_children() {
+                if matches!(
+                    child.local_name(),
+                    "dropLines" | "hiLowLines" | "upDownBars"
+                ) {
+                    return Err(unsupported());
+                }
+            }
+            let style = wrapper
+                .child_by_local("scatterStyle")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("lineMarker");
+            let connect = match style {
+                "marker" => false,
+                "lineMarker" => true,
+                _ => return Err(unsupported()),
+            };
+            PlotKind::Scatter { connect }
+        }
         _ => return Err(unsupported()),
     };
     let vary = flag(wrapper, "varyColors").unwrap_or(false);
@@ -449,10 +486,25 @@ fn read_chart(
         .filter(|el| el.local_name() == "ser")
     {
         let order = number_val(ser, "order").unwrap_or(series.len() as f64) as usize;
-        let values = series_numbers(ser.child_by_local("val"), sheet, cells);
-        if values.is_empty() {
-            continue;
-        }
+        let (values, x_values) = if matches!(kind, PlotKind::Scatter { .. }) {
+            let ys = series_numbers(ser.child_by_local("yVal"), sheet, cells);
+            let xs = series_numbers(ser.child_by_local("xVal"), sheet, cells);
+            if xs.is_empty() && ys.is_empty() {
+                continue;
+            }
+            if !xs.iter().any(|v| v.is_some_and(|n| n.is_finite()))
+                || !ys.iter().any(|v| v.is_some_and(|n| n.is_finite()))
+            {
+                return Err(unsupported());
+            }
+            (ys, xs)
+        } else {
+            let values = series_numbers(ser.child_by_local("val"), sheet, cells);
+            if values.is_empty() {
+                continue;
+            }
+            (values, Vec::new())
+        };
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let style = match kind {
             PlotKind::ClusteredColumn => LineSeriesStyle {
@@ -463,6 +515,13 @@ fn read_chart(
                 marker_color: None,
             },
             PlotKind::StandardLine => read_line_series(ser, accents)?,
+            PlotKind::Scatter { connect } => {
+                let mut style = read_line_series(ser, accents)?;
+                if !connect {
+                    style.visible = false;
+                }
+                style
+            }
         };
         if series.len() <= order {
             series.resize_with(order + 1, Series::default);
@@ -476,31 +535,45 @@ fn read_chart(
             line_width: style.width,
             marker: style.marker,
             marker_color: style.marker_color,
+            x_values,
         };
     }
-    series.retain(|ser| !ser.values.is_empty());
+    series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
     if series.is_empty() {
         return Err(unsupported());
     }
-    let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
+    let n = series
+        .iter()
+        .map(|ser| ser.values.len().max(ser.x_values.len()))
+        .max()
+        .unwrap_or(0);
     if n == 0 {
         return Err(unsupported());
     }
-    let mut categories = cache_labels(series_cat(wrapper));
-    if categories.is_empty() {
+    let mut categories = if matches!(kind, PlotKind::Scatter { .. }) {
+        Vec::new()
+    } else {
+        cache_labels(series_cat(wrapper))
+    };
+    if categories.is_empty() && !matches!(kind, PlotKind::Scatter { .. }) {
         if let Some(text) = formula_text(series_cat(wrapper)) {
             if let Some(labels) = labels_from_cells(&text, sheet, cells) {
                 categories = labels;
             }
         }
     }
-    if categories.len() < n {
-        let start = categories.len();
-        categories.extend((start..n).map(|i| (i + 1).to_string()));
+    if !matches!(kind, PlotKind::Scatter { .. }) {
+        if categories.len() < n {
+            let start = categories.len();
+            categories.extend((start..n).map(|i| (i + 1).to_string()));
+        }
+        categories.truncate(n);
     }
-    categories.truncate(n);
     for ser in &mut series {
         ser.values.resize(n, None);
+        if matches!(kind, PlotKind::Scatter { .. }) {
+            ser.x_values.resize(n, None);
+        }
     }
     let grid = plot.element_children().any(|el| {
         matches!(el.local_name(), "valAx" | "dateAx")
@@ -519,6 +592,22 @@ fn read_chart(
         return Err(unsupported());
     }
     let vary_points = kind == PlotKind::ClusteredColumn && vary && series.len() == 1;
+    let (axis, axis_x, grid_x) = if matches!(kind, PlotKind::Scatter { .. }) {
+        let (x, y) = axis::scatter_axes(plot)?;
+        let grid_x = plot.element_children().any(|el| {
+            el.local_name() == "valAx"
+                && matches!(
+                    el.child_by_local("axPos")
+                        .and_then(|p| p.attr_local("val"))
+                        .unwrap_or(""),
+                    "b" | "t"
+                )
+                && el.child_by_local("majorGridlines").is_some()
+        });
+        (y, Some(x), grid_x)
+    } else {
+        (axis::Spec::read(plot)?, None, false)
+    };
     Ok(ColumnChart {
         categories,
         series,
@@ -526,9 +615,11 @@ fn read_chart(
         overlap,
         vary_points,
         grid,
+        grid_x,
         legend: legend_pos(chart),
         legend_spec: legend::Spec::read(root, accents)?,
-        axis: axis::Spec::read(plot)?,
+        axis,
+        axis_x,
         title: title_text(chart),
         accents,
         kind,
@@ -563,12 +654,274 @@ fn is_chart_wrapper(name: &str) -> bool {
     )
 }
 
+fn paint_scatter(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    host: ChartHost,
+) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let legend_layout = legend::Layout::new(canvas, chart, font)?;
+    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_face = chart
+        .title
+        .as_ref()
+        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+    let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
+    let y_scale = axis::scale(
+        &chart.series,
+        chart.axis,
+        axis::interval_budget(canvas.h, em),
+    )?;
+    let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
+    let y_labels: Vec<String> = y_ticks.iter().copied().map(fmt_tick).collect();
+    let y_intervals = y_ticks.len().saturating_sub(1).max(1) as i32;
+    let widest_tick = y_labels
+        .iter()
+        .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
+        .max()
+        .unwrap_or(0);
+    let mut axis_x = axis_x_of(widest_tick);
+    let mut plot_x = axis_x + 1;
+    let title_top = 4.0;
+    let mut plot_y = if chart.title.is_some() {
+        let band = title_face
+            .as_ref()
+            .map(|face| face.em_box().ceil() as i32)
+            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
+        let half = gdi
+            .as_ref()
+            .map(|face| face.line_height().ceil() as i32 / 2)
+            .unwrap_or(0);
+        let mut y = title_top as i32 + 2 * (band + half);
+        if matches!(host, ChartHost::Slide) {
+            y += TITLE_DROP as i32;
+        }
+        y
+    } else {
+        INSET_TOP
+    };
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let mut plot_r = canvas.w as i32 - inset_right;
+    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    if !chart.legend_spec.legacy {
+        let reserve = legend_layout.reserve();
+        axis_x += reserve[0];
+        plot_x = axis_x + 1;
+        plot_y += reserve[1];
+        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_b -= reserve[3];
+        if plot_r <= plot_x || plot_b <= plot_y {
+            return Err(legend::unsupported());
+        }
+    }
+    let x_spec = chart.axis_x.ok_or_else(unsupported)?;
+    let x_budget = axis::interval_budget_span(f64::from((plot_r - plot_x).max(1)), em, 3.0);
+    let x_scale = axis::scale_values(
+        chart.series.iter().flat_map(|s| s.x_values.iter().copied()),
+        x_spec,
+        x_budget,
+    )?;
+    let x_ticks = tick_values(x_scale.min, x_scale.max, x_scale.major);
+    let x_labels: Vec<String> = x_ticks.iter().copied().map(fmt_tick).collect();
+    let plot = Rect {
+        x: f64::from(plot_x),
+        y: f64::from(plot_y),
+        w: f64::from(plot_r - plot_x),
+        h: f64::from(plot_b - plot_y),
+    };
+    let y_regular = (((y_scale.max - y_scale.min) / y_scale.major).round() * y_scale.major
+        - (y_scale.max - y_scale.min))
+        .abs()
+        <= y_scale.major * 1e-8;
+    if chart.grid && y_regular {
+        for i in 0..=y_intervals {
+            let y = plot_y + (i * (plot_b - plot_y) + y_intervals - 1) / y_intervals;
+            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+        }
+    }
+    if chart.grid && !y_regular {
+        for value in &y_ticks {
+            let y = y_of(*value, y_scale.min, y_scale.max, &plot).ceil() as i32;
+            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+        }
+    }
+    if chart.grid_x {
+        for value in &x_ticks {
+            let x = x_of(*value, x_scale.min, x_scale.max, &plot).round() as i32;
+            canvas.vline_i(x, plot_y, plot_b, INK);
+        }
+    }
+    let y_parts = y_scale.major / y_scale.minor;
+    if y_regular && (y_parts - y_parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&y_parts) {
+        draw_value_minor_ticks(
+            canvas,
+            axis_x,
+            plot_y,
+            plot_b,
+            y_intervals,
+            y_parts.round() as i32,
+        );
+    } else {
+        for value in tick_values(y_scale.min + y_scale.minor, y_scale.max, y_scale.minor) {
+            let at_major = (value - y_scale.min) / y_scale.major;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let y = y_of(value, y_scale.min, y_scale.max, &plot).round() as i32;
+            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+        }
+    }
+    draw_scatter(canvas, chart, &plot, &x_scale, &y_scale);
+    let axis_line_x = x_of(x_scale.crossing(), x_scale.min, x_scale.max, &plot).round() as i32;
+    let axis_line_y = y_of(y_scale.crossing(), y_scale.min, y_scale.max, &plot).round() as i32;
+    canvas.vline_i(axis_line_x, plot_y, plot_b, INK);
+    canvas.hline_i(axis_x, plot_r, axis_line_y, INK);
+    for value in &x_ticks {
+        let x = x_of(*value, x_scale.min, x_scale.max, &plot).round() as i32;
+        canvas.vline_i(x, axis_line_y - CAT_MAJOR_IN, axis_line_y + CAT_MAJOR, INK);
+    }
+    for value in tick_values(x_scale.min + x_scale.minor, x_scale.max, x_scale.minor) {
+        let at_major = (value - x_scale.min) / x_scale.major;
+        if (at_major - at_major.round()).abs() < 1e-8 {
+            continue;
+        }
+        let x = x_of(value, x_scale.min, x_scale.max, &plot).round() as i32;
+        canvas.vline_i(
+            x,
+            axis_line_y - VAL_MINOR_ARM,
+            axis_line_y + VAL_MINOR_ARM,
+            INK,
+        );
+    }
+    for (tick, label) in y_ticks.iter().zip(&y_labels) {
+        let y = y_of(*tick, y_scale.min, y_scale.max, &plot);
+        let w = text_width(font, gdi.as_ref(), label, label_px);
+        let h = text_height(font, label_px);
+        draw_text(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label,
+            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            y - h / 2.0,
+            label_px,
+            INK,
+        );
+    }
+    let baseline = f64::from(canvas.h as i32 - INSET_BOTTOM) + 10.0;
+    for (tick, label) in x_ticks.iter().zip(&x_labels) {
+        let x = x_of(*tick, x_scale.min, x_scale.max, &plot);
+        let w = text_width(font, gdi.as_ref(), label, label_px);
+        draw_text(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label,
+            x - w / 2.0,
+            baseline,
+            label_px,
+            INK,
+        );
+    }
+    if let Some(title) = &chart.title {
+        let face = title_face.as_ref().or(gdi.as_ref());
+        let width = text_width(font, face, title, label_px);
+        let x = (f64::from(canvas.w) - width) / 2.0;
+        draw_text(
+            canvas,
+            font,
+            face,
+            title,
+            x,
+            title_top + TITLE_DROP,
+            label_px,
+            INK,
+        );
+    }
+    if chart.legend_spec.default_right_ink() {
+        let legend_plot_r = canvas.w as i32 - inset_right;
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+    } else {
+        legend_layout.draw(canvas, chart, font);
+    }
+    if matches!(host, ChartHost::Excel) {
+        canvas.stroke_border(BORDER);
+    }
+    Ok(())
+}
+
+fn x_of(value: f64, axis_min: f64, axis_max: f64, plot: &Rect) -> f64 {
+    let span = (axis_max - axis_min).max(1e-12);
+    let t = (value - axis_min) / span;
+    plot.x + t * plot.w
+}
+
+fn draw_scatter(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    x_scale: &axis::Scale,
+    y_scale: &axis::Scale,
+) {
+    for ser in &chart.series {
+        let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
+        let n = ser.values.len().max(ser.x_values.len());
+        let mut run = Vec::new();
+        let mut points = Vec::new();
+        for i in 0..n {
+            let x = ser.x_values.get(i).and_then(|v| *v);
+            let y = ser.values.get(i).and_then(|v| *v);
+            match (x, y) {
+                (Some(x), Some(y)) if x.is_finite() && y.is_finite() => {
+                    let px = x_of(
+                        x.clamp(x_scale.min, x_scale.max),
+                        x_scale.min,
+                        x_scale.max,
+                        plot,
+                    );
+                    let py = y_of(
+                        y.clamp(y_scale.min, y_scale.max),
+                        y_scale.min,
+                        y_scale.max,
+                        plot,
+                    );
+                    run.push((px, py));
+                    points.push((px, py));
+                }
+                _ => {
+                    if ser.line_visible && ser.line_width > 0.0 {
+                        stroke_run(canvas, &run, ser.line_width, color);
+                    }
+                    run.clear();
+                }
+            }
+        }
+        if ser.line_visible && ser.line_width > 0.0 {
+            stroke_run(canvas, &run, ser.line_width, color);
+        }
+        if let MarkerKind::Circle { diameter } = ser.marker {
+            let radius = diameter / 2.0;
+            if radius > 0.0 {
+                let marker_color = ser.marker_color.unwrap_or(color);
+                for (px, py) in points {
+                    canvas.fill_circle(px, py, radius, marker_color);
+                }
+            }
+        }
+    }
+}
+
 fn paint(
     canvas: &mut Canvas,
     chart: &ColumnChart,
     font: Option<&Font>,
     host: ChartHost,
 ) -> Result<(), Error> {
+    if matches!(chart.kind, PlotKind::Scatter { .. }) {
+        return paint_scatter(canvas, chart, font, host);
+    }
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = (LABEL_PT * DPI / 72.0) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
@@ -672,6 +1025,7 @@ fn paint(
     match chart.kind {
         PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::Scatter { .. } => unreachable!("scatter charts use paint_scatter"),
     }
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
@@ -860,10 +1214,15 @@ fn draw_plot_key(
 ) {
     match kind {
         PlotKind::ClusteredColumn => canvas.fill_rect(x0, y0, x1, y1, color),
-        PlotKind::StandardLine => {
+        PlotKind::StandardLine | PlotKind::Scatter { connect: true } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
             canvas.stroke_segment(f64::from(x0), mid_y, f64::from(x1) - 1.0, mid_y, 2.0, color);
+            canvas.fill_circle(mid_x, mid_y, 2.0, color);
+        }
+        PlotKind::Scatter { connect: false } => {
+            let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
+            let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
             canvas.fill_circle(mid_x, mid_y, 2.0, color);
         }
     }
@@ -2934,6 +3293,7 @@ mod tests {
 
         // A supported standard line still renders, so the counterexamples are not a broken harness.
         render_line(&standard_line_xml(&base, "")).unwrap();
+
         render_line(&standard_line_xml(
             &line_ser(
                 0,
@@ -2943,6 +3303,253 @@ mod tests {
             ),
             r#"<c:dispBlanksAs val="gap"/>"#,
         ))
+        .unwrap();
+    }
+
+    fn scatter_space(plot_body: &str, chart_extra: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {chart_extra}
+    <c:plotArea>
+      {plot_body}
+      <c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="b"/><c:crosses val="autoZero"/></c:valAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:axPos val="l"/><c:majorGridlines/><c:crosses val="autoZero"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn scatter_xml(style: &str, series: &str, chart_extra: &str) -> String {
+        scatter_space(
+            &format!(
+                r#"<c:scatterChart>
+        <c:scatterStyle val="{style}"/>
+        <c:varyColors val="0"/>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:scatterChart>"#
+            ),
+            chart_extra,
+        )
+    }
+
+    fn scatter_ser(
+        order: usize,
+        name: &str,
+        xs: &[Option<f64>],
+        ys: &[Option<f64>],
+        extra: &str,
+    ) -> String {
+        format!(
+            r#"<c:ser>
+          <c:order val="{order}"/>
+          <c:tx><c:v>{name}</c:v></c:tx>
+          {extra}
+          <c:xVal><c:numLit>{xs}</c:numLit></c:xVal>
+          <c:yVal><c:numLit>{ys}</c:numLit></c:val>
+        </c:ser>"#,
+            xs = lit_pts(xs),
+            ys = lit_pts(ys)
+        )
+        .replace("</c:val>", "</c:yVal>")
+    }
+
+    fn render_scatter(xml: &str) -> Result<Vec<u8>, Error> {
+        render_line(xml)
+    }
+
+    #[test]
+    fn marked_scatter_uses_numeric_xy_and_paints_series_colors() {
+        let xml = scatter_xml(
+            "lineMarker",
+            &format!(
+                "{}{}",
+                scatter_ser(
+                    0,
+                    "S1",
+                    &[Some(0.0), Some(8.0)],
+                    &[Some(1.0), Some(1.0)],
+                    ""
+                ),
+                scatter_ser(
+                    1,
+                    "S2",
+                    &[Some(1.0), Some(7.0)],
+                    &[Some(4.0), Some(6.0)],
+                    ""
+                )
+            ),
+            "",
+        );
+        let png = render_scatter(&xml).unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        assert!(
+            count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+            "first scatter series color should appear"
+        );
+        assert!(
+            count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+            "second scatter series color should appear"
+        );
+
+        // A lone point at the right of the X scale must not sit on a category midpoint.
+        let right = scatter_xml(
+            "marker",
+            &scatter_ser(0, "S1", &[Some(8.0)], &[Some(2.0)], ""),
+            "",
+        );
+        let (_, _, right_rgb) = png_rgb(&render_scatter(&right).unwrap());
+        let left_count = count_in(&right_rgb, w, 0, w / 2, 0, h, a1, 18);
+        let right_count = count_in(&right_rgb, w, w / 2, w, 0, h, a1, 18);
+        assert!(
+            right_count > left_count,
+            "x=8 on a 0..=8-like scale should land in the right half, not a single category mid-slot; left={left_count} right={right_count}"
+        );
+    }
+
+    #[test]
+    fn scatter_gap_breaks_the_stroke_and_marker_style_drops_the_line() {
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let solid = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(8.0), Some(8.0)],
+                none,
+            ),
+            "",
+        );
+        let gapped = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), None, Some(10.0)],
+                &[Some(8.0), Some(8.0), Some(8.0)],
+                none,
+            ),
+            "",
+        );
+        let (_, _, solid_rgb) = png_rgb(&render_scatter(&solid).unwrap());
+        let (_, _, gap_rgb) = png_rgb(&render_scatter(&gapped).unwrap());
+        let a1 = FALLBACK_ACCENTS[0];
+        let mid0 = 576 / 3;
+        let mid1 = (576 * 2) / 3;
+        let solid_mid = count_in(&solid_rgb, 576, mid0, mid1, 0, 336, a1, 24);
+        let gap_mid = count_in(&gap_rgb, 576, mid0, mid1, 0, 336, a1, 24);
+        assert!(
+            solid_mid >= 10,
+            "a lineMarker series should cross the middle x when every point is present, got {solid_mid}"
+        );
+        assert_eq!(
+            gap_mid, 0,
+            "a missing x or y must break the scatter stroke; got {gap_mid}"
+        );
+
+        let markers = scatter_xml(
+            "marker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(8.0), Some(8.0)],
+                "",
+            ),
+            "",
+        );
+        let (_, _, marker_rgb) = png_rgb(&render_scatter(&markers).unwrap());
+        let marker_mid = count_in(&marker_rgb, 576, mid0 + 20, mid1 - 20, 0, 336, a1, 18);
+        // The middle category of a marker-only series may contain a marker at x=5.
+        // A band between the first and middle marker should stay empty of series ink
+        // if we are not stroking a line.
+        let between = count_in(&marker_rgb, 576, 576 / 6, mid0 - 10, 0, 336, a1, 18);
+        assert_eq!(
+            between, 0,
+            "scatterStyle=marker must not draw a connecting stroke; got {between} (mid markers {marker_mid})"
+        );
+    }
+
+    #[test]
+    fn unsupported_scatter_inputs_stay_not_implemented() {
+        let ser = scatter_ser(
+            0,
+            "S1",
+            &[Some(1.0), Some(2.0), Some(3.0)],
+            &[Some(4.0), Some(5.0), Some(6.0)],
+            "",
+        );
+        let cases = [
+            scatter_xml("line", &ser, ""),
+            scatter_xml("smoothMarker", &ser, ""),
+            scatter_xml("smooth", &ser, ""),
+            scatter_xml(
+                "lineMarker",
+                &scatter_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    &[Some(3.0), Some(4.0)],
+                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
+                ),
+                "",
+            ),
+            scatter_xml(
+                "lineMarker",
+                &scatter_ser(
+                    0,
+                    "S1",
+                    &[Some(1.0), Some(2.0)],
+                    &[Some(3.0), Some(4.0)],
+                    r#"<c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr>"#,
+                ),
+                "",
+            ),
+            scatter_xml("lineMarker", &ser, r#"<c:dispBlanksAs val="zero"/>"#),
+            scatter_xml("lineMarker", &ser, r#"<c:dispBlanksAs val="span"/>"#),
+            scatter_xml("lineMarker", &ser, "")
+                .replace(r#"varyColors val="0""#, r#"varyColors val="1""#),
+            scatter_space(
+                r#"<c:bubbleChart><c:ser>
+          <c:order val="0"/><c:xVal><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:xVal>
+          <c:yVal><c:numLit><c:pt idx="0"><c:v>2</c:v></c:pt></c:numLit></c:yVal>
+        </c:ser></c:bubbleChart>"#,
+                "",
+            ),
+            scatter_xml("lineMarker", &ser, "").replace(
+                "</c:plotArea>",
+                r#"<c:catAx><c:axId val="3"/><c:axPos val="b"/></c:catAx></c:plotArea>"#,
+            ),
+            scatter_xml(
+                "lineMarker",
+                &scatter_ser(0, "S1", &[None, None], &[Some(1.0), Some(2.0)], ""),
+                "",
+            ),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_scatter(xml)
+                .expect_err(&format!("scatter case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "scatter case {i} should stay NotImplemented"
+            );
+        }
+        render_scatter(&scatter_xml("marker", &ser, "")).unwrap();
+        render_scatter(&scatter_xml("lineMarker", &ser, "")).unwrap();
+        // Omitted scatterStyle follows Excel's lineMarker default.
+        render_scatter(
+            &scatter_xml("lineMarker", &ser, "")
+                .replace(r#"<c:scatterStyle val="lineMarker"/>"#, ""),
+        )
         .unwrap();
     }
 }
