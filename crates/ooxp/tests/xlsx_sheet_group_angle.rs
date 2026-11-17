@@ -46,18 +46,25 @@ fn pixel(rgb: &[u8], width: u32, x: u32, y: u32) -> [u8; 3] {
 }
 
 fn export(src: &Path) -> Result<Vec<u8>, ooxp::Error> {
-    let png = src.with_extension("png");
+    export_at(src, None)
+}
+
+fn export_at(src: &Path, dpi: Option<i64>) -> Result<Vec<u8>, ooxp::Error> {
+    let png = src.with_extension(format!("d{}.png", dpi.unwrap_or(96)));
     if png.exists() {
         std::fs::remove_file(&png).unwrap();
     }
-    let written = run(&json!({
+    let mut req = json!({
         "schemaVersion": 1,
         "action": "exportSheetImage",
         "path": src.to_string_lossy(),
         "id": "sheet:Sheet1",
         "output": png.to_string_lossy(),
-    })
-    .to_string())?;
+    });
+    if let Some(dpi) = dpi {
+        req["dpi"] = json!(dpi);
+    }
+    let written = run(&req.to_string())?;
     let RunOutput::Written { path, .. } = written else {
         panic!("应写出文件");
     };
@@ -192,6 +199,44 @@ fn two_cell(x0: i32, y0: i32, x1: i32, y1: i32) -> String {
     )
 }
 
+/// 用外接框的真实 EMU 写 twoCell，避免先按 96 像素取整再乘 9525，
+/// 那样在非 96 DPI 下会和组外框差 1 像素，整表被当成锚点不合而 NI。
+fn two_cell_emu(x0: f64, y0: f64, x1: f64, y1: f64) -> String {
+    let (x0, y0, x1, y1) = (
+        x0.round() as i64,
+        y0.round() as i64,
+        x1.round() as i64,
+        y1.round() as i64,
+    );
+    format!(
+        "<xdr:from><xdr:col>0</xdr:col><xdr:colOff>{x0}</xdr:colOff>         <xdr:row>0</xdr:row><xdr:rowOff>{y0}</xdr:rowOff></xdr:from>         <xdr:to><xdr:col>0</xdr:col><xdr:colOff>{x1}</xdr:colOff>         <xdr:row>0</xdr:row><xdr:rowOff>{y1}</xdr:rowOff></xdr:to>"
+    )
+}
+
+fn group_box_emu(off_x: i64, off_y: i64, cx: i64, cy: i64, rot: i64) -> (f64, f64, f64, f64) {
+    let deg = rot_deg(rot);
+    let gcx = off_x as f64 + cx as f64 / 2.0;
+    let gcy = off_y as f64 + cy as f64 / 2.0;
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for (sx, sy) in [(0, 0), (cx, 0), (cx, cy), (0, cy)] {
+        let (rx, ry) = rotate_cw(
+            off_x as f64 + sx as f64,
+            off_y as f64 + sy as f64,
+            gcx,
+            gcy,
+            deg,
+        );
+        min_x = min_x.min(rx);
+        min_y = min_y.min(ry);
+        max_x = max_x.max(rx);
+        max_y = max_y.max(ry);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
 fn xfrm_attrs(rot: i64, flip_h: bool, flip_v: bool) -> String {
     let mut s = String::new();
     if rot != 0 {
@@ -234,6 +279,39 @@ fn group_drawing(
 ) -> String {
     let (x0, y0, x1, y1) = group_box_px(off_x, off_y, cx, cy, rot);
     let anchor = two_cell(x0, y0, x1, y1);
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+<xdr:twoCellAnchor>{anchor}<xdr:grpSp>
+<xdr:nvGrpSpPr><xdr:cNvPr id="20" name="组合"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr>
+<xdr:grpSpPr><a:xfrm{attrs}><a:off x="{off_x}" y="{off_y}"/><a:ext cx="{cx}" cy="{cy}"/>
+<a:chOff x="{ch_x}" y="{ch_y}"/><a:chExt cx="{ch_cx}" cy="{ch_cy}"/></a:xfrm></xdr:grpSpPr>
+{body}
+</xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#,
+        attrs = xfrm_attrs(rot, flip_h, flip_v)
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn group_drawing_emu(
+    off_x: i64,
+    off_y: i64,
+    cx: i64,
+    cy: i64,
+    ch_x: i64,
+    ch_y: i64,
+    ch_cx: i64,
+    ch_cy: i64,
+    rot: i64,
+    flip_h: bool,
+    flip_v: bool,
+    body: &str,
+) -> String {
+    let (x0, y0, x1, y1) = group_box_emu(off_x, off_y, cx, cy, rot);
+    // 这一档样例外接框必须落在第一格内，避免 96 列宽分区写锚点。
+    assert!(x1 < f64::from(COL_PX) * EMU as f64, "x1={x1}");
+    assert!(y1 < f64::from(ROW_PX) * EMU as f64, "y1={y1}");
+    let anchor = two_cell_emu(x0, y0, x1, y1);
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
@@ -437,6 +515,63 @@ fn a_15_degree_group_paints_the_rotated_rectangle_not_its_bbox() {
     );
     assert!(w >= 65 && h >= 41, "{w}x{h}");
     assert_geometry(&rgb, w, h, &[box_]);
+}
+
+#[cfg(windows)]
+#[test]
+fn an_angled_group_at_106_dpi_is_native_and_default_stays() {
+    // 组与 twoCell 锚点都写同一套外接框 EMU，且落在 A1 内，96 与 106 都应能出图。
+    // 修复前组合 EMU 仍按 9525（96 dpi）换算，锚点已按请求 DPI 换算，整表会 NotImplemented。
+    let xml = group_drawing_emu(
+        OFF,
+        OFF,
+        WIDE,
+        TALL,
+        OFF,
+        OFF,
+        WIDE,
+        TALL,
+        DEG15,
+        false,
+        false,
+        &rect_sp(2, OFF, OFF, WIDE, TALL, 0),
+    );
+    let box96 = child_sheet_box(
+        OFF,
+        OFF,
+        WIDE,
+        TALL,
+        OFF,
+        OFF,
+        WIDE,
+        TALL,
+        DEG15,
+        false,
+        false,
+        (OFF, OFF, WIDE, TALL),
+    );
+    let book = drawing_book(&xml);
+    let before = std::fs::read(&book).unwrap();
+    let at96 = export_at(&book, Some(96)).unwrap();
+    let omitted = export_at(&book, None).unwrap();
+    let at106 = export_at(&book, Some(106)).unwrap();
+    assert_eq!(std::fs::read(&book).unwrap(), before);
+    assert_eq!(at96, omitted);
+    let (w96, h96, rgb96) = decode_png(&at96);
+    let (w106, h106, rgb106) = decode_png(&at106);
+    assert!(w96 >= 65 && h96 >= 41, "{w96}x{h96}");
+    assert!(w106 > w96 && h106 > h96, "106={w106}x{h106} 96={w96}x{h96}");
+    assert_ne!(at96, at106);
+    let sx = 106.0 / 96.0;
+    let box106 = (
+        box96.0 * sx,
+        box96.1 * sx,
+        box96.2 * sx,
+        box96.3 * sx,
+        box96.4,
+    );
+    assert_geometry(&rgb96, w96, h96, &[box96]);
+    assert_geometry(&rgb106, w106, h106, &[box106]);
 }
 
 #[cfg(windows)]

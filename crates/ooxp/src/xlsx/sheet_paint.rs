@@ -1030,17 +1030,18 @@ fn identity_group(
     let origin_y = axis_origin(1, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
-    if anchor_box != turned_box(&map, origin_x, origin_y)? {
+    let dpi = styles.geometry.dpi();
+    if anchor_box != turned_box(&map, origin_x, origin_y, dpi)? {
         return Err(unsupported());
     }
     let rects = if map.quarter().is_some() {
-        group_rects(group, &[map], origin_x, origin_y, cols, rows, theme)?
+        group_rects(group, &[map], origin_x, origin_y, cols, rows, theme, dpi)?
             .into_iter()
             .map(Overlay::Fill)
             .collect()
     } else {
         // 只锁锚点组合这一层的非直角；里层仍必须是已差 0 的直角/翻转/缩放。
-        group_rotated_overlays(group, &[map], origin_x, origin_y, cols, rows, theme)?
+        group_rotated_overlays(group, &[map], origin_x, origin_y, cols, rows, theme, dpi)?
     };
     if rects.is_empty() {
         return Err(unsupported());
@@ -1092,13 +1093,14 @@ fn group_rects(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
 ) -> Result<Vec<PlainRect>, Error> {
     let mut rects = Vec::new();
     for child in group.element_children() {
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, chain)?;
+                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, chain, dpi)?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
@@ -1115,7 +1117,7 @@ fn group_rects(
                 let mut next = chain.to_vec();
                 next.push(inner);
                 rects.extend(group_rects(
-                    child, &next, x_from, y_from, cols, rows, theme,
+                    child, &next, x_from, y_from, cols, rows, theme, dpi,
                 )?);
             }
             _ => return Err(unsupported()),
@@ -1133,6 +1135,7 @@ fn group_rotated_overlays(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
 ) -> Result<Vec<Overlay>, Error> {
     let outer = chain.first().ok_or_else(unsupported)?;
     if outer.quarter().is_some() {
@@ -1143,7 +1146,7 @@ fn group_rotated_overlays(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => out.push(child_rotated_fill(
-                child, x_from, y_from, chain, cols, rows, theme,
+                child, x_from, y_from, chain, cols, rows, theme, dpi,
             )?),
             "grpSp" => {
                 let inner = read_group_map(child)?;
@@ -1154,7 +1157,7 @@ fn group_rotated_overlays(
                 let mut next = chain.to_vec();
                 next.push(inner);
                 out.extend(group_rotated_overlays(
-                    child, &next, x_from, y_from, cols, rows, theme,
+                    child, &next, x_from, y_from, cols, rows, theme, dpi,
                 )?);
             }
             _ => return Err(unsupported()),
@@ -1171,6 +1174,7 @@ fn child_rotated_fill(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
 ) -> Result<Overlay, Error> {
     let (sx0, sy0, sx1, sy1) = child_frame_in_outer(sp, chain)?;
     let map = chain.first().ok_or_else(unsupported)?;
@@ -1178,15 +1182,15 @@ fn child_rotated_fill(
         return Err(unsupported());
     }
     let deg = rot_deg(map.rot);
-    let x = f64::from(x_from) + emu_to_px(map.off_x as f64 + sx0 as f64);
-    let y = f64::from(y_from) + emu_to_px(map.off_y as f64 + sy0 as f64);
-    let w = emu_to_px((sx1 - sx0) as f64);
-    let h = emu_to_px((sy1 - sy0) as f64);
+    let x = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + sx0 as f64, dpi);
+    let y = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + sy0 as f64, dpi);
+    let w = emu_to_px_at((sx1 - sx0) as f64, dpi);
+    let h = emu_to_px_at((sy1 - sy0) as f64, dpi);
     if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
         return Err(unsupported());
     }
-    let gcx = f64::from(x_from) + emu_to_px(map.off_x as f64 + map.cx as f64 / 2.0);
-    let gcy = f64::from(y_from) + emu_to_px(map.off_y as f64 + map.cy as f64 / 2.0);
+    let gcx = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + map.cx as f64 / 2.0, dpi);
+    let gcy = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + map.cy as f64 / 2.0, dpi);
     let (ncx, ncy) = rotate_cw(x + w / 2.0, y + h / 2.0, gcx, gcy, deg);
     let rx = (ncx - w / 2.0) as f32;
     let ry = (ncy - h / 2.0) as f32;
@@ -1422,6 +1426,7 @@ fn child_rect(
     x_from: i32,
     y_from: i32,
     chain: &[GroupMap],
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let map = chain.last().ok_or_else(unsupported)?;
     let xfrm = sp
@@ -1455,23 +1460,29 @@ fn child_rect(
         }
         corners = next;
     }
-    let (x0, y0, x1, y1) = turned_edges(&chain[0], x_from, y_from, corners)?;
+    let (x0, y0, x1, y1) = turned_edges(&chain[0], x_from, y_from, corners, dpi)?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
     Ok((x0, y0, x1, y1))
 }
 
-fn turned_box(map: &GroupMap, x_from: i32, y_from: i32) -> Result<(i32, i32, i32, i32), Error> {
+fn turned_box(
+    map: &GroupMap,
+    x_from: i32,
+    y_from: i32,
+    dpi: RenderDpi,
+) -> Result<(i32, i32, i32, i32), Error> {
     if map.quarter().is_some() {
         turned_edges(
             map,
             x_from,
             y_from,
             [(0, 0), (map.cx, 0), (map.cx, map.cy), (0, map.cy)],
+            dpi,
         )
     } else {
-        angled_group_box(map, x_from, y_from)
+        angled_group_box(map, x_from, y_from, dpi)
     }
 }
 
@@ -1480,6 +1491,7 @@ fn angled_group_box(
     map: &GroupMap,
     x_from: i32,
     y_from: i32,
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let deg = rot_deg(map.rot);
     let gcx = map.off_x as f64 + map.cx as f64 / 2.0;
@@ -1506,10 +1518,10 @@ fn angled_group_box(
         return Err(unsupported());
     }
     Ok((
-        x_from + round_emu(min_x)?,
-        y_from + round_emu(min_y)?,
-        x_from + round_emu(max_x)?,
-        y_from + round_emu(max_y)?,
+        x_from + round_emu_at(min_x, dpi)?,
+        y_from + round_emu_at(min_y, dpi)?,
+        x_from + round_emu_at(max_x, dpi)?,
+        y_from + round_emu_at(max_y, dpi)?,
     ))
 }
 
@@ -1526,6 +1538,7 @@ fn rotate_cw(px: f64, py: f64, cx: f64, cy: f64, deg: f64) -> (f64, f64) {
     (cx + dx * c - dy * s, cy + dx * s + dy * c)
 }
 
+#[allow(dead_code)]
 fn round_emu(emu: f64) -> Result<i32, Error> {
     round_emu_at(emu, RenderDpi::DEFAULT)
 }
@@ -1541,6 +1554,7 @@ fn round_emu_at(emu: f64, dpi: RenderDpi) -> Result<i32, Error> {
     Ok(px as i32)
 }
 
+#[allow(dead_code)]
 fn emu_to_px(emu: f64) -> f64 {
     emu_to_px_at(emu, RenderDpi::DEFAULT)
 }
@@ -1554,6 +1568,7 @@ fn turned_edges(
     x_from: i32,
     y_from: i32,
     corners: [(i64, i64); 4],
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let mut min_x = i64::MAX;
     let mut min_y = i64::MAX;
@@ -1567,10 +1582,10 @@ fn turned_edges(
         max_y = max_y.max(y2);
     }
     Ok((
-        x_from + round_twice(min_x)?,
-        y_from + round_twice(min_y)?,
-        x_from + round_twice(max_x)?,
-        y_from + round_twice(max_y)?,
+        x_from + round_twice(min_x, dpi)?,
+        y_from + round_twice(min_y, dpi)?,
+        x_from + round_twice(max_x, dpi)?,
+        y_from + round_twice(max_y, dpi)?,
     ))
 }
 
@@ -1659,11 +1674,12 @@ fn group_rot(xfrm: &Element) -> Result<i64, Error> {
 }
 
 /// `num` 是 EMU 的两倍。
-fn round_twice(num: i64) -> Result<i32, Error> {
+fn round_twice(num: i64, dpi: RenderDpi) -> Result<i32, Error> {
     if num < 0 {
         return Err(unsupported());
     }
-    let px = (num as f64 / 19_050.0).round();
+    // num 是 2×EMU。96 dpi 时 1_828_800/96=19050，与原先 /19050 相同。
+    let px = (num as f64 * dpi.get() / 1_828_800.0).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
@@ -7529,9 +7545,12 @@ mod tests {
     fn a_square_quarter_turn_keeps_the_same_pixel_box() {
         let map = sample_group_map(5_400_000);
         assert_eq!(map.quarter(), Some(1));
-        assert_eq!(turned_box(&map, 0, 0).unwrap(), (10, 10, 26, 26));
         assert_eq!(
-            turned_box(&sample_group_map(0), 0, 0).unwrap(),
+            turned_box(&map, 0, 0, RenderDpi::DEFAULT).unwrap(),
+            (10, 10, 26, 26)
+        );
+        assert_eq!(
+            turned_box(&sample_group_map(0), 0, 0, RenderDpi::DEFAULT).unwrap(),
             (10, 10, 26, 26)
         );
     }
@@ -7540,9 +7559,29 @@ mod tests {
     fn a_45_degree_group_box_grows_and_is_not_the_unrotated_frame() {
         let map = sample_group_map(2_700_000);
         assert_eq!(map.quarter(), None);
-        let box_ = turned_box(&map, 0, 0).unwrap();
+        let box_ = turned_box(&map, 0, 0, RenderDpi::DEFAULT).unwrap();
         assert_ne!(box_, (10, 10, 26, 26));
         // 中心 18px，半对角 76200*sqrt(2)/9525 ≈ 11.314，外接框 round 后是 7..29。
         assert_eq!(box_, (7, 7, 29, 29));
+    }
+
+    #[test]
+    fn group_boxes_scale_with_request_dpi_and_keep_96() {
+        let mut obj = serde_json::Map::new();
+        obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi = RenderDpi::from_request(&obj).unwrap();
+        let zero = sample_group_map(0);
+        // 95250×106/914400 ≈ 11.042，152400×106/914400 ≈ 17.667 → (11,11,29,29)
+        assert_eq!(turned_box(&zero, 0, 0, dpi).unwrap(), (11, 11, 29, 29));
+        assert_eq!(
+            turned_box(&zero, 0, 0, RenderDpi::DEFAULT).unwrap(),
+            (10, 10, 26, 26)
+        );
+        let angled = sample_group_map(2_700_000);
+        let box106 = turned_box(&angled, 0, 0, dpi).unwrap();
+        assert_ne!(box106, (11, 11, 29, 29));
+        assert_ne!(box106, (7, 7, 29, 29));
+        // 中心 95250+76200=171450 EMU → 19.875px；半对角 76200*sqrt(2)×106/914400 ≈ 12.492
+        assert_eq!(box106, (7, 7, 32, 32));
     }
 }
