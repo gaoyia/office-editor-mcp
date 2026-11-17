@@ -18,6 +18,8 @@ pub enum RunOutput {
         path: PathBuf,
         ops_applied: Option<usize>,
         content_type: Option<String>,
+        /// exportSheetImage + tilePx 多块时的全部路径；单文件为 None。
+        paths: Option<Vec<PathBuf>>,
     },
 }
 
@@ -85,11 +87,20 @@ pub fn envelope_fields(action: Action) -> &'static [&'static str] {
             "locale",
         ],
         Action::LayoutCheck => &["schemaVersion", "action", "path", "format", "locale"],
+        Action::ExportSheetImage => &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "id",
+            "output",
+            "locale",
+            "tilePx",
+        ],
         Action::ExportMedia
         | Action::ExportChartData
         | Action::ExportChartImage
         | Action::ExportSparklineImage
-        | Action::ExportSheetImage
         | Action::ExportSlideImage
         | Action::ExportPageImage => &[
             "schemaVersion",
@@ -345,6 +356,16 @@ pub fn written_json(
     content_type: Option<&str>,
     pretty: bool,
 ) -> String {
+    written_json_with_paths(path, ops_applied, content_type, None, pretty)
+}
+
+pub fn written_json_with_paths(
+    path: &Path,
+    ops_applied: Option<usize>,
+    content_type: Option<&str>,
+    paths: Option<&[PathBuf]>,
+    pretty: bool,
+) -> String {
     let mut body = json!({
         "ok": true,
         "path": path.display().to_string(),
@@ -354,6 +375,12 @@ pub fn written_json(
     }
     if let Some(ct) = content_type {
         body["contentType"] = json!(ct);
+    }
+    if let Some(list) = paths {
+        body["paths"] = json!(list
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>());
     }
     if pretty {
         serde_json::to_string_pretty(&body).unwrap()

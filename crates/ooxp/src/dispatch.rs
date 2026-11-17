@@ -1,4 +1,4 @@
-//! 按 format 把信封交给 xlsx / docx / pptx。
+﻿//! 按 format 把信封交给 xlsx / docx / pptx。
 //! `run_bytes` 不碰磁盘。本机的 `run` 才按路径读写。
 
 use serde_json::Value;
@@ -181,11 +181,26 @@ pub fn run(input_json: &str) -> Result<crate::json::RunOutput, Error> {
             content_type,
         } => {
             let path = output_path(&req)?;
+            // exportSheetImage + tilePx：多块时 bytes 为 zip，本机拆成 stem-rRcC.png。
+            if req.action == Action::ExportSheetImage
+                && req.obj.get("tilePx").is_some()
+                && content_type.as_deref() == Some("application/zip")
+            {
+                let paths = write_sheet_tiles_from_zip(&path, &bytes)?;
+                let first = paths.first().cloned().unwrap_or(path);
+                return Ok(RunOutput::Written {
+                    path: first,
+                    ops_applied,
+                    content_type: Some("image/png".into()),
+                    paths: Some(paths),
+                });
+            }
             write_atomic(&path, &bytes)?;
             Ok(RunOutput::Written {
                 path,
                 ops_applied,
                 content_type,
+                paths: None,
             })
         }
     }
@@ -588,9 +603,33 @@ fn export_sparkline_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported,
 fn export_sheet_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
     let fmt = format_of(req)?;
     let id = str_field(&req.obj, "id")?;
+    let tile_px = match req.obj.get("tilePx") {
+        None | Some(Value::Null) => None,
+        Some(v) => {
+            let n = v.as_u64().ok_or_else(unsupported_sheet_tile)?;
+            if n == 0 || n > 4096 {
+                return Err(unsupported_sheet_tile());
+            }
+            Some(n as i32)
+        }
+    };
     for_format(
         fmt,
         || {
+            if let Some(tile) = tile_px {
+                let tiles = xlsx::export_sheet_image_tiles(bytes, id, tile)?;
+                if tiles.len() == 1 {
+                    return Ok(Exported {
+                        bytes: tiles.into_iter().next().unwrap().bytes,
+                        content_type: Some("image/png".into()),
+                    });
+                }
+                let zip_bytes = zip_sheet_tiles(&tiles)?;
+                return Ok(Exported {
+                    bytes: zip_bytes,
+                    content_type: Some("application/zip".into()),
+                });
+            }
             let exported = xlsx::export_sheet_image(bytes, id)?;
             Ok(Exported {
                 bytes: exported.bytes,
@@ -616,6 +655,84 @@ fn export_sheet_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
             ))
         },
     )
+}
+
+fn unsupported_sheet_tile() -> Error {
+    Error::with_path(ErrorKind::SheetImageUnsupported, "tilePx")
+}
+
+fn zip_sheet_tiles(tiles: &[xlsx::SheetImageTile]) -> Result<Vec<u8>, Error> {
+    use std::io::{Cursor, Write};
+    use zip::write::SimpleFileOptions;
+    use zip::{CompressionMethod, ZipWriter};
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        for tile in tiles {
+            let name = format!("r{}c{}.png", tile.row, tile.col);
+            zip.start_file(&name, opt).map_err(|e| {
+                crate::error::io_path(
+                    std::io::Error::other(e.to_string()),
+                    std::path::PathBuf::from("output"),
+                )
+            })?;
+            zip.write_all(&tile.bytes).map_err(|e| {
+                crate::error::io_path(
+                    std::io::Error::other(e.to_string()),
+                    std::path::PathBuf::from("output"),
+                )
+            })?;
+        }
+        zip.finish().map_err(|e| {
+            crate::error::io_path(
+                std::io::Error::other(e.to_string()),
+                std::path::PathBuf::from("output"),
+            )
+        })?;
+    }
+    Ok(cursor.into_inner())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn write_sheet_tiles_from_zip(
+    output: &std::path::Path,
+    zip_bytes: &[u8],
+) -> Result<Vec<std::path::PathBuf>, Error> {
+    use std::io::{Cursor, Read};
+    use zip::ZipArchive;
+    let stem = output
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("sheet");
+    let parent = output.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut zip = ZipArchive::new(Cursor::new(zip_bytes)).map_err(|e| {
+        crate::error::io_path(
+            std::io::Error::other(e.to_string()),
+            std::path::PathBuf::from("output"),
+        )
+    })?;
+    let mut paths = Vec::new();
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i).map_err(|e| {
+            crate::error::io_path(
+                std::io::Error::other(e.to_string()),
+                std::path::PathBuf::from("output"),
+            )
+        })?;
+        let name = file.name().to_string();
+        let out = parent.join(format!("{stem}-{name}"));
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).map_err(|e| {
+            crate::error::io_path(
+                std::io::Error::other(e.to_string()),
+                std::path::PathBuf::from("output"),
+            )
+        })?;
+        crate::json::write_atomic(&out, &data)?;
+        paths.push(out);
+    }
+    Ok(paths)
 }
 
 fn export_slide_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Error> {
