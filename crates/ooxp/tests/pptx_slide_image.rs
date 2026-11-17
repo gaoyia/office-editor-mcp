@@ -3752,6 +3752,151 @@ fn horizontal_merge_fill_spans_columns_with_table_style() {
         [0x00, 0xAA, 0x00],
         "right of merge should keep anchor fill {mid_right:?}"
     );
+    // 首行底边 4px 实心白条（显式填色之上），横向铺满合并格。
+    for x in [192u32, 287, 383] {
+        for y in 190u32..=193 {
+            assert_eq!(pixel(&rgb, w, x, y), [255, 255, 255], "header bar {x},{y}");
+        }
+    }
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 40), [0x00, 0xAA, 0x00]);
+}
+
+fn empty_table_cells(rows: usize, cols: usize) -> Vec<Vec<serde_json::Value>> {
+    vec![vec![json!({ "text": "" }); cols]; rows]
+}
+
+fn export_style_table_slide(
+    tag: &str,
+    rows: usize,
+    cols: usize,
+    edit: impl FnOnce(String) -> String,
+) -> (u32, Vec<u8>) {
+    let deck = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": rows,
+                    "cols": cols,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 2743200,
+                    "cy": 1828800,
+                    "cells": empty_table_cells(rows, cols)
+                }]
+            }]
+        }
+    }));
+    let painted = tmp(&format!("{tag}-painted"));
+    rewrite_slide(&deck, &painted, edit);
+    let out = tmp(&format!("{tag}.png")).with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    (w, rgb)
+}
+
+#[test]
+fn medium_style2_paints_accent1_header_and_linear_bands() {
+    let (w, rgb) = export_style_table_slide("style-3x2-plain", 3, 2, |xml| xml);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [0x4F, 0x81, 0xBD]);
+    assert_eq!(pixel(&rgb, w, 192 + 180, 96 + 20), [0x4F, 0x81, 0xBD]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [233, 237, 244]);
+    for x in [192u32, 335, 479] {
+        for y in 158u32..=161 {
+            assert_eq!(pixel(&rgb, w, x, y), [255, 255, 255], "header bar {x},{y}");
+        }
+    }
+}
+
+#[test]
+fn medium_style2_first_row_off_starts_bands_at_row_zero() {
+    let (w, rgb) = export_style_table_slide("style-3x2-firstRow0", 3, 2, |xml| {
+        xml.replacen("firstRow=\"1\"", "firstRow=\"0\"", 1)
+    });
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [233, 237, 244]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [208, 216, 232]);
+    assert_ne!(pixel(&rgb, w, 192, 158), [255, 255, 255]);
+}
+
+#[test]
+fn medium_style2_horizontal_merge_does_not_paint_an_inner_vertical() {
+    let (w, rgb) = export_style_table_slide("style-3x2-body-merge", 3, 2, |xml| {
+        let mut out = xml;
+        // 正文第一行（第二个 a:tr）左格 gridSpan=2，右格 hMerge。
+        let first_tr = out.find("<a:tr").expect("tr0");
+        let second_tr = out[first_tr + 5..].find("<a:tr").expect("tr1") + first_tr + 5;
+        let first_tc = out[second_tr..].find("<a:tc>").expect("tc") + second_tr;
+        out.insert_str(first_tc + 5, " gridSpan=\"2\"");
+        let second_tc = out[first_tc + 10..].find("<a:tc>").expect("tc2") + first_tc + 10;
+        out.insert_str(second_tc + 5, " hMerge=\"1\"");
+        out
+    });
+    // 合并行实心区跨过原列缝 x=336，不应再露出页底或第二条带色。
+    let y = 96 + 64 + 20;
+    assert_eq!(pixel(&rgb, w, 192 + 40, y), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 336, y), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 200, y), [208, 216, 232]);
+    // 未合并的末行仍是第二条带，列缝处本子合同不画细样式内线，因此也是带色。
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [233, 237, 244]);
+}
+
+#[test]
+fn medium_style2_header_and_bands_follow_theme_accent1() {
+    let deck = tmp("style-3x2-accent-red");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 3,
+                    "cols": 2,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 2743200,
+                    "cy": 1828800,
+                    "cells": empty_table_cells(3, 2)
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("style-3x2-accent-red-painted");
+    rewrite_named(&deck, &painted, |name, xml| {
+        if name == "ppt/theme/theme1.xml" {
+            xml.replacen(
+                "<a:accent1><a:srgbClr val=\"4F81BD\"/></a:accent1>",
+                "<a:accent1><a:srgbClr val=\"FF0000\"/></a:accent1>",
+                1,
+            )
+        } else {
+            xml
+        }
+    });
+    let out = tmp("style-3x2-accent-red.png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [255, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [255, 203, 203]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [255, 231, 231]);
+    assert_eq!(pixel(&rgb, w, 192, 158), [255, 255, 255]);
 }
 
 #[test]
