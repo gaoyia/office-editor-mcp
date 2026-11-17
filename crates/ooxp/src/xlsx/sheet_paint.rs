@@ -85,6 +85,131 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     })
 }
 
+/// 切块导出：每块边长 ≤ `tile_px`（且 ≤ `MAX_PX`），不分配整表画布。
+/// 返回顺序行主序 `(row_idx, col_idx, png_bytes)`。单块未超限时仍走整图路径（与旧行为同像素）。
+pub fn export_sheet_image_tiles(
+    bytes: &[u8],
+    id: &str,
+    tile_px: i32,
+) -> Result<Vec<SheetImageTile>, Error> {
+    if !(1..=MAX_PX).contains(&tile_px) {
+        return Err(unsupported());
+    }
+    let name = parse_sheet_id(id)?;
+    let pkg = Package::open_bytes(bytes.to_vec())?;
+    let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
+    let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
+    let root = &sheet_doc.root;
+    reject_rtl_extras(root)?;
+    reject_hidden_rules(root)?;
+    let grid_lines = shows_grid(root);
+    let rtl = right_to_left(root);
+    if rtl {
+        // 切块 + RTL 翻转语义未定，明确 NI（默认单图 API 仍可画 RTL）。
+        return Err(unsupported());
+    }
+    let wb_part = crate::opc::office_document_part(&pkg)?;
+    let rels = Relationships::from_package(&pkg, &wb_part)?;
+    let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
+    let styles = load_styles(&pkg, &wb_part, &rels)?;
+    let (c0, r0, c1, r1) = used_range(root)?;
+    let mut session = eval::FormulaSession::open(&pkg, &name)?;
+    let cells = read_cells(root, &sst, &mut session)?;
+    let cols = column_sizes(root, c0, c1)?;
+    let rows = row_sizes(root, &styles, &cells, r0, r1)?;
+    let theme = loaded_theme(&pkg, &wb_part, &rels);
+    let shapes = plain_rects(
+        &pkg,
+        &sheet_part,
+        root,
+        &styles,
+        &cells,
+        c0,
+        r0,
+        c1,
+        r1,
+        &cols,
+        &rows,
+        theme.as_ref(),
+    )?;
+    let xs = Axis::new(&cols);
+    let ys = Axis::new(&rows);
+    let full_w = xs.bitmap();
+    let full_h = ys.bitmap();
+    if full_w < 1 || full_h < 1 {
+        return Err(unsupported());
+    }
+    // 未超 tile：整图一次，保证与 export_sheet_image 同像素。
+    if full_w <= tile_px && full_h <= tile_px {
+        let canvas = paint(
+            root,
+            &styles,
+            &cells,
+            c0,
+            r0,
+            &cols,
+            &rows,
+            grid_lines,
+            rtl,
+            &shapes,
+            &mut session,
+        )?;
+        let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+        return Ok(vec![SheetImageTile {
+            row: 0,
+            col: 0,
+            bytes: png,
+        }]);
+    }
+    let mut out = Vec::new();
+    let mut oy = 0;
+    let mut row = 0u32;
+    while oy < full_h {
+        let th = (full_h - oy).min(tile_px);
+        let mut ox = 0;
+        let mut col = 0u32;
+        while ox < full_w {
+            let tw = (full_w - ox).min(tile_px);
+            let canvas = paint_window(
+                root,
+                &styles,
+                &cells,
+                c0,
+                r0,
+                &cols,
+                &rows,
+                grid_lines,
+                rtl,
+                &shapes,
+                &mut session,
+                ox,
+                oy,
+                tw,
+                th,
+            )?;
+            let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+            out.push(SheetImageTile {
+                row,
+                col,
+                bytes: png,
+            });
+            ox += tw;
+            col += 1;
+        }
+        oy += th;
+        row += 1;
+    }
+    Ok(out)
+}
+
+/// 一块切块 PNG。
+#[derive(Debug, Clone)]
+pub struct SheetImageTile {
+    pub row: u32,
+    pub col: u32,
+    pub bytes: Vec<u8>,
+}
+
 fn unsupported() -> Error {
     Error::with_path(ErrorKind::SheetImageUnsupported, "id")
 }
@@ -2958,26 +3083,42 @@ impl Axis {
 struct Canvas {
     w: i32,
     h: i32,
+    /// 窗口左上角在整表位图中的绝对像素坐标。`put`/`blend` 吃绝对坐标。
+    ox: i32,
+    oy: i32,
     px: Vec<u8>,
 }
 
 impl Canvas {
+    #[allow(dead_code)]
     fn new(w: i32, h: i32) -> Result<Self, Error> {
-        if !(1..=MAX_PX).contains(&w) || !(1..=MAX_PX).contains(&h) {
+        Self::window(0, 0, w, h)
+    }
+
+    /// 只分配 `tw×th`；不分配整表。边长仍受 `MAX_PX` 约束。
+    fn window(ox: i32, oy: i32, tw: i32, th: i32) -> Result<Self, Error> {
+        if !(1..=MAX_PX).contains(&tw) || !(1..=MAX_PX).contains(&th) {
             return Err(unsupported());
         }
-        let n = (w as usize)
-            .checked_mul(h as usize)
+        if ox < 0 || oy < 0 {
+            return Err(unsupported());
+        }
+        let n = (tw as usize)
+            .checked_mul(th as usize)
             .and_then(|n| n.checked_mul(3))
             .ok_or_else(unsupported)?;
         Ok(Self {
-            w,
-            h,
+            w: tw,
+            h: th,
+            ox,
+            oy,
             px: vec![255; n],
         })
     }
 
     fn put(&mut self, x: i32, y: i32, color: [u8; 3]) {
+        let x = x - self.ox;
+        let y = y - self.oy;
         if x < 0 || y < 0 || x >= self.w || y >= self.h {
             return;
         }
@@ -2988,11 +3129,13 @@ impl Canvas {
     }
 
     fn blend(&mut self, x: i32, y: i32, color: [u8; 3], cov: u8) {
+        let x = x - self.ox;
+        let y = y - self.oy;
         if cov == 0 || x < 0 || y < 0 || x >= self.w || y >= self.h {
             return;
         }
         if cov == 255 {
-            self.put(x, y, color);
+            self.put(x + self.ox, y + self.oy, color);
             return;
         }
         let i = (y * self.w + x) as usize * 3;
@@ -3077,25 +3220,44 @@ impl Canvas {
     }
 
     fn grid(&mut self, xs: &Axis, ys: &Axis) {
+        let y0 = self.oy;
+        let y1 = self.oy + self.h;
+        let x0 = self.ox;
+        let x1 = self.ox + self.w;
         for x in &xs.origin {
-            for y in 0..self.h {
+            if *x < x0 || *x >= x1 {
+                continue;
+            }
+            for y in y0..y1 {
                 self.put(*x, y, GRID);
             }
         }
         for y in &ys.origin {
-            for x in 0..self.w {
+            if *y < y0 || *y >= y1 {
+                continue;
+            }
+            for x in x0..x1 {
                 self.put(x, *y, GRID);
             }
         }
     }
 
     /// 上边和左边的外框盖住第一格的填充。网格开着时是网格色，关掉时留白。
+    /// 切块时只在整表绝对边 `x=0`/`y=0` 落入本窗时画。
     fn leading_frame(&mut self, color: [u8; 3]) {
-        for x in 0..self.w {
-            self.put(x, 0, color);
+        let x0 = self.ox;
+        let x1 = self.ox + self.w;
+        let y0 = self.oy;
+        let y1 = self.oy + self.h;
+        if y0 == 0 {
+            for x in x0..x1 {
+                self.put(x, 0, color);
+            }
         }
-        for y in 0..self.h {
-            self.put(0, y, color);
+        if x0 == 0 {
+            for y in y0..y1 {
+                self.put(0, y, color);
+            }
         }
     }
 
@@ -3136,7 +3298,60 @@ fn paint(
 ) -> Result<Canvas, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
-    let mut canvas = Canvas::new(xs.bitmap(), ys.bitmap())?;
+    paint_window(
+        sheet,
+        styles,
+        cells,
+        c0,
+        r0,
+        cols,
+        rows,
+        grid_lines,
+        rtl,
+        shapes,
+        session,
+        0,
+        0,
+        xs.bitmap(),
+        ys.bitmap(),
+    )
+}
+
+fn paint_window(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+    grid_lines: bool,
+    rtl: bool,
+    shapes: &[Overlay],
+    session: &mut Option<FormulaSession>,
+    ox: i32,
+    oy: i32,
+    tw: i32,
+    th: i32,
+) -> Result<Canvas, Error> {
+    let xs = Axis::new(cols);
+    let ys = Axis::new(rows);
+    let full_w = xs.bitmap();
+    let full_h = ys.bitmap();
+    if ox < 0
+        || oy < 0
+        || tw < 1
+        || th < 1
+        || ox.saturating_add(tw) > full_w
+        || oy.saturating_add(th) > full_h
+    {
+        return Err(unsupported());
+    }
+    // RTL 切块会改翻转语义，本刀不切 RTL。
+    if rtl && (ox != 0 || oy != 0 || tw != full_w || th != full_h) {
+        return Err(unsupported());
+    }
+    let mut canvas = Canvas::window(ox, oy, tw, th)?;
     // 一整边都隐藏时，Excel 只留 1 像素白，不画网格。
     let draw_frame = xs.has_span() && ys.has_span();
     if draw_frame && grid_lines {

@@ -65,7 +65,7 @@ pub use create::create_with_workbook_ct;
 pub use inspect::inspect;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
-pub use sheet_paint::export_sheet_image;
+pub use sheet_paint::{export_sheet_image, export_sheet_image_tiles, SheetImageTile};
 pub use sparkline::export_sparkline_image;
 
 pub(crate) use chart_gdi::{

@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use ooxp::{io_path, peek_lang, run, written_json, Error, Lang, RunOutput};
+use ooxp::{io_path, peek_lang, run, written_json_with_paths, Error, Lang, RunOutput};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -83,10 +83,17 @@ fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
             path,
             ops_applied,
             content_type,
+            paths,
         } => {
             println!(
                 "{}",
-                written_json(&path, ops_applied, content_type.as_deref(), cli.pretty)
+                written_json_with_paths(
+                    &path,
+                    ops_applied,
+                    content_type.as_deref(),
+                    paths.as_deref(),
+                    cli.pretty
+                )
             );
         }
     }

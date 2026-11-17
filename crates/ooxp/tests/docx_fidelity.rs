@@ -1633,7 +1633,7 @@ fn export_header_picture_bytes_match() {
     let RunOutput::Written {
         path: written,
         ops_applied,
-        content_type,
+        content_type, ..
     } = result
     else {
         panic!("exportMedia 应写出文件");

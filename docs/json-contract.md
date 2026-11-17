@@ -2450,6 +2450,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 范围取 `dimension` 和有格子的外框的并集。只有一边时用那一边。两边都空报 `NotImplemented`
+- 可选 `tilePx`（1–4096）：按该边长切块导出，**不**先分配整表再裁。未超限时仍一张 PNG，像素与不加 `tilePx` 一致；超限时写出多张 `{stem}-r{row}c{col}.png`，响应 `paths` 列出全部路径，单块边长不超过 `tilePx`。不设 `tilePx` 时一边超过 4096 仍整表 `NotImplemented`（默认不绕上限）。`rightToLeft` 切块报 `NotImplemented`
 - 像素对齐 Excel 16.0 的 `Range.CopyPicture`（`xlScreen`、`xlBitmap`）。不乘工作表 `zoomScale`
 - 显式列宽按 `floor(((256 * 宽度 + floor(128 / 7)) / 256) * 7)`。没写列宽、也没写 `defaultColWidth` 时是 64 像素
 - 写了行高就截断：`floor(round(磅 * 12700) / 9525)`。20 磅是 26，不是 27

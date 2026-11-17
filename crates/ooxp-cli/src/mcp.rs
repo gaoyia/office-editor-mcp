@@ -3,7 +3,7 @@
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::process::ExitCode;
 
-use ooxp::{envelope_fields, peek_lang, run, written_json, Action, Lang, RunOutput};
+use ooxp::{envelope_fields, peek_lang, run, written_json_with_paths, Action, Lang, RunOutput};
 use serde_json::{json, Map, Value};
 
 pub fn parse_lang(args: &[std::ffi::OsString]) -> Result<Option<String>, String> {
@@ -700,7 +700,14 @@ fn success_text(out: RunOutput) -> String {
             path,
             ops_applied,
             content_type,
-        } => written_json(&path, ops_applied, content_type.as_deref(), false),
+            paths,
+        } => written_json_with_paths(
+            &path,
+            ops_applied,
+            content_type.as_deref(),
+            paths.as_deref(),
+            false,
+        ),
     }
 }
 
