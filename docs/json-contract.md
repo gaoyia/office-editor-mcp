@@ -2757,3 +2757,9 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 隐藏/零尺寸宿主不绘制，也不因其不可见复杂配置拒整表。可见且已有独立接口不支持的隐藏源（displayHidden未开启）、多宿主组、日期轴、标记/样式等返回NI；sheet RTL、合并宿主、非空宿主文字的层序尚未官方锁定，同样诚实NI，不把合法配置叫畸形/异常。displayHidden=true沿用原能力。旧独立API行高round及chart/zoom合同不在本片盲统一。
 
 17组同SHA公平矩阵中16个支持sheet宿主对同尺寸独立painter像素差0、宿主外变化0；16个独立spark和17个chart PNG字节不变；实际CLI九块拼接与mono像素差0。完整51项49成功/2 NI（新增NI是原来成功却漏图的隐藏源sheet），严格0 PASS/49 sizeDiffer/2 NI；库内像素一致不是官方整图PASS。gold复用P0相同输入SHA/同range/chart的原生图，未缩放，P1未重复打开Office。
+
+
+### 2026-11-17：既有Excel圆角chart PNG的alpha
+
+默认白底圆角chart使用RGBA，透明来自生产边框圆弧coverage，不以白色key透明化。内部白柱/白字/白底仍不透明；半覆盖边缘保存未预混白的RGB及coverage alpha，避免叠在深底出现白晕。原RGB白底合成像素保持不变；Slide/未mask的Canvas仍为原RGB。固定96、anchor/zoom/轴/legend布局不变。
+本片不是自定义chart背景/描边能力：显式关闭圆角、noFill、自定义底色/线/效果诚实NI（有效但未支持），不按“异常缺省”吞掉；默认/显式纯白背景与显式圆角true为本片范围。原生Office整图仍严格比较尺寸和RGBA；四角透明恢复不等于AA/像素PASS。
