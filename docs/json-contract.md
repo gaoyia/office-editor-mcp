@@ -2769,3 +2769,12 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 nice-number候选容量使用固定96完整字体行框和图表可用高度，不再所有图固定5..10区间。大图原4.5/.5合同保留，小图可为5/1。显式valAx scaling min/max及majorUnit/minorUnit优先，默认minor=major/5；非整除范围按数值位置画刻度，循环有界。min/max/major/minor的26组标量由Office公开属性验证，不等于PNG PASS。
 窄范围单侧非恒值的非零自动界限尚未实现，返回NI（有效配置，不是畸形缺省）。多值轴、log/reversed、非默认crosses/crossesAt、非General格式不伪造支持。本片不声称Office所有title/布局/字体组合自动算法已完全匹配。默认autoZero交点另核对26项COM crossesAt并接入类别轴线/刻度/标签；非默认交点仍NI。详自动值轴计划；96几何、raw gold、容差和P3 AA残差不改。
+
+
+## 2026-11-17 t127：DPI差异分层验收（非新功能）
+
+用户允许**已证实仅DPI引起的像素差**通过；raw严格结果保留但不再一票否决。库固定96 contract不变，原始gold不缩放、不改色、不放宽正常配置。验收必须绑定source SHA/实际exe，核实内容、尺度、字体及合法继承、位置/anchor后才可豁免命名子范围；sizeDiffer、同尺寸或逻辑标量通过不能直接推出整图通过。曲角AA、spark端点、默认边距或布局若未证因，写待确认，真实缺内容/样式/标签位置差仍须修。
+
+当前原51几何子证书：**38通过（DPI豁免）/11待确认/2 NI**；11中6 Normal字体继承、5 chart导出1px边界舍入。轴26/27 case的130逻辑值、P1接线16/16、P3四角17/17分别是已通过子范围，不合并张数。完整图原51=49待确认/2NI；新27=1真实标签侧差异/25待确认/1NI；图例7待确认。raw严格49/26/7 sizeDiffer保留，不能当最终失败统计。
+
+本轮只验收/文档，renderer基线a81c49e6；原1868 Rust和8 Python日志保留，新策略再加10 Python测试。证据：桌面 `office-editor-PR10-DPI验收复核-20261117-145216`。详 `manual-check/office/dpi_acceptance.py`、`dpi-acceptance-report.py` 和DPI验收复核计划。COM图例中心-4pt尚未校准原点，禁止直接硬补；explicit类别标签侧确有非DPI差异，后续本PR已有范围修复。其它十项暂停新功能不恢复。
