@@ -161,6 +161,44 @@ fn dark_count(rgb: &[[u8; 3]], w: u32, x0: u32, x1: u32, h: u32) -> usize {
     n
 }
 
+fn dark_row_bands(rgb: &[[u8; 3]], w: u32, h: u32) -> Vec<(u32, u32)> {
+    let mut bands = Vec::new();
+    let mut start: Option<u32> = None;
+    for y in 0..h {
+        let has = (0..w).any(|x| {
+            let px = rgb[(y * w + x) as usize];
+            px[0] < 80 && px[1] < 80 && px[2] < 80
+        });
+        match (has, start) {
+            (true, None) => start = Some(y),
+            (false, Some(s)) => {
+                bands.push((s, y));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        bands.push((s, h));
+    }
+    bands
+}
+
+fn dark_xs_in_rows(rgb: &[[u8; 3]], w: u32, y0: u32, y1: u32) -> (u32, u32) {
+    let mut min_x = w;
+    let mut max_x = 0u32;
+    for y in y0..y1 {
+        for x in 0..w {
+            let px = rgb[(y * w + x) as usize];
+            if px[0] < 80 && px[1] < 80 && px[2] < 80 {
+                min_x = min_x.min(x);
+                max_x = max_x.max(x);
+            }
+        }
+    }
+    (min_x, max_x)
+}
+
 #[test]
 fn justify_without_soft_wrap_matches_left_pixels_and_keeps_package() {
     let left = create_sheet("just-left", json!([{ "ref": "A1", "value": "hello" }]));
@@ -190,31 +228,13 @@ fn justify_hard_breaks_without_soft_wrap_match_left() {
 }
 
 #[test]
-fn justify_soft_wrap_indent_number_and_last_line_stay_ni() {
-    let soft = create_sheet(
-        "just-soft",
-        json!([{ "ref": "A1", "value": "one two three four five six" }]),
-    );
-    apply_align(
-        &soft,
-        json!([
-            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "justify", "wrap": true, "vertical": "top" } },
-            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 8.0 },
-            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 45.0 }
-        ]),
-    );
-    export_ni(&soft);
-
+fn justify_indent_and_last_line_stay_ni() {
     let indented = create_sheet("just-ind", json!([{ "ref": "A1", "value": "hello" }]));
     apply_align(
         &indented,
         wide_col_ops("A1", "justify", json!({ "indent": 1 })),
     );
     export_ni(&indented);
-
-    let number = create_sheet("just-num", json!([{ "ref": "A1", "value": 12.5 }]));
-    apply_align(&number, wide_col_ops("A1", "justify", json!({})));
-    export_ni(&number);
 
     let last = create_sheet("just-last", json!([{ "ref": "A1", "value": "hello" }]));
     apply_align(&last, wide_col_ops("A1", "justify", json!({})));
@@ -228,6 +248,84 @@ fn justify_soft_wrap_indent_number_and_last_line_stay_ni() {
         )
     });
     export_ni(&last_ni);
+}
+
+#[test]
+fn justify_number_and_bool_without_soft_wrap_match_left() {
+    let num_left = create_sheet("num-left", json!([{ "ref": "A1", "value": 12.5 }]));
+    apply_align(&num_left, wide_col_ops("A1", "left", json!({})));
+    let num_just = create_sheet("num-just", json!([{ "ref": "A1", "value": 12.5 }]));
+    apply_align(&num_just, wide_col_ops("A1", "justify", json!({})));
+    assert_eq!(
+        export_ok(&num_left),
+        export_ok(&num_just),
+        "no-wrap numeric justify follows the same left fallback as text"
+    );
+
+    let bool_left = create_sheet("bool-left", json!([{ "ref": "A1", "value": true }]));
+    apply_align(&bool_left, wide_col_ops("A1", "left", json!({})));
+    let bool_just = create_sheet("bool-just", json!([{ "ref": "A1", "value": true }]));
+    apply_align(&bool_just, wide_col_ops("A1", "justify", json!({})));
+    let bool_gen = create_sheet("bool-gen", json!([{ "ref": "A1", "value": true }]));
+    apply_align(&bool_gen, wide_col_ops("A1", "general", json!({})));
+    let just_png = export_ok(&bool_just);
+    assert_eq!(
+        export_ok(&bool_left),
+        just_png,
+        "no-wrap boolean justify is left, not general/center"
+    );
+    assert_ne!(export_ok(&bool_gen), just_png);
+}
+
+#[test]
+fn justify_soft_wrap_stretches_non_last_lines_and_keeps_last_line_left() {
+    let text = "one two three four five six";
+    let left = create_sheet("wrap-left", json!([{ "ref": "A1", "value": text }]));
+    apply_align(
+        &left,
+        json!([
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "left", "wrap": true, "vertical": "top" } },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 8.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 60.0 }
+        ]),
+    );
+    let just = create_sheet("wrap-just", json!([{ "ref": "A1", "value": text }]));
+    apply_align(
+        &just,
+        json!([
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "justify", "wrap": true, "vertical": "top" } },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 8.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 60.0 }
+        ]),
+    );
+    let left_png = export_ok(&left);
+    let just_png = export_ok(&just);
+    assert_ne!(
+        left_png, just_png,
+        "soft-wrapped justify must not collapse to packed left on every line"
+    );
+    let (w, h, left_rgb) = png_rgb(&left_png);
+    let (jw, jh, just_rgb) = png_rgb(&just_png);
+    assert_eq!((w, h), (jw, jh));
+    let bands = dark_row_bands(&left_rgb, w, h);
+    assert!(
+        bands.len() >= 2,
+        "expected at least two wrapped lines, got {bands:?}"
+    );
+    let (ly0, ly1) = *bands.last().unwrap();
+    let last_left = dark_xs_in_rows(&left_rgb, w, ly0, ly1);
+    let last_just = dark_xs_in_rows(&just_rgb, w, ly0, ly1);
+    assert_eq!(
+        last_left, last_just,
+        "last line of a wrapped justified paragraph stays left"
+    );
+    let (fy0, fy1) = bands[0];
+    let first_left_max = dark_xs_in_rows(&left_rgb, w, fy0, fy1).1;
+    let first_just_max = dark_xs_in_rows(&just_rgb, w, fy0, fy1).1;
+    assert!(
+        first_just_max > first_left_max,
+        "non-last justified line should extend farther right; left_max={first_left_max} just_max={first_just_max}"
+    );
 }
 
 #[test]
@@ -260,12 +358,43 @@ fn distributed_two_words_are_flush_left_and_right() {
 }
 
 #[test]
-fn distributed_not_exactly_two_words_stays_ni() {
-    for (tag, value) in [("one", "abcd"), ("three", "ab cd ef"), ("empty-ish", "ab")] {
+fn distributed_not_at_least_two_words_stays_ni() {
+    for (tag, value) in [("one", "abcd"), ("empty-ish", "ab")] {
         let path = create_sheet(tag, json!([{ "ref": "A1", "value": value }]));
         apply_align(&path, wide_col_ops("A1", "distributed", json!({})));
         export_ni(&path);
     }
+}
+
+#[test]
+fn distributed_three_words_span_left_mid_and_right() {
+    let dist = create_sheet("dist-three", json!([{ "ref": "A1", "value": "ab cd ef" }]));
+    apply_align(&dist, wide_col_ops("A1", "distributed", json!({})));
+    let left = create_sheet(
+        "dist-three-left",
+        json!([{ "ref": "A1", "value": "ab cd ef" }]),
+    );
+    apply_align(&left, wide_col_ops("A1", "left", json!({})));
+    let dist_png = export_ok(&dist);
+    let left_png = export_ok(&left);
+    assert_ne!(dist_png, left_png);
+    let (w, h, dist_rgb) = png_rgb(&dist_png);
+    let (lw, lh, left_rgb) = png_rgb(&left_png);
+    assert_eq!((w, h), (lw, lh));
+    let third = w / 3;
+    let dist_mid = dark_count(&dist_rgb, w, third, 2 * third, h);
+    let left_mid = dark_count(&left_rgb, w, third, 2 * third, h);
+    let dist_right = dark_count(&dist_rgb, w, 2 * third, w, h);
+    let left_right = dark_count(&left_rgb, w, 2 * third, w, h);
+    assert!(
+        dist_mid > left_mid,
+        "middle word should sit near the center; dist_mid={dist_mid} left_mid={left_mid}"
+    );
+    assert!(
+        dist_right > left_right,
+        "third word should sit on the right; dist_right={dist_right} left_right={left_right}"
+    );
+    assert!(dark_count(&dist_rgb, w, 0, third, h) > 0);
 }
 
 #[test]
