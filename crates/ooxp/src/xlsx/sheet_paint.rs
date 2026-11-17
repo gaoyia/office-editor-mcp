@@ -4449,6 +4449,7 @@ fn paint_borders(
 }
 
 /// `down=true`：左上→右下；`false`：左下→右上。仅 Solid 1/2px（parse 已挡其它）。
+/// 落点限制在格子矩形 `[x0,x1)×[y0,y1)`：medium 朝较小坐标加粗时，不得渗进邻格。
 fn paint_cell_diagonal(
     canvas: &mut Canvas,
     x0: i32,
@@ -4466,7 +4467,9 @@ fn paint_cell_diagonal(
     } else {
         (x0, y1 - 1, x1 - 1, y0)
     };
-    paint_diag_segment(canvas, x_a, y_a, x_b, y_b, edge.color, edge.px);
+    paint_diag_segment(
+        canvas, x_a, y_a, x_b, y_b, edge.color, edge.px, x0, y0, x1, y1,
+    );
 }
 
 fn paint_diag_segment(
@@ -4477,6 +4480,10 @@ fn paint_diag_segment(
     y1: i32,
     color: [u8; 3],
     thickness: i32,
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
 ) {
     // Bresenham；厚度 2 时在主线两侧各补半像素朝较小坐标（与正交偶数宽约定一致）。
     let dx = (x1 - x0).abs();
@@ -4485,7 +4492,9 @@ fn paint_diag_segment(
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;
     loop {
-        put_thick(canvas, x0, y0, color, thickness);
+        put_thick_clipped(
+            canvas, x0, y0, color, thickness, clip_x0, clip_y0, clip_x1, clip_y1,
+        );
         if x0 == x1 && y0 == y1 {
             break;
         }
@@ -4501,12 +4510,37 @@ fn paint_diag_segment(
     }
 }
 
-fn put_thick(canvas: &mut Canvas, x: i32, y: i32, color: [u8; 3], thickness: i32) {
-    canvas.put(x, y, color);
+fn put_thick_clipped(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    color: [u8; 3],
+    thickness: i32,
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+) {
+    put_clipped(canvas, x, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
     if thickness >= 2 {
-        // 多出的一像素朝坐标较小侧（左/上），对齐正交 medium 约定。
-        canvas.put(x - 1, y, color);
-        canvas.put(x, y - 1, color);
+        // 多出的一像素朝坐标较小侧（左/上），对齐正交 medium 约定；越出本格则不画。
+        put_clipped(canvas, x - 1, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x, y - 1, color, clip_x0, clip_y0, clip_x1, clip_y1);
+    }
+}
+
+fn put_clipped(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    color: [u8; 3],
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+) {
+    if x >= clip_x0 && x < clip_x1 && y >= clip_y0 && y < clip_y1 {
+        canvas.put(x, y, color);
     }
 }
 

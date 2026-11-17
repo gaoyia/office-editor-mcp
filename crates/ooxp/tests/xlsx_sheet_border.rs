@@ -423,6 +423,77 @@ fn solid_diagonal_thin_and_medium_export_png() {
 }
 
 #[test]
+fn medium_diagonal_does_not_spill_into_the_cell_above() {
+    let src = tmp("diag-clip-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-clip");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A2",
+                "border": {
+                    "diagonal": { "style": "medium", "color": { "rgb": "FF112233" } },
+                    "diagonalDown": true,
+                    "diagonalUp": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 20.0 }
+        ]
+    }));
+    // 30pt→40px @96、44px @106；渗进上格会出现 y=39 / y=43 的 11,22,33。
+    for (dpi, row1) in [(None, 40i32), (Some(106i64), 44i32)] {
+        let png = book.with_file_name(format!("diag-clip-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let bytes = std::fs::read(&png).unwrap();
+        let (w, h, px) = decode_png(&bytes);
+        let mut min_y = h as i32;
+        let mut ink = 0usize;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = ((y as u32 * w + x as u32) * 3) as usize;
+                if px[i] == 0x11 && px[i + 1] == 0x22 && px[i + 2] == 0x33 {
+                    ink += 1;
+                    min_y = min_y.min(y);
+                }
+            }
+        }
+        assert!(ink > 10, "dpi={dpi:?} ink={ink}");
+        assert!(
+            min_y >= row1,
+            "medium 斜线渗进上一格：dpi={dpi:?} min_y={min_y} row1={row1} size={w}x{h}"
+        );
+    }
+}
+
+#[test]
 fn dashed_diagonal_still_not_implemented() {
     let src = tmp("diag-dash-src");
     run_ok(json!({
