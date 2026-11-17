@@ -2091,9 +2091,9 @@ enum HAlign {
     Left,
     Center,
     Right,
-    /// 无软换行时按左对齐；发生软换行的两端对齐本切片仍 NI。
+    /// 无软换行时按左对齐（含数字/布尔）。软换行后，同一段里非末行按词间等间隙拉齐，末行仍左对齐；indent / justifyLastLine 仍 NI。
     Justify,
-    /// 每一行恰好两个单词时左右顶齐；其余分散对齐仍 NI。
+    /// 一行至少两个空格分词时左右顶齐、词间等间隙；缩进同时加在两侧。一词或含其它空白的行仍 NI。
     Distributed,
 }
 
@@ -5708,13 +5708,9 @@ fn paint_labels(
             };
         let max_w = (inner_right - inner_left).max(1.0);
         if h_align == HAlign::Justify {
-            // ECMA：若没有任何一行发生换行，则不做两端对齐。本切片把这一档画成左对齐。
-            // 软换行后的词间加空、indent、justifyLastLine、数字/布尔的几何尚未锁定，保持 NI。
-            if xf.indent != 0
-                || xf.justify_last_line
-                || matches!(cell.shown, Shown::Num(_) | Shown::Bool(_))
-                || cell_soft_wrapped(face, &text, max_w, xf.wrap)
-            {
+            // ECMA：若没有任何一行发生换行，则不做两端对齐。无软换行（含数字/布尔）画成左对齐。
+            // 官方 CopyPicture：软换行后非末行词间等间隙、末行左对齐。indent / justifyLastLine 仍 NI。
+            if xf.indent != 0 || xf.justify_last_line {
                 return Err(unsupported());
             }
         }
@@ -5722,21 +5718,23 @@ fn paint_labels(
             return Err(unsupported());
         }
         let text = datetime_overflow_text(&cell.shown, &fmt, xf.wrap, face, &text, max_w);
+        let soft_wrapped = cell_soft_wrapped(face, &text, max_w, xf.wrap);
         let lines = if xf.wrap || text.contains('\n') {
             wrap_cell_lines(face, &text, max_w)
         } else {
-            vec![text]
+            vec![text.clone()]
         };
         if h_align == HAlign::Distributed
             && lines
                 .iter()
                 .filter(|line| !line.is_empty())
-                .any(|line| split_two_words(line).is_none())
+                .any(|line| split_space_words(line).is_none())
         {
             return Err(unsupported());
         }
+        // 无软换行的 justify 按左对齐；软换行的 justify 在绘制时按段处理非末行。
         let h_align = match h_align {
-            HAlign::Justify => HAlign::Left,
+            HAlign::Justify if !soft_wrapped => HAlign::Left,
             other => other,
         };
         let em = face.em_box();
@@ -5760,10 +5758,17 @@ fn paint_labels(
                 });
             };
             if h_align == HAlign::Distributed {
-                let (left_word, right_word) = split_two_words(line).ok_or_else(unsupported)?;
-                paint(inner_left, &left_word);
-                paint(inner_right - face.width(&right_word), &right_word);
+                paint_space_distributed(face, line, inner_left, inner_right, &mut paint)?;
                 continue;
+            }
+            if h_align == HAlign::Justify {
+                // 软换行两端对齐：同一段的非末行词间等间隙，末行左对齐。
+                let last_in_para =
+                    justify_line_is_last_in_paragraph(&text, xf.wrap, face, max_w, i);
+                if !last_in_para && split_space_words(line).is_some() {
+                    paint_space_distributed(face, line, inner_left, inner_right, &mut paint)?;
+                    continue;
+                }
             }
             let width = face.width(line);
             let x = match h_align {
@@ -5852,16 +5857,74 @@ fn cell_soft_wrapped(face: &Face, text: &str, max_width: f64, wrap: bool) -> boo
         .any(|para| !para.is_empty() && wrap_cell_lines(face, para, max_width).len() > 1)
 }
 
-/// 分散对齐本切片只画恰好两个单词的行。其它空白（如制表符）不拆。
-fn split_two_words(line: &str) -> Option<(String, String)> {
+/// 空格分词：至少两个单词。其它空白（如制表符）不拆，一词或空行返回 None。
+fn split_space_words(line: &str) -> Option<Vec<String>> {
     if line.chars().any(|ch| ch != ' ' && ch.is_whitespace()) {
         return None;
     }
-    let words: Vec<&str> = line.split(' ').filter(|w| !w.is_empty()).collect();
-    match words.as_slice() {
-        [a, b] => Some(((*a).to_string(), (*b).to_string())),
-        _ => None,
+    let words: Vec<String> = line
+        .split(' ')
+        .filter(|w| !w.is_empty())
+        .map(|w| (*w).to_string())
+        .collect();
+    if words.len() >= 2 {
+        Some(words)
+    } else {
+        None
     }
+}
+
+fn paint_space_distributed(
+    face: &Face,
+    line: &str,
+    inner_left: f64,
+    inner_right: f64,
+    paint: &mut impl FnMut(f64, &str),
+) -> Result<(), Error> {
+    let words = split_space_words(line).ok_or_else(unsupported)?;
+    let widths: Vec<f64> = words.iter().map(|w| face.width(w)).collect();
+    let total: f64 = widths.iter().sum();
+    let extra = (inner_right - inner_left - total).max(0.0);
+    let gap = extra / (words.len() - 1) as f64;
+    let mut x = inner_left;
+    for (word, width) in words.iter().zip(widths) {
+        paint(x, word);
+        x += width + gap;
+    }
+    Ok(())
+}
+
+/// 当前绘制行是否是其所在段落（硬换行分隔）经折行后的末行。
+fn justify_line_is_last_in_paragraph(
+    text: &str,
+    wrap: bool,
+    face: &Face,
+    max_width: f64,
+    line_index: usize,
+) -> bool {
+    let lines = if wrap || text.contains('\n') {
+        wrap_cell_lines(face, text, max_width)
+    } else {
+        vec![text.to_string()]
+    };
+    if line_index >= lines.len() {
+        return true;
+    }
+    let mut at = 0usize;
+    for para in text.split('\n') {
+        let para_lines = if para.is_empty() {
+            1usize
+        } else if wrap {
+            wrap_cell_lines(face, para, max_width).len()
+        } else {
+            1usize
+        };
+        if line_index < at + para_lines {
+            return line_index + 1 == at + para_lines;
+        }
+        at += para_lines;
+    }
+    true
 }
 
 /// 仅日期时间数字：非换行且显示串宽过列内宽时填 `#`。不改 General / 普通数值 / 文本 / 错误值。
@@ -7336,16 +7399,22 @@ mod tests {
     }
 
     #[test]
-    fn split_two_words_accepts_exactly_two_space_separated_tokens() {
-        assert_eq!(split_two_words("ab cd"), Some(("ab".into(), "cd".into())));
+    fn split_space_words_accepts_two_or_more_space_separated_tokens() {
         assert_eq!(
-            split_two_words("  ab   cd  "),
-            Some(("ab".into(), "cd".into()))
+            split_space_words("ab cd"),
+            Some(vec!["ab".into(), "cd".into()])
         );
-        assert_eq!(split_two_words("ab"), None);
-        assert_eq!(split_two_words("ab cd ef"), None);
-        assert_eq!(split_two_words(""), None);
-        assert_eq!(split_two_words("ab\tcd"), None);
+        assert_eq!(
+            split_space_words("  ab   cd  "),
+            Some(vec!["ab".into(), "cd".into()])
+        );
+        assert_eq!(
+            split_space_words("ab cd ef"),
+            Some(vec!["ab".into(), "cd".into(), "ef".into()])
+        );
+        assert_eq!(split_space_words("ab"), None);
+        assert_eq!(split_space_words(""), None);
+        assert_eq!(split_space_words("ab\tcd"), None);
     }
 
     #[cfg(windows)]
