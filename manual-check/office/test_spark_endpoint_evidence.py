@@ -1,7 +1,7 @@
 import unittest
 from decimal import Decimal
 from PIL import Image
-from spark_endpoint_evidence import ink_bounds, ink_profile, edge_crop_preserves_ink, line_weight_pixels, same_native_pixels, kernel_max_coverage
+from spark_endpoint_evidence import ink_bounds, ink_profile, edge_crop_preserves_ink, line_weight_pixels, same_native_pixels, kernel_max_coverage, normal_box_max_coverage
 
 class SparkEndpointEvidenceTests(unittest.TestCase):
     def test_same_bbox_is_not_same_native_pixels(self):
@@ -18,11 +18,19 @@ class SparkEndpointEvidenceTests(unittest.TestCase):
     def test_physical_weight_is_not_bbox_height(self):
         self.assertEqual(line_weight_pixels('.75',96),Decimal(1));self.assertEqual(line_weight_pixels('.75',106),Decimal(106)/96)
         self.assertEqual(line_weight_pixels(3,106),Decimal(53)/12)
-    def test_audited_kernel_cannot_reach_native_opaque_center_even_at_106(self):
+    def test_historical_19c_kernel_cannot_reach_native_opaque_center_even_at_106(self):
         self.assertEqual(kernel_max_coverage(line_weight_pixels('.75',96),'.25'),Decimal('.75'))
         bound=kernel_max_coverage(line_weight_pixels('.75',106),'.25')
         self.assertLess(bound,Decimal('.803'))
         self.assertLess(bound,Decimal(1))
+
+    def test_current_normal_box_center_restores_source_color(self):
+        self.assertEqual(normal_box_max_coverage(line_weight_pixels('.75',96)),Decimal(1))
+        self.assertEqual(normal_box_max_coverage(line_weight_pixels('.75',106)),Decimal(1))
+    def test_current_normal_box_preserves_subpixel_width_instead_of_overdarkening(self):
+        self.assertEqual(normal_box_max_coverage('.25'),Decimal('.25'))
+        self.assertEqual(normal_box_max_coverage('.5'),Decimal('.5'))
+        self.assertEqual(normal_box_max_coverage('4'),Decimal(1))
 
     def test_invalid_weights_and_dpi_are_rejected(self):
         for points,dpi in [(0,96),(-1,96),(1,0),('NaN',96),(1,'Infinity')]:

@@ -51,3 +51,11 @@ def kernel_max_coverage(weight_pixels, fringe_pixels):
     if not weight.is_finite() or not fringe.is_finite() or weight <= 0 or fringe < 0:
         raise ValueError('finite positive weight and nonnegative fringe required')
     return max(Decimal(0), min(Decimal(1), weight / 2 + fringe))
+
+
+def normal_box_max_coverage(weight_pixels):
+    """Current unit-normal interval-overlap maximum, not a diagonal area oracle."""
+    weight = Decimal(str(weight_pixels))
+    if not weight.is_finite() or weight <= 0:
+        raise ValueError('positive finite weight required')
+    return min(weight, Decimal(1))
