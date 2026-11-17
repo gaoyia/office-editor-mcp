@@ -24,6 +24,7 @@ use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
 use super::ExportedMedia;
+use crate::xlsx::fill_device_stroked_rect;
 
 const MAX_PX: i32 = 4096;
 /// 切块张数上限：`tilePx=1` 时防海量文件/编码爆炸；超限在分配任何块之前 NI。
@@ -417,12 +418,22 @@ fn cell_addr(prev_col: u32, row: u32, attr: Option<&str>) -> Result<(u32, u32), 
     Ok((prev_col + 1, row))
 }
 
+#[derive(Clone, Copy)]
+struct ShapeLine {
+    color: [u8; 3],
+    /// 仅 1 或 2（9525 / 19050 EMU）。
+    px: i32,
+}
+
 struct PlainRect {
     x0: i32,
     y0: i32,
     x1: i32,
     y1: i32,
-    color: [u8; 3],
+    /// `None` = `a:noFill`（空心，仅描边时合法）。
+    fill: Option<[u8; 3]>,
+    /// `None` = 线 `noFill`（现有无描边纯色路径）。
+    stroke: Option<ShapeLine>,
 }
 
 struct SheetPng {
@@ -482,13 +493,9 @@ fn plain_rects(
                 }
                 out.push(Overlay::Png(sheet_png(pkg, &part, pic, x0, y0, x1, y1)?));
             } else if let Some(sp) = anchor.child_by_local("sp") {
-                out.push(Overlay::Fill(PlainRect {
-                    x0,
-                    y0,
-                    x1,
-                    y1,
-                    color: plain_color(sp, theme, true)?,
-                }));
+                out.push(Overlay::Fill(plain_rect_at(
+                    sp, theme, true, x0, y0, x1, y1,
+                )?));
             } else {
                 return Err(unsupported());
             }
@@ -545,7 +552,8 @@ fn anchor_hits(
             let (from, _, _) = picture::read_marker(anchor.child_by_local("from"))?;
             Ok(from.is_some_and(|a| a.col <= c1 && a.row <= r1))
         }
-        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => Err(unsupported()),
+        AnchorKind::Absolute => Ok(true),
+        AnchorKind::RelSize | AnchorKind::AbsSize => Err(unsupported()),
     }
 }
 
@@ -560,6 +568,20 @@ fn rect_edges(
     cols: &[i32],
     rows: &[i32],
 ) -> Result<(i32, i32, i32, i32), Error> {
+    if kind == AnchorKind::Absolute {
+        let pos = anchor.child_by_local("pos").ok_or_else(unsupported)?;
+        let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+        let x0 = round_px(emu_attr(pos, "x")?)?;
+        let y0 = round_px(emu_attr(pos, "y")?)?;
+        let cx = emu_attr(ext, "cx")?;
+        let cy = emu_attr(ext, "cy")?;
+        if cx <= 0 || cy <= 0 {
+            return Err(unsupported());
+        }
+        let x1 = x0 + round_px(cx)?;
+        let y1 = y0 + round_px(cy)?;
+        return Ok((x0, y0, x1, y1));
+    }
     let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
     let from = from.ok_or_else(unsupported)?;
     let x_from = axis_origin(from.col, c0, cols, &mut |col| column_px_of(sheet, col))?;
@@ -587,7 +609,8 @@ fn rect_edges(
             })?;
             (x_to + round_px(to_x)?, y_to + round_px(to_y)?)
         }
-        AnchorKind::Absolute | AnchorKind::RelSize | AnchorKind::AbsSize => {
+        AnchorKind::Absolute => unreachable!("absolute handled above"),
+        AnchorKind::RelSize | AnchorKind::AbsSize => {
             return Err(unsupported());
         }
     };
@@ -689,41 +712,119 @@ fn round_px(emu: i64) -> Result<i32, Error> {
     Ok(px as i32)
 }
 
-fn plain_color(sp: &Element, theme: Option<&LoadedTheme>, quarter: bool) -> Result<[u8; 3], Error> {
+fn plain_rect_at(
+    sp: &Element,
+    theme: Option<&LoadedTheme>,
+    quarter: bool,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+) -> Result<PlainRect, Error> {
+    let (fill, stroke) = plain_style(sp, theme, quarter)?;
+    Ok(PlainRect {
+        x0,
+        y0,
+        x1,
+        y1,
+        fill,
+        stroke,
+    })
+}
+
+/// 解析工作表 `xdr:sp` 的填充与描边。有描边时仅轴对齐、1/2px 实线；半透明填充明确 NI。
+fn plain_style(
+    sp: &Element,
+    theme: Option<&LoadedTheme>,
+    quarter: bool,
+) -> Result<(Option<[u8; 3]>, Option<ShapeLine>), Error> {
     let sp_pr = sp.child_by_local("spPr").ok_or_else(unsupported)?;
     let geom = sp_pr.child_by_local("prstGeom").ok_or_else(unsupported)?;
     if geom.attr("prst") != Some("rect") || sp_pr.child_by_local("custGeom").is_some() {
         return Err(unsupported());
     }
+    let stroked = sp_pr.child_by_local("ln").is_some_and(|ln| !clear_line(ln));
     if let Some(xfrm) = sp_pr.child_by_local("xfrm") {
-        if xfrm
+        if stroked {
+            // 描边子集：不旋转、不翻转（与 PPT 描边外角同口径，Excel 另验）。
+            if xfrm.attr("rot").is_some_and(|rot| {
+                rot.parse::<i64>()
+                    .ok()
+                    .is_some_and(|n| n.rem_euclid(21_600_000) != 0)
+            }) {
+                return Err(unsupported());
+            }
+            if truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV")) {
+                return Err(unsupported());
+            }
+        } else if xfrm
             .attr("rot")
             .is_some_and(|rot| !quarter_turn(rot, quarter))
+            || (!quarter && (truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV"))))
         {
             return Err(unsupported());
         }
-        if !quarter && (truthy(xfrm.attr("flipH")) || truthy(xfrm.attr("flipV"))) {
-            return Err(unsupported());
-        }
     }
-    if sp_pr.element_children().any(|child| {
-        matches!(
-            child.local_name(),
-            "gradFill" | "blipFill" | "pattFill" | "noFill"
-        )
-    }) {
+    if sp_pr
+        .element_children()
+        .any(|child| matches!(child.local_name(), "gradFill" | "blipFill" | "pattFill"))
+    {
         return Err(unsupported());
     }
-    let fill = sp_pr.child_by_local("solidFill").ok_or_else(unsupported)?;
-    let color = shape_fill(fill, theme)?;
-    let ln = sp_pr.child_by_local("ln").ok_or_else(unsupported)?;
-    if !clear_line(ln) {
+    let fill = if sp_pr.child_by_local("noFill").is_some() {
+        if !stroked {
+            return Err(unsupported());
+        }
+        None
+    } else {
+        let solid = sp_pr.child_by_local("solidFill").ok_or_else(unsupported)?;
+        Some(shape_fill(solid, theme)?)
+    };
+    let stroke = match sp_pr.child_by_local("ln") {
+        None => return Err(unsupported()),
+        Some(ln) if clear_line(ln) => None,
+        Some(ln) => Some(shape_line(ln, theme)?),
+    };
+    if fill.is_none() && stroke.is_none() {
         return Err(unsupported());
     }
     if visible_text(sp) {
         return Err(unsupported());
     }
-    Ok(color)
+    Ok((fill, stroke))
+}
+
+fn shape_line(ln: &Element, theme: Option<&LoadedTheme>) -> Result<ShapeLine, Error> {
+    // 未知线型 / 虚线 / 箭头 / 显式接缝 / 非 ctr：NI，不静默当 solid。
+    if ln.attr("algn").is_some_and(|a| a != "ctr") {
+        return Err(unsupported());
+    }
+    if ln.child_by_local("prstDash").is_some()
+        || ln.child_by_local("custDash").is_some()
+        || ln.child_by_local("headEnd").is_some()
+        || ln.child_by_local("tailEnd").is_some()
+        || ln.child_by_local("miter").is_some()
+        || ln.child_by_local("bevel").is_some()
+        || ln.child_by_local("round").is_some()
+        || ln.child_by_local("gradFill").is_some()
+        || ln.child_by_local("pattFill").is_some()
+        || ln.child_by_local("blipFill").is_some()
+    {
+        return Err(unsupported());
+    }
+    let solid = ln.child_by_local("solidFill").ok_or_else(unsupported)?;
+    let color = shape_fill(solid, theme)?;
+    let w_emu = ln
+        .attr("w")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    // 缺省或非 9525/19050（含 insertShape 曾用的默认外其它宽度）→ NI。
+    let px = match w_emu {
+        9525 => 1,
+        19050 => 2,
+        _ => return Err(unsupported()),
+    };
+    Ok(ShapeLine { color, px })
 }
 
 /// 纯色矩形的组合。可以缩放，也可以绕中心转 90 度的倍数，或翻转。坐标从 A1 量起。
@@ -814,13 +915,12 @@ fn group_rects(
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
-                rects.push(PlainRect {
-                    x0,
-                    y0,
-                    x1,
-                    y1,
-                    color: plain_color(child, theme, true)?,
-                });
+                let rect = plain_rect_at(child, theme, true, x0, y0, x1, y1)?;
+                // 组合内描边未单独官方锁；不默画错。
+                if rect.stroke.is_some() {
+                    return Err(unsupported());
+                }
+                rects.push(rect);
             }
             "grpSp" => {
                 // 里层转 90 度后，存下来的外框可以伸出父组合的子坐标。像素按换算结果取。
@@ -1182,21 +1282,52 @@ fn visible_text(el: &Element) -> bool {
     el.element_children().any(visible_text)
 }
 
+fn fill_plain_rgb(canvas: &mut Canvas, x0: i32, y0: i32, x1: i32, y1: i32, color: [u8; 3]) {
+    for y in y0..y1 {
+        // 外框盖住第一行和第一列，边框留在外框上。
+        if y <= 0 {
+            continue;
+        }
+        for x in x0..x1 {
+            if x <= 0 {
+                continue;
+            }
+            canvas.put(x, y, color);
+        }
+    }
+}
+
 fn paint_plain_rects(canvas: &mut Canvas, shapes: &[Overlay]) {
     for shape in shapes {
         match shape {
             Overlay::Fill(shape) => {
-                for y in shape.y0..shape.y1 {
-                    // 外框盖住第一行和第一列，边框留在外框上。
-                    if y <= 0 {
-                        continue;
-                    }
-                    for x in shape.x0..shape.x1 {
-                        if x <= 0 {
-                            continue;
+                let w = shape.x1 - shape.x0;
+                let h = shape.y1 - shape.y0;
+                if w <= 0 || h <= 0 {
+                    continue;
+                }
+                if let Some(ref line) = shape.stroke {
+                    let ok = fill_device_stroked_rect(
+                        shape.x0 - canvas.ox,
+                        shape.y0 - canvas.oy,
+                        w,
+                        h,
+                        shape.fill,
+                        line.color,
+                        line.px,
+                        &mut canvas.px,
+                        canvas.w as u32,
+                        canvas.h as u32,
+                    );
+                    if !ok {
+                        // GDI+ 不可用时不静默空心；上层已约定 Windows。留白会导致假绿，改由调用方失败更安全——此处无法返回 Err。
+                        // 回退：至少铺不透明填充，避免整页空洞；描边缺失会在 oracle 暴露。
+                        if let Some(fill) = shape.fill {
+                            fill_plain_rgb(canvas, shape.x0, shape.y0, shape.x1, shape.y1, fill);
                         }
-                        canvas.put(x, y, shape.color);
                     }
+                } else if let Some(fill) = shape.fill {
+                    fill_plain_rgb(canvas, shape.x0, shape.y0, shape.x1, shape.y1, fill);
                 }
             }
             Overlay::Png(shape) => {
