@@ -2763,3 +2763,9 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 
 默认白底圆角chart使用RGBA，透明来自生产边框圆弧coverage，不以白色key透明化。内部白柱/白字/白底仍不透明；半覆盖边缘保存未预混白的RGB及coverage alpha，避免叠在深底出现白晕。原RGB白底合成像素保持不变；Slide/未mask的Canvas仍为原RGB。固定96、anchor/zoom/轴/legend布局不变。
 本片不是自定义chart背景/描边能力：显式关闭圆角、noFill、自定义底色/线/效果诚实NI（有效但未支持），不按“异常缺省”吞掉；默认/显式纯白背景与显式圆角true为本片范围。原生Office整图仍严格比较尺寸和RGBA；四角透明恢复不等于AA/像素PASS。
+
+
+### 2026-11-17：既有簇状柱图线性值轴
+
+nice-number候选容量使用固定96完整字体行框和图表可用高度，不再所有图固定5..10区间。大图原4.5/.5合同保留，小图可为5/1。显式valAx scaling min/max及majorUnit/minorUnit优先，默认minor=major/5；非整除范围按数值位置画刻度，循环有界。min/max/major/minor的26组标量由Office公开属性验证，不等于PNG PASS。
+窄范围单侧非恒值的非零自动界限尚未实现，返回NI（有效配置，不是畸形缺省）。多值轴、log/reversed、非默认crosses/crossesAt、非General格式不伪造支持。本片不声称Office所有title/布局/字体组合自动算法已完全匹配。默认autoZero交点另核对26项COM crossesAt并接入类别轴线/刻度/标签；非默认交点仍NI。详自动值轴计划；96几何、raw gold、容差和P3 AA残差不改。
