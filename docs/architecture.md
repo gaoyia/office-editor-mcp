@@ -607,7 +607,7 @@ docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 行或列 `hidden` 为真时不占像素，其余格子接上。整行或整列都隐藏时，这一边只留 1 像素白。条件格式的区域碰到隐藏行或隐藏列时，整表失败。
 
-`sheetView` 的 `rightToLeft` 为真，且没有要画的文字、没有条件格式、没有自动筛选时，把整张图水平翻转。有文字时字仍正写，这一期不翻。
+`sheetView` 的 `rightToLeft` 为真，且没有条件格式、没有自动筛选时：无文字则整图水平翻转；有拉丁/CJK 文字时先翻转非文字层，再在翻转后的格子坐标正写（不 Unicode 反序、不镜像字形）。`readingOrder` 为 2，或文本含强 RTL 文种，仍让整表失败。
 
 ### exportSlideImage
 
