@@ -2,7 +2,7 @@
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
-//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
@@ -139,7 +139,7 @@ struct ColumnChart {
     axis: axis::Spec,
     axis_x: Option<axis::Spec>,
     grid_x: bool,
-    /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。柱形/折线不用。
+    /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     cats_from_bottom: bool,
     title: Option<String>,
     accents: [[u8; 3]; 6],
@@ -1878,6 +1878,7 @@ fn draw_clustered_bars(
     let cluster = bar_h * (n - (n - 1.0) * overlap);
     let side = (slot - cluster) / 2.0;
     let x_zero = x_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let n_ser = chart.series.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
             category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
@@ -1888,7 +1889,13 @@ fn draw_clustered_bars(
             if !value.is_finite() {
                 continue;
             }
-            let y = origin + si as f64 * bar_h * (1.0 - overlap);
+            // 系列 0 在类目轴方向的槽起点：maxMin（第一类在上）时靠槽顶，minMax 时靠槽底。
+            let place = if chart.cats_from_bottom {
+                n_ser.saturating_sub(1).saturating_sub(si)
+            } else {
+                si
+            };
+            let y = origin + place as f64 * bar_h * (1.0 - overlap);
             let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
             let left = x_zero.min(x_val);
             let w = (x_zero - x_val).abs();
@@ -4730,6 +4737,27 @@ mod tests {
         assert!(
             y1 < y2,
             "series 0 should sit above series 1 when the category starts at the top; y1={y1} y2={y2}"
+        );
+
+        // minMax：类目轴从下往上，槽起点在底部，系列 0 应在系列 1 下方。
+        let ordered_minmax = bar_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "S1", &[Some(8.0)], ""),
+                line_ser(1, "S2", &[Some(8.0)], "")
+            ),
+            "",
+            "minMax",
+            Some("bar"),
+        );
+        let (_, _, rgb_min) = png_rgb(&render_bar(&ordered_minmax).unwrap());
+        let y1_min =
+            centroid_y(&rgb_min, w, 80, 450, 20, 300, a1, 18).expect("series 0 color minMax");
+        let y2_min =
+            centroid_y(&rgb_min, w, 80, 450, 20, 300, a2, 18).expect("series 1 color minMax");
+        assert!(
+            y1_min > y2_min,
+            "series 0 should sit below series 1 when the category starts at the bottom; y1={y1_min} y2={y2_min}"
         );
 
         // 缺值不把后续条挤进空位：S1 只在第一类，S2 只在第二类。
