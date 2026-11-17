@@ -41,6 +41,9 @@ const DEFAULT_ROW_PT: f64 = 14.25;
 pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
+    if sheet_kind_of(&pkg, &name)? == "chartsheet" {
+        return super::chart::export_chartsheet_image(bytes, &name);
+    }
     let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let root = &sheet_doc.root;
@@ -107,6 +110,18 @@ pub fn export_sheet_image_tiles(
     }
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
+    if sheet_kind_of(&pkg, &name)? == "chartsheet" {
+        let media = super::chart::export_chartsheet_image(bytes, &name)?;
+        let (w, h) = png_size(&media.bytes).ok_or_else(unsupported)?;
+        if w > tile_px as u32 || h > tile_px as u32 {
+            return Err(unsupported());
+        }
+        return Ok(vec![SheetImageTile {
+            row: 0,
+            col: 0,
+            bytes: media.bytes,
+        }]);
+    }
     let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
     let root = &sheet_doc.root;
@@ -257,6 +272,34 @@ fn bad_id() -> Error {
         },
         "id",
     )
+}
+
+fn sheet_kind_of(pkg: &Package, name: &str) -> Result<&'static str, Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let wb = super::list_pin::parse_part(pkg, &wb_part)?;
+    let rels = Relationships::from_package(pkg, &wb_part)?;
+    let sheets = inspect::list_sheets(&wb.root, &rels, &wb_part, pkg)?;
+    sheets
+        .iter()
+        .find(|s| s.name.eq_ignore_ascii_case(name))
+        .map(|s| s.kind)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SheetNotFound {
+                    name: name.to_string(),
+                },
+                "id",
+            )
+        })
+}
+
+fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < 24 || bytes[0..8] != [137, 80, 78, 71, 13, 10, 26, 10] {
+        return None;
+    }
+    let w = u32::from_be_bytes(bytes[16..20].try_into().ok()?);
+    let h = u32::from_be_bytes(bytes[20..24].try_into().ok()?);
+    Some((w, h))
 }
 
 fn right_to_left(sheet: &Element) -> bool {

@@ -350,3 +350,89 @@ fn insert_with_data_sheet_name() {
         .iter()
         .any(|c| c["id"] == "cell:Data!B11" && c["value"] == 4));
 }
+
+#[test]
+fn export_chartsheet_col_png_matches_chart_image() {
+    let src = create_book("cs-png");
+    let charted = tmp("cs-png-ins");
+    apply(&src, &charted, json!([insert_op()])).unwrap();
+    let before = std::fs::read(&charted).unwrap();
+    let sheet_png = tmp("cs-sheet").with_extension("png");
+    let chart_png = tmp("cs-chart").with_extension("png");
+    let RunOutput::Written {
+        content_type,
+        ops_applied,
+        ..
+    } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": charted.to_string_lossy(),
+        "id": "sheet:Chart1",
+        "output": sheet_png.to_string_lossy()
+    })
+    .to_string())
+    .unwrap()
+    else {
+        panic!("exportSheetImage 应写出图表工作表上的簇状柱形图");
+    };
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert!(ops_applied.is_none());
+    assert_eq!(std::fs::read(&charted).unwrap(), before);
+
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartImage",
+        "path": charted.to_string_lossy(),
+        "id": "sheet:Chart1/chart:2",
+        "output": chart_png.to_string_lossy()
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("exportChartImage 应写出同一张图");
+    };
+    let sheet = std::fs::read(&sheet_png).unwrap();
+    let chart = std::fs::read(&chart_png).unwrap();
+    assert_eq!(&sheet[0..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+    assert_eq!(sheet, chart);
+    let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
+    let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
+    assert_eq!((width, height), (576, 336));
+}
+
+#[test]
+fn export_chartsheet_line_is_not_implemented() {
+    let src = create_book("cs-line");
+    let col = tmp("cs-line-col");
+    apply(&src, &col, json!([insert_op()])).unwrap();
+    let lined = tmp("cs-line-out");
+    apply(
+        &col,
+        &lined,
+        json!([{
+            "op": "setChartType",
+            "id": "sheet:Chart1/chart:2",
+            "type": "line"
+        }]),
+    )
+    .unwrap();
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": lined.to_string_lossy(),
+        "id": "sheet:Chart1",
+        "output": tmp("cs-line-sheet").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartImage",
+        "path": lined.to_string_lossy(),
+        "id": "sheet:Chart1/chart:2",
+        "output": tmp("cs-line-chart").with_extension("png").to_string_lossy()
+    })
+    .to_string())
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
