@@ -2124,13 +2124,10 @@ fn draw_plot_key(
     marker: MarkerKind,
 ) {
     match kind {
-        PlotKind::ClusteredColumn | PlotKind::StandardArea | PlotKind::Pie => {
-            canvas.fill_rect(x0, y0, x1, y1, color)
-        }
-        PlotKind::ClusteredBar => {
-            let mid = (y0 + y1) / 2;
-            canvas.fill_rect(x0, mid - 1, x1, mid + 2, color);
-        }
+        PlotKind::ClusteredColumn
+        | PlotKind::ClusteredBar
+        | PlotKind::StandardArea
+        | PlotKind::Pie => canvas.fill_rect(x0, y0, x1, y1, color),
         PlotKind::StandardLine | PlotKind::Scatter { connect: true } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
@@ -5404,6 +5401,51 @@ mod tests {
             }
         }
         (n > 0).then(|| sum as f64 / n as f64)
+    }
+
+    #[test]
+    fn clustered_bar_legend_key_is_a_filled_swatch_not_a_short_line() {
+        // Excel 16.0 Chart.Export and PowerPoint Slide.Export both use a
+        // filled swatch for clustered bars, just as for columns and areas.
+        let color = [0x15, 0x60, 0x82];
+        let mut actual = Canvas::new(24, 24);
+        draw_plot_key(
+            &mut actual,
+            PlotKind::ClusteredBar,
+            5,
+            5,
+            13,
+            13,
+            color,
+            MarkerKind::None,
+        );
+        let mut expected = Canvas::new(24, 24);
+        expected.fill_rect(5, 5, 13, 13, color);
+        assert!(
+            actual.px == expected.px,
+            "bar legend keys must fill the swatch"
+        );
+
+        let ser = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
+        for orientation in ["maxMin", "minMax"] {
+            let png = render_bar(&bar_xml(&ser, "", orientation, Some("bar"))).unwrap();
+            let (w, h, rgb) = png_rgb(&png);
+            let mut xs = Vec::new();
+            let mut ys = Vec::new();
+            for y in 0..h {
+                for x in w - 55..w - 5 {
+                    if pixel_at(&rgb, w, x, y) == color {
+                        xs.push(x);
+                        ys.push(y);
+                    }
+                }
+            }
+            assert!(!xs.is_empty(), "legend swatch must exist");
+            let width = xs.iter().max().unwrap() - xs.iter().min().unwrap() + 1;
+            let height = ys.iter().max().unwrap() - ys.iter().min().unwrap() + 1;
+            assert_eq!((width, height), (8, 8), "filled bar swatch {orientation}");
+            assert_eq!(xs.len(), 64, "no hollow or line-shaped key");
+        }
     }
 
     #[test]
