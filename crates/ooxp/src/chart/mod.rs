@@ -2014,6 +2014,7 @@ pub fn build_chart_xml(
             &ser.values,
             xy,
             size_pair,
+            default_insert_smooth(ty),
         ));
     }
     let wrapper = if ty == ChartType::Surface {
@@ -2116,6 +2117,7 @@ fn build_volume_stock_xml(
             &ser.values,
             false,
             None,
+            None,
         );
         if i == 0 {
             vol.push_str(&xml);
@@ -2134,6 +2136,12 @@ fn build_volume_stock_xml(
     chart_space_xml(title, &body, &ax_pair(), embed, None)
 }
 
+/// Office 把省略的 `c:smooth` 当作开启（平滑曲线），与 ECMA 缺省 0 不一致。
+/// 新建折线 / 散点系列时显式写入 `val="0"`，让官方按直线画，与库预览一致。
+pub fn default_insert_smooth(ty: ChartType) -> Option<bool> {
+    matches!(ty, ChartType::Line | ChartType::Scatter).then_some(false)
+}
+
 pub fn ser_xml(
     idx: u32,
     name: &str,
@@ -2144,6 +2152,7 @@ pub fn ser_xml(
     vals: &[Value],
     xy: bool,
     sizes: Option<(&[Value], &str)>,
+    smooth: Option<bool>,
 ) -> String {
     let (cat_tag, val_tag) = if xy {
         ("c:xVal", "c:yVal")
@@ -2160,6 +2169,12 @@ pub fn ser_xml(
         body.push_str(&format!(
             "<c:bubbleSize>{}</c:bubbleSize><c:bubble3D val=\"0\"/>",
             str_or_num_ref(sz_ref, sz)
+        ));
+    }
+    if let Some(on) = smooth {
+        body.push_str(&format!(
+            r#"<c:smooth val="{}"/>"#,
+            if on { "1" } else { "0" }
         ));
     }
     body.push_str("</c:ser>");
@@ -2324,6 +2339,7 @@ fn build_combo_chart_xml(
                 &ser.values,
                 ty.is_xy(),
                 None,
+                default_insert_smooth(*ty),
             ));
         }
         let extra = wrapper_prefix_xml(*ty, "pie");

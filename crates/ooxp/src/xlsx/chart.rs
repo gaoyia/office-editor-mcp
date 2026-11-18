@@ -952,6 +952,10 @@ pub fn add_chart_series(
     let xy = chart::uses_xy_axes(&ty)
         || op.series_type.is_some_and(ChartType::is_xy)
         || chart::last_series_type(&space.root).is_some_and(ChartType::is_xy);
+    let smooth = op
+        .series_type
+        .or_else(|| ChartType::parse(&ty))
+        .and_then(chart::default_insert_smooth);
     let xml = chart::ser_xml(
         chart::unused_idx(&space.root),
         &name,
@@ -962,6 +966,7 @@ pub fn add_chart_series(
         &op.values,
         xy,
         None,
+        smooth,
     );
     let ser_el = chart::parse_ser_xml(&xml)?;
     chart::insert_ser(&mut space.root, ser_el, op.series_type);
