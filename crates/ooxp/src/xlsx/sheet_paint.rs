@@ -659,7 +659,11 @@ fn plain_rects(
                 if right_to_left(sheet) {
                     return Err(unsupported());
                 }
-                out.push(Overlay::Png(sheet_png(pkg, &part, pic, x0, y0, x1, y1)?));
+                let (natural_w, natural_h) =
+                    anchor_unclamped_size(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
+                out.push(Overlay::Png(sheet_png(
+                    pkg, &part, pic, x0, y0, x1, y1, natural_w, natural_h,
+                )?));
             } else if let Some(sp) = anchor.child_by_local("sp") {
                 out.push(Overlay::Fill(plain_rect_at(
                     sp, theme, true, x0, y0, x1, y1,
@@ -759,6 +763,106 @@ fn rect_edges(
     let y_from = axis_origin(from.row, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
+    // 单元格锚点的 colOff/rowOff 超出当前格时，Excel 把原点钳在该格远边，
+    // 不把超出部分换算成后续行/列的像素。2026-11-18 多样本 CopyPicture 与
+    // Shape.Top/Left 锁定：15 磅行上 rowOff=381000 EMU 落在一行高度（106 dpi
+    // 为 22），而不是两行的 44；同值 colOff 未超出列宽时 X 本来就与官方一致。
+    // oneCell 目标框尺寸按未钳位的 EMU 差计算，可以从钳位后的原点伸出格外。
+    let from_col_px = column_px_of(sheet, styles, from.col)?;
+    let from_row_px = row_px_one(sheet, styles, cells, from.row)?;
+    let x0 = x_from + clamp_cell_off(col_off, from_col_px, dpi)?;
+    let y0 = y_from + clamp_cell_off(row_off, from_row_px, dpi)?;
+    let (x1, y1) = match kind {
+        AnchorKind::OneCell => {
+            let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+            let cx = emu_attr(ext, "cx")?;
+            let cy = emu_attr(ext, "cy")?;
+            if cx <= 0 || cy <= 0 {
+                return Err(unsupported());
+            }
+            let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
+            let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
+            let x_size = round_px_at(x_end, dpi)? - round_px_at(col_off, dpi)?;
+            let y_size = round_px_at(y_end, dpi)? - round_px_at(row_off, dpi)?;
+            if x_size <= 0 || y_size <= 0 {
+                return Err(unsupported());
+            }
+            (x0 + x_size, y0 + y_size)
+        }
+        AnchorKind::TwoCell => {
+            let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+            let to = to.ok_or_else(unsupported)?;
+            let x_to = axis_origin(to.col, c0, cols, &mut |col| {
+                column_px_of(sheet, styles, col)
+            })?;
+            let y_to = axis_origin(to.row, r0, rows, &mut |row| {
+                row_px_one(sheet, styles, cells, row)
+            })?;
+            let mut x1 = x_to + clamp_cell_off(to_x, column_px_of(sheet, styles, to.col)?, dpi)?;
+            let mut y1 =
+                y_to + clamp_cell_off(to_y, row_px_one(sheet, styles, cells, to.row)?, dpi)?;
+            // twoCell 的 to 也钳在自己那一格。同一格内 from/to 都顶到远边时，
+            // 官方只留下格边上的 1px，不像 oneCell 那样按 ext 伸出格外。
+            if x1 <= x0 {
+                x1 = x0 + 1;
+            }
+            if y1 <= y0 {
+                y1 = y0 + 1;
+            }
+            (x1, y1)
+        }
+        AnchorKind::Absolute => unreachable!("absolute handled above"),
+        AnchorKind::RelSize | AnchorKind::AbsSize => {
+            return Err(unsupported());
+        }
+    };
+    if x1 < x0 || y1 < y0 {
+        return Err(unsupported());
+    }
+    Ok((x0, y0, x1, y1))
+}
+
+/// 把单元格锚点偏移钳在当前格像素范围内；未超出时与 `round_px_at` 相同。
+fn clamp_cell_off(off: i64, cell_px: i32, dpi: RenderDpi) -> Result<i32, Error> {
+    let raw = round_px_at(off, dpi)?;
+    Ok(raw.min(cell_px.max(0)))
+}
+
+/// 未钳位的目标框像素尺寸。twoCell 钳成格边 1px 残余时，1:1 图仍按这个尺寸对照原图，
+/// 再缩小进残余框；一般缩小（原图与未钳位框本来就对不上）仍 NI。
+fn anchor_unclamped_size(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<(u32, u32), Error> {
+    let dpi = styles.geometry.dpi();
+    if kind == AnchorKind::Absolute {
+        let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+        let cx = round_px_at(emu_attr(ext, "cx")?, dpi)?;
+        let cy = round_px_at(emu_attr(ext, "cy")?, dpi)?;
+        let w = u32::try_from(cx).map_err(|_| unsupported())?;
+        let h = u32::try_from(cy).map_err(|_| unsupported())?;
+        if w == 0 || h == 0 {
+            return Err(unsupported());
+        }
+        return Ok((w, h));
+    }
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let x_from = axis_origin(from.col, c0, cols, &mut |col| {
+        column_px_of(sheet, styles, col)
+    })?;
+    let y_from = axis_origin(from.row, r0, rows, &mut |row| {
+        row_px_one(sheet, styles, cells, row)
+    })?;
+    let x0 = x_from + round_px_at(col_off, dpi)?;
+    let y0 = y_from + round_px_at(row_off, dpi)?;
     let (x1, y1) = match kind {
         AnchorKind::OneCell => {
             let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
@@ -770,8 +874,8 @@ fn rect_edges(
             let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
             let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
             (
-                x_from + round_px_at(x_end, dpi)?,
-                y_from + round_px_at(y_end, dpi)?,
+                x0 + (round_px_at(x_end, dpi)? - round_px_at(col_off, dpi)?),
+                y0 + (round_px_at(y_end, dpi)? - round_px_at(row_off, dpi)?),
             )
         }
         AnchorKind::TwoCell => {
@@ -789,16 +893,14 @@ fn rect_edges(
             )
         }
         AnchorKind::Absolute => unreachable!("absolute handled above"),
-        AnchorKind::RelSize | AnchorKind::AbsSize => {
-            return Err(unsupported());
-        }
+        AnchorKind::RelSize | AnchorKind::AbsSize => return Err(unsupported()),
     };
-    let x0 = x_from + round_px_at(col_off, dpi)?;
-    let y0 = y_from + round_px_at(row_off, dpi)?;
-    if x1 < x0 || y1 < y0 {
+    let w = u32::try_from(x1 - x0).map_err(|_| unsupported())?;
+    let h = u32::try_from(y1 - y0).map_err(|_| unsupported())?;
+    if w == 0 || h == 0 {
         return Err(unsupported());
     }
-    Ok((x0, y0, x1, y1))
+    Ok((w, h))
 }
 
 fn axis_origin(
@@ -851,7 +953,7 @@ fn row_px_one(
                 return Ok(0);
             }
             if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
-                let px = excel_row_px(ht);
+                let px = excel_row_px_at(ht, styles.geometry.dpi());
                 if px < 1 {
                     return Err(unsupported());
                 }
@@ -861,7 +963,7 @@ fn row_px_one(
         }
     }
     let pt = row_auto_pt(sheet, styles, cells, row, &base)?;
-    let px = excel_row_px(pt);
+    let px = excel_row_px_at(pt, styles.geometry.dpi());
     if px < 1 {
         return Err(unsupported());
     }
@@ -1884,6 +1986,8 @@ fn sheet_png(
     y0: i32,
     x1: i32,
     y1: i32,
+    natural_w: u32,
+    natural_h: u32,
 ) -> Result<SheetPng, Error> {
     accept_sheet_pic(pic)?;
     let Some(w) = (x1 - x0).try_into().ok().filter(|w: &u32| *w > 0) else {
@@ -1904,10 +2008,20 @@ fn sheet_png(
     let rgb = match source_window(pic, image_w, image_h)? {
         None => {
             // 无裁剪：仍只认 1:1 原像素拷贝。纯放大另案。
-            if image_w != w || image_h != h {
+            // twoCell 钳成格边残余、未钳位框仍与原图 1:1 时，官方把原图缩小进残余框
+            //（滤波，不是裁掉多出来的行/列）。一般缩小仍 NI。
+            if image_w == w && image_h == h {
+                rgb
+            } else if image_w == natural_w
+                && image_h == natural_h
+                && w <= image_w
+                && h <= image_h
+                && (w < image_w || h < image_h)
+            {
+                scale_crop_rgb(&rgb, image_w, image_h, 0, 0, image_w, image_h, x0, y0, w, h)?
+            } else {
                 return Err(unsupported());
             }
-            rgb
         }
         Some((left, top, src_w, src_h)) => {
             if src_w == w && src_h == h {
@@ -3735,6 +3849,7 @@ fn auto_row_pt(name: &str, pt: f64) -> f64 {
 }
 
 /// 自定义行高截断成像素。20 磅是 26，不是四舍五入的 27。
+#[cfg(test)]
 fn excel_row_px(pt: f64) -> i32 {
     excel_row_px_at(pt, RenderDpi::DEFAULT)
 }
