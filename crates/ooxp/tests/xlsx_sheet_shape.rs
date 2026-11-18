@@ -962,3 +962,114 @@ const ROW_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 const GROUP_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>9525</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>9525</xdr:rowOff></xdr:from><xdr:to><xdr:col>0</xdr:col><xdr:colOff>247650</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>85725</xdr:rowOff></xdr:to><xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id="4" name="组合 3"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr><xdr:grpSpPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="238125" cy="76200"/><a:chOff x="9525" y="9525"/><a:chExt cx="238125" cy="76200"/></a:xfrm></xdr:grpSpPr><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="2" name="形状 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="9525" y="9525"/><a:ext cx="76200" cy="76200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp><xdr:sp><xdr:nvSpPr><xdr:cNvPr id="3" name="形状 2"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:xfrm><a:off x="190500" y="9525"/><a:ext cx="57150" cy="38100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="EE4455"/></a:solidFill><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr/><a:lstStyle/><a:p/></xdr:txBody></xdr:sp></xdr:grpSp><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>"#;
+
+fn export_dpi(src: &Path, dpi: u32) -> Vec<u8> {
+    let png = src.with_extension(format!("dpi{dpi}.png"));
+    if png.exists() {
+        std::fs::remove_file(&png).unwrap();
+    }
+    let mut req = json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": src.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": png.to_string_lossy(),
+    });
+    if dpi != 96 {
+        req["dpi"] = json!(dpi);
+    }
+    let written = run(&req.to_string()).unwrap();
+    let RunOutput::Written { path, .. } = written else {
+        panic!("应写出文件");
+    };
+    std::fs::read(path).unwrap()
+}
+
+#[test]
+fn absolute_extent_uses_rounded_pos_plus_ext() {
+    // 95250+133350 EMU 在 106 dpi 是 11+15 对 27。官方远边在 27，不是把 ext 单独四舍五入后的 26。
+    let src = tmp("abs-ext-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "A3", "value": "" },
+            { "ref": "A4", "value": "" }
+        ] }] }
+    }));
+    let shaped = tmp("abs-ext-shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 4, "height": 15.0 },
+            { "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect",
+              "anchor": "oneCell", "from": "A1", "cx": 133350, "cy": 133350 }
+        ]
+    }));
+    let abs = tmp("abs-ext");
+    rewrite(&shaped, &abs, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = xml
+                .replace("<xdr:oneCellAnchor>", "<xdr:absoluteAnchor>")
+                .replace("</xdr:oneCellAnchor>", "</xdr:absoluteAnchor>");
+            // 换成 pos/ext。insertShape 的 from+ext 整段替换。
+            if let Some(start) = xml.find("<xdr:from>") {
+                if let Some(ext_at) = xml.find("<xdr:ext ") {
+                    if let Some(ext_end) = xml[ext_at..].find("/>") {
+                        let end = ext_at + ext_end + 2;
+                        xml.replace_range(
+                            start..end,
+                            "<xdr:pos x=\"95250\" y=\"19050\"/><xdr:ext cx=\"133350\" cy=\"133350\"/>",
+                        );
+                    }
+                }
+            }
+            *xml = xml.replace(
+                "<a:solidFill><a:srgbClr val=\"FFFFFF\"/></a:solidFill>",
+                "<a:noFill/>",
+            );
+        }
+    });
+    #[cfg(windows)]
+    {
+        let (w, h, rgb) = decode_png(&export_dpi(&abs, 106));
+        assert!(w >= 28 && h >= 20, "{w}x{h}");
+        // 原点与官方 far=round(pos+ext) 的右/下边有墨；单独 round(ext) 的旧远边内侧不应再是外框。
+        assert_ne!(pixel(&rgb, w, 11, 2), [255, 255, 255]);
+        assert_ne!(pixel(&rgb, w, 27, 2), [255, 255, 255]);
+        assert_ne!(pixel(&rgb, w, 11, 18), [255, 255, 255]);
+        assert_ne!(pixel(&rgb, w, 27, 18), [255, 255, 255]);
+        // 空心：旧错误远边 x=26 在官方是内部，不应再当外框实线（允许抗锯齿灰，但不能当实黑外框独占）。
+        // 至少右缘必须到达 27。
+        assert_eq!(pixel(&rgb, w, 28, 10), [255, 255, 255]);
+    }
+    #[cfg(not(windows))]
+    {
+        let png = abs.with_extension("dpi106.png");
+        let written = run(&json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": abs.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+            "dpi": 106,
+        })
+        .to_string());
+        assert!(written.is_err());
+    }
+}

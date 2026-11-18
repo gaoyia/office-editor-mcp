@@ -751,8 +751,24 @@ fn rect_edges(
         if cx <= 0 || cy <= 0 {
             return Err(unsupported());
         }
-        let x1 = x0 + round_px_at(cx, dpi)?;
-        let y1 = y0 + round_px_at(cy, dpi)?;
+        // 远边按 round(pos+ext)，与 oneCell 的 round(off+ext)-round(off) 相同，
+        // 不是独立把 ext 四舍五入后再加到原点。2026-11-18 多样本 CopyPicture 锁定：
+        // 95250+133350 EMU 在 106 dpi 为 11+15 vs 27，空心/填色、1/2px 官方远边都在 27。
+        let x1 = round_px_at(
+            emu_attr(pos, "x")?
+                .checked_add(cx)
+                .ok_or_else(unsupported)?,
+            dpi,
+        )?;
+        let y1 = round_px_at(
+            emu_attr(pos, "y")?
+                .checked_add(cy)
+                .ok_or_else(unsupported)?,
+            dpi,
+        )?;
+        if x1 <= x0 || y1 <= y0 {
+            return Err(unsupported());
+        }
         return Ok((x0, y0, x1, y1));
     }
     let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
@@ -843,11 +859,23 @@ fn anchor_unclamped_size(
 ) -> Result<(u32, u32), Error> {
     let dpi = styles.geometry.dpi();
     if kind == AnchorKind::Absolute {
+        let pos = anchor.child_by_local("pos").ok_or_else(unsupported)?;
         let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
-        let cx = round_px_at(emu_attr(ext, "cx")?, dpi)?;
-        let cy = round_px_at(emu_attr(ext, "cy")?, dpi)?;
-        let w = u32::try_from(cx).map_err(|_| unsupported())?;
-        let h = u32::try_from(cy).map_err(|_| unsupported())?;
+        let x = emu_attr(pos, "x")?;
+        let y = emu_attr(pos, "y")?;
+        let cx = emu_attr(ext, "cx")?;
+        let cy = emu_attr(ext, "cy")?;
+        if cx <= 0 || cy <= 0 {
+            return Err(unsupported());
+        }
+        let w = u32::try_from(
+            round_px_at(x.checked_add(cx).ok_or_else(unsupported)?, dpi)? - round_px_at(x, dpi)?,
+        )
+        .map_err(|_| unsupported())?;
+        let h = u32::try_from(
+            round_px_at(y.checked_add(cy).ok_or_else(unsupported)?, dpi)? - round_px_at(y, dpi)?,
+        )
+        .map_err(|_| unsupported())?;
         if w == 0 || h == 0 {
             return Err(unsupported());
         }
