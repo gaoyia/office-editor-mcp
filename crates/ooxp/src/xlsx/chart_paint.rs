@@ -1,7 +1,7 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；标记规则与折线相同。仅连线、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；lineMarker 画实线，缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；标记规则与折线相同。仅连线、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点按缺口断开填充，不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
@@ -964,13 +964,44 @@ fn paint_scatter(
             return Err(legend::unsupported());
         }
     }
+    // autoZero: when 0 is inside the Y scale, the horizontal axis sits at y=0
+    // inside the plot, so the bottom no longer reserves a label gutter.
+    let y_cross_interior = y_scale.min < -1e-12 && y_scale.max > 1e-12;
+    if y_cross_interior {
+        plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_TOP);
+        if !chart.legend_spec.legacy {
+            plot_b -= legend_layout.reserve()[3];
+        }
+        if plot_r <= plot_x || plot_b <= plot_y {
+            return Err(legend::unsupported());
+        }
+    }
     let x_spec = chart.axis_x.ok_or_else(unsupported)?;
     let x_budget = axis::interval_budget_span(f64::from((plot_r - plot_x).max(1)), em, 3.0);
-    let x_scale = axis::scale_values(
+    let mut x_scale = axis::scale_values(
         chart.series.iter().flat_map(|s| s.x_values.iter().copied()),
         x_spec,
         x_budget,
     )?;
+    // When 0 is inside the X scale, the vertical axis sits at x=0 inside the
+    // plot; drop the left tick-label gutter and use the same frame inset as the top.
+    let x_cross_interior = x_scale.min < -1e-12 && x_scale.max > 1e-12;
+    if x_cross_interior {
+        let mut slim = canvas.dpi.scale_px(INSET_TOP);
+        if !chart.legend_spec.legacy {
+            slim += legend_layout.reserve()[0];
+        }
+        if slim != plot_x {
+            axis_x = slim;
+            plot_x = slim;
+            let x_budget = axis::interval_budget_span(f64::from((plot_r - plot_x).max(1)), em, 3.0);
+            x_scale = axis::scale_values(
+                chart.series.iter().flat_map(|s| s.x_values.iter().copied()),
+                x_spec,
+                x_budget,
+            )?;
+        }
+    }
     let x_ticks = tick_values(x_scale.min, x_scale.max, x_scale.major);
     let x_labels: Vec<String> = x_ticks.iter().copied().map(fmt_tick).collect();
     let plot = Rect {
@@ -983,16 +1014,21 @@ fn paint_scatter(
         - (y_scale.max - y_scale.min))
         .abs()
         <= y_scale.major * 1e-8;
+    let grid_left = if x_cross_interior {
+        plot_x
+    } else {
+        axis_x - canvas.dpi.scale_px(TICK_OUT)
+    };
     if chart.grid && y_regular {
         for i in 0..=y_intervals {
             let y = plot_y + (i * (plot_b - plot_y) + y_intervals - 1) / y_intervals;
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            canvas.hline_i(grid_left, plot_r, y, INK);
         }
     }
     if chart.grid && !y_regular {
         for value in &y_ticks {
             let y = y_of(*value, y_scale.min, y_scale.max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            canvas.hline_i(grid_left, plot_r, y, INK);
         }
     }
     if chart.grid_x {
@@ -1002,10 +1038,15 @@ fn paint_scatter(
         }
     }
     let y_parts = y_scale.major / y_scale.minor;
+    let y_tick_x = if x_cross_interior {
+        x_of(x_scale.crossing(), x_scale.min, x_scale.max, &plot).round() as i32
+    } else {
+        axis_x
+    };
     if y_regular && (y_parts - y_parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&y_parts) {
         draw_value_minor_ticks(
             canvas,
-            axis_x,
+            y_tick_x,
             plot_y,
             plot_b,
             y_intervals,
@@ -1019,8 +1060,8 @@ fn paint_scatter(
             }
             let y = y_of(value, y_scale.min, y_scale.max, &plot).round() as i32;
             canvas.hline_i(
-                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
-                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y_tick_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y_tick_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
                 y,
                 INK,
             );
@@ -1030,7 +1071,19 @@ fn paint_scatter(
     let axis_line_x = x_of(x_scale.crossing(), x_scale.min, x_scale.max, &plot).round() as i32;
     let axis_line_y = y_of(y_scale.crossing(), y_scale.min, y_scale.max, &plot).round() as i32;
     canvas.vline_i(axis_line_x, plot_y, plot_b, INK);
-    canvas.hline_i(axis_x, plot_r, axis_line_y, INK);
+    let axis_hline_left = if x_cross_interior { plot_x } else { axis_x };
+    canvas.hline_i(axis_hline_left, plot_r, axis_line_y, INK);
+    if x_cross_interior {
+        for value in &y_ticks {
+            let y = y_of(*value, y_scale.min, y_scale.max, &plot).round() as i32;
+            canvas.hline_i(
+                axis_line_x - canvas.dpi.scale_px(CAT_MAJOR),
+                axis_line_x + canvas.dpi.scale_px(CAT_MAJOR_IN),
+                y,
+                INK,
+            );
+        }
+    }
     for value in &x_ticks {
         let x = x_of(*value, x_scale.min, x_scale.max, &plot).round() as i32;
         canvas.vline_i(
@@ -1053,6 +1106,11 @@ fn paint_scatter(
             INK,
         );
     }
+    let y_label_axis = if x_cross_interior {
+        axis_line_x
+    } else {
+        axis_x
+    };
     for (tick, label) in y_ticks.iter().zip(&y_labels) {
         let y = y_of(*tick, y_scale.min, y_scale.max, &plot);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -1062,14 +1120,17 @@ fn paint_scatter(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
+            f64::from(y_label_axis) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             y - h / 2.0,
             label_px,
             INK,
         );
     }
-    let baseline =
-        f64::from(canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM)) + canvas.dpi.scale_f(10.0);
+    let baseline = if y_cross_interior {
+        f64::from(axis_line_y) + canvas.dpi.scale_f(10.0)
+    } else {
+        f64::from(canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM)) + canvas.dpi.scale_f(10.0)
+    };
     for (tick, label) in x_ticks.iter().zip(&x_labels) {
         let x = x_of(*tick, x_scale.min, x_scale.max, &plot);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -4662,6 +4723,106 @@ mod tests {
             empty_png,
             render_scatter(&omitted).unwrap(),
             "an omitted scatter cache point must stay a gap"
+        );
+    }
+
+    #[test]
+    fn signed_scatter_auto_zero_axes_and_labels_meet_at_origin() {
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let signed = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(-2.0), Some(-1.0), Some(1.0), Some(3.0)],
+                &[Some(-1.0), Some(2.0), Some(-2.0), Some(3.0)],
+                none,
+            ),
+            "",
+        );
+        let (w, h, rgb) = png_rgb(&render_scatter(&signed).unwrap());
+        assert_eq!((w, h), (576, 336));
+        let dark = [0_u8, 0, 0];
+        let mut col = vec![0_u32; w as usize];
+        let mut row = vec![0_u32; h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                if near(
+                    [
+                        rgb[((y * w + x) * 3) as usize],
+                        rgb[((y * w + x) * 3 + 1) as usize],
+                        rgb[((y * w + x) * 3 + 2) as usize],
+                    ],
+                    dark,
+                    40,
+                ) {
+                    col[x as usize] += 1;
+                    row[y as usize] += 1;
+                }
+            }
+        }
+        let axis_x = col
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, n)| *n)
+            .map(|(x, _)| x as u32)
+            .unwrap();
+        assert!(
+            axis_x > w / 4 && axis_x < (w * 3) / 4,
+            "vertical autoZero axis should sit at the origin, not the left edge; x={axis_x}"
+        );
+        let mid_axis_y = (h / 4..(h * 3) / 4)
+            .max_by_key(|&y| row[y as usize])
+            .unwrap();
+        assert!(
+            row[mid_axis_y as usize] >= w / 2,
+            "a full-width horizontal autoZero axis should sit at the origin, not only at the bottom; y={mid_axis_y} count={}",
+            row[mid_axis_y as usize]
+        );
+        let leftover_gutter = count_in(&rgb, w, 0, 36, 0, h / 3, dark, 40);
+        let origin_y_labels = count_in(&rgb, w, axis_x - 36, axis_x, 0, h / 3, dark, 40);
+        assert!(
+            origin_y_labels > leftover_gutter,
+            "Y tick labels should sit left of the origin axis, not in the left gutter; origin={origin_y_labels} gutter={leftover_gutter}"
+        );
+
+        let positive = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(4.0), Some(8.0)],
+                &[Some(1.0), Some(3.0), Some(2.0)],
+                none,
+            ),
+            "",
+        );
+        let (_, _, pos_rgb) = png_rgb(&render_scatter(&positive).unwrap());
+        let mut pos_col = vec![0_u32; w as usize];
+        for y in 0..h {
+            for x in 0..w {
+                if near(
+                    [
+                        pos_rgb[((y * w + x) * 3) as usize],
+                        pos_rgb[((y * w + x) * 3 + 1) as usize],
+                        pos_rgb[((y * w + x) * 3 + 2) as usize],
+                    ],
+                    dark,
+                    40,
+                ) {
+                    pos_col[x as usize] += 1;
+                }
+            }
+        }
+        let pos_axis_x = pos_col
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, n)| *n)
+            .map(|(x, _)| x as u32)
+            .unwrap();
+        assert!(
+            pos_axis_x < w / 4,
+            "when 0 is on the left bound, the vertical axis should stay on the left edge; x={pos_axis_x}"
         );
     }
 
