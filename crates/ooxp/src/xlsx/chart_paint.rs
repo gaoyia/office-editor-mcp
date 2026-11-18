@@ -176,6 +176,10 @@ struct Series {
     /// Area stroke color when a solid outline is present. Lines keep this unset.
     line_color: Option<[u8; 3]>,
     x_values: Vec<Option<f64>>,
+    /// c:barSer defaults to inversion; dPt can override individual values.
+    invert_if_negative: bool,
+    point_inversion: Vec<Option<bool>>,
+    negative_outline: Option<LineSeriesStyle>,
 }
 
 impl Default for Series {
@@ -191,6 +195,9 @@ impl Default for Series {
             marker_color: None,
             line_color: None,
             x_values: Vec::new(),
+            invert_if_negative: true,
+            point_inversion: Vec::new(),
+            negative_outline: None,
         }
     }
 }
@@ -737,6 +744,32 @@ fn read_chart(
         if series.len() <= order {
             series.resize_with(order + 1, Series::default);
         }
+        let is_bar = matches!(kind, PlotKind::ClusteredBar | PlotKind::ClusteredColumn);
+        let mut point_inversion = vec![None; values.len()];
+        if is_bar {
+            for point in ser.element_children().filter(|el| el.local_name() == "dPt") {
+                if let Some(invert) = flag(point, "invertIfNegative") {
+                    let index = number_val(point, "idx").ok_or_else(unsupported)?;
+                    if !index.is_finite()
+                        || index < 0.0
+                        || index.fract() != 0.0
+                        || index as usize >= point_inversion.len()
+                        || point_inversion[index as usize].is_some()
+                    {
+                        return Err(unsupported());
+                    }
+                    point_inversion[index as usize] = Some(invert);
+                }
+            }
+        }
+        let negative_outline = if is_bar {
+            ser.child_by_local("spPr")
+                .and_then(|sp| sp.child_by_local("ln"))
+                .map(|ln| read_solid_ln(ln, accents, dpi.pt_to_px_font(0.75), dpi))
+                .transpose()?
+        } else {
+            None
+        };
         series[order] = Series {
             name,
             values,
@@ -748,6 +781,9 @@ fn read_chart(
             marker_color: style.marker_color,
             line_color,
             x_values,
+            invert_if_negative: is_bar && flag(ser, "invertIfNegative").unwrap_or(true),
+            point_inversion,
+            negative_outline,
         };
     }
     series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
@@ -2231,6 +2267,50 @@ fn category_mid_y(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> 
     category_slot_origin(plot, index, cats as usize, from_bottom) + slot / 2.0
 }
 
+/// Office inversion is a white negative fill with an automatic black 0.75 pt
+/// outline, NOT a solid accent and NOT transparent. Public Point.Fill/Line
+/// properties and toggled Series.InvertIfNegative exports lock this default.
+fn draw_bar_value(
+    canvas: &mut Canvas,
+    series: &Series,
+    index: usize,
+    value: f64,
+    bounds: [i32; 4],
+    color: [u8; 3],
+) {
+    let [x0, y0, x1, y1] = bounds;
+    let invert = series
+        .point_inversion
+        .get(index)
+        .copied()
+        .flatten()
+        .unwrap_or(series.invert_if_negative);
+    if value >= 0.0 || !invert {
+        canvas.fill_rect(x0, y0, x1, y1, color);
+        return;
+    }
+    canvas.fill_rect(x0, y0, x1, y1, [255; 3]);
+    let (visible, width, stroke) = series
+        .negative_outline
+        .as_ref()
+        .map_or((true, canvas.dpi.pt_to_px_font(0.75), INK), |line| {
+            (line.visible, line.width, line.color.unwrap_or(INK))
+        });
+    if visible {
+        let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)];
+        for pair in corners.windows(2) {
+            canvas.stroke_segment(
+                f64::from(pair[0].0),
+                f64::from(pair[0].1),
+                f64::from(pair[1].0),
+                f64::from(pair[1].1),
+                width,
+                stroke,
+            );
+        }
+    }
+}
+
 fn draw_clustered_bars(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -2284,7 +2364,7 @@ fn draw_clustered_bars(
             let x1 = (left + w).round() as i32;
             let y0 = round_half_even(y);
             let y1 = round_half_even(y + bar_h);
-            canvas.fill_rect(x0, y0, x1, y1, color);
+            draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
 }
@@ -2395,7 +2475,7 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
             let x1 = round_half_even(x + bar_w);
             let y0 = top.round() as i32;
             let y1 = (top + h).round() as i32;
-            canvas.fill_rect(x0, y0, x1, y1, color);
+            draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
 }
@@ -3899,6 +3979,37 @@ mod tests {
             })
             .collect();
         encode_png(width, height, &rgb, png::ColorType::Rgb, RenderDpi::DEFAULT)
+    }
+
+    #[test]
+    fn bar_negative_default_inversion_and_explicit_point_overrides() {
+        for (extra, expected) in [
+            ("", true),
+            ("<c:invertIfNegative/>", true),
+            ("<c:invertIfNegative val=\"1\"/>", true),
+            ("<c:invertIfNegative val=\"0\"/>", false),
+            ("<c:invertIfNegative val=\"false\"/>", false),
+            ("<c:invertIfNegative val=\"0\"/><c:dPt><c:idx val=\"0\"/><c:invertIfNegative/></c:dPt>", true),
+            ("<c:dPt><c:idx val=\"0\"/><c:invertIfNegative val=\"0\"/></c:dPt>", false),
+        ] {
+            let xml = bar_xml(&line_ser(0, "S1", &[Some(-8.0), Some(8.0)], extra), "", "maxMin", Some("bar"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+            let series = &chart.series[0];
+            assert_eq!(series.point_inversion.first().copied().flatten().unwrap_or(series.invert_if_negative), expected, "{extra}");
+            for dpi_value in [96, 106, 144] {
+                let dpi = RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap()).unwrap();
+                let mut canvas = Canvas::new(80, 60); canvas.dpi = dpi;
+                canvas.fill_rect(0, 0, 80, 60, [200, 100, 50]);
+                draw_bar_value(&mut canvas, series, 0, -8.0, [10, 10, 60, 40], FALLBACK_ACCENTS[0]);
+                let pixel = |x: usize, y: usize| {let i=(y*80+x)*3; &canvas.px[i..i+3]};
+                assert_eq!(pixel(30, 25), if expected { &[255,255,255] } else { &FALLBACK_ACCENTS[0] });
+                if expected {assert!(pixel(10, 25).iter().all(|v| *v < 160), "negative outline must be black");}
+                // Positive values must never be inverted.
+                draw_bar_value(&mut canvas, series, 0, 8.0, [10, 10, 60, 40], FALLBACK_ACCENTS[0]);
+                assert_eq!(&canvas.px[(25*80+30)*3..(25*80+30)*3+3], &FALLBACK_ACCENTS[0]);
+            }
+        }
     }
 
     #[test]
@@ -5860,7 +5971,12 @@ mod tests {
         let a1 = FALLBACK_ACCENTS[0];
         let (w, h) = (576u32, 336u32);
         let signed = bar_xml(
-            &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], ""),
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-8.0), Some(8.0)],
+                "<c:invertIfNegative val=\"0\"/>",
+            ),
             "",
             "maxMin",
             Some("bar"),
