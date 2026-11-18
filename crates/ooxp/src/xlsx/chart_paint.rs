@@ -4,7 +4,7 @@
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点按缺口断开填充，不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
 
@@ -1510,14 +1510,14 @@ fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
         .categories
         .iter()
         .enumerate()
-        .filter_map(
-            |(index, name)| match ser.values.get(index).copied().flatten() {
-                Some(value) if value.is_finite() && value >= 0.0 => {
-                    Some((name.clone(), pie_slice_color(chart, index)))
-                }
-                _ => None,
-            },
-        )
+        .filter_map(|(index, name)| {
+            // Official Excel still lists omitted/blank categories in the pie
+            // legend and keeps their accent slot, even though they take no slice.
+            match ser.values.get(index).copied().flatten() {
+                Some(value) if !value.is_finite() || value < 0.0 => None,
+                _ => Some((name.clone(), pie_slice_color(chart, index))),
+            }
+        })
         .collect()
 }
 
@@ -6066,7 +6066,7 @@ mod tests {
     }
 
     #[test]
-    fn pie_skips_blanks_keeps_zero_in_legend_and_slide_host_paints() {
+    fn pie_skips_blank_and_zero_slices_but_keeps_both_in_the_legend() {
         let gapped = line_ser(0, "S1", &[Some(1.0), None, Some(1.0)], "");
         let png = render_pie(&standard_pie_xml(
             &gapped,
@@ -6080,15 +6080,16 @@ mod tests {
         let a3 = FALLBACK_ACCENTS[2];
         let c1 = color_centroid(&rgb, w, h, a1, 2).unwrap();
         let c3 = color_centroid(&rgb, w, h, a3, 2).unwrap();
-        // Blank point is skipped: no accent2 wedge, first and third share the pie (right vs left).
-        assert!(
-            color_centroid(&rgb, w, h, a2, 2).is_none_or(|(_, _, n)| n < 8),
-            "a blank should not leave a filled slice in the missing category color"
-        );
+        // Blank point is skipped as a slice, but official Excel still shows it in the legend.
         assert!(c1.2 >= 80 && c3.2 >= 80);
         assert!(
             (c1.0 - c3.0).abs() > 20.0,
             "the two remaining slices should sit on opposite sides"
+        );
+        let blank_hits = color_centroid(&rgb, w, h, a2, 2).map(|c| c.2).unwrap_or(0);
+        assert!(
+            blank_hits > 0 && blank_hits < 80,
+            "a blank should appear in the legend, not as a slice; hits={blank_hits}"
         );
 
         let with_zero = line_ser(0, "S1", &[Some(1.0), Some(0.0), Some(1.0)], "");
