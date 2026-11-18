@@ -162,7 +162,7 @@ pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
     Ok((x.ok_or_else(unsupported)?, y.ok_or_else(unsupported)?))
 }
 
-/// 簇状条形图：类目轴在左（axPos=l），数值轴在下（axPos=b）。
+/// 簇状条形图：类目轴在左（axPos=l），包内数值轴 axPos 仍为 b；绘制时 maxMin（第一类在上）把数值轴放在绘图区顶，minMax 放在底。
 /// 类目 scaling 为 minMax 或省略时，第一类在下；maxMin 时第一类在上（Excel 默认条形图常见）。
 /// 返回 (数值轴, 第一类是否在下)。
 pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {

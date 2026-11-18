@@ -2,7 +2,7 @@
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
-//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点按缺口断开填充，不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
@@ -1255,6 +1255,13 @@ fn paint_bar(
     let mut axis_x = axis_x_of(widest_cat, canvas.dpi);
     let mut plot_x = axis_x + 1;
     let title_top = canvas.dpi.scale_f(4.0);
+    // Official Excel 16.0 draws the value axis at the top when catAx is maxMin
+    // (first category on top), and at the bottom when minMax, even if valAx
+    // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
+    // INSET_BOTTOM. This is not a guessed 1px shift.
+    let val_axis_at_top = !chart.cats_from_bottom;
+    let val_label_inset = canvas.dpi.scale_px(INSET_BOTTOM);
+    let unused_inset = canvas.dpi.scale_px(INSET_TOP);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1268,13 +1275,23 @@ fn paint_bar(
         if matches!(host, ChartHost::Slide) {
             y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
+        if val_axis_at_top {
+            y += val_label_inset;
+        }
         y
+    } else if val_axis_at_top {
+        val_label_inset
     } else {
-        canvas.dpi.scale_px(INSET_TOP)
+        unused_inset
     };
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
+    let mut plot_b = canvas.h as i32
+        - if val_axis_at_top {
+            unused_inset
+        } else {
+            val_label_inset
+        };
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
@@ -1304,6 +1321,7 @@ fn paint_bar(
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
     let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
         <= step * 1e-8;
+    let axis_y = if val_axis_at_top { plot_y } else { plot_b };
     if chart.grid && regular {
         for i in 0..=intervals {
             let x = plot_x + (i * (plot_r - plot_x) + intervals - 1) / intervals;
@@ -1322,7 +1340,7 @@ fn paint_bar(
             canvas,
             plot_x,
             plot_r,
-            plot_b,
+            axis_y,
             intervals,
             parts.round() as i32,
         );
@@ -1335,8 +1353,8 @@ fn paint_bar(
             let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
             canvas.vline_i(
                 x,
-                plot_b - canvas.dpi.scale_px(VAL_MINOR_ARM),
-                plot_b + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
                 INK,
             );
         }
@@ -1344,7 +1362,7 @@ fn paint_bar(
     draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
     let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
-    canvas.hline_i(plot_x, plot_r, plot_b, INK);
+    canvas.hline_i(plot_x, plot_r, axis_y, INK);
     draw_cat_ticks_y(
         canvas,
         chart.categories.len(),
@@ -1353,7 +1371,7 @@ fn paint_bar(
         zero_x,
         chart.cats_from_bottom,
     );
-    // 类目标签在左侧 inset，数值标签在底轴下方。
+    // 类目标签在左侧 inset；数值标签在顶轴上方或底轴下方，跟随官方 maxMin/minMax。
     for (i, label) in chart.categories.iter().enumerate() {
         let mid = category_mid_y(&plot, i, chart.categories.len(), chart.cats_from_bottom);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -1369,7 +1387,12 @@ fn paint_bar(
             INK,
         );
     }
-    let baseline = f64::from(plot_b) + canvas.dpi.scale_f(10.0);
+    let tick_h = text_height(font, label_px);
+    let label_top = if val_axis_at_top {
+        f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
+    } else {
+        f64::from(axis_y) + canvas.dpi.scale_f(10.0)
+    };
     for (tick, label) in ticks.iter().zip(&tick_labels) {
         let w = text_width(font, gdi.as_ref(), label, label_px);
         let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
@@ -1379,7 +1402,7 @@ fn paint_bar(
             gdi.as_ref(),
             label,
             x,
-            baseline,
+            label_top,
             label_px,
             INK,
         );
@@ -5393,6 +5416,46 @@ mod tests {
         assert!(
             bot_right > top_right,
             "minMax should put the long first category in the bottom half; top={top_right} bottom={bot_right}"
+        );
+    }
+
+    fn bar_dark_band(rgb: &[u8], w: u32, x0: u32, x1: u32, y0: u32, y1: u32) -> u32 {
+        let mut n = 0u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 3) as usize;
+                if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn clustered_bar_value_axis_follows_category_orientation() {
+        let series = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
+        let (w, h) = (576u32, 336u32);
+        let band = 36u32;
+        let x0 = w / 5;
+        let x1 = w * 3 / 4;
+
+        let (_, _, top_rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        let top = bar_dark_band(&top_rgb, w, x0, x1, 0, band);
+        let bot = bar_dark_band(&top_rgb, w, x0, x1, h - band, h);
+        assert!(
+            top > bot * 3 && top > 80,
+            "maxMin should put the value axis and tick labels at the top; top={top} bottom={bot}"
+        );
+
+        let (_, _, bot_rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "minMax", Some("bar"))).unwrap());
+        let top = bar_dark_band(&bot_rgb, w, x0, x1, 0, band);
+        let bot = bar_dark_band(&bot_rgb, w, x0, x1, h - band, h);
+        assert!(
+            bot > top * 3 && bot > 80,
+            "minMax should keep the value axis and tick labels at the bottom; top={top} bottom={bot}"
         );
     }
 
