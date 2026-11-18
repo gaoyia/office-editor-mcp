@@ -443,7 +443,10 @@ impl<'a> Layout<'a> {
                     .unwrap_or_else(|| text_width(font, None, &series.name, px));
                 items.push(Item {
                     series,
-                    width: key + space + width,
+                    width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
+                        as f64
+                        + space
+                        + width,
                 });
             }
         }
@@ -626,7 +629,8 @@ impl<'a> Layout<'a> {
                     chart.kind,
                     x.round() as i32,
                     ky.round() as i32,
-                    (x + self.key).round() as i32,
+                    x.round() as i32
+                        + super::legend_key_width(chart.kind, self.key.round() as i32, canvas.dpi),
                     (ky + self.key).round() as i32,
                     ser.color.unwrap_or(chart.accents[ser.slot % 6]),
                     ser.marker,
@@ -636,7 +640,11 @@ impl<'a> Layout<'a> {
                     font,
                     self.face.as_ref(),
                     &ser.name,
-                    x + self.key + self.space,
+                    x + f64::from(super::legend_key_width(
+                        chart.kind,
+                        self.key.round() as i32,
+                        canvas.dpi,
+                    )) + self.space,
                     y,
                     self.px,
                     self.spec.style.color,

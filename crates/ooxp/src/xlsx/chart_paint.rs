@@ -2121,6 +2121,26 @@ fn paint_marker(canvas: &mut Canvas, marker: MarkerKind, x: f64, y: f64, color: 
     }
 }
 
+// Excel's line sample is a 20pt segment, not the square marker box.
+// Public 10/14/20pt legend-font probes at 432/600pt chart widths keep the
+// same 32px ink span at 106dpi (20pt centreline plus the 2.25pt round caps).
+// LegendKey.Width reports the marker box and is not the segment extent.
+fn legend_key_width(kind: PlotKind, square: i32, dpi: RenderDpi) -> i32 {
+    if matches!(kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
+        dpi.pt_to_px_font(20.0).round() as i32
+    } else {
+        square
+    }
+}
+
+fn legend_key_gap(kind: PlotKind, dpi: RenderDpi) -> i32 {
+    if matches!(kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
+        dpi.pt_to_px_font(1.5).round() as i32
+    } else {
+        dpi.scale_px(LEGEND_GAP)
+    }
+}
+
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -2138,8 +2158,16 @@ fn draw_plot_key(
         | PlotKind::Pie => canvas.fill_rect(x0, y0, x1, y1, color),
         PlotKind::StandardLine | PlotKind::Scatter { connect: true } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
-            let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
-            canvas.stroke_segment(f64::from(x0), mid_y, f64::from(x1) - 1.0, mid_y, 2.0, color);
+            let line_end = f64::from(x0) + canvas.dpi.pt_to_px_font(20.0);
+            let mid_x = (f64::from(x0) + line_end) / 2.0;
+            canvas.stroke_segment(
+                f64::from(x0),
+                mid_y,
+                line_end,
+                mid_y,
+                canvas.dpi.pt_to_px_font(2.25),
+                color,
+            );
             let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
             paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
@@ -2391,6 +2419,8 @@ fn draw_legend(
     if chart.legend != Some(LegendPos::Right) {
         return;
     }
+    let key_width = legend_key_width(chart.kind, canvas.dpi.scale_px(LEGEND_SWATCH), canvas.dpi);
+    let key_gap = legend_key_gap(chart.kind, canvas.dpi);
     let pitch = canvas.dpi.scale_px(24);
     let n = chart.series.len() as i32;
     if n == 0 {
@@ -2421,7 +2451,7 @@ fn draw_legend(
             chart.kind,
             x,
             y,
-            x + canvas.dpi.scale_px(LEGEND_SWATCH),
+            x + key_width,
             y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
             ser.marker,
@@ -2431,7 +2461,7 @@ fn draw_legend(
             font,
             gdi,
             &ser.name,
-            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + canvas.dpi.scale_px(LEGEND_GAP)),
+            f64::from(x + key_width + key_gap),
             f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
@@ -2468,12 +2498,14 @@ fn legend_right_inset(
     } else {
         widest.ceil() as i32
     };
+    let square = dpi.scale_px(LEGEND_SWATCH);
+    let key_width = legend_key_width(chart.kind, square, dpi);
     let need = dpi.scale_px(LEGEND_PLOT_GAP)
-        + dpi.scale_px(LEGEND_SWATCH)
-        + dpi.scale_px(LEGEND_GAP)
+        + key_width
+        + legend_key_gap(chart.kind, dpi)
         + name_px
         + dpi.scale_px(LEGEND_PAD);
-    need.max(dpi.scale_px(INSET_RIGHT))
+    need.max(dpi.scale_px(INSET_RIGHT) + key_width - square)
 }
 
 #[cfg(test)]
@@ -5521,6 +5553,56 @@ mod tests {
             at_origin > 0,
             "category label ink must exist by the zero axis"
         );
+    }
+
+    #[test]
+    fn line_legend_key_preserves_fractional_point_endpoints() {
+        let mut canvas = Canvas::new(100, 40);
+        canvas.dpi =
+            RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        let color = [21, 96, 130];
+        for kind in [PlotKind::StandardLine, PlotKind::Scatter { connect: true }] {
+            let mut actual = Canvas::new(100, 40);
+            actual.dpi = canvas.dpi;
+            draw_plot_key(&mut actual, kind, 20, 10, 49, 19, color, MarkerKind::None);
+            // A 20pt centreline at 106dpi is 29.444px, not (rounded slot - 1).
+            // The cap support must include the rightmost official sample pixel.
+            let offset = ((14 * actual.w + 50) * 3) as usize;
+            assert_ne!(&actual.px[offset..offset + 3], &[255, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn line_and_scatter_keys_use_point_width_not_square_marker_width() {
+        for dpi_value in [96, 106, 192] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for marker_box in [7, 9, 14] {
+                for kind in [
+                    PlotKind::StandardLine,
+                    PlotKind::Scatter { connect: true },
+                    PlotKind::Scatter { connect: false },
+                ] {
+                    assert_eq!(
+                        legend_key_width(kind, marker_box, dpi),
+                        dpi.pt_to_px_font(20.0).round() as i32
+                    );
+                    assert_eq!(
+                        legend_key_gap(kind, dpi),
+                        dpi.pt_to_px_font(1.5).round() as i32
+                    );
+                }
+                for kind in [
+                    PlotKind::ClusteredBar,
+                    PlotKind::ClusteredColumn,
+                    PlotKind::StandardArea,
+                    PlotKind::Pie,
+                ] {
+                    assert_eq!(legend_key_width(kind, marker_box, dpi), marker_box);
+                }
+            }
+        }
     }
 
     #[test]
