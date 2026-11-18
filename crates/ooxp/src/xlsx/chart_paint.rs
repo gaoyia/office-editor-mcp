@@ -1,7 +1,7 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、空值按缺口断线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
@@ -83,10 +83,77 @@ enum PlotKind {
     Scatter { connect: bool },
 }
 
+/// Excel default auto-marker cycle when `c:marker` is omitted or `symbol=auto`.
+/// Locked from Excel 16.0 Chart.Export of a dedicated 10-series Temp workbook
+/// (omitted `c:marker`) plus Series.MarkerSize=9: S1 diamond … S9 dash, S10 wraps
+/// to diamond. Official 2-series line golds show the same S1 diamond / S2 square.
+const DEFAULT_MARKER_CYCLE: [MarkerSymbol; 9] = [
+    MarkerSymbol::Diamond,
+    MarkerSymbol::Square,
+    MarkerSymbol::Triangle,
+    MarkerSymbol::X,
+    MarkerSymbol::Star,
+    MarkerSymbol::Circle,
+    MarkerSymbol::Plus,
+    MarkerSymbol::Dot,
+    MarkerSymbol::Dash,
+];
+/// Point size used when the series has no `c:marker` element. Unique lock:
+/// Excel COM MarkerSize=9 and 13x13 px boxes at 106 dpi (9 * 106 / 72 = 13.25).
+const OMITTED_MARKER_SIZE_PT: f64 = 9.0;
+/// OOXML default for `c:size` when a marker element is present but the size is omitted.
+const EXPLICIT_MARKER_DEFAULT_SIZE_PT: f64 = 5.0;
+
+#[derive(Clone, Copy, PartialEq)]
+enum MarkerSymbol {
+    Diamond,
+    Square,
+    Triangle,
+    X,
+    Star,
+    Circle,
+    Plus,
+    Dot,
+    Dash,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum MarkerKind {
     None,
-    Circle { diameter: f64 },
+    Shaped { symbol: MarkerSymbol, size: f64 },
+}
+
+fn default_marker_symbol(slot: usize) -> MarkerSymbol {
+    DEFAULT_MARKER_CYCLE[slot % DEFAULT_MARKER_CYCLE.len()]
+}
+
+fn shaped_marker(symbol: MarkerSymbol, size_pt: f64, dpi: RenderDpi) -> MarkerKind {
+    MarkerKind::Shaped {
+        symbol,
+        size: dpi.pt_to_px_font(size_pt),
+    }
+}
+
+fn marker_symbol_from_name(name: &str) -> Option<MarkerSymbol> {
+    match name {
+        "diamond" => Some(MarkerSymbol::Diamond),
+        "square" => Some(MarkerSymbol::Square),
+        "triangle" => Some(MarkerSymbol::Triangle),
+        "x" => Some(MarkerSymbol::X),
+        "star" => Some(MarkerSymbol::Star),
+        "circle" => Some(MarkerSymbol::Circle),
+        "plus" => Some(MarkerSymbol::Plus),
+        "dot" => Some(MarkerSymbol::Dot),
+        "dash" => Some(MarkerSymbol::Dash),
+        _ => None,
+    }
+}
+
+fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
+    match marker {
+        MarkerKind::None => MarkerKind::None,
+        MarkerKind::Shaped { symbol, .. } => MarkerKind::Shaped { symbol, size },
+    }
 }
 
 struct LineSeriesStyle {
@@ -636,7 +703,7 @@ fn read_chart(
                 marker: MarkerKind::None,
                 marker_color: None,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents, dpi)?,
+            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order)?,
             PlotKind::StandardArea => {
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
@@ -650,7 +717,7 @@ fn read_chart(
             }
             PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
             PlotKind::Scatter { connect } => {
-                let mut style = read_line_series(ser, accents, dpi)?;
+                let mut style = read_line_series(ser, accents, dpi, order)?;
                 if !connect {
                     style.visible = false;
                 }
@@ -1093,13 +1160,10 @@ fn draw_scatter(
         if ser.line_visible && ser.line_width > 0.0 {
             stroke_run(canvas, &run, ser.line_width, color);
         }
-        if let MarkerKind::Circle { diameter } = ser.marker {
-            let radius = diameter / 2.0;
-            if radius > 0.0 {
-                let marker_color = ser.marker_color.unwrap_or(color);
-                for (px, py) in points {
-                    canvas.fill_circle(px, py, radius, marker_color);
-                }
+        if !matches!(ser.marker, MarkerKind::None) {
+            let marker_color = ser.marker_color.unwrap_or(color);
+            for (px, py) in points {
+                paint_marker(canvas, ser.marker, px, py, marker_color);
             }
         }
     }
@@ -1453,6 +1517,7 @@ fn draw_pie_legend(
             x + canvas.dpi.scale_px(LEGEND_SWATCH),
             y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
+            MarkerKind::None,
         );
         draw_text(
             canvas,
@@ -1779,11 +1844,7 @@ fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
             }
             stroke_run(canvas, &run, ser.line_width, color);
         }
-        if let MarkerKind::Circle { diameter } = ser.marker {
-            let radius = diameter / 2.0;
-            if radius <= 0.0 {
-                continue;
-            }
+        if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
             for (ci, value) in ser.values.iter().enumerate() {
                 let Some(v) = value else {
@@ -1793,7 +1854,7 @@ fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
                     continue;
                 }
                 let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max);
-                canvas.fill_circle(x, y, radius, marker_color);
+                paint_marker(canvas, ser.marker, x, y, marker_color);
             }
         }
     }
@@ -1880,6 +1941,80 @@ fn fill_area_span(
     }
 }
 
+fn paint_marker(canvas: &mut Canvas, marker: MarkerKind, x: f64, y: f64, color: [u8; 3]) {
+    let MarkerKind::Shaped { symbol, size } = marker else {
+        return;
+    };
+    if size <= 0.0 || !x.is_finite() || !y.is_finite() {
+        return;
+    }
+    let half = size / 2.0;
+    match symbol {
+        MarkerSymbol::Circle => canvas.fill_circle(x, y, half, color),
+        MarkerSymbol::Square => canvas.fill_polygon(
+            &[
+                (x - half, y - half),
+                (x + half, y - half),
+                (x + half, y + half),
+                (x - half, y + half),
+            ],
+            color,
+        ),
+        MarkerSymbol::Diamond => canvas.fill_polygon(
+            &[(x, y - half), (x + half, y), (x, y + half), (x - half, y)],
+            color,
+        ),
+        MarkerSymbol::Triangle => canvas.fill_polygon(
+            &[(x, y - half), (x + half, y + half), (x - half, y + half)],
+            color,
+        ),
+        MarkerSymbol::X => {
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y - half, x + half, y + half, w, color);
+            canvas.stroke_segment(x + half, y - half, x - half, y + half, w, color);
+        }
+        MarkerSymbol::Plus => {
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y, x + half, y, w, color);
+            canvas.stroke_segment(x, y - half, x, y + half, w, color);
+        }
+        MarkerSymbol::Star => {
+            // Official auto star is an asterisk: X plus a vertical bar (no horizontal).
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y - half, x + half, y + half, w, color);
+            canvas.stroke_segment(x + half, y - half, x - half, y + half, w, color);
+            canvas.stroke_segment(x, y - half, x, y + half, w, color);
+        }
+        MarkerSymbol::Dash => {
+            let h = canvas.dpi.pt_to_px_font(2.0);
+            let hh = h / 2.0;
+            canvas.fill_polygon(
+                &[
+                    (x - half, y - hh),
+                    (x + half, y - hh),
+                    (x + half, y + hh),
+                    (x - half, y + hh),
+                ],
+                color,
+            );
+        }
+        MarkerSymbol::Dot => {
+            let h = canvas.dpi.pt_to_px_font(2.0);
+            let hh = h / 2.0;
+            let hw = size / 4.0;
+            canvas.fill_polygon(
+                &[
+                    (x - hw, y - hh),
+                    (x + hw, y - hh),
+                    (x + hw, y + hh),
+                    (x - hw, y + hh),
+                ],
+                color,
+            );
+        }
+    }
+}
+
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -1888,6 +2023,7 @@ fn draw_plot_key(
     x1: i32,
     y1: i32,
     color: [u8; 3],
+    marker: MarkerKind,
 ) {
     match kind {
         PlotKind::ClusteredColumn | PlotKind::StandardArea | PlotKind::Pie => {
@@ -1901,12 +2037,14 @@ fn draw_plot_key(
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
             canvas.stroke_segment(f64::from(x0), mid_y, f64::from(x1) - 1.0, mid_y, 2.0, color);
-            canvas.fill_circle(mid_x, mid_y, 2.0, color);
+            let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
+            paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
         PlotKind::Scatter { connect: false } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
-            canvas.fill_circle(mid_x, mid_y, 2.0, color);
+            let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
+            paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
     }
 }
@@ -2173,6 +2311,7 @@ fn draw_legend(
             x + canvas.dpi.scale_px(LEGEND_SWATCH),
             y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
+            ser.marker,
         );
         draw_text(
             canvas,
@@ -2402,6 +2541,7 @@ fn read_line_series(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    slot: usize,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
@@ -2425,7 +2565,7 @@ fn read_line_series(
     if color.is_none() {
         color = series_color(ser, accents);
     }
-    let (marker, marker_color) = read_line_marker(ser, accents, dpi)?;
+    let (marker, marker_color) = read_line_marker(ser, accents, dpi, slot)?;
     Ok(LineSeriesStyle {
         color,
         visible,
@@ -2551,13 +2691,12 @@ fn read_line_marker(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    slot: usize,
 ) -> Result<(MarkerKind, Option<[u8; 3]>), Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let Some(marker) = ser.child_by_local("marker") else {
         return Ok((
-            MarkerKind::Circle {
-                diameter: dpi.pt_to_px_font(5.0),
-            },
+            shaped_marker(default_marker_symbol(slot), OMITTED_MARKER_SIZE_PT, dpi),
             None,
         ));
     };
@@ -2568,10 +2707,12 @@ fn read_line_marker(
     if symbol == "none" {
         return Ok((MarkerKind::None, None));
     }
-    if symbol != "auto" && symbol != "circle" {
-        return Err(unsupported());
-    }
-    let size_pt = number_val(marker, "size").unwrap_or(5.0);
+    let symbol = if symbol == "auto" {
+        default_marker_symbol(slot)
+    } else {
+        marker_symbol_from_name(symbol).ok_or_else(unsupported)?
+    };
+    let size_pt = number_val(marker, "size").unwrap_or(EXPLICIT_MARKER_DEFAULT_SIZE_PT);
     if !size_pt.is_finite() || size_pt <= 0.0 {
         return Err(unsupported());
     }
@@ -2595,12 +2736,7 @@ fn read_line_marker(
             }
         }
     }
-    Ok((
-        MarkerKind::Circle {
-            diameter: dpi.pt_to_px_font(size_pt),
-        },
-        marker_color,
-    ))
+    Ok((shaped_marker(symbol, size_pt, dpi), marker_color))
 }
 
 fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
@@ -4406,7 +4542,7 @@ mod tests {
     }
 
     #[test]
-    fn line_marker_none_is_not_the_same_as_default_circle() {
+    fn line_marker_none_is_not_the_same_as_default_marker() {
         let values = [Some(8.0), Some(16.0), Some(12.0)];
         let default_xml = standard_line_xml(&line_ser(0, "S1", &values, ""), "");
         let none_xml = standard_line_xml(
@@ -4425,9 +4561,127 @@ mod tests {
         let none_n = count_in(&none_rgb, 576, 0, 576, 0, 336, a1, 18);
         assert!(
             default_n > none_n,
-            "omitted markers should paint filled circles, so they must add ink; default={default_n} none={none_n}"
+            "omitted markers should paint the default symbol, so they must add ink; default={default_n} none={none_n}"
         );
         assert!(none_n >= 8, "a visible solid line should still leave ink");
+    }
+
+    fn marker_el(symbol: &str, size: f64) -> String {
+        format!(r#"<c:marker><c:symbol val="{symbol}"/><c:size val="{size}"/></c:marker>"#)
+    }
+
+    const AUTO_MARKER_SYMBOLS: [&str; 9] = [
+        "diamond", "square", "triangle", "x", "star", "circle", "plus", "dot", "dash",
+    ];
+
+    fn line_series_with_markers(
+        count: usize,
+        values: &[Option<f64>],
+        extra: impl Fn(usize) -> String,
+    ) -> String {
+        (0..count)
+            .map(|i| line_ser(i, &format!("S{}", i + 1), values, &extra(i)))
+            .collect::<String>()
+    }
+
+    fn scatter_series_with_markers(
+        count: usize,
+        xs: &[Option<f64>],
+        ys: &[Option<f64>],
+        extra: impl Fn(usize) -> String,
+    ) -> String {
+        (0..count)
+            .map(|i| scatter_ser(i, &format!("S{}", i + 1), xs, ys, &extra(i)))
+            .collect::<String>()
+    }
+
+    #[test]
+    fn omitted_line_markers_follow_excel_auto_cycle_at_size_9() {
+        let values = [Some(8.0), Some(16.0), Some(12.0)];
+        let omitted = standard_line_xml(
+            &line_series_with_markers(10, &values, |_| String::new()),
+            "",
+        );
+        let explicit = standard_line_xml(
+            &line_series_with_markers(10, &values, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 9.0)
+            }),
+            "",
+        );
+        assert_eq!(
+            render_line(&omitted).unwrap(),
+            render_line(&explicit).unwrap(),
+            "omitted c:marker must match the 9-symbol auto cycle at 9pt, wrapping at series 10"
+        );
+        let size5 = standard_line_xml(
+            &line_series_with_markers(10, &values, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 5.0)
+            }),
+            "",
+        );
+        assert_ne!(
+            render_line(&omitted).unwrap(),
+            render_line(&size5).unwrap(),
+            "omitted markers use 9pt, not the OOXML explicit-marker default of 5pt"
+        );
+    }
+
+    #[test]
+    fn explicit_line_marker_symbol_wins_over_the_auto_cycle() {
+        let values = [Some(8.0), Some(16.0), Some(12.0)];
+        let omitted = standard_line_xml(&line_ser(0, "S1", &values, ""), "");
+        let circle = standard_line_xml(&line_ser(0, "S1", &values, &marker_el("circle", 9.0)), "");
+        let square = standard_line_xml(&line_ser(0, "S1", &values, &marker_el("square", 9.0)), "");
+        let omitted_png = render_line(&omitted).unwrap();
+        let circle_png = render_line(&circle).unwrap();
+        let square_png = render_line(&square).unwrap();
+        assert_ne!(
+            omitted_png, circle_png,
+            "series 0 default is diamond, so an explicit 9pt circle must differ"
+        );
+        assert_ne!(
+            omitted_png, square_png,
+            "an explicit square on series 0 must not be replaced by the default diamond"
+        );
+        render_line(&standard_line_xml(
+            &line_ser(0, "S1", &values, &marker_el("diamond", 5.0)),
+            "",
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn omitted_scatter_markers_follow_the_same_auto_cycle() {
+        let xs = [Some(0.0), Some(4.0), Some(8.0)];
+        let ys = [Some(1.0), Some(3.0), Some(2.0)];
+        let omitted = scatter_xml(
+            "lineMarker",
+            &scatter_series_with_markers(10, &xs, &ys, |_| String::new()),
+            "",
+        );
+        let explicit = scatter_xml(
+            "lineMarker",
+            &scatter_series_with_markers(10, &xs, &ys, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 9.0)
+            }),
+            "",
+        );
+        assert_eq!(
+            render_scatter(&omitted).unwrap(),
+            render_scatter(&explicit).unwrap(),
+            "omitted scatter markers share the line auto cycle at 9pt"
+        );
+        let circle = scatter_xml(
+            "lineMarker",
+            &scatter_ser(0, "S1", &xs, &ys, &marker_el("circle", 9.0)),
+            "",
+        );
+        let omitted_s1 = scatter_xml("lineMarker", &scatter_ser(0, "S1", &xs, &ys, ""), "");
+        assert_ne!(
+            render_scatter(&omitted_s1).unwrap(),
+            render_scatter(&circle).unwrap(),
+            "explicit circle must win over the default diamond on scatter series 0"
+        );
     }
 
     #[test]
@@ -4451,15 +4705,6 @@ mod tests {
             ),
             standard_line_xml(&base, r#"<c:dispBlanksAs val="zero"/>"#),
             standard_line_xml(&base, r#"<c:dispBlanksAs val="span"/>"#),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
-                ),
-                "",
-            ),
             standard_line_xml(
                 &line_ser(
                     0,
@@ -4704,17 +4949,6 @@ mod tests {
             scatter_xml("line", &ser, ""),
             scatter_xml("smoothMarker", &ser, ""),
             scatter_xml("smooth", &ser, ""),
-            scatter_xml(
-                "lineMarker",
-                &scatter_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0)],
-                    &[Some(3.0), Some(4.0)],
-                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
-                ),
-                "",
-            ),
             scatter_xml(
                 "lineMarker",
                 &scatter_ser(

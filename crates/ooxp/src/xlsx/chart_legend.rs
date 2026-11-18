@@ -629,6 +629,7 @@ impl<'a> Layout<'a> {
                     (x + self.key).round() as i32,
                     (ky + self.key).round() as i32,
                     ser.color.unwrap_or(chart.accents[ser.slot % 6]),
+                    ser.marker,
                 );
                 draw_text(
                     canvas,
