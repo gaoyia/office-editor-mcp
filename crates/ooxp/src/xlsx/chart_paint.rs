@@ -2404,7 +2404,17 @@ fn draw_legend(
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
-    for ser in &chart.series {
+    // Official Excel 16.0 keeps series-index order for maxMin bars (S1 above
+    // S2) but flips the default right legend when catAx is minMax, so the
+    // keys follow the visual stack (S2 above S1). Package legend/series XML
+    // is otherwise identical. Other chart kinds keep series-index order.
+    let legend_series: Vec<&Series> =
+        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
+            chart.series.iter().rev().collect()
+        } else {
+            chart.series.iter().collect()
+        };
+    for ser in legend_series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key(
             canvas,
@@ -5510,6 +5520,39 @@ mod tests {
         assert!(
             at_origin > 0,
             "category label ink must exist by the zero axis"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_legend_follows_visual_series_order() {
+        let series = format!(
+            "{}{}",
+            line_ser(0, "S1", &[Some(8.0), Some(1.0)], ""),
+            line_ser(1, "S2", &[Some(2.0), Some(3.0)], "")
+        );
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let (w, h) = (576u32, 336u32);
+        // Restrict to the default right legend so plot bars cannot move the centroid.
+        let x0 = 516;
+        let x1 = 571;
+
+        let (_, _, maxmin) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        let y1 = centroid_y(&maxmin, w, x0, x1, 0, h, a1, 2).expect("maxMin S1 key");
+        let y2 = centroid_y(&maxmin, w, x0, x1, 0, h, a2, 2).expect("maxMin S2 key");
+        assert!(
+            y1 < y2,
+            "maxMin must keep official S1-above-S2 legend order; y1={y1} y2={y2}"
+        );
+
+        let (_, _, minmax) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "minMax", Some("bar"))).unwrap());
+        let y1 = centroid_y(&minmax, w, x0, x1, 0, h, a1, 2).expect("minMax S1 key");
+        let y2 = centroid_y(&minmax, w, x0, x1, 0, h, a2, 2).expect("minMax S2 key");
+        assert!(
+            y2 < y1,
+            "minMax must put official S2 above S1 in the legend; y1={y1} y2={y2}"
         );
     }
 
