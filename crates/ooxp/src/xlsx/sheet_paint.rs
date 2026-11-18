@@ -4576,7 +4576,7 @@ fn paint_borders(
             bottom_inset,
             false,
         );
-        // 斜线：格子像素矩形真实边（[x0,x1)×[y0,y1)），不搬 PPT 端点偏移假设。
+        // 斜线：细线从格上角网格 LineTo 到远边网格；medium 含终点后中心+四邻加粗。不搬 PPT 端点偏移。
         if let Some(edge) = edges.diagonal_down {
             paint_cell_diagonal(canvas, x0, y0, x1, y1, true, edge);
         }
@@ -4592,8 +4592,11 @@ fn paint_borders(
     Ok(())
 }
 
-/// `down=true`：左上→右下；`false`：左下→右上。仅 Solid 1/2px（parse 已挡其它）。
-/// 落点限制在格子矩形 `[x0,x1)×[y0,y1)`：medium 朝较小坐标加粗时，不得渗进邻格。
+/// `down=true`：从左上网格角画到右下远边网格；`false`：从右上画到左下远边网格。
+/// 仅 Solid thin/medium（parse 已挡其它）。2026-11-18 多样本 CopyPicture 锁定：
+/// 细线是 Bresenham LineTo（含起点不含终点）到 `(x1,y1)` / `(x0,y1)`，不是 `(x1-1,y1-1)`；
+/// medium 含终点后再按中心+四邻加粗（约 3 像素）。允许落在远边网格；
+/// 禁止 `x<x0` / `y<y0`（左/上渗邻格）；整表左/上外框 `x=0` 或 `y=0` 不落斜线墨。
 fn paint_cell_diagonal(
     canvas: &mut Canvas,
     x0: i32,
@@ -4606,14 +4609,39 @@ fn paint_cell_diagonal(
     if x1 <= x0 + 1 || y1 <= y0 + 1 {
         return;
     }
-    let (x_a, y_a, x_b, y_b) = if down {
-        (x0, y0, x1 - 1, y1 - 1)
+    // medium 含终点以盖住官方线帽；细线仍按 LineTo 不含终点。
+    let include_end = edge.px >= 2;
+    if down {
+        paint_diag_segment(
+            canvas,
+            x0,
+            y0,
+            x1,
+            y1,
+            edge.color,
+            edge.px,
+            x0,
+            y0,
+            x1,
+            y1,
+            include_end,
+        );
     } else {
-        (x0, y1 - 1, x1 - 1, y0)
-    };
-    paint_diag_segment(
-        canvas, x_a, y_a, x_b, y_b, edge.color, edge.px, x0, y0, x1, y1,
-    );
+        paint_diag_segment(
+            canvas,
+            x1,
+            y0,
+            x0,
+            y1,
+            edge.color,
+            edge.px,
+            x0,
+            y0,
+            x1,
+            y1,
+            include_end,
+        );
+    }
 }
 
 fn paint_diag_segment(
@@ -4628,18 +4656,21 @@ fn paint_diag_segment(
     clip_y0: i32,
     clip_x1: i32,
     clip_y1: i32,
+    include_end: bool,
 ) {
-    // Bresenham；厚度 2 时在主线两侧各补半像素朝较小坐标（与正交偶数宽约定一致）。
     let dx = (x1 - x0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
     let dy = -(y1 - y0).abs();
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;
     loop {
-        put_thick_clipped(
-            canvas, x0, y0, color, thickness, clip_x0, clip_y0, clip_x1, clip_y1,
-        );
-        if x0 == x1 && y0 == y1 {
+        let at_end = x0 == x1 && y0 == y1;
+        if include_end || !at_end {
+            put_thick_clipped(
+                canvas, x0, y0, color, thickness, clip_x0, clip_y0, clip_x1, clip_y1,
+            );
+        }
+        if at_end {
             break;
         }
         let e2 = 2 * err;
@@ -4667,9 +4698,11 @@ fn put_thick_clipped(
 ) {
     put_clipped(canvas, x, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
     if thickness >= 2 {
-        // 多出的一像素朝坐标较小侧（左/上），对齐正交 medium 约定；越出本格则不画。
+        // medium：中心加四邻约 3 像素。左/上邻格与左/上外框仍由 put_clipped 挡住。
         put_clipped(canvas, x - 1, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x + 1, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
         put_clipped(canvas, x, y - 1, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x, y + 1, color, clip_x0, clip_y0, clip_x1, clip_y1);
     }
 }
 
@@ -4683,7 +4716,11 @@ fn put_clipped(
     clip_x1: i32,
     clip_y1: i32,
 ) {
-    if x >= clip_x0 && x < clip_x1 && y >= clip_y0 && y < clip_y1 {
+    // 含远边网格 x=x1 / y=y1；不含左/上邻格与整表左/上外框。
+    if x == 0 || y == 0 {
+        return;
+    }
+    if x >= clip_x0 && x <= clip_x1 && y >= clip_y0 && y <= clip_y1 {
         canvas.put(x, y, color);
     }
 }

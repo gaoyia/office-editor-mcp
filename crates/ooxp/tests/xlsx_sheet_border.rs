@@ -493,6 +493,149 @@ fn medium_diagonal_does_not_spill_into_the_cell_above() {
     }
 }
 
+/// 单格 A1 细线 down：远边网格是画布末像素；官方 LineTo 不含终点，且不落左/上外框。
+#[test]
+fn diagonal_thin_uses_far_grid_lineto_and_skips_leading_frame() {
+    let src = tmp("diag-far-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-far");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A1",
+                "border": {
+                    "diagonal": { "style": "thin", "color": { "rgb": "FFEE4455" } },
+                    "diagonalDown": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 }
+        ]
+    }));
+    for dpi in [None, Some(106i64)] {
+        let png = book.with_file_name(format!("diag-far-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let (w, h, px) = decode_png(&std::fs::read(&png).unwrap());
+        let mut ink = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                if pixel(&px, w, x, y) == RED {
+                    ink.push((x, y));
+                }
+            }
+        }
+        assert!(ink.len() > 10, "dpi={dpi:?} ink={}", ink.len());
+        assert!(
+            ink.iter().all(|&(x, y)| x > 0 && y > 0),
+            "细斜线落到左/上外框：dpi={dpi:?}"
+        );
+        let last = (w - 1, h - 1);
+        assert!(
+            !ink.contains(&last),
+            "细斜线不应包含远边网格终点：dpi={dpi:?} {last:?} size={w}x{h}"
+        );
+        assert!(
+            ink.iter().any(|&(x, y)| x == w - 1 || y == h - 1),
+            "细斜线应落到远边网格：dpi={dpi:?} size={w}x{h}"
+        );
+    }
+}
+
+#[test]
+fn medium_diagonal_does_not_spill_into_the_cell_to_the_left() {
+    let src = tmp("diag-left-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "B1", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-left");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!B1",
+                "border": {
+                    "diagonal": { "style": "medium", "color": { "rgb": "FF112233" } },
+                    "diagonalDown": true,
+                    "diagonalUp": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "B", "width": 8.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 }
+        ]
+    }));
+    for dpi in [None, Some(106i64)] {
+        let png = book.with_file_name(format!("diag-left-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let (w, h, px) = decode_png(&std::fs::read(&png).unwrap());
+        let mut ink = 0usize;
+        let mut min_x = w as i32;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = ((y as u32 * w + x as u32) * 3) as usize;
+                if px[i] == 0x11 && px[i + 1] == 0x22 && px[i + 2] == 0x33 {
+                    ink += 1;
+                    min_x = min_x.min(x);
+                }
+            }
+        }
+        assert!(ink > 10, "dpi={dpi:?} ink={ink}");
+        // 列 A 在 96/106 都明显宽于 20px；medium 不得渗进左邻格。
+        assert!(
+            min_x >= 20,
+            "medium 斜线渗进左邻格：dpi={dpi:?} min_x={min_x} size={w}x{h}"
+        );
+    }
+}
+
 #[test]
 fn dashed_diagonal_still_not_implemented() {
     let src = tmp("diag-dash-src");
