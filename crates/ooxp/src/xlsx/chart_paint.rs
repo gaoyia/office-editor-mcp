@@ -1,7 +1,7 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；lineMarker 画实线，缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；标记规则与折线相同。仅连线、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点按缺口断开填充，不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
@@ -601,9 +601,11 @@ fn read_chart(
                 .child_by_local("scatterStyle")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("lineMarker");
+            // Official Excel 16.0 maps scatterStyle=marker (no series line hide,
+            // smooth=0) to xlXYScatterLines (74) and draws connecting strokes.
+            // Markers-only remains available via an explicit series a:ln/a:noFill.
             let connect = match style {
-                "marker" => false,
-                "lineMarker" => true,
+                "marker" | "lineMarker" => true,
                 _ => return Err(unsupported()),
             };
             PlotKind::Scatter { connect }
@@ -5158,7 +5160,7 @@ mod tests {
     }
 
     #[test]
-    fn scatter_gap_breaks_the_stroke_and_marker_style_drops_the_line() {
+    fn scatter_gap_breaks_the_stroke_and_hidden_line_drops_the_stroke() {
         let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
         let solid = scatter_xml(
             "lineMarker",
@@ -5205,19 +5207,38 @@ mod tests {
                 "S1",
                 &[Some(0.0), Some(5.0), Some(10.0)],
                 &[Some(8.0), Some(8.0), Some(8.0)],
-                "",
+                none,
             ),
             "",
         );
-        let (_, _, marker_rgb) = png_rgb(&render_scatter(&markers).unwrap());
-        let marker_mid = count_in(&marker_rgb, 576, mid0 + 20, mid1 - 20, 0, 336, a1, 18);
-        // The middle category of a marker-only series may contain a marker at x=5.
-        // A band between the first and middle marker should stay empty of series ink
-        // if we are not stroking a line.
-        let between = count_in(&marker_rgb, 576, 576 / 6, mid0 - 10, 0, 336, a1, 18);
+        let marker_png = render_scatter(&markers).unwrap();
+        assert_eq!(
+            marker_png,
+            render_scatter(&solid).unwrap(),
+            "scatterStyle=marker with no series line hide must connect like lineMarker"
+        );
+
+        let no_line = scatter_xml(
+            "marker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(8.0), Some(8.0)],
+                r#"<c:spPr><a:ln><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="9"/></c:marker>"#,
+            ),
+            "",
+        );
+        let (_, _, hidden_rgb) = png_rgb(&render_scatter(&no_line).unwrap());
+        let between = count_in(&hidden_rgb, 576, 576 / 6, mid0 - 10, 0, 336, a1, 18);
+        let marker_mid = count_in(&hidden_rgb, 576, mid0 + 20, mid1 - 20, 0, 336, a1, 18);
         assert_eq!(
             between, 0,
-            "scatterStyle=marker must not draw a connecting stroke; got {between} (mid markers {marker_mid})"
+            "an explicit series a:ln/a:noFill must drop the connecting stroke; got {between} (mid markers {marker_mid})"
+        );
+        assert!(
+            marker_mid >= 1,
+            "hiding the scatter line should still leave the middle marker, got {marker_mid}"
         );
     }
 
