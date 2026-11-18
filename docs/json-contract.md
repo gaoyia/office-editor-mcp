@@ -2522,7 +2522,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
 - `timePeriod` 用规则里的 `<formula>`，按 `expression` 同一套平移后再求值。命中且差分是纯色时铺上该色，区域内没有 `<c>` 的空位也铺。没有公式或求不了报 `NotImplemented`。这条规则的差分边框仍报 `NotImplemented`
-- 同一条命中的公式规则，差分边框是 `thin`、`medium`、`thick`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。`dashed`、`slantDashDot` 和斜线的差分边框报 `NotImplemented`
+- 同一条命中的公式规则，差分边框是 `thin`、`medium`、`thick`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。`expression` 的 `dashed` 与 `slantDashDot` 差分边框按格子边框画；`cellIs` 带边框和斜线的差分边框仍报 `NotImplemented`
 - `aboveAverage` 只数区域内的数字，空格不算。高于平均是严格大于。`equalAverage` 为真时含等于。`aboveAverage` 为 0 时看低于平均。`stdDev` 用总体标准差，平方和除以个数。数字少于两个又写了 `stdDev` 时不铺。命中且差分是纯色时铺上该色
 - `top10` 的 `rank` 缺省是 10。`percent` 为真时，个数乘 `rank` 再除以 100，向上取整，至少 1。并列时阈值上的格子都算。`bottom` 为真时取最小的那些。命中且差分是纯色时铺上该色
 - `containsText`、`notContainsText`、`beginsWith`、`endsWith` 忽略大小写。`notContainsText` 也铺到区域内没有 `<c>` 的空位。命中且差分是纯色时铺上该色。这几类规则的差分边框仍报 `NotImplemented`
@@ -2537,7 +2537,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`
 - 没写颜色时用黑色。线以格子边界为中线。宽度是偶数时，多出的一像素落在坐标较小的一侧。线只伸到实际有边的那一端，不沿合并区扩开。落在合并区内部的边不画。同一条边界上更粗的线盖住更细的线。同样粗时，右边缘盖住左边缘，其余保持格子的先后
 - 底边比左边那一格的底边更细时，左端才让开。左边是虚线就让开它的全部厚度，左边是实线就让开一半。2 像素虚线在边界那一行再向右涂 1 像素。上面那一格有底边，或格子自己有上边时，竖线不涂上边界。两边都没有时，竖线从上边界涂起
-- 虚线按整张图的坐标取余。横线用 x，竖线用 y。`dashed` 横线在余数 3 时空一像素，周期 4。竖向 `dashed` 先把 y 减 1，再用同一套余数。`dotted` 在余数 0 和 3 上涂，周期 4。`hair` 在偶数坐标上涂
+- 虚线按整张图的坐标取余。`dashed` 用 x 加 y 取余，余数 3 时空一像素，周期 4；横线和竖线相同，不再对竖线做 y 减 1。其它线型仍是横线用 x、竖线用 y。`dotted` 在余数 0 和 3 上涂，周期 4。`hair` 在偶数坐标上涂
 - `dashDot` 的周期是 18，余数 0 到 8、12 到 14 涂。`dashDotDot` 的周期是 24，余数 0 到 8、12 到 14、18 到 20 涂
 - `mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot` 是 2 像素，占边界和坐标较小的那一像素。前三种两行用同一套余数。`mediumDashed` 的周期是 12，余数 0 到 8 涂。后两种分别用 `dashDot` 和 `dashDotDot` 的余数
 - `slantDashDot` 的边界那一行按周期 18，余数 0 到 9、12 到 15 涂。紧挨的较小坐标那一行，余数 1 到 11、13 到 17 涂

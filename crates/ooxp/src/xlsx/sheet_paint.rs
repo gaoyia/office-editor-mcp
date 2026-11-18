@@ -3273,7 +3273,7 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
         .child_by_local("font")
         .and_then(|font| font.child_by_local("color"))
         .and_then(|el| palette.resolve(el));
-    // 竖向 dashed 的相位和 slantDashDot 的末端还没对齐。这两种和斜线仍让整表失败。
+    // dashed / slantDashDot 与格子共用 paint_line；斜线差分仍 NI。
     let edges = match dxf.child_by_local("border") {
         None => Edges::default(),
         Some(border) => accepted_dxf_edges(parse_edges(border, palette)?)?,
@@ -3282,7 +3282,7 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
 }
 
 fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
-    // 条件格式斜线仍 NI。dashed / slantDashDot 与格子共用 paint_line（相位/末端以 oracle 为准）。
+    // 条件格式斜线仍 NI。dashed / slantDashDot 与格子共用 paint_line（dashed 相位为整图 x+y）。
     if edges.diagonal_down.is_some() || edges.diagonal_up.is_some() {
         return Err(unsupported());
     }
@@ -4884,9 +4884,9 @@ fn paint_line(canvas: &mut Canvas, stroke: &Stroke) {
     for y in stroke.y0..stroke.y1 {
         for x in stroke.x0..stroke.x1 {
             let (along, across) = if stroke.vertical { (y, x) } else { (x, y) };
-            // 竖向 dashed 的空档比横线晚一个像素。
-            let along = if stroke.vertical && stroke.kind == LineKind::Dashed {
-                along - 1
+            // dashed 用整图 (x+y) 取余：官方横竖、奇偶边界、公式差分与格子边框同一相位。
+            let along = if stroke.kind == LineKind::Dashed {
+                x + y
             } else {
                 along
             };
@@ -4915,7 +4915,7 @@ fn two_pixel_dash(kind: LineKind) -> bool {
     )
 }
 
-/// 余数用整张图的坐标。横线看 x，竖线看 y。
+/// 余数用整张图的坐标。横线看 x，竖线看 y。dashed 改看 x+y。
 fn line_on(kind: LineKind, along: i32, across: i32, boundary: i32) -> bool {
     let r4 = along.rem_euclid(4);
     let r12 = along.rem_euclid(12);

@@ -929,7 +929,7 @@ fn formula_dashed_and_slant_export_ok_cell_is_still_ni() {
 
 #[test]
 fn formula_dashed_right_rhythm_matches_line_on() {
-    // 与格子 dashed 同一套 paint_line：竖线 along=y，相位 along-1 后 r4!=3。
+    // 与格子 dashed 同一套 paint_line：相位为整图 (x+y).rem_euclid(4) != 3。
     let src = tmp("fdash-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -980,9 +980,56 @@ fn formula_dashed_right_rhythm_matches_line_on() {
         .take((h as usize).saturating_sub(1))
         .skip(first)
     {
-        let along = y as i32 - 1;
+        let along = x as i32 + y as i32;
         let expect = along.rem_euclid(4) != 3;
-        assert_eq!(bit, expect, "y={y} phase");
+        assert_eq!(bit, expect, "y={y} x={x} phase");
+    }
+}
+
+#[test]
+fn formula_dashed_odd_row_follows_x_plus_y() {
+    // 14.25 磅在 96 dpi 为 19px，底边 y=19 为奇数，可与仅 along=x 或 x-y 区分。
+    // 官方 106 奇 y 探针已锁定同一通式 (x+y).rem_euclid(4) != 3。
+    let src = tmp("fdash-odd-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("fdash-odd");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 14.25 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1",
+                "type": "expression", "formulas": ["TRUE"],
+                "dxf": { "border": { "bottom": { "style": "dashed", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    let y: u32 = 19;
+    assert!(y < h, "expected odd far edge y=19, got h={h}");
+    for x in 0..w {
+        let bit = pixel(&px, w, x, y) == [0, 0, 0];
+        let expect = (x as i32 + y as i32).rem_euclid(4) != 3;
+        assert_eq!(bit, expect, "x={x} y={y} phase");
     }
 }
 
