@@ -1471,39 +1471,53 @@ fn paint_pie(
         .as_ref()
         .and_then(|_| super::chart_gdi::Face::open(label_px, true));
     let title_top = canvas.dpi.scale_f(4.0);
-    let plot_y = if chart.title.is_some() {
-        let band = title_face
+    // Public Office PlotArea probes: the pie is not an inscribed circle of
+    // the whole host. Title and right legend bands are removed first; Office
+    // then contracts the shorter side by 7/8 and reserves 11 pt on each side.
+    // These are point-space layout values, not export-pixel corrections.
+    // ChartTitle TextFrame2 has 3.6 pt top/bottom margins; reserve the
+    // additional 6 pt title/plot separation. Font fallback can still differ
+    // from the host theme and remains a separately reported layout residual.
+    let title_band = if chart.title.is_some() {
+        title_face
             .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += canvas.dpi.scale_px(TITLE_DROP as i32);
-        }
-        y
+            .map_or_else(|| text_height(font, label_px), |face| face.em_box())
+            + canvas.dpi.pt_to_px_font(3.6 * 2.0 + 6.0)
     } else {
-        canvas.dpi.scale_px(INSET_TOP)
+        0.0
     };
+    let legend_band = if chart.legend == Some(LegendPos::Right) {
+        let line = gdi
+            .as_ref()
+            .map_or_else(|| text_height(font, label_px), |face| face.em_box());
+        let widest = pie_legend_items(chart)
+            .iter()
+            .map(|(name, _)| {
+                gdi.as_ref().map_or_else(
+                    || text_width(font, None, name, label_px),
+                    |face| face.typo_width(name),
+                )
+            })
+            .fold(0.0, f64::max);
+        // LegendEntry has 1.5 pt padding on either side. Its square key
+        // measures 45% of the font line box; the entry reserves 2.5 keys
+        // including its side spaces. The plot/legend separation is 6 pt.
+        widest + line * 0.45 * 2.5 + canvas.dpi.pt_to_px_font(9.0)
+    } else {
+        0.0
+    };
+    let plot = pie_plot_bounds(
+        f64::from(canvas.w),
+        f64::from(canvas.h),
+        title_band,
+        legend_band,
+        canvas.dpi,
+    )
+    .ok_or_else(unsupported)?;
     let inset_right = if chart.legend == Some(LegendPos::Right) {
         pie_legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi)
     } else {
         canvas.dpi.scale_px(INSET_TOP)
-    };
-    let plot_x = canvas.dpi.scale_px(INSET_TOP);
-    let plot_r = canvas.w as i32 - inset_right;
-    let plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_TOP);
-    if plot_r <= plot_x || plot_b <= plot_y {
-        return Err(unsupported());
-    }
-    let plot = Rect {
-        x: f64::from(plot_x),
-        y: f64::from(plot_y),
-        w: f64::from(plot_r - plot_x),
-        h: f64::from(plot_b - plot_y),
     };
     draw_pie_slices(canvas, chart, &plot);
     if let Some(title) = &chart.title {
@@ -1529,6 +1543,27 @@ fn paint_pie(
         canvas.stroke_border(BORDER);
     }
     Ok(())
+}
+
+/// Auto-layout of the supported flat pie, in host-local pixels. The bands
+/// include the title/legend padding. Public Excel/PowerPoint PlotArea values
+/// have a 4 pt chart-local origin; host coordinates already include that origin.
+fn pie_plot_bounds(
+    width: f64,
+    height: f64,
+    title_band: f64,
+    legend_band: f64,
+    dpi: RenderDpi,
+) -> Option<Rect> {
+    let available_width = width - legend_band;
+    let available_height = height - title_band;
+    let diameter = available_width.min(available_height) * 0.875 - dpi.pt_to_px_font(22.0);
+    (diameter > 1.0).then_some(Rect {
+        x: (available_width - diameter) / 2.0,
+        y: title_band + (available_height - diameter) / 2.0,
+        w: diameter,
+        h: diameter,
+    })
 }
 
 fn pie_slice_color(chart: &ColumnChart, index: usize) -> [u8; 3] {
@@ -3864,6 +3899,94 @@ mod tests {
             })
             .collect();
         encode_png(width, height, &rgb, png::ColorType::Rgb, RenderDpi::DEFAULT)
+    }
+
+    #[test]
+    fn pie_auto_layout_matches_public_office_aspect_and_host_probes() {
+        // Excel public PlotArea relative to its 4 pt origin, then PowerPoint.
+        // Includes height-limited, width-limited, no legend and title hosts.
+        let cases = [
+            (
+                432.0,
+                252.0,
+                0.0,
+                29.314488188976377,
+                98.09275590551181,
+                22.75,
+                198.5,
+            ),
+            (
+                432.0,
+                180.0,
+                0.0,
+                29.314488188976377,
+                129.5927559055118,
+                18.25,
+                135.5,
+            ),
+            (
+                300.0,
+                360.0,
+                0.0,
+                29.314488188976377,
+                23.91779527559055,
+                68.57503937007874,
+                214.84992125984252,
+            ),
+            (
+                600.0,
+                252.0,
+                0.0,
+                29.314488188976377,
+                182.0927559055118,
+                22.75,
+                198.5,
+            ),
+            (
+                300.0,
+                300.0,
+                0.0,
+                29.314488188976377,
+                23.91779527559055,
+                38.57503937007874,
+                214.84992125984252,
+            ),
+            (432.0, 252.0, 0.0, 0.0, 112.75, 22.75, 198.5),
+            (240.0, 180.0, 0.0, 0.0, 48.25, 18.25, 135.5),
+            (
+                432.0,
+                252.0,
+                23.65,
+                29.314488188976377,
+                108.4396062992126,
+                44.92181102362205,
+                177.80637795,
+            ),
+            (
+                432.0,
+                252.0,
+                26.15503937007874,
+                29.134488188976377,
+                109.62559055,
+                47.27031496062992,
+                175.61440945,
+            ),
+        ];
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let px = |pt| dpi.pt_to_px_font(pt);
+            for (w, h, title, legend, left, top, diameter) in cases {
+                let plot = pie_plot_bounds(px(w), px(h), px(title), px(legend), dpi).unwrap();
+                // COM reports geometry to 1/12700 pt. No image-specific offset.
+                assert!((plot.x - px(left + 4.0)).abs() < px(0.001));
+                assert!((plot.y - px(top + 4.0)).abs() < px(0.001));
+                assert!((plot.w - px(diameter)).abs() < px(0.001));
+                assert_eq!(plot.w, plot.h);
+            }
+            assert!(pie_plot_bounds(px(20.0), px(20.0), 0.0, 0.0, dpi).is_none());
+        }
     }
 
     #[test]
