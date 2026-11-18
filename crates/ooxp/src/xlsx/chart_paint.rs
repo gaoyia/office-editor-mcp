@@ -1380,7 +1380,15 @@ fn paint_bar(
         zero_x,
         chart.cats_from_bottom,
     );
-    // 类目标签在左侧 inset；数值标签在顶轴上方或底轴下方，跟随官方 maxMin/minMax。
+    // With an interior autoZero crossing, official category labels sit next
+    // to that axis rather than remaining in the unused left label gutter.
+    // Preserve edge-axis geometry and all plot gutters; this only moves ink.
+    let cat_label_axis_x = if axis_min < scale.crossing() && scale.crossing() < axis_max {
+        zero_x
+    } else {
+        axis_x
+    };
+    // 数值标签在顶轴上方或底轴下方，跟随官方 maxMin/minMax。
     for (i, label) in chart.categories.iter().enumerate() {
         let mid = category_mid_y(&plot, i, chart.categories.len(), chart.cats_from_bottom);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -1390,7 +1398,7 @@ fn paint_bar(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
+            f64::from(cat_label_axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             mid - h / 2.0,
             label_px,
             INK,
@@ -5484,6 +5492,25 @@ mod tests {
             }
         }
         n
+    }
+
+    #[test]
+    fn signed_bar_category_labels_follow_the_zero_crossing_axis() {
+        let series = line_ser(0, "S1", &[Some(-8.0), Some(0.0), Some(8.0)], "");
+        let (w, h, rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        // Official signed-bar chart3 puts A/B/C immediately left of the
+        // vertical zero axis. B must not remain stranded in the left inset.
+        let left = bar_dark_band(&rgb, w, 5, 25, h / 2 - 10, h / 2 + 30);
+        assert_eq!(
+            left, 0,
+            "category B must follow the zero axis, not the left gutter"
+        );
+        let at_origin = bar_dark_band(&rgb, w, w / 2 - 45, w / 2 - 15, h / 2 - 10, h / 2 + 30);
+        assert!(
+            at_origin > 0,
+            "category label ink must exist by the zero axis"
+        );
     }
 
     #[test]
