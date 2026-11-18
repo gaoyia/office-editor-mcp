@@ -1,7 +1,7 @@
 //! Linear value-axis scalars. Nice-number search is bounded by label line
 //! capacity, not a universal 5..10 interval count. Office's general automatic
 //! algorithm is undocumented; nonzero automatic minima are explicitly out of scope.
-use super::{Element, Error, ErrorKind, Series, INSET_BOTTOM, INSET_TOP};
+use super::{Element, Error, ErrorKind, RenderDpi, Series, INSET_BOTTOM, INSET_TOP};
 #[derive(Clone, Copy, Default)]
 pub(super) struct Spec {
     pub min: Option<f64>,
@@ -99,10 +99,16 @@ impl Spec {
     }
 }
 /// A full label line plus one raster-grid row, capped at the historic ten slots.
-/// Uses the existing fixed96 face metrics; never the current desktop DPI.
+/// Face metrics come from the already-dpi-aware label size. Insets follow the
+/// request export DPI, never the Windows desktop DPI.
+#[cfg(test)]
 pub(super) fn interval_budget(height: u32, label_em: f64) -> i32 {
+    interval_budget_dpi(height, label_em, RenderDpi::DEFAULT)
+}
+
+pub(super) fn interval_budget_dpi(height: u32, label_em: f64, dpi: RenderDpi) -> i32 {
     interval_budget_span(
-        f64::from(height) - f64::from(INSET_TOP + INSET_BOTTOM),
+        f64::from(height) - f64::from(dpi.scale_px(INSET_TOP) + dpi.scale_px(INSET_BOTTOM)),
         label_em,
         1.0,
     )

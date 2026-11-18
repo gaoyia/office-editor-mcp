@@ -23,6 +23,8 @@ const LABEL_PT: f64 = 10.0;
 
 const INK: [u8; 3] = [0, 0, 0];
 const BORDER: [u8; 3] = [0x89, 0x89, 0x89];
+/// 下列边距、刻度臂长和图例间距是 96 dpi 下的像素。出图时经 `RenderDpi::scale_px`，
+/// 96 dpi 保持原值。圆角 `CORNER_R` 仍固定，圆角框另案处理。
 const INSET_TOP: i32 = 14;
 const INSET_RIGHT: i32 = 60;
 const INSET_BOTTOM: i32 = 34;
@@ -851,7 +853,7 @@ fn paint_scatter(
     let y_scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget(canvas.h, em),
+        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
     let y_labels: Vec<String> = y_ticks.iter().copied().map(fmt_tick).collect();
@@ -861,9 +863,9 @@ fn paint_scatter(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_tick);
+    let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -875,21 +877,21 @@ fn paint_scatter(
             .unwrap_or(0);
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -917,13 +919,13 @@ fn paint_scatter(
     if chart.grid && y_regular {
         for i in 0..=y_intervals {
             let y = plot_y + (i * (plot_b - plot_y) + y_intervals - 1) / y_intervals;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     if chart.grid && !y_regular {
         for value in &y_ticks {
             let y = y_of(*value, y_scale.min, y_scale.max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     if chart.grid_x {
@@ -949,7 +951,12 @@ fn paint_scatter(
                 continue;
             }
             let y = y_of(value, y_scale.min, y_scale.max, &plot).round() as i32;
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
     draw_scatter(canvas, chart, &plot, &x_scale, &y_scale);
@@ -959,7 +966,12 @@ fn paint_scatter(
     canvas.hline_i(axis_x, plot_r, axis_line_y, INK);
     for value in &x_ticks {
         let x = x_of(*value, x_scale.min, x_scale.max, &plot).round() as i32;
-        canvas.vline_i(x, axis_line_y - CAT_MAJOR_IN, axis_line_y + CAT_MAJOR, INK);
+        canvas.vline_i(
+            x,
+            axis_line_y - canvas.dpi.scale_px(CAT_MAJOR_IN),
+            axis_line_y + canvas.dpi.scale_px(CAT_MAJOR),
+            INK,
+        );
     }
     for value in tick_values(x_scale.min + x_scale.minor, x_scale.max, x_scale.minor) {
         let at_major = (value - x_scale.min) / x_scale.major;
@@ -969,8 +981,8 @@ fn paint_scatter(
         let x = x_of(value, x_scale.min, x_scale.max, &plot).round() as i32;
         canvas.vline_i(
             x,
-            axis_line_y - VAL_MINOR_ARM,
-            axis_line_y + VAL_MINOR_ARM,
+            axis_line_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+            axis_line_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
             INK,
         );
     }
@@ -983,13 +995,14 @@ fn paint_scatter(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             y - h / 2.0,
             label_px,
             INK,
         );
     }
-    let baseline = f64::from(canvas.h as i32 - INSET_BOTTOM) + 10.0;
+    let baseline =
+        f64::from(canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM)) + canvas.dpi.scale_f(10.0);
     for (tick, label) in x_ticks.iter().zip(&x_labels) {
         let x = x_of(*tick, x_scale.min, x_scale.max, &plot);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -1014,7 +1027,7 @@ fn paint_scatter(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1112,9 +1125,9 @@ fn paint_bar(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_cat);
+    let mut axis_x = axis_x_of(widest_cat, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1126,21 +1139,21 @@ fn paint_bar(
             .unwrap_or(0);
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1193,7 +1206,12 @@ fn paint_bar(
                 continue;
             }
             let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
-            canvas.vline_i(x, plot_b - VAL_MINOR_ARM, plot_b + VAL_MINOR_ARM, INK);
+            canvas.vline_i(
+                x,
+                plot_b - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                plot_b + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
         }
     }
     draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
@@ -1218,13 +1236,13 @@ fn paint_bar(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             mid - h / 2.0,
             label_px,
             INK,
         );
     }
-    let baseline = f64::from(plot_b) + 10.0;
+    let baseline = f64::from(plot_b) + canvas.dpi.scale_f(10.0);
     for (tick, label) in ticks.iter().zip(&tick_labels) {
         let w = text_width(font, gdi.as_ref(), label, label_px);
         let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
@@ -1249,7 +1267,7 @@ fn paint_bar(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1285,7 +1303,7 @@ fn paint_pie(
         .title
         .as_ref()
         .and_then(|_| super::chart_gdi::Face::open(label_px, true));
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1297,20 +1315,20 @@ fn paint_pie(
             .unwrap_or(0);
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
     let inset_right = if chart.legend == Some(LegendPos::Right) {
-        pie_legend_right_inset(chart, font, gdi.as_ref(), label_px)
+        pie_legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi)
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let plot_x = INSET_TOP;
+    let plot_x = canvas.dpi.scale_px(INSET_TOP);
     let plot_r = canvas.w as i32 - inset_right;
-    let plot_b = canvas.h as i32 - INSET_TOP;
+    let plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_TOP);
     if plot_r <= plot_x || plot_b <= plot_y {
         return Err(unsupported());
     }
@@ -1331,7 +1349,7 @@ fn paint_pie(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1381,6 +1399,7 @@ fn pie_legend_right_inset(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
+    dpi: RenderDpi,
 ) -> i32 {
     let from_layout = gdi.is_some();
     let widest = pie_legend_items(chart)
@@ -1395,8 +1414,12 @@ fn pie_legend_right_inset(
     } else {
         widest.ceil() as i32
     };
-    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + name_px + LEGEND_PAD;
-    need.max(INSET_RIGHT)
+    let need = dpi.scale_px(LEGEND_PLOT_GAP)
+        + dpi.scale_px(LEGEND_SWATCH)
+        + dpi.scale_px(LEGEND_GAP)
+        + name_px
+        + dpi.scale_px(LEGEND_PAD);
+    need.max(dpi.scale_px(INSET_RIGHT))
 }
 
 fn draw_pie_legend(
@@ -1412,23 +1435,23 @@ fn draw_pie_legend(
     if n == 0 {
         return;
     }
-    let pitch = 24;
-    let block = pitch * (n - 1) + LEGEND_SWATCH;
+    let pitch = canvas.dpi.scale_px(24);
+    let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
-        LEGEND_TITLE_BAND
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
     } else {
         0
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
-    let x = plot_r + LEGEND_PLOT_GAP;
+    let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
     for (name, color) in items {
         draw_plot_key(
             canvas,
             PlotKind::Pie,
             x,
             y,
-            x + LEGEND_SWATCH,
-            y + LEGEND_SWATCH,
+            x + canvas.dpi.scale_px(LEGEND_SWATCH),
+            y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
         );
         draw_text(
@@ -1436,8 +1459,8 @@ fn draw_pie_legend(
             font,
             gdi,
             &name,
-            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
-            f64::from(y - 2),
+            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + canvas.dpi.scale_px(LEGEND_GAP)),
+            f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
         );
@@ -1505,7 +1528,7 @@ fn paint(
     let scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget(canvas.h, em),
+        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
@@ -1516,9 +1539,9 @@ fn paint(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_tick);
+    let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1531,21 +1554,21 @@ fn paint(
         // 标题占一行，下面再空一行，顶上的刻度才不压住标题。
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1562,13 +1585,13 @@ fn paint(
     if chart.grid && regular {
         for i in 0..=intervals {
             let y = plot_y + (i * (plot_b - plot_y) + intervals - 1) / intervals;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     if chart.grid && !regular {
         for value in &ticks {
             let y = y_of(*value, axis_min, axis_max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     let parts = step / scale.minor;
@@ -1588,7 +1611,12 @@ fn paint(
                 continue;
             }
             let y = y_of(value, axis_min, axis_max, &plot).round() as i32;
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
     match chart.kind {
@@ -1634,7 +1662,7 @@ fn paint(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1661,11 +1689,21 @@ fn draw_cat_ticks(canvas: &mut Canvas, n: usize, x0: f64, x1: f64, axis_y: i32) 
     }
     for i in 0..=n {
         let x = round_half_even(x0 + slot * i as f64);
-        canvas.vline_i(x, axis_y - CAT_MAJOR_IN, axis_y + CAT_MAJOR, INK);
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(CAT_MAJOR_IN),
+            axis_y + canvas.dpi.scale_px(CAT_MAJOR),
+            INK,
+        );
     }
     for i in 0..n {
         let x = round_half_even(x0 + slot * (i as f64 + 0.5));
-        canvas.vline_i(x, axis_y - CAT_MINOR_IN, axis_y + CAT_MINOR, INK);
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(CAT_MINOR_IN),
+            axis_y + canvas.dpi.scale_px(CAT_MINOR),
+            INK,
+        );
     }
 }
 
@@ -1708,7 +1746,12 @@ fn draw_value_minor_ticks(
             if y <= y0 || y >= y1 {
                 continue;
             }
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
 }
@@ -1958,12 +2001,22 @@ fn draw_cat_ticks_y(
     for i in 0..=n {
         let t = if from_bottom { n - i } else { i };
         let y = round_half_even(y0 + slot * t as f64);
-        canvas.hline_i(axis_x - CAT_MAJOR, axis_x + CAT_MAJOR_IN, y, INK);
+        canvas.hline_i(
+            axis_x - canvas.dpi.scale_px(CAT_MAJOR),
+            axis_x + canvas.dpi.scale_px(CAT_MAJOR_IN),
+            y,
+            INK,
+        );
     }
     for i in 0..n {
         let t = if from_bottom { n - 1 - i } else { i };
         let y = round_half_even(y0 + slot * (t as f64 + 0.5));
-        canvas.hline_i(axis_x - CAT_MINOR, axis_x + CAT_MINOR_IN, y, INK);
+        canvas.hline_i(
+            axis_x - canvas.dpi.scale_px(CAT_MINOR),
+            axis_x + canvas.dpi.scale_px(CAT_MINOR_IN),
+            y,
+            INK,
+        );
     }
 }
 
@@ -1988,7 +2041,12 @@ fn draw_value_minor_ticks_x(
             if x <= x0 || x >= x1 {
                 continue;
             }
-            canvas.vline_i(x, axis_y - VAL_MINOR_ARM, axis_y + VAL_MINOR_ARM, INK);
+            canvas.vline_i(
+                x,
+                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
         }
     }
 }
@@ -2038,8 +2096,8 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
     }
 }
 
-fn axis_x_of(widest_tick: i32) -> i32 {
-    LABEL_EDGE + widest_tick + TICK_GAP
+fn axis_x_of(widest_tick: i32, dpi: RenderDpi) -> i32 {
+    dpi.scale_px(LABEL_EDGE) + widest_tick + dpi.scale_px(TICK_GAP)
 }
 
 fn draw_tick_labels(
@@ -2065,7 +2123,7 @@ fn draw_tick_labels(
             font,
             gdi,
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             y - h / 2.0,
             px,
             INK,
@@ -2073,7 +2131,7 @@ fn draw_tick_labels(
     }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
-    let baseline = f64::from(category_y) + 10.0;
+    let baseline = f64::from(category_y) + canvas.dpi.scale_f(10.0);
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
@@ -2092,19 +2150,19 @@ fn draw_legend(
     if chart.legend != Some(LegendPos::Right) {
         return;
     }
-    let pitch = 24;
+    let pitch = canvas.dpi.scale_px(24);
     let n = chart.series.len() as i32;
     if n == 0 {
         return;
     }
-    let block = pitch * (n - 1) + LEGEND_SWATCH;
+    let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
-        LEGEND_TITLE_BAND
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
     } else {
         0
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
-    let x = plot_r + LEGEND_PLOT_GAP;
+    let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
     for ser in &chart.series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key(
@@ -2112,8 +2170,8 @@ fn draw_legend(
             chart.kind,
             x,
             y,
-            x + LEGEND_SWATCH,
-            y + LEGEND_SWATCH,
+            x + canvas.dpi.scale_px(LEGEND_SWATCH),
+            y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
         );
         draw_text(
@@ -2121,8 +2179,8 @@ fn draw_legend(
             font,
             gdi,
             &ser.name,
-            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
-            f64::from(y - 2),
+            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + canvas.dpi.scale_px(LEGEND_GAP)),
+            f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
         );
@@ -2136,9 +2194,10 @@ fn legend_right_inset(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
+    dpi: RenderDpi,
 ) -> i32 {
     if chart.legend != Some(LegendPos::Right) {
-        return INSET_RIGHT;
+        return dpi.scale_px(INSET_RIGHT);
     }
     // Excel 和幻灯片都按 GDI+ 默认排版宽度把绘图区向左推。
     // 字形前进宽度更窄，类目槽会被撑开，右边的柱跟着偏出去。
@@ -2157,8 +2216,12 @@ fn legend_right_inset(
     } else {
         widest.ceil() as i32
     };
-    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + name_px + LEGEND_PAD;
-    need.max(INSET_RIGHT)
+    let need = dpi.scale_px(LEGEND_PLOT_GAP)
+        + dpi.scale_px(LEGEND_SWATCH)
+        + dpi.scale_px(LEGEND_GAP)
+        + name_px
+        + dpi.scale_px(LEGEND_PAD);
+    need.max(dpi.scale_px(INSET_RIGHT))
 }
 
 #[cfg(test)]
@@ -4052,9 +4115,18 @@ mod tests {
 
     #[test]
     fn axis_follows_tick_width() {
-        assert_eq!(axis_x_of(7), 27);
-        assert_eq!(axis_x_of(17), 37);
-        assert_eq!(axis_x_of(28), 48);
+        assert_eq!(axis_x_of(7, RenderDpi::DEFAULT), 27);
+        assert_eq!(axis_x_of(17, RenderDpi::DEFAULT), 37);
+        assert_eq!(axis_x_of(28, RenderDpi::DEFAULT), 48);
+        let mut dpi_obj = serde_json::Map::new();
+        dpi_obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi106 = RenderDpi::from_request(&dpi_obj).unwrap();
+        assert_eq!(dpi106.scale_px(INSET_TOP), 15);
+        assert_eq!(dpi106.scale_px(INSET_BOTTOM), 38);
+        assert_eq!(dpi106.scale_px(LABEL_EDGE), 10);
+        assert_eq!(dpi106.scale_px(TICK_GAP), 12);
+        assert_eq!(axis_x_of(7, dpi106), 29);
+        assert_eq!(axis_x_of(19, dpi106), 41);
     }
 
     #[test]
