@@ -3886,6 +3886,16 @@ fn excel_row_px_at(pt: f64, dpi: RenderDpi) -> i32 {
     dpi.excel_row_px(pt)
 }
 
+/// Excel 行盒内基线位置。缺省 0.25；读 sheetFormatPr 的本地名 dyDescent（含 x14ac 前缀）。
+fn sheet_dy_descent(sheet: &Element) -> f64 {
+    sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|el| el.attr_local("dyDescent"))
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0)
+        .unwrap_or(0.25)
+}
+
 struct Axis {
     origin: Vec<i32>,
 }
@@ -5958,6 +5968,7 @@ fn paint_labels(
                 clip_r.min(x1 - 17)
             };
         }
+        let dpi = fonts.dpi;
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
         if xf.rotation != 0 {
             return Err(unsupported());
@@ -5970,7 +5981,8 @@ fn paint_labels(
             HAlign::Distributed => HAlign::Distributed,
             HAlign::General => match cell.shown {
                 Shown::Num(_) => HAlign::Right,
-                Shown::Bool(_) => HAlign::Center,
+                // Excel 常规：布尔与点名错误值居中；共享弦里同形文字仍靠左。
+                Shown::Bool(_) | Shown::Err(_) => HAlign::Center,
                 _ => HAlign::Left,
             },
         };
@@ -6027,18 +6039,24 @@ fn paint_labels(
             HAlign::Justify if !soft_wrapped => HAlign::Left,
             other => other,
         };
-        let em = face.em_box();
-        let block_h = em * lines.len() as f64;
+        // 换行行距用该字体自动行高（等线/Calibri 11 为 14.25 磅→106 下 21px），不是 tmHeight。
+        // 行内基线按 sheetFormatPr 的 dyDescent（缺省 0.25）落在行盒内：
+        // 官方多样本（换行顶对齐三行累积、错误值垂直居中、日期/货币底对齐）与仅 tmHeight/ascent 对不上。
+        let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+        let dy_descent = sheet_dy_descent(sheet);
+        let block_h = pitch * lines.len() as f64;
         let top0 = match xf.v_align {
             VAlign::Top => f64::from(y0) + 2.0,
             VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - block_h) / 2.0,
-            VAlign::Bottom => f64::from(y1) - block_h - 1.0,
+            VAlign::Bottom => f64::from(y1) - block_h,
         };
         for (i, line) in lines.iter().enumerate() {
             if line.is_empty() {
                 continue;
             }
-            let top = top0 + em * i as f64;
+            let line_top = top0 + pitch * i as f64;
+            // draw_cells 的 top 是基线减 ascent；把基线放到行盒内 1-dyDescent 处。
+            let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
             let mut paint = |x: f64, s: &str| {
                 face.draw_cells(s, x, top, color, |px, py, rgb, cov| {
                     if px < x0 || py < y0 || px >= clip_r || py >= y1 {
@@ -7274,6 +7292,40 @@ mod tests {
         assert_eq!(excel_row_px(22.0), 29);
         assert_eq!(excel_row_px(32.0), 42);
         assert_eq!(excel_row_px(26.0), 34);
+        let mut dpi_obj = serde_json::Map::new();
+        dpi_obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi106 = RenderDpi::from_request(&dpi_obj).unwrap();
+        // 标签行距跟自动行高走：等线/Calibri 11 在 106 是 21px，不是 tmHeight 17/19。
+        assert_eq!(excel_row_px_at(auto_row_pt("等线", 11.0), dpi106), 21);
+        assert_eq!(excel_row_px_at(auto_row_pt("Calibri", 11.0), dpi106), 21);
+        assert_eq!(excel_row_px_at(auto_row_pt("DengXian", 11.0), dpi106), 21);
+    }
+
+    #[test]
+    fn sheet_dy_descent_defaults_and_reads_prefixed_attr() {
+        let missing = crate::xml::parse(
+            br#"<worksheet><sheetFormatPr defaultRowHeight="14.3"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&missing.root), 0.25);
+
+        let prefixed = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr defaultRowHeight="14.3" x14ac:dyDescent="0.25"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&prefixed.root), 0.25);
+
+        let other = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.4"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&other.root), 0.4);
+
+        let out_of_range = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr x14ac:dyDescent="1.5"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&out_of_range.root), 0.25);
     }
 
     #[test]

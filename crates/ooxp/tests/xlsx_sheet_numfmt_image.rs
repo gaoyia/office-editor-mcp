@@ -145,6 +145,113 @@ fn datetime_named_formats_export_png() {
 }
 
 #[test]
+fn general_error_aligns_center_text_lookalike_stays_left() {
+    fn book(tag: &str) -> PathBuf {
+        let path = tmp(tag);
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [{ "ref": "A1", "value": 1 }]
+                }]
+            }
+        }));
+        run_ok(json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "ops": [
+                { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 18.0 }
+            ]
+        }));
+        path
+    }
+
+    fn rewrite_keep_style(path: &Path, after_open: &str) {
+        use std::io::{Cursor, Read, Write};
+        use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipArchive, ZipWriter};
+        let bytes = std::fs::read(path).unwrap();
+        let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+        let mut out = Cursor::new(Vec::new());
+        {
+            let mut zip_out = ZipWriter::new(&mut out);
+            let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+            for i in 0..zip_in.len() {
+                let mut file = zip_in.by_index(i).unwrap();
+                let name = file.name().to_string();
+                let mut data = Vec::new();
+                file.read_to_end(&mut data).unwrap();
+                if name == "xl/worksheets/sheet1.xml" {
+                    let xml = String::from_utf8(data).unwrap();
+                    let start = xml.find(r#"<c r="A1""#).expect("A1 cell");
+                    let rest = &xml[start..];
+                    let end_rel = rest.find("</c>").expect("</c>") + 4;
+                    let old = &xml[start..start + end_rel];
+                    let style = if let Some(s) = old.split(r#" s=""#).nth(1) {
+                        let n = s.split('"').next().unwrap();
+                        format!(r#" s="{n}""#)
+                    } else {
+                        String::new()
+                    };
+                    let next = format!(
+                        r#"{}<c r="A1"{}{}</c>{}"#,
+                        &xml[..start],
+                        style,
+                        after_open,
+                        &xml[start + end_rel..]
+                    );
+                    data = next.into_bytes();
+                }
+                zip_out.start_file(&name, opt).unwrap();
+                zip_out.write_all(&data).unwrap();
+            }
+        }
+        std::fs::write(path, out.into_inner()).unwrap();
+    }
+
+    let general = book("error-general");
+    rewrite_keep_style(&general, r#" t="e"><v>#DIV/0!</v>"#);
+
+    let center = book("error-center");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": center.to_string_lossy(),
+        "ops": [{ "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "center" } }]
+    }));
+    rewrite_keep_style(&center, r#" t="e"><v>#DIV/0!</v>"#);
+
+    let left = book("error-left");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": left.to_string_lossy(),
+        "ops": [{ "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "left" } }]
+    }));
+    rewrite_keep_style(&left, r#" t="e"><v>#DIV/0!</v>"#);
+
+    let text = book("error-text");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": text.to_string_lossy(),
+        "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": "#DIV/0!" }]
+    }));
+
+    let png_general = export_png(&general);
+    let png_center = export_png(&center);
+    let png_left = export_png(&left);
+    let png_text = export_png(&text);
+    assert_eq!(png_general, png_center, "常规错误值应与显式居中同像素");
+    assert_ne!(png_general, png_left, "常规错误值不应与显式左对齐同像素");
+    assert_ne!(png_text, png_center, "共享弦同形文字不应居中");
+}
+
+#[test]
 fn cached_div0_error_exports_png() {
     let path = tmp("error-div0");
     run_ok(json!({
