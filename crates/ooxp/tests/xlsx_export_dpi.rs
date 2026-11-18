@@ -210,7 +210,8 @@ fn sparkline_106_is_native_and_larger() {
     let (w96, h96, rgb96) = decode_png(&at96);
     let (w106, h106, rgb106) = decode_png(&at106);
     assert_eq!((w96, h96), (64, 20));
-    assert_eq!((w106, h106), (71, 22));
+    // Calibri 11 default at 106 is 72 (MDW remasured), not scale_px(64)=71.
+    assert_eq!((w106, h106), (72, 22));
     assert_ne!(at96, at106);
     assert_no_phys(&at96);
     assert_phys_dpi(&at106, 106);
@@ -256,7 +257,10 @@ fn illegal_dpi_is_rejected_and_source_stays() {
     )
     .unwrap();
     let (w, h, _) = decode_png(&lo);
-    assert_eq!((w, h), (16, 5));
+    // 24 dpi remasures MDW (Calibri 11 -> 2 on this host) so default is 8*2+8=24,
+    // not the old scale_px(64)=16. Height 5 is layout-round of the package's 15 pt row.
+    // 24 dpi is a supported bound, not official CopyPicture gold.
+    assert_eq!((w, h), (24, 5));
 }
 
 #[test]

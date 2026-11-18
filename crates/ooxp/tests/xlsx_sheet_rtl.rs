@@ -140,7 +140,7 @@ fn right_to_left_flips_a_sheet_without_text() {
     let (w, h, ltr) = decode_png(&export(&src).unwrap());
     let rtl_book = with_view(&src, "rightToLeft=\"1\"");
     let (w2, h2, rtl) = decode_png(&export(&rtl_book).unwrap());
-    assert_eq!((w, h), (129, 41));
+    assert_eq!((w, h), (129, 39));
     assert_eq!((w2, h2), (w, h));
     assert_eq!(rtl, flip(&ltr, w, h));
 }
@@ -166,7 +166,7 @@ fn right_to_left_with_latin_text_exports_png() {
     let png = export(&rtl_book).unwrap();
     assert!(png.starts_with(&[0x89, b'P', b'N', b'G']));
     let (w, h, _) = decode_png(&png);
-    assert_eq!((w, h), (129, 41));
+    assert_eq!((w, h), (129, 39));
 }
 
 #[test]

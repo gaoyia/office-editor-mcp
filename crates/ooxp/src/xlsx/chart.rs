@@ -2195,8 +2195,11 @@ fn chart_bitmap_px(
             super::geometry::GeometryContext::from_package(pkg)
                 .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?
                 .with_dpi(dpi)
+                .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?
         } else {
-            super::geometry::GeometryContext::calibri11().with_dpi(dpi)
+            super::geometry::GeometryContext::calibri11()
+                .with_dpi(dpi)
+                .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?
         };
         match super::chart_paint::bitmap_px(sheet, anchor, kind, &geometry) {
             Ok(px) => size = Some(px),

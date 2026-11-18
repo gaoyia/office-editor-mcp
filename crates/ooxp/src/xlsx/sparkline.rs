@@ -948,7 +948,8 @@ fn raster_group(
         None => {
             let geometry = super::geometry::GeometryContext::from_package(pkg)
                 .map_err(|_| image_unsupported())?
-                .with_dpi(dpi);
+                .with_dpi(dpi)
+                .map_err(|_| image_unsupported())?;
             let width = geometry
                 .column_px(sheet, host.col)
                 .map_err(|_| image_unsupported())? as u32;

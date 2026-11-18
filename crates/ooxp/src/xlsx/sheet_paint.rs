@@ -6,7 +6,8 @@
 //! 两种纯色的图案铺在和纯色同一块矩形上。点的位置用整张图的像素，不从格子左上角重算。
 //! 虚线、点线、发丝、双线和点划线按整图坐标取余。偶数宽度多出的一像素朝坐标较小的一侧。
 //! 没写行高时，没写 `defaultRowHeight` 的空行是 14.25 磅。
-//! 写了这个属性但 `customHeight` 不是真时，不采用这个数字。
+//! 写了这个属性但 `customHeight` 不是真时，不采用这个数字，改用常规样式行高。
+//! 常规 Calibri 11 与 等线 11 一样是 14.25 磅（96 dpi 为 19 像素）。
 //! `customHeight` 为真时，空行和常规字体的行用写下的磅值。
 //! 没有描边、没有字的纯色矩形画在边框上面。锚点 EMU 除以 9525 后四舍五入。
 //! 上边和左边的外框盖住矩形。
@@ -66,7 +67,7 @@ pub(crate) fn export_sheet_image_at(
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
     let mut styles = load_styles(&pkg, &wb_part, &rels)?;
-    styles.geometry = styles.geometry.with_dpi(dpi);
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -159,7 +160,7 @@ pub(crate) fn export_sheet_image_tiles_at(
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
     let mut styles = load_styles(&pkg, &wb_part, &rels)?;
-    styles.geometry = styles.geometry.with_dpi(dpi);
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -3701,13 +3702,13 @@ fn same_face(font: &FontInfo, normal: &FontInfo) -> bool {
     font.name.eq_ignore_ascii_case(&normal.name) && (font.pt - normal.pt).abs() < 0.05
 }
 
-/// 未写行高时的磅值。Calibri 11 是 15。10 磅微软雅黑是 16.5。
+/// 未写行高时的磅值。Calibri 11 与 等线 11 一样是 14.25。10 磅微软雅黑是 16.5。
 fn auto_row_pt(name: &str, pt: f64) -> f64 {
     // 等线/DengXian：COM Excel 16.0 StandardHeight / AutoFit 矩阵（2026-11-17 Asia/Shanghai）：
     // 字号 10/11/空/StandardHeight → 14.25；12 → 15.75；18 → 23。
     // 本刀只锁 11→14.25（与 sheetFormatPr 缺省 14.25 一致）；其它字号暂 pt*15/11，不拟合单例 delta。
-    // 不回归：Calibri 11 仍 15（COM AutoFit 亦见 14.25，契约保持 15）；雅黑仍 1.65×。
-    // RTL 探针曾误走雅黑 1.65→18.15→高 49，COM 两行≈28.5pt→≈38px，残差非纯 DPI。
+    // Calibri 11 同样锁定为 14.25（官方 2026-11-18 StandardHeight / 未写行高 CopyPicture 均为 14.25→21@106，不再保持旧契约 15/20）。
+    // 雅黑仍 1.65×。RTL 残差里两行各多 1 像素，与旧 Calibri 15 vs 14.25 相符，不在此单开 RTL 方向。
     if name.eq_ignore_ascii_case("等线") || name.eq_ignore_ascii_case("DengXian") {
         if (pt - 11.0).abs() < 0.05 {
             return 14.25;
@@ -3727,7 +3728,7 @@ fn auto_row_pt(name: &str, pt: f64) -> f64 {
     if CJK.iter().any(|item| item.eq_ignore_ascii_case(name)) {
         pt * 165.0 / 100.0
     } else if name.eq_ignore_ascii_case("Calibri") && (pt - 11.0).abs() < 0.05 {
-        15.0
+        14.25
     } else {
         pt * 15.0 / 11.0
     }
@@ -7078,14 +7079,14 @@ mod tests {
         }
         let data = excel_row_px(auto_row_pt("微软雅黑", 10.0));
         assert_eq!(data, 22);
-        assert_eq!(excel_row_px(auto_row_pt("Calibri", 11.0)), 20);
+        assert_eq!(excel_row_px(auto_row_pt("Calibri", 11.0)), 19);
         // 等线 11 = Normal 14.25pt → 19px；不得走雅黑 1.65×（否则 18.15→24，双行+框≈49）。
         assert_eq!(auto_row_pt("等线", 11.0), 14.25);
         assert_eq!(excel_row_px(auto_row_pt("等线", 11.0)), 19);
         assert_eq!(auto_row_pt("DengXian", 11.0), 14.25);
         // 非 11：不锁 COM 12→15.75 / 18→23，保持 pt*15/11，避免单例拟合。
         assert!((auto_row_pt("等线", 12.0) - 12.0 * 15.0 / 11.0).abs() < 1e-9);
-        assert_eq!(auto_row_pt("Calibri", 11.0), 15.0);
+        assert_eq!(auto_row_pt("Calibri", 11.0), 14.25);
         assert!((auto_row_pt("微软雅黑", 10.0) - 16.5).abs() < 1e-9);
         height += data * 7;
         assert_eq!(height, 418);

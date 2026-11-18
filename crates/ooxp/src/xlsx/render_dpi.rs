@@ -73,10 +73,13 @@ impl RenderDpi {
         pt * self.value / 72.0
     }
 
-    /// Excel 自定义行高：`floor(round(pt*12700) * dpi / 914400)`。96 dpi 时即 `floor(emu/9525)`。
+    /// Excel 自定义行高：先按 96 dpi 截断 `floor(round(pt*12700)/9525)`，再按请求 dpi 四舍五入放大。
+    /// 96 dpi 时 20 磅仍是 26，不是 27。不得在非 96 下直接 `floor(emu*dpi/914400)`：
+    /// 14.25 磅在 106 dpi 官方为 21 不是 20；23 磅官方为 33 不是 34。
     pub fn excel_row_px(self, pt: f64) -> i32 {
         let emu = (pt * 12_700.0).round();
-        (emu * self.value / EMU_PER_INCH).floor() as i32
+        let px96 = (emu / (EMU_PER_INCH / DEFAULT_DPI)).floor() as i32;
+        self.scale_px(px96)
     }
 
     /// 迷你图宿主行高：与 `layout::row_height_px` 相同的四舍五入。
@@ -157,6 +160,10 @@ mod tests {
         assert_eq!(dpi.emu_to_px_round(3_200_400), 371);
         assert_eq!(dpi.scale_px(64), 71);
         assert_eq!(dpi.excel_row_px(15.0), 22);
+        // Official 106 CopyPicture 2026-11-18: 14.25->21, 20->29, 23->33.
+        assert_eq!(dpi.excel_row_px(14.25), 21);
+        assert_eq!(dpi.excel_row_px(20.0), 29);
+        assert_eq!(dpi.excel_row_px(23.0), 33);
         assert_eq!(from_json(json!(96.0)).unwrap(), RenderDpi::DEFAULT);
     }
 

@@ -5,26 +5,79 @@ use crate::xml::Element;
 
 use super::render_dpi::RenderDpi;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
+struct FaceSpec {
+    name: String,
+    pt: f64,
+    bold: bool,
+    italic: bool,
+}
+
+#[derive(Clone)]
 pub(crate) struct GeometryContext {
     mdw: f64,
     dpi: RenderDpi,
+    face: Option<FaceSpec>,
+    /// Non-Windows cannot remasure MDW at a non-96 export dpi; fall back to the
+    /// 96-pixel formula and scale_px. Windows always remasures and never takes
+    /// this path, and must not hard-code a host-106 MDW.
+    scale_from_96: bool,
 }
 
 impl GeometryContext {
     /// Canonical OOXML Calibri 11 / 96 dpi example; also the platform-independent fallback.
-    pub(crate) const fn calibri11() -> Self {
+    pub(crate) fn calibri11() -> Self {
         Self {
             mdw: 7.0,
             dpi: RenderDpi::DEFAULT,
+            face: Some(FaceSpec {
+                name: "Calibri".into(),
+                pt: 11.0,
+                bold: false,
+                italic: false,
+            }),
+            scale_from_96: false,
         }
     }
 
-    pub(crate) fn with_dpi(self, dpi: RenderDpi) -> Self {
-        Self { mdw: self.mdw, dpi }
+    pub(crate) fn with_dpi(self, dpi: RenderDpi) -> Result<Self, Error> {
+        if dpi == self.dpi {
+            return Ok(self);
+        }
+        if let Some(face) = self.face.clone() {
+            match normal_mdw(&face.name, face.pt, face.bold, face.italic, dpi.get()) {
+                Ok(mdw) => Ok(Self {
+                    mdw,
+                    dpi,
+                    face: Some(face),
+                    scale_from_96: false,
+                }),
+                Err(_) if !cfg!(windows) => Ok(Self {
+                    mdw: self.mdw,
+                    dpi,
+                    face: Some(face),
+                    scale_from_96: true,
+                }),
+                Err(err) => Err(err),
+            }
+        } else if self.dpi.is_default() && !dpi.is_default() {
+            Ok(Self {
+                mdw: self.mdw,
+                dpi,
+                face: None,
+                scale_from_96: true,
+            })
+        } else {
+            Ok(Self {
+                mdw: self.mdw,
+                dpi,
+                face: None,
+                scale_from_96: false,
+            })
+        }
     }
 
-    pub(crate) fn dpi(self) -> RenderDpi {
+    pub(crate) fn dpi(&self) -> RenderDpi {
         self.dpi
     }
 
@@ -73,16 +126,28 @@ impl GeometryContext {
             return Err(unsupported());
         }
         Ok(Self {
-            mdw: normal_mdw(name, pt, bold, italic)?,
+            mdw: normal_mdw(name, pt, bold, italic, RenderDpi::DEFAULT.get())?,
             dpi: RenderDpi::DEFAULT,
+            face: Some(FaceSpec {
+                name: name.to_string(),
+                pt,
+                bold,
+                italic,
+            }),
+            scale_from_96: false,
         })
     }
 
     pub(crate) fn column_px(&self, sheet: &Element, col: u32) -> Result<i32, Error> {
-        Ok(self.dpi.scale_px(self.column_px_96(sheet, col)?))
+        let px = self.column_px_at_mdw(sheet, col)?;
+        if self.scale_from_96 {
+            Ok(self.dpi.scale_px(px))
+        } else {
+            Ok(px)
+        }
     }
 
-    fn column_px_96(&self, sheet: &Element, col: u32) -> Result<i32, Error> {
+    fn column_px_at_mdw(&self, sheet: &Element, col: u32) -> Result<i32, Error> {
         for list in sheet.children_by_local("cols") {
             for node in list.children_by_local("col") {
                 let min = node.attr("min").and_then(|v| v.parse::<u32>().ok());
@@ -104,7 +169,7 @@ impl GeometryContext {
         {
             return self.xml_width_px(parse_width(width)?);
         }
-        Ok((8.43 * self.mdw + 5.0).floor() as i32)
+        default_col_px(self.mdw)
     }
 
     pub(crate) fn xml_width_px(&self, width: f64) -> Result<i32, Error> {
@@ -112,7 +177,21 @@ impl GeometryContext {
     }
 }
 
-/// `width` is the stored OOXML value, already including its padding.
+/// Default column with no width / defaultColWidth: 8 MDW characters plus 8 px.
+/// This equals the historical loor(8.43 * MDW + 5) at MDW 7 (64) and 8 (72),
+/// and matches official Excel 16.0 CopyPicture at MDW 11 (96, not 97).
+pub(crate) fn default_col_px(mdw: f64) -> Result<i32, Error> {
+    if !mdw.is_finite() || mdw <= 0.0 {
+        return Err(unsupported());
+    }
+    let px = (8.0 * mdw + 8.0).floor();
+    if px > f64::from(i32::MAX) {
+        return Err(unsupported());
+    }
+    Ok((px as i32).max(1))
+}
+
+/// width is the stored OOXML value, already including its padding.
 pub(crate) fn xml_width_px(width: f64, mdw: f64) -> Result<i32, Error> {
     if !width.is_finite() || width < 0.0 || !mdw.is_finite() || mdw <= 0.0 {
         return Err(unsupported());
@@ -164,9 +243,16 @@ pub(crate) fn normal_font_index(styles: &Element) -> usize {
 }
 
 #[cfg(windows)]
-fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool) -> Result<f64, Error> {
-    let face = super::chart_gdi::Face::open_cell((pt * 96.0 / 72.0) as f32, bold, italic, name)
-        .ok_or_else(unsupported)?;
+fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool, dpi: f64) -> Result<f64, Error> {
+    if !dpi.is_finite() || dpi <= 0.0 {
+        return Err(unsupported());
+    }
+    let face = if (dpi - 96.0).abs() < 0.0001 {
+        super::chart_gdi::Face::open_cell((pt * 96.0 / 72.0) as f32, bold, italic, name)
+    } else {
+        super::chart_gdi::Face::open_cell_dpi((pt * dpi / 72.0) as f32, bold, italic, name, dpi)
+    }
+    .ok_or_else(unsupported)?;
     let alias = |n: &str| {
         if n.eq_ignore_ascii_case("DengXian") || n == "等线" {
             "dengxian".to_string()
@@ -189,8 +275,13 @@ fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool) -> Result<f64, Erro
 }
 
 #[cfg(not(windows))]
-fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool) -> Result<f64, Error> {
-    if name.eq_ignore_ascii_case("Calibri") && (pt - 11.0).abs() < 0.0001 && !bold && !italic {
+fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool, dpi: f64) -> Result<f64, Error> {
+    if name.eq_ignore_ascii_case("Calibri")
+        && (pt - 11.0).abs() < 0.0001
+        && !bold
+        && !italic
+        && (dpi - 96.0).abs() < 0.0001
+    {
         Ok(7.0)
     } else {
         Err(unsupported())
@@ -217,12 +308,24 @@ mod tests {
         }
     }
     #[test]
+    fn default_column_is_eight_mdw_plus_eight_px() {
+        // Official 106 CopyPicture 2026-11-18: MDW 8 default 72, MDW 11 default 96
+        // (not floor(8.43*11+5)=97). MDW 7 stays 64; MDW 10 is 88, not 89.
+        for (mdw, expected) in [(7.0, 64), (8.0, 72), (10.0, 88), (11.0, 96)] {
+            assert_eq!(default_col_px(mdw).unwrap(), expected, "mdw={mdw}");
+        }
+        assert!(default_col_px(0.0).is_err());
+        assert!(default_col_px(f64::NAN).is_err());
+    }
+    #[test]
     fn default_and_hidden_columns_use_the_same_units() {
         let doc = crate::xml::parse(br#"<worksheet><sheetFormatPr defaultColWidth="10"/><cols><col min="2" max="2" width="10.125"/><col min="3" max="3" width="10.125" hidden="1"/></cols></worksheet>"#).unwrap();
         for (mdw, default, explicit) in [(7.0, 70, 71), (8.0, 80, 81)] {
             let g = GeometryContext {
                 mdw,
                 dpi: RenderDpi::DEFAULT,
+                face: None,
+                scale_from_96: false,
             };
             assert_eq!(g.column_px(&doc.root, 1).unwrap(), default);
             assert_eq!(g.column_px(&doc.root, 2).unwrap(), explicit);
@@ -231,24 +334,111 @@ mod tests {
         }
     }
     #[test]
+    fn explicit_widths_use_mdw_at_the_context_dpi() {
+        // Stored XML from setColWidth (canonical MDW=7) evaluated at request-dpi MDW.
+        // Official 106 CopyPicture 2026-11-18, Calibri 11 / 等线 11 / Calibri 14.
+        let xml = [
+            ("1.2109375", 8, 10, 11, 13),
+            ("1.7109375", 8, 14, 11, 19),
+            ("3.2109375", 8, 26, 11, 35),
+            ("9.140625", 8, 73, 11, 101),
+            ("10.7109375", 8, 86, 11, 118),
+            ("10.125", 8, 81, 11, 111),
+            ("20.7109375", 8, 166, 11, 228),
+            ("30.7109375", 8, 246, 11, 338),
+        ];
+        for (width, mdw_a, px_a, mdw_b, px_b) in xml {
+            assert_eq!(
+                xml_width_px(width.parse().unwrap(), f64::from(mdw_a)).unwrap(),
+                px_a
+            );
+            assert_eq!(
+                xml_width_px(width.parse().unwrap(), f64::from(mdw_b)).unwrap(),
+                px_b
+            );
+        }
+        let doc = crate::xml::parse(
+            br#"<worksheet><cols><col min="1" max="1" width="10.125"/><col min="2" max="2" hidden="1"/></cols></worksheet>"#,
+        )
+        .unwrap();
+        let g = GeometryContext {
+            mdw: 8.0,
+            dpi: RenderDpi::from_request(&{
+                let mut m = serde_json::Map::new();
+                m.insert("dpi".into(), serde_json::json!(106));
+                m
+            })
+            .unwrap(),
+            face: None,
+            scale_from_96: false,
+        };
+        assert_eq!(g.column_px(&doc.root, 1).unwrap(), 81);
+        assert_eq!(g.column_px(&doc.root, 2).unwrap(), 0);
+        assert_eq!(g.column_px(&doc.root, 3).unwrap(), 72);
+    }
+    #[test]
     fn localized_builtin_normal_precedes_english_name() {
         let doc = crate::xml::parse("<styleSheet><cellStyles><cellStyle name=\"Normal\" xfId=\"0\"/><cellStyle name=\"常规重命名\" builtinId=\"0\" xfId=\"1\"/></cellStyles><cellStyleXfs><xf fontId=\"0\"/><xf fontId=\"2\"/></cellStyleXfs></styleSheet>".as_bytes()).unwrap();
         assert_eq!(normal_font_index(&doc.root), 2);
     }
     #[cfg(windows)]
     #[test]
-    fn fixed96_mdw_uses_actual_normal_face_and_size() {
-        for (name, pt, mdw) in [
-            ("Calibri", 11, 7),
-            ("Calibri", 14, 10),
-            ("Arial", 11, 8),
-            ("Consolas", 11, 8),
-            ("DengXian", 11, 8),
+    fn mdw_is_measured_at_the_request_dpi() {
+        {
+            let doc = crate::xml::parse(br#"<styleSheet><fonts><font><name val="Consolas"/><sz val="11"/></font></fonts></styleSheet>"#).unwrap();
+            assert_eq!(
+                GeometryContext::from_styles(&doc.root).unwrap().mdw,
+                8.0,
+                "Consolas 11 @96"
+            );
+        }
+        for (name, pt, mdw96, mdw106) in [
+            // 106 values locked by GDI + official 2026-11-18 CopyPicture.
+            ("Calibri", 11, 7, 8),
+            ("Calibri", 14, 10, 11),
+            ("Arial", 11, 8, 9),
+            ("DengXian", 11, 8, 8),
         ] {
             let doc = crate::xml::parse(format!("<styleSheet><fonts><font><name val=\"{name}\"/><sz val=\"{pt}\"/></font></fonts></styleSheet>").as_bytes()).unwrap();
             let g = GeometryContext::from_styles(&doc.root).unwrap();
-            assert_eq!(g.mdw, f64::from(mdw), "{name} {pt}");
+            assert_eq!(g.mdw, f64::from(mdw96), "{name} {pt} @96");
+            let dpi106 = RenderDpi::from_request(&{
+                let mut m = serde_json::Map::new();
+                m.insert("dpi".into(), serde_json::json!(106));
+                m
+            })
+            .unwrap();
+            let g106 = g.clone().with_dpi(dpi106).unwrap();
+            assert_eq!(g106.mdw, f64::from(mdw106), "{name} {pt} @106");
+            assert!(!g106.scale_from_96);
+            let blank = crate::xml::parse(br#"<worksheet/>"#).unwrap();
+            assert_eq!(
+                g.column_px(&blank.root, 1).unwrap(),
+                default_col_px(f64::from(mdw96)).unwrap()
+            );
+            assert_eq!(
+                g106.column_px(&blank.root, 1).unwrap(),
+                default_col_px(f64::from(mdw106)).unwrap()
+            );
         }
-        assert!(normal_mdw("DefinitelyMissingFont_ooxp_20261117", 11.0, false, false).is_err());
+        assert!(normal_mdw(
+            "DefinitelyMissingFont_ooxp_20261117",
+            11.0,
+            false,
+            false,
+            96.0
+        )
+        .is_err());
+        // Calibri 11 at 106 is 72, not scale_px(64)=71.
+        let c11 = GeometryContext::calibri11()
+            .with_dpi({
+                let mut m = serde_json::Map::new();
+                m.insert("dpi".into(), serde_json::json!(106));
+                RenderDpi::from_request(&m).unwrap()
+            })
+            .unwrap();
+        let blank = crate::xml::parse(br#"<worksheet/>"#).unwrap();
+        assert_eq!(c11.column_px(&blank.root, 1).unwrap(), 72);
+        assert_eq!(c11.mdw, 8.0);
     }
 }

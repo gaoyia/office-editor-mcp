@@ -146,12 +146,12 @@ fn hidden_middle_row_packs_the_fills() {
         ]),
     );
     let (w, h, px) = decode_png(&export(&src).unwrap());
-    assert_eq!((w, h), (65, 41));
+    assert_eq!((w, h), (65, 39));
     assert_eq!(pixel(&px, w, 0, 0), GRID);
     assert_eq!(pixel(&px, w, 1, 1), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 1, 19), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 1, 20), [0x00, 0xAA, 0x66]);
-    assert_eq!(pixel(&px, w, 1, 40), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&px, w, 1, 18), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&px, w, 1, 19), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&px, w, 1, 38), [0x00, 0xAA, 0x66]);
     assert!(!px.chunks(3).any(|p| p == [0x11, 0x22, 0x33]));
 }
 
@@ -175,7 +175,7 @@ fn hidden_middle_column_packs_the_fills() {
         ]),
     );
     let (w, h, px) = decode_png(&export(&src).unwrap());
-    assert_eq!((w, h), (129, 21));
+    assert_eq!((w, h), (129, 20));
     assert_eq!(pixel(&px, w, 1, 1), [0xEE, 0x44, 0x55]);
     assert_eq!(pixel(&px, w, 63, 1), [0xEE, 0x44, 0x55]);
     assert_eq!(pixel(&px, w, 64, 1), [0x00, 0xAA, 0x66]);
@@ -209,10 +209,10 @@ fn hidden_merge_anchor_still_paints_the_visible_rows() {
         ]),
     );
     let (w, h, px) = decode_png(&export(&src).unwrap());
-    assert_eq!((w, h), (65, 41));
+    assert_eq!((w, h), (65, 39));
     assert_eq!(pixel(&px, w, 0, 0), GRID);
     assert_eq!(pixel(&px, w, 1, 1), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 1, 40), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&px, w, 1, 38), [0xEE, 0x44, 0x55]);
 }
 
 #[test]
@@ -257,10 +257,10 @@ fn grid_off_and_hidden_row_leave_a_white_frame() {
         )
     });
     let (w, h, px) = decode_png(&export(&off).unwrap());
-    assert_eq!((w, h), (65, 41));
+    assert_eq!((w, h), (65, 39));
     assert_eq!(pixel(&px, w, 0, 0), [255, 255, 255]);
     assert_eq!(pixel(&px, w, 1, 1), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 1, 20), [0x00, 0xAA, 0x66]);
+    assert_eq!(pixel(&px, w, 1, 19), [0x00, 0xAA, 0x66]);
 }
 
 #[test]
