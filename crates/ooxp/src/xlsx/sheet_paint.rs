@@ -6507,13 +6507,20 @@ fn wrap_cell_lines(face: &Face, text: &str, max_width: f64) -> Vec<String> {
                 last_space = None;
                 continue;
             }
-            let break_at = match last_space {
-                Some(s) => s + 1,
-                None => i,
+            // 已放下的词能排进本行、只是随后的空格溢出时，应在该空格处断行，
+            // 不能退回到上一个空格（否则 indent 收窄后会把 "three four" 拆成两行）。
+            let (piece_end, next_start) = if chars[i] == ' ' {
+                (i, i + 1)
+            } else {
+                let break_at = match last_space {
+                    Some(s) => s + 1,
+                    None => i,
+                };
+                (break_at, break_at)
             };
-            let piece: String = chars[start..break_at].iter().collect();
+            let piece: String = chars[start..piece_end].iter().collect();
             out.push(piece);
-            start = break_at;
+            start = next_start;
             last_space = None;
             i = start;
         }
@@ -8349,6 +8356,53 @@ mod tests {
         assert_eq!(
             map_rect_into_dest(44, 44, 177, 110, (44, 44, 177, 110), (44, 44, 179, 110)).unwrap(),
             (44, 44, 179, 110)
+        );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod wrap_indent_space_overflow {
+    use super::wrap_cell_lines;
+    use crate::xlsx::chart_gdi::Face;
+
+    fn dengxian_11_at_106() -> Face {
+        let dpi = 106.0;
+        let px = (11.0 * dpi / 72.0) as f32;
+        Face::open_cell_dpi(px, false, false, "等线", dpi)
+            .or_else(|| Face::open_cell_dpi(px, false, false, "DengXian", dpi))
+            .expect("DengXian/等线 11 @106")
+    }
+
+    #[test]
+    fn indent_space_overflow_keeps_previous_word_on_the_line() {
+        let face = dengxian_11_at_106();
+        let text = "one two three four five";
+        // 与探针 B1 同级：列宽 10.625@MDW8=85，右缘 -2，cell_pad=3，indent=1 为 3 个空格=12，max_w=68。
+        // "three four"=67 能放下，随后空格使 "three four " 变为 71，不得退回到 "three"。
+        let pad = face.cell_pad();
+        let indent = face.width(" ") * 3.0;
+        let max_w = (85.0 - 2.0 - pad - indent).max(1.0);
+        assert_eq!(max_w, 68.0, "pad={pad} indent={indent}");
+        let lines = wrap_cell_lines(&face, text, max_w);
+        let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
+        assert_eq!(
+            trimmed,
+            vec!["one two".to_string(), "three four".to_string(), "five".to_string()],
+            "lines={lines:?} max_w={max_w} three four width={}",
+            face.width("three four")
+        );
+    }
+
+    #[test]
+    fn unindented_same_text_still_wraps_as_three_lines() {
+        let face = dengxian_11_at_106();
+        let pad = face.cell_pad();
+        let max_w = (85.0 - 2.0 - pad).max(1.0);
+        let lines = wrap_cell_lines(&face, "one two three four five", max_w);
+        let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
+        assert_eq!(
+            trimmed,
+            vec!["one two".to_string(), "three four".to_string(), "five".to_string()]
         );
     }
 }
