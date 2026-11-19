@@ -181,6 +181,188 @@ fn missing_page_background_is_white() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
+fn export_two_stop_page_grad(start: &str, end: &str) -> (u32, u32, Vec<u8>) {
+    let src = tmp("grad-bg-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "slide:1",
+                "color": start,
+                "fill": { "kind": "gradient", "color": end }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_rgb(&std::fs::read(&out).unwrap())
+}
+
+#[test]
+fn two_stop_linear_page_background_follows_the_office_curve() {
+    let (w, h, rgb) = export_two_stop_page_grad("000000", "FFFFFF");
+    assert_eq!((w, h), (1280, 720));
+    // Official lock points from PowerPoint 16.0 Slide.Export 1280x720
+    // (CLEAN_PUBLIC_OFFICE_EXPORT, mid-ramp exact with the shape S-curve).
+    for y in [180u32, 360, 540, 630] {
+        let left = pixel(&rgb, w, 0, y);
+        let mid = pixel(&rgb, w, w / 2, y);
+        let right = pixel(&rgb, w, w - 1, y);
+        assert_eq!(left, mid, "row {y} should be constant");
+        assert_eq!(right, mid, "row {y} should be constant");
+    }
+    assert_eq!(pixel(&rgb, w, 0, 180), [105, 105, 105]);
+    assert_eq!(pixel(&rgb, w, 0, 360), [186, 186, 186]);
+    assert_eq!(pixel(&rgb, w, 0, 540), [238, 238, 238]);
+    assert_eq!(pixel(&rgb, w, 0, 630), [250, 250, 250]);
+    assert_eq!(pixel(&rgb, w, 0, 719), [255, 255, 255]);
+    let top = pixel(&rgb, w, 0, 0);
+    assert!(
+        top[0] < 16 && top == pixel(&rgb, w, w - 1, 0),
+        "top should be near black, got {top:?}"
+    );
+
+    let (w2, h2, rgb2) = export_two_stop_page_grad("FF0000", "0000FF");
+    assert_eq!((w2, h2), (1280, 720));
+    assert_eq!(pixel(&rgb2, w2, 0, 180), [238, 0, 105]);
+    assert_eq!(pixel(&rgb2, w2, 0, 360), [186, 0, 186]);
+    assert_eq!(pixel(&rgb2, w2, 0, 540), [105, 0, 238]);
+    assert_eq!(pixel(&rgb2, w2, w2 / 2, 360), [186, 0, 186]);
+}
+
+#[test]
+fn two_stop_linear_page_background_is_inherited() {
+    let src = tmp("grad-bg-inherit-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg-inherit");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "master:1",
+                "color": "000000",
+                "fill": { "kind": "gradient", "color": "FFFFFF" }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg-inherit").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_rgb(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 360), [186, 186, 186]);
+    assert_eq!(pixel(&rgb, w, w - 1, 360), [186, 186, 186]);
+}
+
+#[test]
+fn translucent_page_gradient_stays_white() {
+    let src = tmp("grad-bg-alpha-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg-alpha");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "slide:1",
+                "color": "000000",
+                "alpha": 50000,
+                "fill": { "kind": "gradient", "color": "FFFFFF" }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg-alpha").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_rgb(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 0), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 0, 360), [255, 255, 255]);
+}
+
 #[test]
 fn opaque_page_background_one_to_one_is_stable() {
     let png = unique_pattern_png(96, 96);

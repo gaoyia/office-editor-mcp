@@ -1,5 +1,5 @@
 //! 幻灯片只读栅格化。先铺页底，再按文档顺序画形状、图、表和文字。
-//! 页底用本页、版式或母版上没有颜色变换的纯色，或没有旋转、没有裁剪、拉伸铺满的不透明嵌入 PNG。
+//! 页底用本页、版式或母版上没有颜色变换的纯色，没有旋转、没有裁剪、拉伸铺满的不透明嵌入 PNG，或两停点、直角、不透明的线性 `a:gradFill`。
 //! 没有或画不了时铺白，不再往下继承。画不了的对象让整页失败，不交出缺一块的图。
 //! 不写回包，像素不进 inspect。t93u 的透明放大残差接受不扩到页底。
 
@@ -88,7 +88,7 @@ fn parse_slide_id(id: &str) -> Result<usize, Error> {
 const WHITE: [u8; 3] = [255, 255, 255];
 
 /// 本页有 `p:bg` 就用本页，否则用版式，再否则用母版。
-/// 这一层写了页底但画不成纯色时铺白，不再往下继承。
+/// 这一层写了页底但画不成纯色、不透明拉伸 PNG 或两停点直角不透明线性渐变时铺白，不再往下继承。
 fn paint_page_background(
     pkg: &Package,
     slide_part: &str,
@@ -155,6 +155,10 @@ fn paint_page_background(
                     return Ok(());
                 }
             }
+            if let Some(grad) = page_linear_gradient(pr) {
+                fill_gradient(rgb, width, height, 0, 0, width as i32, height as i32, grad);
+                return Ok(());
+            }
         }
         // 这一层已经写了页底但画不成：铺白，不再继承。
         fill(rgb, WHITE);
@@ -162,6 +166,29 @@ fn paint_page_background(
     }
     fill(rgb, WHITE);
     Ok(())
+}
+
+fn page_linear_gradient(pr: &Element) -> Option<LinearGrad> {
+    if pr
+        .attr("shadeToTitle")
+        .is_some_and(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+    {
+        return None;
+    }
+    let mut fill = None;
+    for child in pr.element_children() {
+        match child.local_name() {
+            "gradFill" if fill.is_none() => fill = Some(child),
+            "effectLst" if child.element_children().next().is_none() => {}
+            _ => return None,
+        }
+    }
+    let _ = fill?;
+    let grad = linear_gradient(pr)?;
+    if grad_is_translucent(&grad) {
+        return None;
+    }
+    Some(grad)
 }
 
 fn page_blip_fill(pr: &Element) -> Option<&Element> {
