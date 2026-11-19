@@ -1354,55 +1354,38 @@ fn paint_bar(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    // 数值轴在水平方向，间隔预算按绘图区宽度，occupancy=3，与散点 X 轴同一套公式。
+    // 数值轴在水平方向，间隔预算按绘图区宽度。占用系数用 1，与竖向数值轴同一套
+    // 行盒口径，上限仍是 10。occupancy=3 是散点 X 轴为较长标签留的余量，在典型
+    // 条形宽度下会把预算压到 9，从而把 Office 对 -8..8 的自动主间隔 2（-10..10
+    // 共 10 格）拒掉，改成间隔 5。短数字标签在 10 格下仍放得下。
     let scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget_span(plot.w, em, 3.0),
+        axis::interval_budget_span(plot.w, em, 1.0),
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
-    let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
-        <= step * 1e-8;
     let axis_y = if val_axis_at_top { plot_y } else { plot_b };
-    if chart.grid && regular {
-        for i in 0..=intervals {
-            let x = plot_x + (i * (plot_r - plot_x) + intervals - 1) / intervals;
-            canvas.vline_i(x, plot_y, plot_b, INK);
-        }
-    }
-    if chart.grid && !regular {
+    // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
+    if chart.grid {
         for value in &ticks {
             let x = x_of(*value, axis_min, axis_max, &plot).round() as i32;
             canvas.vline_i(x, plot_y, plot_b, INK);
         }
     }
-    let parts = step / scale.minor;
-    if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
-        draw_value_minor_ticks_x(
-            canvas,
-            plot_x,
-            plot_r,
-            axis_y,
-            intervals,
-            parts.round() as i32,
-        );
-    } else {
-        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
-            let at_major = (value - axis_min) / step;
-            if (at_major - at_major.round()).abs() < 1e-8 {
-                continue;
-            }
-            let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
-            canvas.vline_i(
-                x,
-                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
-                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
-                INK,
-            );
+    for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+        let at_major = (value - axis_min) / step;
+        if (at_major - at_major.round()).abs() < 1e-8 {
+            continue;
         }
+        let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+            axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+            INK,
+        );
     }
     draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
     let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
@@ -2350,7 +2333,6 @@ fn draw_clustered_bars(
             };
             let y = origin + place as f64 * bar_h * (1.0 - overlap);
             let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
-            let left = x_zero.min(x_val);
             let w = (x_zero - x_val).abs();
             if w < 0.2 || bar_h < 0.2 {
                 continue;
@@ -2360,8 +2342,16 @@ fn draw_clustered_bars(
             } else {
                 ser.color.unwrap_or(chart.accents[ser.slot % 6])
             };
-            let x0 = left.round() as i32;
-            let x1 = (left + w).round() as i32;
+            // fill_rect 是左闭右开。数值端包含对应刻度像素，零端不越过零轴：
+            // 正条为 [zero, tick]，负条为 [tick, zero)。值 8 的右缘因此落在自己的
+            // 8 刻度上，不再在刻度前空出 1px 白缝。不是把宽度盲目 +1。
+            let x_zero_i = x_zero.round() as i32;
+            let x_val_i = x_val.round() as i32;
+            let (x0, x1) = if x_val_i >= x_zero_i {
+                (x_zero_i, x_val_i + 1)
+            } else {
+                (x_val_i, x_zero_i)
+            };
             let y0 = round_half_even(y);
             let y1 = round_half_even(y + bar_h);
             draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
@@ -2401,37 +2391,6 @@ fn draw_cat_ticks_y(
             y,
             INK,
         );
-    }
-}
-
-fn draw_value_minor_ticks_x(
-    canvas: &mut Canvas,
-    plot_x: i32,
-    plot_r: i32,
-    axis_y: i32,
-    intervals: i32,
-    parts: i32,
-) {
-    let span = plot_r - plot_x;
-    if intervals < 1 || span <= 0 {
-        return;
-    }
-    for i in 0..intervals {
-        let x0 = plot_x + (i * span + intervals - 1) / intervals;
-        let x1 = plot_x + ((i + 1) * span + intervals - 1) / intervals;
-        let gap = x1 - x0;
-        for k in 1..parts {
-            let x = x0 + (k * gap + parts / 2) / parts;
-            if x <= x0 || x >= x1 {
-                continue;
-            }
-            canvas.vline_i(
-                x,
-                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
-                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
-                INK,
-            );
-        }
     }
 }
 
@@ -6050,6 +6009,159 @@ mod tests {
             None,
         ))
         .unwrap();
+    }
+
+    fn near_ink(rgb: [u8; 3]) -> bool {
+        rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40
+    }
+
+    fn pixel_rgb(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * w + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    fn fill_x_span_limit(
+        rgb: &[u8],
+        w: u32,
+        h: u32,
+        color: [u8; 3],
+        tol: i16,
+        x_limit: u32,
+    ) -> Option<(u32, u32)> {
+        let mut min_x = u32::MAX;
+        let mut max_x = 0u32;
+        let mut found = false;
+        let x_end = x_limit.min(w);
+        for y in 0..h {
+            for x in 0..x_end {
+                if near(pixel_rgb(rgb, w, x, y), color, tol) {
+                    min_x = min_x.min(x);
+                    max_x = max_x.max(x);
+                    found = true;
+                }
+            }
+        }
+        found.then_some((min_x, max_x))
+    }
+
+    /// Long vertical ink columns in the plot, i.e. major grid / zero / max ticks.
+    fn major_grid_xs(rgb: &[u8], w: u32, y0: u32, y1: u32, min_count: u32) -> Vec<u32> {
+        let mut xs = Vec::new();
+        for x in 0..w {
+            let mut n = 0u32;
+            for y in y0..y1 {
+                if near_ink(pixel_rgb(rgb, w, x, y)) {
+                    n += 1;
+                }
+            }
+            if n >= min_count {
+                xs.push(x);
+            }
+        }
+        xs
+    }
+
+    #[test]
+    fn clustered_bar_value_edge_lands_on_its_tick() {
+        let color = FALLBACK_ACCENTS[0];
+        let png = render_bar(&bar_xml(
+            &line_ser(0, "S1", &[Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        // Skip the top value-axis band and the bottom gutter; grids run through the plot.
+        let grids = major_grid_xs(&rgb, w, 50, 300, 80);
+        assert!(
+            grids.len() >= 10,
+            "0..9 auto scale should expose the major grid; grids={grids:?}"
+        );
+        let zero = *grids.first().expect("zero / min tick");
+        let max_tick = *grids.last().expect("max tick");
+        // Auto 0..9, value 8 is 8/9 of the axis. Identify that tick from the grid list.
+        let expected = zero + ((max_tick - zero) * 8 + 4) / 9;
+        let tick8 = grids
+            .iter()
+            .copied()
+            .min_by_key(|x| x.abs_diff(expected))
+            .unwrap();
+        // Exclude the right-side legend swatch, which uses the same accent color.
+        let (x0, x1) =
+            fill_x_span_limit(&rgb, w, h, color, 8, max_tick + 1).expect("value-8 bar fill");
+        assert_eq!(
+            x1, tick8,
+            "value-8 bar right edge must land on the 8 tick (no 1px gap); fill={x0}..{x1} zero={zero} max={max_tick} tick8={tick8} grids={grids:?}"
+        );
+        assert!(
+            x0 == zero || x0 == zero + 1,
+            "positive bar should start at the zero axis (axis ink may cover the first pixel); fill={x0}..{x1} zero={zero}"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_signed_auto_major_uses_step_two() {
+        // Office auto-scales -8..8 to -10..10 with majorUnit=2. This must not be
+        // hardcoded for one fixture; the same path serves any clustered bar.
+        let color = FALLBACK_ACCENTS[0];
+        let png = render_bar(&bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-8.0), Some(0.0), Some(8.0)],
+                r#"<c:invertIfNegative val="0"/>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let grids = major_grid_xs(&rgb, w, 50, 300, 80);
+        assert_eq!(
+            grids.len(),
+            11,
+            "auto major 2 on -10..10 should draw 11 vertical grid lines; grids={grids:?}"
+        );
+        let min_tick = grids[0];
+        let max_tick = grids[10];
+        let span = max_tick - min_tick;
+        for (i, x) in grids.iter().copied().enumerate() {
+            let expect = min_tick + ((span * i as u32) + 5) / 10;
+            assert!(
+                x.abs_diff(expect) <= 1,
+                "grid {i} should be evenly spaced for step 2; x={x} expect={expect} grids={grids:?}"
+            );
+        }
+        // Value 8 is the 9th tick (index 9: -10,-8,...,8,10). The bottom category
+        // (C=+8, maxMin so first category on top) must meet that tick.
+        let tick8 = grids[9];
+        let tick0 = grids[5];
+        // Restrict the fill hunt to the lower half so A=-8 does not mix in,
+        // and stop before the legend swatch.
+        let mut right = None;
+        let mut left_pos = None;
+        for y in (h / 2)..(h.saturating_sub(20)) {
+            for x in 0..(max_tick + 1) {
+                if near(pixel_rgb(&rgb, w, x, y), color, 8) {
+                    left_pos = Some(left_pos.map_or(x, |cur: u32| cur.min(x)));
+                    right = Some(right.map_or(x, |cur: u32| cur.max(x)));
+                }
+            }
+        }
+        let right = right.expect("positive C bar fill");
+        let left_pos = left_pos.expect("positive C bar left");
+        assert_eq!(
+            right, tick8,
+            "C=+8 bar right edge must land on the 8 tick; fill={left_pos}..{right} tick8={tick8} zero={tick0} grids={grids:?}"
+        );
+        assert!(
+            left_pos.abs_diff(tick0) <= 1,
+            "C bar should grow from the zero axis; left={left_pos} zero={tick0}"
+        );
     }
 
     #[test]

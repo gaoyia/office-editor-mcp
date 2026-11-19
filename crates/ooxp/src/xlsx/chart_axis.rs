@@ -406,6 +406,32 @@ mod tests {
         assert_eq!(interval_budget(96, 17.0), 2);
         assert!(interval_budget(200, 25.0) < interval_budget(200, 17.0));
     }
+
+    #[test]
+    fn auto_scale_minus_eight_to_eight_uses_major_two_when_budget_allows() {
+        // Office automatic scaling of -8..8 is -10..10, majorUnit=2 (10 intervals).
+        // This is the shared nice-number search, not a one-chart special case.
+        let values = [Some(-8.0), Some(0.0), Some(8.0)];
+        let got = scale_values(values.into_iter(), Spec::default(), 10).unwrap();
+        assert_eq!(
+            (got.min, got.max, got.major),
+            (-10.0, 10.0, 2.0),
+            "budget 10 must accept Office's 10-interval major=2"
+        );
+    }
+
+    #[test]
+    fn horizontal_numeric_budget_reaches_ten_on_typical_bar_width() {
+        // Measured plot width of the 636-wide official bar charts is 537px.
+        // occupancy=3 drops below 10 once em exceeds ~17.6, which is why those
+        // signed bars used major=5. Numeric occupancy 1 must still reach the cap.
+        let em = 20.0;
+        assert_eq!(interval_budget_span(537.0, em, 1.0), 10);
+        assert!(
+            interval_budget_span(537.0, em, 3.0) < 10,
+            "occupancy 3 is what used to reject major=2 on this width"
+        );
+    }
     #[test]
     fn explicit_xml_is_not_silently_ignored() {
         let doc=crate::xml::parse(b"<plotArea><valAx><scaling><min val='-2'/><max val='8'/></scaling><majorUnit val='2'/><minorUnit val='0.5'/></valAx></plotArea>").unwrap();
