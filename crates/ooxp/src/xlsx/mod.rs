@@ -10,6 +10,7 @@ mod chart_drawing;
 mod chart_gdi;
 mod chart_paint;
 mod chartsheet;
+mod chartsheet_page;
 mod comments;
 mod connection;
 mod create;

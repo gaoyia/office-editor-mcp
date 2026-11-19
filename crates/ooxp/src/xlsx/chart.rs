@@ -2095,7 +2095,11 @@ pub(crate) fn export_chart_image_at(
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
     let draw = super::list_pin::parse_part(&pkg, &drawing_part)?;
     let sheet = super::list_pin::parse_part(&pkg, &sheet_part)?;
-    let (width, height) = chart_bitmap_px(&pkg, &draw.root, &sheet.root, &target.key, dpi)?;
+    let (width, height) = if sheet.root.local_name() == "chartsheet" {
+        super::chartsheet_page::canvas_px(&sheet.root, dpi)?
+    } else {
+        chart_bitmap_px(&pkg, &draw.root, &sheet.root, &target.key, dpi)?
+    };
     let rid = find_chart_rid(&draw.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;

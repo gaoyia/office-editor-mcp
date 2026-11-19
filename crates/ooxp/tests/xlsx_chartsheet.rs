@@ -396,7 +396,7 @@ fn export_chartsheet_col_png_matches_chart_image() {
     assert_eq!(sheet, chart);
     let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
     let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
-    assert_eq!((width, height), (576, 336));
+    assert_eq!((width, height), (975, 638));
 }
 
 #[test]
@@ -454,5 +454,46 @@ fn export_chartsheet_standard_line_png_matches_chart_image() {
     assert_eq!(sheet, chart);
     let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
     let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
-    assert_eq!((width, height), (576, 336));
+    assert_eq!((width, height), (975, 638));
+}
+
+#[test]
+fn export_chartsheet_uses_a4_page_canvas_at_106_dpi() {
+    let src = create_book("cs-dpi106");
+    let charted = tmp("cs-dpi106-ins");
+    apply(&src, &charted, json!([insert_op()])).unwrap();
+    let before = std::fs::read(&charted).unwrap();
+    let sheet_png = tmp("cs-dpi106-sheet").with_extension("png");
+    let chart_png = tmp("cs-dpi106-chart").with_extension("png");
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": charted.to_string_lossy(),
+        "id": "sheet:Chart1",
+        "dpi": 106,
+        "output": sheet_png.to_string_lossy()
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("exportSheetImage 应按横向 A4 页计算 106 dpi 画布");
+    };
+    let RunOutput::Written { .. } = run(&json!({
+        "schemaVersion": 1,
+        "action": "exportChartImage",
+        "path": charted.to_string_lossy(),
+        "id": "sheet:Chart1/chart:2",
+        "dpi": 106,
+        "output": chart_png.to_string_lossy()
+    })
+    .to_string())
+    .unwrap() else {
+        panic!("exportChartImage 应与 sheet 入口使用同一页画布");
+    };
+    assert_eq!(std::fs::read(&charted).unwrap(), before);
+    let sheet = std::fs::read(&sheet_png).unwrap();
+    let chart = std::fs::read(&chart_png).unwrap();
+    assert_eq!(sheet, chart);
+    let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
+    let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
+    assert_eq!((width, height), (1077, 704));
 }
