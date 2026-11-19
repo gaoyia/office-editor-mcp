@@ -526,8 +526,8 @@ struct SheetPng {
 
 enum Overlay {
     Fill(PlainRect),
-    /// 锚点组合上的非直角旋转：先按组缩放/翻转得到轴对齐框，再绕组中心旋转。
-    /// `(x, y, w, h)` 是旋转后中心处、旋转前尺寸的轴对齐框，单位是工作表像素（可含小数）。
+    /// 锚点组合上的非直角旋转：先按组缩放/翻转落到 twoCell 未旋转目的框，再绕组中心旋转。
+    /// `(x, y, w, h)` 是旋转后中心处、旋转前（已按 twoCell 放大）尺寸的轴对齐框，单位是工作表像素（可含小数）。
     RotatedFill(RotatedFill),
     Png(SheetPng),
     Spark(SheetSpark),
@@ -1172,7 +1172,17 @@ fn identity_group(
             .collect()
     } else {
         // 只锁锚点组合这一层的非直角；里层仍必须是已差 0 的直角/翻转/缩放。
-        group_rotated_overlays(group, &[map], origin_x, origin_y, cols, rows, theme, dpi)?
+        group_rotated_overlays(
+            group,
+            &[map],
+            origin_x,
+            origin_y,
+            cols,
+            rows,
+            theme,
+            dpi,
+            anchor_box,
+        )?
     };
     if rects.is_empty() {
         return Err(unsupported());
@@ -1267,6 +1277,7 @@ fn group_rotated_overlays(
     rows: &[i32],
     theme: Option<&LoadedTheme>,
     dpi: RenderDpi,
+    anchor_box: (i32, i32, i32, i32),
 ) -> Result<Vec<Overlay>, Error> {
     let outer = chain.first().ok_or_else(unsupported)?;
     if outer.quarter().is_some() {
@@ -1277,7 +1288,7 @@ fn group_rotated_overlays(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => out.push(child_rotated_fill(
-                child, x_from, y_from, chain, cols, rows, theme, dpi,
+                child, x_from, y_from, chain, cols, rows, theme, dpi, anchor_box,
             )?),
             "grpSp" => {
                 let inner = read_group_map(child)?;
@@ -1288,7 +1299,7 @@ fn group_rotated_overlays(
                 let mut next = chain.to_vec();
                 next.push(inner);
                 out.extend(group_rotated_overlays(
-                    child, &next, x_from, y_from, cols, rows, theme, dpi,
+                    child, &next, x_from, y_from, cols, rows, theme, dpi, anchor_box,
                 )?);
             }
             _ => return Err(unsupported()),
@@ -1306,6 +1317,7 @@ fn child_rotated_fill(
     rows: &[i32],
     theme: Option<&LoadedTheme>,
     dpi: RenderDpi,
+    anchor_box: (i32, i32, i32, i32),
 ) -> Result<Overlay, Error> {
     let (sx0, sy0, sx1, sy1) = child_frame_in_outer(sp, chain)?;
     let map = chain.first().ok_or_else(unsupported)?;
@@ -1313,15 +1325,36 @@ fn child_rotated_fill(
         return Err(unsupported());
     }
     let deg = rot_deg(map.rot);
-    let x = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + sx0 as f64, dpi);
-    let y = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + sy0 as f64, dpi);
-    let w = emu_to_px_at((sx1 - sx0) as f64, dpi);
-    let h = emu_to_px_at((sy1 - sy0) as f64, dpi);
+    let mut x = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + sx0 as f64, dpi);
+    let mut y = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + sy0 as f64, dpi);
+    let mut w = emu_to_px_at((sx1 - sx0) as f64, dpi);
+    let mut h = emu_to_px_at((sy1 - sy0) as f64, dpi);
     if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
         return Err(unsupported());
     }
     let gcx = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + map.cx as f64 / 2.0, dpi);
     let gcy = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + map.cy as f64 / 2.0, dpi);
+    // 官方把 twoCell 外接框当作未旋转目的框，再绕中心旋转，因此非直角组合比旋转
+    // 原始 xfrm 外框更肥；直角路径仍走 group_rects，不在这里改。
+    let thin_w = emu_to_px_at(map.cx as f64, dpi);
+    let thin_h = emu_to_px_at(map.cy as f64, dpi);
+    let (ax0, ay0, ax1, ay1) = anchor_box;
+    let dest_w = f64::from(ax1.checked_sub(ax0).ok_or_else(unsupported)?);
+    let dest_h = f64::from(ay1.checked_sub(ay0).ok_or_else(unsupported)?);
+    if thin_w <= 0.0 || thin_h <= 0.0 || dest_w <= 0.0 || dest_h <= 0.0 {
+        return Err(unsupported());
+    }
+    let sx = dest_w / thin_w;
+    let sy = dest_h / thin_h;
+    if !sx.is_finite() || !sy.is_finite() || sx <= 0.0 || sy <= 0.0 {
+        return Err(unsupported());
+    }
+    let ccx = x + w / 2.0;
+    let ccy = y + h / 2.0;
+    w *= sx;
+    h *= sy;
+    x = gcx + (ccx - gcx) * sx - w / 2.0;
+    y = gcy + (ccy - gcy) * sy - h / 2.0;
     let (ncx, ncy) = rotate_cw(x + w / 2.0, y + h / 2.0, gcx, gcy, deg);
     let rx = (ncx - w / 2.0) as f32;
     let ry = (ncy - h / 2.0) as f32;

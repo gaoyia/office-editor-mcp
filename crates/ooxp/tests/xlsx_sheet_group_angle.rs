@@ -1,5 +1,6 @@
-//! 工作表锚点组合的非直角旋转：按组缩放/翻转后再绕中心旋转，不拿外接框铺色。
-//! 不把官方 CopyPicture 对照算作通过。不涉及单元格 textRotation。
+//! 工作表锚点组合的非直角旋转：先把子矩形按组缩放/翻转落到 twoCell 未旋转目的框，再绕中心旋转。
+//! 官方把已写成转完后外接框的 twoCell 当作未旋转尺寸再旋转，因此比旋转原始 xfrm 外框更肥；
+//! 仍不拿外接框铺色。不把官方 CopyPicture 对照算作用户验收。不涉及单元格 textRotation。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -361,13 +362,31 @@ fn child_sheet_box(
         fsy0 = a.min(b);
         fsy1 = a.max(b);
     }
-    let x0 = (off_x + fsx0) as f64 / EMU as f64;
-    let y0 = (off_y + fsy0) as f64 / EMU as f64;
-    let pw = (fsx1 - fsx0) as f64 / EMU as f64;
-    let ph = (fsy1 - fsy0) as f64 / EMU as f64;
+    let mut x0 = (off_x + fsx0) as f64 / EMU as f64;
+    let mut y0 = (off_y + fsy0) as f64 / EMU as f64;
+    let mut pw = (fsx1 - fsx0) as f64 / EMU as f64;
+    let mut ph = (fsy1 - fsy0) as f64 / EMU as f64;
     let gcx = (off_x as f64 + cx as f64 / 2.0) / EMU as f64;
     let gcy = (off_y as f64 + cy as f64 / 2.0) / EMU as f64;
     let deg = rot_deg(rot);
+    // 非直角：官方用 twoCell（转完后的外接框）当未旋转目的框再旋转。
+    if rot.rem_euclid(5_400_000) != 0 {
+        let (ax0, ay0, ax1, ay1) = group_box_px(off_x, off_y, cx, cy, rot);
+        let thin_w = cx as f64 / EMU as f64;
+        let thin_h = cy as f64 / EMU as f64;
+        let dest_w = f64::from(ax1 - ax0);
+        let dest_h = f64::from(ay1 - ay0);
+        let sx = dest_w / thin_w;
+        let sy = dest_h / thin_h;
+        let ccx = x0 + pw / 2.0;
+        let ccy = y0 + ph / 2.0;
+        let pw2 = pw * sx;
+        let ph2 = ph * sy;
+        x0 = gcx + (ccx - gcx) * sx - pw2 / 2.0;
+        y0 = gcy + (ccy - gcy) * sy - ph2 / 2.0;
+        pw = pw2;
+        ph = ph2;
+    }
     let (ncx, ncy) = rotate_cw(x0 + pw / 2.0, y0 + ph / 2.0, gcx, gcy, deg);
     (ncx - pw / 2.0, ncy - ph / 2.0, pw, ph, deg)
 }
@@ -645,8 +664,19 @@ fn a_non_uniform_scale_then_30_degree_turn_keeps_a_rectangle() {
     let box_ = child_sheet_box(
         OFF, OFF, WIDE, TALL, OFF, OFF, ch, ch, DEG30, false, false, child,
     );
-    assert!((box_.2 - 24.0).abs() < 1e-6, "scaled width {}", box_.2);
-    assert!((box_.3 - 12.0).abs() < 1e-6, "scaled height {}", box_.3);
+    let (ax0, ay0, ax1, ay1) = group_box_px(OFF, OFF, WIDE, TALL, DEG30);
+    assert!(
+        (box_.2 - f64::from(ax1 - ax0)).abs() < 1e-6,
+        "fat width {} want {}",
+        box_.2,
+        ax1 - ax0
+    );
+    assert!(
+        (box_.3 - f64::from(ay1 - ay0)).abs() < 1e-6,
+        "fat height {} want {}",
+        box_.3,
+        ay1 - ay0
+    );
     let (w, h, rgb) = decode_png(&export(&drawing_book(&xml)).unwrap());
     assert_geometry(&rgb, w, h, &[box_]);
 }
