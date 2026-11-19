@@ -968,6 +968,16 @@ fn row_px_one(
     cells: &HashMap<(u32, u32), CellRec>,
     row: u32,
 ) -> Result<i32, Error> {
+    row_px_one_at(sheet, styles, cells, row, styles.geometry.dpi())
+}
+
+fn row_px_one_at(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    row: u32,
+    dpi: RenderDpi,
+) -> Result<i32, Error> {
     let base = row_base(sheet, styles);
     if let Some(data) = sheet.child_by_local("sheetData") {
         let mut prev = 0u32;
@@ -981,7 +991,7 @@ fn row_px_one(
                 return Ok(0);
             }
             if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
-                let px = excel_row_px_at(ht, styles.geometry.dpi());
+                let px = excel_row_px_at(ht, dpi);
                 if px < 1 {
                     return Err(unsupported());
                 }
@@ -991,7 +1001,7 @@ fn row_px_one(
         }
     }
     let pt = row_auto_pt(sheet, styles, cells, row, &base)?;
-    let px = excel_row_px_at(pt, styles.geometry.dpi());
+    let px = excel_row_px_at(pt, dpi);
     if px < 1 {
         return Err(unsupported());
     }
@@ -1162,11 +1172,17 @@ fn identity_group(
         row_px_one(sheet, styles, cells, row)
     })?;
     let dpi = styles.geometry.dpi();
-    if anchor_box != turned_box(&map, origin_x, origin_y, dpi)? {
+    let turned = turned_box(&map, origin_x, origin_y, dpi)?;
+    if !group_anchor_agrees(
+        anchor, kind, sheet, styles, cells, c0, r0, &map, anchor_box, turned,
+    )? {
         return Err(unsupported());
     }
     let rects = if map.quarter().is_some() {
         group_rects(group, &[map], origin_x, origin_y, cols, rows, theme, dpi)?
+            .into_iter()
+            .map(|rect| map_fill_into_dest(rect, turned, anchor_box))
+            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(Overlay::Fill)
             .collect()
@@ -1188,6 +1204,140 @@ fn identity_group(
         return Err(unsupported());
     }
     Ok(rects)
+}
+
+/// twoCell 与组外框是否对齐。先比请求 dpi 下的格子像素框和组 EMU 外框；
+/// 不相等时再在 96 dpi 字体网格上比一次。官方组合把转完后的外接框按 96 dpi
+/// 格子（默认列 64、30 磅行 40）写入 twoCell，106 dpi 下 MDW 重测使列变成 72，
+/// 格子锚点会比组 EMU 外框宽 2～3 像素，这不是锚点不合。
+fn group_anchor_agrees(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    map: &GroupMap,
+    anchor_box: (i32, i32, i32, i32),
+    turned: (i32, i32, i32, i32),
+) -> Result<bool, Error> {
+    if anchor_box == turned {
+        return Ok(true);
+    }
+    if kind != AnchorKind::TwoCell || styles.geometry.dpi().is_default() {
+        return Ok(false);
+    }
+    let typo_anchor = typographic_two_cell_box(anchor, sheet, styles, cells, c0, r0)?;
+    let typo = styles.geometry.clone().with_dpi(RenderDpi::DEFAULT)?;
+    let ox = axis_origin(1, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let oy = axis_origin(1, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, typo.dpi())
+    })?;
+    let typo_turned = turned_box(map, ox, oy, RenderDpi::DEFAULT)?;
+    Ok(typo_anchor == typo_turned)
+}
+
+fn typographic_two_cell_box(
+    anchor: &Element,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+) -> Result<(i32, i32, i32, i32), Error> {
+    let typo = styles.geometry.clone().with_dpi(RenderDpi::DEFAULT)?;
+    let dpi = typo.dpi();
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let x_from = axis_origin(from.col, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let y_from = axis_origin(from.row, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, dpi)
+    })?;
+    let x0 = x_from + clamp_cell_off(col_off, typo.column_px(sheet, from.col)?, dpi)?;
+    let y0 = y_from
+        + clamp_cell_off(
+            row_off,
+            row_px_one_at(sheet, styles, cells, from.row, dpi)?,
+            dpi,
+        )?;
+    let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+    let to = to.ok_or_else(unsupported)?;
+    let x_to = axis_origin(to.col, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let y_to = axis_origin(to.row, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, dpi)
+    })?;
+    let mut x1 = x_to + clamp_cell_off(to_x, typo.column_px(sheet, to.col)?, dpi)?;
+    let mut y1 =
+        y_to + clamp_cell_off(to_y, row_px_one_at(sheet, styles, cells, to.row, dpi)?, dpi)?;
+    if x1 <= x0 {
+        x1 = x0 + 1;
+    }
+    if y1 <= y0 {
+        y1 = y0 + 1;
+    }
+    if x1 < x0 || y1 < y0 {
+        return Err(unsupported());
+    }
+    Ok((x0, y0, x1, y1))
+}
+
+fn map_fill_into_dest(
+    mut rect: PlainRect,
+    src: (i32, i32, i32, i32),
+    dest: (i32, i32, i32, i32),
+) -> Result<PlainRect, Error> {
+    let (x0, y0, x1, y1) = map_rect_into_dest(rect.x0, rect.y0, rect.x1, rect.y1, src, dest)?;
+    rect.x0 = x0;
+    rect.y0 = y0;
+    rect.x1 = x1;
+    rect.y1 = y1;
+    Ok(rect)
+}
+
+/// 把矩形从组 EMU 外框线性映射到当前 dpi 的 twoCell 目的框。96 dpi 下两框重合，是恒等。
+fn map_rect_into_dest(
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    src: (i32, i32, i32, i32),
+    dest: (i32, i32, i32, i32),
+) -> Result<(i32, i32, i32, i32), Error> {
+    if src == dest {
+        return Ok((x0, y0, x1, y1));
+    }
+    let map_edge = |v: i32, a0: i32, a1: i32, b0: i32, b1: i32| -> Result<i32, Error> {
+        if a1 == a0 {
+            return Err(unsupported());
+        }
+        if v == a0 {
+            return Ok(b0);
+        }
+        if v == a1 {
+            return Ok(b1);
+        }
+        let t = f64::from(v - a0) / f64::from(a1 - a0);
+        let out = f64::from(b0) + t * f64::from(b1 - b0);
+        if !t.is_finite()
+            || !out.is_finite()
+            || out < f64::from(i32::MIN)
+            || out > f64::from(i32::MAX)
+        {
+            return Err(unsupported());
+        }
+        Ok(out.round() as i32)
+    };
+    let (sx0, sy0, sx1, sy1) = src;
+    let (dx0, dy0, dx1, dy1) = dest;
+    let nx0 = map_edge(x0, sx0, sx1, dx0, dx1)?;
+    let nx1 = map_edge(x1, sx0, sx1, dx0, dx1)?;
+    let ny0 = map_edge(y0, sy0, sy1, dy0, dy1)?;
+    let ny1 = map_edge(y1, sy0, sy1, dy0, dy1)?;
+    if nx1 < nx0 || ny1 < ny0 {
+        return Err(unsupported());
+    }
+    Ok((nx0, ny0, nx1, ny1))
 }
 
 fn read_group_map(group: &Element) -> Result<GroupMap, Error> {
@@ -1325,36 +1475,33 @@ fn child_rotated_fill(
         return Err(unsupported());
     }
     let deg = rot_deg(map.rot);
-    let mut x = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + sx0 as f64, dpi);
-    let mut y = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + sy0 as f64, dpi);
-    let mut w = emu_to_px_at((sx1 - sx0) as f64, dpi);
-    let mut h = emu_to_px_at((sy1 - sy0) as f64, dpi);
-    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
-        return Err(unsupported());
-    }
-    let gcx = f64::from(x_from) + emu_to_px_at(map.off_x as f64 + map.cx as f64 / 2.0, dpi);
-    let gcy = f64::from(y_from) + emu_to_px_at(map.off_y as f64 + map.cy as f64 / 2.0, dpi);
-    // 官方把 twoCell 外接框当作未旋转目的框，再绕中心旋转，因此非直角组合比旋转
-    // 原始 xfrm 外框更肥；直角路径仍走 group_rects，不在这里改。
-    let thin_w = emu_to_px_at(map.cx as f64, dpi);
-    let thin_h = emu_to_px_at(map.cy as f64, dpi);
+    let _ = (x_from, y_from, dpi);
+    // 官方把当前 dpi 下的 twoCell 格子像素框当作未旋转目的框，子矩形按组外框
+    // 轴向比例落入该框，再绕目的框中心旋转。96 dpi 下该框与组 EMU 外框取整后
+    // 重合，结果与原先一致。
     let (ax0, ay0, ax1, ay1) = anchor_box;
     let dest_w = f64::from(ax1.checked_sub(ax0).ok_or_else(unsupported)?);
     let dest_h = f64::from(ay1.checked_sub(ay0).ok_or_else(unsupported)?);
-    if thin_w <= 0.0 || thin_h <= 0.0 || dest_w <= 0.0 || dest_h <= 0.0 {
+    if map.cx <= 0
+        || map.cy <= 0
+        || dest_w <= 0.0
+        || dest_h <= 0.0
+        || !dest_w.is_finite()
+        || !dest_h.is_finite()
+        || !deg.is_finite()
+    {
         return Err(unsupported());
     }
-    let sx = dest_w / thin_w;
-    let sy = dest_h / thin_h;
-    if !sx.is_finite() || !sy.is_finite() || sx <= 0.0 || sy <= 0.0 {
+    let x = f64::from(ax0) + (sx0 as f64 / map.cx as f64) * dest_w;
+    let y = f64::from(ay0) + (sy0 as f64 / map.cy as f64) * dest_h;
+    let w = ((sx1 - sx0) as f64 / map.cx as f64) * dest_w;
+    let h = ((sy1 - sy0) as f64 / map.cy as f64) * dest_h;
+    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !x.is_finite() || !y.is_finite()
+    {
         return Err(unsupported());
     }
-    let ccx = x + w / 2.0;
-    let ccy = y + h / 2.0;
-    w *= sx;
-    h *= sy;
-    x = gcx + (ccx - gcx) * sx - w / 2.0;
-    y = gcy + (ccy - gcy) * sy - h / 2.0;
+    let gcx = f64::from(ax0) + dest_w / 2.0;
+    let gcy = f64::from(ay0) + dest_h / 2.0;
     let (ncx, ncy) = rotate_cw(x + w / 2.0, y + h / 2.0, gcx, gcy, deg);
     let rx = (ncx - w / 2.0) as f32;
     let ry = (ncy - h / 2.0) as f32;
@@ -8098,5 +8245,110 @@ mod tests {
         assert_ne!(box106, (7, 7, 29, 29));
         // 中心 95250+76200=171450 EMU → 19.875px；半对角 76200*sqrt(2)×106/914400 ≈ 12.492
         assert_eq!(box106, (7, 7, 32, 32));
+    }
+
+    fn dpi106() -> RenderDpi {
+        let mut obj = serde_json::Map::new();
+        obj.insert("dpi".into(), serde_json::json!(106));
+        RenderDpi::from_request(&obj).unwrap()
+    }
+
+    fn frames_agree(
+        anchor: (i32, i32, i32, i32),
+        turned: (i32, i32, i32, i32),
+        typo_anchor: (i32, i32, i32, i32),
+        typo_turned: (i32, i32, i32, i32),
+    ) -> bool {
+        anchor == turned || typo_anchor == typo_turned
+    }
+
+    fn cell_edge(index: i32, off: i64, span: i32, dpi: RenderDpi) -> i32 {
+        index * span + round_px_at(off, dpi).unwrap()
+    }
+
+    #[test]
+    fn a_96px_snapped_two_cell_still_agrees_when_106_cell_grid_drifts() {
+        // 官方 right0 / deg15：组 40×40 起、120×60，twoCell 按 96 dpi 格子写入。
+        let dpi = dpi106();
+        let mut right0 = sample_group_map(0);
+        right0.off_x = 381_000;
+        right0.off_y = 381_000;
+        right0.cx = 1_143_000;
+        right0.cy = 571_500;
+        right0.ch_x = 381_000;
+        right0.ch_y = 381_000;
+        right0.ch_cx = 1_143_000;
+        right0.ch_cy = 571_500;
+        let turned96 = turned_box(&right0, 0, 0, RenderDpi::DEFAULT).unwrap();
+        let turned106 = turned_box(&right0, 0, 0, dpi).unwrap();
+        assert_eq!(turned96, (40, 40, 160, 100));
+        assert_eq!(turned106, (44, 44, 177, 110));
+        let typo = (
+            cell_edge(0, 381_000, 64, RenderDpi::DEFAULT),
+            cell_edge(1, 0, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 304_800, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 190_500, 40, RenderDpi::DEFAULT),
+        );
+        let anchor106 = (
+            cell_edge(0, 381_000, 72, dpi),
+            cell_edge(1, 0, 44, dpi),
+            cell_edge(2, 304_800, 72, dpi),
+            cell_edge(2, 190_500, 44, dpi),
+        );
+        assert_eq!(typo, turned96);
+        assert_ne!(anchor106, turned106);
+        assert_eq!(anchor106, (44, 44, 179, 110));
+        assert!(frames_agree(anchor106, turned106, typo, turned96));
+
+        let mut deg15 = right0;
+        deg15.rot = 900_000;
+        let turned96 = turned_box(&deg15, 0, 0, RenderDpi::DEFAULT).unwrap();
+        let turned106 = turned_box(&deg15, 0, 0, dpi).unwrap();
+        assert_eq!(turned96, (34, 25, 166, 115));
+        let typo = (
+            cell_edge(0, 323_850, 64, RenderDpi::DEFAULT),
+            cell_edge(0, 238_125, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 361_950, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 333_375, 40, RenderDpi::DEFAULT),
+        );
+        let anchor106 = (
+            cell_edge(0, 323_850, 72, dpi),
+            cell_edge(0, 238_125, 44, dpi),
+            cell_edge(2, 361_950, 72, dpi),
+            cell_edge(2, 333_375, 44, dpi),
+        );
+        assert_eq!(typo, turned96);
+        assert_ne!(anchor106, turned106);
+        assert_eq!(anchor106, (38, 28, 186, 127));
+        assert!(frames_agree(anchor106, turned106, typo, turned96));
+
+        // 仍用未旋转外框当 15° 组的锚点：两种路径都不对齐。
+        let wrong_typo = (
+            cell_edge(0, 381_000, 64, RenderDpi::DEFAULT),
+            cell_edge(1, 0, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 304_800, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 190_500, 40, RenderDpi::DEFAULT),
+        );
+        let wrong106 = (
+            cell_edge(0, 381_000, 72, dpi),
+            cell_edge(1, 0, 44, dpi),
+            cell_edge(2, 304_800, 72, dpi),
+            cell_edge(2, 190_500, 44, dpi),
+        );
+        assert_ne!(wrong_typo, turned96);
+        assert!(!frames_agree(wrong106, turned106, wrong_typo, turned96));
+    }
+
+    #[test]
+    fn mapping_into_the_two_cell_dest_is_identity_when_boxes_match() {
+        assert_eq!(
+            map_rect_into_dest(40, 40, 160, 100, (40, 40, 160, 100), (40, 40, 160, 100)).unwrap(),
+            (40, 40, 160, 100)
+        );
+        // 官方 right0 在 106 dpi：EMU 外框 (44,44,177,110)，格子锚点 (44,44,179,110)。
+        assert_eq!(
+            map_rect_into_dest(44, 44, 177, 110, (44, 44, 177, 110), (44, 44, 179, 110)).unwrap(),
+            (44, 44, 179, 110)
+        );
     }
 }

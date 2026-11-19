@@ -794,3 +794,165 @@ fn two_cell_from_rot(rot: i64) -> String {
     let (x0, y0, x1, y1) = group_box_px(OFF, OFF, WIDE, TALL, rot);
     two_cell(x0, y0, x1, y1)
 }
+
+const OFF_O: i64 = 381_000; // 40px
+const WIDE_O: i64 = 1_143_000; // 120px
+const TALL_O: i64 = 571_500; // 60px
+
+fn a1_h12_book(drawing: Option<&str>) -> PathBuf {
+    let src = tmp("a1h12-src");
+    let mut cells = Vec::new();
+    for col in 'A'..='H' {
+        for row in 1..=12 {
+            cells.push(json!({ "ref": format!("{col}{row}"), "value": "" }));
+        }
+    }
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": cells }] }
+    }));
+    let mut ops: Vec<_> = (1..=12)
+        .map(|row| json!({ "op": "setRowHeight", "id": "sheet:Sheet1", "row": row, "height": 30 }))
+        .collect();
+    if drawing.is_some() {
+        ops.push(json!({
+            "op": "insertShape", "id": "sheet:Sheet1", "prst": "rect", "anchor": "oneCell",
+            "from": "A1", "cx": 9525, "cy": 9525
+        }));
+    }
+    let shaped = tmp("a1h12-shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": ops
+    }));
+    let Some(drawing) = drawing else {
+        return shaped;
+    };
+    let book = tmp("a1h12-drawn");
+    rewrite(&shaped, &book, |name, xml| {
+        if name == "xl/worksheets/sheet1.xml" && !xml.contains("showGridLines") {
+            *xml = xml.replace(
+                "<sheetData>",
+                "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews><sheetData>",
+            );
+        }
+        if name.starts_with("xl/drawings/drawing") {
+            *xml = drawing.to_string();
+        }
+    });
+    book
+}
+
+fn official_group(rot: i64, flip_h: bool, body: &str) -> String {
+    group_drawing(
+        OFF_O, OFF_O, WIDE_O, TALL_O, OFF_O, OFF_O, WIDE_O, TALL_O, rot, flip_h, false, body,
+    )
+}
+
+fn ink_aabb(rgb: &[u8], width: u32, height: u32) -> (u32, u32, u32, u32) {
+    let mut min_x = width;
+    let mut min_y = height;
+    let mut max_x = 0u32;
+    let mut max_y = 0u32;
+    let mut any = false;
+    for y in 0..height {
+        for x in 0..width {
+            if pixel(rgb, width, x, y) == RED {
+                any = true;
+                min_x = min_x.min(x);
+                min_y = min_y.min(y);
+                max_x = max_x.max(x);
+                max_y = max_y.max(y);
+            }
+        }
+    }
+    assert!(any, "expected red ink");
+    (min_x, min_y, max_x + 1, max_y + 1)
+}
+
+fn export_err_at(drawing: &str, dpi: i64) -> ErrorCode {
+    let book = a1_h12_book(Some(drawing));
+    export_at(&book, Some(dpi)).unwrap_err().code()
+}
+
+#[cfg(windows)]
+#[test]
+fn a_used_range_without_group_keeps_official_canvas_at_96_and_106() {
+    let book = a1_h12_book(None);
+    let (w96, h96, _) = decode_png(&export_at(&book, Some(96)).unwrap());
+    let (w106, h106, _) = decode_png(&export_at(&book, Some(106)).unwrap());
+    assert_eq!((w96, h96), (513, 481));
+    assert_eq!((w106, h106), (577, 529));
+}
+
+#[cfg(windows)]
+#[test]
+fn official_style_96px_group_anchors_export_at_106_with_official_canvas() {
+    // 官方样张把 twoCell 按 96 dpi 格子写入，跨越多列。修复前 106 dpi 会因
+    // 格子锚点与组 EMU 外框差几像素而整表 NotImplemented。
+    let right0 = official_group(0, false, &rect_sp(2, OFF_O, OFF_O, WIDE_O, TALL_O, 0));
+    let deg15 = official_group(DEG15, false, &rect_sp(2, OFF_O, OFF_O, WIDE_O, TALL_O, 0));
+    let deg30 = official_group(DEG30, false, &rect_sp(2, OFF_O, OFF_O, WIDE_O, TALL_O, 0));
+    let flip15 = official_group(
+        DEG15,
+        true,
+        &rect_sp(2, OFF_O, OFF_O, WIDE_O / 2, TALL_O, 0),
+    );
+    let inner_off_x = OFF_O + 381_000;
+    let inner_off_y = OFF_O - 95_250;
+    let inner = format!(
+        "<xdr:grpSp><xdr:nvGrpSpPr><xdr:cNvPr id=\"8\" name=\"里层\"/><xdr:cNvGrpSpPr/></xdr:nvGrpSpPr>\
+         <xdr:grpSpPr><a:xfrm rot=\"5400000\"><a:off x=\"{inner_off_x}\" y=\"{inner_off_y}\"/>\
+         <a:ext cx=\"381000\" cy=\"762000\"/>\
+         <a:chOff x=\"{inner_off_x}\" y=\"{inner_off_y}\"/>\
+         <a:chExt cx=\"381000\" cy=\"762000\"/></a:xfrm></xdr:grpSpPr>\
+         {rect}</xdr:grpSp>",
+        rect = rect_sp(2, inner_off_x, inner_off_y, 381_000, 762_000, 0)
+    );
+    let inner15 = official_group(DEG15, false, &inner);
+
+    for (tag, xml) in [
+        ("right0", right0.as_str()),
+        ("deg15", deg15.as_str()),
+        ("deg30", deg30.as_str()),
+        ("flip15", flip15.as_str()),
+        ("inner15", inner15.as_str()),
+    ] {
+        let book = a1_h12_book(Some(xml));
+        let before = std::fs::read(&book).unwrap();
+        let at96 = export_at(&book, Some(96)).unwrap();
+        let at106 = export_at(&book, Some(106)).unwrap();
+        assert_eq!(
+            std::fs::read(&book).unwrap(),
+            before,
+            "{tag} must not rewrite"
+        );
+        let (w96, h96, _) = decode_png(&at96);
+        let (w106, h106, _) = decode_png(&at106);
+        assert_eq!((w96, h96), (513, 481), "{tag} 96");
+        assert_eq!((w106, h106), (577, 529), "{tag} 106");
+    }
+
+    let (w, h, rgb) = decode_png(&export_at(&a1_h12_book(Some(&right0)), Some(106)).unwrap());
+    assert_eq!((w, h), (577, 529));
+    assert_eq!(ink_aabb(&rgb, w, h), (44, 44, 179, 110));
+
+    let wrong = deg15.replace(
+        &{
+            let (x0, y0, x1, y1) = group_box_px(OFF_O, OFF_O, WIDE_O, TALL_O, DEG15);
+            two_cell(x0, y0, x1, y1)
+        },
+        &{
+            let (x0, y0, x1, y1) = group_box_px(OFF_O, OFF_O, WIDE_O, TALL_O, 0);
+            two_cell(x0, y0, x1, y1)
+        },
+    );
+    assert_ne!(wrong, deg15, "failed to swap the official-size anchor");
+    assert_eq!(export_err_at(&wrong, 96), ErrorCode::NotImplemented);
+    assert_eq!(export_err_at(&wrong, 106), ErrorCode::NotImplemented);
+}
