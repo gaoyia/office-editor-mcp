@@ -1425,7 +1425,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::SparklineImageUnsupported => {
-            "This sparkline cannot be drawn to PNG yet. Drawn: one line in a group; a column whose values are all non-negative and present (high/low/first/last may recolor); a win/loss (type=stacked) with finite points, optional negative coloring, and empty/zero slots left blank; a date axis when the group formula is a single row or column of finite dates the same length as the values, placed in date proportion on the category-slot formula (equal dates match a category axis). Not drawn: missing, non-numeric, two-dimensional, length-mismatched, or identical dates when there are at least two points; line markers, displayXAxis, rightToLeft, stacked span empties, custom axes, and cells outside the drawable size range"
+            "This sparkline cannot be drawn to PNG yet. Drawn: one line in a group; a column whose values are all non-negative and present (high/low/first/last may recolor); a win/loss (type=stacked) with finite points, optional negative coloring, and empty/zero slots left blank; a date axis when the group formula is a single row or column of finite dates the same length as the values: equally spaced dates stay on the category-slot formula (matching a category axis); uneven dates use min-to-max continuous proportion (12 px inset at 96 dpi, right edge width-1-left). Not drawn: missing, non-numeric, two-dimensional, length-mismatched, or identical dates when there are at least two points; line markers, displayXAxis, rightToLeft, stacked span empties, custom axes, and cells outside the drawable size range"
                 .into()
         }
         ErrorKind::SheetImageUnsupported => {
