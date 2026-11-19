@@ -2436,7 +2436,7 @@ struct Xf {
     indent: u32,
     /// `alignment/@readingOrder`：0 上下文 / 1 LTR / 2 RTL。2 与强 RTL 文种出图 NI。
     reading_order: u8,
-    /// `alignment/@textRotation`。0 为不旋转；非 0（含 Excel 堆积 255）在有字的格子上 NI。
+    /// `alignment/@textRotation`。0 为不旋转；1–180 按 Excel 角度旋转；255 为正立堆积。
     rotation: u32,
     /// `alignment/@justifyLastLine`。为真时本切片 NI，不静默忽略。
     justify_last_line: bool,
@@ -3184,7 +3184,7 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
                 false,
             ),
             Some(al) => {
-                // shrinkToFit 仍在读样式时 NI。非 0 textRotation 延到有字的格子再 NI。
+                // shrinkToFit 仍在读样式时 NI。非 0 textRotation 延到有字的格子再按角度或堆积画。
                 if truthy(al.attr("shrinkToFit")) {
                     return Err(unsupported());
                 }
@@ -5970,9 +5970,6 @@ fn paint_labels(
         }
         let dpi = fonts.dpi;
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
-        if xf.rotation != 0 {
-            return Err(unsupported());
-        }
         let h_align = match xf.h_align {
             HAlign::Left => HAlign::Left,
             HAlign::Center => HAlign::Center,
@@ -6009,6 +6006,26 @@ fn paint_labels(
                 _ => 0.0,
             };
         let max_w = (inner_right - inner_left).max(1.0);
+        if xf.rotation != 0 {
+            paint_rotated_cell_text(
+                face,
+                &text,
+                xf,
+                h_align,
+                font,
+                sheet,
+                dpi,
+                x0,
+                y0,
+                y1,
+                clip_r,
+                inner_left,
+                inner_right,
+                color,
+                canvas,
+            )?;
+            continue;
+        }
         if h_align == HAlign::Justify {
             // ECMA：若没有任何一行发生换行，则不做两端对齐。无软换行（含数字/布尔）画成左对齐。
             // 官方 CopyPicture：软换行后非末行词间等间隙、末行左对齐。indent / justifyLastLine 仍 NI。
@@ -6092,6 +6109,178 @@ fn paint_labels(
         }
     }
     paint_filters(canvas, xs, ys, c0, r0, filter);
+    Ok(())
+}
+
+/// ECMA / Excel `@textRotation`：0–90 为逆时针角度，91–180 为顺时针（90-value：91=-1°，180=-90°）。
+/// 255 堆积不是角度，调用方单独处理。
+fn excel_text_rotation_deg(rotation: u32) -> Option<f64> {
+    match rotation {
+        0 => Some(0.0),
+        1..=90 => Some(f64::from(rotation)),
+        91..=180 => Some(90.0 - f64::from(rotation)),
+        _ => None,
+    }
+}
+
+/// 屏幕坐标（x 右、y 下）下，GDI escapement 逆时针 θ 的旋转。
+fn rotate_escapement(x: f64, y: f64, deg: f64) -> (f64, f64) {
+    let rad = deg.to_radians();
+    let (s, c) = (rad.sin(), rad.cos());
+    (x * c + y * s, -x * s + y * c)
+}
+
+/// typographic 矩形绕左上角按 escapement 旋转后的轴对齐外接框。
+fn typo_aabb_after_escapement(w: f64, h: f64, deg: f64) -> (f64, f64, f64, f64) {
+    let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)];
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for (x, y) in corners {
+        let (rx, ry) = rotate_escapement(x, y, deg);
+        min_x = min_x.min(rx);
+        min_y = min_y.min(ry);
+        max_x = max_x.max(rx);
+        max_y = max_y.max(ry);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
+fn paint_rotated_cell_text(
+    face: &Face,
+    text: &str,
+    xf: &Xf,
+    h_align: HAlign,
+    font: &FontInfo,
+    sheet: &Element,
+    dpi: RenderDpi,
+    x0: i32,
+    y0: i32,
+    y1: i32,
+    clip_r: i32,
+    inner_left: f64,
+    inner_right: f64,
+    color: [u8; 3],
+    canvas: &mut Canvas,
+) -> Result<(), Error> {
+    // 旋转/堆积与换行、缩进、分散对齐的组合几何未由本切片官方样本锁定，保持 NI。
+    if xf.wrap
+        || text.contains('\n')
+        || xf.indent != 0
+        || xf.justify_last_line
+        || h_align == HAlign::Distributed
+    {
+        return Err(unsupported());
+    }
+    let h_align = match h_align {
+        HAlign::Justify => HAlign::Left,
+        other => other,
+    };
+    if xf.rotation == 255 {
+        return paint_stacked_cell_text(
+            face,
+            text,
+            xf,
+            h_align,
+            font,
+            sheet,
+            dpi,
+            x0,
+            y0,
+            y1,
+            clip_r,
+            inner_left,
+            inner_right,
+            color,
+            canvas,
+        );
+    }
+    let Some(deg) = excel_text_rotation_deg(xf.rotation) else {
+        return Err(unsupported());
+    };
+    if deg.abs() < 1e-9 {
+        return Err(unsupported());
+    }
+    let typo_w = face.width(text);
+    let typo_h = face.em_box().max(1.0);
+    let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(typo_w, typo_h, deg);
+    let aabb_w = (max_x - min_x).max(1.0);
+    let aabb_h = (max_y - min_y).max(1.0);
+    let aabb_x = match h_align {
+        HAlign::Left | HAlign::General | HAlign::Justify => inner_left,
+        HAlign::Center => inner_left + ((inner_right - inner_left).max(aabb_w) - aabb_w) / 2.0,
+        HAlign::Right => inner_right - aabb_w,
+        HAlign::Distributed => unreachable!("distributed already rejected"),
+    };
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let dy_descent = sheet_dy_descent(sheet);
+    let typo_top = f64::from(y0) + 2.0 + pitch * (1.0 - dy_descent) - face.line_height();
+    let aabb_y = match xf.v_align {
+        VAlign::Top => typo_top,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - aabb_h) / 2.0,
+        VAlign::Bottom => f64::from(y1) - aabb_h,
+    };
+    let origin_x = aabb_x - min_x;
+    let origin_y = aabb_y - min_y;
+    face.draw_cells_rotated(text, origin_x, origin_y, deg, color, |px, py, rgb, cov| {
+        if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+            return;
+        }
+        canvas.blend(px, py, rgb, cov);
+    });
+    Ok(())
+}
+
+fn paint_stacked_cell_text(
+    face: &Face,
+    text: &str,
+    xf: &Xf,
+    h_align: HAlign,
+    font: &FontInfo,
+    sheet: &Element,
+    dpi: RenderDpi,
+    x0: i32,
+    y0: i32,
+    y1: i32,
+    clip_r: i32,
+    inner_left: f64,
+    inner_right: f64,
+    color: [u8; 3],
+    canvas: &mut Canvas,
+) -> Result<(), Error> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return Ok(());
+    }
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let dy_descent = sheet_dy_descent(sheet);
+    let block_h = pitch * chars.len() as f64;
+    let top0 = match xf.v_align {
+        VAlign::Top => f64::from(y0) + 2.0,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - block_h) / 2.0,
+        VAlign::Bottom => f64::from(y1) - block_h,
+    };
+    let col_w = face.em_box().max(1.0);
+    let col_x = match h_align {
+        HAlign::Left | HAlign::General | HAlign::Justify => inner_left,
+        HAlign::Center => inner_left + ((inner_right - inner_left).max(col_w) - col_w) / 2.0,
+        HAlign::Right => inner_right - col_w,
+        HAlign::Distributed => unreachable!("distributed already rejected"),
+    };
+    for (i, ch) in chars.iter().enumerate() {
+        let piece = ch.to_string();
+        let line_top = top0 + pitch * i as f64;
+        let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
+        let w = face.width(&piece);
+        let x = col_x + (col_w - w) / 2.0;
+        face.draw_cells(&piece, x, top, color, |px, py, rgb, cov| {
+            if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                return;
+            }
+            canvas.blend(px, py, rgb, cov);
+        });
+    }
     Ok(())
 }
 
@@ -7801,11 +7990,37 @@ mod tests {
     #[test]
     fn rotate_cw_follows_clockwise_screen_axes() {
         let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 90.0);
+
         assert!((x).abs() < 1e-12, "{x}");
         assert!((y - 1.0).abs() < 1e-12, "{y}");
         let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 0.0);
         assert!((x - 1.0).abs() < 1e-12);
         assert!(y.abs() < 1e-12);
+    }
+
+    #[test]
+    fn excel_text_rotation_maps_ecma_angles() {
+        assert_eq!(excel_text_rotation_deg(0), Some(0.0));
+        assert_eq!(excel_text_rotation_deg(45), Some(45.0));
+        assert_eq!(excel_text_rotation_deg(90), Some(90.0));
+        assert_eq!(excel_text_rotation_deg(91), Some(-1.0));
+        assert_eq!(excel_text_rotation_deg(135), Some(-45.0));
+        assert_eq!(excel_text_rotation_deg(180), Some(-90.0));
+        assert_eq!(excel_text_rotation_deg(255), None);
+    }
+
+    #[test]
+    fn typo_aabb_after_right_angle_swaps_extents() {
+        let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(10.0, 8.0, 90.0);
+        assert!((min_x - 0.0).abs() < 1e-9);
+        assert!((max_x - 8.0).abs() < 1e-9);
+        assert!((min_y - (-10.0)).abs() < 1e-9);
+        assert!((max_y - 0.0).abs() < 1e-9);
+        let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(10.0, 8.0, -90.0);
+        assert!((min_x - (-8.0)).abs() < 1e-9);
+        assert!((max_x - 0.0).abs() < 1e-9);
+        assert!((min_y - 0.0).abs() < 1e-9);
+        assert!((max_y - 10.0).abs() < 1e-9);
     }
 
     #[test]

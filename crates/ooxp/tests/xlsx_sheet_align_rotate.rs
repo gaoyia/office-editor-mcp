@@ -1,5 +1,5 @@
-//! 工作表旋转与两端对齐：只画合同已锁定、几何可独立核验的那一档。
-//! 官方 Excel 16.0 CopyPicture 对照未做，不把内部自测算验收通过。
+//! 工作表旋转与两端对齐：水平 justify/distributed 以及非 0 textRotation / 255 堆积。
+//! 官方对照不把内部自测当成用户验收。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -423,23 +423,74 @@ fn fill_center_continuous_and_vertical_justify_stay_ni() {
     }
 }
 
-#[test]
-fn nonzero_text_rotation_on_text_stays_ni() {
-    for rot in [45, 90, 180] {
-        let path = create_sheet(
-            &format!("rot-{rot}"),
-            json!([{ "ref": "A1", "value": "hello" }]),
-        );
-        apply_align(
-            &path,
-            wide_col_ops("A1", "left", json!({ "rotation": rot })),
-        );
-        export_ni(&path);
+struct Ink {
+    min_x: i32,
+    min_y: i32,
+    max_x: i32,
+    max_y: i32,
+    pts: Vec<(u32, u32)>,
+}
+
+impl Ink {
+    fn width(&self) -> i32 {
+        self.max_x - self.min_x
     }
-    // 255 是 Excel 堆积竖排，apply 的 rotation 只写 0–180，这里直接改部件。
-    let path = create_sheet("rot-255", json!([{ "ref": "A1", "value": "hello" }]));
-    apply_align(&path, wide_col_ops("A1", "left", json!({})));
-    let stacked = tmp("rot-255-xml");
+
+    fn height(&self) -> i32 {
+        self.max_y - self.min_y
+    }
+}
+
+fn ink_points(png: &[u8]) -> Ink {
+    let (w, h, rgb) = png_rgb(png);
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+    let mut pts = Vec::new();
+    let x1 = w.saturating_sub(1);
+    let y1 = h.saturating_sub(1);
+    for y in 1..y1 {
+        for x in 1..x1 {
+            let px = rgb[(y * w + x) as usize];
+            if px[0] < 240 || px[1] < 240 || px[2] < 240 {
+                min_x = min_x.min(x as i32);
+                min_y = min_y.min(y as i32);
+                max_x = max_x.max(x as i32);
+                max_y = max_y.max(y as i32);
+                pts.push((x, y));
+            }
+        }
+    }
+    assert!(
+        min_x <= max_x,
+        "expected cell text ink, got a blank {w}x{h} image"
+    );
+    Ink {
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+        pts,
+    }
+}
+
+fn rot_hello(tag: &str, rotation: u32) -> PathBuf {
+    let path = create_sheet(tag, json!([{ "ref": "A1", "value": "hello" }]));
+    apply_align(
+        &path,
+        json!([
+            { "op": "setCellStyle", "id": "cell:Sheet1!A1", "align": { "horizontal": "left", "vertical": "top", "rotation": rotation } },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 60.0 }
+        ]),
+    );
+    path
+}
+
+fn rot_hello_stacked(tag: &str) -> PathBuf {
+    let path = rot_hello(tag, 0);
+    let stacked = tmp(&format!("{tag}-xml"));
     rewrite_part(&path, &stacked, "xl/styles.xml", |xml| {
         if let Some(idx) = xml.find("<alignment") {
             if xml[idx..].starts_with("<alignment/>") {
@@ -449,7 +500,181 @@ fn nonzero_text_rotation_on_text_stays_ni() {
         }
         xml.replacen("</xf>", r#"<alignment textRotation="255"/></xf>"#, 1)
     });
-    export_ni(&stacked);
+    stacked
+}
+
+#[test]
+fn nonzero_text_rotation_paints_official_geometry() {
+    let left_png = export_ok(&rot_hello("rot-left", 0));
+    let rot90 = export_ok(&rot_hello("rot-90", 90));
+    let rot180 = export_ok(&rot_hello("rot-180", 180));
+    let rot45 = export_ok(&rot_hello("rot-45", 45));
+    let rot255 = export_ok(&rot_hello_stacked("rot-255"));
+
+    assert_ne!(rot90, left_png);
+    assert_ne!(rot180, rot90);
+    assert_ne!(rot45, rot90);
+    assert_ne!(rot255, left_png);
+
+    let left = ink_points(&left_png);
+    let left_h = left.height();
+    let left_w = left.width();
+
+    let ink90 = ink_points(&rot90);
+    let w90 = ink90.width();
+    let h90 = ink90.height();
+    let x0 = ink90.min_x;
+    let y0 = ink90.min_y;
+    let y1 = ink90.max_y;
+    // 90° 自下而上：墨迹比未旋转更瘦、更高，并靠在格子左侧。
+    assert!(
+        h90 > w90,
+        "90° ink should be taller than wide, got {w90}x{h90}"
+    );
+    assert!(
+        h90 >= left_w - 4,
+        "90° height should follow unrotated width, {h90} vs {left_w}"
+    );
+    assert!(x0 < 24, "90° text should stay on the left, x0={x0}");
+    // 阅读方向自下而上：末行（h 的横笔）应比首行（o 的顶部）更靠左、更宽。
+    let top_row: Vec<_> = ink90
+        .pts
+        .iter()
+        .filter(|(_, y)| *y as i32 == y0)
+        .map(|(x, _)| *x as i32)
+        .collect();
+    let bot_row: Vec<_> = ink90
+        .pts
+        .iter()
+        .filter(|(_, y)| *y as i32 == y1)
+        .map(|(x, _)| *x as i32)
+        .collect();
+    assert!(
+        !top_row.is_empty() && !bot_row.is_empty(),
+        "90° needs ink on both ends"
+    );
+    let top_min = *top_row.iter().min().unwrap();
+    let bot_min = *bot_row.iter().min().unwrap();
+    let top_w = top_row.iter().max().unwrap() - top_min;
+    let bot_w = bot_row.iter().max().unwrap() - bot_min;
+    assert!(
+        bot_min <= top_min && bot_w >= top_w,
+        "90° should read bottom-to-top (h stem at the bottom), top x={top_min}..+{top_w} bottom x={bot_min}..+{bot_w}"
+    );
+
+    let ink180 = ink_points(&rot180);
+    let w180 = ink180.width();
+    let h180 = ink180.height();
+    let a0 = ink180.min_x;
+    let b0 = ink180.min_y;
+    let b1 = ink180.max_y;
+    assert!(
+        (h180 - h90).abs() <= 2,
+        "90° and 180° typographic spans should match"
+    );
+    assert!(
+        (w180 - w90).abs() <= 3,
+        "90° and 180° glyph boxes should be close"
+    );
+    // 180 向下：typographic 底边朝左，墨迹应不比 90° 更靠右。
+    assert!(
+        a0 <= x0 + 1,
+        "180° ink should be left of or aligned with 90°, {a0} vs {x0}"
+    );
+    // 阅读方向自上而下：首行（h 的横笔）应比末行（o）更靠左、更宽。
+    let top_row: Vec<_> = ink180
+        .pts
+        .iter()
+        .filter(|(_, y)| *y as i32 == b0)
+        .map(|(x, _)| *x as i32)
+        .collect();
+    let bot_row: Vec<_> = ink180
+        .pts
+        .iter()
+        .filter(|(_, y)| *y as i32 == b1)
+        .map(|(x, _)| *x as i32)
+        .collect();
+    assert!(
+        !top_row.is_empty() && !bot_row.is_empty(),
+        "180° needs ink on both ends"
+    );
+    let top_min = *top_row.iter().min().unwrap();
+    let bot_min = *bot_row.iter().min().unwrap();
+    let top_w = top_row.iter().max().unwrap() - top_min;
+    let bot_w = bot_row.iter().max().unwrap() - bot_min;
+    assert!(
+        top_min <= bot_min && top_w >= bot_w,
+        "180° should read top-to-bottom (h stem at the top), top x={top_min}..+{top_w} bottom x={bot_min}..+{bot_w}"
+    );
+
+    let ink45 = ink_points(&rot45);
+    let c0 = ink45.min_x;
+    let d0 = ink45.min_y;
+    let c1 = ink45.max_x;
+    let d1 = ink45.max_y;
+    assert!(c1 - c0 > w90, "45° AABB should be wider than 90° column");
+    assert!(
+        d1 - d0 > left_h,
+        "45° AABB should be taller than unrotated line"
+    );
+    // h 在左下、o 在右上。
+    let cx = (c0 + c1) / 2;
+    let cy = (d0 + d1) / 2;
+    let lower_left = ink45
+        .pts
+        .iter()
+        .filter(|(x, y)| *x as i32 <= cx && *y as i32 >= cy)
+        .count();
+    let upper_right = ink45
+        .pts
+        .iter()
+        .filter(|(x, y)| *x as i32 >= cx && *y as i32 <= cy)
+        .count();
+    let upper_left = ink45
+        .pts
+        .iter()
+        .filter(|(x, y)| *x as i32 <= cx && *y as i32 <= cy)
+        .count();
+    let lower_right = ink45
+        .pts
+        .iter()
+        .filter(|(x, y)| *x as i32 >= cx && *y as i32 >= cy)
+        .count();
+    assert!(
+        lower_left > 0 && upper_right > 0,
+        "45° should have ink lower-left and upper-right"
+    );
+    assert!(
+        lower_left + upper_right > upper_left + lower_right,
+        "45° ink should follow the up-right diagonal"
+    );
+
+    let ink255 = ink_points(&rot255);
+    let s0 = ink255.min_y;
+    let s1 = ink255.max_y;
+    // 堆积：第一字与未旋转顶对齐同一行盒，后续字按自动行高向下排，60 磅行会裁掉末字。
+    assert!(
+        (s0 - left.min_y).abs() <= 2,
+        "stacked first letter should share unrotated top, {s0} vs {}",
+        left.min_y
+    );
+    assert!(
+        s1 > left.max_y + 20,
+        "stacked letters should extend below a single line, {s1} vs {}",
+        left.max_y
+    );
+}
+
+#[test]
+fn text_rotation_with_wrap_or_indent_stays_ni() {
+    for (tag, extra) in [
+        ("rot-wrap", json!({ "rotation": 90, "wrap": true })),
+        ("rot-indent", json!({ "rotation": 90, "indent": 1 })),
+    ] {
+        let path = create_sheet(tag, json!([{ "ref": "A1", "value": "hello world" }]));
+        apply_align(&path, wide_col_ops("A1", "left", extra));
+        export_ni(&path);
+    }
 }
 
 #[test]
