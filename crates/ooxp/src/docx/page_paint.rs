@@ -1233,6 +1233,7 @@ fn empty_auto_row_twip() -> Result<i64, Error> {
 
 fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
     let mut indent = 0i64;
+    let mut tbl_w_auto = true;
     let mut col_widths: Vec<i64> = Vec::new();
     let mut border_top = false;
     let mut border_left = false;
@@ -1248,7 +1249,17 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
             "tblPr" => {
                 for p in child.element_children() {
                     match p.local_name() {
-                        "tblW" | "tblLook" | "jc" => {}
+                        "tblLook" | "jc" => {}
+                        "tblW" => {
+                            // 缺省或 type=auto：列宽认各列一致的 dxa tcW（Word 会忽略过期 tblGrid）。
+                            // 官方 wide PDF：grid 2880+720，但 tcW 均为 2880，竖线在 96/288/480。
+                            let ty = p.attr_local("type").unwrap_or("auto");
+                            match ty {
+                                "auto" => tbl_w_auto = true,
+                                "dxa" => tbl_w_auto = false,
+                                _ => return Err(unsupported()),
+                            }
+                        }
                         "tblInd" => {
                             let w = p.attr_local("w").ok_or_else(unsupported)?;
                             indent = parse_twip(w)?;
@@ -1305,6 +1316,11 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
             return Err(unsupported());
         }
     }
+    if tbl_w_auto {
+        if let Some(preferred) = preferred_auto_col_widths(&rows, col_widths.len()) {
+            col_widths = preferred;
+        }
+    }
     // 缺省建表骨架带 single 边；若没有任何 tblBorders，按无边处理。
     if !saw_borders {
         border_top = false;
@@ -1345,6 +1361,7 @@ struct PendingRowBuild {
 
 struct PendingCellBuild {
     fill: Option<[u8; 3]>,
+    tc_w: Option<i64>,
 }
 
 fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, Error> {
@@ -1395,13 +1412,28 @@ fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, 
 
 fn parse_plain_cell(tc: &Element) -> Result<PendingCellBuild, Error> {
     let mut fill = None;
+    let mut tc_w = None;
     let mut paras = 0usize;
     for child in tc.element_children() {
         match child.local_name() {
             "tcPr" => {
                 for p in child.element_children() {
                     match p.local_name() {
-                        "tcW" => {}
+                        "tcW" => {
+                            let w = p.attr_local("w").ok_or_else(unsupported)?;
+                            let ty = p.attr_local("type").unwrap_or("dxa");
+                            match ty {
+                                "dxa" => {
+                                    let n = parse_twip(w)?;
+                                    if n <= 0 {
+                                        return Err(unsupported());
+                                    }
+                                    tc_w = Some(n);
+                                }
+                                "auto" | "nil" => {}
+                                _ => return Err(unsupported()),
+                            }
+                        }
                         "shd" => {
                             fill = Some(parse_shd_fill(p)?);
                         }
@@ -1427,7 +1459,24 @@ fn parse_plain_cell(tc: &Element) -> Result<PendingCellBuild, Error> {
     if paras != 1 {
         return Err(unsupported());
     }
-    Ok(PendingCellBuild { fill })
+    Ok(PendingCellBuild { fill, tc_w })
+}
+
+/// 	blW=auto 且每一列的 dxa 	cW 在各行都一致时，用它作列宽。
+/// Word 16.0 对空表走首选单元格宽，不沿用可能过期的 	blGrid。
+fn preferred_auto_col_widths(rows: &[PendingRowBuild], n: usize) -> Option<Vec<i64>> {
+    if n == 0 || rows.is_empty() {
+        return None;
+    }
+    let mut widths = Vec::with_capacity(n);
+    for ci in 0..n {
+        let w = rows[0].cells[ci].tc_w?;
+        if w <= 0 || !rows.iter().all(|row| row.cells[ci].tc_w == Some(w)) {
+            return None;
+        }
+        widths.push(w);
+    }
+    Some(widths)
 }
 
 fn cell_para_is_empty(p: &Element) -> Result<bool, Error> {
