@@ -2253,6 +2253,8 @@ fn category_mid_y(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> 
 /// Office inversion is a white negative fill with an automatic black 0.75 pt
 /// outline, NOT a solid accent and NOT transparent. Public Point.Fill/Line
 /// properties and toggled Series.InvertIfNegative exports lock this default.
+/// The 0.75 pt hairline snaps to a 1 device-pixel solid stroke on the integer
+/// edges; it is not a centered anti-aliased strip of that width.
 fn draw_bar_value(
     canvas: &mut Canvas,
     series: &Series,
@@ -2279,18 +2281,18 @@ fn draw_bar_value(
         .map_or((true, canvas.dpi.pt_to_px_font(0.75), INK), |line| {
             (line.visible, line.width, line.color.unwrap_or(INK))
         });
-    if visible {
-        let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)];
-        for pair in corners.windows(2) {
-            canvas.stroke_segment(
-                f64::from(pair[0].0),
-                f64::from(pair[0].1),
-                f64::from(pair[1].0),
-                f64::from(pair[1].1),
-                width,
-                stroke,
-            );
-        }
+    if visible && width > 0.0 {
+        // Official automatic 0.75 pt outline is a 1 device-pixel solid black
+        // hairline on the integer edges: left on the value tick, right on the
+        // zero axis for a negative bar. Centered stroke_segment along those
+        // same integers at ~1.10 px (0.75 pt at 106 dpi) covers both adjacent
+        // pixel centers at ~55% and paints a 2 px #727272 double line with no
+        // black core; overlapping end caps also dirty the corners. Do not thin
+        // the 0.75 pt source width to fake a 1 px AA stroke; snap to the grid.
+        canvas.hline_i(x0, x1, y0, stroke);
+        canvas.hline_i(x0, x1, y1, stroke);
+        canvas.vline_i(x0, y0, y1, stroke);
+        canvas.vline_i(x1, y0, y1, stroke);
     }
 }
 
@@ -3968,6 +3970,78 @@ mod tests {
                 draw_bar_value(&mut canvas, series, 0, 8.0, [10, 10, 60, 40], FALLBACK_ACCENTS[0]);
                 assert_eq!(&canvas.px[(25*80+30)*3..(25*80+30)*3+3], &FALLBACK_ACCENTS[0]);
             }
+        }
+    }
+
+    #[test]
+    fn bar_negative_outline_is_one_pixel_solid_and_pixel_aligned() {
+        // Official signed bar-2 (chart:3, A=-8) uses a 1 px solid #000000 box.
+        // Mid-edge neighbors are pure fill or background, not a 2 px gray AA
+        // band. Bounds are half-open fill [x0, x1) x [y0, y1); the outline sits
+        // on those integer edges, so the right/bottom lines occupy the exclusive
+        // fill sides and coincide with the zero axis on the value end.
+        let xml = bar_xml(
+            &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let series = &chart.series[0];
+        let bg = [200, 100, 50];
+        let [x0, y0, x1, y1] = [10, 10, 60, 40];
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let mut canvas = Canvas::new(80, 60);
+            canvas.dpi = dpi;
+            canvas.fill_rect(0, 0, 80, 60, bg);
+            draw_bar_value(
+                &mut canvas,
+                series,
+                0,
+                -8.0,
+                [x0, y0, x1, y1],
+                FALLBACK_ACCENTS[0],
+            );
+            let pixel = |x: i32, y: i32| {
+                let i = (y as usize * 80 + x as usize) * 3;
+                [canvas.px[i], canvas.px[i + 1], canvas.px[i + 2]]
+            };
+            assert_eq!(pixel(x0, 25), INK, "left mid @ {dpi_value}");
+            assert_eq!(pixel(x1, 25), INK, "right mid @ {dpi_value}");
+            assert_eq!(pixel(35, y0), INK, "top mid @ {dpi_value}");
+            assert_eq!(pixel(35, y1), INK, "bottom mid @ {dpi_value}");
+            assert_eq!(pixel(x0 - 1, 25), bg, "outside left @ {dpi_value}");
+            assert_eq!(
+                pixel(x0 + 1, 25),
+                [255, 255, 255],
+                "inside left @ {dpi_value}"
+            );
+            assert_eq!(
+                pixel(x1 - 1, 25),
+                [255, 255, 255],
+                "inside right @ {dpi_value}"
+            );
+            assert_eq!(pixel(x1 + 1, 25), bg, "outside right @ {dpi_value}");
+            assert_eq!(pixel(35, y0 - 1), bg, "outside top @ {dpi_value}");
+            assert_eq!(
+                pixel(35, y0 + 1),
+                [255, 255, 255],
+                "inside top @ {dpi_value}"
+            );
+            assert_eq!(
+                pixel(35, y1 - 1),
+                [255, 255, 255],
+                "inside bottom @ {dpi_value}"
+            );
+            assert_eq!(pixel(35, y1 + 1), bg, "outside bottom @ {dpi_value}");
+            for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
+                assert_eq!(pixel(x, y), INK, "corner {x},{y} @ {dpi_value}");
+            }
+            assert_eq!(pixel(x0 - 1, y0 - 1), bg, "outside corner @ {dpi_value}");
         }
     }
 
