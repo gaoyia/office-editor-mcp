@@ -1,4 +1,4 @@
-﻿//! 按 format 把信封交给 xlsx / docx / pptx。
+//! 按 format 把信封交给 xlsx / docx / pptx。
 //! `run_bytes` 不碰磁盘。本机的 `run` 才按路径读写。
 
 use serde_json::Value;
@@ -7,6 +7,7 @@ use crate::error::{Error, ErrorKind};
 use crate::json::{
     self, deny_unknown, infer_format, require_ops, str_field, Action, Format, Request,
 };
+use crate::xlsx::RenderDpi;
 use crate::{docx, pptx, xlsx};
 
 /// 库门口的结果。字节由调用方自己落盘。
@@ -540,7 +541,8 @@ fn export_chart_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
     for_format(
         fmt,
         || {
-            let exported = xlsx::export_chart_image(bytes, id)?;
+            let dpi = RenderDpi::from_request(&req.obj)?;
+            let exported = xlsx::export_chart_image_at(bytes, id, dpi)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
@@ -573,7 +575,8 @@ fn export_sparkline_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported,
     for_format(
         fmt,
         || {
-            let exported = xlsx::export_sparkline_image(bytes, id)?;
+            let dpi = RenderDpi::from_request(&req.obj)?;
+            let exported = xlsx::export_sparkline_image_at(bytes, id, dpi)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
@@ -613,11 +616,12 @@ fn export_sheet_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
             Some(n as i32)
         }
     };
+    let dpi = RenderDpi::from_request(&req.obj)?;
     for_format(
         fmt,
         || {
             if let Some(tile) = tile_px {
-                let tiles = xlsx::export_sheet_image_tiles(bytes, id, tile)?;
+                let tiles = xlsx::export_sheet_image_tiles_at(bytes, id, tile, dpi)?;
                 if tiles.len() == 1 {
                     return Ok(Exported {
                         bytes: tiles.into_iter().next().unwrap().bytes,
@@ -630,7 +634,7 @@ fn export_sheet_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
                     content_type: Some("application/zip".into()),
                 });
             }
-            let exported = xlsx::export_sheet_image(bytes, id)?;
+            let exported = xlsx::export_sheet_image_at(bytes, id, dpi)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,

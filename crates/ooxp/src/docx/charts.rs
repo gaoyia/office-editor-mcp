@@ -2735,6 +2735,9 @@ fn add_series(
         _ => None,
     };
     let size_pair_ref = size_pair.as_ref().map(|(sz, r)| (*sz, r.as_str()));
+    let smooth = series_type
+        .or_else(|| ChartType::parse(&ty))
+        .and_then(crate::chart::default_insert_smooth);
     let xml = crate::chart::ser_xml(
         idx,
         &name,
@@ -2745,6 +2748,7 @@ fn add_series(
         vals,
         xy,
         size_pair_ref,
+        smooth,
     );
     let wrapped = format!(r#"<c:root xmlns:c="{CHART_NS}">{xml}</c:root>"#);
     let doc = xml::parse(wrapped.as_bytes())?;

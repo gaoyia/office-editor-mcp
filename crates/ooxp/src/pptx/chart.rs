@@ -1066,6 +1066,9 @@ fn add_series(
         _ => None,
     };
     let size_pair_ref = size_pair.as_ref().map(|(sz, r)| (*sz, r.as_str()));
+    let smooth = series_type
+        .or_else(|| ChartType::parse(&ty))
+        .and_then(chart::default_insert_smooth);
     let xml = chart::ser_xml(
         idx,
         &name,
@@ -1076,6 +1079,7 @@ fn add_series(
         vals,
         xy,
         size_pair_ref,
+        smooth,
     );
     let ser_el = chart::parse_ser_xml(&xml)?;
     chart::insert_ser(space, ser_el, series_type);

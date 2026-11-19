@@ -1,5 +1,5 @@
 //! 幻灯片只读栅格化。先铺页底，再按文档顺序画形状、图、表和文字。
-//! 页底用本页、版式或母版上没有颜色变换的纯色，或没有旋转、没有裁剪、拉伸铺满的不透明嵌入 PNG。
+//! 页底用本页、版式或母版上没有颜色变换的纯色，没有旋转、没有裁剪、拉伸铺满的不透明嵌入 PNG，或两停点、直角、不透明的线性 `a:gradFill`。
 //! 没有或画不了时铺白，不再往下继承。画不了的对象让整页失败，不交出缺一块的图。
 //! 不写回包，像素不进 inspect。t93u 的透明放大残差接受不扩到页底。
 
@@ -88,7 +88,7 @@ fn parse_slide_id(id: &str) -> Result<usize, Error> {
 const WHITE: [u8; 3] = [255, 255, 255];
 
 /// 本页有 `p:bg` 就用本页，否则用版式，再否则用母版。
-/// 这一层写了页底但画不成纯色时铺白，不再往下继承。
+/// 这一层写了页底但画不成纯色、不透明拉伸 PNG 或两停点直角不透明线性渐变时铺白，不再往下继承。
 fn paint_page_background(
     pkg: &Package,
     slide_part: &str,
@@ -155,6 +155,10 @@ fn paint_page_background(
                     return Ok(());
                 }
             }
+            if let Some(grad) = page_linear_gradient(pr) {
+                fill_gradient(rgb, width, height, 0, 0, width as i32, height as i32, grad);
+                return Ok(());
+            }
         }
         // 这一层已经写了页底但画不成：铺白，不再继承。
         fill(rgb, WHITE);
@@ -162,6 +166,29 @@ fn paint_page_background(
     }
     fill(rgb, WHITE);
     Ok(())
+}
+
+fn page_linear_gradient(pr: &Element) -> Option<LinearGrad> {
+    if pr
+        .attr("shadeToTitle")
+        .is_some_and(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+    {
+        return None;
+    }
+    let mut fill = None;
+    for child in pr.element_children() {
+        match child.local_name() {
+            "gradFill" if fill.is_none() => fill = Some(child),
+            "effectLst" if child.element_children().next().is_none() => {}
+            _ => return None,
+        }
+    }
+    let _ = fill?;
+    let grad = linear_gradient(pr)?;
+    if grad_is_translucent(&grad) {
+        return None;
+    }
+    Some(grad)
 }
 
 fn page_blip_fill(pr: &Element) -> Option<&Element> {
@@ -1790,6 +1817,8 @@ fn paint_table(
         .unwrap_or_default();
     let fonts = minor_fonts(pkg);
     let header_style = header_is_bold_light(tbl);
+    let style = medium_style2_look(tbl);
+    let accent1 = style.and_then(|_| theme_accent1(pkg));
     let rows: Vec<&Element> = tbl
         .element_children()
         .filter(|el| el.local_name() == "tr")
@@ -1846,11 +1875,17 @@ fn paint_table(
             let fill = tc
                 .child_by_local("tcPr")
                 .and_then(|pr| pr.child_by_local("solidFill"))
-                .and_then(opaque_rgb);
+                .and_then(opaque_rgb)
+                .or_else(|| medium_style2_cell_fill(style, accent1, row_index));
             if let Some(color) = fill {
                 fill_rect(rgb, width, height, px, py, cw, rh, color);
             }
             i += span;
+        }
+    }
+    if let Some(look) = style {
+        if look.first_row {
+            paint_medium_style2_header_bottom_bar(rgb, width, height, &xs, &ys);
         }
     }
     if should_paint_default_table_grid(tbl) {
@@ -2056,6 +2091,110 @@ fn named_typeface(parent: &Element, slot: &str) -> Option<String> {
     } else {
         Some(name)
     }
+}
+
+#[derive(Clone, Copy)]
+struct MediumStyle2Look {
+    first_row: bool,
+    band_row: bool,
+}
+
+fn medium_style2_look(tbl: &Element) -> Option<MediumStyle2Look> {
+    let pr = tbl.child_by_local("tblPr")?;
+    let id = pr.child_by_local("tableStyleId")?.text_content();
+    if !id.trim().eq_ignore_ascii_case(MEDIUM_STYLE_2_ACCENT_1) {
+        return None;
+    }
+    Some(MediumStyle2Look {
+        first_row: matches!(pr.attr("firstRow"), Some("1" | "true")),
+        band_row: matches!(pr.attr("bandRow"), Some("1" | "true")),
+    })
+}
+
+fn theme_accent1(pkg: &Package) -> Option<[u8; 3]> {
+    let bytes = pkg.get("/ppt/theme/theme1.xml").ok()?;
+    let doc = crate::xml::parse(bytes).ok()?;
+    theme_color(&doc.root, "accent1")
+}
+
+fn srgb8_to_linear(c: u8) -> f64 {
+    let u = f64::from(c) / 255.0;
+    if u <= 0.04045 {
+        u / 12.92
+    } else {
+        ((u + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb8(u: f64) -> u8 {
+    let u = u.clamp(0.0, 1.0);
+    let v = if u <= 0.0031308 {
+        12.92 * u
+    } else {
+        1.055 * u.powf(1.0 / 2.4) - 0.055
+    };
+    (v * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+/// 把颜色在线性 sRGB（IEC 61966-2-1）里向白做 tint。
+/// 官方多样本把本样式 band 锁成 60% / 80%，不是通道线性 tint_rgb。
+fn tint_toward_white_linear_srgb(rgb: [u8; 3], t: f64) -> [u8; 3] {
+    rgb.map(|c| linear_to_srgb8(srgb8_to_linear(c) * (1.0 - t) + t))
+}
+
+const MEDIUM_STYLE2_BAND1_TINT: f64 = 0.60;
+const MEDIUM_STYLE2_BAND2_TINT: f64 = 0.80;
+const MEDIUM_STYLE2_HEADER_BAR_PX: i32 = 2;
+
+fn medium_style2_cell_fill(
+    style: Option<MediumStyle2Look>,
+    accent1: Option<[u8; 3]>,
+    row_index: usize,
+) -> Option<[u8; 3]> {
+    let look = style?;
+    let accent = accent1?;
+    if look.first_row && row_index == 0 {
+        return Some(accent);
+    }
+    if !look.band_row {
+        return None;
+    }
+    let body = if look.first_row {
+        row_index.checked_sub(1)?
+    } else {
+        row_index
+    };
+    let t = if body % 2 == 0 {
+        MEDIUM_STYLE2_BAND1_TINT
+    } else {
+        MEDIUM_STYLE2_BAND2_TINT
+    };
+    Some(tint_toward_white_linear_srgb(accent, t))
+}
+
+fn paint_medium_style2_header_bottom_bar(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    xs: &[i32],
+    ys: &[i32],
+) {
+    if xs.len() < 2 || ys.len() < 2 {
+        return;
+    }
+    let x0 = xs[0];
+    let x1 = xs[xs.len() - 1];
+    let edge = ys[1];
+    fill_rect(
+        rgb,
+        width,
+        height,
+        x0,
+        edge - MEDIUM_STYLE2_HEADER_BAR_PX,
+        x1 - x0,
+        MEDIUM_STYLE2_HEADER_BAR_PX * 2,
+        WHITE,
+    );
 }
 
 fn header_is_bold_light(tbl: &Element) -> bool {
@@ -5886,5 +6025,52 @@ mod tests {
         assert_eq!(at(575, 144), [0, 170, 0], "right mid");
         assert_eq!(at(383, 144), page, "outside left");
         assert_eq!(at(576, 144), page, "outside right");
+    }
+
+    #[test]
+    fn linear_srgb_tint_matches_official_medium_style2_bands() {
+        // 官方 3x2 多样本（默认 Office accent1 与 accent1=FF0000）实心区内像素。
+        let office = [0x4F, 0x81, 0xBD];
+        assert_eq!(tint_toward_white_linear_srgb(office, 0.60), [208, 216, 232]);
+        assert_eq!(tint_toward_white_linear_srgb(office, 0.80), [233, 237, 244]);
+        let red = [0xFF, 0x00, 0x00];
+        assert_eq!(tint_toward_white_linear_srgb(red, 0.60), [255, 203, 203]);
+        assert_eq!(tint_toward_white_linear_srgb(red, 0.80), [255, 231, 231]);
+    }
+
+    #[test]
+    fn medium_style2_cell_fill_uses_header_then_body_relative_bands() {
+        let accent = [0x4F, 0x81, 0xBD];
+        let on = Some(MediumStyle2Look {
+            first_row: true,
+            band_row: true,
+        });
+        assert_eq!(medium_style2_cell_fill(on, Some(accent), 0), Some(accent));
+        assert_eq!(
+            medium_style2_cell_fill(on, Some(accent), 1),
+            Some([208, 216, 232])
+        );
+        assert_eq!(
+            medium_style2_cell_fill(on, Some(accent), 2),
+            Some([233, 237, 244])
+        );
+        let off = Some(MediumStyle2Look {
+            first_row: false,
+            band_row: true,
+        });
+        assert_eq!(
+            medium_style2_cell_fill(off, Some(accent), 0),
+            Some([208, 216, 232])
+        );
+        assert_eq!(
+            medium_style2_cell_fill(off, Some(accent), 1),
+            Some([233, 237, 244])
+        );
+        let no_band = Some(MediumStyle2Look {
+            first_row: false,
+            band_row: false,
+        });
+        assert_eq!(medium_style2_cell_fill(no_band, Some(accent), 0), None);
+        assert_eq!(medium_style2_cell_fill(None, Some(accent), 0), None);
     }
 }

@@ -105,6 +105,7 @@ mod win {
         bold: bool,
         italic: bool,
         pt: f32,
+        dpi: f32,
     }
 
     impl Drop for Face {
@@ -123,9 +124,13 @@ mod win {
     impl Face {
         /// 按顺序找本机有的字体。图里没写字体时，Excel 16.0 用「等线」。
         pub fn open(px: f32, bold: bool) -> Option<Self> {
-            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
+            Self::open_dpi(px, bold, 96.0)
+        }
+
+        pub fn open_dpi(px: f32, bold: bool, dpi: f64) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / dpi) as f32;
             for name in FACES {
-                let Some(mut face) = Self::new(px, bold, false, name, pt) else {
+                let Some(mut face) = Self::new(px, bold, false, name, pt, dpi) else {
                     continue;
                 };
                 let actual = face.text_face();
@@ -141,7 +146,7 @@ mod win {
         pub fn open_named(px: f32, bold: bool, name: &str) -> Option<Self> {
             let pt = (f64::from(px) * 72.0 / 96.0) as f32;
             if !name.is_empty() && !name.starts_with('+') {
-                if let Some(mut face) = Self::new(px, bold, false, name, pt) {
+                if let Some(mut face) = Self::new(px, bold, false, name, pt, 96.0) {
                     face.name = face.text_face();
                     if !face.name.is_empty() {
                         return Some(face);
@@ -153,23 +158,34 @@ mod win {
 
         /// 单元格文字。斜体只走这一条，图表字仍不加斜。
         pub fn open_cell(px: f32, bold: bool, italic: bool, name: &str) -> Option<Self> {
-            let pt = (f64::from(px) * 72.0 / 96.0) as f32;
+            Self::open_cell_dpi(px, bold, italic, name, 96.0)
+        }
+
+        /// 与 `open_cell` 相同，但按导出 DPI 把像素字号换回磅值。
+        pub fn open_cell_dpi(
+            px: f32,
+            bold: bool,
+            italic: bool,
+            name: &str,
+            dpi: f64,
+        ) -> Option<Self> {
+            let pt = (f64::from(px) * 72.0 / dpi) as f32;
             if !name.is_empty() && !name.starts_with('+') {
-                if let Some(mut face) = Self::new(px, bold, italic, name, pt) {
+                if let Some(mut face) = Self::new(px, bold, italic, name, pt, dpi) {
                     face.name = face.text_face();
                     if !face.name.is_empty() {
                         return Some(face);
                     }
                 }
             }
-            Self::new(px, bold, italic, "Calibri", pt).map(|mut face| {
+            Self::new(px, bold, italic, "Calibri", pt, dpi).map(|mut face| {
                 face.name = face.text_face();
                 face
             })
         }
 
         /// `px` 是 96 dpi 下的像素字号。负高度让 GDI 按字符高度而不是单元格高度来建。
-        fn new(px: f32, bold: bool, italic: bool, name: &str, pt: f32) -> Option<Self> {
+        fn new(px: f32, bold: bool, italic: bool, name: &str, pt: f32, dpi: f64) -> Option<Self> {
             let height = -(px.round() as i32);
             if height == 0 {
                 return None;
@@ -209,6 +225,7 @@ mod win {
                     bold,
                     italic,
                     pt,
+                    dpi: dpi as f32,
                 })
             }
         }
@@ -272,7 +289,8 @@ mod win {
                 {
                     return None;
                 }
-                GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+                // UNIT_POINT 按位图 DPI 换像素；必须用建 Face 时的导出 DPI，不能写死 96。
+                GdipBitmapSetResolution(bitmap, self.dpi, self.dpi);
                 let mut graphics = std::ptr::null_mut();
                 if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
                     GdipDisposeImage(bitmap);
@@ -527,7 +545,8 @@ mod win {
                 {
                     return false;
                 }
-                GdipBitmapSetResolution(bitmap, 96.0, 96.0);
+                // UNIT_POINT 按位图 DPI 换像素；必须用建 Face 时的导出 DPI，不能写死 96。
+                GdipBitmapSetResolution(bitmap, self.dpi, self.dpi);
                 let mut graphics = std::ptr::null_mut();
                 if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
                     GdipDisposeImage(bitmap);
@@ -626,6 +645,152 @@ mod win {
             true
         }
 
+        fn draw_gdiplus_rotated(
+            &self,
+            text: &str,
+            origin_x: f64,
+            origin_y: f64,
+            deg: f64,
+            color: [u8; 3],
+            blend: &mut impl FnMut(i32, i32, [u8; 3], u8),
+        ) -> bool {
+            if gdiplus_token().is_none() {
+                return false;
+            }
+            let typo_w = self.width(text);
+            let typo_h = self.em_box();
+            let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(typo_w, typo_h, deg);
+            let pad = 4i32;
+            let bw = ((max_x - min_x).ceil() as i32 + pad * 2 + 8).max(1);
+            let bh = ((max_y - min_y).ceil() as i32 + pad * 2 + 8).max(1);
+            let mut pixels = vec![0xFFFF_FFFFu32; (bw as usize) * (bh as usize)];
+            let chars: Vec<u16> = text.encode_utf16().collect();
+            let mut name: Vec<u16> = self.name.encode_utf16().collect();
+            name.push(0);
+            let origin_bmp_x = pad as f32 - min_x;
+            let origin_bmp_y = pad as f32 - min_y;
+            let drawn = unsafe {
+                let mut bitmap = std::ptr::null_mut();
+                if GdipCreateBitmapFromScan0(
+                    bw,
+                    bh,
+                    bw * 4,
+                    PIXEL_FORMAT_32BPP_ARGB,
+                    pixels.as_mut_ptr().cast(),
+                    &mut bitmap,
+                ) != 0
+                    || bitmap.is_null()
+                {
+                    return false;
+                }
+                GdipBitmapSetResolution(bitmap, self.dpi, self.dpi);
+                let mut graphics = std::ptr::null_mut();
+                if GdipGetImageGraphicsContext(bitmap, &mut graphics) != 0 || graphics.is_null() {
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                GdipSetPageUnit(graphics, UNIT_PIXEL);
+                GdipSetTextRenderingHint(graphics, TEXT_ANTIALIAS_GRIDFIT);
+                // p' = T * R * p：先按 escapement 旋转 typographic 点，再平移到位图原点。
+                // GDI+ 正角为顺时针，故传入 -deg；Prepend 旋转使最终矩阵为 T*R。
+                GdipTranslateWorldTransform(
+                    graphics,
+                    origin_bmp_x,
+                    origin_bmp_y,
+                    MATRIX_ORDER_APPEND,
+                );
+                GdipRotateWorldTransform(graphics, -deg as f32, MATRIX_ORDER_PREPEND);
+                let mut family = std::ptr::null_mut();
+                if GdipCreateFontFamilyFromName(name.as_ptr(), std::ptr::null_mut(), &mut family)
+                    != 0
+                    || family.is_null()
+                {
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut font = std::ptr::null_mut();
+                let style = self.gdip_style();
+                if GdipCreateFont(family, self.pt, style, UNIT_POINT, &mut font) != 0
+                    || font.is_null()
+                {
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut brush = std::ptr::null_mut();
+                if GdipCreateSolidFill(0xFF00_0000, &mut brush) != 0 || brush.is_null() {
+                    GdipDeleteFont(font);
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                let mut generic = std::ptr::null_mut();
+                let mut format = std::ptr::null_mut();
+                if GdipStringFormatGetGenericTypographic(&mut generic) != 0
+                    || GdipCloneStringFormat(generic, &mut format) != 0
+                    || format.is_null()
+                {
+                    GdipDeleteBrush(brush);
+                    GdipDeleteFont(font);
+                    GdipDeleteFontFamily(family);
+                    GdipDeleteGraphics(graphics);
+                    GdipDisposeImage(bitmap);
+                    return false;
+                }
+                GdipSetStringFormatFlags(format, STRING_FORMAT_TYPO);
+                let rect = RectF {
+                    x: 0.0,
+                    y: 0.0,
+                    w: (typo_w.ceil() as f32 + 8.0).max(1.0),
+                    h: (typo_h.ceil() as f32 + 8.0).max(1.0),
+                };
+                let status = GdipDrawString(
+                    graphics,
+                    chars.as_ptr(),
+                    chars.len() as i32,
+                    font,
+                    &rect,
+                    format,
+                    brush,
+                );
+                GdipDeleteStringFormat(format);
+                GdipDeleteBrush(brush);
+                GdipDeleteFont(font);
+                GdipDeleteFontFamily(family);
+                GdipDeleteGraphics(graphics);
+                GdipDisposeImage(bitmap);
+                status == 0
+            };
+            if !drawn {
+                return false;
+            }
+            let ox = (origin_x + f64::from(min_x) - f64::from(pad)).round() as i32;
+            let oy = (origin_y + f64::from(min_y) - f64::from(pad)).round() as i32;
+            for py in 0..bh {
+                for px in 0..bw {
+                    let row = pixels[py as usize * bw as usize + px as usize];
+                    let red = ((row >> 16) & 0xff) as u8;
+                    let green = ((row >> 8) & 0xff) as u8;
+                    let blue = (row & 0xff) as u8;
+                    if red == 255 && green == 255 && blue == 255 {
+                        continue;
+                    }
+                    let cov = (255 - u16::from(red))
+                        .max(255 - u16::from(green))
+                        .max(255 - u16::from(blue))
+                        .min(255) as u8;
+                    if cov == 0 {
+                        continue;
+                    }
+                    blend(ox + px, oy + py, color, cov);
+                }
+            }
+            true
+        }
+
         fn text_metric(&self) -> Option<TextMetric> {
             let mut metric = TextMetric {
                 height: 0,
@@ -689,6 +854,38 @@ mod win {
                 self.draw(&piece, cursor, top, color, &mut blend);
                 cursor += advance;
             }
+        }
+
+        /// 把 typographic 左上角放到 `(origin_x, origin_y)`，再按 Excel/GDI escapement
+        /// 角度（逆时针，90 表示自下而上）旋转整段字。像素优先走 GDI+ 世界变换。
+        pub fn draw_cells_rotated(
+            &self,
+            text: &str,
+            origin_x: f64,
+            origin_y: f64,
+            deg: f64,
+            color: [u8; 3],
+            mut blend: impl FnMut(i32, i32, [u8; 3], u8),
+        ) {
+            if text.is_empty() {
+                return;
+            }
+            if deg.abs() < 1e-9 {
+                self.draw_cells(text, origin_x, origin_y, color, blend);
+                return;
+            }
+            if self.draw_gdiplus_rotated(text, origin_x, origin_y, deg, color, &mut blend) {
+                return;
+            }
+            self.draw_gray8(text, 0.0, 0.0, color, &mut |px, py, rgb, cov| {
+                let (rx, ry) = rotate_escapement(f64::from(px), f64::from(py), deg);
+                blend(
+                    (origin_x + rx).round() as i32,
+                    (origin_y + ry).round() as i32,
+                    rgb,
+                    cov,
+                );
+            });
         }
 
         /// 基线到字顶的距离。画字时用它，避免汉字高出数字「0」的黑框。
@@ -900,6 +1097,7 @@ mod win {
     const WRAP_MODE_TILE_FLIP_XY: i32 = 3;
     const SMOOTHING_NONE: i32 = 3;
     const MATRIX_ORDER_PREPEND: i32 = 0;
+    const MATRIX_ORDER_APPEND: i32 = 1;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -2030,6 +2228,28 @@ mod win {
         }
     }
 
+    fn rotate_escapement(x: f64, y: f64, deg: f64) -> (f64, f64) {
+        let rad = deg.to_radians();
+        let (s, c) = (rad.sin(), rad.cos());
+        (x * c + y * s, -x * s + y * c)
+    }
+
+    fn typo_aabb_after_escapement(w: f64, h: f64, deg: f64) -> (f32, f32, f32, f32) {
+        let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)];
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        for (x, y) in corners {
+            let (rx, ry) = rotate_escapement(x, y, deg);
+            min_x = min_x.min(rx);
+            min_y = min_y.min(ry);
+            max_x = max_x.max(rx);
+            max_y = max_y.max(ry);
+        }
+        (min_x as f32, min_y as f32, max_x as f32, max_y as f32)
+    }
+
     #[test]
     fn device_round_rect_straight_edges_are_opaque() {
         // 竖直直边中点应为完全覆盖；外接矩形外侧一列不应被涂成实心。
@@ -2285,11 +2505,19 @@ impl Face {
         None
     }
 
+    pub fn open_dpi(_: f32, _: bool, _: f64) -> Option<Self> {
+        None
+    }
+
     pub fn open_named(_: f32, _: bool, _: &str) -> Option<Self> {
         None
     }
 
     pub fn open_cell(_: f32, _: bool, _: bool, _: &str) -> Option<Self> {
+        None
+    }
+
+    pub fn open_cell_dpi(_: f32, _: bool, _: bool, _: &str, _: f64) -> Option<Self> {
         None
     }
 
@@ -2339,6 +2567,19 @@ impl Face {
         blend: impl FnMut(i32, i32, [u8; 3], u8),
     ) {
         self.draw(text, x, top, color, blend);
+    }
+
+    pub fn draw_cells_rotated(
+        &self,
+        text: &str,
+        origin_x: f64,
+        origin_y: f64,
+        deg: f64,
+        color: [u8; 3],
+        blend: impl FnMut(i32, i32, [u8; 3], u8),
+    ) {
+        let _ = (origin_x, origin_y, deg);
+        self.draw(text, origin_x, origin_y, color, blend);
     }
 }
 

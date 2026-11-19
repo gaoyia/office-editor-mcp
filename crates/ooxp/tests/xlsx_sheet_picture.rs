@@ -325,3 +325,180 @@ fn inject_src_rects(xml: &mut String, rects: &[&str]) {
         rest = end + rect.len();
     }
 }
+
+fn export_dpi(src: &Path, dpi: u32) -> Result<Vec<u8>, ooxp::Error> {
+    let png = src.with_extension(format!("dpi{dpi}.png"));
+    if png.exists() {
+        std::fs::remove_file(&png).unwrap();
+    }
+    let mut req = json!({
+        "schemaVersion": 1,
+        "action": "exportSheetImage",
+        "path": src.to_string_lossy(),
+        "id": "sheet:Sheet1",
+        "output": png.to_string_lossy(),
+    });
+    if dpi != 96 {
+        req["dpi"] = json!(dpi);
+    }
+    let written = run(&req.to_string())?;
+    let RunOutput::Written { path, .. } = written else {
+        panic!("应写出文件");
+    };
+    Ok(std::fs::read(path).unwrap())
+}
+
+fn offset_clamp_book(row_height: f64, from_off_y: i64) -> PathBuf {
+    let src = tmp("clamp-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "A3", "value": "" },
+            { "ref": "A4", "value": "" }
+        ] }] }
+    }));
+    let png = tmp("clamp-dot").with_extension("png");
+    write_png(
+        &png,
+        2,
+        2,
+        &[
+            [0x00, 0xFF, 0xFF],
+            [0x11, 0x22, 0x33],
+            [0xAA, 0xBB, 0xCC],
+            [0xDD, 0xEE, 0xFF],
+        ],
+    );
+    let shaped = tmp("clamp-shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": row_height },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": row_height },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": row_height },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 4, "height": row_height },
+            { "op": "insertPicture", "id": "sheet:Sheet1", "file": png.to_string_lossy(),
+              "from": "A1", "fromOffX": 9525, "fromOffY": from_off_y, "cx": 19050, "cy": 19050 }
+        ]
+    }));
+    shaped
+}
+
+#[test]
+fn cell_anchor_offset_is_clamped_to_the_starting_cell() {
+    // 15 磅行 = 190500 EMU = 20px@96 / 22px@106。rowOff=381000 超出一行，
+    // 应落在该行远边，而不是再累加一行像素。未超出的偏移保持原公式。
+    let inside = offset_clamp_book(15.0, 95250);
+    let overflow = offset_clamp_book(15.0, 381000);
+
+    let (w, h, rgb) = decode_png(&export(&inside).unwrap());
+    assert_eq!((w, h), (65, 81));
+    assert_eq!(pixel(&rgb, w, 1, 10), [0x00, 0xFF, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 1, 20), [0x00, 0xFF, 0xFF]);
+
+    let (w, h, rgb) = decode_png(&export(&overflow).unwrap());
+    assert_eq!((w, h), (65, 81));
+    assert_eq!(pixel(&rgb, w, 1, 20), [0x00, 0xFF, 0xFF]);
+    assert_eq!(pixel(&rgb, w, 2, 20), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 1, 21), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 2, 21), [0xDD, 0xEE, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 1, 40), [0x00, 0xFF, 0xFF]);
+
+    let (w, h, rgb) = decode_png(&export_dpi(&overflow, 106).unwrap());
+    assert_eq!((w, h), (73, 89));
+    assert_eq!(pixel(&rgb, w, 1, 22), [0x00, 0xFF, 0xFF]);
+    assert_eq!(pixel(&rgb, w, 2, 22), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&rgb, w, 1, 23), [0xAA, 0xBB, 0xCC]);
+    assert_eq!(pixel(&rgb, w, 2, 23), [0xDD, 0xEE, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 1, 44), [0x00, 0xFF, 0xFF]);
+}
+
+fn two_cell_overflow_book() -> PathBuf {
+    let src = tmp("tc-remnant-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" },
+            { "ref": "A3", "value": "" },
+            { "ref": "A4", "value": "" }
+        ] }] }
+    }));
+    let png = tmp("tc-remnant-dot").with_extension("png");
+    write_png(
+        &png,
+        2,
+        2,
+        &[
+            [0xFF, 0x00, 0x00],
+            [0x00, 0xFF, 0x00],
+            [0x00, 0x00, 0xFF],
+            [0xFF, 0xFF, 0x00],
+        ],
+    );
+    let shaped = tmp("tc-remnant-shaped");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": shaped.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 3, "height": 15.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 4, "height": 15.0 },
+            { "op": "insertPicture", "id": "sheet:Sheet1", "file": png.to_string_lossy(),
+              "from": "A1", "fromOffX": 9525, "fromOffY": 381000, "cx": 19050, "cy": 19050 }
+        ]
+    }));
+    let twocell = tmp("tc-remnant-two");
+    rewrite(&shaped, &twocell, |name, xml| {
+        if name.starts_with("xl/drawings/drawing") {
+            let old = "<xdr:oneCellAnchor>";
+            let new = "<xdr:twoCellAnchor>";
+            *xml = xml
+                .replace(old, new)
+                .replace("</xdr:oneCellAnchor>", "</xdr:twoCellAnchor>");
+            let ext = "<xdr:ext cx=\"19050\" cy=\"19050\"/>";
+            let to = "<xdr:to><xdr:col>0</xdr:col><xdr:colOff>28575</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>400050</xdr:rowOff></xdr:to>";
+            assert!(xml.contains(ext), "oneCell ext");
+            *xml = xml.replacen(ext, to, 1);
+        }
+    });
+    twocell
+}
+
+#[test]
+fn two_cell_overflow_remnant_scales_the_1to1_png() {
+    // 同一 15 磅格内 twoCell from/to 都溢出时，官方把目标框收成格边上 1px，
+    // 再把本来 1:1 的 2x2 图缩小进去，而不是整表 NI，也不裁成只留顶行原色。
+    let book = two_cell_overflow_book();
+
+    let (w, h, rgb) = decode_png(&export(&book).unwrap());
+    assert_eq!((w, h), (65, 81));
+    assert_ne!(pixel(&rgb, w, 1, 20), [0xFF, 0xFF, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 2, 20), [0xFF, 0xFF, 0xFF]);
+    // 没有伸出格外的第二行。
+    assert_ne!(pixel(&rgb, w, 1, 21), [0xFF, 0x00, 0x00]);
+    assert_ne!(pixel(&rgb, w, 1, 21), [0x00, 0x00, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 1, 21), [0x00, 0xFF, 0x00]);
+    assert_ne!(pixel(&rgb, w, 1, 21), [0xFF, 0xFF, 0x00]);
+
+    let (w, h, rgb) = decode_png(&export_dpi(&book, 106).unwrap());
+    assert_eq!((w, h), (73, 89));
+    assert_ne!(pixel(&rgb, w, 1, 22), [0xFF, 0xFF, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 2, 22), [0xFF, 0xFF, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 1, 23), [0xFF, 0x00, 0x00]);
+    assert_ne!(pixel(&rgb, w, 1, 23), [0x00, 0x00, 0xFF]);
+    assert_ne!(pixel(&rgb, w, 2, 23), [0x00, 0xFF, 0x00]);
+    assert_ne!(pixel(&rgb, w, 2, 23), [0xFF, 0xFF, 0x00]);
+}

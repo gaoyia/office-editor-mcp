@@ -6,6 +6,7 @@ use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
 use super::layout;
+use super::render_dpi::RenderDpi;
 use super::request::{
     ColorSpec, DeleteSparklineOp, InsertSparklineOp, Patch, SetSparklineOp, SparkAxisType,
     SparkColors, SparkEmpty, SparklineType,
@@ -733,7 +734,16 @@ fn overlay_colors(g: &mut Element, colors: &SparkColors) {
     }
 }
 
+#[allow(dead_code)]
 pub fn export_sparkline_image(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
+    export_sparkline_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_sparkline_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<super::ExportedMedia, Error> {
     let (sheet_name, index) = parse_export_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let wb_part = crate::opc::office_document_part(&pkg)?;
@@ -749,7 +759,17 @@ pub fn export_sparkline_image(bytes: &[u8], id: &str) -> Result<super::ExportedM
     let sheet_part = super::picture::lookup_sheet_part(&pkg, &sheet_name, "id")?;
     let doc = crate::xml::parse(pkg.get(&sheet_part)?)?;
     let group = group_at(&doc.root, index, id)?;
-    let png = raster_group(&pkg, &sheets, &sheet_name, &doc.root, group, &cells, None)?.png()?;
+    let png = raster_group(
+        &pkg,
+        &sheets,
+        &sheet_name,
+        &doc.root,
+        group,
+        &cells,
+        None,
+        dpi,
+    )?
+    .png()?;
     Ok(super::ExportedMedia {
         bytes: png,
         content_type: Some("image/png".to_string()),
@@ -781,10 +801,24 @@ fn group_hosts(group: &Element) -> Result<Vec<a1::CellRef>, Error> {
 }
 /// Parse only visible hosts, then reuse the standalone supported subset and full
 /// host raster once per export. Cropping it per tile never changes AA phase.
+#[allow(dead_code)]
 pub(crate) fn sheet_rasters<F>(
     pkg: &Package,
     sheet_name: &str,
     sheet: &Element,
+    viewport: F,
+) -> Result<Vec<(a1::CellRef, super::sparkline_paint::Raster)>, Error>
+where
+    F: FnMut(a1::CellRef) -> Result<Option<(u32, u32)>, Error>,
+{
+    sheet_rasters_at(pkg, sheet_name, sheet, RenderDpi::DEFAULT, viewport)
+}
+
+pub(crate) fn sheet_rasters_at<F>(
+    pkg: &Package,
+    sheet_name: &str,
+    sheet: &Element,
+    dpi: RenderDpi,
     mut viewport: F,
 ) -> Result<Vec<(a1::CellRef, super::sparkline_paint::Raster)>, Error>
 where
@@ -829,7 +863,16 @@ where
         .map(|(group, host, size)| {
             Ok((
                 host,
-                raster_group(pkg, &sheets, sheet_name, sheet, group, &cells, Some(size))?,
+                raster_group(
+                    pkg,
+                    &sheets,
+                    sheet_name,
+                    sheet,
+                    group,
+                    &cells,
+                    Some(size),
+                    dpi,
+                )?,
             ))
         })
         .collect()
@@ -880,6 +923,7 @@ fn raster_group(
     group: &Element,
     cells: &CellCache,
     host_size: Option<(u32, u32)>,
+    dpi: RenderDpi,
 ) -> Result<super::sparkline_paint::Raster, Error> {
     let column = is_plain_column(group);
     let win_loss = is_plain_win_loss(group);
@@ -903,11 +947,13 @@ fn raster_group(
         Some(size) => size,
         None => {
             let geometry = super::geometry::GeometryContext::from_package(pkg)
+                .map_err(|_| image_unsupported())?
+                .with_dpi(dpi)
                 .map_err(|_| image_unsupported())?;
             let width = geometry
                 .column_px(sheet, host.col)
                 .map_err(|_| image_unsupported())? as u32;
-            let height = layout::row_height_px(sheet, host.row);
+            let height = layout::row_height_px_at(sheet, host.row, dpi);
             (width, height)
         }
     };
@@ -927,12 +973,13 @@ fn raster_group(
             }
         }
         let colors = column_colors(group, &values, color)?;
-        return super::sparkline_paint::raster_columns(
+        return super::sparkline_paint::raster_columns_at(
             width,
             height,
             &values,
             &colors,
             dates.as_deref(),
+            dpi,
         );
     }
     if win_loss {
@@ -951,7 +998,7 @@ fn raster_group(
             values.push(win_loss_point(value)?);
         }
         let neg = negative_rgb(group)?;
-        return super::sparkline_paint::raster_win_loss(
+        return super::sparkline_paint::raster_win_loss_at(
             width,
             height,
             &values,
@@ -959,6 +1006,7 @@ fn raster_group(
             neg,
             attr_on(group, "negative"),
             dates.as_deref(),
+            dpi,
         );
     }
     let values = cached.iter().map(point_of).collect();
@@ -968,10 +1016,10 @@ fn raster_group(
         axis_min: axis_end(group, "minAxisType", "manualMin")?,
         axis_max: axis_end(group, "maxAxisType", "manualMax")?,
         color,
-        weight_px: line_weight_px(group)?,
+        weight_px: line_weight_px(group, dpi)?,
         dates,
     };
-    super::sparkline_paint::raster_line(width, height, &spec)
+    super::sparkline_paint::raster_line_at(width, height, &spec, dpi)
 }
 
 fn plain_flags(group: &Element) -> bool {
@@ -1136,13 +1184,13 @@ fn parse_series_rgb(raw: &str) -> Option<[u8; 3]> {
     ])
 }
 
-fn line_weight_px(group: &Element) -> Result<f64, Error> {
+fn line_weight_px(group: &Element, dpi: RenderDpi) -> Result<f64, Error> {
     let pt = match group.attr("lineWeight").map(str::trim) {
         None | Some("") => 0.75,
         Some(raw) => raw.parse::<f64>().map_err(|_| image_unsupported())?,
     };
     if pt.is_finite() && pt > 0.0 && pt <= 72.0 {
-        Ok(pt * 96.0 / 72.0)
+        Ok(dpi.pt_to_px_font(pt))
     } else {
         Err(image_unsupported())
     }

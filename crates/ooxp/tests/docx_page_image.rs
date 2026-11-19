@@ -730,6 +730,83 @@ fn equal_custom_grid_widths_export() {
 }
 
 #[cfg(windows)]
+fn rewrite_document_xml(
+    src: &std::path::Path,
+    tag: &str,
+    edit: impl FnOnce(&str) -> String,
+) -> PathBuf {
+    use std::io::{Read, Write};
+    let out = src.with_file_name(format!(
+        "{}-{tag}.docx",
+        src.file_stem().unwrap().to_string_lossy()
+    ));
+    if out.exists() {
+        std::fs::remove_file(&out).unwrap();
+    }
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut zout = ZipWriter::new(std::fs::File::create(&out).unwrap());
+    let opts =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let mut edit = Some(edit);
+    for i in 0..zin.len() {
+        let mut file = zin.by_index(i).unwrap();
+        let name = file.name().to_string();
+        let mut data = Vec::new();
+        file.read_to_end(&mut data).unwrap();
+        if name == "word/document.xml" {
+            let xml = edit.take().expect("document.xml")(&String::from_utf8(data).unwrap());
+            zout.start_file(name, opts).unwrap();
+            zout.write_all(xml.as_bytes()).unwrap();
+        } else {
+            zout.start_file(name, opts).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+    }
+    zout.finish().unwrap();
+    out
+}
+
+#[cfg(windows)]
+#[test]
+fn auto_table_uses_consistent_tcw_not_stale_grid() {
+    // 官方 wide PDF 96dpi：tblW=auto，tblGrid 2880+720，但每个 tcW 都是 2880。
+    // Word 走首选单元格宽，墨迹盒 (96,114) 385×38，竖线 96/288/480。
+    let src = create_empty_table("tbl-wide0", 2, 2);
+    let doc = rewrite_document_xml(&src, "tcw", |xml| {
+        let mut out = xml.to_string();
+        let grid = r#"<w:gridCol w:w="GRID"/>"#;
+        let first = grid.replace("GRID", "2880");
+        let second = grid.replace("GRID", "720");
+        let old_grid = grid.replace("GRID", "1440");
+        assert_eq!(
+            out.matches(&old_grid).count(),
+            2,
+            "expected two default gridCol"
+        );
+        out = out.replacen(&old_grid, &first, 1);
+        out = out.replacen(&old_grid, &second, 1);
+        let old_tc = r#"<w:tcW w:w="1440" w:type="dxa"/>"#;
+        let new_tc = r#"<w:tcW w:w="2880" w:type="dxa"/>"#;
+        let n = out.matches(&old_tc).count();
+        assert_eq!(n, 4, "expected four default tcW, got {n}");
+        out = out.replace(&old_tc, &new_tc);
+        out
+    });
+    let (pw, ph, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!((pw, ph), (794, 1123));
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 385, 38));
+    let at = |x: u32, y: u32| {
+        let i = ((y * 794 + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    };
+    assert_eq!(at(96, 120), [0, 0, 0]);
+    assert_eq!(at(288, 120), [0, 0, 0]);
+    assert_eq!(at(480, 120), [0, 0, 0]);
+    assert_eq!(at(336, 120), [255, 255, 255]);
+}
+
+#[cfg(windows)]
 fn create_with_header(tag: &str, body: &str, header: &str) -> PathBuf {
     let src = tmp(tag);
     run_ok(json!({

@@ -1,7 +1,7 @@
 //! Linear value-axis scalars. Nice-number search is bounded by label line
 //! capacity, not a universal 5..10 interval count. Office's general automatic
 //! algorithm is undocumented; nonzero automatic minima are explicitly out of scope.
-use super::{Element, Error, ErrorKind, Series, INSET_BOTTOM, INSET_TOP};
+use super::{Element, Error, ErrorKind, RenderDpi, Series, INSET_BOTTOM, INSET_TOP};
 #[derive(Clone, Copy, Default)]
 pub(super) struct Spec {
     pub min: Option<f64>,
@@ -99,10 +99,16 @@ impl Spec {
     }
 }
 /// A full label line plus one raster-grid row, capped at the historic ten slots.
-/// Uses the existing fixed96 face metrics; never the current desktop DPI.
+/// Face metrics come from the already-dpi-aware label size. Insets follow the
+/// request export DPI, never the Windows desktop DPI.
+#[cfg(test)]
 pub(super) fn interval_budget(height: u32, label_em: f64) -> i32 {
+    interval_budget_dpi(height, label_em, RenderDpi::DEFAULT)
+}
+
+pub(super) fn interval_budget_dpi(height: u32, label_em: f64, dpi: RenderDpi) -> i32 {
     interval_budget_span(
-        f64::from(height) - f64::from(INSET_TOP + INSET_BOTTOM),
+        f64::from(height) - f64::from(dpi.scale_px(INSET_TOP) + dpi.scale_px(INSET_BOTTOM)),
         label_em,
         1.0,
     )
@@ -156,7 +162,7 @@ pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
     Ok((x.ok_or_else(unsupported)?, y.ok_or_else(unsupported)?))
 }
 
-/// 簇状条形图：类目轴在左（axPos=l），数值轴在下（axPos=b）。
+/// 簇状条形图：类目轴在左（axPos=l），包内数值轴 axPos 仍为 b；绘制时 maxMin（第一类在上）把数值轴放在绘图区顶，minMax 放在底。
 /// 类目 scaling 为 minMax 或省略时，第一类在下；maxMin 时第一类在上（Excel 默认条形图常见）。
 /// 返回 (数值轴, 第一类是否在下)。
 pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
@@ -399,6 +405,32 @@ mod tests {
         assert_eq!(interval_budget(336, 17.0), 10);
         assert_eq!(interval_budget(96, 17.0), 2);
         assert!(interval_budget(200, 25.0) < interval_budget(200, 17.0));
+    }
+
+    #[test]
+    fn auto_scale_minus_eight_to_eight_uses_major_two_when_budget_allows() {
+        // Office automatic scaling of -8..8 is -10..10, majorUnit=2 (10 intervals).
+        // This is the shared nice-number search, not a one-chart special case.
+        let values = [Some(-8.0), Some(0.0), Some(8.0)];
+        let got = scale_values(values.into_iter(), Spec::default(), 10).unwrap();
+        assert_eq!(
+            (got.min, got.max, got.major),
+            (-10.0, 10.0, 2.0),
+            "budget 10 must accept Office's 10-interval major=2"
+        );
+    }
+
+    #[test]
+    fn horizontal_numeric_budget_reaches_ten_on_typical_bar_width() {
+        // Measured plot width of the 636-wide official bar charts is 537px.
+        // occupancy=3 drops below 10 once em exceeds ~17.6, which is why those
+        // signed bars used major=5. Numeric occupancy 1 must still reach the cap.
+        let em = 20.0;
+        assert_eq!(interval_budget_span(537.0, em, 1.0), 10);
+        assert!(
+            interval_budget_span(537.0, em, 3.0) < 10,
+            "occupancy 3 is what used to reject major=2 on this width"
+        );
     }
     #[test]
     fn explicit_xml_is_not_silently_ignored() {

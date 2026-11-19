@@ -188,6 +188,21 @@ fn insert_standard_line_export_keeps_package_and_paints_series_colors() {
 }
 
 #[test]
+fn insert_line_writes_explicit_smooth_off() {
+    let book = insert_line("smooth-off");
+    let xml = part_text(&book, &chart_part(&book));
+    let n = xml.matches(r#"<c:smooth val="0"/>"#).count();
+    assert_eq!(
+        n, 2,
+        "each inserted line series should write explicit c:smooth val=0, got {n} in {xml}"
+    );
+    assert!(
+        !xml.contains(r#"<c:smooth val="1"/>"#),
+        "insertChart type=line must not write smooth on"
+    );
+}
+
+#[test]
 fn read_existing_line_chart_part_exports_and_unsupported_details_stay_ni() {
     let book = insert_line("read");
     let part = chart_part(&book);

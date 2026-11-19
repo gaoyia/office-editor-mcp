@@ -4,6 +4,7 @@ use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
 use super::cell;
+use super::render_dpi::RenderDpi;
 use super::request::{MergeRangeOp, SetColWidthOp, SetRowHeightOp, UnmergeRangeOp};
 use crate::error::{Error, ErrorKind};
 use crate::xml::{Element, Node};
@@ -740,8 +741,13 @@ fn default_row_emu(sheet: &Element) -> i64 {
     points_to_emu(pt).max(1)
 }
 
+#[allow(dead_code)]
 pub(crate) fn row_height_px(sheet: &Element, row: u32) -> u32 {
-    emu_to_px(row_emu(sheet, row))
+    row_height_px_at(sheet, row, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn row_height_px_at(sheet: &Element, row: u32, dpi: RenderDpi) -> u32 {
+    dpi.layout_emu_to_px(row_emu(sheet, row))
 }
 
 fn row_emu(sheet: &Element, row: u32) -> i64 {
@@ -753,6 +759,7 @@ fn row_emu(sheet: &Element, row: u32) -> i64 {
     default_row_emu(sheet).max(1)
 }
 
+#[allow(dead_code)]
 fn emu_to_px(emu: i64) -> u32 {
     let px = (emu as f64 / EMU_PER_PIXEL as f64).round();
     if !px.is_finite() || px < 1.0 {

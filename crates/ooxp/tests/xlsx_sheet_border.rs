@@ -423,6 +423,220 @@ fn solid_diagonal_thin_and_medium_export_png() {
 }
 
 #[test]
+fn medium_diagonal_does_not_spill_into_the_cell_above() {
+    let src = tmp("diag-clip-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-clip");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A2",
+                "border": {
+                    "diagonal": { "style": "medium", "color": { "rgb": "FF112233" } },
+                    "diagonalDown": true,
+                    "diagonalUp": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 20.0 }
+        ]
+    }));
+    // 30pt→40px @96、44px @106；渗进上格会出现 y=39 / y=43 的 11,22,33。
+    for (dpi, row1) in [(None, 40i32), (Some(106i64), 44i32)] {
+        let png = book.with_file_name(format!("diag-clip-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let bytes = std::fs::read(&png).unwrap();
+        let (w, h, px) = decode_png(&bytes);
+        let mut min_y = h as i32;
+        let mut ink = 0usize;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = ((y as u32 * w + x as u32) * 3) as usize;
+                if px[i] == 0x11 && px[i + 1] == 0x22 && px[i + 2] == 0x33 {
+                    ink += 1;
+                    min_y = min_y.min(y);
+                }
+            }
+        }
+        assert!(ink > 10, "dpi={dpi:?} ink={ink}");
+        assert!(
+            min_y >= row1,
+            "medium 斜线渗进上一格：dpi={dpi:?} min_y={min_y} row1={row1} size={w}x{h}"
+        );
+    }
+}
+
+/// 单格 A1 细线 down：远边网格是画布末像素；官方 LineTo 不含终点，且不落左/上外框。
+#[test]
+fn diagonal_thin_uses_far_grid_lineto_and_skips_leading_frame() {
+    let src = tmp("diag-far-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-far");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!A1",
+                "border": {
+                    "diagonal": { "style": "thin", "color": { "rgb": "FFEE4455" } },
+                    "diagonalDown": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 }
+        ]
+    }));
+    for dpi in [None, Some(106i64)] {
+        let png = book.with_file_name(format!("diag-far-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let (w, h, px) = decode_png(&std::fs::read(&png).unwrap());
+        let mut ink = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                if pixel(&px, w, x, y) == RED {
+                    ink.push((x, y));
+                }
+            }
+        }
+        assert!(ink.len() > 10, "dpi={dpi:?} ink={}", ink.len());
+        assert!(
+            ink.iter().all(|&(x, y)| x > 0 && y > 0),
+            "细斜线落到左/上外框：dpi={dpi:?}"
+        );
+        let last = (w - 1, h - 1);
+        assert!(
+            !ink.contains(&last),
+            "细斜线不应包含远边网格终点：dpi={dpi:?} {last:?} size={w}x{h}"
+        );
+        assert!(
+            ink.iter().any(|&(x, y)| x == w - 1 || y == h - 1),
+            "细斜线应落到远边网格：dpi={dpi:?} size={w}x{h}"
+        );
+    }
+}
+
+#[test]
+fn medium_diagonal_does_not_spill_into_the_cell_to_the_left() {
+    let src = tmp("diag-left-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "B1", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("diag-left");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            {
+                "op": "setCellStyle",
+                "id": "cell:Sheet1!B1",
+                "border": {
+                    "diagonal": { "style": "medium", "color": { "rgb": "FF112233" } },
+                    "diagonalDown": true,
+                    "diagonalUp": true
+                }
+            },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 12.0 },
+            { "op": "setColWidth", "id": "sheet:Sheet1", "col": "B", "width": 8.0 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30.0 }
+        ]
+    }));
+    for dpi in [None, Some(106i64)] {
+        let png = book.with_file_name(format!("diag-left-{}.png", dpi.unwrap_or(96)));
+        if png.exists() {
+            std::fs::remove_file(&png).unwrap();
+        }
+        let mut req = json!({
+            "schemaVersion": 1,
+            "action": "exportSheetImage",
+            "path": book.to_string_lossy(),
+            "id": "sheet:Sheet1",
+            "output": png.to_string_lossy(),
+        });
+        if let Some(dpi) = dpi {
+            req["dpi"] = json!(dpi);
+        }
+        run(&req.to_string()).unwrap();
+        let (w, h, px) = decode_png(&std::fs::read(&png).unwrap());
+        let mut ink = 0usize;
+        let mut min_x = w as i32;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = ((y as u32 * w + x as u32) * 3) as usize;
+                if px[i] == 0x11 && px[i + 1] == 0x22 && px[i + 2] == 0x33 {
+                    ink += 1;
+                    min_x = min_x.min(x);
+                }
+            }
+        }
+        assert!(ink > 10, "dpi={dpi:?} ink={ink}");
+        // 列 A 在 96/106 都明显宽于 20px；medium 不得渗进左邻格。
+        assert!(
+            min_x >= 20,
+            "medium 斜线渗进左邻格：dpi={dpi:?} min_x={min_x} size={w}x{h}"
+        );
+    }
+}
+
+#[test]
 fn dashed_diagonal_still_not_implemented() {
     let src = tmp("diag-dash-src");
     run_ok(json!({
@@ -715,7 +929,7 @@ fn formula_dashed_and_slant_export_ok_cell_is_still_ni() {
 
 #[test]
 fn formula_dashed_right_rhythm_matches_line_on() {
-    // 与格子 dashed 同一套 paint_line：竖线 along=y，相位 along-1 后 r4!=3。
+    // 与格子 dashed 同一套 paint_line：相位为整图 (x+y).rem_euclid(4) != 3。
     let src = tmp("fdash-src");
     run_ok(json!({
         "schemaVersion": 1,
@@ -766,9 +980,56 @@ fn formula_dashed_right_rhythm_matches_line_on() {
         .take((h as usize).saturating_sub(1))
         .skip(first)
     {
-        let along = y as i32 - 1;
+        let along = x as i32 + y as i32;
         let expect = along.rem_euclid(4) != 3;
-        assert_eq!(bit, expect, "y={y} phase");
+        assert_eq!(bit, expect, "y={y} x={x} phase");
+    }
+}
+
+#[test]
+fn formula_dashed_odd_row_follows_x_plus_y() {
+    // 14.25 磅在 96 dpi 为 19px，底边 y=19 为奇数，可与仅 along=x 或 x-y 区分。
+    // 官方 106 奇 y 探针已锁定同一通式 (x+y).rem_euclid(4) != 3。
+    let src = tmp("fdash-odd-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "workbook": { "sheets": [{ "name": "Sheet1", "cells": [
+            { "ref": "A1", "value": "" },
+            { "ref": "A2", "value": "" }
+        ] }] }
+    }));
+    let book = tmp("fdash-odd");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": book.to_string_lossy(),
+        "ops": [
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 14.25 },
+            { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 2, "height": 15 },
+            {
+                "op": "insertConditionalFormat", "id": "sheet:Sheet1", "sqref": "A1",
+                "type": "expression", "formulas": ["TRUE"],
+                "dxf": { "border": { "bottom": { "style": "dashed", "color": { "rgb": "FF000000" } } } }
+            }
+        ]
+    }));
+    let book = rewrite_part(&book, "xl/worksheets/sheet1.xml", |xml| {
+        let views =
+            "<sheetViews><sheetView showGridLines=\"0\" workbookViewId=\"0\"/></sheetViews>";
+        let at = xml.find("<dimension ").expect("dimension");
+        let end = xml[at..].find("/>").expect("dimension end") + at + 2;
+        format!("{}{}{}", &xml[..end], views, &xml[end..])
+    });
+    let (w, h, px) = decode_png(&export(&book).unwrap());
+    let y: u32 = 19;
+    assert!(y < h, "expected odd far edge y=19, got h={h}");
+    for x in 0..w {
+        let bit = pixel(&px, w, x, y) == [0, 0, 0];
+        let expect = (x as i32 + y as i32).rem_euclid(4) != 3;
+        assert_eq!(bit, expect, "x={x} y={y} phase");
     }
 }
 

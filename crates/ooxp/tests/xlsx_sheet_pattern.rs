@@ -116,7 +116,7 @@ fn style(reference: &str, pattern: &str, fg: Option<&str>, bg: Option<&str>) -> 
     })
 }
 
-/// 列 A 宽 10（75 像素），第 1 行高 16 磅（21 像素）。其余列 64，其余行 20。
+/// 列 A 宽 10（75 像素），第 1 行高 16 磅（21 像素）。其余列 64，其余行 Calibri 11 自动 14.25 磅（19 像素）。
 fn patterned() -> PathBuf {
     let src = tmp("src");
     run_ok(json!({
@@ -244,23 +244,23 @@ fn owner(origins: &[i32], at: i32) -> usize {
 #[test]
 fn patterns_follow_the_picture_pixel() {
     let (w, h, px) = decode_png(&export(&patterned()).unwrap());
-    assert_eq!((w, h), (332, 82));
+    assert_eq!((w, h), (332, 79));
     assert_eq!(pixel(&px, w, 0, 0), [255, 255, 255]);
     // (2,2) 是 gray125 的点。若从格子可见左缘重算，这里会变成底。
     assert_eq!(pixel(&px, w, 2, 2), [0, 0, 0]);
     // B 列起点是 75。76 在整张图上是 gray0625 的点，按格子原点则是底。
     assert_eq!(pixel(&px, w, 76, 2), [0, 0, 0]);
     // C4 的前景是点，背景是底。
-    assert_eq!(pixel(&px, w, 140, 64), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 139, 64), [0x11, 0x22, 0x33]);
+    assert_eq!(pixel(&px, w, 140, 60), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&px, w, 139, 60), [0x11, 0x22, 0x33]);
     // 没写颜色时点是黑、底是白。只写前景时底仍是白。
-    assert_eq!(pixel(&px, w, 204, 64), [0, 0, 0]);
-    assert_eq!(pixel(&px, w, 203, 64), [255, 255, 255]);
-    assert_eq!(pixel(&px, w, 268, 64), [0xEE, 0x44, 0x55]);
-    assert_eq!(pixel(&px, w, 267, 64), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 204, 60), [0, 0, 0]);
+    assert_eq!(pixel(&px, w, 203, 60), [255, 255, 255]);
+    assert_eq!(pixel(&px, w, 268, 60), [0xEE, 0x44, 0x55]);
+    assert_eq!(pixel(&px, w, 267, 60), [255, 255, 255]);
 
     let xs = [0, 75, 139, 203, 267, 331];
-    let ys = [0, 21, 41, 61, 81];
+    let ys = [0, 21, 40, 59, 78];
     let kinds = [
         [
             "gray125",

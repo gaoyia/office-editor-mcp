@@ -1,10 +1,10 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto/circle 标记、空值按缺口断线。堆积、百分比堆积、平滑线、虚线、其它标记符号、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；lineMarker 画实线，缺值断开；标记规则与折线相同。仅连线、平滑、虚线、其它标记、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
-//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：数值轴在下、类目轴在左；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
-//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺值按缺口断开填充，不跨空点相连。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、空值按零或连线、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式空值按零或连线（dispBlanksAs=zero/span）、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
 
@@ -13,17 +13,18 @@ mod axis;
 #[path = "chart_legend.rs"]
 mod legend;
 
+use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
 use crate::xml::Element;
 
-const DPI: f64 = 96.0;
-const EMU_PER_INCH: f64 = 914_400.0;
 const MAX_PX: u32 = 4096;
 /// 图里没写字号时，标题、轴、类目、图例都是 10 磅。标题另用粗体。
 const LABEL_PT: f64 = 10.0;
 
 const INK: [u8; 3] = [0, 0, 0];
 const BORDER: [u8; 3] = [0x89, 0x89, 0x89];
+/// 下列边距、刻度臂长和图例间距是 96 dpi 下的像素。出图时经 `RenderDpi::scale_px`，
+/// 96 dpi 保持原值。圆角 `CORNER_R` 仍固定，圆角框另案处理。
 const INSET_TOP: i32 = 14;
 const INSET_RIGHT: i32 = 60;
 const INSET_BOTTOM: i32 = 34;
@@ -82,10 +83,77 @@ enum PlotKind {
     Scatter { connect: bool },
 }
 
+/// Excel default auto-marker cycle when `c:marker` is omitted or `symbol=auto`.
+/// Locked from Excel 16.0 Chart.Export of a dedicated 10-series Temp workbook
+/// (omitted `c:marker`) plus Series.MarkerSize=9: S1 diamond … S9 dash, S10 wraps
+/// to diamond. Official 2-series line golds show the same S1 diamond / S2 square.
+const DEFAULT_MARKER_CYCLE: [MarkerSymbol; 9] = [
+    MarkerSymbol::Diamond,
+    MarkerSymbol::Square,
+    MarkerSymbol::Triangle,
+    MarkerSymbol::X,
+    MarkerSymbol::Star,
+    MarkerSymbol::Circle,
+    MarkerSymbol::Plus,
+    MarkerSymbol::Dot,
+    MarkerSymbol::Dash,
+];
+/// Point size used when the series has no `c:marker` element. Unique lock:
+/// Excel COM MarkerSize=9 and 13x13 px boxes at 106 dpi (9 * 106 / 72 = 13.25).
+const OMITTED_MARKER_SIZE_PT: f64 = 9.0;
+/// OOXML default for `c:size` when a marker element is present but the size is omitted.
+const EXPLICIT_MARKER_DEFAULT_SIZE_PT: f64 = 5.0;
+
+#[derive(Clone, Copy, PartialEq)]
+enum MarkerSymbol {
+    Diamond,
+    Square,
+    Triangle,
+    X,
+    Star,
+    Circle,
+    Plus,
+    Dot,
+    Dash,
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum MarkerKind {
     None,
-    Circle { diameter: f64 },
+    Shaped { symbol: MarkerSymbol, size: f64 },
+}
+
+fn default_marker_symbol(slot: usize) -> MarkerSymbol {
+    DEFAULT_MARKER_CYCLE[slot % DEFAULT_MARKER_CYCLE.len()]
+}
+
+fn shaped_marker(symbol: MarkerSymbol, size_pt: f64, dpi: RenderDpi) -> MarkerKind {
+    MarkerKind::Shaped {
+        symbol,
+        size: dpi.pt_to_px_font(size_pt),
+    }
+}
+
+fn marker_symbol_from_name(name: &str) -> Option<MarkerSymbol> {
+    match name {
+        "diamond" => Some(MarkerSymbol::Diamond),
+        "square" => Some(MarkerSymbol::Square),
+        "triangle" => Some(MarkerSymbol::Triangle),
+        "x" => Some(MarkerSymbol::X),
+        "star" => Some(MarkerSymbol::Star),
+        "circle" => Some(MarkerSymbol::Circle),
+        "plus" => Some(MarkerSymbol::Plus),
+        "dot" => Some(MarkerSymbol::Dot),
+        "dash" => Some(MarkerSymbol::Dash),
+        _ => None,
+    }
+}
+
+fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
+    match marker {
+        MarkerKind::None => MarkerKind::None,
+        MarkerKind::Shaped { symbol, .. } => MarkerKind::Shaped { symbol, size },
+    }
 }
 
 struct LineSeriesStyle {
@@ -108,6 +176,10 @@ struct Series {
     /// Area stroke color when a solid outline is present. Lines keep this unset.
     line_color: Option<[u8; 3]>,
     x_values: Vec<Option<f64>>,
+    /// c:barSer defaults to inversion; dPt can override individual values.
+    invert_if_negative: bool,
+    point_inversion: Vec<Option<bool>>,
+    negative_outline: Option<LineSeriesStyle>,
 }
 
 impl Default for Series {
@@ -123,6 +195,9 @@ impl Default for Series {
             marker_color: None,
             line_color: None,
             x_values: Vec::new(),
+            invert_if_negative: true,
+            point_inversion: Vec::new(),
+            negative_outline: None,
         }
     }
 }
@@ -148,6 +223,10 @@ struct ColumnChart {
     first_slice_ang: f64,
     /// Pie per-point fill overrides (dPt). Empty for other kinds.
     point_colors: Vec<Option<[u8; 3]>>,
+    /// Official Excel 16.0 area charts with omitted c:dispBlanksAs plot
+    /// missing cells / omitted cache points as 0 (a V to the baseline).
+    /// Explicit dispBlanksAs=gap still leaves a hole. Unused for other kinds.
+    area_missing_as_zero: bool,
 }
 
 struct Rect {
@@ -163,6 +242,7 @@ struct Canvas {
     px: Vec<u8>,
     /// Straight alpha generated by the existing rounded-frame coverage, never a white key.
     alpha: Option<Vec<u8>>,
+    dpi: RenderDpi,
 }
 
 /// 图表 PNG 的像素。`twoCell` 按格子累加，其它锚点用 `a:ext`。缩放来自工作表。
@@ -175,7 +255,7 @@ pub(crate) fn bitmap_px(
     let zoom = sheet_zoom(sheet);
     let (w, h) = match kind {
         super::picture::AnchorKind::TwoCell => two_cell_px(sheet, anchor, zoom, geometry)?,
-        _ => ext_px(anchor, zoom)?,
+        _ => ext_px(anchor, zoom, geometry.dpi())?,
     };
     Ok((fit_px(w)?, fit_px(h)?))
 }
@@ -201,16 +281,16 @@ fn zoomed(px: i64, zoom: u32) -> i64 {
     (px as f64 * f64::from(zoom) / 100.0).round() as i64
 }
 
-fn emu_px(emu: i64) -> i64 {
-    (emu as f64 * DPI / EMU_PER_INCH).round() as i64
+fn emu_px(emu: i64, dpi: RenderDpi) -> i64 {
+    dpi.emu_to_px_round(emu)
 }
 
-fn pt_to_px(pt: f64) -> i64 {
-    let emu = (pt * 12_700.0).round();
-    (emu / 9_525.0).round() as i64
+fn pt_to_px(pt: f64, dpi: RenderDpi) -> i64 {
+    let emu = (pt * 12_700.0).round() as i64;
+    dpi.emu_to_px_round(emu)
 }
 
-fn row_px(sheet: &Element, row: u32) -> i64 {
+fn row_px(sheet: &Element, row: u32, dpi: RenderDpi) -> i64 {
     if let Some(sheet_data) = sheet.child_by_local("sheetData") {
         for el in sheet_data.children_by_local("row") {
             let Some(r) = el.attr("r").and_then(|s| s.parse::<u32>().ok()) else {
@@ -220,7 +300,7 @@ fn row_px(sheet: &Element, row: u32) -> i64 {
                 continue;
             }
             if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
-                return pt_to_px(ht).max(1);
+                return pt_to_px(ht, dpi).max(1);
             }
         }
     }
@@ -229,7 +309,7 @@ fn row_px(sheet: &Element, row: u32) -> i64 {
         .and_then(|el| el.attr_local("defaultRowHeight"))
         .and_then(|s| s.parse::<f64>().ok())
         .unwrap_or(14.25);
-    pt_to_px(def).max(1)
+    pt_to_px(def, dpi).max(1)
 }
 
 fn marker_x(
@@ -250,15 +330,15 @@ fn marker_x(
             zoom,
         );
     }
-    Ok(px + zoomed(emu_px(off), zoom))
+    Ok(px + zoomed(emu_px(off, geometry.dpi()), zoom))
 }
 
-fn marker_y(sheet: &Element, row: u32, off: i64, zoom: u32) -> i64 {
+fn marker_y(sheet: &Element, row: u32, off: i64, zoom: u32, dpi: RenderDpi) -> i64 {
     let mut px = 0i64;
     for r in 1..row {
-        px += zoomed(row_px(sheet, r), zoom);
+        px += zoomed(row_px(sheet, r, dpi), zoom);
     }
-    px + zoomed(emu_px(off), zoom)
+    px + zoomed(emu_px(off, dpi), zoom)
 }
 
 fn two_cell_px(
@@ -270,15 +350,16 @@ fn two_cell_px(
     let (from, from_x, from_y) = super::picture::read_marker(anchor.child_by_local("from"))?;
     let (to, to_x, to_y) = super::picture::read_marker(anchor.child_by_local("to"))?;
     let (Some(from), Some(to)) = (from, to) else {
-        return ext_px(anchor, zoom);
+        return ext_px(anchor, zoom, geometry.dpi());
     };
     let w = marker_x(sheet, to.col, to_x, zoom, geometry)?
         - marker_x(sheet, from.col, from_x, zoom, geometry)?;
-    let h = marker_y(sheet, to.row, to_y, zoom) - marker_y(sheet, from.row, from_y, zoom);
+    let h = marker_y(sheet, to.row, to_y, zoom, geometry.dpi())
+        - marker_y(sheet, from.row, from_y, zoom, geometry.dpi());
     Ok((w, h))
 }
 
-fn ext_px(anchor: &Element, zoom: u32) -> Result<(i64, i64), Error> {
+fn ext_px(anchor: &Element, zoom: u32, dpi: RenderDpi) -> Result<(i64, i64), Error> {
     let ext = anchor
         .child_by_local("graphicFrame")
         .and_then(|frame| frame.child_by_local("xfrm"))
@@ -295,7 +376,7 @@ fn ext_px(anchor: &Element, zoom: u32) -> Result<(i64, i64), Error> {
         .attr_local("cy")
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
-    Ok((zoomed(emu_px(cx), zoom), zoomed(emu_px(cy), zoom)))
+    Ok((zoomed(emu_px(cx, dpi), zoom), zoomed(emu_px(cy, dpi), zoom)))
 }
 
 pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
@@ -343,15 +424,39 @@ pub(crate) fn render_chart(
     cells: Option<&super::sparkline::CellCache>,
     sheet: &str,
 ) -> Result<Vec<u8>, Error> {
+    render_chart_at(
+        root,
+        width,
+        height,
+        accents,
+        font_bytes,
+        host,
+        cells,
+        sheet,
+        RenderDpi::DEFAULT,
+    )
+}
+
+pub(crate) fn render_chart_at(
+    root: &Element,
+    width: u32,
+    height: u32,
+    accents: [[u8; 3]; 6],
+    font_bytes: Option<&[u8]>,
+    host: ChartHost,
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
+    dpi: RenderDpi,
+) -> Result<Vec<u8>, Error> {
     if width == 0 || height == 0 || width > MAX_PX || height > MAX_PX {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
     if matches!(host, ChartHost::Excel) {
         validate_default_frame(root)?;
     }
-    let chart = read_chart(root, accents, cells, sheet)?;
+    let chart = read_chart(root, accents, cells, sheet, dpi)?;
     let font = font_bytes.and_then(|bytes| Font::from_bytes(bytes, FontSettings::default()).ok());
-    let mut canvas = Canvas::new(width, height);
+    let mut canvas = Canvas::with_dpi(width, height, dpi);
     paint(&mut canvas, &chart, font.as_ref(), host)?;
     canvas.encode_png()
 }
@@ -398,6 +503,7 @@ fn read_chart(
     accents: [[u8; 3]; 6],
     cells: Option<&super::sparkline::CellCache>,
     sheet: &str,
+    dpi: RenderDpi,
 ) -> Result<ColumnChart, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
@@ -412,6 +518,7 @@ fn read_chart(
         }
     }
     let wrapper = wrapper.ok_or_else(unsupported)?;
+    let mut area_missing_as_zero = false;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -506,9 +613,11 @@ fn read_chart(
                 .child_by_local("scatterStyle")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("lineMarker");
+            // Official Excel 16.0 maps scatterStyle=marker (no series line hide,
+            // smooth=0) to xlXYScatterLines (74) and draws connecting strokes.
+            // Markers-only remains available via an explicit series a:ln/a:noFill.
             let connect = match style {
-                "marker" => false,
-                "lineMarker" => true,
+                "marker" | "lineMarker" => true,
                 _ => return Err(unsupported()),
             };
             PlotKind::Scatter { connect }
@@ -530,13 +639,16 @@ fn read_chart(
                 }
             }
             data_labels_hidden(wrapper.child_by_local("dLbls"))?;
-            let blanks = chart
-                .child_by_local("dispBlanksAs")
+            let blanks_el = chart.child_by_local("dispBlanksAs");
+            let blanks = blanks_el
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("gap");
             if blanks != "gap" {
                 return Err(unsupported());
             }
+            // Omitted dispBlanksAs is official area default (missing as 0).
+            // Explicit gap stays a hole. zero/span remain NotImplemented.
+            area_missing_as_zero = blanks_el.is_none();
             PlotKind::StandardArea
         }
         "pieChart" => {
@@ -608,9 +720,9 @@ fn read_chart(
                 marker: MarkerKind::None,
                 marker_color: None,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents)?,
+            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order)?,
             PlotKind::StandardArea => {
-                let area = read_area_series(ser, accents)?;
+                let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
                 LineSeriesStyle {
                     color: area.fill,
@@ -620,9 +732,9 @@ fn read_chart(
                     marker_color: None,
                 }
             }
-            PlotKind::Pie => read_pie_series_style(ser, accents)?,
+            PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
             PlotKind::Scatter { connect } => {
-                let mut style = read_line_series(ser, accents)?;
+                let mut style = read_line_series(ser, accents, dpi, order)?;
                 if !connect {
                     style.visible = false;
                 }
@@ -632,6 +744,32 @@ fn read_chart(
         if series.len() <= order {
             series.resize_with(order + 1, Series::default);
         }
+        let is_bar = matches!(kind, PlotKind::ClusteredBar | PlotKind::ClusteredColumn);
+        let mut point_inversion = vec![None; values.len()];
+        if is_bar {
+            for point in ser.element_children().filter(|el| el.local_name() == "dPt") {
+                if let Some(invert) = flag(point, "invertIfNegative") {
+                    let index = number_val(point, "idx").ok_or_else(unsupported)?;
+                    if !index.is_finite()
+                        || index < 0.0
+                        || index.fract() != 0.0
+                        || index as usize >= point_inversion.len()
+                        || point_inversion[index as usize].is_some()
+                    {
+                        return Err(unsupported());
+                    }
+                    point_inversion[index as usize] = Some(invert);
+                }
+            }
+        }
+        let negative_outline = if is_bar {
+            ser.child_by_local("spPr")
+                .and_then(|sp| sp.child_by_local("ln"))
+                .map(|ln| read_solid_ln(ln, accents, dpi.pt_to_px_font(0.75), dpi))
+                .transpose()?
+        } else {
+            None
+        };
         series[order] = Series {
             name,
             values,
@@ -643,6 +781,9 @@ fn read_chart(
             marker_color: style.marker_color,
             line_color,
             x_values,
+            invert_if_negative: is_bar && flag(ser, "invertIfNegative").unwrap_or(true),
+            point_inversion,
+            negative_outline,
         };
     }
     series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
@@ -715,7 +856,7 @@ fn read_chart(
             .element_children()
             .find(|el| el.local_name() == "ser")
             .ok_or_else(unsupported)?;
-        read_pie_point_colors(ser, accents, n)?
+        read_pie_point_colors(ser, accents, n, dpi)?
     } else {
         Vec::new()
     };
@@ -776,6 +917,7 @@ fn read_chart(
         kind,
         first_slice_ang,
         point_colors,
+        area_missing_as_zero,
     })
 }
 
@@ -815,7 +957,7 @@ fn paint_scatter(
 ) -> Result<(), Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
-    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
     let title_face = chart
         .title
@@ -825,7 +967,7 @@ fn paint_scatter(
     let y_scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget(canvas.h, em),
+        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
     let y_labels: Vec<String> = y_ticks.iter().copied().map(fmt_tick).collect();
@@ -835,9 +977,9 @@ fn paint_scatter(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_tick);
+    let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -849,33 +991,64 @@ fn paint_scatter(
             .unwrap_or(0);
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
+        if plot_r <= plot_x || plot_b <= plot_y {
+            return Err(legend::unsupported());
+        }
+    }
+    // autoZero: when 0 is inside the Y scale, the horizontal axis sits at y=0
+    // inside the plot, so the bottom no longer reserves a label gutter.
+    let y_cross_interior = y_scale.min < -1e-12 && y_scale.max > 1e-12;
+    if y_cross_interior {
+        plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_TOP);
+        if !chart.legend_spec.legacy {
+            plot_b -= legend_layout.reserve()[3];
+        }
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
         }
     }
     let x_spec = chart.axis_x.ok_or_else(unsupported)?;
     let x_budget = axis::interval_budget_span(f64::from((plot_r - plot_x).max(1)), em, 3.0);
-    let x_scale = axis::scale_values(
+    let mut x_scale = axis::scale_values(
         chart.series.iter().flat_map(|s| s.x_values.iter().copied()),
         x_spec,
         x_budget,
     )?;
+    // When 0 is inside the X scale, the vertical axis sits at x=0 inside the
+    // plot; drop the left tick-label gutter and use the same frame inset as the top.
+    let x_cross_interior = x_scale.min < -1e-12 && x_scale.max > 1e-12;
+    if x_cross_interior {
+        let mut slim = canvas.dpi.scale_px(INSET_TOP);
+        if !chart.legend_spec.legacy {
+            slim += legend_layout.reserve()[0];
+        }
+        if slim != plot_x {
+            axis_x = slim;
+            plot_x = slim;
+            let x_budget = axis::interval_budget_span(f64::from((plot_r - plot_x).max(1)), em, 3.0);
+            x_scale = axis::scale_values(
+                chart.series.iter().flat_map(|s| s.x_values.iter().copied()),
+                x_spec,
+                x_budget,
+            )?;
+        }
+    }
     let x_ticks = tick_values(x_scale.min, x_scale.max, x_scale.major);
     let x_labels: Vec<String> = x_ticks.iter().copied().map(fmt_tick).collect();
     let plot = Rect {
@@ -888,16 +1061,21 @@ fn paint_scatter(
         - (y_scale.max - y_scale.min))
         .abs()
         <= y_scale.major * 1e-8;
+    let grid_left = if x_cross_interior {
+        plot_x
+    } else {
+        axis_x - canvas.dpi.scale_px(TICK_OUT)
+    };
     if chart.grid && y_regular {
         for i in 0..=y_intervals {
             let y = plot_y + (i * (plot_b - plot_y) + y_intervals - 1) / y_intervals;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(grid_left, plot_r, y, INK);
         }
     }
     if chart.grid && !y_regular {
         for value in &y_ticks {
             let y = y_of(*value, y_scale.min, y_scale.max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(grid_left, plot_r, y, INK);
         }
     }
     if chart.grid_x {
@@ -907,10 +1085,15 @@ fn paint_scatter(
         }
     }
     let y_parts = y_scale.major / y_scale.minor;
+    let y_tick_x = if x_cross_interior {
+        x_of(x_scale.crossing(), x_scale.min, x_scale.max, &plot).round() as i32
+    } else {
+        axis_x
+    };
     if y_regular && (y_parts - y_parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&y_parts) {
         draw_value_minor_ticks(
             canvas,
-            axis_x,
+            y_tick_x,
             plot_y,
             plot_b,
             y_intervals,
@@ -923,17 +1106,39 @@ fn paint_scatter(
                 continue;
             }
             let y = y_of(value, y_scale.min, y_scale.max, &plot).round() as i32;
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                y_tick_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y_tick_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
     draw_scatter(canvas, chart, &plot, &x_scale, &y_scale);
     let axis_line_x = x_of(x_scale.crossing(), x_scale.min, x_scale.max, &plot).round() as i32;
     let axis_line_y = y_of(y_scale.crossing(), y_scale.min, y_scale.max, &plot).round() as i32;
     canvas.vline_i(axis_line_x, plot_y, plot_b, INK);
-    canvas.hline_i(axis_x, plot_r, axis_line_y, INK);
+    let axis_hline_left = if x_cross_interior { plot_x } else { axis_x };
+    canvas.hline_i(axis_hline_left, plot_r, axis_line_y, INK);
+    if x_cross_interior {
+        for value in &y_ticks {
+            let y = y_of(*value, y_scale.min, y_scale.max, &plot).round() as i32;
+            canvas.hline_i(
+                axis_line_x - canvas.dpi.scale_px(CAT_MAJOR),
+                axis_line_x + canvas.dpi.scale_px(CAT_MAJOR_IN),
+                y,
+                INK,
+            );
+        }
+    }
     for value in &x_ticks {
         let x = x_of(*value, x_scale.min, x_scale.max, &plot).round() as i32;
-        canvas.vline_i(x, axis_line_y - CAT_MAJOR_IN, axis_line_y + CAT_MAJOR, INK);
+        canvas.vline_i(
+            x,
+            axis_line_y - canvas.dpi.scale_px(CAT_MAJOR_IN),
+            axis_line_y + canvas.dpi.scale_px(CAT_MAJOR),
+            INK,
+        );
     }
     for value in tick_values(x_scale.min + x_scale.minor, x_scale.max, x_scale.minor) {
         let at_major = (value - x_scale.min) / x_scale.major;
@@ -943,11 +1148,16 @@ fn paint_scatter(
         let x = x_of(value, x_scale.min, x_scale.max, &plot).round() as i32;
         canvas.vline_i(
             x,
-            axis_line_y - VAL_MINOR_ARM,
-            axis_line_y + VAL_MINOR_ARM,
+            axis_line_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+            axis_line_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
             INK,
         );
     }
+    let y_label_axis = if x_cross_interior {
+        axis_line_x
+    } else {
+        axis_x
+    };
     for (tick, label) in y_ticks.iter().zip(&y_labels) {
         let y = y_of(*tick, y_scale.min, y_scale.max, &plot);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -957,13 +1167,17 @@ fn paint_scatter(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(y_label_axis) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             y - h / 2.0,
             label_px,
             INK,
         );
     }
-    let baseline = f64::from(canvas.h as i32 - INSET_BOTTOM) + 10.0;
+    let baseline = if y_cross_interior {
+        f64::from(axis_line_y) + canvas.dpi.scale_f(10.0)
+    } else {
+        f64::from(canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM)) + canvas.dpi.scale_f(10.0)
+    };
     for (tick, label) in x_ticks.iter().zip(&x_labels) {
         let x = x_of(*tick, x_scale.min, x_scale.max, &plot);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -988,7 +1202,7 @@ fn paint_scatter(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1054,13 +1268,10 @@ fn draw_scatter(
         if ser.line_visible && ser.line_width > 0.0 {
             stroke_run(canvas, &run, ser.line_width, color);
         }
-        if let MarkerKind::Circle { diameter } = ser.marker {
-            let radius = diameter / 2.0;
-            if radius > 0.0 {
-                let marker_color = ser.marker_color.unwrap_or(color);
-                for (px, py) in points {
-                    canvas.fill_circle(px, py, radius, marker_color);
-                }
+        if !matches!(ser.marker, MarkerKind::None) {
+            let marker_color = ser.marker_color.unwrap_or(color);
+            for (px, py) in points {
+                paint_marker(canvas, ser.marker, px, py, marker_color);
             }
         }
     }
@@ -1073,7 +1284,7 @@ fn paint_bar(
     host: ChartHost,
 ) -> Result<(), Error> {
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
-    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
     let title_face = chart
         .title
@@ -1086,9 +1297,16 @@ fn paint_bar(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_cat);
+    let mut axis_x = axis_x_of(widest_cat, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
+    // Official Excel 16.0 draws the value axis at the top when catAx is maxMin
+    // (first category on top), and at the bottom when minMax, even if valAx
+    // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
+    // INSET_BOTTOM. This is not a guessed 1px shift.
+    let val_axis_at_top = !chart.cats_from_bottom;
+    let val_label_inset = canvas.dpi.scale_px(INSET_BOTTOM);
+    let unused_inset = canvas.dpi.scale_px(INSET_TOP);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1100,21 +1318,31 @@ fn paint_bar(
             .unwrap_or(0);
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
+        }
+        if val_axis_at_top {
+            y += val_label_inset;
         }
         y
+    } else if val_axis_at_top {
+        val_label_inset
     } else {
-        INSET_TOP
+        unused_inset
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32
+        - if val_axis_at_top {
+            unused_inset
+        } else {
+            val_label_inset
+        };
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1126,54 +1354,43 @@ fn paint_bar(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    // 数值轴在水平方向，间隔预算按绘图区宽度，occupancy=3，与散点 X 轴同一套公式。
+    // 数值轴在水平方向，间隔预算按绘图区宽度。占用系数用 1，与竖向数值轴同一套
+    // 行盒口径，上限仍是 10。occupancy=3 是散点 X 轴为较长标签留的余量，在典型
+    // 条形宽度下会把预算压到 9，从而把 Office 对 -8..8 的自动主间隔 2（-10..10
+    // 共 10 格）拒掉，改成间隔 5。短数字标签在 10 格下仍放得下。
     let scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget_span(plot.w, em, 3.0),
+        axis::interval_budget_span(plot.w, em, 1.0),
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
-    let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
-        <= step * 1e-8;
-    if chart.grid && regular {
-        for i in 0..=intervals {
-            let x = plot_x + (i * (plot_r - plot_x) + intervals - 1) / intervals;
-            canvas.vline_i(x, plot_y, plot_b, INK);
-        }
-    }
-    if chart.grid && !regular {
+    let axis_y = if val_axis_at_top { plot_y } else { plot_b };
+    // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
+    if chart.grid {
         for value in &ticks {
             let x = x_of(*value, axis_min, axis_max, &plot).round() as i32;
             canvas.vline_i(x, plot_y, plot_b, INK);
         }
     }
-    let parts = step / scale.minor;
-    if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
-        draw_value_minor_ticks_x(
-            canvas,
-            plot_x,
-            plot_r,
-            plot_b,
-            intervals,
-            parts.round() as i32,
-        );
-    } else {
-        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
-            let at_major = (value - axis_min) / step;
-            if (at_major - at_major.round()).abs() < 1e-8 {
-                continue;
-            }
-            let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
-            canvas.vline_i(x, plot_b - VAL_MINOR_ARM, plot_b + VAL_MINOR_ARM, INK);
+    for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+        let at_major = (value - axis_min) / step;
+        if (at_major - at_major.round()).abs() < 1e-8 {
+            continue;
         }
+        let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+            axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+            INK,
+        );
     }
     draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
     let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
-    canvas.hline_i(plot_x, plot_r, plot_b, INK);
+    canvas.hline_i(plot_x, plot_r, axis_y, INK);
     draw_cat_ticks_y(
         canvas,
         chart.categories.len(),
@@ -1182,7 +1399,15 @@ fn paint_bar(
         zero_x,
         chart.cats_from_bottom,
     );
-    // 类目标签在左侧 inset，数值标签在底轴下方。
+    // With an interior autoZero crossing, official category labels sit next
+    // to that axis rather than remaining in the unused left label gutter.
+    // Preserve edge-axis geometry and all plot gutters; this only moves ink.
+    let cat_label_axis_x = if axis_min < scale.crossing() && scale.crossing() < axis_max {
+        zero_x
+    } else {
+        axis_x
+    };
+    // 数值标签在顶轴上方或底轴下方，跟随官方 maxMin/minMax。
     for (i, label) in chart.categories.iter().enumerate() {
         let mid = category_mid_y(&plot, i, chart.categories.len(), chart.cats_from_bottom);
         let w = text_width(font, gdi.as_ref(), label, label_px);
@@ -1192,13 +1417,18 @@ fn paint_bar(
             font,
             gdi.as_ref(),
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(cat_label_axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             mid - h / 2.0,
             label_px,
             INK,
         );
     }
-    let baseline = f64::from(plot_b) + 10.0;
+    let tick_h = text_height(font, label_px);
+    let label_top = if val_axis_at_top {
+        f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
+    } else {
+        f64::from(axis_y) + canvas.dpi.scale_f(10.0)
+    };
     for (tick, label) in ticks.iter().zip(&tick_labels) {
         let w = text_width(font, gdi.as_ref(), label, label_px);
         let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
@@ -1208,7 +1438,7 @@ fn paint_bar(
             gdi.as_ref(),
             label,
             x,
-            baseline,
+            label_top,
             label_px,
             INK,
         );
@@ -1223,7 +1453,7 @@ fn paint_bar(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1253,46 +1483,60 @@ fn paint_pie(
     if chart.legend.is_some() && !chart.legend_spec.default_right_ink() {
         return Err(unsupported());
     }
-    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
     let title_face = chart
         .title
         .as_ref()
         .and_then(|_| super::chart_gdi::Face::open(label_px, true));
-    let title_top = 4.0;
-    let plot_y = if chart.title.is_some() {
-        let band = title_face
+    let title_top = canvas.dpi.scale_f(4.0);
+    // Public Office PlotArea probes: the pie is not an inscribed circle of
+    // the whole host. Title and right legend bands are removed first; Office
+    // then contracts the shorter side by 7/8 and reserves 11 pt on each side.
+    // These are point-space layout values, not export-pixel corrections.
+    // ChartTitle TextFrame2 has 3.6 pt top/bottom margins; reserve the
+    // additional 6 pt title/plot separation. Font fallback can still differ
+    // from the host theme and remains a separately reported layout residual.
+    let title_band = if chart.title.is_some() {
+        title_face
             .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
-        }
-        y
+            .map_or_else(|| text_height(font, label_px), |face| face.em_box())
+            + canvas.dpi.pt_to_px_font(3.6 * 2.0 + 6.0)
     } else {
-        INSET_TOP
+        0.0
     };
+    let legend_band = if chart.legend == Some(LegendPos::Right) {
+        let line = gdi
+            .as_ref()
+            .map_or_else(|| text_height(font, label_px), |face| face.em_box());
+        let widest = pie_legend_items(chart)
+            .iter()
+            .map(|(name, _)| {
+                gdi.as_ref().map_or_else(
+                    || text_width(font, None, name, label_px),
+                    |face| face.typo_width(name),
+                )
+            })
+            .fold(0.0, f64::max);
+        // LegendEntry has 1.5 pt padding on either side. Its square key
+        // measures 45% of the font line box; the entry reserves 2.5 keys
+        // including its side spaces. The plot/legend separation is 6 pt.
+        widest + line * 0.45 * 2.5 + canvas.dpi.pt_to_px_font(9.0)
+    } else {
+        0.0
+    };
+    let plot = pie_plot_bounds(
+        f64::from(canvas.w),
+        f64::from(canvas.h),
+        title_band,
+        legend_band,
+        canvas.dpi,
+    )
+    .ok_or_else(unsupported)?;
     let inset_right = if chart.legend == Some(LegendPos::Right) {
-        pie_legend_right_inset(chart, font, gdi.as_ref(), label_px)
+        pie_legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi)
     } else {
-        INSET_TOP
-    };
-    let plot_x = INSET_TOP;
-    let plot_r = canvas.w as i32 - inset_right;
-    let plot_b = canvas.h as i32 - INSET_TOP;
-    if plot_r <= plot_x || plot_b <= plot_y {
-        return Err(unsupported());
-    }
-    let plot = Rect {
-        x: f64::from(plot_x),
-        y: f64::from(plot_y),
-        w: f64::from(plot_r - plot_x),
-        h: f64::from(plot_b - plot_y),
+        canvas.dpi.scale_px(INSET_TOP)
     };
     draw_pie_slices(canvas, chart, &plot);
     if let Some(title) = &chart.title {
@@ -1305,7 +1549,7 @@ fn paint_pie(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1318,6 +1562,27 @@ fn paint_pie(
         canvas.stroke_border(BORDER);
     }
     Ok(())
+}
+
+/// Auto-layout of the supported flat pie, in host-local pixels. The bands
+/// include the title/legend padding. Public Excel/PowerPoint PlotArea values
+/// have a 4 pt chart-local origin; host coordinates already include that origin.
+fn pie_plot_bounds(
+    width: f64,
+    height: f64,
+    title_band: f64,
+    legend_band: f64,
+    dpi: RenderDpi,
+) -> Option<Rect> {
+    let available_width = width - legend_band;
+    let available_height = height - title_band;
+    let diameter = available_width.min(available_height) * 0.875 - dpi.pt_to_px_font(22.0);
+    (diameter > 1.0).then_some(Rect {
+        x: (available_width - diameter) / 2.0,
+        y: title_band + (available_height - diameter) / 2.0,
+        w: diameter,
+        h: diameter,
+    })
 }
 
 fn pie_slice_color(chart: &ColumnChart, index: usize) -> [u8; 3] {
@@ -1339,14 +1604,14 @@ fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
         .categories
         .iter()
         .enumerate()
-        .filter_map(
-            |(index, name)| match ser.values.get(index).copied().flatten() {
-                Some(value) if value.is_finite() && value >= 0.0 => {
-                    Some((name.clone(), pie_slice_color(chart, index)))
-                }
-                _ => None,
-            },
-        )
+        .filter_map(|(index, name)| {
+            // Official Excel still lists omitted/blank categories in the pie
+            // legend and keeps their accent slot, even though they take no slice.
+            match ser.values.get(index).copied().flatten() {
+                Some(value) if !value.is_finite() || value < 0.0 => None,
+                _ => Some((name.clone(), pie_slice_color(chart, index))),
+            }
+        })
         .collect()
 }
 
@@ -1355,6 +1620,7 @@ fn pie_legend_right_inset(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
+    dpi: RenderDpi,
 ) -> i32 {
     let from_layout = gdi.is_some();
     let widest = pie_legend_items(chart)
@@ -1369,8 +1635,12 @@ fn pie_legend_right_inset(
     } else {
         widest.ceil() as i32
     };
-    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + name_px + LEGEND_PAD;
-    need.max(INSET_RIGHT)
+    let need = dpi.scale_px(LEGEND_PLOT_GAP)
+        + dpi.scale_px(LEGEND_SWATCH)
+        + dpi.scale_px(LEGEND_GAP)
+        + name_px
+        + dpi.scale_px(LEGEND_PAD);
+    need.max(dpi.scale_px(INSET_RIGHT))
 }
 
 fn draw_pie_legend(
@@ -1386,32 +1656,33 @@ fn draw_pie_legend(
     if n == 0 {
         return;
     }
-    let pitch = 24;
-    let block = pitch * (n - 1) + LEGEND_SWATCH;
+    let pitch = canvas.dpi.scale_px(24);
+    let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
-        LEGEND_TITLE_BAND
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
     } else {
         0
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
-    let x = plot_r + LEGEND_PLOT_GAP;
+    let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
     for (name, color) in items {
         draw_plot_key(
             canvas,
             PlotKind::Pie,
             x,
             y,
-            x + LEGEND_SWATCH,
-            y + LEGEND_SWATCH,
+            x + canvas.dpi.scale_px(LEGEND_SWATCH),
+            y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
+            MarkerKind::None,
         );
         draw_text(
             canvas,
             font,
             gdi,
             &name,
-            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
-            f64::from(y - 2),
+            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + canvas.dpi.scale_px(LEGEND_GAP)),
+            f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
         );
@@ -1466,7 +1737,7 @@ fn paint(
         return paint_pie(canvas, chart, font, host);
     }
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
-    let label_px = (LABEL_PT * DPI / 72.0) as f32;
+    let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
     let title_face = chart
         .title
@@ -1479,7 +1750,7 @@ fn paint(
     let scale = axis::scale(
         &chart.series,
         chart.axis,
-        axis::interval_budget(canvas.h, em),
+        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
@@ -1490,9 +1761,9 @@ fn paint(
         .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
         .max()
         .unwrap_or(0);
-    let mut axis_x = axis_x_of(widest_tick);
+    let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
-    let title_top = 4.0;
+    let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1505,21 +1776,21 @@ fn paint(
         // 标题占一行，下面再空一行，顶上的刻度才不压住标题。
         let mut y = title_top as i32 + 2 * (band + half);
         if matches!(host, ChartHost::Slide) {
-            y += TITLE_DROP as i32;
+            y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         y
     } else {
-        INSET_TOP
+        canvas.dpi.scale_px(INSET_TOP)
     };
-    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px);
+    let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - INSET_BOTTOM;
+    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - INSET_TOP - reserve[2];
+        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1536,13 +1807,13 @@ fn paint(
     if chart.grid && regular {
         for i in 0..=intervals {
             let y = plot_y + (i * (plot_b - plot_y) + intervals - 1) / intervals;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     if chart.grid && !regular {
         for value in &ticks {
             let y = y_of(*value, axis_min, axis_max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - TICK_OUT, plot_r, y, INK);
+            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
     let parts = step / scale.minor;
@@ -1562,7 +1833,12 @@ fn paint(
                 continue;
             }
             let y = y_of(value, axis_min, axis_max, &plot).round() as i32;
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
     match chart.kind {
@@ -1608,7 +1884,7 @@ fn paint(
             face,
             title,
             x,
-            title_top + TITLE_DROP,
+            title_top + canvas.dpi.scale_f(TITLE_DROP),
             label_px,
             INK,
         );
@@ -1635,11 +1911,21 @@ fn draw_cat_ticks(canvas: &mut Canvas, n: usize, x0: f64, x1: f64, axis_y: i32) 
     }
     for i in 0..=n {
         let x = round_half_even(x0 + slot * i as f64);
-        canvas.vline_i(x, axis_y - CAT_MAJOR_IN, axis_y + CAT_MAJOR, INK);
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(CAT_MAJOR_IN),
+            axis_y + canvas.dpi.scale_px(CAT_MAJOR),
+            INK,
+        );
     }
     for i in 0..n {
         let x = round_half_even(x0 + slot * (i as f64 + 0.5));
-        canvas.vline_i(x, axis_y - CAT_MINOR_IN, axis_y + CAT_MINOR, INK);
+        canvas.vline_i(
+            x,
+            axis_y - canvas.dpi.scale_px(CAT_MINOR_IN),
+            axis_y + canvas.dpi.scale_px(CAT_MINOR),
+            INK,
+        );
     }
 }
 
@@ -1682,7 +1968,12 @@ fn draw_value_minor_ticks(
             if y <= y0 || y >= y1 {
                 continue;
             }
-            canvas.hline_i(axis_x - VAL_MINOR_ARM, axis_x + VAL_MINOR_ARM, y, INK);
+            canvas.hline_i(
+                axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                y,
+                INK,
+            );
         }
     }
 }
@@ -1710,11 +2001,7 @@ fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
             }
             stroke_run(canvas, &run, ser.line_width, color);
         }
-        if let MarkerKind::Circle { diameter } = ser.marker {
-            let radius = diameter / 2.0;
-            if radius <= 0.0 {
-                continue;
-            }
+        if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
             for (ci, value) in ser.values.iter().enumerate() {
                 let Some(v) = value else {
@@ -1724,7 +2011,7 @@ fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
                     continue;
                 }
                 let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max);
-                canvas.fill_circle(x, y, radius, marker_color);
+                paint_marker(canvas, ser.marker, x, y, marker_color);
             }
         }
     }
@@ -1764,6 +2051,9 @@ fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
             match value {
                 Some(v) if v.is_finite() => {
                     run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
+                }
+                None if chart.area_missing_as_zero => {
+                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max));
                 }
                 _ => {
                     fill_area_run(canvas, &run, zero_y, fill);
@@ -1811,6 +2101,100 @@ fn fill_area_span(
     }
 }
 
+fn paint_marker(canvas: &mut Canvas, marker: MarkerKind, x: f64, y: f64, color: [u8; 3]) {
+    let MarkerKind::Shaped { symbol, size } = marker else {
+        return;
+    };
+    if size <= 0.0 || !x.is_finite() || !y.is_finite() {
+        return;
+    }
+    let half = size / 2.0;
+    match symbol {
+        MarkerSymbol::Circle => canvas.fill_circle(x, y, half, color),
+        MarkerSymbol::Square => canvas.fill_polygon(
+            &[
+                (x - half, y - half),
+                (x + half, y - half),
+                (x + half, y + half),
+                (x - half, y + half),
+            ],
+            color,
+        ),
+        MarkerSymbol::Diamond => canvas.fill_polygon(
+            &[(x, y - half), (x + half, y), (x, y + half), (x - half, y)],
+            color,
+        ),
+        MarkerSymbol::Triangle => canvas.fill_polygon(
+            &[(x, y - half), (x + half, y + half), (x - half, y + half)],
+            color,
+        ),
+        MarkerSymbol::X => {
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y - half, x + half, y + half, w, color);
+            canvas.stroke_segment(x + half, y - half, x - half, y + half, w, color);
+        }
+        MarkerSymbol::Plus => {
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y, x + half, y, w, color);
+            canvas.stroke_segment(x, y - half, x, y + half, w, color);
+        }
+        MarkerSymbol::Star => {
+            // Official auto star is an asterisk: X plus a vertical bar (no horizontal).
+            let w = canvas.dpi.scale_f(1.0);
+            canvas.stroke_segment(x - half, y - half, x + half, y + half, w, color);
+            canvas.stroke_segment(x + half, y - half, x - half, y + half, w, color);
+            canvas.stroke_segment(x, y - half, x, y + half, w, color);
+        }
+        MarkerSymbol::Dash => {
+            let h = canvas.dpi.pt_to_px_font(2.0);
+            let hh = h / 2.0;
+            canvas.fill_polygon(
+                &[
+                    (x - half, y - hh),
+                    (x + half, y - hh),
+                    (x + half, y + hh),
+                    (x - half, y + hh),
+                ],
+                color,
+            );
+        }
+        MarkerSymbol::Dot => {
+            let h = canvas.dpi.pt_to_px_font(2.0);
+            let hh = h / 2.0;
+            let hw = size / 4.0;
+            canvas.fill_polygon(
+                &[
+                    (x - hw, y - hh),
+                    (x + hw, y - hh),
+                    (x + hw, y + hh),
+                    (x - hw, y + hh),
+                ],
+                color,
+            );
+        }
+    }
+}
+
+// Excel's line sample is a 20pt segment, not the square marker box.
+// Public 10/14/20pt legend-font probes at 432/600pt chart widths keep the
+// same 32px ink span at 106dpi (20pt centreline plus the 2.25pt round caps).
+// LegendKey.Width reports the marker box and is not the segment extent.
+fn legend_key_width(kind: PlotKind, square: i32, dpi: RenderDpi) -> i32 {
+    if matches!(kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
+        dpi.pt_to_px_font(20.0).round() as i32
+    } else {
+        square
+    }
+}
+
+fn legend_key_gap(kind: PlotKind, dpi: RenderDpi) -> i32 {
+    if matches!(kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
+        dpi.pt_to_px_font(1.5).round() as i32
+    } else {
+        dpi.scale_px(LEGEND_GAP)
+    }
+}
+
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -1819,25 +2203,33 @@ fn draw_plot_key(
     x1: i32,
     y1: i32,
     color: [u8; 3],
+    marker: MarkerKind,
 ) {
     match kind {
-        PlotKind::ClusteredColumn | PlotKind::StandardArea | PlotKind::Pie => {
-            canvas.fill_rect(x0, y0, x1, y1, color)
-        }
-        PlotKind::ClusteredBar => {
-            let mid = (y0 + y1) / 2;
-            canvas.fill_rect(x0, mid - 1, x1, mid + 2, color);
-        }
+        PlotKind::ClusteredColumn
+        | PlotKind::ClusteredBar
+        | PlotKind::StandardArea
+        | PlotKind::Pie => canvas.fill_rect(x0, y0, x1, y1, color),
         PlotKind::StandardLine | PlotKind::Scatter { connect: true } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
-            let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
-            canvas.stroke_segment(f64::from(x0), mid_y, f64::from(x1) - 1.0, mid_y, 2.0, color);
-            canvas.fill_circle(mid_x, mid_y, 2.0, color);
+            let line_end = f64::from(x0) + canvas.dpi.pt_to_px_font(20.0);
+            let mid_x = (f64::from(x0) + line_end) / 2.0;
+            canvas.stroke_segment(
+                f64::from(x0),
+                mid_y,
+                line_end,
+                mid_y,
+                canvas.dpi.pt_to_px_font(2.25),
+                color,
+            );
+            let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
+            paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
         PlotKind::Scatter { connect: false } => {
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let mid_x = (f64::from(x0) + f64::from(x1)) / 2.0;
-            canvas.fill_circle(mid_x, mid_y, 2.0, color);
+            let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
+            paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
     }
 }
@@ -1856,6 +2248,52 @@ fn category_mid_y(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> 
     let cats = cats.max(1) as f64;
     let slot = (plot.h + 1.0) / cats;
     category_slot_origin(plot, index, cats as usize, from_bottom) + slot / 2.0
+}
+
+/// Office inversion is a white negative fill with an automatic black 0.75 pt
+/// outline, NOT a solid accent and NOT transparent. Public Point.Fill/Line
+/// properties and toggled Series.InvertIfNegative exports lock this default.
+/// The 0.75 pt hairline snaps to a 1 device-pixel solid stroke on the integer
+/// edges; it is not a centered anti-aliased strip of that width.
+fn draw_bar_value(
+    canvas: &mut Canvas,
+    series: &Series,
+    index: usize,
+    value: f64,
+    bounds: [i32; 4],
+    color: [u8; 3],
+) {
+    let [x0, y0, x1, y1] = bounds;
+    let invert = series
+        .point_inversion
+        .get(index)
+        .copied()
+        .flatten()
+        .unwrap_or(series.invert_if_negative);
+    if value >= 0.0 || !invert {
+        canvas.fill_rect(x0, y0, x1, y1, color);
+        return;
+    }
+    canvas.fill_rect(x0, y0, x1, y1, [255; 3]);
+    let (visible, width, stroke) = series
+        .negative_outline
+        .as_ref()
+        .map_or((true, canvas.dpi.pt_to_px_font(0.75), INK), |line| {
+            (line.visible, line.width, line.color.unwrap_or(INK))
+        });
+    if visible && width > 0.0 {
+        // Official automatic 0.75 pt outline is a 1 device-pixel solid black
+        // hairline on the integer edges: left on the value tick, right on the
+        // zero axis for a negative bar. Centered stroke_segment along those
+        // same integers at ~1.10 px (0.75 pt at 106 dpi) covers both adjacent
+        // pixel centers at ~55% and paints a 2 px #727272 double line with no
+        // black core; overlapping end caps also dirty the corners. Do not thin
+        // the 0.75 pt source width to fake a 1 px AA stroke; snap to the grid.
+        canvas.hline_i(x0, x1, y0, stroke);
+        canvas.hline_i(x0, x1, y1, stroke);
+        canvas.vline_i(x0, y0, y1, stroke);
+        canvas.vline_i(x1, y0, y1, stroke);
+    }
 }
 
 fn draw_clustered_bars(
@@ -1897,7 +2335,6 @@ fn draw_clustered_bars(
             };
             let y = origin + place as f64 * bar_h * (1.0 - overlap);
             let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
-            let left = x_zero.min(x_val);
             let w = (x_zero - x_val).abs();
             if w < 0.2 || bar_h < 0.2 {
                 continue;
@@ -1907,11 +2344,19 @@ fn draw_clustered_bars(
             } else {
                 ser.color.unwrap_or(chart.accents[ser.slot % 6])
             };
-            let x0 = left.round() as i32;
-            let x1 = (left + w).round() as i32;
+            // fill_rect 是左闭右开。数值端包含对应刻度像素，零端不越过零轴：
+            // 正条为 [zero, tick]，负条为 [tick, zero)。值 8 的右缘因此落在自己的
+            // 8 刻度上，不再在刻度前空出 1px 白缝。不是把宽度盲目 +1。
+            let x_zero_i = x_zero.round() as i32;
+            let x_val_i = x_val.round() as i32;
+            let (x0, x1) = if x_val_i >= x_zero_i {
+                (x_zero_i, x_val_i + 1)
+            } else {
+                (x_val_i, x_zero_i)
+            };
             let y0 = round_half_even(y);
             let y1 = round_half_even(y + bar_h);
-            canvas.fill_rect(x0, y0, x1, y1, color);
+            draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
 }
@@ -1932,38 +2377,22 @@ fn draw_cat_ticks_y(
     for i in 0..=n {
         let t = if from_bottom { n - i } else { i };
         let y = round_half_even(y0 + slot * t as f64);
-        canvas.hline_i(axis_x - CAT_MAJOR, axis_x + CAT_MAJOR_IN, y, INK);
+        canvas.hline_i(
+            axis_x - canvas.dpi.scale_px(CAT_MAJOR),
+            axis_x + canvas.dpi.scale_px(CAT_MAJOR_IN),
+            y,
+            INK,
+        );
     }
     for i in 0..n {
         let t = if from_bottom { n - 1 - i } else { i };
         let y = round_half_even(y0 + slot * (t as f64 + 0.5));
-        canvas.hline_i(axis_x - CAT_MINOR, axis_x + CAT_MINOR_IN, y, INK);
-    }
-}
-
-fn draw_value_minor_ticks_x(
-    canvas: &mut Canvas,
-    plot_x: i32,
-    plot_r: i32,
-    axis_y: i32,
-    intervals: i32,
-    parts: i32,
-) {
-    let span = plot_r - plot_x;
-    if intervals < 1 || span <= 0 {
-        return;
-    }
-    for i in 0..intervals {
-        let x0 = plot_x + (i * span + intervals - 1) / intervals;
-        let x1 = plot_x + ((i + 1) * span + intervals - 1) / intervals;
-        let gap = x1 - x0;
-        for k in 1..parts {
-            let x = x0 + (k * gap + parts / 2) / parts;
-            if x <= x0 || x >= x1 {
-                continue;
-            }
-            canvas.vline_i(x, axis_y - VAL_MINOR_ARM, axis_y + VAL_MINOR_ARM, INK);
-        }
+        canvas.hline_i(
+            axis_x - canvas.dpi.scale_px(CAT_MINOR),
+            axis_x + canvas.dpi.scale_px(CAT_MINOR_IN),
+            y,
+            INK,
+        );
     }
 }
 
@@ -2007,13 +2436,13 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
             let x1 = round_half_even(x + bar_w);
             let y0 = top.round() as i32;
             let y1 = (top + h).round() as i32;
-            canvas.fill_rect(x0, y0, x1, y1, color);
+            draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
 }
 
-fn axis_x_of(widest_tick: i32) -> i32 {
-    LABEL_EDGE + widest_tick + TICK_GAP
+fn axis_x_of(widest_tick: i32, dpi: RenderDpi) -> i32 {
+    dpi.scale_px(LABEL_EDGE) + widest_tick + dpi.scale_px(TICK_GAP)
 }
 
 fn draw_tick_labels(
@@ -2039,7 +2468,7 @@ fn draw_tick_labels(
             font,
             gdi,
             label,
-            f64::from(axis_x) - w - f64::from(TICK_GAP),
+            f64::from(axis_x) - w - f64::from(canvas.dpi.scale_px(TICK_GAP)),
             y - h / 2.0,
             px,
             INK,
@@ -2047,7 +2476,7 @@ fn draw_tick_labels(
     }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
-    let baseline = f64::from(category_y) + 10.0;
+    let baseline = f64::from(category_y) + canvas.dpi.scale_f(10.0);
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
@@ -2066,37 +2495,50 @@ fn draw_legend(
     if chart.legend != Some(LegendPos::Right) {
         return;
     }
-    let pitch = 24;
+    let key_width = legend_key_width(chart.kind, canvas.dpi.scale_px(LEGEND_SWATCH), canvas.dpi);
+    let key_gap = legend_key_gap(chart.kind, canvas.dpi);
+    let pitch = canvas.dpi.scale_px(24);
     let n = chart.series.len() as i32;
     if n == 0 {
         return;
     }
-    let block = pitch * (n - 1) + LEGEND_SWATCH;
+    let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
-        LEGEND_TITLE_BAND
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
     } else {
         0
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
-    let x = plot_r + LEGEND_PLOT_GAP;
-    for ser in &chart.series {
+    let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
+    // Official Excel 16.0 keeps series-index order for maxMin bars (S1 above
+    // S2) but flips the default right legend when catAx is minMax, so the
+    // keys follow the visual stack (S2 above S1). Package legend/series XML
+    // is otherwise identical. Other chart kinds keep series-index order.
+    let legend_series: Vec<&Series> =
+        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
+            chart.series.iter().rev().collect()
+        } else {
+            chart.series.iter().collect()
+        };
+    for ser in legend_series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key(
             canvas,
             chart.kind,
             x,
             y,
-            x + LEGEND_SWATCH,
-            y + LEGEND_SWATCH,
+            x + key_width,
+            y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
+            ser.marker,
         );
         draw_text(
             canvas,
             font,
             gdi,
             &ser.name,
-            f64::from(x + LEGEND_SWATCH + LEGEND_GAP),
-            f64::from(y - 2),
+            f64::from(x + key_width + key_gap),
+            f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
         );
@@ -2110,9 +2552,10 @@ fn legend_right_inset(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
+    dpi: RenderDpi,
 ) -> i32 {
     if chart.legend != Some(LegendPos::Right) {
-        return INSET_RIGHT;
+        return dpi.scale_px(INSET_RIGHT);
     }
     // Excel 和幻灯片都按 GDI+ 默认排版宽度把绘图区向左推。
     // 字形前进宽度更窄，类目槽会被撑开，右边的柱跟着偏出去。
@@ -2131,8 +2574,14 @@ fn legend_right_inset(
     } else {
         widest.ceil() as i32
     };
-    let need = LEGEND_PLOT_GAP + LEGEND_SWATCH + LEGEND_GAP + name_px + LEGEND_PAD;
-    need.max(INSET_RIGHT)
+    let square = dpi.scale_px(LEGEND_SWATCH);
+    let key_width = legend_key_width(chart.kind, square, dpi);
+    let need = dpi.scale_px(LEGEND_PLOT_GAP)
+        + key_width
+        + legend_key_gap(chart.kind, dpi)
+        + name_px
+        + dpi.scale_px(LEGEND_PAD);
+    need.max(dpi.scale_px(INSET_RIGHT) + key_width - square)
 }
 
 #[cfg(test)]
@@ -2270,8 +2719,20 @@ fn json_number(value: serde_json::Value) -> Option<f64> {
     match value {
         serde_json::Value::Number(n) => n.as_f64().filter(|n| n.is_finite()),
         serde_json::Value::Bool(b) => Some(if b { 1.0 } else { 0.0 }),
-        serde_json::Value::String(s) => s.parse().ok(),
+        serde_json::Value::String(s) => parse_chart_number(&s),
         _ => None,
+    }
+}
+
+/// Excel charts treat an empty string (empty `inlineStr`, empty cached `<c:v>`) as 0
+/// and keep the stroke connected. A missing cell, an omitted cache point, or an
+/// unparsable value such as `#N/A` stays `None` and breaks the stroke.
+fn parse_chart_number(text: &str) -> Option<f64> {
+    let text = text.trim();
+    if text.is_empty() {
+        Some(0.0)
+    } else {
+        text.parse().ok().filter(|n: &f64| n.is_finite())
     }
 }
 
@@ -2309,7 +2770,12 @@ fn series_name(
         .find(|label| !label.is_empty())
 }
 
-fn read_line_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+fn read_line_series(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+    slot: usize,
+) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
         return Err(unsupported());
@@ -2321,10 +2787,10 @@ fn read_line_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesSt
         }
     }
     let mut visible = true;
-    let mut width = 2.25 * DPI / 72.0;
+    let mut width = dpi.pt_to_px_font(2.25);
     let mut color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
-        let style = read_line_sp_pr(sp, accents)?;
+        let style = read_line_sp_pr(sp, accents, dpi)?;
         visible = style.visible;
         width = style.width;
         color = style.color;
@@ -2332,7 +2798,7 @@ fn read_line_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesSt
     if color.is_none() {
         color = series_color(ser, accents);
     }
-    let (marker, marker_color) = read_line_marker(ser, accents)?;
+    let (marker, marker_color) = read_line_marker(ser, accents, dpi, slot)?;
     Ok(LineSeriesStyle {
         color,
         visible,
@@ -2342,10 +2808,14 @@ fn read_line_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesSt
     })
 }
 
-fn read_line_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+fn read_line_sp_pr(
+    sp: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut visible = true;
-    let mut width = 2.25 * DPI / 72.0;
+    let mut width = dpi.pt_to_px_font(2.25);
     let mut color = None;
     for child in sp.element_children() {
         match child.local_name() {
@@ -2356,7 +2826,7 @@ fn read_line_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyl
                 }
             }
             "ln" => {
-                let line = read_solid_ln(child, accents, width)?;
+                let line = read_solid_ln(child, accents, width, dpi)?;
                 visible = line.visible;
                 width = line.width;
                 if line.color.is_some() {
@@ -2384,6 +2854,7 @@ fn read_solid_ln(
     ln: &Element,
     accents: [[u8; 3]; 6],
     default_width: f64,
+    dpi: RenderDpi,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     for (attr, allowed) in [
@@ -2409,7 +2880,7 @@ fn read_solid_ln(
     let width = ln
         .attr_local("w")
         .and_then(|raw| raw.parse::<f64>().ok())
-        .map(|emu| emu * DPI / EMU_PER_INCH)
+        .map(|emu| dpi.emu_to_px_f(emu))
         .unwrap_or(default_width);
     if !width.is_finite() || width < 0.0 {
         return Err(unsupported());
@@ -2452,13 +2923,13 @@ fn read_solid_ln(
 fn read_line_marker(
     ser: &Element,
     accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+    slot: usize,
 ) -> Result<(MarkerKind, Option<[u8; 3]>), Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let Some(marker) = ser.child_by_local("marker") else {
         return Ok((
-            MarkerKind::Circle {
-                diameter: 5.0 * DPI / 72.0,
-            },
+            shaped_marker(default_marker_symbol(slot), OMITTED_MARKER_SIZE_PT, dpi),
             None,
         ));
     };
@@ -2469,10 +2940,12 @@ fn read_line_marker(
     if symbol == "none" {
         return Ok((MarkerKind::None, None));
     }
-    if symbol != "auto" && symbol != "circle" {
-        return Err(unsupported());
-    }
-    let size_pt = number_val(marker, "size").unwrap_or(5.0);
+    let symbol = if symbol == "auto" {
+        default_marker_symbol(slot)
+    } else {
+        marker_symbol_from_name(symbol).ok_or_else(unsupported)?
+    };
+    let size_pt = number_val(marker, "size").unwrap_or(EXPLICIT_MARKER_DEFAULT_SIZE_PT);
     if !size_pt.is_finite() || size_pt <= 0.0 {
         return Err(unsupported());
     }
@@ -2485,7 +2958,7 @@ fn read_line_marker(
                 }
                 "noFill" => return Err(unsupported()),
                 "ln" => {
-                    let _ = read_solid_ln(child, accents, 1.0)?;
+                    let _ = read_solid_ln(child, accents, 1.0, dpi)?;
                 }
                 "effectLst" => {
                     if child.element_children().next().is_some() {
@@ -2496,12 +2969,7 @@ fn read_line_marker(
             }
         }
     }
-    Ok((
-        MarkerKind::Circle {
-            diameter: size_pt * DPI / 72.0,
-        },
-        marker_color,
-    ))
+    Ok((shaped_marker(symbol, size_pt, dpi), marker_color))
 }
 
 fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
@@ -2526,7 +2994,11 @@ fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
     }
 }
 
-fn read_pie_series_style(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSeriesStyle, Error> {
+fn read_pie_series_style(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     data_labels_hidden(ser.child_by_local("dLbls"))?;
     for name in ["trendline", "errBars"] {
@@ -2540,7 +3012,7 @@ fn read_pie_series_style(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSer
         }
     }
     if let Some(sp) = ser.child_by_local("spPr") {
-        reject_pie_sp_pr(sp, accents)?;
+        reject_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
         color: series_color(ser, accents),
@@ -2551,7 +3023,7 @@ fn read_pie_series_style(ser: &Element, accents: [[u8; 3]; 6]) -> Result<LineSer
     })
 }
 
-fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
+fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6], dpi: RenderDpi) -> Result<(), Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     for child in sp.element_children() {
         match child.local_name() {
@@ -2563,7 +3035,7 @@ fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
             }
             "noFill" | "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
             "ln" => {
-                let line = read_solid_ln(child, accents, 0.0)?;
+                let line = read_solid_ln(child, accents, 0.0, dpi)?;
                 if line.visible {
                     return Err(unsupported());
                 }
@@ -2583,6 +3055,7 @@ fn read_pie_point_colors(
     ser: &Element,
     accents: [[u8; 3]; 6],
     n: usize,
+    dpi: RenderDpi,
 ) -> Result<Vec<Option<[u8; 3]>>, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if let Some(explosion) = number_val(ser, "explosion") {
@@ -2611,7 +3084,7 @@ fn read_pie_point_colors(
             }
         }
         if let Some(sp) = dpt.child_by_local("spPr") {
-            reject_pie_sp_pr(sp, accents)?;
+            reject_pie_sp_pr(sp, accents, dpi)?;
             if let Some(fill) = sp.child_by_local("solidFill") {
                 colors[idx] = Some(color_of_slot(fill, &accents).ok_or_else(unsupported)?);
             }
@@ -2627,7 +3100,11 @@ struct AreaSeriesStyle {
     line_color: Option<[u8; 3]>,
 }
 
-fn read_area_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<AreaSeriesStyle, Error> {
+fn read_area_series(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<AreaSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
         return Err(unsupported());
@@ -2649,7 +3126,7 @@ fn read_area_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<AreaSeriesSt
     }
     let mut fill = None;
     let mut line_visible = false;
-    let mut line_width = 2.25 * DPI / 72.0;
+    let mut line_width = dpi.pt_to_px_font(2.25);
     let mut line_color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
         for child in sp.element_children() {
@@ -2667,7 +3144,7 @@ fn read_area_series(ser: &Element, accents: [[u8; 3]; 6]) -> Result<AreaSeriesSt
                             return Err(unsupported());
                         }
                     }
-                    let line = read_solid_ln(child, accents, line_width)?;
+                    let line = read_solid_ln(child, accents, line_width, dpi)?;
                     line_visible = line.visible;
                     line_width = line.width;
                     line_color = line.color;
@@ -2727,7 +3204,7 @@ fn cache_numbers(parent: Option<&Element>) -> Vec<Option<f64>> {
     let Some(cache) = find_deep(parent, "numCache").or_else(|| find_deep(parent, "numLit")) else {
         return Vec::new();
     };
-    points_to_values(&read_pts(cache), |text| text.parse().ok())
+    points_to_values(&read_pts(cache), parse_chart_number)
 }
 
 fn cache_labels(parent: Option<&Element>) -> Vec<String> {
@@ -3116,19 +3593,29 @@ impl Canvas {
                 rgba.extend_from_slice(rgb);
                 rgba.push(*a);
             }
-            encode_png(self.w, self.h, &rgba, png::ColorType::Rgba)
+            encode_png(self.w, self.h, &rgba, png::ColorType::Rgba, self.dpi)
         } else {
-            encode_png(self.w, self.h, &self.px, png::ColorType::Rgb)
+            encode_png(self.w, self.h, &self.px, png::ColorType::Rgb, self.dpi)
         }
     }
 
+    #[allow(dead_code)]
     fn new(w: u32, h: u32) -> Self {
+        Self::with_dpi(w, h, RenderDpi::DEFAULT)
+    }
+
+    fn with_dpi(w: u32, h: u32, dpi: RenderDpi) -> Self {
         Self {
             w,
             h,
             px: vec![255; (w as usize) * (h as usize) * 3],
             alpha: None,
+            dpi,
         }
+    }
+
+    fn sx(&self, px96: i32) -> i32 {
+        self.dpi.scale_px(px96)
     }
 
     fn blend(&mut self, x: i32, y: i32, rgb: [u8; 3], cov: u8) {
@@ -3385,11 +3872,25 @@ impl Canvas {
     }
 }
 
-fn encode_png(w: u32, h: u32, rgb: &[u8], color: png::ColorType) -> Result<Vec<u8>, Error> {
+fn encode_png(
+    w: u32,
+    h: u32,
+    rgb: &[u8],
+    color: png::ColorType,
+    dpi: RenderDpi,
+) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);
     encoder.set_color(color);
     encoder.set_depth(png::BitDepth::Eight);
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder
         .write_header()
         .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
@@ -3425,7 +3926,7 @@ mod tests {
         let info = reader.next_frame(&mut buf).unwrap();
         let data = &buf[..info.buffer_size()];
         if info.color_type == png::ColorType::Rgb {
-            return encode_png(width, height, data, png::ColorType::Rgb);
+            return encode_png(width, height, data, png::ColorType::Rgb, RenderDpi::DEFAULT);
         }
         let rgb: Vec<_> = data
             .as_chunks::<4>()
@@ -3438,7 +3939,198 @@ mod tests {
                 })
             })
             .collect();
-        encode_png(width, height, &rgb, png::ColorType::Rgb)
+        encode_png(width, height, &rgb, png::ColorType::Rgb, RenderDpi::DEFAULT)
+    }
+
+    #[test]
+    fn bar_negative_default_inversion_and_explicit_point_overrides() {
+        for (extra, expected) in [
+            ("", true),
+            ("<c:invertIfNegative/>", true),
+            ("<c:invertIfNegative val=\"1\"/>", true),
+            ("<c:invertIfNegative val=\"0\"/>", false),
+            ("<c:invertIfNegative val=\"false\"/>", false),
+            ("<c:invertIfNegative val=\"0\"/><c:dPt><c:idx val=\"0\"/><c:invertIfNegative/></c:dPt>", true),
+            ("<c:dPt><c:idx val=\"0\"/><c:invertIfNegative val=\"0\"/></c:dPt>", false),
+        ] {
+            let xml = bar_xml(&line_ser(0, "S1", &[Some(-8.0), Some(8.0)], extra), "", "maxMin", Some("bar"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+            let series = &chart.series[0];
+            assert_eq!(series.point_inversion.first().copied().flatten().unwrap_or(series.invert_if_negative), expected, "{extra}");
+            for dpi_value in [96, 106, 144] {
+                let dpi = RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap()).unwrap();
+                let mut canvas = Canvas::new(80, 60); canvas.dpi = dpi;
+                canvas.fill_rect(0, 0, 80, 60, [200, 100, 50]);
+                draw_bar_value(&mut canvas, series, 0, -8.0, [10, 10, 60, 40], FALLBACK_ACCENTS[0]);
+                let pixel = |x: usize, y: usize| {let i=(y*80+x)*3; &canvas.px[i..i+3]};
+                assert_eq!(pixel(30, 25), if expected { &[255,255,255] } else { &FALLBACK_ACCENTS[0] });
+                if expected {assert!(pixel(10, 25).iter().all(|v| *v < 160), "negative outline must be black");}
+                // Positive values must never be inverted.
+                draw_bar_value(&mut canvas, series, 0, 8.0, [10, 10, 60, 40], FALLBACK_ACCENTS[0]);
+                assert_eq!(&canvas.px[(25*80+30)*3..(25*80+30)*3+3], &FALLBACK_ACCENTS[0]);
+            }
+        }
+    }
+
+    #[test]
+    fn bar_negative_outline_is_one_pixel_solid_and_pixel_aligned() {
+        // Official signed bar-2 (chart:3, A=-8) uses a 1 px solid #000000 box.
+        // Mid-edge neighbors are pure fill or background, not a 2 px gray AA
+        // band. Bounds are half-open fill [x0, x1) x [y0, y1); the outline sits
+        // on those integer edges, so the right/bottom lines occupy the exclusive
+        // fill sides and coincide with the zero axis on the value end.
+        let xml = bar_xml(
+            &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let series = &chart.series[0];
+        let bg = [200, 100, 50];
+        let [x0, y0, x1, y1] = [10, 10, 60, 40];
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let mut canvas = Canvas::new(80, 60);
+            canvas.dpi = dpi;
+            canvas.fill_rect(0, 0, 80, 60, bg);
+            draw_bar_value(
+                &mut canvas,
+                series,
+                0,
+                -8.0,
+                [x0, y0, x1, y1],
+                FALLBACK_ACCENTS[0],
+            );
+            let pixel = |x: i32, y: i32| {
+                let i = (y as usize * 80 + x as usize) * 3;
+                [canvas.px[i], canvas.px[i + 1], canvas.px[i + 2]]
+            };
+            assert_eq!(pixel(x0, 25), INK, "left mid @ {dpi_value}");
+            assert_eq!(pixel(x1, 25), INK, "right mid @ {dpi_value}");
+            assert_eq!(pixel(35, y0), INK, "top mid @ {dpi_value}");
+            assert_eq!(pixel(35, y1), INK, "bottom mid @ {dpi_value}");
+            assert_eq!(pixel(x0 - 1, 25), bg, "outside left @ {dpi_value}");
+            assert_eq!(
+                pixel(x0 + 1, 25),
+                [255, 255, 255],
+                "inside left @ {dpi_value}"
+            );
+            assert_eq!(
+                pixel(x1 - 1, 25),
+                [255, 255, 255],
+                "inside right @ {dpi_value}"
+            );
+            assert_eq!(pixel(x1 + 1, 25), bg, "outside right @ {dpi_value}");
+            assert_eq!(pixel(35, y0 - 1), bg, "outside top @ {dpi_value}");
+            assert_eq!(
+                pixel(35, y0 + 1),
+                [255, 255, 255],
+                "inside top @ {dpi_value}"
+            );
+            assert_eq!(
+                pixel(35, y1 - 1),
+                [255, 255, 255],
+                "inside bottom @ {dpi_value}"
+            );
+            assert_eq!(pixel(35, y1 + 1), bg, "outside bottom @ {dpi_value}");
+            for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
+                assert_eq!(pixel(x, y), INK, "corner {x},{y} @ {dpi_value}");
+            }
+            assert_eq!(pixel(x0 - 1, y0 - 1), bg, "outside corner @ {dpi_value}");
+        }
+    }
+
+    #[test]
+    fn pie_auto_layout_matches_public_office_aspect_and_host_probes() {
+        // Excel public PlotArea relative to its 4 pt origin, then PowerPoint.
+        // Includes height-limited, width-limited, no legend and title hosts.
+        let cases = [
+            (
+                432.0,
+                252.0,
+                0.0,
+                29.314488188976377,
+                98.09275590551181,
+                22.75,
+                198.5,
+            ),
+            (
+                432.0,
+                180.0,
+                0.0,
+                29.314488188976377,
+                129.5927559055118,
+                18.25,
+                135.5,
+            ),
+            (
+                300.0,
+                360.0,
+                0.0,
+                29.314488188976377,
+                23.91779527559055,
+                68.57503937007874,
+                214.84992125984252,
+            ),
+            (
+                600.0,
+                252.0,
+                0.0,
+                29.314488188976377,
+                182.0927559055118,
+                22.75,
+                198.5,
+            ),
+            (
+                300.0,
+                300.0,
+                0.0,
+                29.314488188976377,
+                23.91779527559055,
+                38.57503937007874,
+                214.84992125984252,
+            ),
+            (432.0, 252.0, 0.0, 0.0, 112.75, 22.75, 198.5),
+            (240.0, 180.0, 0.0, 0.0, 48.25, 18.25, 135.5),
+            (
+                432.0,
+                252.0,
+                23.65,
+                29.314488188976377,
+                108.4396062992126,
+                44.92181102362205,
+                177.80637795,
+            ),
+            (
+                432.0,
+                252.0,
+                26.15503937007874,
+                29.134488188976377,
+                109.62559055,
+                47.27031496062992,
+                175.61440945,
+            ),
+        ];
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let px = |pt| dpi.pt_to_px_font(pt);
+            for (w, h, title, legend, left, top, diameter) in cases {
+                let plot = pie_plot_bounds(px(w), px(h), px(title), px(legend), dpi).unwrap();
+                // COM reports geometry to 1/12700 pt. No image-specific offset.
+                assert!((plot.x - px(left + 4.0)).abs() < px(0.001));
+                assert!((plot.y - px(top + 4.0)).abs() < px(0.001));
+                assert!((plot.w - px(diameter)).abs() < px(0.001));
+                assert_eq!(plot.w, plot.h);
+            }
+            assert!(pie_plot_bounds(px(20.0), px(20.0), 0.0, 0.0, dpi).is_none());
+        }
     }
 
     #[test]
@@ -3570,7 +4262,7 @@ mod tests {
         let canvas = Canvas::new(30, 20);
         assert_eq!(
             canvas.encode_png().unwrap(),
-            encode_png(30, 20, &canvas.px, png::ColorType::Rgb).unwrap()
+            encode_png(30, 20, &canvas.px, png::ColorType::Rgb, RenderDpi::DEFAULT).unwrap()
         );
         let doc = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
         for (host, expected) in [
@@ -3983,9 +4675,18 @@ mod tests {
 
     #[test]
     fn axis_follows_tick_width() {
-        assert_eq!(axis_x_of(7), 27);
-        assert_eq!(axis_x_of(17), 37);
-        assert_eq!(axis_x_of(28), 48);
+        assert_eq!(axis_x_of(7, RenderDpi::DEFAULT), 27);
+        assert_eq!(axis_x_of(17, RenderDpi::DEFAULT), 37);
+        assert_eq!(axis_x_of(28, RenderDpi::DEFAULT), 48);
+        let mut dpi_obj = serde_json::Map::new();
+        dpi_obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi106 = RenderDpi::from_request(&dpi_obj).unwrap();
+        assert_eq!(dpi106.scale_px(INSET_TOP), 15);
+        assert_eq!(dpi106.scale_px(INSET_BOTTOM), 38);
+        assert_eq!(dpi106.scale_px(LABEL_EDGE), 10);
+        assert_eq!(dpi106.scale_px(TICK_GAP), 12);
+        assert_eq!(axis_x_of(7, dpi106), 29);
+        assert_eq!(axis_x_of(19, dpi106), 41);
     }
 
     #[test]
@@ -4265,7 +4966,219 @@ mod tests {
     }
 
     #[test]
-    fn line_marker_none_is_not_the_same_as_default_circle() {
+    fn empty_cache_v_plots_as_zero_and_connects_the_line() {
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let zero = standard_line_xml(
+            &line_ser(0, "S1", &[Some(20.0), Some(0.0), Some(20.0)], none),
+            "",
+        );
+        let empty_v = standard_line_xml(
+            &line_ser(0, "S1", &[Some(20.0), Some(0.0), Some(20.0)], none).replace(
+                r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+                r#"<c:pt idx="1"><c:v></c:v></c:pt>"#,
+            ),
+            "",
+        );
+        let omitted = standard_line_xml(
+            &line_ser(0, "S1", &[Some(20.0), None, Some(20.0)], none),
+            "",
+        );
+        let zero_png = render_line(&zero).unwrap();
+        let empty_png = render_line(&empty_v).unwrap();
+        let omitted_png = render_line(&omitted).unwrap();
+        assert_eq!(
+            empty_png, zero_png,
+            "an empty cache <c:v></c:v> must plot as 0 and keep the stroke connected"
+        );
+        assert_ne!(
+            empty_png, omitted_png,
+            "an omitted cache point must stay a gap, not the same as an empty <c:v>"
+        );
+        let (w, h, empty_rgb) = png_rgb(&empty_png);
+        let (_, _, omit_rgb) = png_rgb(&omitted_png);
+        let a1 = FALLBACK_ACCENTS[0];
+        let mid0 = w / 3;
+        let mid1 = (w * 2) / 3;
+        let empty_mid = count_in(&empty_rgb, w, mid0, mid1, 0, h, a1, 24);
+        let omit_mid = count_in(&omit_rgb, w, mid0, mid1, 0, h, a1, 24);
+        assert!(
+            empty_mid >= 10,
+            "empty cache v should connect through the middle category like 0, got {empty_mid}"
+        );
+        assert_eq!(
+            omit_mid, 0,
+            "an omitted cache point must still break the stroke; got {omit_mid}"
+        );
+    }
+
+    #[test]
+    fn parse_chart_number_locks_empty_text_zero_and_keeps_blanks_and_errors_as_gaps() {
+        assert_eq!(parse_chart_number(""), Some(0.0));
+        assert_eq!(parse_chart_number("   "), Some(0.0));
+        assert_eq!(parse_chart_number("20"), Some(20.0));
+        assert_eq!(parse_chart_number("-1.5"), Some(-1.5));
+        assert_eq!(parse_chart_number("#N/A"), None);
+        assert_eq!(json_number(serde_json::json!("")), Some(0.0));
+        assert_eq!(json_number(serde_json::json!(null)), None);
+        assert_eq!(json_number(serde_json::Value::String("#N/A".into())), None);
+        assert_eq!(json_number(serde_json::json!(20)), Some(20.0));
+    }
+
+    #[test]
+    fn empty_scatter_cache_v_plots_as_zero_and_connects_the_line() {
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let zero = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(0.0), Some(8.0)],
+                none,
+            ),
+            "",
+        );
+        let empty_v = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(0.0), Some(8.0)],
+                none,
+            )
+            .replace(
+                r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+                r#"<c:pt idx="1"><c:v></c:v></c:pt>"#,
+            ),
+            "",
+        );
+        let omitted = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), None, Some(8.0)],
+                none,
+            ),
+            "",
+        );
+        let zero_png = render_scatter(&zero).unwrap();
+        let empty_png = render_scatter(&empty_v).unwrap();
+        assert_eq!(
+            empty_png, zero_png,
+            "an empty scatter cache <c:v></c:v> must plot as 0 and keep the stroke connected"
+        );
+        assert_ne!(
+            empty_png,
+            render_scatter(&omitted).unwrap(),
+            "an omitted scatter cache point must stay a gap"
+        );
+    }
+
+    #[test]
+    fn signed_scatter_auto_zero_axes_and_labels_meet_at_origin() {
+        let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
+        let signed = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(-2.0), Some(-1.0), Some(1.0), Some(3.0)],
+                &[Some(-1.0), Some(2.0), Some(-2.0), Some(3.0)],
+                none,
+            ),
+            "",
+        );
+        let (w, h, rgb) = png_rgb(&render_scatter(&signed).unwrap());
+        assert_eq!((w, h), (576, 336));
+        let dark = [0_u8, 0, 0];
+        let mut col = vec![0_u32; w as usize];
+        let mut row = vec![0_u32; h as usize];
+        for y in 0..h {
+            for x in 0..w {
+                if near(
+                    [
+                        rgb[((y * w + x) * 3) as usize],
+                        rgb[((y * w + x) * 3 + 1) as usize],
+                        rgb[((y * w + x) * 3 + 2) as usize],
+                    ],
+                    dark,
+                    40,
+                ) {
+                    col[x as usize] += 1;
+                    row[y as usize] += 1;
+                }
+            }
+        }
+        let axis_x = col
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, n)| *n)
+            .map(|(x, _)| x as u32)
+            .unwrap();
+        assert!(
+            axis_x > w / 4 && axis_x < (w * 3) / 4,
+            "vertical autoZero axis should sit at the origin, not the left edge; x={axis_x}"
+        );
+        let mid_axis_y = (h / 4..(h * 3) / 4)
+            .max_by_key(|&y| row[y as usize])
+            .unwrap();
+        assert!(
+            row[mid_axis_y as usize] >= w / 2,
+            "a full-width horizontal autoZero axis should sit at the origin, not only at the bottom; y={mid_axis_y} count={}",
+            row[mid_axis_y as usize]
+        );
+        let leftover_gutter = count_in(&rgb, w, 0, 36, 0, h / 3, dark, 40);
+        let origin_y_labels = count_in(&rgb, w, axis_x - 36, axis_x, 0, h / 3, dark, 40);
+        assert!(
+            origin_y_labels > leftover_gutter,
+            "Y tick labels should sit left of the origin axis, not in the left gutter; origin={origin_y_labels} gutter={leftover_gutter}"
+        );
+
+        let positive = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(4.0), Some(8.0)],
+                &[Some(1.0), Some(3.0), Some(2.0)],
+                none,
+            ),
+            "",
+        );
+        let (_, _, pos_rgb) = png_rgb(&render_scatter(&positive).unwrap());
+        let mut pos_col = vec![0_u32; w as usize];
+        for y in 0..h {
+            for x in 0..w {
+                if near(
+                    [
+                        pos_rgb[((y * w + x) * 3) as usize],
+                        pos_rgb[((y * w + x) * 3 + 1) as usize],
+                        pos_rgb[((y * w + x) * 3 + 2) as usize],
+                    ],
+                    dark,
+                    40,
+                ) {
+                    pos_col[x as usize] += 1;
+                }
+            }
+        }
+        let pos_axis_x = pos_col
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, n)| *n)
+            .map(|(x, _)| x as u32)
+            .unwrap();
+        assert!(
+            pos_axis_x < w / 4,
+            "when 0 is on the left bound, the vertical axis should stay on the left edge; x={pos_axis_x}"
+        );
+    }
+
+    #[test]
+    fn line_marker_none_is_not_the_same_as_default_marker() {
         let values = [Some(8.0), Some(16.0), Some(12.0)];
         let default_xml = standard_line_xml(&line_ser(0, "S1", &values, ""), "");
         let none_xml = standard_line_xml(
@@ -4284,9 +5197,127 @@ mod tests {
         let none_n = count_in(&none_rgb, 576, 0, 576, 0, 336, a1, 18);
         assert!(
             default_n > none_n,
-            "omitted markers should paint filled circles, so they must add ink; default={default_n} none={none_n}"
+            "omitted markers should paint the default symbol, so they must add ink; default={default_n} none={none_n}"
         );
         assert!(none_n >= 8, "a visible solid line should still leave ink");
+    }
+
+    fn marker_el(symbol: &str, size: f64) -> String {
+        format!(r#"<c:marker><c:symbol val="{symbol}"/><c:size val="{size}"/></c:marker>"#)
+    }
+
+    const AUTO_MARKER_SYMBOLS: [&str; 9] = [
+        "diamond", "square", "triangle", "x", "star", "circle", "plus", "dot", "dash",
+    ];
+
+    fn line_series_with_markers(
+        count: usize,
+        values: &[Option<f64>],
+        extra: impl Fn(usize) -> String,
+    ) -> String {
+        (0..count)
+            .map(|i| line_ser(i, &format!("S{}", i + 1), values, &extra(i)))
+            .collect::<String>()
+    }
+
+    fn scatter_series_with_markers(
+        count: usize,
+        xs: &[Option<f64>],
+        ys: &[Option<f64>],
+        extra: impl Fn(usize) -> String,
+    ) -> String {
+        (0..count)
+            .map(|i| scatter_ser(i, &format!("S{}", i + 1), xs, ys, &extra(i)))
+            .collect::<String>()
+    }
+
+    #[test]
+    fn omitted_line_markers_follow_excel_auto_cycle_at_size_9() {
+        let values = [Some(8.0), Some(16.0), Some(12.0)];
+        let omitted = standard_line_xml(
+            &line_series_with_markers(10, &values, |_| String::new()),
+            "",
+        );
+        let explicit = standard_line_xml(
+            &line_series_with_markers(10, &values, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 9.0)
+            }),
+            "",
+        );
+        assert_eq!(
+            render_line(&omitted).unwrap(),
+            render_line(&explicit).unwrap(),
+            "omitted c:marker must match the 9-symbol auto cycle at 9pt, wrapping at series 10"
+        );
+        let size5 = standard_line_xml(
+            &line_series_with_markers(10, &values, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 5.0)
+            }),
+            "",
+        );
+        assert_ne!(
+            render_line(&omitted).unwrap(),
+            render_line(&size5).unwrap(),
+            "omitted markers use 9pt, not the OOXML explicit-marker default of 5pt"
+        );
+    }
+
+    #[test]
+    fn explicit_line_marker_symbol_wins_over_the_auto_cycle() {
+        let values = [Some(8.0), Some(16.0), Some(12.0)];
+        let omitted = standard_line_xml(&line_ser(0, "S1", &values, ""), "");
+        let circle = standard_line_xml(&line_ser(0, "S1", &values, &marker_el("circle", 9.0)), "");
+        let square = standard_line_xml(&line_ser(0, "S1", &values, &marker_el("square", 9.0)), "");
+        let omitted_png = render_line(&omitted).unwrap();
+        let circle_png = render_line(&circle).unwrap();
+        let square_png = render_line(&square).unwrap();
+        assert_ne!(
+            omitted_png, circle_png,
+            "series 0 default is diamond, so an explicit 9pt circle must differ"
+        );
+        assert_ne!(
+            omitted_png, square_png,
+            "an explicit square on series 0 must not be replaced by the default diamond"
+        );
+        render_line(&standard_line_xml(
+            &line_ser(0, "S1", &values, &marker_el("diamond", 5.0)),
+            "",
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn omitted_scatter_markers_follow_the_same_auto_cycle() {
+        let xs = [Some(0.0), Some(4.0), Some(8.0)];
+        let ys = [Some(1.0), Some(3.0), Some(2.0)];
+        let omitted = scatter_xml(
+            "lineMarker",
+            &scatter_series_with_markers(10, &xs, &ys, |_| String::new()),
+            "",
+        );
+        let explicit = scatter_xml(
+            "lineMarker",
+            &scatter_series_with_markers(10, &xs, &ys, |i| {
+                marker_el(AUTO_MARKER_SYMBOLS[i % AUTO_MARKER_SYMBOLS.len()], 9.0)
+            }),
+            "",
+        );
+        assert_eq!(
+            render_scatter(&omitted).unwrap(),
+            render_scatter(&explicit).unwrap(),
+            "omitted scatter markers share the line auto cycle at 9pt"
+        );
+        let circle = scatter_xml(
+            "lineMarker",
+            &scatter_ser(0, "S1", &xs, &ys, &marker_el("circle", 9.0)),
+            "",
+        );
+        let omitted_s1 = scatter_xml("lineMarker", &scatter_ser(0, "S1", &xs, &ys, ""), "");
+        assert_ne!(
+            render_scatter(&omitted_s1).unwrap(),
+            render_scatter(&circle).unwrap(),
+            "explicit circle must win over the default diamond on scatter series 0"
+        );
     }
 
     #[test]
@@ -4310,15 +5341,6 @@ mod tests {
             ),
             standard_line_xml(&base, r#"<c:dispBlanksAs val="zero"/>"#),
             standard_line_xml(&base, r#"<c:dispBlanksAs val="span"/>"#),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
-                ),
-                "",
-            ),
             standard_line_xml(
                 &line_ser(
                     0,
@@ -4487,7 +5509,7 @@ mod tests {
     }
 
     #[test]
-    fn scatter_gap_breaks_the_stroke_and_marker_style_drops_the_line() {
+    fn scatter_gap_breaks_the_stroke_and_hidden_line_drops_the_stroke() {
         let none = r#"<c:marker><c:symbol val="none"/></c:marker>"#;
         let solid = scatter_xml(
             "lineMarker",
@@ -4534,19 +5556,38 @@ mod tests {
                 "S1",
                 &[Some(0.0), Some(5.0), Some(10.0)],
                 &[Some(8.0), Some(8.0), Some(8.0)],
-                "",
+                none,
             ),
             "",
         );
-        let (_, _, marker_rgb) = png_rgb(&render_scatter(&markers).unwrap());
-        let marker_mid = count_in(&marker_rgb, 576, mid0 + 20, mid1 - 20, 0, 336, a1, 18);
-        // The middle category of a marker-only series may contain a marker at x=5.
-        // A band between the first and middle marker should stay empty of series ink
-        // if we are not stroking a line.
-        let between = count_in(&marker_rgb, 576, 576 / 6, mid0 - 10, 0, 336, a1, 18);
+        let marker_png = render_scatter(&markers).unwrap();
+        assert_eq!(
+            marker_png,
+            render_scatter(&solid).unwrap(),
+            "scatterStyle=marker with no series line hide must connect like lineMarker"
+        );
+
+        let no_line = scatter_xml(
+            "marker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(0.0), Some(5.0), Some(10.0)],
+                &[Some(8.0), Some(8.0), Some(8.0)],
+                r#"<c:spPr><a:ln><a:noFill/></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="9"/></c:marker>"#,
+            ),
+            "",
+        );
+        let (_, _, hidden_rgb) = png_rgb(&render_scatter(&no_line).unwrap());
+        let between = count_in(&hidden_rgb, 576, 576 / 6, mid0 - 10, 0, 336, a1, 18);
+        let marker_mid = count_in(&hidden_rgb, 576, mid0 + 20, mid1 - 20, 0, 336, a1, 18);
         assert_eq!(
             between, 0,
-            "scatterStyle=marker must not draw a connecting stroke; got {between} (mid markers {marker_mid})"
+            "an explicit series a:ln/a:noFill must drop the connecting stroke; got {between} (mid markers {marker_mid})"
+        );
+        assert!(
+            marker_mid >= 1,
+            "hiding the scatter line should still leave the middle marker, got {marker_mid}"
         );
     }
 
@@ -4563,17 +5604,6 @@ mod tests {
             scatter_xml("line", &ser, ""),
             scatter_xml("smoothMarker", &ser, ""),
             scatter_xml("smooth", &ser, ""),
-            scatter_xml(
-                "lineMarker",
-                &scatter_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0)],
-                    &[Some(3.0), Some(4.0)],
-                    r#"<c:marker><c:symbol val="diamond"/></c:marker>"#,
-                ),
-                "",
-            ),
             scatter_xml(
                 "lineMarker",
                 &scatter_ser(
@@ -4691,6 +5721,51 @@ mod tests {
     }
 
     #[test]
+    fn clustered_bar_legend_key_is_a_filled_swatch_not_a_short_line() {
+        // Excel 16.0 Chart.Export and PowerPoint Slide.Export both use a
+        // filled swatch for clustered bars, just as for columns and areas.
+        let color = [0x15, 0x60, 0x82];
+        let mut actual = Canvas::new(24, 24);
+        draw_plot_key(
+            &mut actual,
+            PlotKind::ClusteredBar,
+            5,
+            5,
+            13,
+            13,
+            color,
+            MarkerKind::None,
+        );
+        let mut expected = Canvas::new(24, 24);
+        expected.fill_rect(5, 5, 13, 13, color);
+        assert!(
+            actual.px == expected.px,
+            "bar legend keys must fill the swatch"
+        );
+
+        let ser = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
+        for orientation in ["maxMin", "minMax"] {
+            let png = render_bar(&bar_xml(&ser, "", orientation, Some("bar"))).unwrap();
+            let (w, h, rgb) = png_rgb(&png);
+            let mut xs = Vec::new();
+            let mut ys = Vec::new();
+            for y in 0..h {
+                for x in w - 55..w - 5 {
+                    if pixel_at(&rgb, w, x, y) == color {
+                        xs.push(x);
+                        ys.push(y);
+                    }
+                }
+            }
+            assert!(!xs.is_empty(), "legend swatch must exist");
+            let width = xs.iter().max().unwrap() - xs.iter().min().unwrap() + 1;
+            let height = ys.iter().max().unwrap() - ys.iter().min().unwrap() + 1;
+            assert_eq!((width, height), (8, 8), "filled bar swatch {orientation}");
+            assert_eq!(xs.len(), 64, "no hollow or line-shaped key");
+        }
+    }
+
+    #[test]
     fn clustered_bar_places_first_category_by_orientation() {
         let series = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
         let a1 = FALLBACK_ACCENTS[0];
@@ -4712,6 +5787,148 @@ mod tests {
         assert!(
             bot_right > top_right,
             "minMax should put the long first category in the bottom half; top={top_right} bottom={bot_right}"
+        );
+    }
+
+    fn bar_dark_band(rgb: &[u8], w: u32, x0: u32, x1: u32, y0: u32, y1: u32) -> u32 {
+        let mut n = 0u32;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = ((y * w + x) * 3) as usize;
+                if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn signed_bar_category_labels_follow_the_zero_crossing_axis() {
+        let series = line_ser(0, "S1", &[Some(-8.0), Some(0.0), Some(8.0)], "");
+        let (w, h, rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        // Official signed-bar chart3 puts A/B/C immediately left of the
+        // vertical zero axis. B must not remain stranded in the left inset.
+        let left = bar_dark_band(&rgb, w, 5, 25, h / 2 - 10, h / 2 + 30);
+        assert_eq!(
+            left, 0,
+            "category B must follow the zero axis, not the left gutter"
+        );
+        let at_origin = bar_dark_band(&rgb, w, w / 2 - 45, w / 2 - 15, h / 2 - 10, h / 2 + 30);
+        assert!(
+            at_origin > 0,
+            "category label ink must exist by the zero axis"
+        );
+    }
+
+    #[test]
+    fn line_legend_key_preserves_fractional_point_endpoints() {
+        let mut canvas = Canvas::new(100, 40);
+        canvas.dpi =
+            RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        let color = [21, 96, 130];
+        for kind in [PlotKind::StandardLine, PlotKind::Scatter { connect: true }] {
+            let mut actual = Canvas::new(100, 40);
+            actual.dpi = canvas.dpi;
+            draw_plot_key(&mut actual, kind, 20, 10, 49, 19, color, MarkerKind::None);
+            // A 20pt centreline at 106dpi is 29.444px, not (rounded slot - 1).
+            // The cap support must include the rightmost official sample pixel.
+            let offset = ((14 * actual.w + 50) * 3) as usize;
+            assert_ne!(&actual.px[offset..offset + 3], &[255, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn line_and_scatter_keys_use_point_width_not_square_marker_width() {
+        for dpi_value in [96, 106, 192] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi": dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for marker_box in [7, 9, 14] {
+                for kind in [
+                    PlotKind::StandardLine,
+                    PlotKind::Scatter { connect: true },
+                    PlotKind::Scatter { connect: false },
+                ] {
+                    assert_eq!(
+                        legend_key_width(kind, marker_box, dpi),
+                        dpi.pt_to_px_font(20.0).round() as i32
+                    );
+                    assert_eq!(
+                        legend_key_gap(kind, dpi),
+                        dpi.pt_to_px_font(1.5).round() as i32
+                    );
+                }
+                for kind in [
+                    PlotKind::ClusteredBar,
+                    PlotKind::ClusteredColumn,
+                    PlotKind::StandardArea,
+                    PlotKind::Pie,
+                ] {
+                    assert_eq!(legend_key_width(kind, marker_box, dpi), marker_box);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn clustered_bar_legend_follows_visual_series_order() {
+        let series = format!(
+            "{}{}",
+            line_ser(0, "S1", &[Some(8.0), Some(1.0)], ""),
+            line_ser(1, "S2", &[Some(2.0), Some(3.0)], "")
+        );
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let (w, h) = (576u32, 336u32);
+        // Restrict to the default right legend so plot bars cannot move the centroid.
+        let x0 = 516;
+        let x1 = 571;
+
+        let (_, _, maxmin) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        let y1 = centroid_y(&maxmin, w, x0, x1, 0, h, a1, 2).expect("maxMin S1 key");
+        let y2 = centroid_y(&maxmin, w, x0, x1, 0, h, a2, 2).expect("maxMin S2 key");
+        assert!(
+            y1 < y2,
+            "maxMin must keep official S1-above-S2 legend order; y1={y1} y2={y2}"
+        );
+
+        let (_, _, minmax) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "minMax", Some("bar"))).unwrap());
+        let y1 = centroid_y(&minmax, w, x0, x1, 0, h, a1, 2).expect("minMax S1 key");
+        let y2 = centroid_y(&minmax, w, x0, x1, 0, h, a2, 2).expect("minMax S2 key");
+        assert!(
+            y2 < y1,
+            "minMax must put official S2 above S1 in the legend; y1={y1} y2={y2}"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_value_axis_follows_category_orientation() {
+        let series = line_ser(0, "S1", &[Some(8.0), Some(1.0)], "");
+        let (w, h) = (576u32, 336u32);
+        let band = 36u32;
+        let x0 = w / 5;
+        let x1 = w * 3 / 4;
+
+        let (_, _, top_rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "maxMin", Some("bar"))).unwrap());
+        let top = bar_dark_band(&top_rgb, w, x0, x1, 0, band);
+        let bot = bar_dark_band(&top_rgb, w, x0, x1, h - band, h);
+        assert!(
+            top > bot * 3 && top > 80,
+            "maxMin should put the value axis and tick labels at the top; top={top} bottom={bot}"
+        );
+
+        let (_, _, bot_rgb) =
+            png_rgb(&render_bar(&bar_xml(&series, "", "minMax", Some("bar"))).unwrap());
+        let top = bar_dark_band(&bot_rgb, w, x0, x1, 0, band);
+        let bot = bar_dark_band(&bot_rgb, w, x0, x1, h - band, h);
+        assert!(
+            bot > top * 3 && bot > 80,
+            "minMax should keep the value axis and tick labels at the bottom; top={top} bottom={bot}"
         );
     }
 
@@ -4787,7 +6004,12 @@ mod tests {
         let a1 = FALLBACK_ACCENTS[0];
         let (w, h) = (576u32, 336u32);
         let signed = bar_xml(
-            &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], ""),
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-8.0), Some(8.0)],
+                "<c:invertIfNegative val=\"0\"/>",
+            ),
             "",
             "maxMin",
             Some("bar"),
@@ -4861,6 +6083,159 @@ mod tests {
             None,
         ))
         .unwrap();
+    }
+
+    fn near_ink(rgb: [u8; 3]) -> bool {
+        rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40
+    }
+
+    fn pixel_rgb(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * w + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    fn fill_x_span_limit(
+        rgb: &[u8],
+        w: u32,
+        h: u32,
+        color: [u8; 3],
+        tol: i16,
+        x_limit: u32,
+    ) -> Option<(u32, u32)> {
+        let mut min_x = u32::MAX;
+        let mut max_x = 0u32;
+        let mut found = false;
+        let x_end = x_limit.min(w);
+        for y in 0..h {
+            for x in 0..x_end {
+                if near(pixel_rgb(rgb, w, x, y), color, tol) {
+                    min_x = min_x.min(x);
+                    max_x = max_x.max(x);
+                    found = true;
+                }
+            }
+        }
+        found.then_some((min_x, max_x))
+    }
+
+    /// Long vertical ink columns in the plot, i.e. major grid / zero / max ticks.
+    fn major_grid_xs(rgb: &[u8], w: u32, y0: u32, y1: u32, min_count: u32) -> Vec<u32> {
+        let mut xs = Vec::new();
+        for x in 0..w {
+            let mut n = 0u32;
+            for y in y0..y1 {
+                if near_ink(pixel_rgb(rgb, w, x, y)) {
+                    n += 1;
+                }
+            }
+            if n >= min_count {
+                xs.push(x);
+            }
+        }
+        xs
+    }
+
+    #[test]
+    fn clustered_bar_value_edge_lands_on_its_tick() {
+        let color = FALLBACK_ACCENTS[0];
+        let png = render_bar(&bar_xml(
+            &line_ser(0, "S1", &[Some(8.0)], ""),
+            "",
+            "maxMin",
+            Some("bar"),
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        // Skip the top value-axis band and the bottom gutter; grids run through the plot.
+        let grids = major_grid_xs(&rgb, w, 50, 300, 80);
+        assert!(
+            grids.len() >= 10,
+            "0..9 auto scale should expose the major grid; grids={grids:?}"
+        );
+        let zero = *grids.first().expect("zero / min tick");
+        let max_tick = *grids.last().expect("max tick");
+        // Auto 0..9, value 8 is 8/9 of the axis. Identify that tick from the grid list.
+        let expected = zero + ((max_tick - zero) * 8 + 4) / 9;
+        let tick8 = grids
+            .iter()
+            .copied()
+            .min_by_key(|x| x.abs_diff(expected))
+            .unwrap();
+        // Exclude the right-side legend swatch, which uses the same accent color.
+        let (x0, x1) =
+            fill_x_span_limit(&rgb, w, h, color, 8, max_tick + 1).expect("value-8 bar fill");
+        assert_eq!(
+            x1, tick8,
+            "value-8 bar right edge must land on the 8 tick (no 1px gap); fill={x0}..{x1} zero={zero} max={max_tick} tick8={tick8} grids={grids:?}"
+        );
+        assert!(
+            x0 == zero || x0 == zero + 1,
+            "positive bar should start at the zero axis (axis ink may cover the first pixel); fill={x0}..{x1} zero={zero}"
+        );
+    }
+
+    #[test]
+    fn clustered_bar_signed_auto_major_uses_step_two() {
+        // Office auto-scales -8..8 to -10..10 with majorUnit=2. This must not be
+        // hardcoded for one fixture; the same path serves any clustered bar.
+        let color = FALLBACK_ACCENTS[0];
+        let png = render_bar(&bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-8.0), Some(0.0), Some(8.0)],
+                r#"<c:invertIfNegative val="0"/>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        ))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        assert_eq!((w, h), (576, 336));
+        let grids = major_grid_xs(&rgb, w, 50, 300, 80);
+        assert_eq!(
+            grids.len(),
+            11,
+            "auto major 2 on -10..10 should draw 11 vertical grid lines; grids={grids:?}"
+        );
+        let min_tick = grids[0];
+        let max_tick = grids[10];
+        let span = max_tick - min_tick;
+        for (i, x) in grids.iter().copied().enumerate() {
+            let expect = min_tick + ((span * i as u32) + 5) / 10;
+            assert!(
+                x.abs_diff(expect) <= 1,
+                "grid {i} should be evenly spaced for step 2; x={x} expect={expect} grids={grids:?}"
+            );
+        }
+        // Value 8 is the 9th tick (index 9: -10,-8,...,8,10). The bottom category
+        // (C=+8, maxMin so first category on top) must meet that tick.
+        let tick8 = grids[9];
+        let tick0 = grids[5];
+        // Restrict the fill hunt to the lower half so A=-8 does not mix in,
+        // and stop before the legend swatch.
+        let mut right = None;
+        let mut left_pos = None;
+        for y in (h / 2)..(h.saturating_sub(20)) {
+            for x in 0..(max_tick + 1) {
+                if near(pixel_rgb(&rgb, w, x, y), color, 8) {
+                    left_pos = Some(left_pos.map_or(x, |cur: u32| cur.min(x)));
+                    right = Some(right.map_or(x, |cur: u32| cur.max(x)));
+                }
+            }
+        }
+        let right = right.expect("positive C bar fill");
+        let left_pos = left_pos.expect("positive C bar left");
+        assert_eq!(
+            right, tick8,
+            "C=+8 bar right edge must land on the 8 tick; fill={left_pos}..{right} tick8={tick8} zero={tick0} grids={grids:?}"
+        );
+        assert!(
+            left_pos.abs_diff(tick0) <= 1,
+            "C bar should grow from the zero axis; left={left_pos} zero={tick0}"
+        );
     }
 
     #[test]
@@ -5073,6 +6448,25 @@ mod tests {
         assert!(
             mid_hits < 8,
             "a gap must not leave a filled band down the missing category, got {mid_hits}"
+        );
+
+        // Official Excel 16.0: omitted dispBlanksAs plots the missing area
+        // point as 0 (a V to the baseline), not a hole. Explicit 0 matches.
+        let as_zero = line_ser(
+            0,
+            "S1",
+            &[Some(2.0), Some(2.0), Some(0.0), Some(2.0), Some(2.0)],
+            &area_fill("156082"),
+        );
+        let omitted_png = render_area(&standard_area_xml(&gapped, "")).unwrap();
+        let zero_png = render_area(&standard_area_xml(&as_zero, "")).unwrap();
+        assert_eq!(
+            omitted_png, zero_png,
+            "omitted dispBlanksAs plus a missing area point must fill like an explicit 0"
+        );
+        assert_ne!(
+            omitted_png, png,
+            "explicit dispBlanksAs=gap must still leave a hole, unlike the omitted default"
         );
     }
 
@@ -5385,7 +6779,7 @@ mod tests {
     }
 
     #[test]
-    fn pie_skips_blanks_keeps_zero_in_legend_and_slide_host_paints() {
+    fn pie_skips_blank_and_zero_slices_but_keeps_both_in_the_legend() {
         let gapped = line_ser(0, "S1", &[Some(1.0), None, Some(1.0)], "");
         let png = render_pie(&standard_pie_xml(
             &gapped,
@@ -5399,15 +6793,16 @@ mod tests {
         let a3 = FALLBACK_ACCENTS[2];
         let c1 = color_centroid(&rgb, w, h, a1, 2).unwrap();
         let c3 = color_centroid(&rgb, w, h, a3, 2).unwrap();
-        // Blank point is skipped: no accent2 wedge, first and third share the pie (right vs left).
-        assert!(
-            color_centroid(&rgb, w, h, a2, 2).is_none_or(|(_, _, n)| n < 8),
-            "a blank should not leave a filled slice in the missing category color"
-        );
+        // Blank point is skipped as a slice, but official Excel still shows it in the legend.
         assert!(c1.2 >= 80 && c3.2 >= 80);
         assert!(
             (c1.0 - c3.0).abs() > 20.0,
             "the two remaining slices should sit on opposite sides"
+        );
+        let blank_hits = color_centroid(&rgb, w, h, a2, 2).map(|c| c.2).unwrap_or(0);
+        assert!(
+            blank_hits > 0 && blank_hits < 80,
+            "a blank should appear in the legend, not as a slice; hits={blank_hits}"
         );
 
         let with_zero = line_ser(0, "S1", &[Some(1.0), Some(0.0), Some(1.0)], "");

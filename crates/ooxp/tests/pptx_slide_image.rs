@@ -181,6 +181,188 @@ fn missing_page_background_is_white() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
+fn export_two_stop_page_grad(start: &str, end: &str) -> (u32, u32, Vec<u8>) {
+    let src = tmp("grad-bg-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "slide:1",
+                "color": start,
+                "fill": { "kind": "gradient", "color": end }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    decode_rgb(&std::fs::read(&out).unwrap())
+}
+
+#[test]
+fn two_stop_linear_page_background_follows_the_office_curve() {
+    let (w, h, rgb) = export_two_stop_page_grad("000000", "FFFFFF");
+    assert_eq!((w, h), (1280, 720));
+    // Official lock points from PowerPoint 16.0 Slide.Export 1280x720
+    // (CLEAN_PUBLIC_OFFICE_EXPORT, mid-ramp exact with the shape S-curve).
+    for y in [180u32, 360, 540, 630] {
+        let left = pixel(&rgb, w, 0, y);
+        let mid = pixel(&rgb, w, w / 2, y);
+        let right = pixel(&rgb, w, w - 1, y);
+        assert_eq!(left, mid, "row {y} should be constant");
+        assert_eq!(right, mid, "row {y} should be constant");
+    }
+    assert_eq!(pixel(&rgb, w, 0, 180), [105, 105, 105]);
+    assert_eq!(pixel(&rgb, w, 0, 360), [186, 186, 186]);
+    assert_eq!(pixel(&rgb, w, 0, 540), [238, 238, 238]);
+    assert_eq!(pixel(&rgb, w, 0, 630), [250, 250, 250]);
+    assert_eq!(pixel(&rgb, w, 0, 719), [255, 255, 255]);
+    let top = pixel(&rgb, w, 0, 0);
+    assert!(
+        top[0] < 16 && top == pixel(&rgb, w, w - 1, 0),
+        "top should be near black, got {top:?}"
+    );
+
+    let (w2, h2, rgb2) = export_two_stop_page_grad("FF0000", "0000FF");
+    assert_eq!((w2, h2), (1280, 720));
+    assert_eq!(pixel(&rgb2, w2, 0, 180), [238, 0, 105]);
+    assert_eq!(pixel(&rgb2, w2, 0, 360), [186, 0, 186]);
+    assert_eq!(pixel(&rgb2, w2, 0, 540), [105, 0, 238]);
+    assert_eq!(pixel(&rgb2, w2, w2 / 2, 360), [186, 0, 186]);
+}
+
+#[test]
+fn two_stop_linear_page_background_is_inherited() {
+    let src = tmp("grad-bg-inherit-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg-inherit");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "master:1",
+                "color": "000000",
+                "fill": { "kind": "gradient", "color": "FFFFFF" }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg-inherit").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_rgb(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 360), [186, 186, 186]);
+    assert_eq!(pixel(&rgb, w, w - 1, 360), [186, 186, 186]);
+}
+
+#[test]
+fn translucent_page_gradient_stays_white() {
+    let src = tmp("grad-bg-alpha-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "presentation": { "slides": [{ "shapes": [{ "text": "x" }] }] }
+    }));
+    let tree = {
+        let RunOutput::Inspect(tree) = run_ok(json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })) else {
+            panic!("inspect");
+        };
+        tree
+    };
+    let shape_id = tree["slides"][0]["shapes"][0]["id"].as_str().unwrap();
+    let deck = tmp("grad-bg-alpha");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "apply",
+        "path": src.to_string_lossy(),
+        "output": deck.to_string_lossy(),
+        "ops": [
+            { "op": "deleteShape", "id": shape_id },
+            {
+                "op": "setPageBackground",
+                "id": "slide:1",
+                "color": "000000",
+                "alpha": 50000,
+                "fill": { "kind": "gradient", "color": "FFFFFF" }
+            }
+        ]
+    }));
+    let out = tmp("grad-bg-alpha").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": deck.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, h, rgb) = decode_rgb(&std::fs::read(&out).unwrap());
+    assert_eq!((w, h), (1280, 720));
+    assert_eq!(pixel(&rgb, w, 0, 0), [255, 255, 255]);
+    assert_eq!(pixel(&rgb, w, 0, 360), [255, 255, 255]);
+}
+
 #[test]
 fn opaque_page_background_one_to_one_is_stable() {
     let png = unique_pattern_png(96, 96);
@@ -3752,6 +3934,151 @@ fn horizontal_merge_fill_spans_columns_with_table_style() {
         [0x00, 0xAA, 0x00],
         "right of merge should keep anchor fill {mid_right:?}"
     );
+    // 首行底边 4px 实心白条（显式填色之上），横向铺满合并格。
+    for x in [192u32, 287, 383] {
+        for y in 190u32..=193 {
+            assert_eq!(pixel(&rgb, w, x, y), [255, 255, 255], "header bar {x},{y}");
+        }
+    }
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 40), [0x00, 0xAA, 0x00]);
+}
+
+fn empty_table_cells(rows: usize, cols: usize) -> Vec<Vec<serde_json::Value>> {
+    vec![vec![json!({ "text": "" }); cols]; rows]
+}
+
+fn export_style_table_slide(
+    tag: &str,
+    rows: usize,
+    cols: usize,
+    edit: impl FnOnce(String) -> String,
+) -> (u32, Vec<u8>) {
+    let deck = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": rows,
+                    "cols": cols,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 2743200,
+                    "cy": 1828800,
+                    "cells": empty_table_cells(rows, cols)
+                }]
+            }]
+        }
+    }));
+    let painted = tmp(&format!("{tag}-painted"));
+    rewrite_slide(&deck, &painted, edit);
+    let out = tmp(&format!("{tag}.png")).with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    (w, rgb)
+}
+
+#[test]
+fn medium_style2_paints_accent1_header_and_linear_bands() {
+    let (w, rgb) = export_style_table_slide("style-3x2-plain", 3, 2, |xml| xml);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [0x4F, 0x81, 0xBD]);
+    assert_eq!(pixel(&rgb, w, 192 + 180, 96 + 20), [0x4F, 0x81, 0xBD]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [233, 237, 244]);
+    for x in [192u32, 335, 479] {
+        for y in 158u32..=161 {
+            assert_eq!(pixel(&rgb, w, x, y), [255, 255, 255], "header bar {x},{y}");
+        }
+    }
+}
+
+#[test]
+fn medium_style2_first_row_off_starts_bands_at_row_zero() {
+    let (w, rgb) = export_style_table_slide("style-3x2-firstRow0", 3, 2, |xml| {
+        xml.replacen("firstRow=\"1\"", "firstRow=\"0\"", 1)
+    });
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [233, 237, 244]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [208, 216, 232]);
+    assert_ne!(pixel(&rgb, w, 192, 158), [255, 255, 255]);
+}
+
+#[test]
+fn medium_style2_horizontal_merge_does_not_paint_an_inner_vertical() {
+    let (w, rgb) = export_style_table_slide("style-3x2-body-merge", 3, 2, |xml| {
+        let mut out = xml;
+        // 正文第一行（第二个 a:tr）左格 gridSpan=2，右格 hMerge。
+        let first_tr = out.find("<a:tr").expect("tr0");
+        let second_tr = out[first_tr + 5..].find("<a:tr").expect("tr1") + first_tr + 5;
+        let first_tc = out[second_tr..].find("<a:tc>").expect("tc") + second_tr;
+        out.insert_str(first_tc + 5, " gridSpan=\"2\"");
+        let second_tc = out[first_tc + 10..].find("<a:tc>").expect("tc2") + first_tc + 10;
+        out.insert_str(second_tc + 5, " hMerge=\"1\"");
+        out
+    });
+    // 合并行实心区跨过原列缝 x=336，不应再露出页底或第二条带色。
+    let y = 96 + 64 + 20;
+    assert_eq!(pixel(&rgb, w, 192 + 40, y), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 336, y), [208, 216, 232]);
+    assert_eq!(pixel(&rgb, w, 192 + 200, y), [208, 216, 232]);
+    // 未合并的末行仍是第二条带，列缝处本子合同不画细样式内线，因此也是带色。
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [233, 237, 244]);
+}
+
+#[test]
+fn medium_style2_header_and_bands_follow_theme_accent1() {
+    let deck = tmp("style-3x2-accent-red");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": deck.to_string_lossy(),
+        "presentation": {
+            "slides": [{
+                "tables": [{
+                    "rows": 3,
+                    "cols": 2,
+                    "x": 1828800,
+                    "y": 914400,
+                    "cx": 2743200,
+                    "cy": 1828800,
+                    "cells": empty_table_cells(3, 2)
+                }]
+            }]
+        }
+    }));
+    let painted = tmp("style-3x2-accent-red-painted");
+    rewrite_named(&deck, &painted, |name, xml| {
+        if name == "ppt/theme/theme1.xml" {
+            xml.replacen(
+                "<a:accent1><a:srgbClr val=\"4F81BD\"/></a:accent1>",
+                "<a:accent1><a:srgbClr val=\"FF0000\"/></a:accent1>",
+                1,
+            )
+        } else {
+            xml
+        }
+    });
+    let out = tmp("style-3x2-accent-red.png").with_extension("png");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "exportSlideImage",
+        "path": painted.to_string_lossy(),
+        "id": "slide:1",
+        "output": out.to_string_lossy()
+    }));
+    let (w, _, rgb) = decode_png(&std::fs::read(&out).unwrap());
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 20), [255, 0, 0]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 64 + 20), [255, 203, 203]);
+    assert_eq!(pixel(&rgb, w, 192 + 40, 96 + 128 + 20), [255, 231, 231]);
+    assert_eq!(pixel(&rgb, w, 192, 158), [255, 255, 255]);
 }
 
 #[test]

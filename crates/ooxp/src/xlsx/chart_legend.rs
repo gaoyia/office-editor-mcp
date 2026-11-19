@@ -1,4 +1,4 @@
-//! Legend semantics live separately from chart axes. All dimensions are fixed-96 pixels.
+//! Legend semantics live separately from chart axes. Dimensions follow the export DPI; 96 is the historical default.
 use super::*;
 
 #[derive(Clone, PartialEq)]
@@ -374,6 +374,7 @@ pub(super) struct Layout<'a> {
     auto: Rect,
     horizontal: bool,
     rows: Vec<Vec<usize>>,
+    dpi: RenderDpi,
 }
 impl<'a> Layout<'a> {
     pub(super) fn new(
@@ -382,21 +383,23 @@ impl<'a> Layout<'a> {
         font: Option<&Font>,
     ) -> Result<Self, Error> {
         let spec = &chart.legend_spec;
-        let px = (spec.style.pt * DPI / 72.0) as f32;
+        let px = canvas.dpi.pt_to_px_font(spec.style.pt) as f32;
         #[cfg(not(windows))]
         if spec.style.bold || spec.style.italic || !spec.style.name.is_empty() {
             return Err(unsupported());
         }
         let face = if spec.style.name.is_empty() {
-            let face = super::super::chart_gdi::Face::open(px, spec.style.bold);
+            let face =
+                super::super::chart_gdi::Face::open_dpi(px, spec.style.bold, canvas.dpi.get());
             #[cfg(windows)]
             let face = if spec.style.italic {
                 face.and_then(|f| {
-                    super::super::chart_gdi::Face::open_cell(
+                    super::super::chart_gdi::Face::open_cell_dpi(
                         px,
                         spec.style.bold,
                         true,
                         f.family_name(),
+                        canvas.dpi.get(),
                     )
                 })
             } else {
@@ -404,11 +407,12 @@ impl<'a> Layout<'a> {
             };
             face
         } else {
-            let face = super::super::chart_gdi::Face::open_cell(
+            let face = super::super::chart_gdi::Face::open_cell_dpi(
                 px,
                 spec.style.bold,
                 spec.style.italic,
                 &spec.style.name,
+                canvas.dpi.get(),
             );
             #[cfg(windows)]
             if face
@@ -439,7 +443,10 @@ impl<'a> Layout<'a> {
                     .unwrap_or_else(|| text_width(font, None, &series.name, px));
                 items.push(Item {
                     series,
-                    width: key + space + width,
+                    width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
+                        as f64
+                        + space
+                        + width,
                 });
             }
         }
@@ -474,10 +481,10 @@ impl<'a> Layout<'a> {
         if chart.title.is_some() {
             match spec.pos {
                 Some(LegendPos::Top | LegendPos::TopRight) => {
-                    auto.y += f64::from(LEGEND_TITLE_BAND)
+                    auto.y += f64::from(canvas.sx(LEGEND_TITLE_BAND))
                 }
                 Some(LegendPos::Right | LegendPos::Left) => {
-                    auto.y += f64::from(LEGEND_TITLE_BAND) / 2.0
+                    auto.y += f64::from(canvas.sx(LEGEND_TITLE_BAND)) / 2.0
                 }
                 _ => (),
             }
@@ -519,6 +526,7 @@ impl<'a> Layout<'a> {
             auto,
             horizontal,
             rows: Vec::new(),
+            dpi: canvas.dpi,
         };
         result.flow()?;
         if !spec.legacy
@@ -582,9 +590,12 @@ impl<'a> Layout<'a> {
         }
         match self.spec.pos {
             Some(LegendPos::Right | LegendPos::TopRight) => {
-                r[2] = (self.auto.w + f64::from(LEGEND_PLOT_GAP) - f64::from(INSET_TOP))
-                    .ceil()
-                    .max(f64::from(INSET_RIGHT - INSET_TOP)) as i32
+                r[2] = (self.auto.w + f64::from(self.dpi.scale_px(LEGEND_PLOT_GAP))
+                    - f64::from(self.dpi.scale_px(INSET_TOP)))
+                .ceil()
+                .max(f64::from(
+                    self.dpi.scale_px(INSET_RIGHT) - self.dpi.scale_px(INSET_TOP),
+                )) as i32
             }
             Some(LegendPos::Left) => r[0] = (self.auto.w + self.space * 2.0).ceil() as i32,
             Some(LegendPos::Top) => r[1] = (self.auto.h + self.space * 2.0).ceil() as i32,
@@ -618,16 +629,22 @@ impl<'a> Layout<'a> {
                     chart.kind,
                     x.round() as i32,
                     ky.round() as i32,
-                    (x + self.key).round() as i32,
+                    x.round() as i32
+                        + super::legend_key_width(chart.kind, self.key.round() as i32, canvas.dpi),
                     (ky + self.key).round() as i32,
                     ser.color.unwrap_or(chart.accents[ser.slot % 6]),
+                    ser.marker,
                 );
                 draw_text(
                     canvas,
                     font,
                     self.face.as_ref(),
                     &ser.name,
-                    x + self.key + self.space,
+                    x + f64::from(super::legend_key_width(
+                        chart.kind,
+                        self.key.round() as i32,
+                        canvas.dpi,
+                    )) + self.space,
                     y,
                     self.px,
                     self.spec.style.color,

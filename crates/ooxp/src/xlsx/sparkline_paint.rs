@@ -3,14 +3,20 @@
 //! 柱形槽从第 3 列起、右端留 2，柱占槽的三分之二。柱是纯色，没有抗锯齿。
 //! 盈亏复用同一套横向 `column_x`；正半区上沿→中线上一像素，负半区中线下一像素→下沿；0/空不画。
 //! 日期轴：用组上 `xm:f` 的数值序列（Excel 日期序列）把点放到时间比例位置，而不是按下标等距。
-//! 等距日期与原分类轴同一套公式，使连续等差日期与关闭日期轴的像素一致；不等距日期按 (date-min)/(max-min)*(n-1) 映射到该公式的槽坐标。不排序、不把缺日期或非数值日期当成等距轴。
+//! 等距日期与原分类轴同一套公式，使连续等差日期与关闭日期轴的像素一致。不等距日期按
+//! (date-min)/(max-min) 把最小/最大放到连续左右沿（96 dpi 各留 `DATE_PAD_X` 像素，再按请求
+//! dpi 四舍五入；右沿为 `width-1-left`），不再映射到分类槽。不排序、不把缺日期或非数值日期当成等距轴。
 
+use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
 
 const PAD_X: f64 = 2.0;
 const TOP: f64 = 5.0;
 const BOTTOM: f64 = 4.0;
 const MAX_PX: u32 = 4096;
+/// 不等距日期轴在 96 dpi 下距左右边缘的像素。官方 231 宽、106 dpi 上 `scale_px(12)=13`，
+/// 连续左右沿为 13 与 `width-1-13=217`，与 CopyPicture 柱心/折线端点一致。
+const DATE_PAD_X: i32 = 12;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EmptyCells {
@@ -35,15 +41,17 @@ pub(crate) struct LineSpec {
 pub(crate) struct Raster {
     pub width: u32,
     pub height: u32,
+    dpi: RenderDpi,
     rgb: Vec<u8>,
     coverage: Vec<f32>,
 }
 impl Raster {
-    fn new(width: u32, height: u32) -> Self {
+    fn new(width: u32, height: u32, dpi: RenderDpi) -> Self {
         let n = width as usize * height as usize;
         Self {
             width,
             height,
+            dpi,
             rgb: vec![255; n * 3],
             coverage: vec![0.0; n],
         }
@@ -65,18 +73,28 @@ impl Raster {
                 rgb.extend_from_slice(&self.composite_pixel(x, y, [255; 3]));
             }
         }
-        encode_png(self.width, self.height, &rgb)
+        encode_png(self.width, self.height, &rgb, self.dpi)
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Raster, Error> {
+    raster_line_at(width, height, spec, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn raster_line_at(
+    width: u32,
+    height: u32,
+    spec: &LineSpec,
+    dpi: RenderDpi,
+) -> Result<Raster, Error> {
     if !(1..=MAX_PX).contains(&width) || !(1..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if !(spec.weight_px.is_finite() && spec.weight_px > 0.0) {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
+    let mut px = Raster::new(width, height, dpi);
     let n = spec.values.len();
     if let Some(dates) = spec.dates.as_ref() {
         if dates.len() != n {
@@ -92,8 +110,17 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
             for run in runs {
                 let mut prev: Option<(f64, f64)> = None;
                 for (index, value) in run {
-                    let u = slot_of(index, n, spec.dates.as_deref())?;
-                    let here = point_xy(u, n, value, lo, hi, width, height);
+                    let here = plotted_xy(
+                        index,
+                        n,
+                        value,
+                        lo,
+                        hi,
+                        width,
+                        height,
+                        dpi,
+                        spec.dates.as_deref(),
+                    )?;
                     if let Some(from) = prev {
                         stamp(&mut cover, width, height, from, here, spec.weight_px);
                     }
@@ -114,12 +141,24 @@ pub(crate) fn raster_line(width: u32, height: u32, spec: &LineSpec) -> Result<Ra
 }
 
 /// 非负柱形。宽至少 6、高至少 9，否则上下左右的留白叠在一起。
+#[allow(dead_code)]
 pub(crate) fn raster_columns(
     width: u32,
     height: u32,
     values: &[f64],
     colors: &[[u8; 3]],
     dates: Option<&[f64]>,
+) -> Result<Raster, Error> {
+    raster_columns_at(width, height, values, colors, dates, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn raster_columns_at(
+    width: u32,
+    height: u32,
+    values: &[f64],
+    colors: &[[u8; 3]],
+    dates: Option<&[f64]>,
+    dpi: RenderDpi,
 ) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
@@ -130,18 +169,17 @@ pub(crate) fn raster_columns(
     {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
+    let mut px = Raster::new(width, height, dpi);
     let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
     let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let plot_h = height as i32 - 8;
-    let bottom = height as i32 - 4;
+    let plot_h = height as i32 - dpi.scale_px(8);
+    let bottom = height as i32 - dpi.scale_px(4);
     for (index, value) in values.iter().enumerate() {
         let bar = bar_px(*value, lo, hi, plot_h);
         if bar <= 0 {
             continue;
         }
-        let u = slot_of(index, values.len(), dates)?;
-        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
+        let Some((x0, x1)) = column_x_of(width, values.len(), index, dates, dpi) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -166,6 +204,7 @@ pub(crate) fn raster_columns(
 /// 有元素但无 `rgb`（theme/tint）→ 上游 NI。上沿/下沿是 CopyPicture 几何常数，不是单样本硬编码色。
 /// 证据：Excel 16.0 CopyPicture（2026-11-17 Asia/Shanghai）G2 `+/-` 缺省色实心与 20px 行 5..=10/11..=16；
 /// 全 0 无柱；另有自定义色/高宽单元。
+#[allow(dead_code)]
 pub(crate) fn raster_win_loss(
     width: u32,
     height: u32,
@@ -175,15 +214,37 @@ pub(crate) fn raster_win_loss(
     color_negatives: bool,
     dates: Option<&[f64]>,
 ) -> Result<Raster, Error> {
+    raster_win_loss_at(
+        width,
+        height,
+        values,
+        series,
+        negative,
+        color_negatives,
+        dates,
+        RenderDpi::DEFAULT,
+    )
+}
+
+pub(crate) fn raster_win_loss_at(
+    width: u32,
+    height: u32,
+    values: &[Option<f64>],
+    series: [u8; 3],
+    negative: [u8; 3],
+    color_negatives: bool,
+    dates: Option<&[f64]>,
+    dpi: RenderDpi,
+) -> Result<Raster, Error> {
     if !(6..=MAX_PX).contains(&width) || !(9..=MAX_PX).contains(&height) {
         return Err(unsupported());
     }
     if values.is_empty() {
         return Err(unsupported());
     }
-    let mut px = Raster::new(width, height);
-    let top = 5_i32;
-    let bottom = height as i32 - 4;
+    let mut px = Raster::new(width, height, dpi);
+    let top = dpi.scale_px(5);
+    let bottom = height as i32 - dpi.scale_px(4);
     let plot_h = bottom - top + 1;
     if plot_h < 2 {
         return Err(unsupported());
@@ -200,8 +261,7 @@ pub(crate) fn raster_win_loss(
         if !n.is_finite() || *n == 0.0 {
             continue;
         }
-        let u = slot_of(index, values.len(), dates)?;
-        let Some((x0, x1)) = column_x_at(width, values.len(), u) else {
+        let Some((x0, x1)) = column_x_of(width, values.len(), index, dates, dpi) else {
             return Err(unsupported());
         };
         if x1 < x0 {
@@ -232,12 +292,17 @@ fn column_x(width: u32, count: usize, index: usize) -> Option<(i32, i32)> {
     column_x_at(width, count, index as f64)
 }
 
+#[allow(dead_code)]
 fn column_x_at(width: u32, count: usize, u: f64) -> Option<(i32, i32)> {
+    column_x_at_dpi(width, count, u, RenderDpi::DEFAULT)
+}
+
+fn column_x_at_dpi(width: u32, count: usize, u: f64, dpi: RenderDpi) -> Option<(i32, i32)> {
     if !u.is_finite() || count == 0 {
         return None;
     }
     let n = i64::try_from(count).ok()?;
-    let span = i64::from(width) - 5;
+    let span = i64::from(width) - i64::from(dpi.scale_px(5));
     if n <= 0 || span <= 0 {
         return None;
     }
@@ -247,13 +312,15 @@ fn column_x_at(width: u32, count: usize, u: f64) -> Option<(i32, i32)> {
     if !start.is_finite() || !end.is_finite() {
         return None;
     }
-    let x0 = 3 + start.floor() as i64;
-    let x1 = 3 + end.ceil() as i64 - 1;
+    let origin = i64::from(dpi.scale_px(3));
+    let x0 = origin + start.floor() as i64;
+    let x1 = origin + end.ceil() as i64 - 1;
     Some((i32::try_from(x0).ok()?, i32::try_from(x1).ok()?))
 }
 
 /// 日期轴把序列映射到分类槽坐标：等距日期时 `slot == index`，与关闭日期轴一致。
 /// `n == 1` 时落在唯一槽；`n >= 2` 且最大最小日期相同则无法定比例，报错。
+/// 不等距日期的出图不再使用该槽坐标，而走 `date_axis_center` 的连续最小-最大范围。
 pub(crate) fn date_slot(dates: &[f64], index: usize) -> Result<f64, Error> {
     let n = dates.len();
     let date = *dates.get(index).ok_or_else(unsupported)?;
@@ -287,6 +354,90 @@ fn slot_of(index: usize, n: usize, dates: Option<&[f64]>) -> Result<f64, Error> 
             date_slot(dates, index)
         }
     }
+}
+
+fn dates_use_category_slots(dates: &[f64]) -> Result<bool, Error> {
+    if dates.len() <= 1 {
+        date_slot(dates, 0)?;
+        return Ok(true);
+    }
+    for i in 0..dates.len() {
+        if (date_slot(dates, i)? - i as f64).abs() > 1e-9 {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// 不等距日期轴的连续横坐标（像素中心，官方 231×54@106 为 13 / 33.4 / 217）。
+/// 等距日期不走这里。
+fn date_axis_center(width: u32, dpi: RenderDpi, dates: &[f64], index: usize) -> Result<f64, Error> {
+    let frac = date_frac(dates, index)?;
+    let left = f64::from(dpi.scale_px(DATE_PAD_X));
+    let right = f64::from(width) - 1.0 - left;
+    if !(left.is_finite() && right.is_finite()) || right < left {
+        return Err(unsupported());
+    }
+    let x = left + frac * (right - left);
+    if !x.is_finite() {
+        return Err(unsupported());
+    }
+    Ok(x)
+}
+
+fn date_frac(dates: &[f64], index: usize) -> Result<f64, Error> {
+    if dates.len() <= 1 {
+        date_slot(dates, index)?;
+        return Ok(0.0);
+    }
+    let slot = date_slot(dates, index)?;
+    Ok(slot / (dates.len() as f64 - 1.0))
+}
+
+fn plotted_xy(
+    index: usize,
+    n: usize,
+    value: f64,
+    lo: f64,
+    hi: f64,
+    width: u32,
+    height: u32,
+    dpi: RenderDpi,
+    dates: Option<&[f64]>,
+) -> Result<(f64, f64), Error> {
+    let u = slot_of(index, n, dates)?;
+    let (_, y) = point_xy(u, n, value, lo, hi, width, height, dpi);
+    if let Some(dates) = dates {
+        if !dates_use_category_slots(dates)? {
+            let x = date_axis_center(width, dpi, dates, index)?.round() + 0.5;
+            return Ok((x, y));
+        }
+    }
+    Ok(point_xy(u, n, value, lo, hi, width, height, dpi))
+}
+
+fn column_x_of(
+    width: u32,
+    count: usize,
+    index: usize,
+    dates: Option<&[f64]>,
+    dpi: RenderDpi,
+) -> Option<(i32, i32)> {
+    let u = slot_of(index, count, dates).ok()?;
+    if let Some(dates) = dates {
+        if !dates_use_category_slots(dates).ok()? {
+            let (i0, i1) = column_x_at_dpi(width, count, 0.0, dpi)?;
+            let bar = i1 - i0;
+            if bar < 0 {
+                return None;
+            }
+            let cx = date_axis_center(width, dpi, dates, index).ok()?.round() as i32;
+            let x0 = cx - bar / 2;
+            let x1 = x0 + bar;
+            return Some((x0, x1));
+        }
+    }
+    column_x_at_dpi(width, count, u, dpi)
 }
 
 fn bar_px(value: f64, lo: f64, hi: f64, plot_h: i32) -> i32 {
@@ -365,16 +516,28 @@ fn runs(empty: EmptyCells, plotted: &[(usize, f64)]) -> Vec<Vec<(usize, f64)>> {
 }
 
 /// 公式给出的是像素序号。画的时候落到该像素中心。`u` 是分类下标或日期映射后的槽坐标。
-fn point_xy(u: f64, n: usize, value: f64, lo: f64, hi: f64, width: u32, height: u32) -> (f64, f64) {
+fn point_xy(
+    u: f64,
+    n: usize,
+    value: f64,
+    lo: f64,
+    hi: f64,
+    width: u32,
+    height: u32,
+    dpi: RenderDpi,
+) -> (f64, f64) {
     let w = f64::from(width);
     let h = f64::from(height);
-    let x = (PAD_X + (u + 0.5) * (w - PAD_X * 2.0) / n as f64).round();
+    let pad = dpi.scale_f(PAD_X);
+    let top = dpi.scale_f(TOP);
+    let bottom = dpi.scale_f(BOTTOM);
+    let x = (pad + (u + 0.5) * (w - pad * 2.0) / n as f64).round();
     let t = if (hi - lo).abs() < 1e-9 {
         1.0
     } else {
         ((value - lo) / (hi - lo)).clamp(0.0, 1.0)
     };
-    let y = (TOP + (1.0 - t) * (h - TOP - BOTTOM)).round();
+    let y = (top + (1.0 - t) * (h - top - bottom)).round();
     (x + 0.5, y + 0.5)
 }
 
@@ -438,11 +601,20 @@ fn blend(px: &mut Raster, width: u32, x: u32, y: u32, cov: f64, color: [u8; 3]) 
     px.coverage[i] = cov as f32;
 }
 
-fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: u32, h: u32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    // 仅非默认 DPI 写入 pHYs，使省略 dpi / dpi=96 的既有 PNG 字节保持不变。
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);
@@ -814,6 +986,35 @@ mod tests {
             left < mid && mid < right,
             "peak should follow the date, not the category mid; left={left} mid={mid} right={right}"
         );
+    }
+
+    fn dpi106() -> RenderDpi {
+        let mut obj = serde_json::Map::new();
+        obj.insert("dpi".into(), serde_json::json!(106));
+        RenderDpi::from_request(&obj).unwrap()
+    }
+
+    #[test]
+    fn uneven_dates_use_official_continuous_range_not_category_slots() {
+        let dates = [0.0, 1.0, 10.0];
+        let dpi = dpi106();
+        // Official 231-wide CopyPicture: centers 13, 13+0.1*204=33.4, 217.
+        assert!((date_axis_center(231, dpi, &dates, 0).unwrap() - 13.0).abs() < 1e-9);
+        assert!((date_axis_center(231, dpi, &dates, 1).unwrap() - 33.4).abs() < 1e-9);
+        assert!((date_axis_center(231, dpi, &dates, 2).unwrap() - 217.0).abs() < 1e-9);
+        // 12 px @96 is the unique integer pad that rounds to official 13 @106.
+        assert_eq!(dpi.scale_px(12), 13);
+        assert_eq!(RenderDpi::DEFAULT.scale_px(12), 12);
+        // Equal dates must keep the slot formula, not the continuous 13-217 range.
+        let equal = [10.0, 11.0, 12.0];
+        assert!(dates_use_category_slots(&equal).unwrap());
+        assert!(!dates_use_category_slots(&dates).unwrap());
+        let (x_eq, y_eq) = plotted_xy(1, 3, 8.0, 1.0, 8.0, 231, 54, dpi, Some(&equal)).unwrap();
+        let (x_cat, y_cat) = plotted_xy(1, 3, 8.0, 1.0, 8.0, 231, 54, dpi, None).unwrap();
+        assert!((x_eq - x_cat).abs() < 1e-9);
+        assert!((y_eq - y_cat).abs() < 1e-9);
+        let (x_uneven, _) = plotted_xy(1, 3, 8.0, 1.0, 8.0, 231, 54, dpi, Some(&dates)).unwrap();
+        assert!((x_uneven - 33.5).abs() < 1e-9);
     }
 
     #[test]

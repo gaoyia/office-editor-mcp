@@ -14,7 +14,34 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 xlsx 另有 `exportChartImage`：按图表 id 把簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图或普通饼图画成 PNG。像素不进 inspect。
 xlsx 另有 `exportSparklineImage`：按迷你图组 id 把一条折线、非负柱形或盈亏画成 PNG；合法日期轴按日期比例定位。像素不进 inspect。
 xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。像素不进 inspect。画不了的对象让整表失败。
-pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
+`exportChartImage`、`exportSparklineImage`、`exportSheetImage` 可写可选整数字段 `dpi`（24 到 600）。省略或 `96` 时与现有 96 dpi 出图像素一致。按该 DPI 原生计算坐标、字体、描边和间距，不是先画 96 再拉伸位图。只影响本次 PNG，不改源包，也不改系统 DPI。非默认 DPI 会写入 pHYs（像素/米）；省略或 96 不写该块，以免改既有字节。宽或高超出 1 到 4096 像素仍报 NotImplemented。`exportSlideImage` 与 `exportPageImage` 本切片不接受此字段。
+
+示例（库默认仍是 96；对照官方 106 dpi 窗口时显式传入）：
+
+```json
+{"schemaVersion":1,"action":"exportSparklineImage","path":"book.xlsx","id":"sheet:Sheet1/spark:1","output":"spark.png","dpi":106}
+```
+
+```json
+{"schemaVersion":1,"action":"exportChartImage","path":"book.xlsx","id":"sheet:Sheet1/chart:1","output":"chart.png","dpi":106}
+```
+
+```json
+{"schemaVersion":1,"action":"exportSheetImage","path":"book.xlsx","id":"sheet:Sheet1","output":"sheet.png","dpi":106}
+```
+
+命令行用 `--input` 读取同一份领域 JSON（文件路径，或 `-` 表示标准输入）。不要把 JSON 路径当作位置参数，命令行会拒绝并退出码 2。
+
+```text
+ooxp --input spark-106.json
+```
+
+`spark-106.json` 的内容即上面第一份 `exportSparklineImage` 请求。也可以：
+
+```text
+ooxp --input - < spark-106.json
+```
+pptx 另有 `exportSlideImage`：按幻灯片 id 把页底（没有颜色变换的纯色、不透明拉伸铺满 PNG，以及两停点、直角、不透明线性渐变）、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
 docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁 Calibri 多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或无文字表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`），或 default 页眉拉丁 Calibri（`pgMar/@header` 顶距，正文原点不位移），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/样式/表内文字、奇偶/首页页眉、页脚、页眉内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
@@ -136,7 +163,7 @@ xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRa
 
 `help` 不读文件，也不改文件。用来查某个操作该怎么填，避免把别的格式的字段套过来。
 
-本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线/非负柱形/盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底（没有颜色变换的纯色、不透明拉伸铺满 PNG，以及两停点、直角、不透明线性渐变）、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。两停点、直角、不透明的线性页底按同一条 Office 16.0 S 形曲线铺满整页；半透明、路径、非直角、不是 0/100000 两停点，或主题 `bgRef` 渐变仍铺白。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 没有字的页，以及 Windows 上单节、单段（可按空格换行）的不透明拉丁 Calibri 正文，可以按 `exportPageImage` 写成 PNG。第二段、表格、图和页眉还不画。像素不进 inspect。机器上有 Microsoft Office 或 WPS 时，可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -2412,7 +2439,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 一组里只能有一条迷你图，落点只能是一个格子。落在合并单元格里报 `NotImplemented`
-- 宽高是这个格子的列宽和行高，96 dpi，和布局用的像素同一套。缺省列 8.43 字符是 64 像素，缺省行 15 磅是 20 像素
+- 宽高是这个格子的列宽和行高，缺省 96 dpi。列宽与工作表共用同一套几何：按请求 `dpi`（缺省 96）重测 MDW 后套公式，Calibri 11 缺省列在 96 仍是 64、在 106 是 72，不再把 96 像素按 `round(64*dpi/96)` 放大成 71。迷你图宿主行高仍用布局的 `round(emu*dpi/914400)`（与工作表 `excel_row_px` 的先 96 截断再放大不是同一条路径，20 磅等自定义行可能差 1 像素）；未写行高的 Calibri 11 与 等线 11 均为 14.25 磅（96 下 19 像素），不再把 Calibri 11 当成 15 磅/20 像素
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 点用包里已有的格子缓存，不算公式。公式不是本簿一块连续区域时报 `NotImplemented`
 - 空格子按 `displayEmptyCellsAs`。缺省当 `zero`。`gap` 断开，`span` 跨过空格连线，`zero` 当 0
@@ -2420,7 +2447,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 纵轴上沿是 5 像素，下沿是高度减 4 的那一行。最小值和最大值取这条线自己的数。两者相同，线画在上沿
 - `minAxisType` / `maxAxisType` 缺省是 `individual`。`group` 在这一组只有一条时与它相同。`custom` 用 `manualMin` / `manualMax`，缺了或最小值不小于最大值时报 `NotImplemented`。超出轴端的数收到轴端
 - 线色用 `colorSeries` 的 `rgb`。没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
-- 线宽缺省 0.75 磅，按 96 dpi 换成像素
+- 线宽缺省 0.75 磅，按请求 DPI（缺省 96）换成像素
 - 柱形在每个点都是有限非负数、没有空格子时可以画。柱是纯色，没有抗锯齿。色用 `colorSeries` 的 `rgb`，没有这层时用 `376092`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形横向：格子宽减去 5 后按点数等分，槽从第 3 列像素起。第 i 根柱（从 0 起）占这一槽正中的三分之二。左缘是 `floor(3 + (i + 1/6) × 槽宽)`，右缘含端点是 `ceil(3 + (i + 5/6) × 槽宽) - 1`。右缘正好落在整数上时，这一列不画
 - 柱形纵向和折线同一段：上沿是 5，下沿含端点是高度减 4。绘图高是高度减 8。最小值和最大值取这些数自己。全部相同且大于 0 时每根柱都铺满。全部是 0 时不画。其余柱高是 `floor((值 - 最小) / (最大 - 最小) × (绘图高 - 1)) + 1`，底边贴下沿。值是 0 且最小值也是 0 时这一根不画，槽仍占着
@@ -2428,7 +2455,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 柱形的高点、低点、首点和末点换成对应颜色的纯色。同一根柱同时命中时，按低点、高点、首点、末点的顺序留第一种。并列的极值每根都换色。没有写出颜色时用 `D00000`。只有主题色、没有 `rgb`，或带透明，报 `NotImplemented`
 - 柱形上的 `markers` 不改变像素。负值着色打开但每个点都不是负数时，也不改变像素
 - 盈亏（`type=stacked`）：横向与柱形同一套槽公式；纵轴上沿 5、下沿 `height-4`，绘图高对半，正值铺上半、负值铺下半；`0` 与空槽不画。正色用 `colorSeries`（元素缺省时回落 Excel 新建缺省 `376092`；有元素无 `rgb` 则 NI），`negative` 为真时负色用 `colorNegative`（元素缺省回落 `D00000`；有元素无 `rgb` 则 NI），否则负值仍用系列色。paint 不写死样本色。`displayEmptyCellsAs` 只认 `gap`/`zero`（空都不画）；`span`、自定义轴、`displayXAxis`、`rightToLeft`、首末高低标记报 `NotImplemented`。日期轴与折线、柱形共用下面这条规则。Excel 16.0 CopyPicture 金样（2026-11-17 Asia/Shanghai）对 `+/-` 实心色与半高分界有独立证据；整图 73×22@~106 vs lib 64×19（本机 defaultRowHeight 14.3）sizeDiffer→pxBlocked，不改金样/DPI
-- `dateAxis` 打开时，组上的 `xm:f` 必须是与数值等长的单行或单列有限日期序列（Excel 序列数）。点按 `(date-min)/(max-min)×(n-1)` 映射到分类轴同一套槽公式，不排序；反向日期可以从右画到左。等距日期与关闭日期轴像素一致。`n=1` 时即使日期相同也落在第 0 槽。至少两点但全部日期相同、日期缺失或非数值、长度不合、二维区域报 `NotImplemented`，不回退成等距分类轴。`dateAxis` 关闭时忽略组上的日期公式。隐藏日期格子与数值同一套 `displayHidden`。折线、非负柱形和盈亏在原有子集内都按此定位；柱宽仍按点数和格子宽计算，日期很近时柱可以重叠。`insertSparkline` / `setSparkline` 本片不写 `dateAxis` 或日期公式。官方 CopyPicture 对照仍未做，不把本片自测当成官方通过。
+- `dateAxis` 打开时，组上的 `xm:f` 必须是与数值等长的单行或单列有限日期序列（Excel 序列数）。等距日期仍按分类轴同一套槽公式定位，与关闭日期轴像素一致；不等距日期按 `(date-min)/(max-min)` 把最小与最大放到连续左右沿（96 dpi 各留 12 像素，再按请求 dpi 四舍五入，右沿为 `width-1-left`），不再映射到分类槽。不排序；反向日期可以从右画到左。`n=1` 时即使日期相同也落在第 0 槽。至少两点但全部日期相同、日期缺失或非数值、长度不合、二维区域报 `NotImplemented`，不回退成等距分类轴。`dateAxis` 关闭时忽略组上的日期公式。隐藏日期格子与数值同一套 `displayHidden`。折线、非负柱形和盈亏在原有子集内都按此定位；柱宽仍按点数和格子宽计算，日期很近时柱可以重叠，不凭单图把官方 15px 柱宽写成通用公式。`insertSparkline` / `setSparkline` 本片不写 `dateAxis` 或日期公式。
 - 折线上的标记、高点、低点、首点、末点、负值、横坐标、从右到左，报 `NotImplemented`
 - 源格子落在隐藏的行或列上，且没有 `displayHidden`，报 `NotImplemented`。`displayHidden` 为真时，隐藏格子的缓存照样画
 - docx 与 pptx 报 `InvalidField`
@@ -2458,22 +2485,22 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
 - 范围取 `dimension` 和有格子的外框的并集。只有一边时用那一边。两边都空报 `NotImplemented`
-- 可选 `tilePx`（1–4096）：按该边长切块导出，**不**先分配整表再裁。未超限时仍一张 PNG，像素与不加 `tilePx` 一致；超限时写出多张 `{stem}-r{row}c{col}.png`，响应 `paths` 列出全部路径，单块边长不超过 `tilePx`。不设 `tilePx` 时一边超过 4096 仍整表 `NotImplemented`（默认不绕上限）。`rightToLeft` 切块报 `NotImplemented` 切块张数上限 1024、全图合计像素上限 64Mi；超限在编码/落盘前 NotImplemented（`tilePx=1` 不留下海量文件）。中途落盘失败时已写出的分块文件可能残留。
+- 可选 `tilePx`（1–4096）：按该边长切块导出，**不**先分配整表再裁。未超限时仍一张 PNG，像素与不加 `tilePx` 一致；超限时写出多张 `{stem}-r{row}c{col}.png`，响应 `paths` 列出全部路径，单块边长不超过 `tilePx`。不设 `tilePx` 时一边超过 4096 仍整表 `NotImplemented`（默认不绕上限）。`rightToLeft` 切块报 `NotImplemented` 切块张数上限 1024、全图合计像素上限 64Mi；超限在编码/落盘前 NotImplemented（`tilePx=1` 不留下海量文件）。中途落盘失败时已写出的分块文件可能残留。 超限切块的官方对照（2026-11-18）：有界 65 列×16 行、网格关、Calibri 缺省列。Excel 16.0 窗口 DPI 106、Zoom=100 的全表 `Range.CopyPicture`（`xlScreen=1, xlBitmap=2`）成功为 4681×337（`1+65×72` 宽、`1+16×21` 高），未超内存。当时库 `tilePx=1024` 缝合 96=4161×321（`1+65×64`、`1+16×20`）、106=4616×353（`1+65×71`、`1+16×22`），反映旧的「先按 96 测 MDW 再比例放大」以及 Calibri 11 未写行高按 15 磅。本次改为按请求 dpi 重测 MDW、未写宽度用 `8×MDW+8`、行高先按 96 截断再放大、Calibri 11 未写行高改 14.25 磅后，库 106 期望与当时官方全表 4681×337（`1+65×72`、`1+16×21`）同尺寸，库 96 高度由 `1+16×20=321` 变为 `1+16×19=305`（宽度 4161 不变）。这是授权的缺省 96 几何修正，不是把旧失败改写成早已通过。须用当时合格源包做库回归，不以缝合差 0 冒充官方验收。内部块只在全表官方图上取窗才与库瓦片同一坐标系；对内部子范围再 `CopyPicture` 会在该子范围原点新画 `leading_frame`，不得与全表窗口或库内部块直接逐像素等同。库内部块不再画左框，与全表窗口一致。不以库内缝合差 0 冒充官方验收，也不把本对照写成整图通过。
 - `iconSet` 条件格式：cfvo/reverse/showValue/gte **选择语义**在库内可测；**出图仍 NotImplemented**（无公开可合法复现标准图标字形前不绘制）。最小锁定：`3Arrows` / `3ArrowsGray` / `3TrafficLights1`。不声称完整图标集或与 Excel 差 0。
 - 公式差分边框 `dashed` / `slantDashDot`：与格子边框共用绘制；`expression`+dxf 可出图。`cellIs` 带边框、差分对角线仍 NotImplemented。整图与 Excel CopyPicture 若屏 DPI≠96 可能 sizeDiffer，不以缩金样宣称差 0。
 - 像素对齐 Excel 16.0 的 `Range.CopyPicture`（`xlScreen`、`xlBitmap`）。不乘工作表 `zoomScale`
-- 工作表、切块、迷你图及图表 twoCell 锚点共用固定 96 dpi 的列几何；不读取本机显示 DPI。
-- 先按 `builtinId=0` 找 Normal 样式，再回退英文名 Normal 和字体 0。列宽的 MDW 是这个字体、字号及粗斜体在 96 dpi 下数字 0–9 的最大前进宽，不取格子的局部字体。
-- 显式 `col/@width` 和 `defaultColWidth` 都直接按 `floor(((256 * width + floor(128 / MDW)) / 256) * MDW)` 换像素，不经过 UI 两位小数字符宽，也不重复加 5 像素。
-- 没写上述宽度时，沿用 8.43 字符加 5 像素的缺省；Calibri 11 / MDW=7 仍为 64 像素，`16.7109375` 仍为 117 像素。
-- Windows 用公开 GDI 按固定像素字号测量，并核对实际字体名；缺字体或测量失败报 `NotImplemented`，不静默改成 MDW=7。非 Windows 仅对规范已知的普通 Calibri 11 使用 MDW=7，其它 Normal 字体暂不出图。
-- 本次不改变图表 zoomScale 与行高四舍五入、工作表行高截断的既有区别。106 dpi 的官方位图仍可能与 96 dpi 库图不同；字体像素量化不保证按 DPI 比例缩放后相同。
-- 写了行高就截断：`floor(round(磅 * 12700) / 9525)`。20 磅是 26，不是 27
+- 工作表、切块、迷你图及图表 twoCell 锚点共用同一套列几何。MDW 按请求 `dpi`（缺省 96）用公开 GDI 重测，再套列宽公式，不把 96 dpi 像素按 `dpi/96` 放大；不读取本机显示 DPI，也不改系统 DPI。非 Windows 无法重测时，仅普通 Calibri 11 在非 96 dpi 下退回旧的 96 像素再 `scale_px` 路径，不把本机 106 写成常量。
+- 先按 `builtinId=0` 找 Normal 样式，再回退英文名 Normal 和字体 0。列宽的 MDW 是这个字体、字号及粗斜体在该导出 dpi 下数字 0–9 的最大前进宽，不取格子的局部字体。
+- 显式 `col/@width` 和 `defaultColWidth` 都直接按 `floor(((256 * width + floor(128 / MDW)) / 256) * MDW)` 换像素，不经过 UI 两位小数字符宽，也不重复加 5 像素。这里的 MDW 是导出 dpi 下的值。
+- 没写上述宽度时，缺省是 `8×MDW+8` 像素（8 个字符宽再加 8 像素）。Calibri 11 / MDW=7 在 96 dpi 仍为 64；MDW=8 为 72；MDW=10 为 88（不再用 `floor(8.43×MDW+5)` 的 89）；MDW=11 为 96（不是 97）。`16.7109375` 在 MDW=7 仍为 117 像素。写入路径的 `setColWidth` 仍按规范示例 MDW=7 存 OOXML，导出按实际 MDW 解释已存值。
+- Windows 用公开 GDI 按该 dpi 的像素字号测量，并核对实际字体名；缺字体或测量失败报 `NotImplemented`，不静默改成 MDW=7。非 Windows 仅对规范已知的普通 Calibri 11 使用 MDW=7，其它 Normal 字体暂不出图。
+- 图表 zoomScale 与行高四舍五入、工作表行高先 96 截断再放大的既有路径区别仍在。请求 `dpi: 106` 后，图表 `a:ext` 按 `round(EMU*106/914400)` 取画布（例如 5486400×3200400 EMU 为 636×371），twoCell 锚点的列宽改用该 dpi 的 MDW（Calibri 11 缺省 72，不再是 71）。官方对照以尽力接近的几何/颜色/抗锯齿及实测尺寸报告，不再把 differ=0 当唯一完成门。这是 2026-11-18 用户明确放宽，不是把旧失败改写成已通过。
+- 写了行高时，先按 96 dpi 截断 `floor(round(磅 * 12700) / 9525)`，再按请求 dpi 四舍五入放大。96 dpi 时 20 磅是 26，不是 27；14.25 磅在 106 dpi 是 21 不是 20，23 磅在 106 dpi 是 33 不是 34。
 - 没写行高时，先取这一张表的缺省，再用格子里的字加高
-- 没写 `defaultRowHeight` 时，缺省是 14.25 磅，19 像素
-- 写了 `defaultRowHeight` 但 `customHeight` 不是真时，不采用这个数字。缺省改用常规样式的行高。常规样式是 Calibri 11 磅时，这一档是 15 磅
+- 没写 `defaultRowHeight` 时，缺省是 14.25 磅，19 像素（96 dpi）
+- 写了 `defaultRowHeight` 但 `customHeight` 不是真时，不采用这个数字。缺省改用常规样式的行高。常规样式是 Calibri 11 或 等线 11 时，这一档都是 14.25 磅
 - `customHeight` 为真并且写了 `defaultRowHeight` 时，缺省就是这个磅值。这一行的字如果还是常规字体，不再加高
-- 要加高时，Calibri 11 磅按 15 磅。微软雅黑、宋体、黑体、楷体、仿宋（及 Microsoft YaHei / SimSun / SimHei）按字号乘 1.65。等线/DengXian 在 11 磅时按 14.25 磅（COM Excel 16.0 StandardHeight/AutoFit：10/11/空/Standard 均为 14.25；12→15.75、18→23 本刀仍用字号×15/11，不单例拟合）。其余按字号乘 15/11。一行里取最高的。不把 Calibri 11 改成 COM AutoFit 的 14.25，不把雅黑改离 1.65×
+- 要加高时，Calibri 11 磅与 等线/DengXian 11 磅一样按 14.25 磅（官方 2026-11-18 COM StandardHeight 与未写行高的 CopyPicture 均为 14.25；96 dpi 为 19 像素，106 dpi 为 21 像素）。这会改变缺省 96 出图里原先按 15 磅/20 像素计算的 Calibri 11 自动行高，属授权修正，不把历史失败改写成早已通过。微软雅黑、宋体、黑体、楷体、仿宋（及 Microsoft YaHei / SimSun / SimHei）仍按字号乘 1.65。等线/DengXian 其它字号仍用字号×15/11（COM 12→15.75、18→23 不单例拟合）。其余按字号乘 15/11。一行里取最高的。不把雅黑改离 1.65×
 - 合并盖住的行没有自己的格子时，仍按锚点的字加高。锚点被隐藏也一样。没被合并盖住、也没有格子的行保持上面的缺省
 - 宽和高是各格像素之和再加 1。这一像素是外框
 - 网格色是 `E0E0E0`。纯色填充盖住格子右缘和下缘那条网格。右边和下边的格子后画，盖住交界。上边和左边的外框最后仍画成网格色
@@ -2483,9 +2510,9 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 合并跨过隐藏行或隐藏列时，按剩下的可见格子铺满锚点。锚点自己被隐藏、合并仍伸进可见格子时，照样铺
 - 条件格式的区域含隐藏行或隐藏列时，整表报 `NotImplemented`
 - `sheetView` 的 `rightToLeft` 为真，且没有条件格式、没有自动筛选时：无文字则整图水平翻转；有拉丁/CJK 文字时先翻转非文字层，再在翻转后的格子坐标用同一套 `Face::width`/`draw_cells` 正写（不 Unicode 反序、不镜像字形）。`alignment/@readingOrder` 为 `2`，或文本含强 RTL 文种（阿拉伯/希伯来等）时仍整表 `NotImplemented`（与列镜像不同语义；逐字前进宽不能冒充 bidi shaping）。条件格式或自动筛选在 RTL 下仍 `NotImplemented`
-- 文字认左、中、右和常规。常规时数字靠右，文字靠左，布尔居中。垂直认上、中、下。左缘留白是该字体平均字宽的一半，右缘留 2 像素。字与字的间距用 GDI 前进宽度，不跟整段字符串的排版步进
-- `wrapText` 为真或单元格文本含硬换行 `\n` 时按单元格内宽软断多行；`indent` 0–15，每级缩进为 3 个 `0` 字宽（与绘制同一套 `Face::width`，不用 Word 排版步进）。多行块按垂直对齐整体摆放。`textRotation` 非 0、`shrinkToFit`、两端对齐/fill/justify/distributed 仍整表 `NotImplemented`。不照搬 Word 行距或断词。
-- 单元格 `t="e"` 且 `<v>` 为 `#NULL!` / `#DIV/0!` / `#VALUE!` / `#REF!` / `#NAME?` / `#NUM!` / `#N/A` 时按该串画字（常规对齐同文字靠左）。其它错误码报 `NotImplemented`。共享弦里的同形文字仍是文字，不是错误值。
+- 文字认左、中、右和常规。常规时数字靠右，文字靠左，布尔与点名错误值居中。垂直认上、中、下。左缘留白是该字体平均字宽的一半，右缘留 2 像素。字与字的间距用 GDI 前进宽度，不跟整段字符串的排版步进
+- `wrapText` 为真或单元格文本含硬换行 `\n` 时按单元格内宽软断多行；`indent` 0–15，每级缩进为 3 个空格宽（与绘制同一套 `Face::width(" ") * 3`，不用 Word 排版步进）。多行块按垂直对齐整体摆放。多行行距用该字体自动行高像素（等线/Calibri 11 在 96 dpi 为 19、106 dpi 为 21），不是 GDI `tmHeight`；行内基线按 `sheetFormatPr` 的 `dyDescent`（缺省 0.25）落在行盒内 `1-dyDescent` 处。顶对齐在行顶加 2 像素；底对齐的行盒贴齐下一行原点，不再额外减 1。这是布局合同，不要求与 ClearType 灰阶逐像素一致。水平 `justify`：无软换行时按左对齐（含数字/布尔）；软换行后同一段非末行按词间等间隙拉齐，末行仍左对齐。水平 `distributed`：至少两词按等间隙左右顶齐。`justify` 上的 `indent`、`justifyLastLine`、一词 `distributed`、`fill`、`shrinkToFit` 仍 `NotImplemented`。有字格子上的非 0 `textRotation`：1–90 按逆时针、91–180 按顺时针（`90-value，180 为 -90°`）旋转 typographic 框，把转完后的外接框按水平/垂直对齐放到与未旋转相同的左内缘和顶对齐 typographic 顶；255 堆积把每个正立字水平居中在 `tmHeight` 宽的列里，第一字与未旋转顶对齐同一行盒，后续字按自动行高向下排并裁切到格子。带换行、缩进、`distributed` 或 `justifyLastLine` 的旋转仍 `NotImplemented`。这是按官方 `Range.CopyPicture`（`pr10-official-review-20261118-001710`）锁定的布局合同，不要求与 ClearType 灰阶逐像素一致。不照搬 Word 行距或断词。
+- 单元格 `t="e"` 且 `<v>` 为 `#NULL!` / `#DIV/0!` / `#VALUE!` / `#REF!` / `#NAME?` / `#NUM!` / `#N/A` 时按该串画字（常规对齐居中，同布尔）。其它错误码报 `NotImplemented`。共享弦里的同形文字仍是文字、仍靠左，不是错误值。
 - 数字格式认常规、`0`、`0.0`、`0.00`、`#,##0`，以及同样位数的百分数。格式码 `General` 不区分大小写。内置 14–22 与点名 `yyyy/mm/dd`（及去转义后的同义码 `m/d/yy`、`d-mmm-yy`、`h:mm AM/PM` 等）按 Excel 1900/1904 序列与英文月缩写画显示串；未点名日期码与方括号 locale/颜色仍 `NotImplemented`
 - 格式码只有分号、分成两段到四段且每段都空时，数字不画。四段时文字和布尔也不画。两段、三段仍画文字和布尔。无方括号的货币/多段（含 OOXML `\$` `\(` `\)` 转义、会计 `_` 跳宽、正/负/零选段、引号字面量段）按 Excel 选段规则画成与 `Range.Text` 一致的串；带方括号的颜色/条件格式仍报 `NotImplemented`。未知骨架不静默当 General
 - 公式有 `<v>` 或内联结果时用这份缓存，共享公式的从属格也一样。没有缓存时用库里的求值，包括 `IF` 的文字。算不了报 `NotImplemented`
@@ -2495,7 +2522,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `cellIs` 没有 `dxfId` 时不改像素。有纯色 `dxf` 填充时盖住格子
 - `expression` 的公式按规则区域左上角平移后再求值。结果非 0 时，有纯色 `dxf` 填充就盖住格子，区域内没有 `<c>` 的空位也铺。结果为 0、文字或错误时不铺。求不了报 `NotImplemented`
 - `timePeriod` 用规则里的 `<formula>`，按 `expression` 同一套平移后再求值。命中且差分是纯色时铺上该色，区域内没有 `<c>` 的空位也铺。没有公式或求不了报 `NotImplemented`。这条规则的差分边框仍报 `NotImplemented`
-- 同一条命中的公式规则，差分边框是 `thin`、`medium`、`thick`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。`dashed`、`slantDashDot` 和斜线的差分边框报 `NotImplemented`
+- 同一条命中的公式规则，差分边框是 `thin`、`medium`、`thick`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 时，按格子边框的像素画。没写的一侧仍用格子自己的边。优先级数字更小的那条差分边框生效，不把两条差分的边拼在一起。区域内没有 `<c>` 的空位也画。`expression` 的 `dashed` 与 `slantDashDot` 差分边框按格子边框画；`cellIs` 带边框和斜线的差分边框仍报 `NotImplemented`
 - `aboveAverage` 只数区域内的数字，空格不算。高于平均是严格大于。`equalAverage` 为真时含等于。`aboveAverage` 为 0 时看低于平均。`stdDev` 用总体标准差，平方和除以个数。数字少于两个又写了 `stdDev` 时不铺。命中且差分是纯色时铺上该色
 - `top10` 的 `rank` 缺省是 10。`percent` 为真时，个数乘 `rank` 再除以 100，向上取整，至少 1。并列时阈值上的格子都算。`bottom` 为真时取最小的那些。命中且差分是纯色时铺上该色
 - `containsText`、`notContainsText`、`beginsWith`、`endsWith` 忽略大小写。`notContainsText` 也铺到区域内没有 `<c>` 的空位。命中且差分是纯色时铺上该色。这几类规则的差分边框仍报 `NotImplemented`
@@ -2510,7 +2537,7 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - 边框认 `thin`、`medium`、`thick`，宽度是 1、2、3 像素。也认 `dashed`、`dotted`、`hair`、`double`、`dashDot`、`dashDotDot`、`mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot`
 - 没写颜色时用黑色。线以格子边界为中线。宽度是偶数时，多出的一像素落在坐标较小的一侧。线只伸到实际有边的那一端，不沿合并区扩开。落在合并区内部的边不画。同一条边界上更粗的线盖住更细的线。同样粗时，右边缘盖住左边缘，其余保持格子的先后
 - 底边比左边那一格的底边更细时，左端才让开。左边是虚线就让开它的全部厚度，左边是实线就让开一半。2 像素虚线在边界那一行再向右涂 1 像素。上面那一格有底边，或格子自己有上边时，竖线不涂上边界。两边都没有时，竖线从上边界涂起
-- 虚线按整张图的坐标取余。横线用 x，竖线用 y。`dashed` 横线在余数 3 时空一像素，周期 4。竖向 `dashed` 先把 y 减 1，再用同一套余数。`dotted` 在余数 0 和 3 上涂，周期 4。`hair` 在偶数坐标上涂
+- 虚线按整张图的坐标取余。`dashed` 用 x 加 y 取余，余数 3 时空一像素，周期 4；横线和竖线相同，不再对竖线做 y 减 1。其它线型仍是横线用 x、竖线用 y。`dotted` 在余数 0 和 3 上涂，周期 4。`hair` 在偶数坐标上涂
 - `dashDot` 的周期是 18，余数 0 到 8、12 到 14 涂。`dashDotDot` 的周期是 24，余数 0 到 8、12 到 14、18 到 20 涂
 - `mediumDashed`、`mediumDashDot`、`mediumDashDotDot` 和 `slantDashDot` 是 2 像素，占边界和坐标较小的那一像素。前三种两行用同一套余数。`mediumDashed` 的周期是 12，余数 0 到 8 涂。后两种分别用 `dashDot` 和 `dashDotDot` 的余数
 - `slantDashDot` 的边界那一行按周期 18，余数 0 到 9、12 到 15 涂。紧挨的较小坐标那一行，余数 1 到 11、13 到 17 涂
@@ -2523,12 +2550,13 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - `rgb` 写成 8 位、前两位又不是 `FF` 时，这一格图案不认，整表报 `NotImplemented`
 - 没有描边、没有字的纯色矩形可以画。`prst` 是 `rect`，`a:ln` 只有 `noFill`，正文没有文字。填充是不透明的 `srgbClr`，或没有颜色变换的 `schemeClr`。`schemeClr` 的颜色取主题部件里这一档，`sysClr` 用 `lastClr`。没有主题部件，或带了 `lumMod`、`tint`、`shade`、`alpha`，报 `NotImplemented`
 - 锚点的 EMU 除以 9525 后四舍五入。`oneCell` 的终点是起点单元格加上偏移和 `ext`。`twoCell` 的终点是 `to` 标记。图形含起点，不含终点
+- 单元格锚点（`oneCell` / `twoCell`）的 `colOff` / `rowOff` 超出当前格的像素宽高时，原点钳在该格远边，不把超出的 EMU 累加到后续列或行。未超出时仍按请求 dpi 把该格内偏移四舍五入为像素。`oneCell` 的目标框尺寸按未钳位的 EMU 差计算，可以从钳位后的原点伸出格外。`twoCell` 的 `to` 偏移同样钳在目标格内；同一格内 from/to 都顶到远边时只留下该边上的 1 像素，不按 oneCell 的 ext 伸出。若未钳位框仍与不透明 PNG 1:1，官方把该图缩小进残余框（不是裁掉多出来的原图像素）；一般缩小仍失败整表。`absoluteAnchor` 不受格尺寸钳位：原点按 `pos` 四舍五入，远边按 `pos+ext` 四舍五入。15 磅行上 `rowOff=381000` EMU 在 106 dpi 落在 y=22，而不是 44
 - 上边和左边的外框盖住图形。图形盖住格子、网格和边框。后画的盖住先画的
 - 不透明 PNG 可以画。没有 `a:srcRect` 时，目标框宽高必须等于源图像素，按原像素贴。`a:srcRect` 四边落到整像素时：裁完宽高等于目标则原样贴；裁完宽高均不超过目标（可再放大）时，Windows 上用公开 GDI+（与幻灯片同源的 `scale_device_rgba_window`：源矩形画在原图上，相位用真实目标原点）放大后再贴。半像素百分比、缩小、一边放大一边缩小、无裁纯放大、带透明通道、`fillRect` 有偏移、旋转、翻转、描边、不是 PNG，报 `NotImplemented`。本机屏 DPI≠96 时 CopyPicture 可能 sizeDiffer，不以缩金样宣称差 0
-- 组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。子矩形先绕自己的中心转 90 度的倍数，再按组的外框和子坐标框做整数比例，除法去掉余数，再翻转，再旋转。转完的子矩形要落在组的子坐标里。坐标从工作表左上角量起。锚点外接矩形要和转完、翻完之后的组外框按像素重合。里面的这种矩形可以跨格。子矩形的水平或垂直翻转不改变这块纯色，也可以和直角叠在一起。组合可以再套一层，换算从内到外。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。锚点组合还可以绕中心转非直角：先按同一套整数比例缩放并翻转，再绕外框中心顺时针旋转；在 Windows 上用公开 GDI+ `TranslateTransform` / `RotateTransform` / `FillRectangle`（抗锯齿和半像素偏移）画真实旋转矩形，不拿转完后的外接框铺色。直角倍数仍走已差 0 的整数路径。子矩形自己的非直角、里层组合的非直角、组合内描边或其它对象，以及 GDI+ 不可用，报 `NotImplemented`。工作表上未编组纯色矩形的其它角度仍报 `NotImplemented`。官方 `Range.CopyPicture` 对照未做，不把本片自测当成官方通过
+- 组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。子矩形先绕自己的中心转 90 度的倍数，再按组的外框和子坐标框做整数比例，除法去掉余数，再翻转，再旋转。转完的子矩形要落在组的子坐标里。坐标从工作表左上角量起。组外框与子矩形的 EMU 按请求 `dpi` 换算（省略或 96 时与除以 9525 四舍五入相同）。锚点外接矩形要和转完、翻完之后的组外框按像素重合。里面的这种矩形可以跨格。子矩形的水平或垂直翻转不改变这块纯色，也可以和直角叠在一起。组合可以再套一层，换算从内到外。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。锚点组合还可以绕中心转非直角：先按同一套整数比例缩放并翻转，把未旋转外框对到 twoCell 外接框（官方把该外接框当作未旋转目的框，因此比旋转原始 xfrm 外框更肥），再绕中心顺时针旋转；在 Windows 上用公开 GDI+ `TranslateTransform` / `RotateTransform` / `FillRectangle`（抗锯齿和半像素偏移）画真实旋转矩形，不拿转完后的外接框铺色。直角倍数仍走已差 0 的整数路径。子矩形自己的非直角、里层组合的非直角、组合内描边或其它对象，以及 GDI+ 不可用，报 `NotImplemented`。工作表上未编组纯色矩形的其它角度仍报 `NotImplemented`。墨迹可以超出已写入的 twoCell。官方尺寸与库默认列宽行高仍不合，不可 raw 零差，不把本片自测当成用户验收
 - 没有描边的纯色矩形可以绕中心转 90 度的倍数，也可以水平或垂直翻转。锚点上的外接矩形就是要铺的那一块。线写成 `noFill` 时，旁边的虚线、斜接和隐藏线不画。其它角度、有字、不是矩形和其它图形，报 `NotImplemented`。隐藏行或隐藏列碰到这种图形也报 `NotImplemented`
-- 线宽恰好是 1 或 2 像素（9525 / 19050 EMU）的不透明实线描边也会画：`prst` 为 `rect`，轴对齐、无旋转无翻转；用与幻灯片相同的 GDI+ `DrawRectangle`（1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽）叠在已画格子上。填充可以是不透明 `srgbClr` / 没有颜色变换的 `schemeClr`，或 `noFill`。`absoluteAnchor` 的 `pos`/`ext` 与 `oneCell`/`twoCell` 一样按 EMU/9525 四舍五入。组合内描边、其它线宽（含缺省非 9525/19050）、虚线、箭头、显式 `miter`/`bevel`/`round`、`algn` 不是 `ctr`、半透明填或线，整块形状仍 `NotImplemented`。本机屏 DPI≠96 时 CopyPicture 可能 sizeDiffer，不以缩金样宣称差 0
-- 格子 `diagonalUp` / `diagonalDown` 且 `<diagonal style>` 为 `thin`（1 像素）或 `medium`（2 像素）实线时画斜线，色取 `diagonal/color`。其它斜线线型、只有方向标志没有 style、条件格式斜线仍报 `NotImplemented`
+- 线宽恰好是 1 或 2 像素（9525 / 19050 EMU）的不透明实线描边也会画：`prst` 为 `rect`，轴对齐、无旋转无翻转；用与幻灯片相同的 GDI+ `DrawRectangle`（1 像素无像素偏移，2 像素半像素偏移，圆角接缝，平头线帽）叠在已画格子上。填充可以是不透明 `srgbClr` / 没有颜色变换的 `schemeClr`，或 `noFill`。`absoluteAnchor` 的原点按 `pos` 在请求 dpi 下四舍五入，远边按 `pos+ext` 四舍五入（尺寸是两者之差），与 `oneCell` 的未钳位 EMU 差相同，不是把 `ext` 单独四舍五入后再加到原点。组合内描边、其它线宽（含缺省非 9525/19050）、虚线、箭头、显式 `miter`/`bevel`/`round`、`algn` 不是 `ctr`、半透明填或线，整块形状仍 `NotImplemented`。本机屏 DPI≠96 时 CopyPicture 可能 sizeDiffer，不以缩金样宣称差 0
+- 格子 `diagonalUp` / `diagonalDown` 且 `<diagonal style>` 为 `thin`（1 像素）或 `medium`（中心加四邻，约 3 像素）实线时画斜线，色取 `diagonal/color`。细线从格子上角网格 LineTo 到远边网格（down：`(x0,y0)→(x1,y1)`，up：`(x1,y0)→(x0,y1)`），含起点不含终点；medium 含终点后再加粗。允许落在远边网格 `x=x1` / `y=y1`；不得朝左/上渗进邻格；整表左/上外框 `x=0` 或 `y=0` 不落斜线墨。其它斜线线型、只有方向标志没有 style、条件格式斜线仍报 `NotImplemented`
 - `fills` 里 `gradientFill`：`type` 缺省或 `linear`、恰好两停点、每停不透明 `rgb`（8 位且 A=`FF`，或 6 位）时，按 `degree`（缺省 0=左→右，90=上→下）做通道直线插值（与条件格式 colorScale 同 `mix`）。这是 SpreadsheetML 单元格渐变，**不是** DrawingML/PPT 形状的 `gamma_mix`/S 曲线；PPT 渐变证伪不拿来挡本档，也不照抄 PPT 曲线。Excel 16.0 ExportAsFixedFormat PDF 对 FF92D050→FF0070C0 条带 RMSE(sRGB)≈0.68、gamma2.2≈18.5。`type=path`、theme/indexed/auto/tint、A≠FF、停点不是两个，仍报 `NotImplemented`
 - 认不出的图案、条件格式里的图案、图标集和其它还没画的条件格式，报 `NotImplemented`
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
@@ -2614,6 +2642,10 @@ docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表�
 - run 没写字体时，拉丁用主题 minor 的 `a:latin`。主题里没有这个名字就用 Calibri
 - 汉字用主题 minor 的 `a:ea`。`typeface` 为空时用微软雅黑
 - 内置样式 `{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}` 且 `firstRow` 打开时，首行在 run 没写粗体和字色的情况下加粗，字用白色
+- 同一内置样式的最小外观子合同（公开官方多样本锁定，含默认 Office 主题 accent1=4F81BD 与 accent1=FF0000）：无显式不透明单元格 solidFill 时画样式填色。
+irstRow 打开时首行填主题 ccent1 本色；andRow 打开时正文行从首行之后（或 
+irstRow 关闭时从第 0 行）起算，偶数行把 ccent1 在线性 sRGB（IEC 61966-2-1）里向白做 60% tint，奇数行做 80%。显式不透明 solidFill 覆盖样式填色。横向合并的样式填色铺满跨列，不在合并格内画竖向内线。
+irstRow 打开时，在 96dpi 幻灯片画布上沿首行底边画 4 像素实心白条（上下各 2 像素），横向铺满表宽。其它 	ableStyleId、未打开的 andRow 带色、以及样式细内外描边（含交点抗锯齿）仍不画；灰边交点计划不并入本条通过结论。纵向合并仍整页 NotImplemented
 - 其余单元格没写字色时用黑色。别的表样式不套这套首行规则
 - 组合里已经会画的对象，子矩形先绕自己的中心转 90 度的倍数，再按 `layoutCheck` 的组合换算落到幻灯片 EMU，然后按上面的像素规则取整。
   子矩形的直角可以和组合自己的直角或翻转叠在一起。子矩形自己的水平或垂直翻转不改变这块纯色。组合可以再套一层，换算从内到外。里层也可以绕中心转 90 度。里层和外层可以同时绕中心转 90 度。组合可以绕中心转 90 度的倍数，也可以水平或垂直翻转。其它角度整页失败

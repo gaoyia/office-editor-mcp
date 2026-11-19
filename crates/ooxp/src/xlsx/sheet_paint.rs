@@ -6,7 +6,8 @@
 //! 两种纯色的图案铺在和纯色同一块矩形上。点的位置用整张图的像素，不从格子左上角重算。
 //! 虚线、点线、发丝、双线和点划线按整图坐标取余。偶数宽度多出的一像素朝坐标较小的一侧。
 //! 没写行高时，没写 `defaultRowHeight` 的空行是 14.25 磅。
-//! 写了这个属性但 `customHeight` 不是真时，不采用这个数字。
+//! 写了这个属性但 `customHeight` 不是真时，不采用这个数字，改用常规样式行高。
+//! 常规 Calibri 11 与 等线 11 一样是 14.25 磅（96 dpi 为 19 像素）。
 //! `customHeight` 为真时，空行和常规字体的行用写下的磅值。
 //! 没有描边、没有字的纯色矩形画在边框上面。锚点 EMU 除以 9525 后四舍五入。
 //! 上边和左边的外框盖住矩形。
@@ -23,6 +24,7 @@ use super::chart_gdi::Face;
 use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
+use super::render_dpi::RenderDpi;
 use super::ExportedMedia;
 use crate::xlsx::fill_device_rotated_rect;
 use crate::xlsx::fill_device_stroked_rect;
@@ -39,11 +41,20 @@ const DEFAULT_COL_PX: i32 = 64;
 /// 没写 `defaultRowHeight` 时的空行。Excel 的标准行高是 14.25 磅，19 像素。
 const DEFAULT_ROW_PT: f64 = 14.25;
 
+#[allow(dead_code)]
 pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    export_sheet_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_sheet_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<ExportedMedia, Error> {
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     if sheet_kind_of(&pkg, &name)? == "chartsheet" {
-        return super::chart::export_chartsheet_image(bytes, &name);
+        return super::chart::export_chartsheet_image_at(bytes, &name, dpi);
     }
     let sheet_part = picture::lookup_sheet_part(&pkg, &name, "id")?;
     let sheet_doc = super::list_pin::parse_part(&pkg, &sheet_part)?;
@@ -55,7 +66,8 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
-    let styles = load_styles(&pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(&pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -77,7 +89,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         theme.as_ref(),
     )?;
     shapes.extend(embedded_sparks(
-        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
     )?);
     let canvas = paint(
         root,
@@ -92,7 +104,7 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
         &shapes,
         &mut session,
     )?;
-    let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+    let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
     Ok(ExportedMedia {
         bytes: png,
         content_type: Some("image/png".to_string()),
@@ -101,10 +113,20 @@ pub fn export_sheet_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error
 
 /// 切块导出：每块边长 ≤ `tile_px`（且 ≤ `MAX_PX`），不分配整表画布。
 /// 返回顺序行主序 `(row_idx, col_idx, png_bytes)`。单块未超限时仍走整图路径（与旧行为同像素）。
+#[allow(dead_code)]
 pub fn export_sheet_image_tiles(
     bytes: &[u8],
     id: &str,
     tile_px: i32,
+) -> Result<Vec<SheetImageTile>, Error> {
+    export_sheet_image_tiles_at(bytes, id, tile_px, RenderDpi::DEFAULT)
+}
+
+pub(crate) fn export_sheet_image_tiles_at(
+    bytes: &[u8],
+    id: &str,
+    tile_px: i32,
+    dpi: RenderDpi,
 ) -> Result<Vec<SheetImageTile>, Error> {
     if !(1..=MAX_PX).contains(&tile_px) {
         return Err(unsupported());
@@ -112,7 +134,7 @@ pub fn export_sheet_image_tiles(
     let name = parse_sheet_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     if sheet_kind_of(&pkg, &name)? == "chartsheet" {
-        let media = super::chart::export_chartsheet_image(bytes, &name)?;
+        let media = super::chart::export_chartsheet_image_at(bytes, &name, dpi)?;
         let (w, h) = png_size(&media.bytes).ok_or_else(unsupported)?;
         if w > tile_px as u32 || h > tile_px as u32 {
             return Err(unsupported());
@@ -137,7 +159,8 @@ pub fn export_sheet_image_tiles(
     let wb_part = crate::opc::office_document_part(&pkg)?;
     let rels = Relationships::from_package(&pkg, &wb_part)?;
     let sst = inspect::load_shared_strings(&pkg, &wb_part, &rels)?;
-    let styles = load_styles(&pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(&pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
     let (c0, r0, c1, r1) = used_range(root)?;
     let mut session = eval::FormulaSession::open(&pkg, &name)?;
     let cells = read_cells(root, &sst, &mut session)?;
@@ -159,7 +182,7 @@ pub fn export_sheet_image_tiles(
         theme.as_ref(),
     )?;
     shapes.extend(embedded_sparks(
-        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl,
+        &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
     )?);
     let xs = Axis::new(&cols);
     let ys = Axis::new(&rows);
@@ -183,7 +206,7 @@ pub fn export_sheet_image_tiles(
             &shapes,
             &mut session,
         )?;
-        let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+        let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
         return Ok(vec![SheetImageTile {
             row: 0,
             col: 0,
@@ -229,7 +252,7 @@ pub fn export_sheet_image_tiles(
                 tw,
                 th,
             )?;
-            let png = encode_png(canvas.w, canvas.h, &canvas.px)?;
+            let png = encode_png(canvas.w, canvas.h, &canvas.px, dpi)?;
             out.push(SheetImageTile {
                 row,
                 col,
@@ -503,8 +526,8 @@ struct SheetPng {
 
 enum Overlay {
     Fill(PlainRect),
-    /// 锚点组合上的非直角旋转：先按组缩放/翻转得到轴对齐框，再绕组中心旋转。
-    /// `(x, y, w, h)` 是旋转后中心处、旋转前尺寸的轴对齐框，单位是工作表像素（可含小数）。
+    /// 锚点组合上的非直角旋转：先按组缩放/翻转落到 twoCell 未旋转目的框，再绕组中心旋转。
+    /// `(x, y, w, h)` 是旋转后中心处、旋转前（已按 twoCell 放大）尺寸的轴对齐框，单位是工作表像素（可含小数）。
     RotatedFill(RotatedFill),
     Png(SheetPng),
     Spark(SheetSpark),
@@ -535,10 +558,11 @@ fn embedded_sparks(
     cols: &[i32],
     rows: &[i32],
     rtl: bool,
+    dpi: RenderDpi,
 ) -> Result<Vec<Overlay>, Error> {
     let xs = Axis::new(cols);
     let ys = Axis::new(rows);
-    let rasters = super::sparkline::sheet_rasters(pkg, name, sheet, |host| {
+    let rasters = super::sparkline::sheet_rasters_at(pkg, name, sheet, dpi, |host| {
         if host.col < c0 || host.row < r0 {
             return Ok(None);
         }
@@ -635,7 +659,11 @@ fn plain_rects(
                 if right_to_left(sheet) {
                     return Err(unsupported());
                 }
-                out.push(Overlay::Png(sheet_png(pkg, &part, pic, x0, y0, x1, y1)?));
+                let (natural_w, natural_h) =
+                    anchor_unclamped_size(anchor, kind, sheet, styles, cells, c0, r0, cols, rows)?;
+                out.push(Overlay::Png(sheet_png(
+                    pkg, &part, pic, x0, y0, x1, y1, natural_w, natural_h,
+                )?));
             } else if let Some(sp) = anchor.child_by_local("sp") {
                 out.push(Overlay::Fill(plain_rect_at(
                     sp, theme, true, x0, y0, x1, y1,
@@ -712,18 +740,35 @@ fn rect_edges(
     cols: &[i32],
     rows: &[i32],
 ) -> Result<(i32, i32, i32, i32), Error> {
+    let dpi = styles.geometry.dpi();
     if kind == AnchorKind::Absolute {
         let pos = anchor.child_by_local("pos").ok_or_else(unsupported)?;
         let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
-        let x0 = round_px(emu_attr(pos, "x")?)?;
-        let y0 = round_px(emu_attr(pos, "y")?)?;
+        let x0 = round_px_at(emu_attr(pos, "x")?, dpi)?;
+        let y0 = round_px_at(emu_attr(pos, "y")?, dpi)?;
         let cx = emu_attr(ext, "cx")?;
         let cy = emu_attr(ext, "cy")?;
         if cx <= 0 || cy <= 0 {
             return Err(unsupported());
         }
-        let x1 = x0 + round_px(cx)?;
-        let y1 = y0 + round_px(cy)?;
+        // 远边按 round(pos+ext)，与 oneCell 的 round(off+ext)-round(off) 相同，
+        // 不是独立把 ext 四舍五入后再加到原点。2026-11-18 多样本 CopyPicture 锁定：
+        // 95250+133350 EMU 在 106 dpi 为 11+15 vs 27，空心/填色、1/2px 官方远边都在 27。
+        let x1 = round_px_at(
+            emu_attr(pos, "x")?
+                .checked_add(cx)
+                .ok_or_else(unsupported)?,
+            dpi,
+        )?;
+        let y1 = round_px_at(
+            emu_attr(pos, "y")?
+                .checked_add(cy)
+                .ok_or_else(unsupported)?,
+            dpi,
+        )?;
+        if x1 <= x0 || y1 <= y0 {
+            return Err(unsupported());
+        }
         return Ok((x0, y0, x1, y1));
     }
     let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
@@ -734,6 +779,15 @@ fn rect_edges(
     let y_from = axis_origin(from.row, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
+    // 单元格锚点的 colOff/rowOff 超出当前格时，Excel 把原点钳在该格远边，
+    // 不把超出部分换算成后续行/列的像素。2026-11-18 多样本 CopyPicture 与
+    // Shape.Top/Left 锁定：15 磅行上 rowOff=381000 EMU 落在一行高度（106 dpi
+    // 为 22），而不是两行的 44；同值 colOff 未超出列宽时 X 本来就与官方一致。
+    // oneCell 目标框尺寸按未钳位的 EMU 差计算，可以从钳位后的原点伸出格外。
+    let from_col_px = column_px_of(sheet, styles, from.col)?;
+    let from_row_px = row_px_one(sheet, styles, cells, from.row)?;
+    let x0 = x_from + clamp_cell_off(col_off, from_col_px, dpi)?;
+    let y0 = y_from + clamp_cell_off(row_off, from_row_px, dpi)?;
     let (x1, y1) = match kind {
         AnchorKind::OneCell => {
             let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
@@ -744,7 +798,12 @@ fn rect_edges(
             }
             let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
             let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
-            (x_from + round_px(x_end)?, y_from + round_px(y_end)?)
+            let x_size = round_px_at(x_end, dpi)? - round_px_at(col_off, dpi)?;
+            let y_size = round_px_at(y_end, dpi)? - round_px_at(row_off, dpi)?;
+            if x_size <= 0 || y_size <= 0 {
+                return Err(unsupported());
+            }
+            (x0 + x_size, y0 + y_size)
         }
         AnchorKind::TwoCell => {
             let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
@@ -755,19 +814,121 @@ fn rect_edges(
             let y_to = axis_origin(to.row, r0, rows, &mut |row| {
                 row_px_one(sheet, styles, cells, row)
             })?;
-            (x_to + round_px(to_x)?, y_to + round_px(to_y)?)
+            let mut x1 = x_to + clamp_cell_off(to_x, column_px_of(sheet, styles, to.col)?, dpi)?;
+            let mut y1 =
+                y_to + clamp_cell_off(to_y, row_px_one(sheet, styles, cells, to.row)?, dpi)?;
+            // twoCell 的 to 也钳在自己那一格。同一格内 from/to 都顶到远边时，
+            // 官方只留下格边上的 1px，不像 oneCell 那样按 ext 伸出格外。
+            if x1 <= x0 {
+                x1 = x0 + 1;
+            }
+            if y1 <= y0 {
+                y1 = y0 + 1;
+            }
+            (x1, y1)
         }
         AnchorKind::Absolute => unreachable!("absolute handled above"),
         AnchorKind::RelSize | AnchorKind::AbsSize => {
             return Err(unsupported());
         }
     };
-    let x0 = x_from + round_px(col_off)?;
-    let y0 = y_from + round_px(row_off)?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
     Ok((x0, y0, x1, y1))
+}
+
+/// 把单元格锚点偏移钳在当前格像素范围内；未超出时与 `round_px_at` 相同。
+fn clamp_cell_off(off: i64, cell_px: i32, dpi: RenderDpi) -> Result<i32, Error> {
+    let raw = round_px_at(off, dpi)?;
+    Ok(raw.min(cell_px.max(0)))
+}
+
+/// 未钳位的目标框像素尺寸。twoCell 钳成格边 1px 残余时，1:1 图仍按这个尺寸对照原图，
+/// 再缩小进残余框；一般缩小（原图与未钳位框本来就对不上）仍 NI。
+fn anchor_unclamped_size(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    cols: &[i32],
+    rows: &[i32],
+) -> Result<(u32, u32), Error> {
+    let dpi = styles.geometry.dpi();
+    if kind == AnchorKind::Absolute {
+        let pos = anchor.child_by_local("pos").ok_or_else(unsupported)?;
+        let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+        let x = emu_attr(pos, "x")?;
+        let y = emu_attr(pos, "y")?;
+        let cx = emu_attr(ext, "cx")?;
+        let cy = emu_attr(ext, "cy")?;
+        if cx <= 0 || cy <= 0 {
+            return Err(unsupported());
+        }
+        let w = u32::try_from(
+            round_px_at(x.checked_add(cx).ok_or_else(unsupported)?, dpi)? - round_px_at(x, dpi)?,
+        )
+        .map_err(|_| unsupported())?;
+        let h = u32::try_from(
+            round_px_at(y.checked_add(cy).ok_or_else(unsupported)?, dpi)? - round_px_at(y, dpi)?,
+        )
+        .map_err(|_| unsupported())?;
+        if w == 0 || h == 0 {
+            return Err(unsupported());
+        }
+        return Ok((w, h));
+    }
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let x_from = axis_origin(from.col, c0, cols, &mut |col| {
+        column_px_of(sheet, styles, col)
+    })?;
+    let y_from = axis_origin(from.row, r0, rows, &mut |row| {
+        row_px_one(sheet, styles, cells, row)
+    })?;
+    let x0 = x_from + round_px_at(col_off, dpi)?;
+    let y0 = y_from + round_px_at(row_off, dpi)?;
+    let (x1, y1) = match kind {
+        AnchorKind::OneCell => {
+            let ext = anchor.child_by_local("ext").ok_or_else(unsupported)?;
+            let cx = emu_attr(ext, "cx")?;
+            let cy = emu_attr(ext, "cy")?;
+            if cx <= 0 || cy <= 0 {
+                return Err(unsupported());
+            }
+            let x_end = col_off.checked_add(cx).ok_or_else(unsupported)?;
+            let y_end = row_off.checked_add(cy).ok_or_else(unsupported)?;
+            (
+                x0 + (round_px_at(x_end, dpi)? - round_px_at(col_off, dpi)?),
+                y0 + (round_px_at(y_end, dpi)? - round_px_at(row_off, dpi)?),
+            )
+        }
+        AnchorKind::TwoCell => {
+            let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+            let to = to.ok_or_else(unsupported)?;
+            let x_to = axis_origin(to.col, c0, cols, &mut |col| {
+                column_px_of(sheet, styles, col)
+            })?;
+            let y_to = axis_origin(to.row, r0, rows, &mut |row| {
+                row_px_one(sheet, styles, cells, row)
+            })?;
+            (
+                x_to + round_px_at(to_x, dpi)?,
+                y_to + round_px_at(to_y, dpi)?,
+            )
+        }
+        AnchorKind::Absolute => unreachable!("absolute handled above"),
+        AnchorKind::RelSize | AnchorKind::AbsSize => return Err(unsupported()),
+    };
+    let w = u32::try_from(x1 - x0).map_err(|_| unsupported())?;
+    let h = u32::try_from(y1 - y0).map_err(|_| unsupported())?;
+    if w == 0 || h == 0 {
+        return Err(unsupported());
+    }
+    Ok((w, h))
 }
 
 fn axis_origin(
@@ -807,6 +968,16 @@ fn row_px_one(
     cells: &HashMap<(u32, u32), CellRec>,
     row: u32,
 ) -> Result<i32, Error> {
+    row_px_one_at(sheet, styles, cells, row, styles.geometry.dpi())
+}
+
+fn row_px_one_at(
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    row: u32,
+    dpi: RenderDpi,
+) -> Result<i32, Error> {
     let base = row_base(sheet, styles);
     if let Some(data) = sheet.child_by_local("sheetData") {
         let mut prev = 0u32;
@@ -820,7 +991,7 @@ fn row_px_one(
                 return Ok(0);
             }
             if let Some(ht) = el.attr("ht").and_then(|s| s.parse::<f64>().ok()) {
-                let px = excel_row_px(ht);
+                let px = excel_row_px_at(ht, dpi);
                 if px < 1 {
                     return Err(unsupported());
                 }
@@ -830,7 +1001,7 @@ fn row_px_one(
         }
     }
     let pt = row_auto_pt(sheet, styles, cells, row, &base)?;
-    let px = excel_row_px(pt);
+    let px = excel_row_px_at(pt, dpi);
     if px < 1 {
         return Err(unsupported());
     }
@@ -845,11 +1016,16 @@ fn emu_attr(el: &Element, name: &str) -> Result<i64, Error> {
 }
 
 /// 9525 是奇数，EMU 除出来不会正好落在半像素上。
+#[allow(dead_code)]
 fn round_px(emu: i64) -> Result<i32, Error> {
+    round_px_at(emu, RenderDpi::DEFAULT)
+}
+
+fn round_px_at(emu: i64, dpi: RenderDpi) -> Result<i32, Error> {
     if emu < 0 {
         return Err(unsupported());
     }
-    let px = (emu as f64 / 9_525.0).round();
+    let px = dpi.emu_to_px_f(emu as f64).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
@@ -995,22 +1171,173 @@ fn identity_group(
     let origin_y = axis_origin(1, r0, rows, &mut |row| {
         row_px_one(sheet, styles, cells, row)
     })?;
-    if anchor_box != turned_box(&map, origin_x, origin_y)? {
+    let dpi = styles.geometry.dpi();
+    let turned = turned_box(&map, origin_x, origin_y, dpi)?;
+    if !group_anchor_agrees(
+        anchor, kind, sheet, styles, cells, c0, r0, &map, anchor_box, turned,
+    )? {
         return Err(unsupported());
     }
     let rects = if map.quarter().is_some() {
-        group_rects(group, &[map], origin_x, origin_y, cols, rows, theme)?
+        group_rects(group, &[map], origin_x, origin_y, cols, rows, theme, dpi)?
+            .into_iter()
+            .map(|rect| map_fill_into_dest(rect, turned, anchor_box))
+            .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .map(Overlay::Fill)
             .collect()
     } else {
         // 只锁锚点组合这一层的非直角；里层仍必须是已差 0 的直角/翻转/缩放。
-        group_rotated_overlays(group, &[map], origin_x, origin_y, cols, rows, theme)?
+        group_rotated_overlays(
+            group,
+            &[map],
+            origin_x,
+            origin_y,
+            cols,
+            rows,
+            theme,
+            dpi,
+            anchor_box,
+        )?
     };
     if rects.is_empty() {
         return Err(unsupported());
     }
     Ok(rects)
+}
+
+/// twoCell 与组外框是否对齐。先比请求 dpi 下的格子像素框和组 EMU 外框；
+/// 不相等时再在 96 dpi 字体网格上比一次。官方组合把转完后的外接框按 96 dpi
+/// 格子（默认列 64、30 磅行 40）写入 twoCell，106 dpi 下 MDW 重测使列变成 72，
+/// 格子锚点会比组 EMU 外框宽 2～3 像素，这不是锚点不合。
+fn group_anchor_agrees(
+    anchor: &Element,
+    kind: AnchorKind,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+    map: &GroupMap,
+    anchor_box: (i32, i32, i32, i32),
+    turned: (i32, i32, i32, i32),
+) -> Result<bool, Error> {
+    if anchor_box == turned {
+        return Ok(true);
+    }
+    if kind != AnchorKind::TwoCell || styles.geometry.dpi().is_default() {
+        return Ok(false);
+    }
+    let typo_anchor = typographic_two_cell_box(anchor, sheet, styles, cells, c0, r0)?;
+    let typo = styles.geometry.clone().with_dpi(RenderDpi::DEFAULT)?;
+    let ox = axis_origin(1, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let oy = axis_origin(1, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, typo.dpi())
+    })?;
+    let typo_turned = turned_box(map, ox, oy, RenderDpi::DEFAULT)?;
+    Ok(typo_anchor == typo_turned)
+}
+
+fn typographic_two_cell_box(
+    anchor: &Element,
+    sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    c0: u32,
+    r0: u32,
+) -> Result<(i32, i32, i32, i32), Error> {
+    let typo = styles.geometry.clone().with_dpi(RenderDpi::DEFAULT)?;
+    let dpi = typo.dpi();
+    let (from, col_off, row_off) = picture::read_marker(anchor.child_by_local("from"))?;
+    let from = from.ok_or_else(unsupported)?;
+    let x_from = axis_origin(from.col, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let y_from = axis_origin(from.row, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, dpi)
+    })?;
+    let x0 = x_from + clamp_cell_off(col_off, typo.column_px(sheet, from.col)?, dpi)?;
+    let y0 = y_from
+        + clamp_cell_off(
+            row_off,
+            row_px_one_at(sheet, styles, cells, from.row, dpi)?,
+            dpi,
+        )?;
+    let (to, to_x, to_y) = picture::read_marker(anchor.child_by_local("to"))?;
+    let to = to.ok_or_else(unsupported)?;
+    let x_to = axis_origin(to.col, c0, &[], &mut |col| typo.column_px(sheet, col))?;
+    let y_to = axis_origin(to.row, r0, &[], &mut |row| {
+        row_px_one_at(sheet, styles, cells, row, dpi)
+    })?;
+    let mut x1 = x_to + clamp_cell_off(to_x, typo.column_px(sheet, to.col)?, dpi)?;
+    let mut y1 =
+        y_to + clamp_cell_off(to_y, row_px_one_at(sheet, styles, cells, to.row, dpi)?, dpi)?;
+    if x1 <= x0 {
+        x1 = x0 + 1;
+    }
+    if y1 <= y0 {
+        y1 = y0 + 1;
+    }
+    if x1 < x0 || y1 < y0 {
+        return Err(unsupported());
+    }
+    Ok((x0, y0, x1, y1))
+}
+
+fn map_fill_into_dest(
+    mut rect: PlainRect,
+    src: (i32, i32, i32, i32),
+    dest: (i32, i32, i32, i32),
+) -> Result<PlainRect, Error> {
+    let (x0, y0, x1, y1) = map_rect_into_dest(rect.x0, rect.y0, rect.x1, rect.y1, src, dest)?;
+    rect.x0 = x0;
+    rect.y0 = y0;
+    rect.x1 = x1;
+    rect.y1 = y1;
+    Ok(rect)
+}
+
+/// 把矩形从组 EMU 外框线性映射到当前 dpi 的 twoCell 目的框。96 dpi 下两框重合，是恒等。
+fn map_rect_into_dest(
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    src: (i32, i32, i32, i32),
+    dest: (i32, i32, i32, i32),
+) -> Result<(i32, i32, i32, i32), Error> {
+    if src == dest {
+        return Ok((x0, y0, x1, y1));
+    }
+    let map_edge = |v: i32, a0: i32, a1: i32, b0: i32, b1: i32| -> Result<i32, Error> {
+        if a1 == a0 {
+            return Err(unsupported());
+        }
+        if v == a0 {
+            return Ok(b0);
+        }
+        if v == a1 {
+            return Ok(b1);
+        }
+        let t = f64::from(v - a0) / f64::from(a1 - a0);
+        let out = f64::from(b0) + t * f64::from(b1 - b0);
+        if !t.is_finite()
+            || !out.is_finite()
+            || out < f64::from(i32::MIN)
+            || out > f64::from(i32::MAX)
+        {
+            return Err(unsupported());
+        }
+        Ok(out.round() as i32)
+    };
+    let (sx0, sy0, sx1, sy1) = src;
+    let (dx0, dy0, dx1, dy1) = dest;
+    let nx0 = map_edge(x0, sx0, sx1, dx0, dx1)?;
+    let nx1 = map_edge(x1, sx0, sx1, dx0, dx1)?;
+    let ny0 = map_edge(y0, sy0, sy1, dy0, dy1)?;
+    let ny1 = map_edge(y1, sy0, sy1, dy0, dy1)?;
+    if nx1 < nx0 || ny1 < ny0 {
+        return Err(unsupported());
+    }
+    Ok((nx0, ny0, nx1, ny1))
 }
 
 fn read_group_map(group: &Element) -> Result<GroupMap, Error> {
@@ -1057,13 +1384,14 @@ fn group_rects(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
 ) -> Result<Vec<PlainRect>, Error> {
     let mut rects = Vec::new();
     for child in group.element_children() {
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => {
-                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, chain)?;
+                let (x0, y0, x1, y1) = child_rect(child, x_from, y_from, chain, dpi)?;
                 if crosses_hidden(x0, y0, x1, y1, cols, rows) {
                     return Err(unsupported());
                 }
@@ -1080,7 +1408,7 @@ fn group_rects(
                 let mut next = chain.to_vec();
                 next.push(inner);
                 rects.extend(group_rects(
-                    child, &next, x_from, y_from, cols, rows, theme,
+                    child, &next, x_from, y_from, cols, rows, theme, dpi,
                 )?);
             }
             _ => return Err(unsupported()),
@@ -1098,6 +1426,8 @@ fn group_rotated_overlays(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
+    anchor_box: (i32, i32, i32, i32),
 ) -> Result<Vec<Overlay>, Error> {
     let outer = chain.first().ok_or_else(unsupported)?;
     if outer.quarter().is_some() {
@@ -1108,7 +1438,7 @@ fn group_rotated_overlays(
         match child.local_name() {
             "nvGrpSpPr" | "grpSpPr" => {}
             "sp" => out.push(child_rotated_fill(
-                child, x_from, y_from, chain, cols, rows, theme,
+                child, x_from, y_from, chain, cols, rows, theme, dpi, anchor_box,
             )?),
             "grpSp" => {
                 let inner = read_group_map(child)?;
@@ -1119,7 +1449,7 @@ fn group_rotated_overlays(
                 let mut next = chain.to_vec();
                 next.push(inner);
                 out.extend(group_rotated_overlays(
-                    child, &next, x_from, y_from, cols, rows, theme,
+                    child, &next, x_from, y_from, cols, rows, theme, dpi, anchor_box,
                 )?);
             }
             _ => return Err(unsupported()),
@@ -1136,6 +1466,8 @@ fn child_rotated_fill(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
+    anchor_box: (i32, i32, i32, i32),
 ) -> Result<Overlay, Error> {
     let (sx0, sy0, sx1, sy1) = child_frame_in_outer(sp, chain)?;
     let map = chain.first().ok_or_else(unsupported)?;
@@ -1143,15 +1475,33 @@ fn child_rotated_fill(
         return Err(unsupported());
     }
     let deg = rot_deg(map.rot);
-    let x = f64::from(x_from) + emu_to_px(map.off_x as f64 + sx0 as f64);
-    let y = f64::from(y_from) + emu_to_px(map.off_y as f64 + sy0 as f64);
-    let w = emu_to_px((sx1 - sx0) as f64);
-    let h = emu_to_px((sy1 - sy0) as f64);
-    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !deg.is_finite() {
+    let _ = (x_from, y_from, dpi);
+    // 官方把当前 dpi 下的 twoCell 格子像素框当作未旋转目的框，子矩形按组外框
+    // 轴向比例落入该框，再绕目的框中心旋转。96 dpi 下该框与组 EMU 外框取整后
+    // 重合，结果与原先一致。
+    let (ax0, ay0, ax1, ay1) = anchor_box;
+    let dest_w = f64::from(ax1.checked_sub(ax0).ok_or_else(unsupported)?);
+    let dest_h = f64::from(ay1.checked_sub(ay0).ok_or_else(unsupported)?);
+    if map.cx <= 0
+        || map.cy <= 0
+        || dest_w <= 0.0
+        || dest_h <= 0.0
+        || !dest_w.is_finite()
+        || !dest_h.is_finite()
+        || !deg.is_finite()
+    {
         return Err(unsupported());
     }
-    let gcx = f64::from(x_from) + emu_to_px(map.off_x as f64 + map.cx as f64 / 2.0);
-    let gcy = f64::from(y_from) + emu_to_px(map.off_y as f64 + map.cy as f64 / 2.0);
+    let x = f64::from(ax0) + (sx0 as f64 / map.cx as f64) * dest_w;
+    let y = f64::from(ay0) + (sy0 as f64 / map.cy as f64) * dest_h;
+    let w = ((sx1 - sx0) as f64 / map.cx as f64) * dest_w;
+    let h = ((sy1 - sy0) as f64 / map.cy as f64) * dest_h;
+    if w <= 0.0 || h <= 0.0 || !w.is_finite() || !h.is_finite() || !x.is_finite() || !y.is_finite()
+    {
+        return Err(unsupported());
+    }
+    let gcx = f64::from(ax0) + dest_w / 2.0;
+    let gcy = f64::from(ay0) + dest_h / 2.0;
     let (ncx, ncy) = rotate_cw(x + w / 2.0, y + h / 2.0, gcx, gcy, deg);
     let rx = (ncx - w / 2.0) as f32;
     let ry = (ncy - h / 2.0) as f32;
@@ -1387,6 +1737,7 @@ fn child_rect(
     x_from: i32,
     y_from: i32,
     chain: &[GroupMap],
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let map = chain.last().ok_or_else(unsupported)?;
     let xfrm = sp
@@ -1420,23 +1771,29 @@ fn child_rect(
         }
         corners = next;
     }
-    let (x0, y0, x1, y1) = turned_edges(&chain[0], x_from, y_from, corners)?;
+    let (x0, y0, x1, y1) = turned_edges(&chain[0], x_from, y_from, corners, dpi)?;
     if x1 < x0 || y1 < y0 {
         return Err(unsupported());
     }
     Ok((x0, y0, x1, y1))
 }
 
-fn turned_box(map: &GroupMap, x_from: i32, y_from: i32) -> Result<(i32, i32, i32, i32), Error> {
+fn turned_box(
+    map: &GroupMap,
+    x_from: i32,
+    y_from: i32,
+    dpi: RenderDpi,
+) -> Result<(i32, i32, i32, i32), Error> {
     if map.quarter().is_some() {
         turned_edges(
             map,
             x_from,
             y_from,
             [(0, 0), (map.cx, 0), (map.cx, map.cy), (0, map.cy)],
+            dpi,
         )
     } else {
-        angled_group_box(map, x_from, y_from)
+        angled_group_box(map, x_from, y_from, dpi)
     }
 }
 
@@ -1445,6 +1802,7 @@ fn angled_group_box(
     map: &GroupMap,
     x_from: i32,
     y_from: i32,
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let deg = rot_deg(map.rot);
     let gcx = map.off_x as f64 + map.cx as f64 / 2.0;
@@ -1471,10 +1829,10 @@ fn angled_group_box(
         return Err(unsupported());
     }
     Ok((
-        x_from + round_emu(min_x)?,
-        y_from + round_emu(min_y)?,
-        x_from + round_emu(max_x)?,
-        y_from + round_emu(max_y)?,
+        x_from + round_emu_at(min_x, dpi)?,
+        y_from + round_emu_at(min_y, dpi)?,
+        x_from + round_emu_at(max_x, dpi)?,
+        y_from + round_emu_at(max_y, dpi)?,
     ))
 }
 
@@ -1491,19 +1849,29 @@ fn rotate_cw(px: f64, py: f64, cx: f64, cy: f64, deg: f64) -> (f64, f64) {
     (cx + dx * c - dy * s, cy + dx * s + dy * c)
 }
 
+#[allow(dead_code)]
 fn round_emu(emu: f64) -> Result<i32, Error> {
+    round_emu_at(emu, RenderDpi::DEFAULT)
+}
+
+fn round_emu_at(emu: f64, dpi: RenderDpi) -> Result<i32, Error> {
     if !emu.is_finite() || emu < 0.0 {
         return Err(unsupported());
     }
-    let px = (emu / 9_525.0).round();
+    let px = dpi.emu_to_px_f(emu).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
     Ok(px as i32)
 }
 
+#[allow(dead_code)]
 fn emu_to_px(emu: f64) -> f64 {
-    emu / 9_525.0
+    emu_to_px_at(emu, RenderDpi::DEFAULT)
+}
+
+fn emu_to_px_at(emu: f64, dpi: RenderDpi) -> f64 {
+    dpi.emu_to_px_f(emu)
 }
 
 fn turned_edges(
@@ -1511,6 +1879,7 @@ fn turned_edges(
     x_from: i32,
     y_from: i32,
     corners: [(i64, i64); 4],
+    dpi: RenderDpi,
 ) -> Result<(i32, i32, i32, i32), Error> {
     let mut min_x = i64::MAX;
     let mut min_y = i64::MAX;
@@ -1524,10 +1893,10 @@ fn turned_edges(
         max_y = max_y.max(y2);
     }
     Ok((
-        x_from + round_twice(min_x)?,
-        y_from + round_twice(min_y)?,
-        x_from + round_twice(max_x)?,
-        y_from + round_twice(max_y)?,
+        x_from + round_twice(min_x, dpi)?,
+        y_from + round_twice(min_y, dpi)?,
+        x_from + round_twice(max_x, dpi)?,
+        y_from + round_twice(max_y, dpi)?,
     ))
 }
 
@@ -1616,11 +1985,12 @@ fn group_rot(xfrm: &Element) -> Result<i64, Error> {
 }
 
 /// `num` 是 EMU 的两倍。
-fn round_twice(num: i64) -> Result<i32, Error> {
+fn round_twice(num: i64, dpi: RenderDpi) -> Result<i32, Error> {
     if num < 0 {
         return Err(unsupported());
     }
-    let px = (num as f64 / 19_050.0).round();
+    // num 是 2×EMU。96 dpi 时 1_828_800/96=19050，与原先 /19050 相同。
+    let px = (num as f64 * dpi.get() / 1_828_800.0).round();
     if px > i32::MAX as f64 {
         return Err(unsupported());
     }
@@ -1824,6 +2194,8 @@ fn sheet_png(
     y0: i32,
     x1: i32,
     y1: i32,
+    natural_w: u32,
+    natural_h: u32,
 ) -> Result<SheetPng, Error> {
     accept_sheet_pic(pic)?;
     let Some(w) = (x1 - x0).try_into().ok().filter(|w: &u32| *w > 0) else {
@@ -1844,10 +2216,20 @@ fn sheet_png(
     let rgb = match source_window(pic, image_w, image_h)? {
         None => {
             // 无裁剪：仍只认 1:1 原像素拷贝。纯放大另案。
-            if image_w != w || image_h != h {
+            // twoCell 钳成格边残余、未钳位框仍与原图 1:1 时，官方把原图缩小进残余框
+            //（滤波，不是裁掉多出来的行/列）。一般缩小仍 NI。
+            if image_w == w && image_h == h {
+                rgb
+            } else if image_w == natural_w
+                && image_h == natural_h
+                && w <= image_w
+                && h <= image_h
+                && (w < image_w || h < image_h)
+            {
+                scale_crop_rgb(&rgb, image_w, image_h, 0, 0, image_w, image_h, x0, y0, w, h)?
+            } else {
                 return Err(unsupported());
             }
-            rgb
         }
         Some((left, top, src_w, src_h)) => {
             if src_w == w && src_h == h {
@@ -2234,7 +2616,7 @@ struct Xf {
     indent: u32,
     /// `alignment/@readingOrder`：0 上下文 / 1 LTR / 2 RTL。2 与强 RTL 文种出图 NI。
     reading_order: u8,
-    /// `alignment/@textRotation`。0 为不旋转；非 0（含 Excel 堆积 255）在有字的格子上 NI。
+    /// `alignment/@textRotation`。0 为不旋转；1–180 按 Excel 角度旋转；255 为正立堆积。
     rotation: u32,
     /// `alignment/@justifyLastLine`。为真时本切片 NI，不静默忽略。
     justify_last_line: bool,
@@ -2982,7 +3364,7 @@ fn read_xf(xf: &Element, borders: &[Edges]) -> Result<Xf, Error> {
                 false,
             ),
             Some(al) => {
-                // shrinkToFit 仍在读样式时 NI。非 0 textRotation 延到有字的格子再 NI。
+                // shrinkToFit 仍在读样式时 NI。非 0 textRotation 延到有字的格子再按角度或堆积画。
                 if truthy(al.attr("shrinkToFit")) {
                     return Err(unsupported());
                 }
@@ -3071,7 +3453,7 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
         .child_by_local("font")
         .and_then(|font| font.child_by_local("color"))
         .and_then(|el| palette.resolve(el));
-    // 竖向 dashed 的相位和 slantDashDot 的末端还没对齐。这两种和斜线仍让整表失败。
+    // dashed / slantDashDot 与格子共用 paint_line；斜线差分仍 NI。
     let edges = match dxf.child_by_local("border") {
         None => Edges::default(),
         Some(border) => accepted_dxf_edges(parse_edges(border, palette)?)?,
@@ -3080,7 +3462,7 @@ fn read_dxf(dxf: &Element, palette: &Palette) -> Result<Dxf, Error> {
 }
 
 fn accepted_dxf_edges(edges: Edges) -> Result<Edges, Error> {
-    // 条件格式斜线仍 NI。dashed / slantDashDot 与格子共用 paint_line（相位/末端以 oracle 为准）。
+    // 条件格式斜线仍 NI。dashed / slantDashDot 与格子共用 paint_line（dashed 相位为整图 x+y）。
     if edges.diagonal_down.is_some() || edges.diagonal_up.is_some() {
         return Err(unsupported());
     }
@@ -3586,7 +3968,7 @@ fn row_sizes(
         } else {
             row_auto_pt(sheet, styles, cells, row, &base)?
         };
-        let px = excel_row_px(pt);
+        let px = excel_row_px_at(pt, styles.geometry.dpi());
         if px < 1 {
             return Err(unsupported());
         }
@@ -3642,13 +4024,13 @@ fn same_face(font: &FontInfo, normal: &FontInfo) -> bool {
     font.name.eq_ignore_ascii_case(&normal.name) && (font.pt - normal.pt).abs() < 0.05
 }
 
-/// 未写行高时的磅值。Calibri 11 是 15。10 磅微软雅黑是 16.5。
+/// 未写行高时的磅值。Calibri 11 与 等线 11 一样是 14.25。10 磅微软雅黑是 16.5。
 fn auto_row_pt(name: &str, pt: f64) -> f64 {
     // 等线/DengXian：COM Excel 16.0 StandardHeight / AutoFit 矩阵（2026-11-17 Asia/Shanghai）：
     // 字号 10/11/空/StandardHeight → 14.25；12 → 15.75；18 → 23。
     // 本刀只锁 11→14.25（与 sheetFormatPr 缺省 14.25 一致）；其它字号暂 pt*15/11，不拟合单例 delta。
-    // 不回归：Calibri 11 仍 15（COM AutoFit 亦见 14.25，契约保持 15）；雅黑仍 1.65×。
-    // RTL 探针曾误走雅黑 1.65→18.15→高 49，COM 两行≈28.5pt→≈38px，残差非纯 DPI。
+    // Calibri 11 同样锁定为 14.25（官方 2026-11-18 StandardHeight / 未写行高 CopyPicture 均为 14.25→21@106，不再保持旧契约 15/20）。
+    // 雅黑仍 1.65×。RTL 残差里两行各多 1 像素，与旧 Calibri 15 vs 14.25 相符，不在此单开 RTL 方向。
     if name.eq_ignore_ascii_case("等线") || name.eq_ignore_ascii_case("DengXian") {
         if (pt - 11.0).abs() < 0.05 {
             return 14.25;
@@ -3668,16 +4050,30 @@ fn auto_row_pt(name: &str, pt: f64) -> f64 {
     if CJK.iter().any(|item| item.eq_ignore_ascii_case(name)) {
         pt * 165.0 / 100.0
     } else if name.eq_ignore_ascii_case("Calibri") && (pt - 11.0).abs() < 0.05 {
-        15.0
+        14.25
     } else {
         pt * 15.0 / 11.0
     }
 }
 
 /// 自定义行高截断成像素。20 磅是 26，不是四舍五入的 27。
+#[cfg(test)]
 fn excel_row_px(pt: f64) -> i32 {
-    let emu = (pt * 12_700.0).round();
-    (emu / 9_525.0).floor() as i32
+    excel_row_px_at(pt, RenderDpi::DEFAULT)
+}
+
+fn excel_row_px_at(pt: f64, dpi: RenderDpi) -> i32 {
+    dpi.excel_row_px(pt)
+}
+
+/// Excel 行盒内基线位置。缺省 0.25；读 sheetFormatPr 的本地名 dyDescent（含 x14ac 前缀）。
+fn sheet_dy_descent(sheet: &Element) -> f64 {
+    sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|el| el.attr_local("dyDescent"))
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0)
+        .unwrap_or(0.25)
 }
 
 struct Axis {
@@ -4039,7 +4435,10 @@ fn paint_window(
         )?;
     }
     paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
-    let mut fonts = FontBook::default();
+    let mut fonts = FontBook {
+        dpi: styles.geometry.dpi(),
+        faces: Vec::new(),
+    };
     // sheetView RTL：无文字整图翻转已差 0。有文字时 Excel 只换列边、字仍正写——
     // 先画非文字层再翻转，最后在翻转坐标系画字（不 Unicode 反序、不镜像字形）。
     if !rtl {
@@ -4367,7 +4766,7 @@ fn paint_borders(
             bottom_inset,
             false,
         );
-        // 斜线：格子像素矩形真实边（[x0,x1)×[y0,y1)），不搬 PPT 端点偏移假设。
+        // 斜线：细线从格上角网格 LineTo 到远边网格；medium 含终点后中心+四邻加粗。不搬 PPT 端点偏移。
         if let Some(edge) = edges.diagonal_down {
             paint_cell_diagonal(canvas, x0, y0, x1, y1, true, edge);
         }
@@ -4383,7 +4782,11 @@ fn paint_borders(
     Ok(())
 }
 
-/// `down=true`：左上→右下；`false`：左下→右上。仅 Solid 1/2px（parse 已挡其它）。
+/// `down=true`：从左上网格角画到右下远边网格；`false`：从右上画到左下远边网格。
+/// 仅 Solid thin/medium（parse 已挡其它）。2026-11-18 多样本 CopyPicture 锁定：
+/// 细线是 Bresenham LineTo（含起点不含终点）到 `(x1,y1)` / `(x0,y1)`，不是 `(x1-1,y1-1)`；
+/// medium 含终点后再按中心+四邻加粗（约 3 像素）。允许落在远边网格；
+/// 禁止 `x<x0` / `y<y0`（左/上渗邻格）；整表左/上外框 `x=0` 或 `y=0` 不落斜线墨。
 fn paint_cell_diagonal(
     canvas: &mut Canvas,
     x0: i32,
@@ -4396,12 +4799,39 @@ fn paint_cell_diagonal(
     if x1 <= x0 + 1 || y1 <= y0 + 1 {
         return;
     }
-    let (x_a, y_a, x_b, y_b) = if down {
-        (x0, y0, x1 - 1, y1 - 1)
+    // medium 含终点以盖住官方线帽；细线仍按 LineTo 不含终点。
+    let include_end = edge.px >= 2;
+    if down {
+        paint_diag_segment(
+            canvas,
+            x0,
+            y0,
+            x1,
+            y1,
+            edge.color,
+            edge.px,
+            x0,
+            y0,
+            x1,
+            y1,
+            include_end,
+        );
     } else {
-        (x0, y1 - 1, x1 - 1, y0)
-    };
-    paint_diag_segment(canvas, x_a, y_a, x_b, y_b, edge.color, edge.px);
+        paint_diag_segment(
+            canvas,
+            x1,
+            y0,
+            x0,
+            y1,
+            edge.color,
+            edge.px,
+            x0,
+            y0,
+            x1,
+            y1,
+            include_end,
+        );
+    }
 }
 
 fn paint_diag_segment(
@@ -4412,16 +4842,25 @@ fn paint_diag_segment(
     y1: i32,
     color: [u8; 3],
     thickness: i32,
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+    include_end: bool,
 ) {
-    // Bresenham；厚度 2 时在主线两侧各补半像素朝较小坐标（与正交偶数宽约定一致）。
     let dx = (x1 - x0).abs();
     let sx = if x0 < x1 { 1 } else { -1 };
     let dy = -(y1 - y0).abs();
     let sy = if y0 < y1 { 1 } else { -1 };
     let mut err = dx + dy;
     loop {
-        put_thick(canvas, x0, y0, color, thickness);
-        if x0 == x1 && y0 == y1 {
+        let at_end = x0 == x1 && y0 == y1;
+        if include_end || !at_end {
+            put_thick_clipped(
+                canvas, x0, y0, color, thickness, clip_x0, clip_y0, clip_x1, clip_y1,
+            );
+        }
+        if at_end {
             break;
         }
         let e2 = 2 * err;
@@ -4436,12 +4875,43 @@ fn paint_diag_segment(
     }
 }
 
-fn put_thick(canvas: &mut Canvas, x: i32, y: i32, color: [u8; 3], thickness: i32) {
-    canvas.put(x, y, color);
+fn put_thick_clipped(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    color: [u8; 3],
+    thickness: i32,
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+) {
+    put_clipped(canvas, x, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
     if thickness >= 2 {
-        // 多出的一像素朝坐标较小侧（左/上），对齐正交 medium 约定。
-        canvas.put(x - 1, y, color);
-        canvas.put(x, y - 1, color);
+        // medium：中心加四邻约 3 像素。左/上邻格与左/上外框仍由 put_clipped 挡住。
+        put_clipped(canvas, x - 1, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x + 1, y, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x, y - 1, color, clip_x0, clip_y0, clip_x1, clip_y1);
+        put_clipped(canvas, x, y + 1, color, clip_x0, clip_y0, clip_x1, clip_y1);
+    }
+}
+
+fn put_clipped(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    color: [u8; 3],
+    clip_x0: i32,
+    clip_y0: i32,
+    clip_x1: i32,
+    clip_y1: i32,
+) {
+    // 含远边网格 x=x1 / y=y1；不含左/上邻格与整表左/上外框。
+    if x == 0 || y == 0 {
+        return;
+    }
+    if x >= clip_x0 && x <= clip_x1 && y >= clip_y0 && y <= clip_y1 {
+        canvas.put(x, y, color);
     }
 }
 
@@ -4604,9 +5074,9 @@ fn paint_line(canvas: &mut Canvas, stroke: &Stroke) {
     for y in stroke.y0..stroke.y1 {
         for x in stroke.x0..stroke.x1 {
             let (along, across) = if stroke.vertical { (y, x) } else { (x, y) };
-            // 竖向 dashed 的空档比横线晚一个像素。
-            let along = if stroke.vertical && stroke.kind == LineKind::Dashed {
-                along - 1
+            // dashed 用整图 (x+y) 取余：官方横竖、奇偶边界、公式差分与格子边框同一相位。
+            let along = if stroke.kind == LineKind::Dashed {
+                x + y
             } else {
                 along
             };
@@ -4635,7 +5105,7 @@ fn two_pixel_dash(kind: LineKind) -> bool {
     )
 }
 
-/// 余数用整张图的坐标。横线看 x，竖线看 y。
+/// 余数用整张图的坐标。横线看 x，竖线看 y。dashed 改看 x+y。
 fn line_on(kind: LineKind, along: i32, across: i32, boundary: i32) -> bool {
     let r4 = along.rem_euclid(4);
     let r12 = along.rem_euclid(12);
@@ -5569,9 +6039,18 @@ fn cell_rect(
     Some((x0, y0, x1, y1))
 }
 
-#[derive(Default)]
 struct FontBook {
+    dpi: RenderDpi,
     faces: Vec<(String, i32, bool, bool, Face)>,
+}
+
+impl Default for FontBook {
+    fn default() -> Self {
+        Self {
+            dpi: RenderDpi::DEFAULT,
+            faces: Vec::new(),
+        }
+    }
 }
 
 impl FontBook {
@@ -5584,8 +6063,9 @@ impl FontBook {
         {
             return Ok(&self.faces[index].4);
         }
-        let px = (pt * 96.0 / 72.0) as f32;
-        let face = Face::open_cell(px, bold, italic, name).ok_or_else(unsupported)?;
+        let px = self.dpi.pt_to_px_font(pt) as f32;
+        let face =
+            Face::open_cell_dpi(px, bold, italic, name, self.dpi.get()).ok_or_else(unsupported)?;
         self.faces.push((name.to_string(), key, bold, italic, face));
         Ok(&self.faces.last().expect("刚放进去").4)
     }
@@ -5668,10 +6148,8 @@ fn paint_labels(
                 clip_r.min(x1 - 17)
             };
         }
+        let dpi = fonts.dpi;
         let face = fonts.face(&font.name, font.pt, font.bold, font.italic)?;
-        if xf.rotation != 0 {
-            return Err(unsupported());
-        }
         let h_align = match xf.h_align {
             HAlign::Left => HAlign::Left,
             HAlign::Center => HAlign::Center,
@@ -5680,7 +6158,8 @@ fn paint_labels(
             HAlign::Distributed => HAlign::Distributed,
             HAlign::General => match cell.shown {
                 Shown::Num(_) => HAlign::Right,
-                Shown::Bool(_) => HAlign::Center,
+                // Excel 常规：布尔与点名错误值居中；共享弦里同形文字仍靠左。
+                Shown::Bool(_) | Shown::Err(_) => HAlign::Center,
                 _ => HAlign::Left,
             },
         };
@@ -5707,6 +6186,26 @@ fn paint_labels(
                 _ => 0.0,
             };
         let max_w = (inner_right - inner_left).max(1.0);
+        if xf.rotation != 0 {
+            paint_rotated_cell_text(
+                face,
+                &text,
+                xf,
+                h_align,
+                font,
+                sheet,
+                dpi,
+                x0,
+                y0,
+                y1,
+                clip_r,
+                inner_left,
+                inner_right,
+                color,
+                canvas,
+            )?;
+            continue;
+        }
         if h_align == HAlign::Justify {
             // ECMA：若没有任何一行发生换行，则不做两端对齐。无软换行（含数字/布尔）画成左对齐。
             // 官方 CopyPicture：软换行后非末行词间等间隙、末行左对齐。indent / justifyLastLine 仍 NI。
@@ -5737,18 +6236,24 @@ fn paint_labels(
             HAlign::Justify if !soft_wrapped => HAlign::Left,
             other => other,
         };
-        let em = face.em_box();
-        let block_h = em * lines.len() as f64;
+        // 换行行距用该字体自动行高（等线/Calibri 11 为 14.25 磅→106 下 21px），不是 tmHeight。
+        // 行内基线按 sheetFormatPr 的 dyDescent（缺省 0.25）落在行盒内：
+        // 官方多样本（换行顶对齐三行累积、错误值垂直居中、日期/货币底对齐）与仅 tmHeight/ascent 对不上。
+        let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+        let dy_descent = sheet_dy_descent(sheet);
+        let block_h = pitch * lines.len() as f64;
         let top0 = match xf.v_align {
             VAlign::Top => f64::from(y0) + 2.0,
             VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - block_h) / 2.0,
-            VAlign::Bottom => f64::from(y1) - block_h - 1.0,
+            VAlign::Bottom => f64::from(y1) - block_h,
         };
         for (i, line) in lines.iter().enumerate() {
             if line.is_empty() {
                 continue;
             }
-            let top = top0 + em * i as f64;
+            let line_top = top0 + pitch * i as f64;
+            // draw_cells 的 top 是基线减 ascent；把基线放到行盒内 1-dyDescent 处。
+            let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
             let mut paint = |x: f64, s: &str| {
                 face.draw_cells(s, x, top, color, |px, py, rgb, cov| {
                     if px < x0 || py < y0 || px >= clip_r || py >= y1 {
@@ -5784,6 +6289,178 @@ fn paint_labels(
         }
     }
     paint_filters(canvas, xs, ys, c0, r0, filter);
+    Ok(())
+}
+
+/// ECMA / Excel `@textRotation`：0–90 为逆时针角度，91–180 为顺时针（90-value：91=-1°，180=-90°）。
+/// 255 堆积不是角度，调用方单独处理。
+fn excel_text_rotation_deg(rotation: u32) -> Option<f64> {
+    match rotation {
+        0 => Some(0.0),
+        1..=90 => Some(f64::from(rotation)),
+        91..=180 => Some(90.0 - f64::from(rotation)),
+        _ => None,
+    }
+}
+
+/// 屏幕坐标（x 右、y 下）下，GDI escapement 逆时针 θ 的旋转。
+fn rotate_escapement(x: f64, y: f64, deg: f64) -> (f64, f64) {
+    let rad = deg.to_radians();
+    let (s, c) = (rad.sin(), rad.cos());
+    (x * c + y * s, -x * s + y * c)
+}
+
+/// typographic 矩形绕左上角按 escapement 旋转后的轴对齐外接框。
+fn typo_aabb_after_escapement(w: f64, h: f64, deg: f64) -> (f64, f64, f64, f64) {
+    let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)];
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for (x, y) in corners {
+        let (rx, ry) = rotate_escapement(x, y, deg);
+        min_x = min_x.min(rx);
+        min_y = min_y.min(ry);
+        max_x = max_x.max(rx);
+        max_y = max_y.max(ry);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
+fn paint_rotated_cell_text(
+    face: &Face,
+    text: &str,
+    xf: &Xf,
+    h_align: HAlign,
+    font: &FontInfo,
+    sheet: &Element,
+    dpi: RenderDpi,
+    x0: i32,
+    y0: i32,
+    y1: i32,
+    clip_r: i32,
+    inner_left: f64,
+    inner_right: f64,
+    color: [u8; 3],
+    canvas: &mut Canvas,
+) -> Result<(), Error> {
+    // 旋转/堆积与换行、缩进、分散对齐的组合几何未由本切片官方样本锁定，保持 NI。
+    if xf.wrap
+        || text.contains('\n')
+        || xf.indent != 0
+        || xf.justify_last_line
+        || h_align == HAlign::Distributed
+    {
+        return Err(unsupported());
+    }
+    let h_align = match h_align {
+        HAlign::Justify => HAlign::Left,
+        other => other,
+    };
+    if xf.rotation == 255 {
+        return paint_stacked_cell_text(
+            face,
+            text,
+            xf,
+            h_align,
+            font,
+            sheet,
+            dpi,
+            x0,
+            y0,
+            y1,
+            clip_r,
+            inner_left,
+            inner_right,
+            color,
+            canvas,
+        );
+    }
+    let Some(deg) = excel_text_rotation_deg(xf.rotation) else {
+        return Err(unsupported());
+    };
+    if deg.abs() < 1e-9 {
+        return Err(unsupported());
+    }
+    let typo_w = face.width(text);
+    let typo_h = face.em_box().max(1.0);
+    let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(typo_w, typo_h, deg);
+    let aabb_w = (max_x - min_x).max(1.0);
+    let aabb_h = (max_y - min_y).max(1.0);
+    let aabb_x = match h_align {
+        HAlign::Left | HAlign::General | HAlign::Justify => inner_left,
+        HAlign::Center => inner_left + ((inner_right - inner_left).max(aabb_w) - aabb_w) / 2.0,
+        HAlign::Right => inner_right - aabb_w,
+        HAlign::Distributed => unreachable!("distributed already rejected"),
+    };
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let dy_descent = sheet_dy_descent(sheet);
+    let typo_top = f64::from(y0) + 2.0 + pitch * (1.0 - dy_descent) - face.line_height();
+    let aabb_y = match xf.v_align {
+        VAlign::Top => typo_top,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - aabb_h) / 2.0,
+        VAlign::Bottom => f64::from(y1) - aabb_h,
+    };
+    let origin_x = aabb_x - min_x;
+    let origin_y = aabb_y - min_y;
+    face.draw_cells_rotated(text, origin_x, origin_y, deg, color, |px, py, rgb, cov| {
+        if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+            return;
+        }
+        canvas.blend(px, py, rgb, cov);
+    });
+    Ok(())
+}
+
+fn paint_stacked_cell_text(
+    face: &Face,
+    text: &str,
+    xf: &Xf,
+    h_align: HAlign,
+    font: &FontInfo,
+    sheet: &Element,
+    dpi: RenderDpi,
+    x0: i32,
+    y0: i32,
+    y1: i32,
+    clip_r: i32,
+    inner_left: f64,
+    inner_right: f64,
+    color: [u8; 3],
+    canvas: &mut Canvas,
+) -> Result<(), Error> {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.is_empty() {
+        return Ok(());
+    }
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let dy_descent = sheet_dy_descent(sheet);
+    let block_h = pitch * chars.len() as f64;
+    let top0 = match xf.v_align {
+        VAlign::Top => f64::from(y0) + 2.0,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - block_h) / 2.0,
+        VAlign::Bottom => f64::from(y1) - block_h,
+    };
+    let col_w = face.em_box().max(1.0);
+    let col_x = match h_align {
+        HAlign::Left | HAlign::General | HAlign::Justify => inner_left,
+        HAlign::Center => inner_left + ((inner_right - inner_left).max(col_w) - col_w) / 2.0,
+        HAlign::Right => inner_right - col_w,
+        HAlign::Distributed => unreachable!("distributed already rejected"),
+    };
+    for (i, ch) in chars.iter().enumerate() {
+        let piece = ch.to_string();
+        let line_top = top0 + pitch * i as f64;
+        let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
+        let w = face.width(&piece);
+        let x = col_x + (col_w - w) / 2.0;
+        face.draw_cells(&piece, x, top, color, |px, py, rgb, cov| {
+            if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                return;
+            }
+            canvas.blend(px, py, rgb, cov);
+        });
+    }
     Ok(())
 }
 
@@ -6904,11 +7581,19 @@ fn paint_button(canvas: &mut Canvas, x: i32, y: i32) {
     }
 }
 
-fn encode_png(w: i32, h: i32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: i32, h: i32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w as u32, h as u32);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);
@@ -6961,14 +7646,14 @@ mod tests {
         }
         let data = excel_row_px(auto_row_pt("微软雅黑", 10.0));
         assert_eq!(data, 22);
-        assert_eq!(excel_row_px(auto_row_pt("Calibri", 11.0)), 20);
+        assert_eq!(excel_row_px(auto_row_pt("Calibri", 11.0)), 19);
         // 等线 11 = Normal 14.25pt → 19px；不得走雅黑 1.65×（否则 18.15→24，双行+框≈49）。
         assert_eq!(auto_row_pt("等线", 11.0), 14.25);
         assert_eq!(excel_row_px(auto_row_pt("等线", 11.0)), 19);
         assert_eq!(auto_row_pt("DengXian", 11.0), 14.25);
         // 非 11：不锁 COM 12→15.75 / 18→23，保持 pt*15/11，避免单例拟合。
         assert!((auto_row_pt("等线", 12.0) - 12.0 * 15.0 / 11.0).abs() < 1e-9);
-        assert_eq!(auto_row_pt("Calibri", 11.0), 15.0);
+        assert_eq!(auto_row_pt("Calibri", 11.0), 14.25);
         assert!((auto_row_pt("微软雅黑", 10.0) - 16.5).abs() < 1e-9);
         height += data * 7;
         assert_eq!(height, 418);
@@ -6976,6 +7661,40 @@ mod tests {
         assert_eq!(excel_row_px(22.0), 29);
         assert_eq!(excel_row_px(32.0), 42);
         assert_eq!(excel_row_px(26.0), 34);
+        let mut dpi_obj = serde_json::Map::new();
+        dpi_obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi106 = RenderDpi::from_request(&dpi_obj).unwrap();
+        // 标签行距跟自动行高走：等线/Calibri 11 在 106 是 21px，不是 tmHeight 17/19。
+        assert_eq!(excel_row_px_at(auto_row_pt("等线", 11.0), dpi106), 21);
+        assert_eq!(excel_row_px_at(auto_row_pt("Calibri", 11.0), dpi106), 21);
+        assert_eq!(excel_row_px_at(auto_row_pt("DengXian", 11.0), dpi106), 21);
+    }
+
+    #[test]
+    fn sheet_dy_descent_defaults_and_reads_prefixed_attr() {
+        let missing = crate::xml::parse(
+            br#"<worksheet><sheetFormatPr defaultRowHeight="14.3"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&missing.root), 0.25);
+
+        let prefixed = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr defaultRowHeight="14.3" x14ac:dyDescent="0.25"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&prefixed.root), 0.25);
+
+        let other = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr defaultRowHeight="15" x14ac:dyDescent="0.4"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&other.root), 0.4);
+
+        let out_of_range = crate::xml::parse(
+            br#"<worksheet xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"><sheetFormatPr x14ac:dyDescent="1.5"/></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(sheet_dy_descent(&out_of_range.root), 0.25);
     }
 
     #[test]
@@ -7451,6 +8170,7 @@ mod tests {
     #[test]
     fn rotate_cw_follows_clockwise_screen_axes() {
         let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 90.0);
+
         assert!((x).abs() < 1e-12, "{x}");
         assert!((y - 1.0).abs() < 1e-12, "{y}");
         let (x, y) = rotate_cw(1.0, 0.0, 0.0, 0.0, 0.0);
@@ -7459,12 +8179,40 @@ mod tests {
     }
 
     #[test]
+    fn excel_text_rotation_maps_ecma_angles() {
+        assert_eq!(excel_text_rotation_deg(0), Some(0.0));
+        assert_eq!(excel_text_rotation_deg(45), Some(45.0));
+        assert_eq!(excel_text_rotation_deg(90), Some(90.0));
+        assert_eq!(excel_text_rotation_deg(91), Some(-1.0));
+        assert_eq!(excel_text_rotation_deg(135), Some(-45.0));
+        assert_eq!(excel_text_rotation_deg(180), Some(-90.0));
+        assert_eq!(excel_text_rotation_deg(255), None);
+    }
+
+    #[test]
+    fn typo_aabb_after_right_angle_swaps_extents() {
+        let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(10.0, 8.0, 90.0);
+        assert!((min_x - 0.0).abs() < 1e-9);
+        assert!((max_x - 8.0).abs() < 1e-9);
+        assert!((min_y - (-10.0)).abs() < 1e-9);
+        assert!((max_y - 0.0).abs() < 1e-9);
+        let (min_x, min_y, max_x, max_y) = typo_aabb_after_escapement(10.0, 8.0, -90.0);
+        assert!((min_x - (-8.0)).abs() < 1e-9);
+        assert!((max_x - 0.0).abs() < 1e-9);
+        assert!((min_y - 0.0).abs() < 1e-9);
+        assert!((max_y - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
     fn a_square_quarter_turn_keeps_the_same_pixel_box() {
         let map = sample_group_map(5_400_000);
         assert_eq!(map.quarter(), Some(1));
-        assert_eq!(turned_box(&map, 0, 0).unwrap(), (10, 10, 26, 26));
         assert_eq!(
-            turned_box(&sample_group_map(0), 0, 0).unwrap(),
+            turned_box(&map, 0, 0, RenderDpi::DEFAULT).unwrap(),
+            (10, 10, 26, 26)
+        );
+        assert_eq!(
+            turned_box(&sample_group_map(0), 0, 0, RenderDpi::DEFAULT).unwrap(),
             (10, 10, 26, 26)
         );
     }
@@ -7473,9 +8221,134 @@ mod tests {
     fn a_45_degree_group_box_grows_and_is_not_the_unrotated_frame() {
         let map = sample_group_map(2_700_000);
         assert_eq!(map.quarter(), None);
-        let box_ = turned_box(&map, 0, 0).unwrap();
+        let box_ = turned_box(&map, 0, 0, RenderDpi::DEFAULT).unwrap();
         assert_ne!(box_, (10, 10, 26, 26));
         // 中心 18px，半对角 76200*sqrt(2)/9525 ≈ 11.314，外接框 round 后是 7..29。
         assert_eq!(box_, (7, 7, 29, 29));
+    }
+
+    #[test]
+    fn group_boxes_scale_with_request_dpi_and_keep_96() {
+        let mut obj = serde_json::Map::new();
+        obj.insert("dpi".into(), serde_json::json!(106));
+        let dpi = RenderDpi::from_request(&obj).unwrap();
+        let zero = sample_group_map(0);
+        // 95250×106/914400 ≈ 11.042，152400×106/914400 ≈ 17.667 → (11,11,29,29)
+        assert_eq!(turned_box(&zero, 0, 0, dpi).unwrap(), (11, 11, 29, 29));
+        assert_eq!(
+            turned_box(&zero, 0, 0, RenderDpi::DEFAULT).unwrap(),
+            (10, 10, 26, 26)
+        );
+        let angled = sample_group_map(2_700_000);
+        let box106 = turned_box(&angled, 0, 0, dpi).unwrap();
+        assert_ne!(box106, (11, 11, 29, 29));
+        assert_ne!(box106, (7, 7, 29, 29));
+        // 中心 95250+76200=171450 EMU → 19.875px；半对角 76200*sqrt(2)×106/914400 ≈ 12.492
+        assert_eq!(box106, (7, 7, 32, 32));
+    }
+
+    fn dpi106() -> RenderDpi {
+        let mut obj = serde_json::Map::new();
+        obj.insert("dpi".into(), serde_json::json!(106));
+        RenderDpi::from_request(&obj).unwrap()
+    }
+
+    fn frames_agree(
+        anchor: (i32, i32, i32, i32),
+        turned: (i32, i32, i32, i32),
+        typo_anchor: (i32, i32, i32, i32),
+        typo_turned: (i32, i32, i32, i32),
+    ) -> bool {
+        anchor == turned || typo_anchor == typo_turned
+    }
+
+    fn cell_edge(index: i32, off: i64, span: i32, dpi: RenderDpi) -> i32 {
+        index * span + round_px_at(off, dpi).unwrap()
+    }
+
+    #[test]
+    fn a_96px_snapped_two_cell_still_agrees_when_106_cell_grid_drifts() {
+        // 官方 right0 / deg15：组 40×40 起、120×60，twoCell 按 96 dpi 格子写入。
+        let dpi = dpi106();
+        let mut right0 = sample_group_map(0);
+        right0.off_x = 381_000;
+        right0.off_y = 381_000;
+        right0.cx = 1_143_000;
+        right0.cy = 571_500;
+        right0.ch_x = 381_000;
+        right0.ch_y = 381_000;
+        right0.ch_cx = 1_143_000;
+        right0.ch_cy = 571_500;
+        let turned96 = turned_box(&right0, 0, 0, RenderDpi::DEFAULT).unwrap();
+        let turned106 = turned_box(&right0, 0, 0, dpi).unwrap();
+        assert_eq!(turned96, (40, 40, 160, 100));
+        assert_eq!(turned106, (44, 44, 177, 110));
+        let typo = (
+            cell_edge(0, 381_000, 64, RenderDpi::DEFAULT),
+            cell_edge(1, 0, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 304_800, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 190_500, 40, RenderDpi::DEFAULT),
+        );
+        let anchor106 = (
+            cell_edge(0, 381_000, 72, dpi),
+            cell_edge(1, 0, 44, dpi),
+            cell_edge(2, 304_800, 72, dpi),
+            cell_edge(2, 190_500, 44, dpi),
+        );
+        assert_eq!(typo, turned96);
+        assert_ne!(anchor106, turned106);
+        assert_eq!(anchor106, (44, 44, 179, 110));
+        assert!(frames_agree(anchor106, turned106, typo, turned96));
+
+        let mut deg15 = right0;
+        deg15.rot = 900_000;
+        let turned96 = turned_box(&deg15, 0, 0, RenderDpi::DEFAULT).unwrap();
+        let turned106 = turned_box(&deg15, 0, 0, dpi).unwrap();
+        assert_eq!(turned96, (34, 25, 166, 115));
+        let typo = (
+            cell_edge(0, 323_850, 64, RenderDpi::DEFAULT),
+            cell_edge(0, 238_125, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 361_950, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 333_375, 40, RenderDpi::DEFAULT),
+        );
+        let anchor106 = (
+            cell_edge(0, 323_850, 72, dpi),
+            cell_edge(0, 238_125, 44, dpi),
+            cell_edge(2, 361_950, 72, dpi),
+            cell_edge(2, 333_375, 44, dpi),
+        );
+        assert_eq!(typo, turned96);
+        assert_ne!(anchor106, turned106);
+        assert_eq!(anchor106, (38, 28, 186, 127));
+        assert!(frames_agree(anchor106, turned106, typo, turned96));
+
+        // 仍用未旋转外框当 15° 组的锚点：两种路径都不对齐。
+        let wrong_typo = (
+            cell_edge(0, 381_000, 64, RenderDpi::DEFAULT),
+            cell_edge(1, 0, 40, RenderDpi::DEFAULT),
+            cell_edge(2, 304_800, 64, RenderDpi::DEFAULT),
+            cell_edge(2, 190_500, 40, RenderDpi::DEFAULT),
+        );
+        let wrong106 = (
+            cell_edge(0, 381_000, 72, dpi),
+            cell_edge(1, 0, 44, dpi),
+            cell_edge(2, 304_800, 72, dpi),
+            cell_edge(2, 190_500, 44, dpi),
+        );
+        assert_ne!(wrong_typo, turned96);
+        assert!(!frames_agree(wrong106, turned106, wrong_typo, turned96));
+    }
+
+    #[test]
+    fn mapping_into_the_two_cell_dest_is_identity_when_boxes_match() {
+        assert_eq!(
+            map_rect_into_dest(40, 40, 160, 100, (40, 40, 160, 100), (40, 40, 160, 100)).unwrap(),
+            (40, 40, 160, 100)
+        );
+        // 官方 right0 在 106 dpi：EMU 外框 (44,44,177,110)，格子锚点 (44,44,179,110)。
+        assert_eq!(
+            map_rect_into_dest(44, 44, 177, 110, (44, 44, 177, 110), (44, 44, 179, 110)).unwrap(),
+            (44, 44, 179, 110)
+        );
     }
 }

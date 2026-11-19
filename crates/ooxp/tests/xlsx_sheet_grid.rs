@@ -159,7 +159,7 @@ fn grid_off_clears_grid_pixels_and_keeps_fill_and_borders() {
 
     let (w, h, on_px) = decode_png(&on);
     let (w2, h2, off_px) = decode_png(&off);
-    assert_eq!((w, h), (129, 41));
+    assert_eq!((w, h), (129, 39));
     assert_eq!((w2, h2), (w, h));
     assert_eq!(pixel(&on_px, w, 128, 10), GRID);
     assert_eq!(pixel(&on_px, w, 1, 1), [0xEE, 0x44, 0x55]);
@@ -202,7 +202,7 @@ fn grid_colored_fill_stays_when_grid_is_off() {
     }));
     let off = hide_grid(&painted, "0");
     let (w, h, px) = decode_png(&export(&off));
-    assert_eq!((w, h), (129, 41));
+    assert_eq!((w, h), (129, 39));
     assert_eq!(pixel(&px, w, 0, 10), [255, 255, 255]);
     assert_eq!(pixel(&px, w, 70, 10), GRID);
 }
@@ -261,26 +261,28 @@ fn missing_default_row_height_is_fourteen_point_two_five() {
     let sheet = std::fs::read(&src).unwrap();
     assert!(!String::from_utf8_lossy(&sheet).contains("defaultRowHeight"));
     let (w, h, px) = decode_png(&export(&src));
-    assert_eq!((w, h), (65, 60));
+    // Calibri 11 auto is 14.25 pt / 19 px at 96 (was 15/20). Three rows + frame = 58.
+    assert_eq!((w, h), (65, 58));
     let red = [0xEE, 0x44, 0x55];
     let blue = [0x11, 0x22, 0x33];
     let white = [255, 255, 255];
     assert_eq!(pixel(&px, w, 0, 1), white);
     assert_eq!(pixel(&px, w, 1, 1), red);
-    assert_eq!(pixel(&px, w, 1, 20), red);
-    assert_eq!(pixel(&px, w, 1, 21), white);
-    assert_eq!(pixel(&px, w, 1, 38), white);
-    assert_eq!(pixel(&px, w, 1, 39), blue);
-    assert_eq!(pixel(&px, w, 1, 59), blue);
+    assert_eq!(pixel(&px, w, 1, 19), red);
+    assert_eq!(pixel(&px, w, 1, 20), white);
+    assert_eq!(pixel(&px, w, 1, 37), white);
+    assert_eq!(pixel(&px, w, 1, 38), blue);
+    assert_eq!(pixel(&px, w, 1, 57), blue);
 
     let ignored = with_format(&src, r#"<sheetFormatPr defaultRowHeight="18"/>"#);
     let (w, h, px) = decode_png(&export(&ignored));
-    assert_eq!((w, h), (65, 61));
-    assert_eq!(pixel(&px, w, 1, 20), red);
-    assert_eq!(pixel(&px, w, 1, 21), white);
-    assert_eq!(pixel(&px, w, 1, 39), white);
-    assert_eq!(pixel(&px, w, 1, 40), blue);
-    assert_eq!(pixel(&px, w, 1, 60), blue);
+    // customHeight is off, so 18 is ignored and Normal Calibri 11 = 14.25, same 58 as missing.
+    assert_eq!((w, h), (65, 58));
+    assert_eq!(pixel(&px, w, 1, 19), red);
+    assert_eq!(pixel(&px, w, 1, 20), white);
+    assert_eq!(pixel(&px, w, 1, 37), white);
+    assert_eq!(pixel(&px, w, 1, 38), blue);
+    assert_eq!(pixel(&px, w, 1, 57), blue);
 
     let locked = with_format(
         &src,
@@ -306,6 +308,6 @@ fn right_to_left_without_text_is_drawn() {
         )
     });
     let (w, h, px) = decode_png(&export(&dst));
-    assert_eq!((w, h), (129, 41));
+    assert_eq!((w, h), (129, 39));
     assert_eq!(pixel(&px, w, 0, 0), [255, 255, 255]);
 }

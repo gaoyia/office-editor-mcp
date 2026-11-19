@@ -300,7 +300,7 @@ fn chartsheet_scatter_png_matches_chart_image_and_line_only_stays_ni() {
     assert_eq!(sheet, chart);
     let width = u32::from_be_bytes(sheet[16..20].try_into().unwrap());
     let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
-    assert_eq!((width, height), (576, 336));
+    assert_eq!((width, height), (975, 638));
 
     let part = chart_part(&book);
     let xml = part_text(&book, &part);
