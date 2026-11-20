@@ -749,16 +749,16 @@ pub(crate) fn render_chart_with_theme(
             }
         }
         canvas.plot_fill = if chart.kind == PlotKind::Pie {
-            // A pie's automatic plot area is transparent. Explicit pie plot-area
-            // formatting needs its own layout evidence, not an inscribed square.
-            // Plot noFill is already transparent and is not the F09 non-white case.
-            if !matches!(
-                frame.plot_fill,
-                FrameFill::NoFill | FrameFill::Default | FrameFill::Solid([255, 255, 255])
-            ) {
-                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            // A pie's automatic plot area is transparent. Explicit opaque solid
+            // fill uses the same title/legend-aware plot rectangle as the pie,
+            // before slices, never the full available host rectangle.
+            match frame.plot_fill {
+                FrameFill::NoFill | FrameFill::Default => None,
+                FrameFill::Solid(color) => Some(PlotPaint::Solid(color, 255)),
+                // Translucent and gradient pie plot fills need their own
+                // fractional-edge compositing locks, not Cartesian assumptions.
+                _ => return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id")),
             }
-            None
         } else {
             match frame.plot_fill {
                 FrameFill::NoFill => None,
@@ -2263,6 +2263,9 @@ fn paint_pie(
     } else {
         canvas.dpi.scale_px(INSET_TOP)
     };
+    if let Some(PlotPaint::Solid(color, 255)) = canvas.plot_fill {
+        canvas.fill_fractional_rect(&plot, color);
+    }
     draw_pie_slices(canvas, chart, &plot);
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -4773,6 +4776,20 @@ impl Canvas {
         for y in y0..y1 {
             for x in x0..x1 {
                 self.blend(x, y, color, cov);
+            }
+        }
+    }
+
+    /// Area coverage of an axis-aligned floating rectangle. Pie plot bounds
+    /// are point-derived and must not be shifted/truncated to match one gold.
+    fn fill_fractional_rect(&mut self, rect: &Rect, color: [u8; 3]) {
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                self.blend(x, y, color, (cx * cy * 255.0).round() as u8);
             }
         }
     }
@@ -9349,6 +9366,62 @@ mod tests {
             }
         }
         (n > 0).then_some((sx / n as f64, sy / n as f64, n))
+    }
+
+    #[test]
+    fn pie_opaque_plot_fill_paints_bounding_square_before_slices() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(1.0), Some(1.0), Some(1.0)], "");
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let xml = standard_pie_xml(&ser, "", "").replace(r#"<c:legend><c:legendPos val="r"/></c:legend>"#, "").replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='FFFF00'/></a:solidFill></c:spPr>",
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let png = render_chart_at(
+                &doc.root,
+                576,
+                336,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                dpi,
+            )
+            .unwrap();
+            let (w, h, rgb) = decode_rgb(&png);
+            let rect = pie_plot_bounds(576.0, 336.0, 0.0, 0.0, dpi).unwrap();
+            let x = rect.x.ceil() as u32 + 2;
+            let y = rect.y.ceil() as u32 + 2;
+            let i = ((y * w + x) * 3) as usize;
+            assert_eq!(
+                &rgb[i..i + 3],
+                &[255, 255, 0],
+                "bounding-square corner, not just wedge"
+            );
+            let outside = ((y * w + x - 5) * 3) as usize;
+            assert_eq!(
+                &rgb[outside..outside + 3],
+                &[255, 255, 255],
+                "not full host fill"
+            );
+            for accent in &FALLBACK_ACCENTS[..4] {
+                assert!(
+                    color_centroid(&rgb, w, h, *accent, 0).unwrap().2 > 100,
+                    "fill must stay below slices"
+                );
+            }
+        }
+        for fill in [
+            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
+            "<a:gradFill><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='0'/></a:gradFill>",
+        ] {
+            let xml=standard_pie_xml(&ser,"","").replace("<c:plotArea>",&format!("<c:plotArea><c:spPr>{fill}</c:spPr>"));
+            assert!(render_pie(&xml).is_err(),"unlocked pie plot fill must remain NI");
+        }
     }
 
     #[test]
