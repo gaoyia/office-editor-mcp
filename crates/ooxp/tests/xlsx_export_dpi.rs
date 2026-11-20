@@ -1,4 +1,4 @@
-//! 导出可选 dpi：省略或 96 与历史出图一致；其它整数 DPI 原生重算，不是拉伸。
+//! 导出可选 dpi：省略或 96 按该 DPI 的列行像素加 CopyPicture +1 边框；其它整数 DPI 原生重算，不是拉伸。
 //! exportSlideImage / exportPageImage 本切片不接受此字段。
 
 use std::io::Cursor;
@@ -183,7 +183,7 @@ fn omitted_and_explicit_96_match_historical_spark_size() {
     assert_eq!(std::fs::read(&src).unwrap(), before, "导出不得改源包");
     assert_eq!(omitted, explicit);
     let (w, h, _) = decode_png(&omitted);
-    assert_eq!((w, h), (64, 20));
+    assert_eq!((w, h), (65, 20));
     assert_no_phys(&omitted);
     assert_no_phys(&explicit);
 }
@@ -209,9 +209,10 @@ fn sparkline_106_is_native_and_larger() {
     assert_eq!(std::fs::read(&src).unwrap(), before);
     let (w96, h96, rgb96) = decode_png(&at96);
     let (w106, h106, rgb106) = decode_png(&at106);
-    assert_eq!((w96, h96), (64, 20));
-    // Calibri 11 default at 106 is 72 (MDW remasured), not scale_px(64)=71.
-    assert_eq!((w106, h106), (72, 22));
+    assert_eq!((w96, h96), (65, 20));
+    // Calibri 11 default at 106 is 72 (MDW remasured) + CopyPicture +1 frame = 73,
+    // not scale_px(64)=71. Height: Normal 14.25pt -> 21 + 1 = 22.
+    assert_eq!((w106, h106), (73, 22));
     assert_ne!(at96, at106);
     assert_no_phys(&at96);
     assert_phys_dpi(&at106, 106);
@@ -257,10 +258,11 @@ fn illegal_dpi_is_rejected_and_source_stays() {
     )
     .unwrap();
     let (w, h, _) = decode_png(&lo);
-    // 24 dpi remasures MDW (Calibri 11 -> 2 on this host) so default is 8*2+8=24,
-    // not the old scale_px(64)=16. Height 5 is layout-round of the package's 15 pt row.
+    // 24 dpi remasures MDW (Calibri 11 -> 2 on this host) so default is 8*2+8=24
+    // plus CopyPicture +1 frame = 25, not the old scale_px(64)=16. Height 6 is
+    // layout-round of Normal 14.25 pt (or package 15 pt) plus the same +1 frame.
     // 24 dpi is a supported bound, not official CopyPicture gold.
-    assert_eq!((w, h), (24, 5));
+    assert_eq!((w, h), (25, 6));
 }
 
 #[test]

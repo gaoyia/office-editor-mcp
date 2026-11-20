@@ -190,24 +190,24 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-日期时间格式出图.md` — 内置 14–22 + yyyy/mm/dd string 对齐 Range.Text；CopyPicture 721×22@106 vs lib 641×21 pxBlocked。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-错误值出图.md` — 点名七码 `t=e` string+paint；CopyPicture 809×30@106 vs lib 705×27 pxBlocked。
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-换行缩进出图.md` — wrapText/indent paint；CopyPicture 373×221@106 vs lib 325×201 pxBlocked；Face::width 断点。
+本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-换行缩进出图.md` — wrapText/indent paint；CopyPicture 373×221@106 vs lib 325×201 pxBlocked；Face::width 断点。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-从右到左文字出图.md` — sheetView RTL + 拉丁/CJK 正写；readingOrder=2/强 RTL NI；gold 145×43@106 vs lib 129×49 pxBlocked。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-斜线边框出图.md` — thin/medium 实线斜线；gold 256×110@106 vs lib 223×100 pxBlocked；等线行高 14.25 纠偏。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-渐变填充出图.md` — SpreadsheetML 两停点不透明 linear（sRGB mix，非 PPT gamma）；path/theme/alpha NI；CopyPicture 203×60@106 vs lib 177×54 pxBlocked；等线 11→14.25 COM 来源写入契约。
 
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-负数数据条出图.md` — x14 实心 middle；gold 506×22@106 vs lib 441×96 pxBlocked；主题色-only/未知轴仍 NI。前刀：`.plan/2026年-11月-16日-⚠️-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。
+本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-负数数据条出图.md` — x14 实心 middle；gold 506×22@106 vs lib 441×96 pxBlocked；主题色-only/未知轴仍 NI。前刀：`.plan/2026年-11月-16日-✅-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-超大区域切块.md` — tilePx 切块；stitch differ=0；默认 4096 NI 不绕；MAX_TILE_COUNT/总像素闸。
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。
+本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-差分虚线斜点划线.md` — CF dashed/slantDashDot；节律 oracle；整图 sizeDiffer。
 
 
-本分支共享缺陷修复：`.plan/2026年-11月-17日-⚠️-xlsx-共享列几何与尺寸链路.md`。Normal 字体固定 96 MDW、直接 OOXML 列宽以及 sheet/tiles/spark/twoCell 入口已共用；固定 96 维度回归通过，官方整图仍未全部通过。其它未开工功能保持暂停。
+本分支共享缺陷修复：`.plan/2026年-11月-17日-✅-xlsx-共享列几何与尺寸链路.md`。Normal 字体固定 96 MDW、直接 OOXML 列宽以及 sheet/tiles/spark/twoCell 入口已共用；固定 96 维度回归通过，官方整图仍未全部通过。其它未开工功能保持暂停。
 
 
-2026-11-17 PR10既有图例缺陷修复：见`.plan/2026年-11月-17日-⚠️-xlsx-图例样式与位置修复.md`。有效普通txPr样式、五位置、overlay、普通manualLayout与entry删除不再成功返回却静默丢失，复杂有效配置诚实NI；styled-right纠正为合法手动框/叠放组合，不称Office坏图。新增10项回归、全套1849通过；旧缺省右图PNG SHA不变。7组同源严格比较仍636×371 vs576×336，字体/边距/灰阶等残差保留，不把布局修复标整图✅。100705逐图有限复核继续在本次待办，其余十项新功能暂停。
+2026-11-17 PR10既有图例缺陷修复：见`.plan/2026年-11月-17日-✅-xlsx-图例样式与位置修复.md`。有效普通txPr样式、五位置、overlay、普通manualLayout与entry删除不再成功返回却静默丢失，复杂有效配置诚实NI；styled-right纠正为合法手动框/叠放组合，不称Office坏图。新增10项回归、全套1849通过；旧缺省右图PNG SHA不变。7组同源严格比较仍636×371 vs576×336，字体/边距/灰阶等残差保留，不把布局修复标整图✅。100705逐图有限复核继续在本次待办，其余十项新功能暂停。
 
 
 ### 2026-11-17 P0：公平诊断语料修复（不是renderer验收）
@@ -229,7 +229,7 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 - 51项当前49成功/2 NI，成功项49/49固定96维度；严格0 PASS/49 sizeDiffer/2 NI，widthChanged0/statusChanged1，不把诚实NI冒充尺寸回归。
 - 可见复杂/未支持配置诚实NI；隐藏宿主不影响其它内容；RTL/merged/非空文字宿主不伪造支持，dateAxis等暂停功能不恢复。
 - fmt、clippy all-targets/all-features -D warnings、全Rust1860 passed/0 failed/0 ignored、Python8、实际CLI build通过。P3/自动值轴/端点/Normal继承残差另核，不塞本片。
-- 证据：桌面 `office-editor-PR10-迷你图遗漏修复-20261117-134723`；详情 `.plan/2026年-11月-17日-⚠️-xlsx-工作表内嵌迷你图遗漏.md`。gold复用P0同SHA原生图，P1未重开Office、owner lock0。
+- 证据：桌面 `office-editor-PR10-迷你图遗漏修复-20261117-134723`；详情 `.plan/2026年-11月-17日-✅-xlsx-工作表内嵌迷你图遗漏.md`。gold复用P0同SHA原生图，P1未重开Office、owner lock0。
 
 
 2026-11-17 P3（82圆角）：既有默认白底圆角PNG恢复coverage直出alpha，内部白/颜色及白底合成不变；合法但未支持的背景/描边/显式非圆角NI。整图及圆弧AA仍⚠️，不把17图四角透明恢复记全部通过；详圆角计划。自动值轴与暂停10项不在本片。
@@ -305,3 +305,8 @@ DPI几何分子**38/49不变**，6 Normal路径仍需Office同语义可比证据
 实际完整Rust1874 passed/0failed/0ignored；44 Python通过，fmt、workspace clippy全targets/features-Dwarnings、真实CLI build、语法/diff通过。新exeSHA见桌面minimal-fix-results.json，旧28ddb1f2完整exe保留。原1873与38是前片历史，不冒充本次。几何43/49不变，未称7功能/7整图PASS。
 
 证据：桌面office-editor-PR10-图例坐标核实-20261117-162104。四自有wb全部Close(false)、ownwb0、源SHA不变/独占读/锁0；无Save/Quit/kill/删锁/系统设置。当前必要检查与小回归修复已结束，按t128不继续追4pt、自动布局或其它项目；余绝对原点/自动边距/key与ink细节记录为限制，暂停十项不恢复。
+
+
+## 2026-11-20 t160u/t164u：迷你折线与列宽审核通过
+
+用户 t160 将迷你折线角度审核标为通过（同 106 画布角度 / 抗锯齿残差已接受，无唯一通用公式，未写入代码）。用户 t164 通过 `fonts[0]` 列宽修复：Excel 16.0 列宽 MDW 取 stylesheet `fonts[0]` 而非 Normal，仍按请求 DPI 重测，不是「永远 96 MDW」。修后 106 下工作表 325×23、迷你图 82×23 已与官方齐，图表 324×220 对官方 324×221，已接受 1px 高度残差（未硬插 +1）。对应计划已改名为 ✅：`.plan/2026年-11月-17日-✅-xlsx-Normal继承核实.md`、`.plan/2026年-11月-17日-✅-迷你图端点与笔画核实.md`、`.plan/2026年-11月-17日-✅-xlsx-DPI验收复核.md`、`.plan/2026年-11月-20日-✅-pr12-出图对照收束.md`。准备由用户合并 PR12。不改绿 11 月 14 日总计划或 pr10 / pr11 交接。

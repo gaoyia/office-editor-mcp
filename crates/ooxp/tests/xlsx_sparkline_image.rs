@@ -111,10 +111,10 @@ fn line_sparkline_is_a_png_of_the_cell() {
     assert_eq!(std::fs::read(&src).unwrap(), before);
     assert_eq!(&bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
     let (w, h, rgb) = decode_png(&bytes);
-    assert_eq!((w, h), (64, 20));
-    assert_eq!(pixel(&rgb, w, 0, 0), [255, 255, 255]);
+    assert_eq!((w, h), (65, 20));
+    assert_eq!(pixel(&rgb, w, 0, 0), GRID);
     let peak = pixel(&rgb, w, 32, 5);
-    let start = pixel(&rgb, w, 12, 16);
+    let start = pixel(&rgb, w, 12, 15);
     assert!(peak[2] > peak[0], "峰顶像素 {peak:?}");
     assert!(start[2] > 140, "起点像素 {start:?}");
 }
@@ -137,14 +137,28 @@ fn set_type(src: &Path, tag: &str, kind: &str) -> PathBuf {
 
 const SERIES: [u8; 3] = [0x37, 0x60, 0x92];
 
-/// 含端点的柱。坐标来自 Excel 16.0 的空单元格，不从绘制函数回推。
+/// 含端点的柱。可绘制区沿用既有柱槽公式；独立出图按 CopyPicture 再加 1 像素外缝。
+/// 默认网格开启时外框为 #E0E0E0。行高与工作表出图一致（14.25 磅在 96 dpi 为 19
+/// 像素可绘制 + 1 像素外缝 = 20）。
+const GRID: [u8; 3] = [224, 224, 224];
+fn is_frame(x: u32, y: u32, width: u32, height: u32) -> bool {
+    x == 0 || y == 0 || x + 1 == width || y + 1 == height
+}
 fn assert_bars(rgb: &[u8], width: u32, height: u32, bars: &[(u32, u32, u32, u32)]) {
     for y in 0..height {
         for x in 0..width {
-            let inside = bars
-                .iter()
-                .any(|(x0, x1, y0, y1)| x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1);
-            let want = if inside { SERIES } else { [255, 255, 255] };
+            let want = if is_frame(x, y, width, height) {
+                GRID
+            } else {
+                let inside = bars
+                    .iter()
+                    .any(|(x0, x1, y0, y1)| x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1);
+                if inside {
+                    SERIES
+                } else {
+                    [255, 255, 255]
+                }
+            };
             assert_eq!(pixel(rgb, width, x, y), want, "像素 ({x},{y})");
         }
     }
@@ -154,12 +168,12 @@ fn assert_bars(rgb: &[u8], width: u32, height: u32, bars: &[(u32, u32, u32, u32)
 fn column_sparkline_matches_the_measured_bars() {
     let src = set_type(&insert_line(&book("col")), "col-set", "column");
     let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
-    assert_eq!((w, h), (64, 20));
+    assert_eq!((w, h), (65, 20));
     assert_bars(
         &rgb,
         w,
         h,
-        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+        &[(6, 19, 15, 15), (25, 39, 5, 15), (45, 58, 12, 15)],
     );
 }
 
@@ -178,12 +192,12 @@ fn column_sparkline_on_a_wider_cell_uses_the_same_slots() {
         ]
     }));
     let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
-    assert_eq!((w, h), (110, 20));
+    assert_eq!((w, h), (111, 20));
     assert_bars(
         &rgb,
         w,
         h,
-        &[(8, 32, 16, 16), (43, 67, 5, 16), (78, 102, 13, 16)],
+        &[(8, 32, 15, 15), (43, 67, 5, 15), (78, 102, 12, 15)],
     );
 }
 
@@ -195,8 +209,8 @@ fn column_sparkline_skips_a_zero_when_the_minimum_is_zero() {
         "column",
     );
     let (w, h, rgb) = decode_png(&export(&src, "sheet:Sheet1/spark:1").unwrap());
-    assert_eq!((w, h), (64, 20));
-    assert_bars(&rgb, w, h, &[(25, 39, 11, 16), (45, 58, 5, 16)]);
+    assert_eq!((w, h), (65, 20));
+    assert_bars(&rgb, w, h, &[(25, 39, 10, 15), (45, 58, 5, 15)]);
 }
 
 #[test]
@@ -211,7 +225,7 @@ fn column_sparkline_of_equal_positives_fills_the_plot() {
         &rgb,
         w,
         h,
-        &[(6, 19, 5, 16), (25, 39, 5, 16), (45, 58, 5, 16)],
+        &[(6, 19, 5, 15), (25, 39, 5, 15), (45, 58, 5, 15)],
     );
 }
 
@@ -231,10 +245,16 @@ const HIGH: [u8; 3] = [0xEE, 0x44, 0x55];
 fn assert_colored(rgb: &[u8], width: u32, height: u32, bars: &[(u32, u32, u32, u32, [u8; 3])]) {
     for y in 0..height {
         for x in 0..width {
-            let mut want = [255, 255, 255];
-            for (x0, x1, y0, y1, color) in bars {
-                if x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1 {
-                    want = *color;
+            let mut want = if is_frame(x, y, width, height) {
+                GRID
+            } else {
+                [255, 255, 255]
+            };
+            if !is_frame(x, y, width, height) {
+                for (x0, x1, y0, y1, color) in bars {
+                    if x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1 {
+                        want = *color;
+                    }
                 }
             }
             assert_eq!(pixel(rgb, width, x, y), want, "像素 ({x},{y})");
@@ -277,15 +297,15 @@ fn column_point_colors_keep_low_then_high_then_last() {
             }
         }),
     );
-    assert_eq!((w, h), (64, 20));
+    assert_eq!((w, h), (65, 20));
     assert_colored(
         &rgb,
         w,
         h,
         &[
-            (6, 19, 16, 16, LOW),
-            (25, 39, 5, 16, HIGH),
-            (45, 58, 13, 16, SERIES),
+            (6, 19, 15, 15, LOW),
+            (25, 39, 5, 15, HIGH),
+            (45, 58, 12, 15, SERIES),
         ],
     );
 
@@ -306,9 +326,9 @@ fn column_point_colors_keep_low_then_high_then_last() {
         w,
         h,
         &[
-            (6, 19, 5, 16, LOW),
-            (25, 39, 5, 16, LOW),
-            (45, 58, 5, 16, LOW),
+            (6, 19, 5, 15, LOW),
+            (25, 39, 5, 15, LOW),
+            (45, 58, 5, 15, LOW),
         ],
     );
 
@@ -329,9 +349,9 @@ fn column_point_colors_keep_low_then_high_then_last() {
         w,
         h,
         &[
-            (6, 19, 13, 16, SERIES),
-            (25, 39, 5, 16, SERIES),
-            (45, 58, 16, 16, HIGH),
+            (6, 19, 12, 15, SERIES),
+            (25, 39, 5, 15, SERIES),
+            (45, 58, 15, 15, HIGH),
         ],
     );
 }
@@ -343,14 +363,14 @@ fn column_markers_and_an_unused_negative_flag_keep_the_series() {
         &rgb,
         w,
         h,
-        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+        &[(6, 19, 15, 15), (25, 39, 5, 15), (45, 58, 12, 15)],
     );
     let (w, h, rgb) = column_with("col-negative", [1, 4, 2], json!({ "negative": true }));
     assert_bars(
         &rgb,
         w,
         h,
-        &[(6, 19, 16, 16), (25, 39, 5, 16), (45, 58, 13, 16)],
+        &[(6, 19, 15, 15), (25, 39, 5, 15), (45, 58, 12, 15)],
     );
 }
 
@@ -375,7 +395,7 @@ fn column_negatives_markers_axis_and_missing_ids_are_rejected() {
     let bytes = export(&stacked, "sheet:Sheet1/spark:1").unwrap();
     assert_eq!(&bytes[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
     let (w, h, rgb) = decode_png(&bytes);
-    assert_eq!((w, h), (64, 20));
+    assert_eq!((w, h), (65, 20));
     // insert 缺省 negative=false：负半仍用系列色 #376092
     assert_eq!(pixel(&rgb, w, 12, 14), SERIES);
 

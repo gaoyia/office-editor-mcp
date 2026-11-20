@@ -351,7 +351,10 @@ fn reject_rtl_extras(sheet: &Element) -> Result<(), Error> {
 }
 
 /// 没写 `showGridLines` 时默认开着。`0` 和 `false` 关掉。
-fn shows_grid(sheet: &Element) -> bool {
+/// 官方 Excel 16.0 `Range.CopyPicture(xlScreen, xlBitmap)` 在窗口网格开启时画出
+/// #E0E0E0 网格，关掉时同一尺寸留白；两种情况的画布都是 Σpx+1。库按文件属性出图，
+/// 不跟随实时窗口开关。
+pub(crate) fn shows_grid(sheet: &Element) -> bool {
     let Some(view) = sheet
         .child_by_local("sheetViews")
         .and_then(|views| views.child_by_local("sheetView"))
@@ -361,6 +364,36 @@ fn shows_grid(sheet: &Element) -> bool {
     !view
         .attr("showGridLines")
         .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+/// 独立迷你图宿主的可绘制宽高（不含 CopyPicture 右边/底边那 1 像素外缝）。
+/// 列规则与 `GeometryContext` 相同；行规则与工作表出图相同：写了 `defaultRowHeight`
+/// 但没有 `customHeight` 时，不用这个字面值，改用常规样式行高
+///（Calibri 11 / 等线 11 为 14.25 磅，106 dpi 为 21 像素）。
+/// 官方 raw 画布是可绘制宽高各 +1，见 `Axis::bitmap`。
+pub(crate) fn spark_host_drawable_px(
+    pkg: &Package,
+    sheet_name: &str,
+    sheet: &Element,
+    col: u32,
+    row: u32,
+    dpi: RenderDpi,
+) -> Result<(u32, u32), Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let rels = Relationships::from_package(pkg, &wb_part)?;
+    let sst = inspect::load_shared_strings(pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
+    let mut session = eval::FormulaSession::open(pkg, sheet_name)?;
+    let cells = read_cells(sheet, &sst, &mut session)?;
+    let cols = column_sizes(sheet, &styles.geometry, col, col)?;
+    let rows = row_sizes(sheet, &styles, &cells, row, row)?;
+    let width = *cols.first().ok_or_else(unsupported)?;
+    let height = *rows.first().ok_or_else(unsupported)?;
+    if width < 1 || height < 1 {
+        return Err(unsupported());
+    }
+    Ok((width as u32, height as u32))
 }
 
 /// 条件格式把隐藏格子算进最小、最大时，可见格子的颜色会变。这一期不猜，整表不画。
@@ -4017,6 +4050,9 @@ fn row_auto_pt(
             raise(styles.font(cell.style)?);
         }
     }
+    if row_has_icon_set(&parsed_icon_rules(sheet)?, row) {
+        pt = pt.max(super::icon_set::ICON_AUTO_ROW_MIN_PT);
+    }
     Ok(pt)
 }
 
@@ -4434,7 +4470,7 @@ fn paint_window(
             session,
         )?;
     }
-    paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
+    paint_rules(&mut canvas, sheet, styles, cells, &xs, &ys, c0, r0)?;
     let mut fonts = FontBook {
         dpi: styles.geometry.dpi(),
         faces: Vec::new(),
@@ -5137,12 +5173,14 @@ fn line_on(kind: LineKind, along: i32, across: i32, boundary: i32) -> bool {
 fn paint_rules(
     canvas: &mut Canvas,
     sheet: &Element,
+    styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
     xs: &Axis,
     ys: &Axis,
     c0: u32,
     r0: u32,
 ) -> Result<(), Error> {
+    let icons = parsed_icon_rules(sheet)?;
     let mut rules = Vec::new();
     for block in sheet.children_by_local("conditionalFormatting") {
         let sqref = block.attr("sqref").unwrap_or("");
@@ -5173,14 +5211,154 @@ fn paint_rules(
             "containsErrors" | "notContainsErrors" => {
                 let _ = error_mode(rule, areas)?;
             }
-            // iconSet：选择语义见 `icon_set` 模块；无合法字形资产前整表仍 NI（不冒充出图）。
-            "iconSet" => return Err(unsupported()),
+            // iconSet：最小三色子集在 paint_icon_sets 绘制；其它集合已在 parsed_icon_rules NI。
+            "iconSet" => {}
             _ => return Err(unsupported()),
         }
     }
     for (_, areas, rule) in &rules {
         if rule.attr("type") == Some("dataBar") {
             paint_bar(canvas, sheet, cells, xs, ys, c0, r0, areas, rule)?;
+        }
+    }
+    paint_icon_sets(canvas, sheet, styles, cells, xs, ys, c0, r0, &icons)?;
+    Ok(())
+}
+
+struct IconRule<'a> {
+    priority: i32,
+    areas: Vec<(CellRef, CellRef)>,
+    set: super::icon_set::ThreeIconSet,
+    show_value: bool,
+    reverse: bool,
+    cfvos: Vec<&'a Element>,
+}
+
+fn parsed_icon_rules(sheet: &Element) -> Result<Vec<IconRule<'_>>, Error> {
+    let mut out = Vec::new();
+    for block in sheet.children_by_local("conditionalFormatting") {
+        let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
+        for rule in block.children_by_local("cfRule") {
+            if rule.attr("type") != Some("iconSet") {
+                continue;
+            }
+            out.push(parse_one_icon_rule(areas.clone(), rule)?);
+        }
+    }
+    Ok(out)
+}
+
+fn parse_one_icon_rule<'a>(
+    areas: Vec<(CellRef, CellRef)>,
+    rule: &'a Element,
+) -> Result<IconRule<'a>, Error> {
+    let priority = rule
+        .attr("priority")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(i32::MAX);
+    let Some(iset) = rule.child_by_local("iconSet") else {
+        return Err(unsupported());
+    };
+    if icon_set_is_custom(iset) {
+        return Err(unsupported());
+    }
+    let name = super::icon_set::icon_set_name(iset.attr("iconSet"));
+    let Some(set) = super::icon_set::parse_minimal_set(name) else {
+        return Err(unsupported());
+    };
+    let cfvos = iset.children_by_local("cfvo");
+    if cfvos.len() != 3 {
+        return Err(unsupported());
+    }
+    Ok(IconRule {
+        priority,
+        areas,
+        set,
+        show_value: super::icon_set::show_value(iset.attr("showValue")),
+        reverse: super::icon_set::reverse_icons(iset.attr("reverse")),
+        cfvos,
+    })
+}
+
+fn icon_set_is_custom(iset: &Element) -> bool {
+    matches!(iset.attr("custom"), Some("1" | "true" | "True"))
+        || !iset.children_by_local("cfIcon").is_empty()
+}
+
+fn icon_show_value(rules: &[IconRule<'_>], col: u32, row: u32) -> Option<bool> {
+    let mut best: Option<(i32, bool)> = None;
+    for rule in rules {
+        if !in_areas(col, row, &rule.areas) {
+            continue;
+        }
+        if best.map(|(p, _)| rule.priority < p).unwrap_or(true) {
+            best = Some((rule.priority, rule.show_value));
+        }
+    }
+    best.map(|(_, show)| show)
+}
+
+fn row_has_icon_set(rules: &[IconRule<'_>], row: u32) -> bool {
+    rules.iter().any(|rule| {
+        rule.areas
+            .iter()
+            .any(|(a, b)| row >= a.row.min(b.row) && row <= a.row.max(b.row))
+    })
+}
+
+fn cell_typo_center_y(y0: i32, y1: i32, xf: &Xf, font: &FontInfo, dpi: RenderDpi) -> f64 {
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let top0 = match xf.v_align {
+        VAlign::Top => f64::from(y0) + 2.0,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - pitch) / 2.0,
+        VAlign::Bottom => f64::from(y1) - pitch,
+    };
+    super::icon_set::typo_line_center(top0, pitch)
+}
+
+fn paint_icon_sets(
+    canvas: &mut Canvas,
+    _sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+    icons: &[IconRule<'_>],
+) -> Result<(), Error> {
+    let dpi = styles.geometry.dpi();
+    for rule in icons {
+        let values = area_numbers(cells, &rule.areas);
+        let mut thresholds = Vec::with_capacity(rule.cfvos.len());
+        let mut gte = Vec::with_capacity(rule.cfvos.len());
+        for cfvo in &rule.cfvos {
+            thresholds.push(cfvo_value(cfvo, &values)?);
+            gte.push(super::icon_set::cfvo_gte(cfvo.attr("gte")));
+        }
+        for ((col, row), cell) in cells {
+            let Shown::Num(n) = cell.shown else {
+                continue;
+            };
+            if !in_areas(*col, *row, &rule.areas) {
+                continue;
+            }
+            let Some((x0, y0, x1, y1)) = cell_rect(xs, ys, c0, r0, *col, *row) else {
+                continue;
+            };
+            let xf = styles.xf(cell.style)?;
+            let font = styles.font(cell.style)?;
+            let typo = cell_typo_center_y(y0, y1, xf, font, dpi);
+            let slot = super::icon_set::icon_slot_px(font.pt, dpi.get());
+            let Some((ix, iy, size)) = super::icon_set::icon_slot_rect(x0, y0, x1, y1, slot, typo)
+            else {
+                continue;
+            };
+            let index = super::icon_set::select_icon_index(n, &thresholds, &gte, rule.reverse)
+                .map_err(|_| unsupported())?;
+            super::icon_set::paint_three_icon(rule.set, index, ix, iy, size, |x, y, rgb, cov| {
+                canvas.blend(x, y, rgb, cov);
+            });
         }
     }
     Ok(())
@@ -5438,7 +5616,7 @@ fn cf_fill(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(i32::MAX);
             let color = match rule.attr("type").unwrap_or("") {
-                "dataBar" => None,
+                "dataBar" | "iconSet" => None,
                 "colorScale" => scale_of(cells, &areas, rule, col, row)?,
                 "cellIs" => cell_is_fill(styles, cells, rule, col, row)?,
                 "expression" | "timePeriod" => {
@@ -5821,7 +5999,8 @@ fn attr_is_one_or_true(el: &Element, name: &str) -> bool {
 
 /// x14 实心 + `axisPosition=middle`：正右负左；`gradient=0`；`minLength=0`/`maxLength=100`。
 /// 负色：`negativeBarColorSameAsPositive=0` 时用 `negativeFillColor` rgb，否则用正色。
-/// 轴色：`axisColor` rgb。其它 axis/cfvo/border/direction/theme NI。
+/// 轴色：`axisColor` rgb。零轴为 1 像素虚线，相位同格子 dashed 边框，x 为 `x0+(width+1)/2`。
+/// 其它 axis/cfvo/border/direction/theme NI。
 fn paint_bar_x14(
     canvas: &mut Canvas,
     cells: &HashMap<(u32, u32), CellRec>,
@@ -5929,13 +6108,18 @@ fn paint_bar_x14(
         }
         let by = y0 + 2;
         let bh = (height - 4).max(1);
-        let axis = x0 + width / 2;
+        // 奇数宽 101 上官方轴在 x0+(width+1)/2（51/152/…），不是 width/2。
+        // 偶数宽尚无官方样本，此式退回与旧公式相同，不臆造一律 +1。
+        let axis = x0 + (width + 1) / 2;
         let left_max = (axis - (x0 + 2)).max(0);
         let right_max = ((x1 - 2) - axis).max(0);
         let half = left_max.max(right_max);
-        // 轴线
-        for dy in 0..bh {
-            canvas.put(axis, by + dy, axis_color);
+        // 中轴是 1 像素虚线，相位与格子 dashed 边框相同：整图 (x+y)%4 != 3。
+        // 只画格内（不含网格线）；上下比条带各多 1 像素。网格关闭时官方会把虚线画到内网格线上，本刀不盖网格。
+        for y in (y0 + 1)..y1 {
+            if line_on(LineKind::Dashed, axis + y, axis, axis) {
+                canvas.put(axis, y, axis_color);
+            }
         }
         if n == 0.0 || extent < 1e-12 || half <= 0 {
             continue;
@@ -6087,6 +6271,7 @@ fn paint_labels(
     session: &mut Option<FormulaSession>,
 ) -> Result<(), Error> {
     let filter = filter_header(sheet)?;
+    let icon_rules = parsed_icon_rules(sheet)?;
     let mut jobs = Vec::new();
     for merge in merges {
         jobs.push((merge.c0, merge.r0, merge.c1, merge.r1));
@@ -6124,6 +6309,10 @@ fn paint_labels(
         if text.is_empty() {
             continue;
         }
+        let icon_show = icon_show_value(&icon_rules, col, row);
+        if icon_show == Some(false) {
+            continue;
+        }
         // readingOrder=2 / 强 RTL 文种需要整段 bidi+shaping。
         // Face::width 与 draw_cells 是逐字 glyph advance，接 DirectionRightToLeft 会测画错配——NI。
         // 不把 Unicode 反序当 RTL；不与 sheetView.rightToLeft（列镜像）混同。
@@ -6141,6 +6330,11 @@ fn paint_labels(
             (x0, x1)
         };
         let mut clip_r = x1;
+        let icon_reserve = if icon_show == Some(true) {
+            super::icon_set::icon_text_reserve(font.pt, fonts.dpi.get())
+        } else {
+            0
+        };
         if filter_hit(filter, col, row, col_end) {
             clip_r = if rtl {
                 (x0 + 17).min(x1)
@@ -6178,7 +6372,8 @@ fn paint_labels(
             + match h_align {
                 HAlign::Right => 0.0,
                 _ => indent_px,
-            };
+            }
+            + f64::from(icon_reserve);
         let inner_right = f64::from(clip_r)
             - 2.0
             - match h_align {
@@ -6256,7 +6451,7 @@ fn paint_labels(
             let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
             let mut paint = |x: f64, s: &str| {
                 face.draw_cells(s, x, top, color, |px, py, rgb, cov| {
-                    if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                    if px < x0 + icon_reserve || py < y0 || px >= clip_r || py >= y1 {
                         return;
                     }
                     canvas.blend(px, py, rgb, cov);
@@ -6507,13 +6702,20 @@ fn wrap_cell_lines(face: &Face, text: &str, max_width: f64) -> Vec<String> {
                 last_space = None;
                 continue;
             }
-            let break_at = match last_space {
-                Some(s) => s + 1,
-                None => i,
+            // 已放下的词能排进本行、只是随后的空格溢出时，应在该空格处断行，
+            // 不能退回到上一个空格（否则 indent 收窄后会把 "three four" 拆成两行）。
+            let (piece_end, next_start) = if chars[i] == ' ' {
+                (i, i + 1)
+            } else {
+                let break_at = match last_space {
+                    Some(s) => s + 1,
+                    None => i,
+                };
+                (break_at, break_at)
             };
-            let piece: String = chars[start..break_at].iter().collect();
+            let piece: String = chars[start..piece_end].iter().collect();
             out.push(piece);
-            start = break_at;
+            start = next_start;
             last_space = None;
             i = start;
         }
@@ -8349,6 +8551,61 @@ mod tests {
         assert_eq!(
             map_rect_into_dest(44, 44, 177, 110, (44, 44, 177, 110), (44, 44, 179, 110)).unwrap(),
             (44, 44, 179, 110)
+        );
+    }
+}
+
+#[cfg(all(test, windows))]
+mod wrap_indent_space_overflow {
+    use super::wrap_cell_lines;
+    use crate::xlsx::chart_gdi::Face;
+
+    fn dengxian_11_at_106() -> Face {
+        let dpi = 106.0;
+        let px = (11.0 * dpi / 72.0) as f32;
+        Face::open_cell_dpi(px, false, false, "等线", dpi)
+            .or_else(|| Face::open_cell_dpi(px, false, false, "DengXian", dpi))
+            .expect("DengXian/等线 11 @106")
+    }
+
+    #[test]
+    fn indent_space_overflow_keeps_previous_word_on_the_line() {
+        let face = dengxian_11_at_106();
+        let text = "one two three four five";
+        // 与探针 B1 同级：列宽 10.625@MDW8=85，右缘 -2，cell_pad=3，indent=1 为 3 个空格=12，max_w=68。
+        // "three four"=67 能放下，随后空格使 "three four " 变为 71，不得退回到 "three"。
+        let pad = face.cell_pad();
+        let indent = face.width(" ") * 3.0;
+        let max_w = (85.0 - 2.0 - pad - indent).max(1.0);
+        assert_eq!(max_w, 68.0, "pad={pad} indent={indent}");
+        let lines = wrap_cell_lines(&face, text, max_w);
+        let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
+        assert_eq!(
+            trimmed,
+            vec![
+                "one two".to_string(),
+                "three four".to_string(),
+                "five".to_string()
+            ],
+            "lines={lines:?} max_w={max_w} three four width={}",
+            face.width("three four")
+        );
+    }
+
+    #[test]
+    fn unindented_same_text_still_wraps_as_three_lines() {
+        let face = dengxian_11_at_106();
+        let pad = face.cell_pad();
+        let max_w = (85.0 - 2.0 - pad).max(1.0);
+        let lines = wrap_cell_lines(&face, "one two three four five", max_w);
+        let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
+        assert_eq!(
+            trimmed,
+            vec![
+                "one two".to_string(),
+                "three four".to_string(),
+                "five".to_string()
+            ]
         );
     }
 }
