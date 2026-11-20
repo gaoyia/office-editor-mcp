@@ -94,6 +94,10 @@ fn unsupported() -> Error {
 }
 
 fn read_tick_format(axis: &Element) -> Result<TickFormat, Error> {
+    read_tick_format_kind(axis, false)
+}
+
+fn read_tick_format_kind(axis: &Element, percent_stacked: bool) -> Result<TickFormat, Error> {
     let Some(el) = axis.child_by_local("numFmt") else {
         return Ok(TickFormat::General);
     };
@@ -110,8 +114,13 @@ fn read_tick_format(axis: &Element) -> Result<TickFormat, Error> {
         return Ok(TickFormat::General);
     }
     // Official Excel 16 writes sourceLinked="0" when TickLabels.NumberFormat
-    // is a custom code. sourceLinked=1 plus a non-General formatCode is not locked.
+    // is a custom code. sourceLinked=1 plus a non-General formatCode is not
+    // locked in general (F18). Official percentStacked valAx is the exception:
+    // Excel writes formatCode="0%" sourceLinked="1" as the 0..1 default.
     if el.attr_local("sourceLinked") != Some("0") {
+        if percent_stacked && code == "0%" && el.attr_local("sourceLinked") == Some("1") {
+            return Ok(TickFormat::Percent);
+        }
         return Err(unsupported());
     }
     match code {
@@ -176,6 +185,15 @@ fn is_integer_power(value: f64, base: f64) -> bool {
 }
 impl Spec {
     pub fn read(plot: &Element) -> Result<Self, Error> {
+        Self::read_plot(plot, false)
+    }
+
+    /// Official Excel 16 percentStacked valAx writes numFmt 0% sourceLinked=1.
+    pub fn read_percent_stacked(plot: &Element) -> Result<Self, Error> {
+        Self::read_plot(plot, true)
+    }
+
+    fn read_plot(plot: &Element, percent_stacked: bool) -> Result<Self, Error> {
         let axes: Vec<_> = plot
             .element_children()
             .filter(|e| e.local_name() == "valAx")
@@ -186,7 +204,7 @@ impl Spec {
         let Some(axis) = axes.first() else {
             return Ok(Self::default());
         };
-        let mut spec = Self::read_axis(axis)?;
+        let mut spec = Self::read_axis_kind(axis, percent_stacked)?;
         let (crosses_at, cat_crosses) = read_cat_crosses(plot)?;
         spec.crosses_at = crosses_at;
         spec.cat_crosses = cat_crosses;
@@ -206,6 +224,10 @@ impl Spec {
     }
 
     pub fn read_axis(axis: &Element) -> Result<Self, Error> {
+        Self::read_axis_kind(axis, false)
+    }
+
+    fn read_axis_kind(axis: &Element, percent_stacked: bool) -> Result<Self, Error> {
         let deleted = axis
             .child_by_local("delete")
             .and_then(|e| e.attr_local("val"))
@@ -241,7 +263,7 @@ impl Spec {
         {
             return Err(unsupported());
         }
-        let tick_format = read_tick_format(axis)?;
+        let tick_format = read_tick_format_kind(axis, percent_stacked)?;
         let read = |node: Option<&Element>, name: &str| -> Result<Option<f64>, Error> {
             let Some(el) = node.and_then(|n| n.child_by_local(name)) else {
                 return Ok(None);
@@ -598,6 +620,14 @@ pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
 /// 类目 scaling 为 minMax 或省略时，第一类在下；maxMin 时第一类在上（Excel 默认条形图常见）。
 /// 返回 (数值轴, 第一类是否在下)。
 pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
+    bar_axes_kind(plot, false)
+}
+
+pub(super) fn bar_axes_percent_stacked(plot: &Element) -> Result<(Spec, bool), Error> {
+    bar_axes_kind(plot, true)
+}
+
+fn bar_axes_kind(plot: &Element, percent_stacked: bool) -> Result<(Spec, bool), Error> {
     if plot
         .element_children()
         .any(|e| matches!(e.local_name(), "dateAx" | "serAx"))
@@ -674,7 +704,7 @@ pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
         "maxMin" => false,
         _ => return Err(unsupported()),
     };
-    Ok((Spec::read_axis(val)?, from_bottom))
+    Ok((Spec::read_axis_kind(val, percent_stacked)?, from_bottom))
 }
 
 pub(super) fn scale(series: &[Series], spec: Spec, budget: i32) -> Result<Scale, Error> {

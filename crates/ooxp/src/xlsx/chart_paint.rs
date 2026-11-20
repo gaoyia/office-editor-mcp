@@ -1,8 +1,8 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。折线堆积见 F23。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
-//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。已锁定的 barChart grouping=stacked/percentStacked（overlap=100，线性显式 min/max autoZero）见 F22；三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
@@ -84,6 +84,14 @@ enum PlotKind {
     StandardArea,
     Pie,
     Scatter { connect: bool },
+}
+
+/// Official Excel 16 barChart grouping for clustered / stacked / percentStacked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stacking {
+    Clustered,
+    Stacked,
+    PercentStacked,
 }
 
 /// Excel default auto-marker cycle when `c:marker` is omitted or `symbol=auto`.
@@ -301,6 +309,7 @@ struct ColumnChart {
     series: Vec<Series>,
     gap_width: f64,
     overlap: f64,
+    stacking: Stacking,
     vary_points: bool,
     grid: bool,
     legend: Option<LegendPos>,
@@ -1145,6 +1154,7 @@ fn read_chart(
         None
     };
     let mut area_missing_as_zero = false;
+    let mut stacking = Stacking::Clustered;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -1155,9 +1165,12 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("clustered");
-            if grouping != "clustered" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "clustered" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if dir == "bar" {
                 let blanks = chart
                     .child_by_local("dispBlanksAs")
@@ -1373,6 +1386,13 @@ fn read_chart(
     };
     let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
+    // Official Excel 16 stacked / percentStacked barChart writes overlap=100.
+    if stacking != Stacking::Clustered {
+        match number_val(wrapper, "overlap") {
+            Some(v) if (v - 100.0).abs() <= 1e-9 => {}
+            _ => return Err(unsupported()),
+        }
+    }
     let mut series = Vec::new();
     let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() {
         wrappers.clone()
@@ -1745,11 +1765,17 @@ fn read_chart(
         });
         (y, Some(x), grid_x, true)
     } else if kind == PlotKind::ClusteredBar {
-        let (spec, from_bottom) = axis::bar_axes(plot)?;
+        let (spec, from_bottom) = if stacking == Stacking::PercentStacked {
+            axis::bar_axes_percent_stacked(plot)?
+        } else {
+            axis::bar_axes(plot)?
+        };
         (spec, None, false, from_bottom)
     } else if locked_secondary.is_some() {
         let sec = locked_secondary.as_ref().unwrap();
         (sec.primary, None, false, true)
+    } else if stacking == Stacking::PercentStacked {
+        (axis::Spec::read_percent_stacked(plot)?, None, false, true)
     } else {
         (axis::Spec::read(plot)?, None, false, true)
     };
@@ -1790,11 +1816,45 @@ fn read_chart(
     {
         return Err(unsupported());
     }
+    if stacking != Stacking::Clustered {
+        // Official F22 evidence is linear autoZero minMax, explicit min/max,
+        // no value labels, no inversion, no log / maxMin / delete / custom crosses.
+        if axis.min.is_none()
+            || axis.max.is_none()
+            || axis.log_base.is_some()
+            || axis.reversed
+            || axis.deleted
+            || axis.crosses_at.is_some()
+            || !matches!(axis.cat_crosses, axis::CatCrosses::AutoZero)
+            || series.iter().any(|ser| ser.value_label.is_some())
+            || series.iter().any(|ser| {
+                ser.invert_if_negative || ser.point_inversion.iter().any(|p| p.is_some())
+            })
+        {
+            return Err(unsupported());
+        }
+        if stacking == Stacking::PercentStacked {
+            if axis.min != Some(0.0)
+                || axis.max != Some(1.0)
+                || axis.tick_format != axis::TickFormat::Percent
+            {
+                return Err(unsupported());
+            }
+            for ser in &series {
+                if ser.values.iter().any(|v| {
+                    !v.is_some_and(|n| n.is_finite() && n > 0.0)
+                }) {
+                    return Err(unsupported());
+                }
+            }
+        }
+    }
     Ok(ColumnChart {
         categories,
         series,
         gap_width,
         overlap,
+        stacking,
         vary_points,
         grid,
         grid_x,
@@ -3517,6 +3577,88 @@ fn draw_bar_value(
     }
 }
 
+
+/// Official Excel 16 stacked / percentStacked: positives accumulate upward
+/// (or right) from zero in series order; negatives accumulate the other way
+/// from zero, independently. Omitted or non-finite points are skipped and
+/// later series pack onto the running total. percentStacked uses value/sum
+/// of all (required positive finite) points in the category.
+fn stack_segment(group: &[&Series], ci: usize, si: usize, percent: bool) -> Option<(f64, f64)> {
+    if si >= group.len() {
+        return None;
+    }
+    let mut denom = 0.0;
+    if percent {
+        for ser in group {
+            let v = ser.values.get(ci).copied().flatten()?;
+            if !v.is_finite() || v <= 0.0 {
+                return None;
+            }
+            denom += v;
+        }
+        if denom <= 0.0 {
+            return None;
+        }
+    }
+    let mut pos = 0.0;
+    let mut neg = 0.0;
+    for (i, ser) in group.iter().enumerate() {
+        let Some(v) = ser.values.get(ci).copied().flatten() else {
+            continue;
+        };
+        if !v.is_finite() {
+            continue;
+        }
+        let v = if percent { v / denom } else { v };
+        let (base, end) = if v >= 0.0 {
+            let b = pos;
+            pos += v;
+            (b, pos)
+        } else {
+            let b = neg;
+            neg += v;
+            (b, neg)
+        };
+        if i == si {
+            if (end - base).abs() < 1e-12 {
+                return None;
+            }
+            return Some((base, end));
+        }
+    }
+    None
+}
+
+fn stacked_edge_y(
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    edge: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+    axis_origin: f64,
+) -> i32 {
+    let clipped = edge.clamp(axis_min, axis_max);
+    if (edge - axis_origin).abs() <= 1e-12 || (edge < axis_origin && log_base.is_none()) {
+        crossing_axis_y_mode(
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            clipped,
+            if (edge - axis_origin).abs() <= 1e-12 {
+                log_base
+            } else {
+                None
+            },
+            reversed,
+        )
+    } else {
+        y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
+    }
+}
+
 fn draw_clustered_bars(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -3526,8 +3668,9 @@ fn draw_clustered_bars(
     reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
-    let n = chart.series.len().max(1) as f64;
-    let overlap = chart.overlap / 100.0;
+    let stacked = !matches!(chart.stacking, Stacking::Clustered);
+    let n = if stacked { 1.0 } else { chart.series.len().max(1) as f64 };
+    let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     let slot = (plot.h + 1.0) / cats;
     let denom = n - (n - 1.0) * overlap + gap;
@@ -3538,6 +3681,10 @@ fn draw_clustered_bars(
     let cluster = bar_h * (n - (n - 1.0) * overlap);
     let side = (slot - cluster) / 2.0;
     let x_zero = x_of_dir(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+    if !matches!(chart.stacking, Stacking::Clustered) {
+        draw_stacked_horizontal_bars(canvas, chart, plot, axis_min, axis_max, reversed, side, slot);
+        return;
+    }
     let n_ser = chart.series.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
@@ -3835,8 +3982,9 @@ fn draw_bars(
         return;
     }
     let cats = chart.categories.len().max(1) as f64;
-    let n = group.len().max(1) as f64;
-    let overlap = chart.overlap / 100.0;
+    let stacked = !matches!(chart.stacking, Stacking::Clustered);
+    let n = if stacked { 1.0 } else { group.len().max(1) as f64 };
+    let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     // 右端那一列算进槽宽。左缘仍是轴线右侧的第一列。
     let slot = (plot.w + 1.0) / cats;
@@ -3859,6 +4007,24 @@ fn draw_bars(
         log_base,
         reversed,
     );
+    if !matches!(chart.stacking, Stacking::Clustered) {
+        draw_stacked_columns(
+            canvas,
+            chart,
+            &group,
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            log_base,
+            axis_origin,
+            reversed,
+            side,
+            slot,
+            y_zero,
+        );
+        return;
+    }
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin = plot.x + slot * ci as f64 + side;
         for (si, ser) in group.iter().enumerate() {
@@ -3899,6 +4065,110 @@ fn draw_bars(
                 continue;
             }
             draw_bar_value(canvas, ser, ci, value, bounds, color);
+        }
+    }
+}
+
+fn draw_stacked_columns(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    group: &[&Series],
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    log_base: Option<f64>,
+    axis_origin: f64,
+    reversed: bool,
+    side: f64,
+    slot: f64,
+    y_zero: i32,
+) {
+    let percent = matches!(chart.stacking, Stacking::PercentStacked);
+    let bar_w = slot / (1.0 + chart.gap_width / 100.0);
+    let _ = y_zero;
+    for (ci, _) in chart.categories.iter().enumerate() {
+        let x = plot.x + slot * ci as f64 + side;
+        for (si, ser) in group.iter().enumerate() {
+            let Some((base, end)) = stack_segment(group, ci, si, percent) else {
+                continue;
+            };
+            if bar_w < 0.2 {
+                continue;
+            }
+            let y_base = stacked_edge_y(
+                plot, axis_min, axis_max, step, base, log_base, reversed, axis_origin,
+            );
+            let y_end = stacked_edge_y(
+                plot, axis_min, axis_max, step, end, log_base, reversed, axis_origin,
+            );
+            if y_base == y_end {
+                continue;
+            }
+            let color = if chart.vary_points {
+                chart.accents[ci % 6]
+            } else {
+                ser.color.unwrap_or(chart.accents[ser.slot % 6])
+            };
+            let value = end - base;
+            let bounds = column_bar_bounds(x, x + bar_w, y_base, y_end, value, axis_origin, false);
+            if bounds[2] < bounds[0]
+                || bounds[3] <= bounds[1]
+                || (bounds[2] == bounds[0] && !(value < 0.0))
+            {
+                continue;
+            }
+            let raw = ser.values[ci].unwrap_or(value);
+            draw_bar_value(canvas, ser, ci, raw, bounds, color);
+        }
+    }
+}
+
+fn draw_stacked_horizontal_bars(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+    side: f64,
+    slot: f64,
+) {
+    let percent = matches!(chart.stacking, Stacking::PercentStacked);
+    let bar_h = slot / (1.0 + chart.gap_width / 100.0);
+    let group: Vec<&Series> = chart.series.iter().collect();
+    for (ci, _) in chart.categories.iter().enumerate() {
+        let origin =
+            category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
+        for (si, ser) in group.iter().enumerate() {
+            let Some((base, end)) = stack_segment(&group, ci, si, percent) else {
+                continue;
+            };
+            if bar_h < 0.2 {
+                continue;
+            }
+            let x_base = x_of_dir(base.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+            let x_end = x_of_dir(end.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+            let w = (x_end - x_base).abs();
+            if w < 0.2 {
+                continue;
+            }
+            let color = if chart.vary_points {
+                chart.accents[ci % 6]
+            } else {
+                ser.color.unwrap_or(chart.accents[ser.slot % 6])
+            };
+            let x_base_i = x_base.round() as i32;
+            let x_end_i = x_end.round() as i32;
+            let (x0, x1) = if x_end_i >= x_base_i {
+                (x_base_i, x_end_i + 1)
+            } else {
+                (x_end_i, x_base_i)
+            };
+            let y0 = round_half_even(origin);
+            let y1 = round_half_even(origin + bar_h);
+            let raw = ser.values[ci].unwrap_or(end - base);
+            draw_bar_value(canvas, ser, ci, raw, [x0, y0, x1, y1], color);
         }
     }
 }
@@ -12461,6 +12731,288 @@ mod tests {
         assert!(
             read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
             "omitted min/max on a secondary pair stays NI"
+        );
+    }
+
+    fn stacked_xml(
+        dir: &str,
+        grouping: &str,
+        series: &[&[Option<f64>]],
+        auto: bool,
+        invert: bool,
+        labels: bool,
+    ) -> String {
+        let n = series[0].len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let mut sers = String::new();
+        for (si, vals) in series.iter().enumerate() {
+            let pts = vals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    v.map(|x| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#))
+                })
+                .collect::<String>();
+            let present = vals.iter().filter(|v| v.is_some()).count();
+            let inv = if invert { "1" } else { "0" };
+            let d_lbls = if labels {
+                r#"<c:dLbls><c:dLblPos val="outEnd"/><c:showVal val="1"/></c:dLbls>"#
+            } else {
+                ""
+            };
+            sers.push_str(&format!(
+                r#"<c:ser><c:idx val="{si}"/><c:order val="{si}"/><c:tx><c:v>S{si}</c:v></c:tx><c:invertIfNegative val="{inv}"/><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{present}"/>{pts}</c:numLit></c:val>{d_lbls}</c:ser>"#
+            ));
+        }
+        let (vmin, vmax, major, numfmt) = if grouping == "percentStacked" {
+            (
+                "0",
+                "1",
+                "0.2",
+                r#"<c:numFmt formatCode="0%" sourceLinked="1"/>"#,
+            )
+        } else {
+            ("0", "80", "20", "")
+        };
+        let scaling = if auto {
+            r#"<c:scaling><c:orientation val="minMax"/></c:scaling>"#.to_string()
+        } else {
+            format!(
+                r#"<c:scaling><c:orientation val="minMax"/><c:min val="{vmin}"/><c:max val="{vmax}"/></c:scaling>"#
+            )
+        };
+        let (cat_pos, val_pos) = if dir == "bar" { ("l", "b") } else { ("b", "l") };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="{dir}"/><c:grouping val="{grouping}"/><c:varyColors val="0"/>
+        {sers}
+        <c:gapWidth val="150"/><c:overlap val="100"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn clustered_three_xml(series: &[&[Option<f64>]]) -> String {
+        stacked_xml("col", "stacked", series, false, false, false).replacen(
+            r#"grouping val="stacked""#,
+            r#"grouping val="clustered""#,
+            1,
+        ).replacen(r#"<c:overlap val="100"/>"#, "", 1)
+    }
+
+    #[test]
+    fn stacked_and_percent_stacked_bars_accumulate_in_series_order() {
+        let s1 = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let s2 = [Some(20.0), Some(10.0), Some(20.0), Some(10.0)];
+        let s3 = [Some(20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let series: [&[Option<f64>]; 3] = [&s1, &s2, &s3];
+        let xml = stacked_xml("col", "stacked", &series, false, false, false);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(chart.stacking, Stacking::Stacked);
+        assert_eq!(chart.overlap, 100.0);
+
+        let png = render_rgb_chart(
+            &doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let a2 = FALLBACK_ACCENTS[2];
+        let r0 = accent_x_runs(&rgb, w, h, a0);
+        let r1 = accent_x_runs(&rgb, w, h, a1);
+        let r2 = accent_x_runs(&rgb, w, h, a2);
+        assert_eq!(r0.len(), 4, "S1 four stacked slots, got {r0:?}");
+        assert_eq!(r1.len(), 4, "S2 four stacked slots, got {r1:?}");
+        assert_eq!(r2.len(), 4, "S3 four stacked slots, got {r2:?}");
+        for i in 0..4 {
+            let overlap01 = r0[i].0 <= r1[i].1 && r1[i].0 <= r0[i].1;
+            let overlap12 = r1[i].0 <= r2[i].1 && r2[i].0 <= r1[i].1;
+            assert!(
+                overlap01 && overlap12,
+                "official stacked columns share category slots; {r0:?} {r1:?} {r2:?}"
+            );
+        }
+
+        let ctrl_doc = crate::xml::parse(clustered_three_xml(&series).as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(ctrl.stacking, Stacking::Clustered);
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (cw, ch, crgb) = png_rgb(&ctrl_png);
+        let c0 = accent_x_runs(&crgb, cw, ch, a0);
+        assert_eq!(c0.len(), 4);
+        let stacked_w: i32 = r0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        let cluster_w: i32 = c0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        assert!(
+            stacked_w > cluster_w,
+            "overlap=100 stacked bars are one-series wide; stacked={stacked_w} clustered={cluster_w}"
+        );
+
+        // S1 sits on the zero baseline; S3 is farther from it (on top of the stack).
+        let mid_x = (r0[0].0 + r0[0].1) / 2;
+        let ys = |accent: [u8; 3]| {
+            (0..h)
+                .filter(|&y| {
+                    let i = (y as usize * w as usize + mid_x as usize) * 3;
+                    near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16)
+                })
+                .collect::<Vec<_>>()
+        };
+        let y1 = ys(a0);
+        let y3 = ys(a2);
+        assert!(!y1.is_empty() && !y3.is_empty());
+        let mean = |v: &Vec<u32>| v.iter().sum::<u32>() as f64 / v.len() as f64;
+        assert!(
+            mean(&y1) > mean(&y3),
+            "S1 is at the base (higher y), S3 on top; S1={:?} S3={:?}",
+            y1,
+            y3
+        );
+
+        let pct_xml = stacked_xml("col", "percentStacked", &series, false, false, false);
+        let pct_doc = crate::xml::parse(pct_xml.as_bytes()).unwrap();
+        let pct = read_chart(&pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(pct.stacking, Stacking::PercentStacked);
+        assert_eq!(pct.axis.min, Some(0.0));
+        assert_eq!(pct.axis.max, Some(1.0));
+        assert_eq!(pct.axis.tick_format, super::axis::TickFormat::Percent);
+        let pct_png = render_rgb_chart(
+            &pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (pw, ph, prgb) = png_rgb(&pct_png);
+        let tops: Vec<u32> = (0..4)
+            .map(|i| {
+                let pr = accent_x_runs(&prgb, pw, ph, a0);
+                let mid = (pr[i].0 + pr[i].1) / 2;
+                (0..ph)
+                    .filter(|&y| {
+                        let idx = (y as usize * pw as usize + mid as usize) * 3;
+                        near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a0, 16)
+                            || near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a1, 16)
+                            || near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a2, 16)
+                    })
+                    .min()
+                    .unwrap()
+            })
+            .collect();
+        let span = tops.iter().max().unwrap() - tops.iter().min().unwrap();
+        assert!(
+            span <= 3,
+            "percentStacked all-positive stacks reach the same 100% top; tops={tops:?}"
+        );
+
+        render_rgb_chart(
+            &crate::xml::parse(stacked_xml("bar", "stacked", &series, false, false, false).as_bytes())
+                .unwrap()
+                .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_rgb_chart(
+            &crate::xml::parse(
+                stacked_xml("bar", "percentStacked", &series, false, false, false).as_bytes(),
+            )
+            .unwrap()
+            .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+
+        // Mixed signs: positives stack up from zero, negatives down, independently.
+        let m1 = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let m2 = [Some(20.0), Some(-10.0), Some(20.0), Some(-10.0)];
+        let m3 = [Some(-20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let mixed: [&[Option<f64>]; 3] = [&m1, &m2, &m3];
+        let mix_xml = stacked_xml("col", "stacked", &mixed, false, false, false)
+            .replace(r#"min val="0""#, r#"min val="-40""#);
+        let mix_doc = crate::xml::parse(mix_xml.as_bytes()).unwrap();
+        read_chart(&mix_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mix_png = render_rgb_chart(
+            &mix_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (mw, mh, mrgb) = png_rgb(&mix_png);
+        let mr0 = accent_x_runs(&mrgb, mw, mh, a0);
+        assert_eq!(mr0.len(), 4, "mixed S1 still occupies four categories, {mr0:?}");
+
+        // Blank S2 in category B: S3 packs onto S1 (no reserved hole).
+        let b2 = [Some(20.0), None, Some(20.0), Some(10.0)];
+        let blank: [&[Option<f64>]; 3] = [&s1, &b2, &s3];
+        let blank_png = render_rgb_chart(
+            &crate::xml::parse(stacked_xml("col", "stacked", &blank, false, false, false).as_bytes())
+                .unwrap()
+                .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (bw, bh, brgb) = png_rgb(&blank_png);
+        let br1 = accent_x_runs(&brgb, bw, bh, a1);
+        assert_eq!(br1.len(), 3, "missing S2 in B is not drawn, got {br1:?}");
+
+        let auto = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on stacked stays NI"
+        );
+        let inv = crate::xml::parse(stacked_xml("col", "stacked", &series, false, true, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&inv.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "invertIfNegative=1 on stacked stays NI"
+        );
+        let labs = crate::xml::parse(stacked_xml("col", "stacked", &series, false, false, true).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&labs.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "value labels plus stacked stay NI"
+        );
+        let pct_mixed = crate::xml::parse(stacked_xml("col", "percentStacked", &mixed, false, false, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&pct_mixed.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "percentStacked mixed signs stay NI"
+        );
+        let no_overlap = stacked_xml("col", "stacked", &series, false, false, false)
+            .replacen(r#"<c:overlap val="100"/>"#, "", 1);
+        let no_over_doc = crate::xml::parse(no_overlap.as_bytes()).unwrap();
+        assert!(
+            read_chart(&no_over_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked without official overlap=100 stays NI"
         );
     }
 }
