@@ -489,6 +489,172 @@ pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
     accents
 }
 
+#[derive(Clone, Copy)]
+struct ThemeScheme {
+    accents: [[u8; 3]; 6],
+    dk1: Option<[u8; 3]>,
+    lt1: Option<[u8; 3]>,
+    dk2: Option<[u8; 3]>,
+    lt2: Option<[u8; 3]>,
+    hlink: Option<[u8; 3]>,
+    fol_hlink: Option<[u8; 3]>,
+}
+
+fn theme_slot_rgb(slot: &Element, accents: &[[u8; 3]; 6]) -> Option<[u8; 3]> {
+    if let Some(sys) = slot.child_by_local("sysClr") {
+        // Theme clrScheme records the slot in lastClr. Chart-frame sysClr
+        // fills are a different path: Excel paints the live system color
+        // and ignores lastClr, so those fills stay NI.
+        return parse_hex(sys.attr_local("lastClr")?);
+    }
+    color_of_slot(slot, accents)
+}
+
+fn theme_scheme(theme_xml: Option<&[u8]>, accents: [[u8; 3]; 6]) -> ThemeScheme {
+    let mut scheme = ThemeScheme {
+        accents,
+        dk1: None,
+        lt1: None,
+        dk2: None,
+        lt2: None,
+        hlink: None,
+        fol_hlink: None,
+    };
+    let Some(bytes) = theme_xml else {
+        return scheme;
+    };
+    let Ok(doc) = crate::xml::parse(bytes) else {
+        return scheme;
+    };
+    let Some(slots) = find_deep(&doc.root, "clrScheme") else {
+        return scheme;
+    };
+    let color = |name: &str| {
+        slots
+            .child_by_local(name)
+            .and_then(|slot| theme_slot_rgb(slot, &accents))
+    };
+    scheme.dk1 = color("dk1");
+    scheme.lt1 = color("lt1");
+    scheme.dk2 = color("dk2");
+    scheme.lt2 = color("lt2");
+    scheme.hlink = color("hlink");
+    scheme.fol_hlink = color("folHlink");
+    scheme
+}
+
+fn scheme_slot(name: &str, scheme: &ThemeScheme) -> Option<[u8; 3]> {
+    Some(match name {
+        "accent1" => scheme.accents[0],
+        "accent2" => scheme.accents[1],
+        "accent3" => scheme.accents[2],
+        "accent4" => scheme.accents[3],
+        "accent5" => scheme.accents[4],
+        "accent6" => scheme.accents[5],
+        "dk1" | "tx1" => scheme.dk1?,
+        "lt1" | "bg1" => scheme.lt1?,
+        "dk2" | "tx2" => scheme.dk2?,
+        "lt2" | "bg2" => scheme.lt2?,
+        "hlink" => scheme.hlink?,
+        "folHlink" => scheme.fol_hlink?,
+        _ => return None,
+    })
+}
+
+/// IEC 61966-2-1 sRGB. Excel chart-frame tint/shade interpolate in this space,
+/// not in gamma-encoded bytes and not with a pure 2.2 gamma.
+fn srgb_to_linear(channel: u8) -> f64 {
+    let s = f64::from(channel) / 255.0;
+    if s <= 0.04045 {
+        s / 12.92
+    } else {
+        ((s + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f64) -> u8 {
+    let value = value.clamp(0.0, 1.0);
+    let s = if value <= 0.0031308 {
+        12.92 * value
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    };
+    (s * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+fn frame_tint(rgb: [u8; 3], val: u32) -> [u8; 3] {
+    let share = f64::from(val) / 100_000.0;
+    rgb.map(|channel| {
+        let lin = srgb_to_linear(channel);
+        linear_to_srgb(lin * share + (1.0 - share))
+    })
+}
+
+fn frame_shade(rgb: [u8; 3], val: u32) -> [u8; 3] {
+    let share = f64::from(val) / 100_000.0;
+    rgb.map(|channel| linear_to_srgb(srgb_to_linear(channel) * share))
+}
+
+fn frame_lum(rgb: [u8; 3], lum_mod: Option<u32>, lum_off: Option<u32>) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    let mut light = light;
+    if let Some(factor) = lum_mod {
+        light *= f64::from(factor) / 100_000.0;
+    }
+    if let Some(offset) = lum_off {
+        light += f64::from(offset) / 100_000.0;
+    }
+    hsl_rgb(hue, sat, light.clamp(0.0, 1.0))
+}
+
+fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let alpha = parse_ooxml_alpha(alpha.attr_local("val")).ok_or_else(unsupported)?;
+    if alpha == 100_000 {
+        Ok(FrameFill::Solid(rgb))
+    } else {
+        Ok(FrameFill::Translucent(rgb, alpha))
+    }
+}
+
+fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let rgb = match color.local_name() {
+        "srgbClr" => color
+            .attr_local("val")
+            .and_then(parse_hex)
+            .ok_or_else(unsupported)?,
+        "schemeClr" => {
+            let name = color.attr_local("val").ok_or_else(unsupported)?;
+            scheme_slot(name, scheme).ok_or_else(unsupported)?
+        }
+        _ => return Err(unsupported()),
+    };
+    let kids: Vec<&Element> = color.element_children().collect();
+    let names: Vec<&str> = kids.iter().map(|child| child.local_name()).collect();
+    let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
+    match names.as_slice() {
+        [] => Ok(FrameFill::Solid(rgb)),
+        ["alpha"] => frame_alpha_fill(rgb, kids[0]),
+        ["tint"] => Ok(FrameFill::Solid(frame_tint(rgb, pct(kids[0])?))),
+        ["tint", "alpha"] => frame_alpha_fill(frame_tint(rgb, pct(kids[0])?), kids[1]),
+        ["shade"] => Ok(FrameFill::Solid(frame_shade(rgb, pct(kids[0])?))),
+        ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
+        ["lumMod"] => Ok(FrameFill::Solid(frame_lum(rgb, Some(pct(kids[0])?), None))),
+        ["lumMod", "alpha"] => frame_alpha_fill(frame_lum(rgb, Some(pct(kids[0])?), None), kids[1]),
+        ["lumMod", "lumOff"] => Ok(FrameFill::Solid(frame_lum(
+            rgb,
+            Some(pct(kids[0])?),
+            Some(pct(kids[1])?),
+        ))),
+        ["lumMod", "lumOff", "alpha"] => frame_alpha_fill(
+            frame_lum(rgb, Some(pct(kids[0])?), Some(pct(kids[1])?)),
+            kids[2],
+        ),
+        _ => Err(unsupported()),
+    }
+}
+
 /// Excel 导出带圆角外框，绘图区从标题布局顶起算。
 /// 幻灯片导出没有这圈外框，有标题时绘图区再低一截。
 #[derive(Clone, Copy)]
@@ -531,11 +697,29 @@ pub(crate) fn render_chart_at(
     sheet: &str,
     dpi: RenderDpi,
 ) -> Result<Vec<u8>, Error> {
+    render_chart_with_theme(
+        root, width, height, accents, font_bytes, host, cells, sheet, dpi, None,
+    )
+}
+
+pub(crate) fn render_chart_with_theme(
+    root: &Element,
+    width: u32,
+    height: u32,
+    accents: [[u8; 3]; 6],
+    font_bytes: Option<&[u8]>,
+    host: ChartHost,
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
+    dpi: RenderDpi,
+    theme_xml: Option<&[u8]>,
+) -> Result<Vec<u8>, Error> {
     if width == 0 || height == 0 || width > MAX_PX || height > MAX_PX {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
+    let scheme = theme_scheme(theme_xml, accents);
     let frame = if matches!(host, ChartHost::Excel) {
-        Some(read_frame(root)?)
+        Some(read_frame_with(root, &scheme)?)
     } else {
         None
     };
@@ -631,21 +815,26 @@ struct FrameStyle {
     plot_fill: FrameFill,
 }
 
+#[cfg(test)]
 fn read_frame(root: &Element) -> Result<FrameStyle, Error> {
+    read_frame_with(root, &theme_scheme(None, FALLBACK_ACCENTS))
+}
+
+fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<FrameStyle, Error> {
     let plot = root
         .child_by_local("chart")
         .and_then(|c| c.child_by_local("plotArea"));
     Ok(FrameStyle {
         rounded: flag(root, "roundedCorners").unwrap_or(true),
-        fill: read_frame_fill(root)?,
+        fill: read_frame_fill(root, scheme)?,
         plot_fill: plot
-            .map(read_frame_fill)
+            .map(|node| read_frame_fill(node, scheme))
             .transpose()?
             .unwrap_or(FrameFill::Default),
     })
 }
 
-fn read_frame_fill(node: &Element) -> Result<FrameFill, Error> {
+fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let Some(props) = node.child_by_local("spPr") else {
         return Ok(FrameFill::Default);
@@ -676,29 +865,10 @@ fn read_frame_fill(node: &Element) -> Result<FrameFill, Error> {
                 saw_fill = true;
                 let mut colors = prop.element_children();
                 let color = colors.next().ok_or_else(unsupported)?;
-                if colors.next().is_some() || color.local_name() != "srgbClr" {
+                if colors.next().is_some() {
                     return Err(unsupported());
                 }
-                let rgb = color
-                    .attr_local("val")
-                    .and_then(parse_hex)
-                    .ok_or_else(unsupported)?;
-                let mut mods = color.element_children();
-                fill = match mods.next() {
-                    None => FrameFill::Solid(rgb),
-                    Some(child) => {
-                        if mods.next().is_some() || child.local_name() != "alpha" {
-                            return Err(unsupported());
-                        }
-                        let alpha =
-                            parse_ooxml_alpha(child.attr_local("val")).ok_or_else(unsupported)?;
-                        if alpha == 100000 {
-                            FrameFill::Solid(rgb)
-                        } else {
-                            FrameFill::Translucent(rgb, alpha)
-                        }
-                    }
-                };
+                fill = resolve_frame_solid(color, scheme)?;
             }
             "effectLst" if prop.element_children().next().is_none() => (),
             // Excel 16 writes a:noFill plus an Office 2010 hiddenFill ext that
@@ -5497,6 +5667,13 @@ mod tests {
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='100000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='0' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
             "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='60000'/><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:tint val='60000'/></a:schemeClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:alpha val='50000'/></a:schemeClr></a:solidFill></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
@@ -5929,6 +6106,127 @@ mod tests {
         .is_ok());
     }
 
+    const OFFICE16_THEME: &str = r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <a:themeElements>
+    <a:clrScheme name="Office">
+      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
+      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="0E2841"/></a:dk2>
+      <a:lt2><a:srgbClr val="E8E8E8"/></a:lt2>
+      <a:accent1><a:srgbClr val="156082"/></a:accent1>
+      <a:accent2><a:srgbClr val="E97132"/></a:accent2>
+      <a:accent3><a:srgbClr val="196B24"/></a:accent3>
+      <a:accent4><a:srgbClr val="0F9ED5"/></a:accent4>
+      <a:accent5><a:srgbClr val="A02B93"/></a:accent5>
+      <a:accent6><a:srgbClr val="4EA72E"/></a:accent6>
+      <a:hlink><a:srgbClr val="467886"/></a:hlink>
+      <a:folHlink><a:srgbClr val="96607D"/></a:folHlink>
+    </a:clrScheme>
+  </a:themeElements>
+</a:theme>"#;
+
+    #[test]
+    fn frame_scheme_tint_shade_and_lum_match_official_excel_pixels() {
+        let accent1 = [0x15, 0x60, 0x82];
+        assert_eq!(frame_tint(accent1, 60_000), [170, 182, 193]);
+        assert_eq!(frame_shade(accent1, 75_000), [17, 84, 114]);
+        assert_eq!(frame_lum(accent1, Some(75_000), None), [16, 72, 98]);
+        assert_eq!(
+            frame_lum(accent1, Some(60_000), Some(40_000)),
+            [70, 177, 225]
+        );
+        // Pure 2.2 or gamma-encoded lerp must not be used: they miss official by 1+.
+        assert_ne!(
+            accent1.map(|c| {
+                let lin = (f64::from(c) / 255.0).powf(2.2);
+                let mixed = lin * 0.6 + 0.4;
+                (mixed.powf(1.0 / 2.2) * 255.0).round().clamp(0.0, 255.0) as u8
+            }),
+            [170, 182, 193]
+        );
+        assert_ne!(tint_rgb(accent1, 0.6), [170, 182, 193]);
+        assert_ne!(scale_rgb(accent1, 0.75), [17, 84, 114]);
+
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        assert_eq!(scheme_slot("accent1", &scheme), Some(accent1));
+        assert_eq!(scheme_slot("dk2", &scheme), Some([0x0E, 0x28, 0x41]));
+        assert_eq!(scheme_slot("lt2", &scheme), Some([0xE8, 0xE8, 0xE8]));
+        assert_eq!(scheme_slot("dk1", &scheme), Some([0, 0, 0]));
+        assert_eq!(scheme_slot("lt1", &scheme), Some([255, 255, 255]));
+        // Without the theme, dk2 is not the stale hardcoded 1F497D.
+        let fallback = theme_scheme(None, FALLBACK_ACCENTS);
+        assert_eq!(scheme_slot("dk2", &fallback), None);
+        assert_eq!(scheme_slot("accent1", &fallback), Some(accent1));
+
+        let cases = [
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+                FrameFill::Solid(accent1),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
+                FrameFill::Solid([0x0E, 0x28, 0x41]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([170, 182, 193]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:tint val='60000'/></a:schemeClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([170, 182, 193]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([17, 84, 114]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:shade val='75000'/></a:schemeClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([17, 84, 114]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([16, 72, 98]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='60000'/><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([70, 177, 225]),
+            ),
+        ];
+        for (config, expected) in cases {
+            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let frame = read_frame_with(&doc.root, &scheme).unwrap();
+            assert_eq!(frame.fill, expected, "parse {config}");
+            assert!(super::render_chart_with_theme(
+                &doc.root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                RenderDpi::DEFAULT,
+                Some(OFFICE16_THEME.as_bytes()),
+            )
+            .is_ok());
+        }
+
+        let plot_xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            );
+        let doc = crate::xml::parse(plot_xml.as_bytes()).unwrap();
+        let frame = read_frame_with(&doc.root, &scheme).unwrap();
+        assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+        assert_eq!(frame.plot_fill, FrameFill::Solid(accent1));
+    }
+
     #[test]
     fn unsupported_frame_semantics_do_not_fall_back_to_white() {
         for config in [
@@ -5937,7 +6235,13 @@ mod tests {
             "<c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
             "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:ln w='25400'/></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
