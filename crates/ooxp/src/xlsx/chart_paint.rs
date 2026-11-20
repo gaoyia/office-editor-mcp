@@ -164,6 +164,12 @@ struct LineSeriesStyle {
     marker_color: Option<[u8; 3]>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ValueLabel {
+    OutsideEnd,
+    Right,
+}
+
 struct Series {
     name: String,
     values: Vec<Option<f64>>,
@@ -180,6 +186,11 @@ struct Series {
     invert_if_negative: bool,
     point_inversion: Vec<Option<bool>>,
     negative_outline: Option<LineSeriesStyle>,
+    value_label: Option<ValueLabel>,
+    /// Distinguish explicit errors from omitted points for dispBlanksAs.
+    error_points: Vec<bool>,
+    unavailable_points: Vec<bool>,
+    span_blanks: bool,
 }
 
 impl Default for Series {
@@ -198,6 +209,10 @@ impl Default for Series {
             invert_if_negative: true,
             point_inversion: Vec::new(),
             negative_outline: None,
+            value_label: None,
+            error_points: Vec::new(),
+            unavailable_points: Vec::new(),
+            span_blanks: false,
         }
     }
 }
@@ -626,12 +641,11 @@ fn read_chart(
                     return Err(unsupported());
                 }
             }
-            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
             let blanks = chart
                 .child_by_local("dispBlanksAs")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("gap");
-            if blanks != "gap" {
+            if !matches!(blanks, "gap" | "zero" | "span") {
                 return Err(unsupported());
             }
             PlotKind::StandardLine
@@ -757,6 +771,42 @@ fn read_chart(
             }
             (values, Vec::new())
         };
+        let value_label = if matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+            read_value_label(wrapper, ser, kind)?
+        } else {
+            data_labels_hidden(ser.child_by_local("dLbls"))?;
+            None
+        };
+        if value_label.is_some()
+            && values
+                .iter()
+                .flatten()
+                .any(|v| value_label_text(*v).is_none())
+        {
+            return Err(unsupported());
+        }
+        let (error_points, unavailable_points) = if kind == PlotKind::StandardLine {
+            series_error_points(ser.child_by_local("val"), sheet, cells, values.len())
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        // Like the bubble-only flag, NA-as-blank is inert without NA points.
+        // Do not reject a fully numeric ordinary line for an inactive option.
+        if kind == PlotKind::StandardLine
+            && unavailable_points.iter().any(|na| *na)
+            && find_deep(root, "dispNaAsBlank")
+                .is_some_and(|e| !matches!(e.attr_local("val"), Some("0" | "false" | "off")))
+        {
+            return Err(unsupported());
+        }
+        if value_label.is_some()
+            && error_points
+                .iter()
+                .zip(&unavailable_points)
+                .any(|(error, na)| *error && !na)
+        {
+            return Err(unsupported());
+        }
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let mut line_color = None;
         let style = match kind {
@@ -831,13 +881,21 @@ fn read_chart(
             invert_if_negative: is_bar && flag(ser, "invertIfNegative").unwrap_or(true),
             point_inversion,
             negative_outline,
+            value_label,
+            error_points,
+            unavailable_points,
+            span_blanks: kind == PlotKind::StandardLine
+                && chart
+                    .child_by_local("dispBlanksAs")
+                    .and_then(|el| el.attr_local("val"))
+                    == Some("span"),
         };
     }
     series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
     if series.is_empty() {
         return Err(unsupported());
     }
-    let n = series
+    let mut n = series
         .iter()
         .map(|ser| ser.values.len().max(ser.x_values.len()))
         .max()
@@ -857,6 +915,9 @@ fn read_chart(
             }
         }
     }
+    if kind == PlotKind::StandardLine {
+        n = n.max(categories.len());
+    }
     if !matches!(kind, PlotKind::Scatter { .. }) {
         if categories.len() < n {
             let start = categories.len();
@@ -864,8 +925,67 @@ fn read_chart(
         }
         categories.truncate(n);
     }
+    if kind == PlotKind::StandardLine || series.iter().any(|s| s.value_label.is_some()) {
+        // Do not silently shrink the category domain when both caches omit
+        // trailing points. Sparse-domain/resource-budget support is separate;
+        // this batch requires a complete domain from parsed values/categories.
+        for ser in wrapper
+            .element_children()
+            .filter(|e| e.local_name() == "ser")
+        {
+            if let Some(count) = ser
+                .child_by_local("val")
+                .and_then(|e| find_deep(e, "numCache").or_else(|| find_deep(e, "numLit")))
+                .and_then(|e| e.child_by_local("ptCount"))
+            {
+                let count = count
+                    .attr_local("val")
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .ok_or_else(unsupported)?;
+                if count > n as u64 {
+                    return Err(unsupported());
+                }
+            }
+        }
+    }
     for ser in &mut series {
         ser.values.resize(n, None);
+        // Column blank/error label text has not yet been locked by a public
+        // probe. Never report successful showVal while silently omitting it.
+        if kind == PlotKind::ClusteredColumn
+            && ser.value_label.is_some()
+            && ser.values.iter().any(Option::is_none)
+        {
+            return Err(unsupported());
+        }
+        if kind == PlotKind::StandardLine {
+            ser.error_points.resize(n, false);
+            ser.unavailable_points.resize(n, false);
+            let mode = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if mode != "gap"
+                && ser
+                    .error_points
+                    .iter()
+                    .zip(&ser.unavailable_points)
+                    .any(|(error, na)| *error && !na)
+            {
+                return Err(unsupported());
+            }
+            if chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                == Some("zero")
+            {
+                for (value, error) in ser.values.iter_mut().zip(&ser.error_points) {
+                    if value.is_none() && !error {
+                        *value = Some(0.0);
+                    }
+                }
+            }
+        }
         if matches!(kind, PlotKind::Scatter { .. }) {
             ser.x_values.resize(n, None);
         }
@@ -1923,6 +2043,16 @@ fn paint(
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
     }
+    draw_value_labels(
+        canvas,
+        chart,
+        &plot,
+        axis_min,
+        axis_max,
+        font,
+        gdi.as_ref(),
+        label_px,
+    );
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     let category_y = y_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
@@ -2067,6 +2197,9 @@ fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
                     Some(v) if v.is_finite() => {
                         run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
                     }
+                    _ if ser.unavailable_points.get(ci).copied().unwrap_or(false)
+                        || (ser.span_blanks
+                            && !ser.error_points.get(ci).copied().unwrap_or(false)) => {}
                     _ => {
                         stroke_run(canvas, &run, ser.line_width, color);
                         run.clear();
@@ -2470,6 +2603,66 @@ fn draw_cat_ticks_y(
     }
 }
 
+/// Labels share the exact category slot / clustered-bar geometry with the marks.
+/// This deliberately supports only plain General showVal: unsupported label
+/// semantics are rejected during parsing, never reported as successful omission.
+fn draw_value_labels(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+) {
+    let slot = (plot.w + 1.0) / chart.categories.len().max(1) as f64;
+    let n = chart.series.len().max(1) as f64;
+    let overlap = chart.overlap / 100.0;
+    let width = slot / (n - (n - 1.0) * overlap + chart.gap_width / 100.0);
+    let side = (slot - width * (n - (n - 1.0) * overlap)) / 2.0;
+    // Public Excel label boxes have 3pt mark-to-box gap and 3pt text inset.
+    // The marker's actual requested size, not a fixed pixel offset, is excluded.
+    let pad = canvas.dpi.pt_to_px_font(6.0);
+    for (si, ser) in chart.series.iter().enumerate() {
+        let Some(position) = ser.value_label else {
+            continue;
+        };
+        for (ci, value) in ser.values.iter().enumerate() {
+            let Some(value) = value.filter(|n| n.is_finite()) else {
+                continue;
+            };
+            let Some(text) = value_label_text(value) else {
+                continue;
+            };
+            let w = text_width(font, gdi, &text, px);
+            let h = value_label_height(font, gdi, px);
+            let y = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let (x, top) = match position {
+                ValueLabel::OutsideEnd => {
+                    let x = plot.x
+                        + slot * ci as f64
+                        + side
+                        + si as f64 * width * (1.0 - overlap)
+                        + width / 2.0;
+                    (x - w / 2.0, if value < 0.0 { y + pad } else { y - h - pad })
+                }
+                ValueLabel::Right => (
+                    plot.x
+                        + slot * (ci as f64 + 0.5)
+                        + pad
+                        + match ser.marker {
+                            MarkerKind::None => 0.0,
+                            MarkerKind::Shaped { size, .. } => size / 2.0,
+                        },
+                    y - h / 2.0,
+                ),
+            };
+            draw_text(canvas, font, gdi, &text, x, top, px, INK);
+        }
+    }
+}
+
 fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
     let cats = chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
@@ -2854,7 +3047,6 @@ fn read_line_series(
     if flag(ser, "smooth").unwrap_or(false) {
         return Err(unsupported());
     }
-    data_labels_hidden(ser.child_by_local("dLbls"))?;
     for name in ["dPt", "trendline", "errBars"] {
         if ser.child_by_local(name).is_some() {
             return Err(unsupported());
@@ -3487,6 +3679,165 @@ fn hue(p: f64, q: f64, mut t: f64) -> u8 {
     (v * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
+/// Use the renderer that will actually draw the label. On Windows chart text
+/// is GDI; fontdue's fallback line leading is not its line box and would shift
+/// outside-end labels upward, even when the visible glyph itself is correct.
+fn value_label_height(font: Option<&Font>, gdi: Option<&super::chart_gdi::Face>, px: f32) -> f64 {
+    gdi.map_or_else(|| text_height(font, px), |face| face.em_box())
+}
+
+/// Minimum locked General subset: ordinary integers (no scientific notation,
+/// locale-dependent separators or decimal precision approximation).
+fn value_label_text(value: f64) -> Option<String> {
+    if !value.is_finite() || value.fract() != 0.0 || value.abs() >= 100_000_000_000.0 {
+        return None;
+    }
+    Some(if value == 0.0 {
+        "0".to_owned()
+    } else {
+        format!("{value:.0}")
+    })
+}
+
+/// Only these non-bubble chart kinds reach this parser. Excel writes
+/// showBubbleSize=1 on ordinary line/column wrappers; it has no visible meaning
+/// there. Real label flags, custom formatting and point overrides remain guarded.
+fn read_value_label(
+    wrapper: &Element,
+    ser: &Element,
+    kind: PlotKind,
+) -> Result<Option<ValueLabel>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut visible = false;
+    let mut position = if kind == PlotKind::StandardLine {
+        "r"
+    } else {
+        "outEnd"
+    };
+    let configs: Vec<_> = [wrapper.child_by_local("dLbls"), ser.child_by_local("dLbls")]
+        .into_iter()
+        .flatten()
+        .collect();
+    for labels in &configs {
+        if flag(labels, "delete").unwrap_or(false) {
+            visible = false;
+            continue;
+        }
+        if labels.element_children().any(|e| e.local_name() == "dLbl") {
+            return Err(unsupported());
+        }
+        for name in [
+            "showLegendKey",
+            "showCatName",
+            "showSerName",
+            "showPercent",
+            "showLeaderLines",
+        ] {
+            if flag(labels, name).unwrap_or(false) {
+                return Err(unsupported());
+            }
+        }
+        if let Some(v) = flag(labels, "showVal") {
+            visible = v;
+        }
+        if let Some(p) = labels
+            .child_by_local("dLblPos")
+            .and_then(|e| e.attr_local("val"))
+        {
+            position = p;
+        }
+    }
+    if !visible {
+        return Ok(None);
+    }
+    for labels in configs {
+        // Hidden label styling cannot affect output. Visible custom styling is
+        // not approximated by the default font/background.
+
+        for child in labels.element_children() {
+            match child.local_name() {
+                "spPr" => {
+                    for style in child.element_children() {
+                        match style.local_name() {
+                            "noFill" => {}
+                            "ln" if style
+                                .element_children()
+                                .all(|e| e.local_name() == "noFill") => {}
+                            "effectLst" if style.element_children().next().is_none() => {}
+                            _ => return Err(unsupported()),
+                        }
+                    }
+                }
+                "numFmt" if child.attr_local("formatCode").unwrap_or("General") != "General" => {
+                    return Err(unsupported())
+                }
+                "txPr" | "layout" => return Err(unsupported()),
+                "extLst" => {
+                    for ext in child.element_children() {
+                        for setting in ext.element_children() {
+                            if setting.local_name() != "showLeaderLines"
+                                || !matches!(setting.attr_local("val"), Some("0" | "false"))
+                            {
+                                return Err(unsupported());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    if let Some(cache) = ser
+        .child_by_local("val")
+        .and_then(|v| find_deep(v, "numCache").or_else(|| find_deep(v, "numLit")))
+    {
+        if cache
+            .child_by_local("formatCode")
+            .is_some_and(|e| e.text_content() != "General")
+        {
+            return Err(unsupported());
+        }
+    }
+    match (kind, position) {
+        (PlotKind::ClusteredColumn, "outEnd") => Ok(Some(ValueLabel::OutsideEnd)),
+        (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
+        _ => Err(unsupported()),
+    }
+}
+
+/// Excel16 public probes show #N/A is not a zero point and the line connects
+/// across it (including zero/span); an actual blank follows dispBlanksAs.
+/// Other explicit non-numeric errors remain distinguishable and are not silently
+/// treated as blanks when opting into the newly supported zero/span modes.
+fn series_error_points(
+    parent: Option<&Element>,
+    sheet: &str,
+    cells: Option<&super::sparkline::CellCache>,
+    len: usize,
+) -> (Vec<bool>, Vec<bool>) {
+    let mut errors = vec![false; len];
+    let mut unavailable = vec![false; len];
+    let cache = parent
+        .and_then(|p| find_deep(p, "numCache").or_else(|| find_deep(p, "numLit")))
+        .filter(|_| !cache_numbers(parent).is_empty());
+    if let Some(cache) = cache {
+        for (idx, text) in read_pts(cache) {
+            if let Some(error) = errors.get_mut(idx) {
+                *error = parse_chart_number(text.trim()).is_none();
+                unavailable[idx] = text.trim() == "#N/A";
+            }
+        }
+    } else if let Some(values) = cells.and_then(|cells| {
+        formula_text(parent).and_then(|f| super::sparkline::range_values(&f, sheet, cells))
+    }) {
+        for (idx, value) in values.into_iter().take(len).enumerate() {
+            unavailable[idx] = value.as_str() == Some("#N/A");
+            errors[idx] = !value.is_null() && json_number(value).is_none();
+        }
+    }
+    (errors, unavailable)
+}
+
 fn data_labels_hidden(dlbls: Option<&Element>) -> Result<(), Error> {
     let Some(dlbls) = dlbls else {
         return Ok(());
@@ -3504,7 +3855,6 @@ fn data_labels_hidden(dlbls: Option<&Element>) -> Result<(), Error> {
         "showCatName",
         "showSerName",
         "showPercent",
-        "showBubbleSize",
         "showLeaderLines",
     ] {
         if flag(dlbls, name).unwrap_or(false) {
@@ -5513,6 +5863,329 @@ mod tests {
     }
 
     #[test]
+    fn non_bubble_flag_is_inert_but_real_label_semantics_are_not() {
+        let base = standard_line_xml(&line_ser(0, "S1", &[Some(1.0), Some(2.0)], ""), "");
+        let bubble = base.replace(
+            "<c:varyColors",
+            "<c:dLbls><c:showBubbleSize val='1'/></c:dLbls><c:varyColors",
+        );
+        assert_eq!(render_line(&base).unwrap(), render_line(&bubble).unwrap());
+        for unsupported in [
+            "<c:showCatName val='1'/>",
+            "<c:showPercent val='1'/>",
+            "<c:showLegendKey val='1'/>",
+            "<c:dLbl><c:idx val='0'/><c:delete val='1'/></c:dLbl>",
+        ] {
+            let xml = base.replace(
+                "<c:varyColors",
+                &format!("<c:dLbls>{unsupported}</c:dLbls><c:varyColors"),
+            );
+            assert!(
+                render_line(&xml).is_err(),
+                "must not silently omit {unsupported}"
+            );
+        }
+    }
+
+    #[test]
+    fn line_zero_span_and_na_are_distinct_in_values_and_actual_strokes() {
+        let ser = line_ser(
+            0,
+            "S1",
+            &[Some(1.0), None, Some(3.0)],
+            "<c:marker><c:symbol val='none'/></c:marker>",
+        );
+        let plot = Rect {
+            x: 0.0,
+            y: 0.0,
+            w: 299.0,
+            h: 100.0,
+        };
+        let parse = |mode: &str, ser: &str| {
+            let xml = standard_line_xml(ser, &format!("<c:dispBlanksAs val='{mode}'/>"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap()
+        };
+        let mut canvases = Vec::new();
+        for mode in ["gap", "zero", "span"] {
+            let chart = parse(mode, &ser);
+            assert_eq!(
+                chart.series[0].values[1],
+                if mode == "zero" { Some(0.0) } else { None }
+            );
+            let mut canvas = Canvas::new(300, 110);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0);
+            canvases.push(canvas);
+        }
+        let ink = |canvas: &Canvas, x: usize, y: usize| {
+            canvas.px[(y * 300 + x) * 3..(y * 300 + x) * 3 + 3] != [255; 3]
+        };
+        assert!(!ink(&canvases[0], 150, 50), "gap must not connect");
+        assert!(
+            ink(&canvases[1], 150, 99),
+            "zero must draw down to baseline"
+        );
+        assert!(
+            ink(&canvases[2], 150, 50),
+            "span must actually connect across missing point"
+        );
+        let na = ser.replace(
+            "</c:numLit>",
+            "<c:pt idx='1'><c:v>#N/A</c:v></c:pt></c:numLit>",
+        );
+        for mode in ["gap", "zero", "span"] {
+            let chart = parse(mode, &na);
+            assert_eq!(chart.series[0].values[1], None, "NA is never a zero point");
+            assert!(chart.series[0].unavailable_points[1]);
+            let mut canvas = Canvas::new(300, 110);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0);
+            assert!(
+                ink(&canvas, 150, 50),
+                "Excel16 NA probe connects across NA: {mode}"
+            );
+        }
+        let error = na.replace("#N/A", "#DIV/0!");
+        for mode in ["zero", "span"] {
+            let xml = standard_line_xml(&error, &format!("<c:dispBlanksAs val='{mode}'/>"));
+            assert!(
+                render_line(&xml).is_err(),
+                "unverified error semantics must not silently be a blank/zero"
+            );
+        }
+    }
+
+    #[test]
+    fn na_as_blank_extension_is_not_silently_treated_as_ordinary_na() {
+        let base = standard_line_xml(
+            &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
+            "<c:dispBlanksAs val='zero'/>",
+        );
+        let finite=base.replace("</c:chart>","<c:extLst><c:ext uri='dataDisplayOptions16'><dispNaAsBlank xmlns='http://schemas.microsoft.com/office/drawing/2017/03/chart' val='1'/></c:ext></c:extLst></c:chart>");
+        assert!(
+            render_line(&finite).is_ok(),
+            "inactive option must not be a false export failure"
+        );
+        let with_na = finite.replace(
+            "<c:pt idx=\"1\"><c:v>2</c:v></c:pt>",
+            "<c:pt idx=\"1\"><c:v>#N/A</c:v></c:pt>",
+        );
+        assert_ne!(with_na, finite, "counterexample must really contain NA");
+        assert!(
+            render_line(&with_na).is_err(),
+            "active NA-as-blank has different valid semantics still needing implementation"
+        );
+        assert!(render_line(&with_na.replace("val='1'", "val='0'")).is_ok());
+    }
+
+    #[test]
+    fn sparse_unresolved_cache_domain_is_not_silently_shortened_or_allocated_unbounded() {
+        let ser = line_ser(0, "S1", &[Some(1.0), None, Some(3.0)], "");
+        for count in [5_u64, 4_000_000_000_u64] {
+            let ser = ser.replace(
+                "<c:numLit>",
+                &format!("<c:numLit><c:ptCount val='{count}'/>"),
+            );
+            for mode in ["gap", "zero", "span"] {
+                let xml = standard_line_xml(&ser, &format!("<c:dispBlanksAs val='{mode}'/>"));
+                assert!(render_line(&xml).is_err(),"unresolved domain must not lose trailing slots or allocate by untrusted ptCount");
+            }
+        }
+    }
+
+    #[test]
+    fn line_blank_modes_keep_trailing_categories_and_cell_error_identity() {
+        let ser = line_ser(0, "S1", &[Some(1.0), None, Some(3.0), None], "");
+        let xml = standard_line_xml(&ser, "<c:dispBlanksAs val='zero'/>");
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(
+            chart.series[0].values,
+            vec![Some(1.0), Some(0.0), Some(3.0), Some(0.0)]
+        );
+        let cells = super::super::sparkline::CellCache::from_pairs(
+            "Data",
+            &[
+                ((2, 1), serde_json::json!(1)),
+                ((2, 3), serde_json::json!("#N/A")),
+                ((2, 4), serde_json::json!(4)),
+            ],
+        );
+        let parent =
+            crate::xml::parse(b"<val><numRef><f>Data!B1:B4</f><numCache/></numRef></val>").unwrap();
+        let (errors, na) = series_error_points(Some(&parent.root), "Data", Some(&cells), 4);
+        assert_eq!(errors, vec![false, false, true, false]);
+        assert_eq!(na, vec![false, false, true, false]);
+    }
+
+    #[test]
+    fn plain_value_labels_are_parsed_and_unsupported_styles_are_never_omitted() {
+        for kind in [PlotKind::ClusteredColumn, PlotKind::StandardLine] {
+            let wrapper = crate::xml::parse(
+                b"<wrapper><dLbls><showVal val='1'/><showBubbleSize val='1'/></dLbls></wrapper>",
+            )
+            .unwrap();
+            let ser = crate::xml::parse(b"<ser/>").unwrap();
+            assert_eq!(
+                read_value_label(&wrapper.root, &ser.root, kind).unwrap(),
+                Some(if kind == PlotKind::StandardLine {
+                    ValueLabel::Right
+                } else {
+                    ValueLabel::OutsideEnd
+                })
+            );
+            for config in [
+                "<showCatName val='1'/>",
+                "<numFmt formatCode='0.00'/>",
+                "<dLblPos val='bestFit'/>",
+                "<txPr/>",
+                "<dLbl><idx val='0'/></dLbl>",
+                "<spPr><solidFill/></spPr>",
+            ] {
+                let ser = crate::xml::parse(
+                    format!("<ser><dLbls><showVal val='1'/>{config}</dLbls></ser>").as_bytes(),
+                )
+                .unwrap();
+                assert!(
+                    read_value_label(&wrapper.root, &ser.root, kind).is_err(),
+                    "must not ignore {config}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn value_label_missing_and_error_semantics_are_never_silently_omitted() {
+        let base = standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(1.0), None, Some(3.0)],
+                "<c:dLbls><c:showVal val='1'/></c:dLbls>",
+            ),
+            "<c:dispBlanksAs val='zero'/>",
+        );
+        let column = base.replace("lineChart", "barChart").replace(
+            "<c:grouping val=\"standard\"/>",
+            "<c:barDir val='col'/><c:grouping val='clustered'/>",
+        );
+        assert!(
+            render_line(&column).is_err(),
+            "unlocked column blank labels must not silently disappear"
+        );
+        let error = base
+            .replace(
+                "</c:numLit>",
+                "<c:pt idx='1'><c:v>#DIV/0!</c:v></c:pt></c:numLit>",
+            )
+            .replace("val='zero'", "val='gap'");
+        assert!(
+            render_line(&error).is_err(),
+            "unsupported error label semantics are not a successful omission"
+        );
+    }
+
+    #[test]
+    fn label_inheritance_and_integer_format_boundary_are_explicit() {
+        let root =
+            crate::xml::parse(b"<wrapper><dLbls><showVal val='0'/><txPr/></dLbls></wrapper>")
+                .unwrap();
+        let ser = crate::xml::parse(b"<ser><dLbls><showVal val='1'/></dLbls></ser>").unwrap();
+        assert!(
+            read_value_label(&root.root, &ser.root, PlotKind::StandardLine).is_err(),
+            "must not silently drop inherited custom text styling"
+        );
+        assert_eq!(value_label_text(-0.0), Some("0".to_owned()));
+        assert_eq!(value_label_text(-42.0), Some("-42".to_owned()));
+        for value in [1.25, f64::INFINITY, 100_000_000_000.0] {
+            assert!(value_label_text(value).is_none());
+        }
+        let xml = standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(1.25), Some(2.0)],
+                "<c:dLbls><c:showVal val='1'/></c:dLbls>",
+            ),
+            "",
+        );
+        assert!(
+            render_line(&xml).is_err(),
+            "decimal General labels need an actual formatter, not an approximate integer"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn value_labels_use_actual_gdi_line_box_not_fallback_font_leading() {
+        let face = super::super::chart_gdi::Face::open_dpi(15.0, false, 106.0).unwrap();
+        assert_eq!(value_label_height(None, Some(&face), 50.0), face.em_box());
+        assert_ne!(
+            value_label_height(None, Some(&face), 50.0),
+            text_height(None, 50.0)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn real_value_label_glyph_pixels_are_added_for_column_and_line_at_each_dpi() {
+        let base = standard_line_xml(
+            &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
+            "",
+        );
+        for kind in [PlotKind::ClusteredColumn, PlotKind::StandardLine] {
+            let hidden = if kind == PlotKind::ClusteredColumn {
+                base.replace("lineChart", "barChart").replace(
+                    "<c:grouping val=\"standard\"/>",
+                    "<c:barDir val='col'/><c:grouping val='clustered'/>",
+                )
+            } else {
+                base.clone()
+            };
+            let visible = hidden.replace(
+                "<c:order",
+                "<c:dLbls><c:showVal val='1'/></c:dLbls><c:order",
+            );
+            for dpi_value in [96, 106, 144] {
+                let dpi = RenderDpi::from_request(
+                    serde_json::json!({"dpi":dpi_value}).as_object().unwrap(),
+                )
+                .unwrap();
+                let mut images = Vec::new();
+                for xml in [&hidden, &visible] {
+                    let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                    let png = render_chart_at(
+                        &doc.root,
+                        636,
+                        371,
+                        FALLBACK_ACCENTS,
+                        None,
+                        ChartHost::Excel,
+                        None,
+                        "",
+                        dpi,
+                    )
+                    .unwrap();
+                    let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+                        .read_info()
+                        .unwrap();
+                    let mut bytes = vec![0; reader.output_buffer_size()];
+                    reader.next_frame(&mut bytes).unwrap();
+                    images.push(bytes);
+                }
+                assert!(
+                    images[0]
+                        .iter()
+                        .zip(&images[1])
+                        .filter(|(a, b)| a != b)
+                        .count()
+                        > 30,
+                    "labels must add actual glyph pixels, not just remove NI"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn unsupported_line_inputs_stay_not_implemented() {
         let base = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let cases = [
@@ -5531,8 +6204,6 @@ mod tests {
                 ),
                 "",
             ),
-            standard_line_xml(&base, r#"<c:dispBlanksAs val="zero"/>"#),
-            standard_line_xml(&base, r#"<c:dispBlanksAs val="span"/>"#),
             standard_line_xml(
                 &line_ser(
                     0,
