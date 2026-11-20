@@ -305,3 +305,8 @@ DPI几何分子**38/49不变**，6 Normal路径仍需Office同语义可比证据
 实际完整Rust1874 passed/0failed/0ignored；44 Python通过，fmt、workspace clippy全targets/features-Dwarnings、真实CLI build、语法/diff通过。新exeSHA见桌面minimal-fix-results.json，旧28ddb1f2完整exe保留。原1873与38是前片历史，不冒充本次。几何43/49不变，未称7功能/7整图PASS。
 
 证据：桌面office-editor-PR10-图例坐标核实-20261117-162104。四自有wb全部Close(false)、ownwb0、源SHA不变/独占读/锁0；无Save/Quit/kill/删锁/系统设置。当前必要检查与小回归修复已结束，按t128不继续追4pt、自动布局或其它项目；余绝对原点/自动边距/key与ink细节记录为限制，暂停十项不恢复。
+
+
+## 2026-11-20 t160u/t164u：迷你折线与列宽审核通过
+
+用户 t160 将迷你折线角度审核标为通过（同 106 画布角度 / 抗锯齿残差已接受，无唯一通用公式，未写入代码）。用户 t164 通过 `fonts[0]` 列宽修复：Excel 16.0 列宽 MDW 取 stylesheet `fonts[0]` 而非 Normal，仍按请求 DPI 重测，不是「永远 96 MDW」。修后 106 下工作表 325×23、迷你图 82×23 已与官方齐，图表 324×220 对官方 324×221，已接受 1px 高度残差（未硬插 +1）。对应计划已改名为 ✅：`.plan/2026年-11月-17日-✅-xlsx-Normal继承核实.md`、`.plan/2026年-11月-17日-✅-迷你图端点与笔画核实.md`、`.plan/2026年-11月-17日-✅-xlsx-DPI验收复核.md`、`.plan/2026年-11月-20日-✅-pr12-出图对照收束.md`。准备由用户合并 PR12。不改绿 11 月 14 日总计划或 pr10 / pr11 交接。
