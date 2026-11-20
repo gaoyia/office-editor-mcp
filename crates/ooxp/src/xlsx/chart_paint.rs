@@ -2426,7 +2426,7 @@ fn draw_plot_key(
                 mid_y,
                 line_end,
                 mid_y,
-                canvas.dpi.pt_to_px_font(2.25),
+                excel_chart_line_width_px(canvas.dpi.pt_to_px_font(2.25)),
                 color,
             );
             let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
@@ -3037,6 +3037,27 @@ fn series_name(
         .find(|label| !label.is_empty())
 }
 
+/// Excel Chart.Export paints ordinary line/scatter series strokes with a
+/// whole-pixel device pen. The implicit default is 2.25pt (28575 EMU).
+/// At 96dpi that is exactly 3px and stays 3. At 106dpi the unsnapped
+/// width is 3.3125px, but unstretched official exports show a 4px opaque
+/// core and an any-ink band out to about +/-2.5px (one device pixel
+/// wider than a fractional 3.3125px stroke). Non-integer device widths
+/// therefore ceil; exact integers are preserved so 96dpi does not change.
+/// Applied only to line/scatter series and matching legend keys, not to
+/// bar outlines or area borders.
+fn excel_chart_line_width_px(px: f64) -> f64 {
+    if !px.is_finite() || px <= 0.0 {
+        return px;
+    }
+    let rounded = px.round();
+    if (px - rounded).abs() <= 1e-6 {
+        rounded
+    } else {
+        px.ceil()
+    }
+}
+
 fn read_line_series(
     ser: &Element,
     accents: [[u8; 3]; 6],
@@ -3053,12 +3074,12 @@ fn read_line_series(
         }
     }
     let mut visible = true;
-    let mut width = dpi.pt_to_px_font(2.25);
+    let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
         let style = read_line_sp_pr(sp, accents, dpi)?;
         visible = style.visible;
-        width = style.width;
+        width = excel_chart_line_width_px(style.width);
         color = style.color;
     }
     if color.is_none() {
@@ -3081,7 +3102,7 @@ fn read_line_sp_pr(
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut visible = true;
-    let mut width = dpi.pt_to_px_font(2.25);
+    let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
     for child in sp.element_children() {
         match child.local_name() {
@@ -3094,7 +3115,7 @@ fn read_line_sp_pr(
             "ln" => {
                 let line = read_solid_ln(child, accents, width, dpi)?;
                 visible = line.visible;
-                width = line.width;
+                width = excel_chart_line_width_px(line.width);
                 if line.color.is_some() {
                     color = line.color;
                 }
@@ -6683,6 +6704,59 @@ mod tests {
             at_origin > 0,
             "category label ink must exist by the zero axis"
         );
+    }
+
+    #[test]
+    fn excel_chart_line_width_snaps_to_the_official_device_pen() {
+        let px96 = RenderDpi::DEFAULT.pt_to_px_font(2.25);
+        assert_eq!(px96, 3.0);
+        assert_eq!(excel_chart_line_width_px(px96), 3.0);
+
+        let dpi106 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        assert!((dpi106.pt_to_px_font(2.25) - 3.3125).abs() < 1e-9);
+        assert_eq!(excel_chart_line_width_px(dpi106.pt_to_px_font(2.25)), 4.0);
+        assert_eq!(excel_chart_line_width_px(dpi106.emu_to_px_f(28_575.0)), 4.0);
+
+        let dpi144 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 144}).as_object().unwrap()).unwrap();
+        assert!((dpi144.pt_to_px_font(2.25) - 4.5).abs() < 1e-9);
+        assert_eq!(excel_chart_line_width_px(dpi144.pt_to_px_font(2.25)), 5.0);
+    }
+
+    #[test]
+    fn snapped_device_pen_paints_an_aligned_opaque_core() {
+        let color = [21, 96, 130];
+        for (dpi_value, expect) in [(96u32, 3i32), (106, 4), (144, 5)] {
+            let dpi = RenderDpi::from_request(
+                serde_json::json!({ "dpi": dpi_value }).as_object().unwrap(),
+            )
+            .unwrap();
+            let width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
+            assert_eq!(width, f64::from(expect));
+            // Odd widths sit on a pixel centre; even widths sit on a pixel edge
+            // so the opaque core is exactly `expect` device pixels.
+            let y = if expect % 2 == 0 { 20.0 } else { 20.5 };
+            let mut canvas = Canvas::with_dpi(80, 40, dpi);
+            canvas.stroke_segment(10.0, y, 70.0, y, width, color);
+            let x = 40u32;
+            let mut run = 0i32;
+            let mut best = 0i32;
+            for row in 0..canvas.h {
+                let i = ((row * canvas.w + x) * 3) as usize;
+                let px = [canvas.px[i], canvas.px[i + 1], canvas.px[i + 2]];
+                if px == color {
+                    run += 1;
+                    best = best.max(run);
+                } else {
+                    run = 0;
+                }
+            }
+            assert_eq!(
+                best, expect,
+                "aligned 2.25pt core at dpi={dpi_value} should be {expect}px, got {best}"
+            );
+        }
     }
 
     #[test]
