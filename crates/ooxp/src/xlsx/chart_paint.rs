@@ -3,7 +3,7 @@
 //! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
-//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式空值按连线（dispBlanksAs=span）；显式 dispBlanksAs=zero 仅对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充，错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
@@ -1242,8 +1242,10 @@ fn read_chart(
             // Omitted dispBlanksAs is official area default (missing as 0).
             // Excel 16 public saves of that default write explicit val=zero,
             // which fills the same V-to-baseline. Explicit gap stays a hole.
-            // span, and unverified error points under zero, remain NI.
-            area_missing_as_zero = blanks_el.is_none() || blanks == "zero";
+            // Official Excel 16 area span paints the same V-to-baseline as
+            // zero, including #N/A; it is not a 4-to-9 chord. Other errors
+            // and non-area types remain NI.
+            area_missing_as_zero = blanks_el.is_none() || blanks == "zero" || blanks == "span";
             if blanks != "gap" && !area_missing_as_zero {
                 return Err(unsupported());
             }
@@ -1335,14 +1337,23 @@ fn read_chart(
             (Vec::new(), Vec::new())
         };
         // Explicit area zero is locked only for true blanks / omitted cache
-        // points. #N/A and other errors are not silently drawn as baseline.
+        // points. Official area span also locks #N/A as a baseline V, but
+        // other errors stay NI under both modes.
         if kind == PlotKind::StandardArea
             && area_missing_as_zero
             && chart.child_by_local("dispBlanksAs").is_some()
         {
-            let (errors, _) =
+            let (errors, unavailable) =
                 series_error_points(ser.child_by_local("val"), sheet, cells, values.len());
-            if errors.iter().any(|error| *error) {
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            let unverified = errors
+                .iter()
+                .zip(&unavailable)
+                .any(|(error, na)| *error && (blanks != "span" || !*na));
+            if unverified {
                 return Err(unsupported());
             }
         }
@@ -9778,6 +9789,50 @@ mod tests {
                 "unverified area error points must not silently become baseline zero"
             );
         }
+        let explicit_span_png = render_area(&standard_area_xml(
+            &gapped,
+            r#"<c:dispBlanksAs val="span"/>"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            explicit_span_png, omitted_png,
+            "explicit area span must fill the same V-to-baseline as omitted default"
+        );
+        // Mid-only #N/A / #DIV/0! — do not reuse the all-points error XML
+        // used for the explicit-zero NI asserts above.
+        let na_mid = gapped.replace(
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let div_mid = gapped.replace(
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>#DIV/0!</c:v></c:pt>"#,
+        );
+        assert!(
+            render_area(&standard_area_xml(
+                &na_mid,
+                r#"<c:dispBlanksAs val="span"/>"#
+            ))
+            .is_ok(),
+            "official area span paints #N/A as the same baseline V"
+        );
+        let span_na_png = render_area(&standard_area_xml(
+            &na_mid,
+            r#"<c:dispBlanksAs val="span"/>"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            span_na_png, explicit_span_png,
+            "area span + #N/A must match the blank-mid span fill"
+        );
+        assert!(
+            render_area(&standard_area_xml(
+                &div_mid,
+                r#"<c:dispBlanksAs val="span"/>"#
+            ))
+            .is_err(),
+            "unverified area #DIV/0! under span must stay not implemented"
+        );
     }
 
     fn count_fill_band(rgb: &[u8], w: u32, x: u32, y0: u32, y1: u32, color: [u8; 3]) -> usize {
@@ -9856,7 +9911,6 @@ mod tests {
                 r#"crossBetween val="between""#,
                 r#"crossBetween val="midCat""#,
             ),
-            standard_area_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#),
             base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
             base.replacen(
                 r#"</c:areaChart>"#,
