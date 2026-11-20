@@ -137,15 +137,14 @@ const UI = {
     unsupported: "当前浏览器没有目录选择接口。请更新到新版 Chrome 或 Edge。",
     unsupportedEmpty: "更新浏览器之后，才能把示例写进本地目录。",
     previewTitle: "导出预览图",
-    previewBody: "把当前格式的包按库的导出动作画成 PNG，并立刻显示在这一页。可以预览刚才在会话里生成的文件，也可以选择本地文件，不必先授权目录。浏览器里没有 Windows 的字体绘制，带文字的文档或工作表往往会失败；要看效果可以先生成一份浏览器能画的简单示例。这是库的近似预览，不是和 Office 逐像素相同。",
+    previewBody: "把当前格式的包按库的导出动作画成 PNG，并立刻显示在这一页。预览的是刚才在会话里生成的文件，也可以选择本地文件，不必先授权目录。库尚未实现的绘制会按错误显示出来，这是后续要补齐的部分。这是库的近似预览，不是和 Office 逐像素相同。",
     previewSession: "预览会话里的文件",
-    previewSample: "生成可预览示例",
     previewPick: "选择本地文件",
     previewing: "正在导出…",
     previewPage: "正在导出 {id}…",
     previewDone: "已导出 {n} 张。",
     previewPartial: "已导出 {ok} 张，{fail} 张失败。",
-    previewNone: "会话里还没有这份格式的文件。请先运行上面的创建，选择本地文件，或生成一份可预览示例。",
+    previewNone: "会话里还没有这份格式的文件。请先运行上面的创建，或选择本地文件。",
     previewBadDpi: "dpi 必须是 24 到 600 的整数。",
     previewNoImage: "没有得到 PNG。",
     previewDownload: "下载这张 PNG",
@@ -228,15 +227,14 @@ const UI = {
     unsupported: "This browser has no directory picker. Update to a current Chrome or Edge.",
     unsupportedEmpty: "After the browser is updated, examples can be written into a local directory.",
     previewTitle: "Export a preview image",
-    previewBody: "Export the current format to a PNG with the library's export actions, and show it on this page immediately. You can preview a package already in the session, or choose a local file. A directory does not have to be authorized first. The browser wasm build has no Windows font rasterizer, so documents and worksheets with text often fail; to see a picture first, generate a simple sample the browser can draw. This is the library's approximate preview, not a pixel-identical Office export.",
+    previewBody: "Export the current format to a PNG with the library's export actions, and show it on this page immediately. The preview is the package just created in the session, or a local file you choose. A directory does not have to be authorized first. Features the library cannot draw yet are shown as errors; those are left to later work. This is the library's approximate preview, not a pixel-identical Office export.",
     previewSession: "Preview the session file",
-    previewSample: "Create a drawable sample",
     previewPick: "Choose a local file",
     previewing: "Exporting…",
     previewPage: "Exporting {id}…",
     previewDone: "Exported {n} image(s).",
     previewPartial: "Exported {ok} image(s); {fail} failed.",
-    previewNone: "There is no package for this format in the session yet. Run the create example above, choose a local file, or create a drawable sample.",
+    previewNone: "There is no package for this format in the session yet. Run the create example above, or choose a local file.",
     previewBadDpi: "dpi must be an integer from 24 to 600.",
     previewNoImage: "The export did not return a PNG.",
     previewDownload: "Download this PNG",
@@ -941,108 +939,6 @@ async function yieldUi() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function previewableCreate(format) {
-  if (format === "xlsx") {
-    const fill = (rgb) => ({ pattern: "solid", fg: { rgb } });
-    return {
-      schemaVersion: 1,
-      action: "create",
-      path: "ooxp-preview-sheet.xlsx",
-      format: "xlsx",
-      workbook: {
-        sheets: [
-          {
-            name: lang === "zh" ? "色块" : "Blocks",
-            cells: [
-              { ref: "A1", fill: fill("FF1F7A4D") },
-              { ref: "B1", fill: fill("FFE5F3F1") },
-              { ref: "C1", fill: fill("FF0E5C56") },
-              { ref: "A2", fill: fill("FFE4D8C8") },
-              { ref: "B2", fill: fill("FFB45309") },
-              { ref: "C2", fill: fill("FF1D4E89") },
-            ],
-          },
-          {
-            name: lang === "zh" ? "对照" : "Contrast",
-            cells: [
-              { ref: "A1", fill: fill("FF1D4E89") },
-              { ref: "B1", fill: fill("FFB45309") },
-              { ref: "A2", fill: fill("FF1F7A4D") },
-              { ref: "B2", fill: fill("FF0E5C56") },
-            ],
-          },
-        ],
-      },
-    };
-  }
-  if (format === "docx") {
-    const border = { val: "single", sz: 4, color: "000000" };
-    return {
-      schemaVersion: 1,
-      action: "create",
-      path: "ooxp-preview-page.docx",
-      format: "docx",
-      document: {
-        paragraphs: [{ text: "" }],
-        tables: [
-          {
-            cells: [["", "", ""], ["", "", ""]],
-            rowHeights: [
-              { h: 900, rule: "exact" },
-              { h: 900, rule: "exact" },
-            ],
-            borders: {
-              top: border,
-              left: border,
-              bottom: border,
-              right: border,
-              insideH: border,
-              insideV: border,
-            },
-            cellFormats: [
-              { r: 1, c: 1, fill: "1F7A4D" },
-              { r: 1, c: 2, fill: "1D4E89" },
-              { r: 1, c: 3, fill: "B45309" },
-              { r: 2, c: 1, fill: "0E5C56" },
-              { r: 2, c: 2, fill: "E4D8C8" },
-              { r: 2, c: 3, fill: "1C1917" },
-            ],
-          },
-        ],
-      },
-    };
-  }
-  return {
-    schemaVersion: 1,
-    action: "create",
-    path: "ooxp-preview-slides.pptx",
-    format: "pptx",
-    presentation: {
-      slides: [
-        {
-          shapes: [
-            { prst: "rect", x: 914400, y: 914400, cx: 4572000, cy: 2743200, fill: "1F7A4D" },
-            { prst: "roundRect", x: 6400800, y: 914400, cx: 3657600, cy: 2743200, fill: "1D4E89" },
-            { prst: "ellipse", x: 2743200, y: 4114800, cx: 4572000, cy: 2286000, fill: "B45309" },
-          ],
-        },
-        {
-          shapes: [
-            { prst: "rect", x: 1371600, y: 1371600, cx: 9144000, cy: 4114800, fill: "0E5C56" },
-          ],
-        },
-      ],
-    },
-  };
-}
-
-function showcaseCreate(format) {
-  const group = localizedFormats().find((item) => item.id === format);
-  if (!group) return null;
-  const item = group.items.find((entry) => entry.request && entry.request.action === "create");
-  return item ? item.request : null;
-}
-
 function clearPreview(format) {
   const state = previewState[format];
   for (const url of state.urls) URL.revokeObjectURL(url);
@@ -1210,47 +1106,11 @@ async function runPreview(format, source) {
 
 async function previewFromSession(format) {
   const pack = packageOf(format);
-  if (pack) {
-    await runPreview(format, pack);
-    return;
-  }
-  const request = showcaseCreate(format);
-  if (!request) {
+  if (!pack) {
     setPreviewStatus(format, t("previewNone"), "bad");
     return;
   }
-  setPreviewStatus(format, t("previewing"));
-  setBusy(true);
-  try {
-    await yieldUi();
-    const made = takeBytes(runSession(request, new Uint8Array(0)));
-    rememberPackage(made.path || request.path, made.bytes);
-    setBusy(false);
-    await runPreview(format, { path: made.path || request.path, bytes: made.bytes });
-  } catch (err) {
-    setBusy(false);
-    const message = err.message || String(err);
-    setPreviewStatus(format, message, "bad");
-    append(message);
-  }
-}
-
-async function previewFromSample(format) {
-  setPreviewStatus(format, t("previewing"));
-  setBusy(true);
-  try {
-    await yieldUi();
-    const request = previewableCreate(format);
-    const made = takeBytes(runSession(request, new Uint8Array(0)));
-    rememberPackage(made.path || request.path, made.bytes);
-    setBusy(false);
-    await runPreview(format, { path: made.path || request.path, bytes: made.bytes });
-  } catch (err) {
-    setBusy(false);
-    const message = err.message || String(err);
-    setPreviewStatus(format, message, "bad");
-    append(message);
-  }
+  await runPreview(format, pack);
 }
 
 async function previewFromFile(format, file) {
@@ -1288,7 +1148,6 @@ async function writePreviewPng(format) {
 function bindPreviewCard(card, format) {
   const file = card.querySelector(".preview-file");
   card.querySelector(".preview-session").addEventListener("click", () => previewFromSession(format));
-  card.querySelector(".preview-sample").addEventListener("click", () => previewFromSample(format));
   card.querySelector(".preview-pick").addEventListener("click", () => file.click());
   file.addEventListener("change", () => {
     const chosen = file.files && file.files[0];
@@ -1350,11 +1209,6 @@ function renderPreviewCard(format) {
   sessionBtn.className = "preview-run preview-session";
   sessionBtn.textContent = t("previewSession");
   sessionBtn.disabled = busy || !session;
-  const sampleBtn = document.createElement("button");
-  sampleBtn.type = "button";
-  sampleBtn.className = "ghost preview-run preview-sample";
-  sampleBtn.textContent = t("previewSample");
-  sampleBtn.disabled = busy || !session;
   const pickBtn = document.createElement("button");
   pickBtn.type = "button";
   pickBtn.className = "ghost preview-run preview-pick";
@@ -1365,7 +1219,7 @@ function renderPreviewCard(format) {
   file.className = "preview-file";
   file.hidden = true;
   file.accept = format === "xlsx" ? ".xlsx,.xlsm" : "." + format;
-  controls.append(sessionBtn, sampleBtn, pickBtn, file);
+  controls.append(sessionBtn, pickBtn, file);
   const status = document.createElement("p");
   status.className = "status preview-status";
   const toolbar = document.createElement("div");
