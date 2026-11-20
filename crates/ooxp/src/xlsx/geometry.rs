@@ -104,9 +104,11 @@ impl GeometryContext {
         if fonts.is_empty() {
             return Ok(Self::calibri11());
         }
-        let font = fonts
-            .get(normal_font_index(styles))
-            .ok_or_else(unsupported)?;
+        // Excel 16.0 列宽 MDW 取 stylesheet 的第一个 font，而不是 Normal
+        // cellStyle。两者不一致时（人工把 Normal 指到 Arial、fonts[0] 仍是
+        // Calibri）官方 106 CopyPicture / Range.Width 仍按 fonts[0]。
+        // 2026-11-20 五组探针锁定：P1-P5 见证据 pr12-t162-width-height。
+        let font = &fonts[0];
         let name = font
             .child_by_local("name")
             .and_then(|n| n.attr("val"))
@@ -380,6 +382,33 @@ mod tests {
     fn localized_builtin_normal_precedes_english_name() {
         let doc = crate::xml::parse("<styleSheet><cellStyles><cellStyle name=\"Normal\" xfId=\"0\"/><cellStyle name=\"常规重命名\" builtinId=\"0\" xfId=\"1\"/></cellStyles><cellStyleXfs><xf fontId=\"0\"/><xf fontId=\"2\"/></cellStyleXfs></styleSheet>".as_bytes()).unwrap();
         assert_eq!(normal_font_index(&doc.root), 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn column_mdw_follows_first_font_not_normal_style() {
+        // Excel 16.0 window 106, 2026-11-20: fonts[0]=Calibri, Normal=Arial
+        // still uses Calibri MDW (8 at 106, width 10.125 -> 81), not Arial 9->91.
+        let doc = crate::xml::parse(
+            r#"<styleSheet><fonts><font><name val="Calibri"/><sz val="11"/></font><font><name val="Arial"/><sz val="11"/></font></fonts><cellStyleXfs><xf fontId="0"/><xf fontId="1"/></cellStyleXfs><cellXfs><xf fontId="0" xfId="0"/></cellXfs><cellStyles><cellStyle name="常规重命名" builtinId="0" xfId="1"/></cellStyles></styleSheet>"#.as_bytes(),
+        )
+        .unwrap();
+        let g = GeometryContext::from_styles(&doc.root).unwrap();
+        assert_eq!(g.mdw, 7.0, "fonts[0] Calibri @96");
+        let dpi106 = RenderDpi::from_request(&{
+            let mut m = serde_json::Map::new();
+            m.insert("dpi".into(), serde_json::json!(106));
+            m
+        })
+        .unwrap();
+        let g106 = g.clone().with_dpi(dpi106).unwrap();
+        assert_eq!(g106.mdw, 8.0, "fonts[0] Calibri @106");
+        let sheet = crate::xml::parse(
+            br#"<worksheet><cols><col min="1" max="1" width="10.125"/></cols></worksheet>"#,
+        )
+        .unwrap();
+        assert_eq!(g.column_px(&sheet.root, 1).unwrap(), 71);
+        assert_eq!(g106.column_px(&sheet.root, 1).unwrap(), 81);
     }
     #[cfg(windows)]
     #[test]

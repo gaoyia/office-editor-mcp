@@ -52,7 +52,7 @@ fn corpus(face: &str, pt: u32, default_width: bool, hidden: bool, non_a1: bool) 
         let mut data = Vec::new();
         file.read_to_end(&mut data).unwrap();
         if name == "xl/styles.xml" {
-            data=format!(r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><sz val="{pt}"/><name val="{face}"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="2"><xf fontId="0"/><xf fontId="1"/></cellStyleXfs><cellXfs count="1"><xf fontId="0" fillId="0" borderId="0" numFmtId="0" xfId="0"/></cellXfs><cellStyles count="2"><cellStyle name="Normal" xfId="0"/><cellStyle name="常规重命名" builtinId="0" xfId="1"/></cellStyles></styleSheet>"#).into_bytes();
+            data=format!(r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="{pt}"/><name val="{face}"/></font><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="2"><xf fontId="0"/><xf fontId="1"/></cellStyleXfs><cellXfs count="1"><xf fontId="0" fillId="0" borderId="0" numFmtId="0" xfId="0"/></cellXfs><cellStyles count="2"><cellStyle name="Normal" builtinId="0" xfId="0"/><cellStyle name="Other" xfId="1"/></cellStyles></styleSheet>"#).into_bytes();
         } else if name == "xl/worksheets/sheet1.xml" {
             let old = String::from_utf8(data).unwrap();
             let ext = &old[old.find("<extLst>").unwrap()..old.rfind("</worksheet>").unwrap()];
@@ -343,6 +343,42 @@ fn expected_probe(mdw: u32, auto_pt: f64, dpi: i64) -> (u32, u32) {
         .sum::<u32>()
         + 1;
     (width, height)
+}
+
+#[test]
+fn split_normal_style_still_uses_first_font_for_columns() {
+    // Same construction as localized-normal: fonts[0]=Calibri, Normal=Arial.
+    // Excel 16.0 @106 CopyPicture is 325x23 (MDW 8), not Arial MDW 9 (365).
+    let book = {
+        let seed = temp("split-seed");
+        ok(json!({"schemaVersion":1,"action":"create","path":seed.to_string_lossy(),"workbook":{"sheets":[{"name":"Sheet1","cells":[{"ref":"B1","value":1},{"ref":"C1","value":4},{"ref":"D1","value":2}]}]}}));
+        let sparked = temp("split-sparked");
+        ok(json!({"schemaVersion":1,"action":"apply","path":seed.to_string_lossy(),"output":sparked.to_string_lossy(),"ops":[{"op":"insertSparkline","id":"sheet:Sheet1","ref":"A1","formula":"B1:D1"}]}));
+        let mut src = ZipArchive::new(Cursor::new(std::fs::read(sparked).unwrap())).unwrap();
+        let mut out = ZipWriter::new(Cursor::new(Vec::new()));
+        for i in 0..src.len() {
+            let mut file = src.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == "xl/styles.xml" {
+                data = r#"<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><sz val="11"/><name val="Arial"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="2"><xf fontId="0"/><xf fontId="1"/></cellStyleXfs><cellXfs count="1"><xf fontId="0" fillId="0" borderId="0" numFmtId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="常规重命名" builtinId="0" xfId="1"/></cellStyles></styleSheet>"#.as_bytes().to_vec();
+            } else if name == "xl/worksheets/sheet1.xml" {
+                let old = String::from_utf8(data).unwrap();
+                let ext = &old[old.find("<extLst>").unwrap()..old.rfind("</worksheet>").unwrap()];
+                data = format!(r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:D1"/><sheetFormatPr defaultRowHeight="15" customHeight="1"/><cols><col min="1" max="4" width="10.125" customWidth="1"/></cols><sheetData><row r="1" ht="15" customHeight="1"><c r="A1"/><c r="B1"><v>1</v></c><c r="C1"><v>4</v></c><c r="D1"><v>2</v></c></row></sheetData>{ext}</worksheet>"#).into_bytes();
+            }
+            out.start_file(name, SimpleFileOptions::default()).unwrap();
+            out.write_all(&data).unwrap();
+        }
+        let book = temp("split-normal");
+        std::fs::write(&book, out.finish().unwrap().into_inner()).unwrap();
+        book
+    };
+    let (w96, h96, _) = png_at(&book, "exportSheetImage", "sheet:Sheet1", Some(96));
+    let (w106, h106, _) = png_at(&book, "exportSheetImage", "sheet:Sheet1", Some(106));
+    assert_eq!((w96, h96), (4 * 71 + 1, 21), "lib96 uses Calibri MDW 7, not Arial 8");
+    assert_eq!((w106, h106), (4 * 81 + 1, 23), "lib106 uses Calibri MDW 8, not Arial 9");
 }
 
 #[test]
