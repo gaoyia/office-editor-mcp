@@ -8,12 +8,14 @@ pub(super) struct Spec {
     pub max: Option<f64>,
     pub major: Option<f64>,
     pub minor: Option<f64>,
+    pub log_base: Option<f64>,
 }
 pub(super) struct Scale {
     pub min: f64,
     pub max: f64,
     pub major: f64,
     pub minor: f64,
+    pub log_base: Option<f64>,
 }
 impl Scale {
     /// Default autoZero crosses at zero, or the nearer bound when zero is outside.
@@ -24,6 +26,22 @@ impl Scale {
 
 fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
+}
+
+fn values_out_of_log_range(raw_min: f64, raw_max: f64, min: f64, max: f64) -> bool {
+    !raw_min.is_finite() || !raw_max.is_finite() || raw_min < min - 1e-12 || raw_max > max + 1e-12
+}
+
+fn is_integer_power(value: f64, base: f64) -> bool {
+    if value <= 0.0 || base <= 1.0 || !value.is_finite() || !base.is_finite() {
+        return false;
+    }
+    let exp = value.log(base);
+    if !exp.is_finite() || exp < -1e-9 {
+        return false;
+    }
+    let rounded = exp.round();
+    (value - base.powf(rounded)).abs() <= 1e-9 * value.max(1.0)
 }
 impl Spec {
     pub fn read(plot: &Element) -> Result<Self, Error> {
@@ -50,13 +68,26 @@ impl Spec {
         }
         let scaling = axis.child_by_local("scaling");
         if scaling.is_some_and(|s| {
-            s.child_by_local("logBase").is_some()
-                || s.child_by_local("orientation")
-                    .and_then(|e| e.attr_local("val"))
-                    .is_some_and(|v| v != "minMax")
+            s.child_by_local("orientation")
+                .and_then(|e| e.attr_local("val"))
+                .is_some_and(|v| v != "minMax")
         }) {
             return Err(unsupported());
         }
+        let log_base = match scaling.and_then(|s| s.child_by_local("logBase")) {
+            Some(el) => {
+                let value = el
+                    .attr_local("val")
+                    .and_then(|v| v.parse::<f64>().ok())
+                    .filter(|v| v.is_finite())
+                    .ok_or_else(unsupported)?;
+                if !(2.0..=1000.0).contains(&value) {
+                    return Err(unsupported());
+                }
+                Some(value)
+            }
+            None => None,
+        };
         if axis.child_by_local("crossesAt").is_some()
             || axis
                 .child_by_local("crosses")
@@ -88,12 +119,31 @@ impl Spec {
             max: read(scaling, "max")?,
             major: read(Some(axis), "majorUnit")?,
             minor: read(Some(axis), "minorUnit")?,
+            log_base,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
             || matches!((spec.min,spec.max),(Some(a),Some(b)) if a>=b)
         {
             return Err(unsupported());
+        }
+        if let Some(base) = spec.log_base {
+            // Official Excel 16 log axes write no majorUnit/minorUnit; custom
+            // steps are not uniquely locked. Auto min/max (omitted in XML) stay
+            // NI. Only explicit positive power-of-base ends are accepted here.
+            if spec.major.is_some() || spec.minor.is_some() {
+                return Err(unsupported());
+            }
+            let (Some(min), Some(max)) = (spec.min, spec.max) else {
+                return Err(unsupported());
+            };
+            if min < 1.0
+                || max <= min
+                || !is_integer_power(min, base)
+                || !is_integer_power(max, base)
+            {
+                return Err(unsupported());
+            }
         }
         Ok(spec)
     }
@@ -248,6 +298,21 @@ pub(super) fn scale_values(
         raw_min = 0.0;
         raw_max = 0.0;
     }
+    if let Some(base) = spec.log_base {
+        let min = spec.min.ok_or_else(unsupported)?;
+        let max = spec.max.ok_or_else(unsupported)?;
+        // Out-of-range values (official clip stubs) and non-positive points stay NI.
+        if values_out_of_log_range(raw_min, raw_max, min, max) {
+            return Err(unsupported());
+        }
+        return Ok(Scale {
+            min,
+            max,
+            major: base,
+            minor: base,
+            log_base: Some(base),
+        });
+    }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
     // Its general layout-dependent algorithm is not implemented; don't force zero.
     if spec.min.is_none() && raw_min > 0.0 && raw_min < raw_max && raw_min >= raw_max * 5.0 / 6.0 {
@@ -318,6 +383,7 @@ pub(super) fn scale_values(
         max,
         major,
         minor,
+        log_base: None,
     })
 }
 
@@ -346,6 +412,7 @@ mod tests {
                 max: e["max"].as_f64(),
                 major: e["majorUnit"].as_f64(),
                 minor: e["minorUnit"].as_f64(),
+                log_base: None,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -445,5 +512,47 @@ mod tests {
             let d = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(Spec::read(&d.root).is_err());
         }
+        let log = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&log.root).unwrap();
+        assert_eq!(s.log_base, Some(10.0));
+        assert_eq!((s.min, s.max), (Some(1.0), Some(1000.0)));
+        for bad in [
+            "<logBase val='10'/><min val='1'/>",
+            "<logBase val='10'/><min val='3'/><max val='300'/>",
+            "<logBase val='10'/><min val='0.1'/><max val='1000'/>",
+            "<logBase val='1'/><min val='1'/><max val='1000'/>",
+        ] {
+            let xml = format!("<plotArea><valAx><scaling>{bad}</scaling></valAx></plotArea>");
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(Spec::read(&d.root).is_err(), "unverified log scale {bad}");
+        }
+    }
+
+    #[test]
+    fn log_explicit_power_bounds_scale_and_reject_out_of_range() {
+        let spec = Spec {
+            min: Some(1.0),
+            max: Some(1000.0),
+            major: None,
+            minor: None,
+            log_base: Some(10.0),
+        };
+        let ok = scale_values(
+            [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
+            spec,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (ok.min, ok.max, ok.major, ok.log_base),
+            (1.0, 1000.0, 10.0, Some(10.0))
+        );
+        assert!(
+            scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10).is_err(),
+            "values below the explicit log min must stay NI"
+        );
     }
 }
