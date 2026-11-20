@@ -240,6 +240,7 @@ struct Series {
     point_inversion: Vec<Option<bool>>,
     negative_outline: Option<LineSeriesStyle>,
     value_label: Option<ValueLabel>,
+    deleted_label_points: Vec<usize>,
     /// Distinguish explicit errors from omitted points for dispBlanksAs.
     error_points: Vec<bool>,
     unavailable_points: Vec<bool>,
@@ -263,6 +264,7 @@ impl Default for Series {
             point_inversion: Vec::new(),
             negative_outline: None,
             value_label: None,
+            deleted_label_points: Vec::new(),
             error_points: Vec::new(),
             unavailable_points: Vec::new(),
             span_blanks: false,
@@ -1402,6 +1404,7 @@ fn read_chart(
         } else {
             None
         };
+        let values_len = values.len();
         series[order] = Series {
             name,
             values,
@@ -1417,6 +1420,14 @@ fn read_chart(
             point_inversion,
             negative_outline,
             value_label,
+            deleted_label_points: if matches!(
+                kind,
+                PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
+            ) {
+                read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?
+            } else {
+                Vec::new()
+            },
             error_points,
             unavailable_points,
             span_blanks: kind == PlotKind::StandardLine
@@ -3174,6 +3185,9 @@ fn draw_horizontal_value_labels(
             si
         };
         for (ci, value) in ser.values.iter().enumerate() {
+            if ser.deleted_label_points.binary_search(&ci).is_ok() {
+                continue;
+            }
             let Some(value) = value else {
                 continue;
             };
@@ -3269,6 +3283,9 @@ fn draw_value_labels(
             continue;
         };
         for (ci, value) in ser.values.iter().enumerate() {
+            if ser.deleted_label_points.binary_search(&ci).is_ok() {
+                continue;
+            }
             let Some(value) = value.filter(|n| n.is_finite()) else {
                 continue;
             };
@@ -4433,9 +4450,94 @@ fn value_label_text(value: f64) -> Option<String> {
     })
 }
 
+/// Only deletion-only series point labels are locked. Known Excel editing
+/// identity extensions carry no paint semantics; unknown extensions stay NI.
+fn read_deleted_label_points(labels: Option<&Element>, len: usize) -> Result<Vec<usize>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let Some(labels) = labels else {
+        return Ok(Vec::new());
+    };
+    let scalar = |e: &Element| {
+        e.element_children().next().is_none()
+            && e.attrs
+                .iter()
+                .filter(|(k, _)| !k.starts_with("xmlns"))
+                .all(|(k, _)| k == "val")
+            && e.attrs.iter().filter(|(k, _)| k == "val").count() <= 1
+    };
+    let mut deleted = Vec::new();
+    for point in labels
+        .element_children()
+        .filter(|e| e.local_name() == "dLbl")
+    {
+        if point.attrs.iter().any(|(k, _)| !k.starts_with("xmlns")) {
+            return Err(unsupported());
+        }
+        let mut idx = None;
+        let mut delete_seen = false;
+        let mut ext_seen = false;
+        for child in point.element_children() {
+            match child.local_name() {
+                "idx" if idx.is_none() && scalar(child) => {
+                    let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+                        return Err(unsupported());
+                    }
+                    idx = Some(raw.parse::<usize>().map_err(|_| unsupported())?);
+                }
+                "delete"
+                    if !delete_seen
+                        && scalar(child)
+                        && matches!(child.attr_local("val"), None | Some("1" | "true")) =>
+                {
+                    delete_seen = true;
+                }
+                "extLst" if !ext_seen => {
+                    ext_seen = true;
+                    for ext in child.element_children() {
+                        if ext.local_name() != "ext" {
+                            return Err(unsupported());
+                        }
+                        let mut settings = ext.element_children();
+                        let inert = match ext.attr_local("uri") {
+                            Some("{CE6537A1-D6FC-4f65-9D91-7224C49458BB}") => {
+                                settings.next().is_none()
+                            }
+                            Some("{C3380CC4-5D6E-409C-BE32-E72D297353CC}") => {
+                                settings.next().is_some_and(|e| {
+                                    e.local_name() == "uniqueId"
+                                        && scalar(e)
+                                        && e.attr_local("val").is_some()
+                                }) && settings.next().is_none()
+                            }
+                            _ => false,
+                        };
+                        if !inert {
+                            return Err(unsupported());
+                        }
+                    }
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+        let idx = idx.ok_or_else(unsupported)?;
+        if !delete_seen || idx >= len {
+            return Err(unsupported());
+        }
+        deleted.push(idx);
+    }
+    // Keep input-sized work O(n log n), including duplicate validation and
+    // point lookup during painting; do not add a quadratic resource path.
+    deleted.sort_unstable();
+    if deleted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(unsupported());
+    }
+    Ok(deleted)
+}
+
 /// Only these non-bubble chart kinds reach this parser. Excel writes
 /// showBubbleSize=1 on ordinary line/column wrappers; it has no visible meaning
-/// there. Real label flags, custom formatting and point overrides remain guarded.
+/// there. Real label flags, custom formatting and visible point overrides remain guarded.
 fn read_value_label(
     wrapper: &Element,
     ser: &Element,
@@ -4448,17 +4550,25 @@ fn read_value_label(
     } else {
         "outEnd"
     };
-    let configs: Vec<_> = [wrapper.child_by_local("dLbls"), ser.child_by_local("dLbls")]
-        .into_iter()
-        .flatten()
-        .collect();
-    for labels in &configs {
+    let configs: Vec<_> = [
+        (false, wrapper.child_by_local("dLbls")),
+        (true, ser.child_by_local("dLbls")),
+    ]
+    .into_iter()
+    .filter_map(|(series_level, labels)| labels.map(|labels| (series_level, labels)))
+    .collect();
+    for (series_level, labels) in &configs {
         if flag(labels, "delete").unwrap_or(false) {
             visible = false;
             continue;
         }
         if labels.element_children().any(|e| e.local_name() == "dLbl") {
-            return Err(unsupported());
+            if !series_level {
+                return Err(unsupported());
+            }
+            // Shape is checked here even for this parser's direct callers;
+            // read_chart additionally checks indices against real values.
+            read_deleted_label_points(Some(labels), usize::MAX)?;
         }
         for name in [
             "showLegendKey",
@@ -4484,7 +4594,7 @@ fn read_value_label(
     if !visible {
         return Ok(None);
     }
-    for labels in configs {
+    for (_, labels) in configs {
         // Hidden label styling cannot affect output. Visible custom styling is
         // not approximated by the default font/background.
 
@@ -7856,6 +7966,164 @@ mod tests {
         let (errors, na) = series_error_points(Some(&parent.root), "Data", Some(&cells), 4);
         assert_eq!(errors, vec![false, false, true, false]);
         assert_eq!(na, vec![false, false, true, false]);
+    }
+
+    #[test]
+    fn point_label_deletion_only_validates_indices_and_preserves_ni() {
+        let valid = "<dLbl><idx val='1'/><delete val='1'/></dLbl>";
+        let read = |body: &str, len| {
+            let doc = crate::xml::parse(format!("<dLbls>{body}</dLbls>").as_bytes()).unwrap();
+            read_deleted_label_points(Some(&doc.root), len)
+        };
+        assert_eq!(read(valid, 3).unwrap(), vec![1]);
+        assert_eq!(
+            read(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3).unwrap(),
+            vec![1]
+        );
+        let metadata = valid.replace("</dLbl>", "<extLst><ext uri='{CE6537A1-D6FC-4f65-9D91-7224C49458BB}'/><ext uri='{C3380CC4-5D6E-409C-BE32-E72D297353CC}'><uniqueId val='{00000001-2765-4173-A018-3A6CF43989F2}'/></ext></extLst></dLbl>");
+        assert_eq!(read(&metadata, 3).unwrap(), vec![1]);
+        for bad in [
+            valid.replace("idx val='1'", "idx val='-1'"),
+            valid.replace("idx val='1'", "idx val='3'"),
+            valid.replace("idx val='1'", "idx val='1.5'"),
+            valid.replace("idx val='1'", "idx val=''"),
+            valid.replace("idx val='1'", "idx val='184467440737095516160'"),
+            valid.replace("<idx val='1'/>", ""),
+            valid.replace("<delete val='1'/>", ""),
+            valid.replace("delete val='1'", "delete val='0'"),
+            valid.replace("</dLbl>", "<showVal val='1'/></dLbl>"),
+            valid.replace("</dLbl>", "<spPr><solidFill/></spPr></dLbl>"),
+            valid.replace("</dLbl>", "<dLblPos val='outEnd'/></dLbl>"),
+            valid.replace("</dLbl>", "<tx><rich/></tx></dLbl>"),
+            metadata.replace("uniqueId", "showLeaderLines"),
+            metadata.replace("{CE6537A1-D6FC-4f65-9D91-7224C49458BB}", "unknown"),
+            format!("{valid}{valid}"),
+        ] {
+            assert_eq!(
+                read(&bad, 3).unwrap_err().code(),
+                crate::error::ErrorCode::NotImplemented,
+                "{bad}"
+            );
+        }
+        let wrapper = crate::xml::parse(b"<wrapper/>").unwrap();
+        let ser = crate::xml::parse(
+            format!("<ser><dLbls>{valid}<showVal val='1'/></dLbls></ser>").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
+            Some(ValueLabel::OutsideEnd)
+        );
+        assert!(
+            read_value_label(&ser.root, &wrapper.root, PlotKind::ClusteredColumn).is_err(),
+            "wrapper-level per-point overrides remain NI"
+        );
+        let other_kind = crate::xml::parse(format!("<dLbls>{valid}</dLbls>").as_bytes()).unwrap();
+        assert!(
+            data_labels_hidden(Some(&other_kind.root)).is_err(),
+            "other chart kinds remain NI"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn deleted_point_labels_remove_only_the_requested_glyphs() {
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for kind in [
+                PlotKind::ClusteredColumn,
+                PlotKind::ClusteredBar,
+                PlotKind::StandardLine,
+            ] {
+                let pos = if kind == PlotKind::StandardLine {
+                    "r"
+                } else {
+                    "outEnd"
+                };
+                let labels =
+                    format!("<c:dLbls><c:showVal val='1'/><c:dLblPos val='{pos}'/></c:dLbls>");
+                let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], &labels);
+                let base = match kind {
+                    PlotKind::StandardLine => {
+                        standard_line_xml(&ser, "<c:dispBlanksAs val='gap'/>")
+                    }
+                    PlotKind::ClusteredColumn => bar_xml(&ser, "", "minMax", Some("col")),
+                    PlotKind::ClusteredBar => bar_xml(&ser, "", "minMax", Some("bar")),
+                    _ => unreachable!(),
+                };
+                let deleted = base.replace(
+                    "<c:dLbls>",
+                    "<c:dLbls><c:dLbl><c:idx val='1'/><c:delete val='1'/></c:dLbl>",
+                );
+                let control_doc = crate::xml::parse(base.as_bytes()).unwrap();
+                let deleted_doc = crate::xml::parse(deleted.as_bytes()).unwrap();
+                let control_chart =
+                    read_chart(&control_doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                let deleted_chart =
+                    read_chart(&deleted_doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                assert_eq!(deleted_chart.series[0].deleted_label_points, vec![1]);
+                assert_eq!(
+                    deleted_chart.series[0].values, control_chart.series[0].values,
+                    "deleting labels must not delete chart marks"
+                );
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 100.0,
+                    y: 50.0,
+                    w: 300.0,
+                    h: 220.0,
+                };
+                let mut control = Canvas::with_dpi(576, 336, dpi);
+                let mut actual = Canvas::with_dpi(576, 336, dpi);
+                for (canvas, chart) in [
+                    (&mut control, &control_chart),
+                    (&mut actual, &deleted_chart),
+                ] {
+                    if kind == PlotKind::ClusteredBar {
+                        draw_horizontal_value_labels(
+                            canvas,
+                            chart,
+                            &plot,
+                            0.0,
+                            10.0,
+                            None,
+                            Some(&face),
+                            14.0,
+                        )
+                        .unwrap();
+                    } else {
+                        draw_value_labels(canvas, chart, &plot, 0.0, 10.0, None, Some(&face), 14.0);
+                    }
+                }
+                let mut removed = 0;
+                let mut kept = 0;
+                for y in 0..336 {
+                    for x in 0..576 {
+                        let i = (y * 576 + x) * 3;
+                        let before = &control.px[i..i + 3];
+                        let after = &actual.px[i..i + 3];
+                        let middle = if kind == PlotKind::ClusteredBar {
+                            (270..330).contains(&x) && (140..180).contains(&y)
+                        } else {
+                            (225..285).contains(&x) && (100..155).contains(&y)
+                        };
+                        if middle {
+                            assert_eq!(after, [255; 3], "deleted glyph must disappear");
+                            removed += usize::from(before != after);
+                        } else {
+                            assert_eq!(before, after, "unrelated point labels must not move");
+                            kept += usize::from(after != [255; 3]);
+                        }
+                    }
+                }
+                assert!(
+                    removed > 0 && kept > 0,
+                    "both real deleted and retained glyphs required at {dpi_value}"
+                );
+            }
+        }
     }
 
     #[test]
