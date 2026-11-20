@@ -1667,7 +1667,7 @@ fn read_chart(
     if axis.log_base.is_some() && series.iter().any(|ser| ser.value_label.is_some()) {
         return Err(unsupported());
     }
-    if axis.crosses_at.is_some()
+    if (axis.crosses_at.is_some() || !matches!(axis.cat_crosses, axis::CatCrosses::AutoZero))
         && !matches!(
             kind,
             PlotKind::ClusteredColumn | PlotKind::StandardLine | PlotKind::StandardArea
@@ -2636,6 +2636,13 @@ fn paint(
             plot_b -= legend_layout.reserve()[3];
         }
     }
+    // Official crosses=max keeps the category-label gutter on the top edge and
+    // releases the unused bottom gutter. A crossesAt that merely clamps to max
+    // (F16-6) does not get this top gutter.
+    if scale.category_labels_above() {
+        plot_y += scale_plot_trailing(canvas.dpi, INSET_BOTTOM)
+            - scale_plot_leading(canvas.dpi, INSET_TOP);
+    }
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
@@ -2748,6 +2755,7 @@ fn paint(
         &chart.categories,
         category_y,
         log_base,
+        scale.category_labels_above(),
     );
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -3584,6 +3592,7 @@ fn draw_tick_labels(
     categories: &[String],
     category_y: i32,
     log_base: Option<f64>,
+    labels_above: bool,
 ) {
     for (tick, label) in ticks.iter().zip(labels) {
         let y = y_map(*tick, axis_min, axis_max, plot, log_base);
@@ -3602,7 +3611,12 @@ fn draw_tick_labels(
     }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
-    let baseline = f64::from(category_y) + canvas.dpi.scale_f(10.0);
+    let gap = canvas.dpi.scale_f(10.0);
+    let baseline = if labels_above {
+        f64::from(category_y) - gap - text_height(font, px)
+    } else {
+        f64::from(category_y) + gap
+    };
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
@@ -10762,6 +10776,229 @@ mod tests {
             "bar fixture must carry catAx crossesAt"
         );
         let err = render_bar(&bar).expect_err("bar crossesAt stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_cat_crosses(xml: &str, mode: &str) -> String {
+        let xml = xml.replace(
+            r#"<c:crosses val="autoZero"/>
+      </c:catAx>"#,
+            &format!(
+                r#"<c:crosses val="{mode}"/>
+      </c:catAx>"#
+            ),
+        );
+        let xml = if xml.contains(r#"<c:catAx/>"#) {
+            xml.replace(
+                r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>"#,
+                &format!(
+                    r#"<c:valAx><c:scaling><c:min val="-8"/><c:max val="8"/></c:scaling><c:majorUnit val="2"/><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:crosses val="{mode}"/></c:catAx>"#
+                ),
+            )
+        } else {
+            xml
+        };
+        xml.replace(
+            r#"<c:crosses val="autoZero"/></c:catAx>"#,
+            &format!(r#"<c:crosses val="{mode}"/></c:catAx>"#),
+        )
+    }
+
+    fn first_accent_row(png: &[u8]) -> i32 {
+        let (w, h, rgb) = png_rgb(png);
+        let accent = FALLBACK_ACCENTS[0];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 3;
+                if (rgb[i] as i16 - accent[0] as i16).abs() < 8
+                    && (rgb[i + 1] as i16 - accent[1] as i16).abs() < 8
+                    && (rgb[i + 2] as i16 - accent[2] as i16).abs() < 8
+                {
+                    return y as i32;
+                }
+            }
+        }
+        panic!("expected accent fill");
+    }
+
+    #[test]
+    fn cat_axis_crosses_min_max_grows_from_the_bounds() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let min_xml = with_cat_crosses(&mixed_column_explicit_pm8(&values), "min");
+        let max_xml = with_cat_crosses(&mixed_column_explicit_pm8(&values), "max");
+        assert!(min_xml.contains(r#"<c:crosses val="min"/>"#));
+        assert!(max_xml.contains(r#"<c:crosses val="max"/>"#));
+        let min_doc = crate::xml::parse(min_xml.as_bytes()).unwrap();
+        let max_doc = crate::xml::parse(max_xml.as_bytes()).unwrap();
+        let min_chart = read_chart(
+            &min_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let max_chart = read_chart(
+            &max_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(min_chart.axis.cat_crosses, super::axis::CatCrosses::Min);
+        assert_eq!(max_chart.axis.cat_crosses, super::axis::CatCrosses::Max);
+
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let min_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, -8.0);
+        let max_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 8.0);
+        let mut min_canvas = Canvas::new(300, 220);
+        draw_bars(
+            &mut min_canvas,
+            &min_chart,
+            &plot,
+            -8.0,
+            8.0,
+            2.0,
+            None,
+            -8.0,
+        );
+        let mut below_min = 0u32;
+        let mut min_fill = 0u32;
+        for y in 0..min_canvas.h {
+            for x in 0..min_canvas.w {
+                let i = (y as usize * min_canvas.w as usize + x as usize) * 3;
+                if !near(&min_canvas.px[i..i + 3]) {
+                    continue;
+                }
+                min_fill += 1;
+                if (y as i32) > min_y {
+                    below_min += 1;
+                }
+            }
+        }
+        assert!(min_fill > 0, "crosses=min columns must fill from the min");
+        assert_eq!(below_min, 0, "crosses=min columns must not grow past min");
+
+        let mut max_canvas = Canvas::new(300, 220);
+        draw_bars(
+            &mut max_canvas,
+            &max_chart,
+            &plot,
+            -8.0,
+            8.0,
+            2.0,
+            None,
+            8.0,
+        );
+        let mut above_max = 0u32;
+        let mut max_fill = 0u32;
+        for y in 0..max_canvas.h {
+            for x in 0..max_canvas.w {
+                let i = (y as usize * max_canvas.w as usize + x as usize) * 3;
+                if !near(&max_canvas.px[i..i + 3]) {
+                    continue;
+                }
+                max_fill += 1;
+                if (y as i32) < max_y {
+                    above_max += 1;
+                }
+            }
+        }
+        assert!(max_fill > 0, "crosses=max columns must fill from the max");
+        assert_eq!(above_max, 0, "crosses=max columns must not grow past max");
+
+        let min_png = render_rgb_chart(
+            &min_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let max_png = render_rgb_chart(
+            &max_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let at_max = with_cat_crosses_at(&mixed_column_explicit_pm8(&values), "8");
+        let at_doc = crate::xml::parse(at_max.as_bytes()).unwrap();
+        let at_png = render_rgb_chart(
+            &at_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let max_top = first_accent_row(&max_png);
+        let at_top = first_accent_row(&at_png);
+        assert!(
+            max_top > at_top + 8,
+            "official crosses=max keeps a top category-label gutter, unlike crossesAt=max; max={max_top} at={at_top}"
+        );
+        let _ = min_png;
+
+        render_line(&with_cat_crosses(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        ))
+        .unwrap();
+        render_line(&with_cat_crosses(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "max",
+        ))
+        .unwrap();
+        render_area(&with_cat_crosses(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        ))
+        .unwrap();
+        let bar = with_cat_crosses(
+            &bar_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+                "maxMin",
+                Some("bar"),
+            ),
+            "min",
+        );
+        assert!(bar.contains(r#"<c:crosses val="min"/>"#));
+        let err = render_bar(&bar).expect_err("bar crosses=min stays NI");
         assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     }
 }
