@@ -154,6 +154,28 @@ fn regular_grid_y(plot_y: i32, plot_b: i32, i: i32, intervals: i32) -> i32 {
     plot_y + i * (plot_b - plot_y) / intervals
 }
 
+// Keep an on-major zero crossing on the very same raster row as its grid.
+// Rounding y_of(0) separately puts mixed-sign axes one row below the 0 grid
+// whenever the exact position is a half pixel (e.g. [-3,5], 106dpi).
+fn crossing_axis_y(plot: &Rect, min: f64, max: f64, major: f64, crossing: f64) -> i32 {
+    let intervals = (max - min) / major;
+    let index = (max - crossing) / major;
+    if major > 0.0
+        && (intervals - intervals.round()).abs() < 1e-8
+        && (index - index.round()).abs() < 1e-8
+        && intervals >= 1.0
+    {
+        regular_grid_y(
+            plot.y as i32,
+            (plot.y + plot.h) as i32,
+            index.round() as i32,
+            intervals.round() as i32,
+        )
+    } else {
+        y_of(crossing, min, max, plot).round() as i32
+    }
+}
+
 fn default_marker_symbol(slot: usize) -> MarkerSymbol {
     DEFAULT_MARKER_CYCLE[slot % DEFAULT_MARKER_CYCLE.len()]
 }
@@ -1203,7 +1225,7 @@ fn paint_scatter(
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
+        plot_r = canvas.w as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1552,7 +1574,7 @@ fn paint_bar(
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
+        plot_r = canvas.w as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
@@ -1977,7 +1999,17 @@ fn paint(
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
     let widest_tick = tick_labels
         .iter()
-        .map(|label| text_width(font, gdi.as_ref(), label, label_px).ceil() as i32)
+        .map(|label| {
+            let width = text_width(font, gdi.as_ref(), label, label_px);
+            // Excel hangs half the minus advance outside the numeric label
+            // column. Counting it as a full digit widens all signed plots.
+            let hanging = if label.starts_with('-') {
+                text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+            } else {
+                0.0
+            };
+            (width - hanging).ceil() as i32
+        })
         .max()
         .unwrap_or(0);
     let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
@@ -2009,10 +2041,19 @@ fn paint(
         axis_x += reserve[0];
         plot_x = axis_x + 1;
         plot_y += reserve[1];
-        plot_r = canvas.w as i32 - canvas.dpi.scale_px(INSET_TOP) - reserve[2];
+        plot_r = canvas.w as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP) - reserve[2];
         plot_b -= reserve[3];
         if plot_r <= plot_x || plot_b <= plot_y {
             return Err(legend::unsupported());
+        }
+    }
+    // autoZero category labels follow the crossing axis. When that axis is
+    // inside the plot (or at its top for negative-only values), keeping the
+    // bottom category-label gutter shortens every tick interval and moves 0.
+    if scale.crossing() > axis_min + 1e-12 {
+        plot_b = canvas.h as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP);
+        if !chart.legend_spec.legacy {
+            plot_b -= legend_layout.reserve()[3];
         }
     }
     let plot = Rect {
@@ -2089,7 +2130,7 @@ fn paint(
     );
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
-    let category_y = y_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
+    let category_y = crossing_axis_y(&plot, axis_min, axis_max, step, scale.crossing());
     canvas.hline_i(axis_x, plot_r, category_y, INK);
     draw_cat_ticks(
         canvas,
@@ -2882,7 +2923,11 @@ fn legend_right_inset(
         + legend_key_gap(chart.kind, dpi)
         + name_px
         + dpi.scale_px(LEGEND_PAD);
-    need.max(dpi.scale_px(INSET_RIGHT) + key_width - square)
+    let reference = gdi
+        .map(|f| f.layout_width("S1"))
+        .unwrap_or_else(|| text_width(font, None, "S1", px));
+    let short_reduction = (reference - widest).max(0.0) as i32;
+    need.max(dpi.scale_px(INSET_RIGHT) + key_width - square - short_reduction)
 }
 
 #[cfg(test)]
@@ -2902,7 +2947,15 @@ fn tick_values(min: f64, max: f64, step: f64) -> Vec<f64> {
         if v > max + step * 0.01 {
             break;
         }
-        out.push(v);
+        // Decimal stepping can leave a tiny nonzero residue at 0. Rendering
+        // that as scientific notation creates an enormous, spurious label
+        // gutter (e.g. -0.3..0.5 by 0.1). This is scale-relative, so genuine
+        // small axes still retain their scientific labels.
+        out.push(if v.abs() <= step.abs() * 1e-10 {
+            0.0
+        } else {
+            v
+        });
         v += step;
     }
     if out.is_empty() {
@@ -4393,6 +4446,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn decimal_axis_ticks_do_not_invent_a_scientific_label_at_zero() {
+        let ticks = tick_values(-0.3, 0.5, 0.1);
+        assert_eq!(ticks.len(), 9);
+        assert_eq!(ticks[3], 0.0);
+        assert_eq!(fmt_tick(ticks[3]), "0");
+        assert!(ticks.iter().all(|v| !fmt_tick(*v).contains('e')));
+        assert!(
+            fmt_tick(1e-8).contains('e'),
+            "genuinely small data is not zero"
+        );
+    }
+
+    #[test]
+    fn signed_crossing_uses_major_grid_rasterization_not_independent_rounding() {
+        let p = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        assert_eq!(crossing_axis_y(&p, -3.0, 5.0, 1.0, 0.0), 133);
+        assert_eq!(crossing_axis_y(&p, -2.0, 8.0, 2.0, 0.0), 166);
+        assert_eq!(crossing_axis_y(&p, 0.0, 5.0, 1.0, 0.0), 204);
+        assert_eq!(crossing_axis_y(&p, -5.0, 0.0, 1.0, 0.0), 16);
+    }
+
+    #[test]
     fn one_cell_size_uses_anchor_ext_when_frame_xfrm_is_zero() {
         // Excel 16.0 Save writes graphicFrame/xfrm/ext as 0×0 while keeping the
         // real oneCell size on xdr:ext. Prefer the anchor so export still works.
@@ -4895,7 +4975,7 @@ mod tests {
         </c:ser>
       </c:barChart>
     </c:plotArea>
-    <c:legend><c:legendPos val="r"/></c:legend>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
 </c:chartSpace>"#;
 
@@ -4949,7 +5029,7 @@ mod tests {
       </c:barChart>
       <c:valAx><c:majorGridlines/></c:valAx>
     </c:plotArea>
-    <c:legend><c:legendPos val="r"/></c:legend>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
 </c:chartSpace>"#
         )
@@ -6663,7 +6743,7 @@ mod tests {
       <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="{cat_orient}"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
       <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
     </c:plotArea>
-    <c:legend><c:legendPos val="r"/></c:legend>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
 </c:chartSpace>"#
         )
@@ -7103,7 +7183,7 @@ mod tests {
         <c:varyColors val="0"/>
 "#
         .to_string()
-            + &line_ser(0, "S1", &[Some(-8.0), Some(8.0)], "")
+            + &line_ser(0, "S1", &[Some(8.0)], "")
             + r#"
         <c:axId val="1"/><c:axId val="2"/>
       </c:barChart>

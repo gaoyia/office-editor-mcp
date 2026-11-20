@@ -85,7 +85,7 @@ impl Spec {
             legacy: true,
             pos,
             style: TextStyle::default(),
-            overlay: false,
+            overlay: true,
             manual: None,
             deleted: Vec::new(),
         };
@@ -98,9 +98,12 @@ impl Spec {
         {
             result.style.read(tx, accents)?;
         }
+        // Excel 16 public-API matrix (all five legendPos values): absence,
+        // <overlay/>, and explicit 1 are equivalent. Only explicit 0 reserves.
+        // This is an element default, not just CT_Boolean's attribute default.
         result.overlay = legend
             .child_by_local("overlay")
-            .is_some_and(|n| bool_attr(n.attr_local("val"), false));
+            .is_none_or(|n| bool_attr(n.attr_local("val"), true));
         if let Some(layout) = legend
             .child_by_local("layout")
             .and_then(|n| n.child_by_local("manualLayout"))
@@ -370,6 +373,8 @@ pub(super) struct Layout<'a> {
     key: f64,
     space: f64,
     line: f64,
+    pitch: f64,
+    reservation_width: f64,
     frame: Rect,
     auto: Rect,
     horizontal: bool,
@@ -423,7 +428,7 @@ impl<'a> Layout<'a> {
             }
             face
         };
-        let key = (f64::from(px) * 0.5).round().max(1.0);
+        let key = (f64::from(px) * 0.5).ceil().max(1.0);
         let space = text_width(font, face.as_ref(), " ", px).ceil().max(1.0);
         let line = face
             .as_ref()
@@ -431,6 +436,10 @@ impl<'a> Layout<'a> {
             .filter(|v| *v > 0.0)
             .unwrap_or_else(|| text_height(font, px))
             .max(f64::from(px));
+        // Native legend rows use the font size plus an 8pt entry gutter,
+        // not the GDI em-box plus two measured spaces (which grows too much
+        // for large/bold fonts and is too small for the default 10pt face).
+        let pitch = f64::from(px) + canvas.dpi.pt_to_px_font(8.0);
         let mut items = Vec::new();
         if spec.pos.is_some() {
             for (idx, series) in chart.series.iter().enumerate() {
@@ -439,13 +448,12 @@ impl<'a> Layout<'a> {
                 }
                 let width = face
                     .as_ref()
-                    .map(|f| f.layout_width(&series.name))
+                    .map(|f| f.typo_width(&series.name))
                     .unwrap_or_else(|| text_width(font, None, &series.name, px));
                 items.push(Item {
                     series,
                     width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
                         as f64
-                        + space
                         + width,
                 });
             }
@@ -468,16 +476,39 @@ impl<'a> Layout<'a> {
         } else {
             max_item
         } + space * 2.0;
-        let natural_h = if auto_horizontal {
-            line + 2.0 * space
-        } else {
-            line * items.len() as f64
-                + 2.0 * space * items.len().saturating_sub(1) as f64
-                + 2.0 * space
-        };
+        // Plot reservation uses the padded font layout box. Ink packing above
+        // uses typographic advances; conflating the two shrinks a left legend's
+        // reserved band when its text has GDI overhang padding.
+        let reservation_width = chart
+            .series
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| !spec.deleted.contains(idx))
+            .map(|(_, ser)| {
+                face.as_ref()
+                    .map(|f| f.layout_width(&ser.name))
+                    .unwrap_or_else(|| text_width(font, None, &ser.name, px))
+            })
+            .fold(0.0, f64::max)
+            + key
+            + 3.0 * space;
+        let natural_h = pitch
+            * if auto_horizontal {
+                1.0
+            } else {
+                items.len() as f64
+            };
         let w = f64::from(canvas.w);
         let h = f64::from(canvas.h);
-        let mut auto = position(spec.pos, w, h, natural_w, natural_h, space);
+        let mut auto = position(
+            spec.pos,
+            w,
+            h,
+            natural_w,
+            natural_h,
+            canvas.dpi.pt_to_px_font(8.0),
+            canvas.dpi.pt_to_px_font(6.0),
+        );
         if chart.title.is_some() {
             match spec.pos {
                 Some(LegendPos::Top | LegendPos::TopRight) => {
@@ -511,8 +542,15 @@ impl<'a> Layout<'a> {
             } else {
                 auto.y + auto.h / 2.0 - frame.h / 2.0 + m.y.value * h
             };
-            frame.x = frame.x.clamp(0.0, w - frame.w);
-            frame.y = frame.y.clamp(0.0, h - frame.h);
+            // Manual frame uses chart-space coordinates, not the COM
+            // Legend.Left/Top rectangle (whose public bounds omit 4pt padding).
+            // Edge can deliberately clip outside; factor is automatically bounded.
+            if !m.x.edge {
+                frame.x = frame.x.min(w - frame.w);
+            }
+            if !m.y.edge {
+                frame.y = frame.y.min(h - frame.h);
+            }
         }
         let mut result = Self {
             spec,
@@ -522,6 +560,8 @@ impl<'a> Layout<'a> {
             key,
             space,
             line,
+            pitch,
+            reservation_width,
             frame,
             auto,
             horizontal,
@@ -530,6 +570,7 @@ impl<'a> Layout<'a> {
         };
         result.flow()?;
         if !spec.legacy
+            && spec.manual.is_none()
             && (result.frame.w > w
                 || result.frame.x < 0.0
                 || result.frame.x + result.frame.w > w + 1e-6
@@ -567,8 +608,7 @@ impl<'a> Layout<'a> {
         if !row.is_empty() {
             self.rows.push(row);
         }
-        let required = self.rows.len() as f64 * self.line
-            + self.rows.len().saturating_sub(1) as f64 * self.space * 2.0;
+        let required = self.rows.len() as f64 * self.pitch;
         if required > self.frame.h {
             if self.spec.manual.is_some() {
                 return Err(unsupported());
@@ -597,16 +637,25 @@ impl<'a> Layout<'a> {
                     self.dpi.scale_px(INSET_RIGHT) - self.dpi.scale_px(INSET_TOP),
                 )) as i32
             }
-            Some(LegendPos::Left) => r[0] = (self.auto.w + self.space * 2.0).ceil() as i32,
+            Some(LegendPos::Left) => {
+                r[0] = (self.reservation_width + self.space * 2.0).ceil() as i32
+            }
             Some(LegendPos::Top) => r[1] = (self.auto.h + self.space * 2.0).ceil() as i32,
-            Some(LegendPos::Bottom) => r[3] = (self.auto.h + self.space * 2.0).ceil() as i32,
+            Some(LegendPos::Bottom) => r[3] = (self.auto.h + self.space * 2.0).ceil() as i32 + 1,
             None => (),
+        }
+        if self.spec.pos == Some(LegendPos::TopRight) {
+            // A non-overlay corner legend is a two-dimensional reservation,
+            // not a synonym for right. Native Excel reserves its full top row
+            // block and a 6pt trailing clearance below the plot.
+            r[1] = self.auto.h.round() as i32;
+            r[3] = self.dpi.pt_to_px_font(6.0).round() as i32;
         }
         r
     }
     pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
         let height = self.rows.len() as f64 * self.line
-            + self.rows.len().saturating_sub(1) as f64 * self.space * 2.0;
+            + self.rows.len().saturating_sub(1) as f64 * (self.pitch - self.line).max(0.0);
         let mut y = self.frame.y + (self.frame.h - height) / 2.0;
         for row in &self.rows {
             let items_width = row.iter().map(|i| self.items[*i].width).sum::<f64>();
@@ -651,17 +700,25 @@ impl<'a> Layout<'a> {
                 );
                 x += item.width + gap;
             }
-            y += self.line + self.space * 2.0;
+            y += self.pitch;
         }
     }
 }
-fn position(pos: Option<LegendPos>, w: f64, h: f64, width: f64, height: f64, pad: f64) -> Rect {
+fn position(
+    pos: Option<LegendPos>,
+    w: f64,
+    h: f64,
+    width: f64,
+    height: f64,
+    side: f64,
+    pad: f64,
+) -> Rect {
     let (x, y) = match pos {
-        Some(LegendPos::Left) => (pad, (h - height) / 2.0),
+        Some(LegendPos::Left) => (side, (h - height) / 2.0),
         Some(LegendPos::Top) => ((w - width) / 2.0, pad),
         Some(LegendPos::Bottom) => ((w - width) / 2.0, h - pad - height),
-        Some(LegendPos::TopRight) => (w - pad - width, pad),
-        _ => (w - pad - width, (h - height) / 2.0),
+        Some(LegendPos::TopRight) => (w - side - width, pad),
+        _ => (w - side - width, (h - height) / 2.0),
     };
     Rect {
         x,
@@ -700,14 +757,59 @@ mod tests {
             .pos
             .is_none());
         let s = spec("<legend><legendPos val='garbage'/><txPr><p><pPr><defRPr sz='NaN'/></pPr></p></txPr></legend>").unwrap();
-        assert!(s.legacy);
-        assert!(spec("<legend><layout><manualLayout><x val='NaN'/><w val='-1'/></manualLayout></layout></legend>").unwrap().legacy);
+        assert!(!s.legacy);
+        assert!(spec("<legend><overlay val='0'/><layout><manualLayout><x val='NaN'/><w val='-1'/></manualLayout></layout></legend>").unwrap().legacy);
         for pos in ["l", "t", "b", "tr"] {
             assert!(
                 !spec(&format!("<legend><legendPos val='{pos}'/></legend>"))
                     .unwrap()
                     .legacy
             );
+        }
+    }
+    #[test]
+    fn automatic_positions_cover_five_edges_without_inventing_a_float_enum() {
+        let left = position(Some(LegendPos::Left), 600.0, 360.0, 40.0, 50.0, 12.0, 9.0);
+        let right = position(Some(LegendPos::Right), 600.0, 360.0, 40.0, 50.0, 12.0, 9.0);
+        let top = position(Some(LegendPos::Top), 600.0, 360.0, 80.0, 25.0, 12.0, 9.0);
+        let bottom = position(Some(LegendPos::Bottom), 600.0, 360.0, 80.0, 25.0, 12.0, 9.0);
+        let corner = position(
+            Some(LegendPos::TopRight),
+            600.0,
+            360.0,
+            40.0,
+            50.0,
+            12.0,
+            9.0,
+        );
+        assert_eq!((left.x, left.y), (12.0, 155.0));
+        assert_eq!((right.x, right.y), (548.0, 155.0));
+        assert_eq!((top.x, top.y), (260.0, 9.0));
+        assert_eq!((bottom.x, bottom.y), (260.0, 326.0));
+        assert_eq!((corner.x, corner.y), (548.0, 9.0));
+    }
+    #[test]
+    fn excel_overlay_matrix_absent_empty_and_true_match_but_false_reserves() {
+        for pos in ["l", "r", "t", "b", "tr"] {
+            for overlay in [
+                "",
+                "<overlay/>",
+                "<overlay val='1'/>",
+                "<overlay val='true'/>",
+            ] {
+                let s = spec(&format!(
+                    "<legend><legendPos val='{pos}'/>{overlay}</legend>"
+                ))
+                .unwrap();
+                assert!(s.overlay, "{pos} {overlay}");
+                assert!(!s.legacy);
+            }
+            let s = spec(&format!(
+                "<legend><legendPos val='{pos}'/><overlay val='0'/></legend>"
+            ))
+            .unwrap();
+            assert!(!s.overlay);
+            assert_eq!(s.legacy, pos == "r");
         }
     }
     #[test]

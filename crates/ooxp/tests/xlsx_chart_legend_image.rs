@@ -118,7 +118,11 @@ fn malformed_optional_values_fall_back_but_explicit_close_stays_closed() {
 fn manual_factor_edge_overlay_and_entry_delete_have_real_effects() {
     let normal = "<c:legend><c:legendPos val='r'/></c:legend>";
     let overlay = "<c:legend><c:legendPos val='r'/><c:overlay val='1'/></c:legend>";
-    assert_ne!(bytes(normal).unwrap(), bytes(overlay).unwrap());
+    assert_eq!(bytes(normal).unwrap(), bytes(overlay).unwrap());
+    assert_ne!(
+        bytes(normal).unwrap(),
+        bytes("<c:legend><c:legendPos val='r'/><c:overlay val='0'/></c:legend>").unwrap()
+    );
     let manual = |mode| {
         format!("<c:legend><c:legendPos val='r'/><c:layout><c:manualLayout><c:xMode val='{mode}'/><c:yMode val='{mode}'/><c:x val='.1'/><c:y val='.1'/><c:w val='.4'/><c:h val='.3'/></c:manualLayout></c:layout></c:legend>")
     };
@@ -172,5 +176,29 @@ fn manual_width_distributes_free_space_without_scaling_text() {
         };
         let(w,narrow)=pitch(0.4);let(_,wide)=pitch(0.8);
         assert!((wide-narrow-w as f64*0.4/3.0).abs()<=2.0,"{style}: {narrow} -> {wide}");
+    }
+}
+
+#[test]
+fn all_five_excel_positions_distinguish_reserved_from_overlay_but_not_omitted_true() {
+    for pos in ["l", "r", "t", "b", "tr"] {
+        let legend =
+            |overlay: &str| format!("<c:legend><c:legendPos val='{pos}'/>{overlay}</c:legend>");
+        let absent = bytes(&legend("")).unwrap();
+        assert_eq!(
+            absent,
+            bytes(&legend("<c:overlay/>")).unwrap(),
+            "{pos}: empty bool defaults true"
+        );
+        assert_eq!(
+            absent,
+            bytes(&legend("<c:overlay val='1'/>")).unwrap(),
+            "{pos}: absent overlay follows Excel"
+        );
+        assert_ne!(
+            absent,
+            bytes(&legend("<c:overlay val='0'/>")).unwrap(),
+            "{pos}: explicit 0 must reserve plot space"
+        );
     }
 }
