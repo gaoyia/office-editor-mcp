@@ -190,7 +190,7 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-日期时间格式出图.md` — 内置 14–22 + yyyy/mm/dd string 对齐 Range.Text；CopyPicture 721×22@106 vs lib 641×21 pxBlocked。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-错误值出图.md` — 点名七码 `t=e` string+paint；CopyPicture 809×30@106 vs lib 705×27 pxBlocked。
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-换行缩进出图.md` — wrapText/indent paint；CopyPicture 373×221@106 vs lib 325×201 pxBlocked；Face::width 断点。
+本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-换行缩进出图.md` — wrapText/indent paint；CopyPicture 373×221@106 vs lib 325×201 pxBlocked；Face::width 断点。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-从右到左文字出图.md` — sheetView RTL + 拉丁/CJK 正写；readingOrder=2/强 RTL NI；gold 145×43@106 vs lib 129×49 pxBlocked。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-斜线边框出图.md` — thin/medium 实线斜线；gold 256×110@106 vs lib 223×100 pxBlocked；等线行高 14.25 纠偏。
