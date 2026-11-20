@@ -197,7 +197,7 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-渐变填充出图.md` — SpreadsheetML 两停点不透明 linear（sRGB mix，非 PPT gamma）；path/theme/alpha NI；CopyPicture 203×60@106 vs lib 177×54 pxBlocked；等线 11→14.25 COM 来源写入契约。
 
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-负数数据条出图.md` — x14 实心 middle；gold 506×22@106 vs lib 441×96 pxBlocked；主题色-only/未知轴仍 NI。前刀：`.plan/2026年-11月-16日-⚠️-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。
+本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-负数数据条出图.md` — x14 实心 middle；gold 506×22@106 vs lib 441×96 pxBlocked；主题色-only/未知轴仍 NI。前刀：`.plan/2026年-11月-16日-✅-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-超大区域切块.md` — tilePx 切块；stitch differ=0；默认 4096 NI 不绕；MAX_TILE_COUNT/总像素闸。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。

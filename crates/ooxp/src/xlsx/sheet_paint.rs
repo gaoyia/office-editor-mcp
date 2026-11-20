@@ -5854,7 +5854,8 @@ fn attr_is_one_or_true(el: &Element, name: &str) -> bool {
 
 /// x14 实心 + `axisPosition=middle`：正右负左；`gradient=0`；`minLength=0`/`maxLength=100`。
 /// 负色：`negativeBarColorSameAsPositive=0` 时用 `negativeFillColor` rgb，否则用正色。
-/// 轴色：`axisColor` rgb。其它 axis/cfvo/border/direction/theme NI。
+/// 轴色：`axisColor` rgb。零轴为 1 像素虚线，相位同格子 dashed 边框，x 为 `x0+(width+1)/2`。
+/// 其它 axis/cfvo/border/direction/theme NI。
 fn paint_bar_x14(
     canvas: &mut Canvas,
     cells: &HashMap<(u32, u32), CellRec>,
@@ -5962,13 +5963,18 @@ fn paint_bar_x14(
         }
         let by = y0 + 2;
         let bh = (height - 4).max(1);
-        let axis = x0 + width / 2;
+        // 奇数宽 101 上官方轴在 x0+(width+1)/2（51/152/…），不是 width/2。
+        // 偶数宽尚无官方样本，此式退回与旧公式相同，不臆造一律 +1。
+        let axis = x0 + (width + 1) / 2;
         let left_max = (axis - (x0 + 2)).max(0);
         let right_max = ((x1 - 2) - axis).max(0);
         let half = left_max.max(right_max);
-        // 轴线
-        for dy in 0..bh {
-            canvas.put(axis, by + dy, axis_color);
+        // 中轴是 1 像素虚线，相位与格子 dashed 边框相同：整图 (x+y)%4 != 3。
+        // 只画格内（不含网格线）；上下比条带各多 1 像素。网格关闭时官方会把虚线画到内网格线上，本刀不盖网格。
+        for y in (y0 + 1)..y1 {
+            if line_on(LineKind::Dashed, axis + y, axis, axis) {
+                canvas.put(axis, y, axis_color);
+            }
         }
         if n == 0.0 || extent < 1e-12 || half <= 0 {
             continue;
