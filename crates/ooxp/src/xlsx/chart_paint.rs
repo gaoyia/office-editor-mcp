@@ -245,7 +245,8 @@ struct Canvas {
     dpi: RenderDpi,
 }
 
-/// 图表 PNG 的像素。`twoCell` 按格子累加，其它锚点用 `a:ext`。缩放来自工作表。
+/// 图表 PNG 的像素。`twoCell` 按格子累加，`oneCell`/`absolute` 用锚点上的 `xdr:ext`。
+/// Excel 16.0 保存后 `graphicFrame/xfrm/ext` 常被写成 0×0，不能拿来当尺寸。缩放来自工作表。
 pub(crate) fn bitmap_px(
     sheet: &Element,
     anchor: &Element,
@@ -360,14 +361,14 @@ fn two_cell_px(
 }
 
 fn ext_px(anchor: &Element, zoom: u32, dpi: RenderDpi) -> Result<(i64, i64), Error> {
-    let ext = anchor
+    // oneCell/absolute 的合同尺寸在锚点 `xdr:ext`。内层 graphicFrame xfrm 只是占位，
+    // Office 保存后经常是 0×0；若优先读它，fit_px 会把整张已会画的图误判为 NI。
+    let frame_ext = anchor
         .child_by_local("graphicFrame")
         .and_then(|frame| frame.child_by_local("xfrm"))
-        .and_then(|xfrm| xfrm.child_by_local("ext"))
-        .or_else(|| anchor.child_by_local("ext"));
-    let Some(ext) = ext else {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
-    };
+        .and_then(|xfrm| xfrm.child_by_local("ext"));
+    let ext = first_positive_ext([anchor.child_by_local("ext"), frame_ext])
+        .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
     let cx: i64 = ext
         .attr_local("cx")
         .and_then(|s| s.parse().ok())
@@ -377,6 +378,18 @@ fn ext_px(anchor: &Element, zoom: u32, dpi: RenderDpi) -> Result<(i64, i64), Err
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
     Ok((zoomed(emu_px(cx, dpi), zoom), zoomed(emu_px(cy, dpi), zoom)))
+}
+
+fn first_positive_ext(cands: [Option<&Element>; 2]) -> Option<&Element> {
+    cands.into_iter().flatten().find(|ext| {
+        matches!(
+            (
+                ext.attr_local("cx").and_then(|s| s.parse::<i64>().ok()),
+                ext.attr_local("cy").and_then(|s| s.parse::<i64>().ok()),
+            ),
+            (Some(cx), Some(cy)) if cx > 0 && cy > 0
+        )
+    })
 }
 
 pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
@@ -3903,7 +3916,41 @@ fn encode_png(
 
 #[cfg(test)]
 mod tests {
+    use super::super::geometry::GeometryContext;
+    use super::super::picture::AnchorKind;
     use super::*;
+
+    #[test]
+    fn one_cell_size_uses_anchor_ext_when_frame_xfrm_is_zero() {
+        // Excel 16.0 Save writes graphicFrame/xfrm/ext as 0×0 while keeping the
+        // real oneCell size on xdr:ext. Prefer the anchor so export still works.
+        let geometry = GeometryContext::calibri11();
+        let sheet = crate::xml::parse(br#"<worksheet/>"#).unwrap();
+        let cases = [
+            (5486400, 3200400, 0, 0, true, Ok((576, 336))),
+            (5486400, 3200400, 5486400, 3200400, true, Ok((576, 336))),
+            (0, 0, 5486400, 3200400, true, Ok((576, 336))),
+            (5486400, 3200400, 5486400, 3200400, false, Ok((576, 336))),
+            (0, 0, 0, 0, true, Err(())),
+        ];
+        for (anchor_cx, anchor_cy, frame_cx, frame_cy, include_anchor, expected) in cases {
+            let anchor_ext = if include_anchor {
+                format!(r#"<xdr:ext cx="{anchor_cx}" cy="{anchor_cy}"/>"#)
+            } else {
+                String::new()
+            };
+            let xml = format!(
+                r#"<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:oneCellAnchor><xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>{anchor_ext}<xdr:graphicFrame><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="{frame_cx}" cy="{frame_cy}"/></xdr:xfrm></xdr:graphicFrame></xdr:oneCellAnchor></xdr:wsDr>"#
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let anchor = doc.root.child_by_local("oneCellAnchor").unwrap();
+            let got = bitmap_px(&sheet.root, anchor, AnchorKind::OneCell, &geometry);
+            match expected {
+                Ok(size) => assert_eq!(got.unwrap(), size, "anchor={anchor_cx}x{anchor_cy} frame={frame_cx}x{frame_cy} include={include_anchor}"),
+                Err(()) => assert!(got.is_err(), "expected NI for zero extents"),
+            }
+        }
+    }
 
     /// Existing colour/layout assertions inspect the white-composited export.
     /// Raw RGBA and coverage have separate assertions below.
