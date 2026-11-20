@@ -265,6 +265,9 @@ struct Series {
     error_points: Vec<bool>,
     unavailable_points: Vec<bool>,
     span_blanks: bool,
+    /// Official F21 secondary valAx: this series is in the second same-type
+    /// wrapper and is mapped with the secondary scale.
+    on_secondary: bool,
 }
 
 impl Default for Series {
@@ -288,6 +291,7 @@ impl Default for Series {
             error_points: Vec::new(),
             unavailable_points: Vec::new(),
             span_blanks: false,
+            on_secondary: false,
         }
     }
 }
@@ -303,6 +307,8 @@ struct ColumnChart {
     legend_spec: legend::Spec,
     axis: axis::Spec,
     axis_x: Option<axis::Spec>,
+    /// Official F21 secondary valAx (axPos=r, crosses=max). None for one axis.
+    axis_secondary: Option<axis::Spec>,
     grid_x: bool,
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     cats_from_bottom: bool,
@@ -1125,16 +1131,19 @@ fn read_chart(
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
     let plot = chart.child_by_local("plotArea").ok_or_else(unsupported)?;
-    let mut wrapper = None;
-    for child in plot.element_children() {
-        if is_chart_wrapper(child.local_name()) {
-            if wrapper.is_some() {
-                return Err(unsupported());
-            }
-            wrapper = Some(child);
-        }
+    let wrappers: Vec<&Element> = plot
+        .element_children()
+        .filter(|child| is_chart_wrapper(child.local_name()))
+        .collect();
+    if wrappers.is_empty() || wrappers.len() > 2 {
+        return Err(unsupported());
     }
-    let wrapper = wrapper.ok_or_else(unsupported)?;
+    let wrapper = wrappers[0];
+    let locked_secondary = if wrappers.len() == 2 {
+        Some(axis::read_locked_secondary_axes(plot)?)
+    } else {
+        None
+    };
     let mut area_missing_as_zero = false;
     let kind = match wrapper.local_name() {
         "barChart" => {
@@ -1297,6 +1306,66 @@ fn read_chart(
         }
         _ => return Err(unsupported()),
     };
+    if let Some(sec) = &locked_secondary {
+        if !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+            return Err(unsupported());
+        }
+        if wrappers[1].local_name() != wrapper.local_name() {
+            return Err(unsupported());
+        }
+        if kind == PlotKind::ClusteredColumn {
+            let dir = wrappers[1]
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("bar");
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            if dir != "col" || grouping != "clustered" {
+                return Err(unsupported());
+            }
+        }
+        if kind == PlotKind::StandardLine {
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard"
+                || flag(wrappers[1], "varyColors").unwrap_or(false)
+                || flag(wrappers[1], "smooth").unwrap_or(false)
+            {
+                return Err(unsupported());
+            }
+        }
+        let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
+        let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
+        if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
+            || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
+        {
+            return Err(unsupported());
+        }
+        for wrap in &wrappers {
+            let nser = wrap
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count();
+            if nser != 1 {
+                return Err(unsupported());
+            }
+            let ids: Vec<_> = wrap
+                .element_children()
+                .filter(|el| el.local_name() == "axId")
+                .filter_map(|el| el.attr_local("val"))
+                .collect();
+            let uses_primary = ids.iter().any(|id| *id == sec.primary_val_id.as_str());
+            let uses_secondary = ids.iter().any(|id| *id == sec.secondary_val_id.as_str());
+            if uses_primary == uses_secondary {
+                return Err(unsupported());
+            }
+        }
+        let _ = sec;
+    }
     let vary = if kind == PlotKind::Pie {
         flag(wrapper, "varyColors").unwrap_or(true)
     } else {
@@ -1305,7 +1374,20 @@ fn read_chart(
     let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     let mut series = Vec::new();
-    for ser in wrapper
+    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() {
+        wrappers.clone()
+    } else {
+        vec![wrapper]
+    };
+    for wrap in &ser_wrappers {
+    let on_secondary = locked_secondary.as_ref().is_some_and(|sec| {
+        wrap
+            .element_children()
+            .filter(|el| el.local_name() == "axId")
+            .filter_map(|el| el.attr_local("val"))
+            .any(|id| id == sec.secondary_val_id)
+    });
+    for ser in wrap
         .element_children()
         .filter(|el| el.local_name() == "ser")
     {
@@ -1333,11 +1415,14 @@ fn read_chart(
             kind,
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
         ) {
-            read_value_label(wrapper, ser, kind)?
+            read_value_label(wrap, ser, kind)?
         } else {
             data_labels_hidden(ser.child_by_local("dLbls"))?;
             None
         };
+        if on_secondary && value_label.is_some() {
+            return Err(unsupported());
+        }
         if value_label == Some(ValueLabel::InsideEnd) && values.iter().flatten().any(|v| *v == 0.0)
         {
             return Err(unsupported());
@@ -1484,7 +1569,9 @@ fn read_chart(
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
                     == Some("span"),
+            on_secondary,
         };
+    }
     }
     series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
     if series.is_empty() {
@@ -1524,7 +1611,8 @@ fn read_chart(
         // Do not silently shrink the category domain when both caches omit
         // trailing points. Sparse-domain/resource-budget support is separate;
         // this batch requires a complete domain from parsed values/categories.
-        for ser in wrapper
+        for wrap in &ser_wrappers {
+        for ser in wrap
             .element_children()
             .filter(|e| e.local_name() == "ser")
         {
@@ -1541,6 +1629,7 @@ fn read_chart(
                     return Err(unsupported());
                 }
             }
+        }
         }
     }
     for ser in &mut series {
@@ -1658,9 +1747,21 @@ fn read_chart(
     } else if kind == PlotKind::ClusteredBar {
         let (spec, from_bottom) = axis::bar_axes(plot)?;
         (spec, None, false, from_bottom)
+    } else if locked_secondary.is_some() {
+        let sec = locked_secondary.as_ref().unwrap();
+        (sec.primary, None, false, true)
     } else {
         (axis::Spec::read(plot)?, None, false, true)
     };
+    let axis_secondary = locked_secondary.as_ref().map(|sec| sec.secondary);
+    if axis_secondary.is_some() {
+        if series.iter().any(|ser| ser.value_label.is_some())
+            || !series.iter().any(|ser| ser.on_secondary)
+            || !series.iter().any(|ser| !ser.on_secondary)
+        {
+            return Err(unsupported());
+        }
+    }
     if axis.log_base.is_some()
         && !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine)
     {
@@ -1701,6 +1802,7 @@ fn read_chart(
         legend_spec: legend::Spec::read(root, accents)?,
         axis,
         axis_x,
+        axis_secondary,
         cats_from_bottom,
         title: title_text(chart),
         accents,
@@ -2601,11 +2703,33 @@ fn paint(
     // Glyph drawing can use the existing GDI fallback; label packing must reserve
     // the larger declared line box so the two paths cannot over-pack the axis.
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
-    let scale = axis::scale(
-        &chart.series,
-        chart.axis,
-        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
-    )?;
+    let budget = axis::interval_budget_dpi(canvas.h, em, canvas.dpi);
+    let scale = if chart.axis_secondary.is_some() {
+        axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| !ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            chart.axis,
+            budget,
+        )?
+    } else {
+        axis::scale(&chart.series, chart.axis, budget)?
+    };
+    let secondary_scale = if let Some(spec) = chart.axis_secondary {
+        Some(axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            spec,
+            budget,
+        )?)
+    } else {
+        None
+    };
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let log_base = scale.log_base;
     let ticks = if let Some(base) = log_base {
@@ -2688,6 +2812,39 @@ fn paint(
         plot_y += scale_plot_trailing(canvas.dpi, INSET_BOTTOM)
             - scale_plot_leading(canvas.dpi, INSET_TOP);
     }
+    let (secondary_ticks, secondary_tick_labels, right_axis_x) =
+        if let Some(sec) = secondary_scale.as_ref() {
+            let ticks = tick_values(sec.min, sec.max, sec.major);
+            let labels: Vec<String> = ticks
+                .iter()
+                .copied()
+                .map(|v| fmt_tick_with(v, sec.tick_format))
+                .collect();
+            let widest = labels
+                .iter()
+                .map(|label| {
+                    let width = text_width(font, gdi.as_ref(), label, label_px);
+                    let hanging = if label.starts_with('-') {
+                        text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                    } else {
+                        0.0
+                    };
+                    (width - hanging).ceil() as i32
+                })
+                .max()
+                .unwrap_or(0);
+            // Reserve the mirrored label column between the plot and the
+            // already-reserved legend. The right axis sits on the new plot
+            // edge; labels start TICK_GAP to its right. Not a 1px fudge.
+            let gutter = widest + canvas.dpi.scale_px(TICK_GAP);
+            plot_r -= gutter;
+            if plot_r <= plot_x {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
+            (ticks, labels, plot_r)
+        } else {
+            (Vec::new(), Vec::new(), plot_r)
+        };
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
@@ -2711,16 +2868,21 @@ fn paint(
     } else {
         axis_x - canvas.dpi.scale_px(TICK_OUT)
     };
+    let grid_x1 = if secondary_scale.is_some() {
+        right_axis_x + canvas.dpi.scale_px(TICK_OUT)
+    } else {
+        plot_r
+    };
     if chart.grid && regular {
         for i in 0..=intervals {
             let y = regular_grid_y(plot_y, plot_b, i, intervals);
-            canvas.hline_i(grid_x0, plot_r, y, INK);
+            canvas.hline_i(grid_x0, grid_x1, y, INK);
         }
     }
     if chart.grid && !regular {
         for value in &ticks {
             let y = y_map(*value, axis_min, axis_max, &plot, log_base, scale.reversed).ceil() as i32;
-            canvas.hline_i(grid_x0, plot_r, y, INK);
+            canvas.hline_i(grid_x0, grid_x1, y, INK);
         }
     }
     let parts = step / scale.minor;
@@ -2753,19 +2915,75 @@ fn paint(
         }
     }
     match chart.kind {
-        PlotKind::ClusteredColumn => draw_bars(
-            canvas,
-            chart,
-            &plot,
-            axis_min,
-            axis_max,
-            step,
-            log_base,
-            scale.crossing(),
-            scale.reversed,
-        ),
+        PlotKind::ClusteredColumn => {
+            if secondary_scale.is_some() {
+                // Official same-type secondary columns overlap: each wrapper
+                // is a one-series cluster. Paint primary first, secondary on top.
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    step,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
+                let sec = secondary_scale.as_ref().unwrap();
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.major,
+                    sec.log_base,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
+            } else {
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    step,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                );
+            }
+        }
         PlotKind::StandardLine => {
-            draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed)
+            if let Some(sec) = secondary_scale.as_ref() {
+                draw_lines(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.reversed,
+                    Some(false),
+                );
+                draw_lines(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.reversed,
+                    Some(true),
+                );
+            } else {
+                draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)
+            }
         }
         PlotKind::StandardArea => draw_areas(
             canvas,
@@ -2825,6 +3043,23 @@ fn paint(
         scale.reversed,
         !scale.deleted,
     );
+    if let Some(sec) = secondary_scale.as_ref() {
+        canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
+        draw_right_tick_labels(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label_px,
+            &plot,
+            right_axis_x,
+            &secondary_ticks,
+            &secondary_tick_labels,
+            sec.min,
+            sec.max,
+            sec.log_base,
+            sec.reversed,
+        );
+    }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
         let width = text_width(font, face, title, label_px);
@@ -2939,13 +3174,18 @@ fn draw_lines(
     axis_max: f64,
     log_base: Option<f64>,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
         return;
     }
-    for ser in &chart.series {
+    for ser in chart.series.iter().filter(|ser| {
+        group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+    }) {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         if ser.line_visible && ser.line_width > 0.0 {
             let mut run = Vec::new();
@@ -3584,9 +3824,18 @@ fn draw_bars(
     log_base: Option<f64>,
     axis_origin: f64,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .collect();
+    if group.is_empty() {
+        return;
+    }
     let cats = chart.categories.len().max(1) as f64;
-    let n = chart.series.len().max(1) as f64;
+    let n = group.len().max(1) as f64;
     let overlap = chart.overlap / 100.0;
     let gap = chart.gap_width / 100.0;
     // 右端那一列算进槽宽。左缘仍是轴线右侧的第一列。
@@ -3612,7 +3861,7 @@ fn draw_bars(
     );
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin = plot.x + slot * ci as f64 + side;
-        for (si, ser) in chart.series.iter().enumerate() {
+        for (si, ser) in group.iter().enumerate() {
             let Some(value) = ser.values[ci] else {
                 continue;
             };
@@ -3705,6 +3954,36 @@ fn draw_tick_labels(
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
         draw_text(canvas, font, gdi, label, x, baseline, px, INK);
+    }
+}
+
+fn draw_right_tick_labels(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+    plot: &Rect,
+    axis_x: i32,
+    ticks: &[f64],
+    labels: &[String],
+    axis_min: f64,
+    axis_max: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+) {
+    for (tick, label) in ticks.iter().zip(labels) {
+        let y = y_map(*tick, axis_min, axis_max, plot, log_base, reversed);
+        let h = text_height(font, px);
+        draw_text(
+            canvas,
+            font,
+            gdi,
+            label,
+            f64::from(axis_x) + f64::from(canvas.dpi.scale_px(TICK_GAP)),
+            y - h / 2.0,
+            px,
+            INK,
+        );
     }
 }
 
@@ -5988,7 +6267,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false, None);
         // Three equal path widths are 221 / 7.5 pixels. The middle path
         // crosses columns 130..160: rounding two fill edges and subtracting
         // one instead loses both outline sides (131..159).
@@ -6019,7 +6298,7 @@ mod tests {
             w: 2.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false, None);
         assert_eq!(row_ink_runs(&canvas.px, canvas.w, 30), vec![(35, 37)]);
     }
 
@@ -6077,7 +6356,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0, false);
+        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0, false, None);
         // Verify both path edges of all 60 columns, not a run count: an
         // unfilled 1.47px-wide path can have two separated 1px edges.
         let slot = 221.0 / 60.0;
@@ -8230,7 +8509,7 @@ mod tests {
                 if mode == "zero" { Some(0.0) } else { None }
             );
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None);
             canvases.push(canvas);
         }
         let ink = |canvas: &Canvas, x: usize, y: usize| {
@@ -8254,7 +8533,7 @@ mod tests {
             assert_eq!(chart.series[0].values[1], None, "NA is never a zero point");
             assert!(chart.series[0].unavailable_points[1]);
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None);
             assert!(
                 ink(&canvas, 150, 50),
                 "Excel16 NA probe connects across NA: {mode}"
@@ -10735,6 +11014,7 @@ mod tests {
             Some(10.0),
             1.0,
             false,
+            None,
         );
         let accent = FALLBACK_ACCENTS[0];
         let near = |px: &[u8]| {
@@ -10881,7 +11161,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0, false);
+        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0, false, None);
         let origin_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 2.0);
         let zero_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 0.0);
         assert_ne!(origin_y, zero_y);
@@ -11057,6 +11337,7 @@ mod tests {
             None,
             -8.0,
             false,
+            None,
         );
         let mut below_min = 0u32;
         let mut min_fill = 0u32;
@@ -11086,6 +11367,7 @@ mod tests {
             None,
             8.0,
             false,
+            None,
         );
         let mut above_max = 0u32;
         let mut max_fill = 0u32;
@@ -11875,6 +12157,310 @@ mod tests {
         assert!(
             read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
             "log plus valAx delete=true stays NI"
+        );
+    }
+
+    fn secondary_pair_xml(kind: &str, s1: &[f64], s2: &[f64], auto: bool) -> String {
+        let n = s1.len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let nums = |vals: &[f64]| {
+            vals.iter()
+                .enumerate()
+                .map(|(i, v)| format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#))
+                .collect::<String>()
+        };
+        let scale_p = if auto {
+            String::new()
+        } else if s1.iter().any(|v| *v < 0.0) {
+            r#"<c:min val="-8"/><c:max val="8"/>"#.into()
+        } else {
+            r#"<c:min val="0"/><c:max val="10"/>"#.into()
+        };
+        let major_p = if auto {
+            String::new()
+        } else if s1.iter().any(|v| *v < 0.0) {
+            r#"<c:majorUnit val="2"/>"#.into()
+        } else {
+            r#"<c:majorUnit val="2"/>"#.into()
+        };
+        let scale_s = if auto {
+            String::new()
+        } else {
+            r#"<c:min val="0"/><c:max val="100"/>"#.into()
+        };
+        let major_s = if auto {
+            String::new()
+        } else {
+            r#"<c:majorUnit val="20"/>"#.into()
+        };
+        let (w1, w2) = match kind {
+            "line" => (
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            "bar" => (
+                format!(
+                    r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="3"/><c:axId val="4"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            "combo" => (
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            _ => (
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="3"/><c:axId val="4"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      {w1}{w2}
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn two_series_primary_xml(s1: &[f64], s2: &[f64]) -> String {
+        let n = s1.len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let nums = |vals: &[f64]| {
+            vals.iter()
+                .enumerate()
+                .map(|(i, v)| format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#))
+                .collect::<String>()
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/>
+        <c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser>
+        <c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser>
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/><c:max val="100"/></c:scaling><c:majorUnit val="20"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            n = n,
+            cats = cats,
+            n1 = nums(s1),
+            n2 = nums(s2),
+        )
+    }
+
+    fn accent_x_runs(rgb: &[u8], w: u32, h: u32, accent: [u8; 3]) -> Vec<(u32, u32)> {
+        let mut xs = Vec::new();
+        for x in 0..w {
+            let mut n = 0u32;
+            for y in 0..h {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16) {
+                    n += 1;
+                }
+            }
+            if n >= 3 {
+                xs.push(x);
+            }
+        }
+        let mut runs = Vec::new();
+        if xs.is_empty() {
+            return runs;
+        }
+        let mut start = xs[0];
+        let mut prev = xs[0];
+        for x in xs.into_iter().skip(1) {
+            if x <= prev + 2 {
+                prev = x;
+            } else {
+                // drop slim legend swatches
+                if prev - start >= 8 {
+                    runs.push((start, prev));
+                }
+                start = x;
+                prev = x;
+            }
+        }
+        if prev - start >= 8 {
+            runs.push((start, prev));
+        }
+        runs
+    }
+
+    #[test]
+    fn secondary_val_axis_maps_own_scale_and_overlaps_same_type_columns() {
+        let s1 = [2.0, 4.0, 6.0, 8.0];
+        let s2 = [20.0, 40.0, 80.0, 60.0];
+        let xml = secondary_pair_xml("col", &s1, &s2, false);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert!(chart.axis_secondary.is_some());
+        assert_eq!(chart.axis.min, Some(0.0));
+        assert_eq!(chart.axis.max, Some(10.0));
+        let sec = chart.axis_secondary.unwrap();
+        assert_eq!(sec.min, Some(0.0));
+        assert_eq!(sec.max, Some(100.0));
+        assert!(!chart.series[0].on_secondary);
+        assert!(chart.series[1].on_secondary);
+
+        let png = render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let r0 = accent_x_runs(&rgb, w, h, a0);
+        let r1 = accent_x_runs(&rgb, w, h, a1);
+        // Official same-type secondary columns overlap in the same slots.
+        // Secondary is painted on top, so S1 is only visible in D (8/10 vs 60/100).
+        assert_eq!(r1.len(), 4, "secondary series must occupy four category slots, got {r1:?}");
+        assert_eq!(
+            r0.len(),
+            1,
+            "primary S1 should only stick out above S2 in category D, got {r0:?}"
+        );
+        assert!(
+            r1.iter().any(|(s, e)| r0[0].0 <= *e && r0[0].1 >= *s),
+            "official secondary columns overlap the primary slot; primary={r0:?} secondary={r1:?}"
+        );
+        let ctrl_doc = crate::xml::parse(two_series_primary_xml(&s1, &s2).as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert!(ctrl.axis_secondary.is_none());
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (cw, ch, crgb) = png_rgb(&ctrl_png);
+        let c0 = accent_x_runs(&crgb, cw, ch, a0);
+        let c1 = accent_x_runs(&crgb, cw, ch, a1);
+        assert_eq!(c0.len(), 4);
+        assert_eq!(c1.len(), 4);
+        // Control clusters sit side by side, so matching-index runs should not fully coincide.
+        for ((a0s, a0e), (a1s, a1e)) in c0.iter().zip(&c1) {
+            assert!(
+                *a0e < *a1s || *a1e < *a0s,
+                "one-axis two-series columns stay clustered side by side; {c0:?} {c1:?}"
+            );
+        }
+        let secondary_w: i32 = r1.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        let cluster_w: i32 = c0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        assert!(
+            secondary_w > cluster_w,
+            "each secondary-axis wrapper is a one-series cluster, so bars are wider than a two-series cluster; secondary_w={secondary_w} control_w={cluster_w}"
+        );
+        // Right-side tick labels: more ink in the right gutter than the one-axis control.
+        let ink = |rgb: &[u8], w: u32, h: u32| {
+            let mut n = 0u32;
+            for y in h / 6..(h * 5) / 6 {
+                for x in (w * 5) / 8..(w * 7) / 8 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let right = ink(&rgb, w, h);
+        let ctrl_right = ink(&crgb, cw, ch);
+        assert!(
+            right > ctrl_right + 10,
+            "official secondary valAx places tick labels on the right; secondary={right} control={ctrl_right}"
+        );
+
+        render_line(&secondary_pair_xml(
+            "line",
+            &s1,
+            &s2,
+            false,
+        ))
+        .unwrap();
+
+        let bar = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        assert!(
+            read_chart(&bar.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "clustered bar secondary valAx stays NI"
+        );
+        let combo = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        assert!(
+            read_chart(&combo.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "combo (different wrappers) stays NI for F26"
+        );
+        let auto = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on a secondary pair stays NI"
         );
     }
 }

@@ -336,7 +336,224 @@ pub(super) fn interval_budget_span(span: f64, label_em: f64, occupancy: f64) -> 
         .clamp(1.0, 10.0) as i32
 }
 
+/// Official Excel 16 encoding of a non-scatter secondary value axis:
+/// a second valAx with axPos=r and crosses=max, paired with a deleted catAx.
+/// crosses=max places that axis on the right; growth on the secondary scale
+/// still uses autoZero. This is not F17 catAx crosses=min/max.
+pub(super) struct SecondaryAxes {
+    pub primary: Spec,
+    pub secondary: Spec,
+    pub primary_val_id: String,
+    pub secondary_val_id: String,
+}
+
+fn ax_id(axis: &Element) -> Option<&str> {
+    axis.child_by_local("axId").and_then(|e| e.attr_local("val"))
+}
+
+fn ax_pos(axis: &Element) -> &str {
+    axis
+        .child_by_local("axPos")
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("")
+}
+
+fn axis_deleted(axis: &Element) -> bool {
+    axis
+        .child_by_local("delete")
+        .and_then(|e| e.attr_local("val"))
+        .is_some_and(|v| !matches!(v, "0" | "false" | "off"))
+}
+
+fn axis_crosses(axis: &Element) -> Option<&str> {
+    axis
+        .child_by_local("crosses")
+        .and_then(|e| e.attr_local("val"))
+}
+
+fn axis_orient(axis: &Element) -> &str {
+    axis
+        .child_by_local("scaling")
+        .and_then(|s| s.child_by_local("orientation"))
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("minMax")
+}
+
+fn locked_hidden_secondary_cat(cat: &Element, val_id: &str) -> bool {
+    axis_deleted(cat)
+        && ax_pos(cat) == "b"
+        && axis_orient(cat) == "minMax"
+        && cat.child_by_local("majorGridlines").is_none()
+        && cat
+            .child_by_local("scaling")
+            .map_or(true, |s| s.child_by_local("logBase").is_none())
+        && cat.child_by_local("crosses").is_none()
+        && cat.child_by_local("crossesAt").is_none()
+        && cat
+            .child_by_local("crossAx")
+            .and_then(|e| e.attr_local("val"))
+            == Some(val_id)
+}
+
+fn locked_primary_cat(cat: &Element, val_id: &str) -> bool {
+    !axis_deleted(cat)
+        && ax_pos(cat) == "b"
+        && axis_orient(cat) == "minMax"
+        && cat.child_by_local("majorGridlines").is_none()
+        && cat
+            .child_by_local("scaling")
+            .map_or(true, |s| s.child_by_local("logBase").is_none())
+        && cat.child_by_local("crossesAt").is_none()
+        && matches!(axis_crosses(cat), None | Some("autoZero"))
+        && cat
+            .child_by_local("crossAx")
+            .and_then(|e| e.attr_local("val"))
+            == Some(val_id)
+}
+
+fn read_secondary_placement_fields(axis: &Element) -> Result<Spec, Error> {
+    let deleted = axis_deleted(axis);
+    let scaling = axis.child_by_local("scaling");
+    let reversed = match scaling
+        .and_then(|s| s.child_by_local("orientation"))
+        .and_then(|e| e.attr_local("val"))
+    {
+        None | Some("minMax") => false,
+        Some("maxMin") => true,
+        _ => return Err(unsupported()),
+    };
+    if scaling.and_then(|s| s.child_by_local("logBase")).is_some() {
+        return Err(unsupported());
+    }
+    let tick_format = read_tick_format(axis)?;
+    let read = |node: Option<&Element>, name: &str| -> Result<Option<f64>, Error> {
+        let Some(el) = node.and_then(|n| n.child_by_local(name)) else {
+            return Ok(None);
+        };
+        let value = el
+            .attr_local("val")
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite())
+            .ok_or_else(unsupported)?;
+        Ok(Some(value))
+    };
+    let spec = Spec {
+        min: read(scaling, "min")?,
+        max: read(scaling, "max")?,
+        major: read(Some(axis), "majorUnit")?,
+        minor: read(Some(axis), "minorUnit")?,
+        log_base: None,
+        crosses_at: None,
+        cat_crosses: CatCrosses::AutoZero,
+        tick_format,
+        reversed,
+        deleted,
+    };
+    if spec.major.is_some_and(|v| v <= 0.0)
+        || spec.minor.is_some_and(|v| v <= 0.0)
+        || matches!((spec.min, spec.max), (Some(a), Some(b)) if a >= b)
+        || spec.deleted
+        || spec.reversed
+        || spec.min.is_none()
+        || spec.max.is_none()
+    {
+        return Err(unsupported());
+    }
+    Ok(spec)
+}
+
+fn read_secondary_val_axis(axis: &Element) -> Result<Spec, Error> {
+    if ax_pos(axis) != "r" {
+        return Err(unsupported());
+    }
+    if axis_crosses(axis) != Some("max") || axis.child_by_local("crossesAt").is_some() {
+        return Err(unsupported());
+    }
+    if axis.child_by_local("majorGridlines").is_some() {
+        return Err(unsupported());
+    }
+    read_secondary_placement_fields(axis)
+}
+
+pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes, Error> {
+    if plot
+        .element_children()
+        .any(|e| matches!(e.local_name(), "dateAx" | "serAx"))
+    {
+        return Err(unsupported());
+    }
+    let vals: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .collect();
+    let cats: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .collect();
+    if vals.len() != 2 || cats.len() != 2 {
+        return Err(unsupported());
+    }
+    if vals.iter().filter(|ax| ax_pos(ax) == "l").count() != 1
+        || vals.iter().filter(|ax| ax_pos(ax) == "r").count() != 1
+    {
+        return Err(unsupported());
+    }
+    let primary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "l")
+        .ok_or_else(unsupported)?;
+    let secondary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "r")
+        .ok_or_else(unsupported)?;
+    let primary_val_id = ax_id(primary_val).ok_or_else(unsupported)?.to_string();
+    let secondary_val_id = ax_id(secondary_val).ok_or_else(unsupported)?.to_string();
+    let primary_cat = cats
+        .iter()
+        .find(|cat| locked_primary_cat(cat, &primary_val_id))
+        .ok_or_else(unsupported)?;
+    let secondary_cat = cats
+        .iter()
+        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id))
+        .ok_or_else(unsupported)?;
+    if std::ptr::eq(*primary_cat, *secondary_cat) {
+        return Err(unsupported());
+    }
+    let primary_cat_id = ax_id(primary_cat).ok_or_else(unsupported)?;
+    let secondary_cat_id = ax_id(secondary_cat).ok_or_else(unsupported)?;
+    if primary_val
+        .child_by_local("crossAx")
+        .and_then(|e| e.attr_local("val"))
+        != Some(primary_cat_id)
+        || secondary_val
+            .child_by_local("crossAx")
+            .and_then(|e| e.attr_local("val"))
+            != Some(secondary_cat_id)
+    {
+        return Err(unsupported());
+    }
+    let primary = Spec::read_axis(primary_val)?;
+    if primary.min.is_none()
+        || primary.max.is_none()
+        || primary.deleted
+        || primary.reversed
+        || primary.log_base.is_some()
+        || primary.crosses_at.is_some()
+        || !matches!(primary.cat_crosses, CatCrosses::AutoZero)
+    {
+        return Err(unsupported());
+    }
+    let secondary = read_secondary_val_axis(secondary_val)?;
+    Ok(SecondaryAxes {
+        primary,
+        secondary,
+        primary_val_id,
+        secondary_val_id,
+    })
+}
+
 pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
+
     if plot
         .element_children()
         .any(|e| matches!(e.local_name(), "catAx" | "dateAx" | "serAx"))
