@@ -16,6 +16,9 @@ pub(super) struct Spec {
     /// This is distinct from crossesAt equal to an endpoint: crosses=max keeps
     /// the category-label gutter at the top, while a clamped crossesAt does not.
     pub cat_crosses: CatCrosses,
+    /// Official Excel 16 value-axis TickLabels.NumberFormat, written on
+    /// valAx/numFmt. Only the uniquely locked literal codes are stored.
+    pub tick_format: TickFormat,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum CatCrosses {
@@ -32,6 +35,20 @@ pub(super) struct Scale {
     pub log_base: Option<f64>,
     pub crosses_at: Option<f64>,
     pub cat_crosses: CatCrosses,
+    pub tick_format: TickFormat,
+}
+/// Official Excel 16 valAx formatCode values locked from Chart.Export at
+/// window DPI 106 (decimal `.`, thousands `,`). Any other code stays NI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum TickFormat {
+    #[default]
+    General,
+    Integer,
+    Fixed2,
+    Percent,
+    PercentFixed2,
+    Thousands,
+    Scientific2,
 }
 impl Scale {
     /// autoZero crosses at zero, or the nearer bound when zero is outside.
@@ -52,6 +69,38 @@ impl Scale {
 
 fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
+}
+
+fn read_tick_format(axis: &Element) -> Result<TickFormat, Error> {
+    let Some(el) = axis.child_by_local("numFmt") else {
+        return Ok(TickFormat::General);
+    };
+    if el.element_children().next().is_some() {
+        return Err(unsupported());
+    }
+    for (key, _) in &el.attrs {
+        if !key.starts_with("xmlns") && *key != "formatCode" && *key != "sourceLinked" {
+            return Err(unsupported());
+        }
+    }
+    let code = el.attr_local("formatCode").unwrap_or("General");
+    if code == "General" {
+        return Ok(TickFormat::General);
+    }
+    // Official Excel 16 writes sourceLinked="0" when TickLabels.NumberFormat
+    // is a custom code. sourceLinked=1 plus a non-General formatCode is not locked.
+    if el.attr_local("sourceLinked") != Some("0") {
+        return Err(unsupported());
+    }
+    match code {
+        "0" => Ok(TickFormat::Integer),
+        "0.00" => Ok(TickFormat::Fixed2),
+        "0%" => Ok(TickFormat::Percent),
+        "0.00%" => Ok(TickFormat::PercentFixed2),
+        "#,##0" => Ok(TickFormat::Thousands),
+        "0.00E+00" => Ok(TickFormat::Scientific2),
+        _ => Err(unsupported()),
+    }
 }
 
 fn read_cat_crosses(plot: &Element) -> Result<(Option<f64>, CatCrosses), Error> {
@@ -160,13 +209,7 @@ impl Spec {
         {
             return Err(unsupported());
         }
-        if axis
-            .child_by_local("numFmt")
-            .and_then(|e| e.attr_local("formatCode"))
-            .is_some_and(|v| v != "General")
-        {
-            return Err(unsupported());
-        }
+        let tick_format = read_tick_format(axis)?;
         let read = |node: Option<&Element>, name: &str| -> Result<Option<f64>, Error> {
             let Some(el) = node.and_then(|n| n.child_by_local(name)) else {
                 return Ok(None);
@@ -186,6 +229,7 @@ impl Spec {
             log_base,
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
+            tick_format,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -208,6 +252,10 @@ impl Spec {
                 || !is_integer_power(min, base)
                 || !is_integer_power(max, base)
             {
+                return Err(unsupported());
+            }
+            // Official F15 log evidence used formatCode General only.
+            if spec.tick_format != TickFormat::General {
                 return Err(unsupported());
             }
         }
@@ -377,7 +425,10 @@ pub(super) fn scale_values(
         let min = spec.min.ok_or_else(unsupported)?;
         let max = spec.max.ok_or_else(unsupported)?;
         // Official F16/F17 log evidence had autoZero only; custom crosses stay NI.
-        if spec.crosses_at.is_some() || !matches!(spec.cat_crosses, CatCrosses::AutoZero) {
+        if spec.crosses_at.is_some()
+            || !matches!(spec.cat_crosses, CatCrosses::AutoZero)
+            || spec.tick_format != TickFormat::General
+        {
             return Err(unsupported());
         }
         // Out-of-range values (official clip stubs) and non-positive points stay NI.
@@ -392,6 +443,7 @@ pub(super) fn scale_values(
             log_base: Some(base),
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
+            tick_format: TickFormat::General,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -467,6 +519,7 @@ pub(super) fn scale_values(
         log_base: None,
         crosses_at: spec.crosses_at,
         cat_crosses: spec.cat_crosses,
+        tick_format: spec.tick_format,
     })
 }
 
@@ -498,6 +551,7 @@ mod tests {
                 log_base: None,
                 crosses_at: None,
                 cat_crosses: CatCrosses::AutoZero,
+                tick_format: TickFormat::General,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -626,6 +680,7 @@ mod tests {
             log_base: Some(10.0),
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
+            tick_format: TickFormat::General,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
@@ -739,6 +794,64 @@ mod tests {
         assert!(
             scale_values([Some(1.0), Some(10.0), Some(100.0)].into_iter(), s, 10).is_err(),
             "log plus custom crossesAt stays NI"
+        );
+    }
+
+    #[test]
+    fn val_axis_locked_format_codes_are_parsed_and_others_stay_ni() {
+        let codes = [
+            ("General", TickFormat::General, None),
+            ("General", TickFormat::General, Some("1")),
+            ("0", TickFormat::Integer, Some("0")),
+            ("0.00", TickFormat::Fixed2, Some("0")),
+            ("0%", TickFormat::Percent, Some("0")),
+            ("0.00%", TickFormat::PercentFixed2, Some("0")),
+            ("#,##0", TickFormat::Thousands, Some("0")),
+            ("0.00E+00", TickFormat::Scientific2, Some("0")),
+        ];
+        for (code, want, linked) in codes {
+            let src = match linked {
+                Some(v) => format!(" sourceLinked='{v}'"),
+                None => String::new(),
+            };
+            let xml = format!(
+                "<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><numFmt formatCode='{code}'{src}/></valAx></plotArea>"
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let s = Spec::read(&doc.root).unwrap();
+            assert_eq!(s.tick_format, want, "formatCode {code}");
+            let got = scale_values(
+                [Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)].into_iter(),
+                s,
+                10,
+            )
+            .unwrap();
+            assert_eq!(got.tick_format, want);
+        }
+        for bad in [
+            "<numFmt formatCode='0.00' sourceLinked='1'/>",
+            "<numFmt formatCode='0.00'/>",
+            "<numFmt formatCode='0.0' sourceLinked='0'/>",
+            "<numFmt formatCode='#,##0.00' sourceLinked='0'/>",
+            "<numFmt formatCode='$#,##0.00' sourceLinked='0'/>",
+            "<numFmt formatCode='0.00E+0' sourceLinked='0'/>",
+        ] {
+            let xml = format!(
+                "<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling>{bad}</valAx></plotArea>"
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(
+                Spec::read(&doc.root).is_err(),
+                "unlocked format must stay NI: {bad}"
+            );
+        }
+        let log = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><numFmt formatCode='0.00' sourceLinked='0'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&log.root).is_err(),
+            "log plus a non-General formatCode stays NI"
         );
     }
 }

@@ -1746,7 +1746,7 @@ fn paint_scatter(
         axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
-    let y_labels: Vec<String> = y_ticks.iter().copied().map(fmt_tick).collect();
+    let y_labels: Vec<String> = y_ticks.iter().copied().map(|v| fmt_tick_with(v, y_scale.tick_format)).collect();
     let y_intervals = y_ticks.len().saturating_sub(1).max(1) as i32;
     let widest_tick = y_labels
         .iter()
@@ -1826,7 +1826,7 @@ fn paint_scatter(
         }
     }
     let x_ticks = tick_values(x_scale.min, x_scale.max, x_scale.major);
-    let x_labels: Vec<String> = x_ticks.iter().copied().map(fmt_tick).collect();
+    let x_labels: Vec<String> = x_ticks.iter().copied().map(|v| fmt_tick_with(v, x_scale.tick_format)).collect();
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
@@ -2164,7 +2164,7 @@ fn paint_bar(
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
-    let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
+    let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let axis_y = if val_axis_at_top { plot_y } else { plot_b };
     // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
     if chart.grid {
@@ -2575,7 +2575,7 @@ fn paint(
     } else {
         tick_values(axis_min, axis_max, step)
     };
-    let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
+    let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
     let widest_tick = tick_labels
         .iter()
@@ -3798,10 +3798,27 @@ fn tick_values_log(min: f64, max: f64, base: f64) -> Vec<f64> {
     out
 }
 
+#[cfg(test)]
 fn fmt_tick(value: f64) -> String {
+    fmt_tick_with(value, axis::TickFormat::General)
+}
+
+fn fmt_tick_with(value: f64, format: axis::TickFormat) -> String {
     if !value.is_finite() {
         return String::new();
     }
+    match format {
+        axis::TickFormat::General => fmt_tick_general(value),
+        axis::TickFormat::Integer => fmt_fixed_int(value, false),
+        axis::TickFormat::Fixed2 => fmt_fixed(value, 2, false),
+        axis::TickFormat::Percent => fmt_fixed_int(value * 100.0, true),
+        axis::TickFormat::PercentFixed2 => fmt_fixed(value * 100.0, 2, true),
+        axis::TickFormat::Thousands => fmt_thousands(value),
+        axis::TickFormat::Scientific2 => fmt_scientific2(value),
+    }
+}
+
+fn fmt_tick_general(value: f64) -> String {
     let abs = value.abs();
     if abs != 0.0 && !(0.0001..10_000_000.0).contains(&abs) {
         return format!("{value:.2e}");
@@ -3814,6 +3831,73 @@ fn fmt_tick(value: f64) -> String {
         text.pop();
     }
     text
+}
+
+fn fmt_fixed_int(value: f64, percent: bool) -> String {
+    let n = value.round();
+    let n = if n == 0.0 { 0_i64 } else { n as i64 };
+    if percent {
+        format!("{n}%")
+    } else {
+        format!("{n}")
+    }
+}
+
+fn fmt_fixed(value: f64, places: u32, percent: bool) -> String {
+    let factor = 10f64.powi(places as i32);
+    let mut n = (value * factor).round();
+    if n == 0.0 {
+        n = 0.0;
+    }
+    let sign = if n < 0.0 { "-" } else { "" };
+    let abs = n.abs() as u64;
+    let div = 10u64.pow(places);
+    let whole = abs / div;
+    let frac = abs % div;
+    let width = places as usize;
+    let body = format!("{sign}{whole}.{frac:0width$}");
+    if percent {
+        format!("{body}%")
+    } else {
+        body
+    }
+}
+
+fn fmt_thousands(value: f64) -> String {
+    let n = value.round();
+    let n = if n == 0.0 { 0_i64 } else { n as i64 };
+    let sign = if n < 0 { "-" } else { "" };
+    let digits = n.unsigned_abs().to_string();
+    let mut grouped = String::new();
+    for (i, ch) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(ch);
+    }
+    let grouped: String = grouped.chars().rev().collect();
+    format!("{sign}{grouped}")
+}
+
+fn fmt_scientific2(value: f64) -> String {
+    if value == 0.0 {
+        return "0.00E+00".to_owned();
+    }
+    let sign = if value < 0.0 { "-" } else { "" };
+    let abs = value.abs();
+    let mut exp = abs.log10().floor() as i32;
+    let mant = abs / 10f64.powi(exp);
+    let mut scaled = (mant * 100.0).round();
+    if scaled >= 1000.0 {
+        scaled = 100.0;
+        exp += 1;
+    }
+    if scaled == 0.0 {
+        return format!("{sign}0.00E+00");
+    }
+    let whole = (scaled as u64) / 100;
+    let frac = (scaled as u64) % 100;
+    format!("{sign}{whole}.{frac:02}E{exp:+03}")
 }
 
 fn legend_pos(chart: &Element) -> Option<LegendPos> {
@@ -10999,6 +11083,242 @@ mod tests {
         );
         assert!(bar.contains(r#"<c:crosses val="min"/>"#));
         let err = render_bar(&bar).expect_err("bar crosses=min stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_num_fmt(xml: &str, code: &str) -> String {
+        let inject = format!(r#"<c:numFmt formatCode="{code}" sourceLinked="0"/>"#);
+        let replaced = xml.replacen("</c:valAx>", &format!("{inject}</c:valAx>"), 1);
+        assert!(
+            replaced.contains(&inject),
+            "fixture must carry valAx numFmt {code}"
+        );
+        replaced
+    }
+
+    fn mixed_column_thousands(values: &[f64]) -> String {
+        mixed_column_xml(values)
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-8000"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="8000"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2000"/>"#)
+    }
+
+    fn first_axis_x(png: &[u8]) -> u32 {
+        let (w, h, rgb) = png_rgb(png);
+        let y0 = h / 4;
+        let y1 = (h * 3) / 4;
+        let mut best_x = 0u32;
+        let mut best_n = 0u32;
+        for x in 0..w / 2 {
+            let mut n = 0u32;
+            for y in y0..y1 {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                    n += 1;
+                }
+            }
+            if n > best_n {
+                best_n = n;
+                best_x = x;
+            }
+        }
+        assert!(
+            best_n > (y1 - y0) / 2,
+            "expected a dark vertical value axis in the left half"
+        );
+        best_x
+    }
+
+    #[test]
+    fn val_axis_locked_format_codes_match_official_tick_text() {
+        use super::axis::TickFormat;
+        let ticks = [-8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0];
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::General)),
+            ["-8", "-6", "-4", "-2", "0", "2", "4", "6", "8"]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Integer)),
+            ["-8", "-6", "-4", "-2", "0", "2", "4", "6", "8"]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Fixed2)),
+            [
+                "-8.00", "-6.00", "-4.00", "-2.00", "0.00", "2.00", "4.00", "6.00",
+                "8.00"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Percent)),
+            [
+                "-800%", "-600%", "-400%", "-200%", "0%", "200%", "400%", "600%",
+                "800%"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::PercentFixed2)),
+            [
+                "-800.00%",
+                "-600.00%",
+                "-400.00%",
+                "-200.00%",
+                "0.00%",
+                "200.00%",
+                "400.00%",
+                "600.00%",
+                "800.00%"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Scientific2)),
+            [
+                "-8.00E+00",
+                "-6.00E+00",
+                "-4.00E+00",
+                "-2.00E+00",
+                "0.00E+00",
+                "2.00E+00",
+                "4.00E+00",
+                "6.00E+00",
+                "8.00E+00"
+            ]
+        );
+        let thousands = [-8000.0, -6000.0, -2000.0, 0.0, 2000.0, 8000.0];
+        assert_eq!(
+            thousands.map(|v| fmt_tick_with(v, TickFormat::Thousands)),
+            ["-8,000", "-6,000", "-2,000", "0", "2,000", "8,000"]
+        );
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Fixed2), "0.00");
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Percent), "0%");
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Scientific2), "0.00E+00");
+    }
+
+    #[test]
+    fn val_axis_non_general_format_codes_widen_labels_and_keep_unlocked_ni() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let general = mixed_column_explicit_pm8(&values);
+        let general_doc = crate::xml::parse(general.as_bytes()).unwrap();
+        let general_chart = read_chart(
+            &general_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(general_chart.axis.tick_format, super::axis::TickFormat::General);
+
+        let fixed = with_val_num_fmt(&general, "0.00");
+        let fixed_doc = crate::xml::parse(fixed.as_bytes()).unwrap();
+        let fixed_chart = read_chart(
+            &fixed_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(fixed_chart.axis.tick_format, super::axis::TickFormat::Fixed2);
+
+        let general_png = render_rgb_chart(
+            &general_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let fixed_png = render_rgb_chart(
+            &fixed_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let general_x = first_axis_x(&general_png);
+        let fixed_x = first_axis_x(&fixed_png);
+        assert!(
+            fixed_x > general_x + 8,
+            "0.00 tick labels must widen the left gutter; general={general_x} fixed={fixed_x}"
+        );
+
+        let integer = with_val_num_fmt(&general, "0");
+        let integer_doc = crate::xml::parse(integer.as_bytes()).unwrap();
+        let integer_png = render_rgb_chart(
+            &integer_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let integer_x = first_axis_x(&integer_png);
+        assert!(
+            (integer_x as i32 - general_x as i32).abs() <= 1,
+            "format 0 on integer ticks matches General gutter; general={general_x} integer={integer_x}"
+        );
+
+        for code in ["0%", "0.00%", "0.00E+00"] {
+            render_rgb_chart(
+                &crate::xml::parse(with_val_num_fmt(&general, code).as_bytes())
+                    .unwrap()
+                    .root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap();
+        }
+        let thousands = with_val_num_fmt(
+            &mixed_column_thousands(&[-4000.0, -1000.0, 3000.0, 6000.0]),
+            "#,##0",
+        );
+        render_rgb_chart(
+            &crate::xml::parse(thousands.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_line(&with_val_num_fmt(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "0.00",
+        ))
+        .unwrap();
+
+        let currency = with_val_num_fmt(&general, "$#,##0.00");
+        let err = render_rgb_chart(
+            &crate::xml::parse(currency.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect_err("currency formatCode stays NI");
         assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     }
 }
