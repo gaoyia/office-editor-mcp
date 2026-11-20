@@ -200,7 +200,7 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-负数数据条出图.md` — x14 实心 middle；gold 506×22@106 vs lib 441×96 pxBlocked；主题色-only/未知轴仍 NI。前刀：`.plan/2026年-11月-16日-✅-xlsx-盈亏迷你图.md` — stacked 盈亏半高柱；gold 73×22@106 vs lib 64×19 pxBlocked；日期轴有限核查仍 ❌。
 
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-超大区域切块.md` — tilePx 切块；stitch differ=0；默认 4096 NI 不绕；MAX_TILE_COUNT/总像素闸。
-本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。
+本分支 follow-up：`.plan/2026年-11月-16日-✅-xlsx-图标集出图.md` — 选择语义子 PASS；字形出图仍 NI。
 本分支 follow-up：`.plan/2026年-11月-16日-⚠️-xlsx-差分虚线斜点划线.md` — CF dashed/slantDashDot；节律 oracle；整图 sizeDiffer。
 
 
@@ -229,7 +229,7 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 - 51项当前49成功/2 NI，成功项49/49固定96维度；严格0 PASS/49 sizeDiffer/2 NI，widthChanged0/statusChanged1，不把诚实NI冒充尺寸回归。
 - 可见复杂/未支持配置诚实NI；隐藏宿主不影响其它内容；RTL/merged/非空文字宿主不伪造支持，dateAxis等暂停功能不恢复。
 - fmt、clippy all-targets/all-features -D warnings、全Rust1860 passed/0 failed/0 ignored、Python8、实际CLI build通过。P3/自动值轴/端点/Normal继承残差另核，不塞本片。
-- 证据：桌面 `office-editor-PR10-迷你图遗漏修复-20261117-134723`；详情 `.plan/2026年-11月-17日-⚠️-xlsx-工作表内嵌迷你图遗漏.md`。gold复用P0同SHA原生图，P1未重开Office、owner lock0。
+- 证据：桌面 `office-editor-PR10-迷你图遗漏修复-20261117-134723`；详情 `.plan/2026年-11月-17日-✅-xlsx-工作表内嵌迷你图遗漏.md`。gold复用P0同SHA原生图，P1未重开Office、owner lock0。
 
 
 2026-11-17 P3（82圆角）：既有默认白底圆角PNG恢复coverage直出alpha，内部白/颜色及白底合成不变；合法但未支持的背景/描边/显式非圆角NI。整图及圆弧AA仍⚠️，不把17图四角透明恢复记全部通过；详圆角计划。自动值轴与暂停10项不在本片。
