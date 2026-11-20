@@ -158,7 +158,7 @@ fn regular_grid_y(plot_y: i32, plot_b: i32, i: i32, intervals: i32) -> i32 {
 // Rounding y_of(0) separately puts mixed-sign axes one row below the 0 grid
 // whenever the exact position is a half pixel (e.g. [-3,5], 106dpi).
 fn crossing_axis_y(plot: &Rect, min: f64, max: f64, major: f64, crossing: f64) -> i32 {
-    crossing_axis_y_mode(plot, min, max, major, crossing, None)
+    crossing_axis_y_mode(plot, min, max, major, crossing, None, false)
 }
 
 fn crossing_axis_y_mode(
@@ -168,12 +168,17 @@ fn crossing_axis_y_mode(
     major: f64,
     crossing: f64,
     log_base: Option<f64>,
+    reversed: bool,
 ) -> i32 {
     if log_base.is_some() {
-        return y_map(crossing, min, max, plot, log_base).round() as i32;
+        return y_map(crossing, min, max, plot, log_base, reversed).round() as i32;
     }
     let intervals = (max - min) / major;
-    let index = (max - crossing) / major;
+    let index = if reversed {
+        (crossing - min) / major
+    } else {
+        (max - crossing) / major
+    };
     if major > 0.0
         && (intervals - intervals.round()).abs() < 1e-8
         && (index - index.round()).abs() < 1e-8
@@ -186,7 +191,7 @@ fn crossing_axis_y_mode(
             intervals.round() as i32,
         )
     } else {
-        y_of(crossing, min, max, plot).round() as i32
+        y_map(crossing, min, max, plot, None, reversed).round() as i32
     }
 }
 
@@ -1745,6 +1750,9 @@ fn paint_scatter(
         chart.axis,
         axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
+    if y_scale.reversed {
+        return Err(unsupported());
+    }
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
     let y_labels: Vec<String> = y_ticks.iter().copied().map(|v| fmt_tick_with(v, y_scale.tick_format)).collect();
     let y_intervals = y_ticks.len().saturating_sub(1).max(1) as i32;
@@ -1806,6 +1814,9 @@ fn paint_scatter(
         x_spec,
         x_budget,
     )?;
+    if x_scale.reversed {
+        return Err(unsupported());
+    }
     // When 0 is inside the X scale, the vertical axis sits at x=0 inside the
     // plot; drop the left tick-label gutter and use the same frame inset as the top.
     let x_cross_interior = x_scale.min < -1e-12 && x_scale.max > 1e-12;
@@ -2008,8 +2019,15 @@ fn paint_scatter(
 }
 
 fn x_of(value: f64, axis_min: f64, axis_max: f64, plot: &Rect) -> f64 {
+    x_of_dir(value, axis_min, axis_max, plot, false)
+}
+
+fn x_of_dir(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, reversed: bool) -> f64 {
     let span = (axis_max - axis_min).max(1e-12);
-    let t = (value - axis_min) / span;
+    let mut t = (value - axis_min) / span;
+    if reversed {
+        t = 1.0 - t;
+    }
     plot.x + t * plot.w
 }
 
@@ -2169,7 +2187,7 @@ fn paint_bar(
     // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
     if chart.grid {
         for value in &ticks {
-            let x = x_of(*value, axis_min, axis_max, &plot).round() as i32;
+            let x = x_of_dir(*value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
             canvas.vline_i(x, plot_y, plot_b, INK);
         }
     }
@@ -2178,7 +2196,7 @@ fn paint_bar(
         if (at_major - at_major.round()).abs() < 1e-8 {
             continue;
         }
-        let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
+        let x = x_of_dir(value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
         canvas.vline_i(
             x,
             axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
@@ -2186,7 +2204,10 @@ fn paint_bar(
             INK,
         );
     }
-    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
+    if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+    }
+    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed);
     draw_horizontal_value_labels(
         canvas,
         chart,
@@ -2196,8 +2217,9 @@ fn paint_bar(
         font,
         gdi.as_ref(),
         label_px,
+        scale.reversed,
     )?;
-    let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
+    let zero_x = x_of_dir(scale.crossing(), axis_min, axis_max, &plot, scale.reversed).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
     canvas.hline_i(plot_x, plot_r, axis_y, INK);
     draw_cat_ticks_y(
@@ -2240,7 +2262,7 @@ fn paint_bar(
     };
     for (tick, label) in ticks.iter().zip(&tick_labels) {
         let w = text_width(font, gdi.as_ref(), label, label_px);
-        let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
+        let x = x_of_dir(*tick, axis_min, axis_max, &plot, scale.reversed) - w / 2.0;
         draw_text(
             canvas,
             font,
@@ -2630,7 +2652,7 @@ fn paint(
     // autoZero category labels follow the crossing axis. When that axis is
     // inside the plot (or at its top for negative-only values), keeping the
     // bottom category-label gutter shortens every tick interval and moves 0.
-    if scale.crossing() > axis_min + 1e-12 {
+    if !scale.category_labels_below() {
         plot_b = canvas.h as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP);
         if !chart.legend_spec.legacy {
             plot_b -= legend_layout.reserve()[3];
@@ -2638,7 +2660,8 @@ fn paint(
     }
     // Official crosses=max keeps the category-label gutter on the top edge and
     // releases the unused bottom gutter. A crossesAt that merely clamps to max
-    // (F16-6) does not get this top gutter.
+    // (F16-6) does not get this top gutter. Official valAx maxMin with the
+    // crossing at min likewise keeps the category labels in the top gutter.
     if scale.category_labels_above() {
         plot_y += scale_plot_trailing(canvas.dpi, INSET_BOTTOM)
             - scale_plot_leading(canvas.dpi, INSET_TOP);
@@ -2669,7 +2692,7 @@ fn paint(
     }
     if chart.grid && !regular {
         for value in &ticks {
-            let y = y_of(*value, axis_min, axis_max, &plot).ceil() as i32;
+            let y = y_map(*value, axis_min, axis_max, &plot, log_base, scale.reversed).ceil() as i32;
             canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
@@ -2691,7 +2714,7 @@ fn paint(
             if (at_major - at_major.round()).abs() < 1e-8 {
                 continue;
             }
-            let y = y_of(value, axis_min, axis_max, &plot).round() as i32;
+            let y = y_map(value, axis_min, axis_max, &plot, None, scale.reversed).round() as i32;
             canvas.hline_i(
                 axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
                 axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
@@ -2710,14 +2733,26 @@ fn paint(
             step,
             log_base,
             scale.crossing(),
+            scale.reversed,
         ),
-        PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base),
-        PlotKind::StandardArea => {
-            draw_areas(canvas, chart, &plot, axis_min, axis_max, scale.crossing())
+        PlotKind::StandardLine => {
+            draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed)
         }
+        PlotKind::StandardArea => draw_areas(
+            canvas,
+            chart,
+            &plot,
+            axis_min,
+            axis_max,
+            scale.crossing(),
+            scale.reversed,
+        ),
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
+    }
+    if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
     draw_value_labels(
         canvas,
@@ -2732,7 +2767,7 @@ fn paint(
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     let category_y =
-        crossing_axis_y_mode(&plot, axis_min, axis_max, step, scale.crossing(), log_base);
+        crossing_axis_y_mode(&plot, axis_min, axis_max, step, scale.crossing(), log_base, scale.reversed);
     canvas.hline_i(axis_x, plot_r, category_y, INK);
     draw_cat_ticks(
         canvas,
@@ -2756,6 +2791,7 @@ fn paint(
         category_y,
         log_base,
         scale.category_labels_above(),
+        scale.reversed,
     );
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -2870,6 +2906,7 @@ fn draw_lines(
     axis_min: f64,
     axis_max: f64,
     log_base: Option<f64>,
+    reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
@@ -2883,7 +2920,7 @@ fn draw_lines(
             for (ci, value) in ser.values.iter().enumerate() {
                 match value {
                     Some(v) if v.is_finite() => {
-                        run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, log_base));
+                        run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                     }
                     _ if ser.unavailable_points.get(ci).copied().unwrap_or(false)
                         || (ser.span_blanks
@@ -2905,7 +2942,7 @@ fn draw_lines(
                 if !v.is_finite() {
                     continue;
                 }
-                let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max, log_base);
+                let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
                 paint_marker(canvas, ser.marker, x, y, marker_color);
             }
         }
@@ -2920,6 +2957,7 @@ fn line_point(
     axis_min: f64,
     axis_max: f64,
     log_base: Option<f64>,
+    reversed: bool,
 ) -> (f64, f64) {
     let x = plot.x + slot * (ci as f64 + 0.5);
     let y = y_map(
@@ -2928,6 +2966,7 @@ fn line_point(
         axis_max,
         plot,
         log_base,
+        reversed,
     );
     (x, y)
 }
@@ -2945,13 +2984,14 @@ fn draw_areas(
     axis_min: f64,
     axis_max: f64,
     origin: f64,
+    reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
         return;
     }
-    let zero_y = y_of(origin.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let zero_y = y_map(origin.clamp(axis_min, axis_max), axis_min, axis_max, plot, None, reversed);
     for ser in &chart.series {
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
@@ -2959,10 +2999,10 @@ fn draw_areas(
         for (ci, value) in ser.values.iter().enumerate() {
             match value {
                 Some(v) if v.is_finite() => {
-                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, None));
+                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, None, reversed));
                 }
                 None if chart.area_missing_as_zero => {
-                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max, None));
+                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max, None, reversed));
                 }
                 _ => {
                     fill_area_run(canvas, &run, zero_y, fill);
@@ -3211,6 +3251,7 @@ fn draw_clustered_bars(
     plot: &Rect,
     axis_min: f64,
     axis_max: f64,
+    reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
@@ -3224,7 +3265,7 @@ fn draw_clustered_bars(
     let bar_h = slot / denom;
     let cluster = bar_h * (n - (n - 1.0) * overlap);
     let side = (slot - cluster) / 2.0;
-    let x_zero = x_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let x_zero = x_of_dir(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
     let n_ser = chart.series.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
@@ -3243,7 +3284,7 @@ fn draw_clustered_bars(
                 si
             };
             let y = origin + place as f64 * bar_h * (1.0 - overlap);
-            let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let x_val = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let w = (x_zero - x_val).abs();
             if w < 0.2 || bar_h < 0.2 {
                 continue;
@@ -3281,6 +3322,7 @@ fn draw_horizontal_value_labels(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
+    reversed: bool,
 ) -> Result<(), Error> {
     let n = chart.series.len().max(1);
     let overlap = chart.overlap / 100.0;
@@ -3307,7 +3349,7 @@ fn draw_horizontal_value_labels(
             let Some(text) = value_label_text(*value) else {
                 continue;
             };
-            let end = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let end = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let width = text_width(font, gdi, &text, px);
             let height = value_label_height(font, gdi, px);
             let x = if *value < 0.0 {
@@ -3487,8 +3529,12 @@ fn column_bar_bounds(
     } else {
         let x0 = round_half_even(x0);
         let x1_open = round_half_even(x1);
-        if value >= origin {
-            // Keep the supplied shape edge on the side away from the crossing.
+        // Inclusive edge at the crossing belongs to the visually upper
+        // bar; the lower bar starts on the next row. Using y_val vs y_zero
+        // (not value vs origin) keeps this true when orientation=maxMin
+        // flips the growth direction.
+        let _ = origin;
+        if y_val <= y_zero {
             [x0, y_val, x1_open, y_zero]
         } else {
             [x0, y_zero + 1, x1_open, y_val]
@@ -3505,6 +3551,7 @@ fn draw_bars(
     step: f64,
     log_base: Option<f64>,
     axis_origin: f64,
+    reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
@@ -3529,6 +3576,7 @@ fn draw_bars(
         step,
         axis_origin.clamp(axis_min, axis_max),
         log_base,
+        reversed,
     );
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin = plot.x + slot * ci as f64 + side;
@@ -3542,9 +3590,9 @@ fn draw_bars(
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
             let clipped = value.clamp(axis_min, axis_max);
             let y_val = if value < axis_origin && log_base.is_none() {
-                crossing_axis_y(plot, axis_min, axis_max, step, clipped)
+                crossing_axis_y_mode(plot, axis_min, axis_max, step, clipped, None, reversed)
             } else {
-                y_map(clipped, axis_min, axis_max, plot, log_base).round() as i32
+                y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
             };
             if y_val == y_zero || bar_w < 0.2 {
                 continue;
@@ -3593,9 +3641,10 @@ fn draw_tick_labels(
     category_y: i32,
     log_base: Option<f64>,
     labels_above: bool,
+    reversed: bool,
 ) {
     for (tick, label) in ticks.iter().zip(labels) {
-        let y = y_map(*tick, axis_min, axis_max, plot, log_base);
+        let y = y_map(*tick, axis_min, axis_max, plot, log_base, reversed);
         let w = text_width(font, gdi, label, px);
         let h = text_height(font, px);
         draw_text(
@@ -3763,11 +3812,18 @@ fn tick_values(min: f64, max: f64, step: f64) -> Vec<f64> {
 }
 
 fn y_of(value: f64, axis_min: f64, axis_max: f64, plot: &Rect) -> f64 {
-    y_map(value, axis_min, axis_max, plot, None)
+    y_map(value, axis_min, axis_max, plot, None, false)
 }
 
-fn y_map(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, log_base: Option<f64>) -> f64 {
-    let t = if let Some(base) = log_base {
+fn y_map(
+    value: f64,
+    axis_min: f64,
+    axis_max: f64,
+    plot: &Rect,
+    log_base: Option<f64>,
+    reversed: bool,
+) -> f64 {
+    let mut t = if let Some(base) = log_base {
         let lo = axis_min.log(base);
         let hi = axis_max.log(base);
         let v = value.max(axis_min).log(base);
@@ -3776,6 +3832,9 @@ fn y_map(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, log_base: Option
         let span = (axis_max - axis_min).max(1e-12);
         (value - axis_min) / span
     };
+    if reversed {
+        t = 1.0 - t;
+    }
     plot.y + plot.h - t * plot.h
 }
 
@@ -5894,7 +5953,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false);
         // Three equal path widths are 221 / 7.5 pixels. The middle path
         // crosses columns 130..160: rounding two fill edges and subtracting
         // one instead loses both outline sides (131..159).
@@ -5925,7 +5984,7 @@ mod tests {
             w: 2.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false);
         assert_eq!(row_ink_runs(&canvas.px, canvas.w, 30), vec![(35, 37)]);
     }
 
@@ -5983,7 +6042,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0);
+        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0, false);
         // Verify both path edges of all 60 columns, not a run count: an
         // unfilled 1.47px-wide path can have two separated 1px edges.
         let slot = 221.0 / 60.0;
@@ -8136,7 +8195,7 @@ mod tests {
                 if mode == "zero" { Some(0.0) } else { None }
             );
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false);
             canvases.push(canvas);
         }
         let ink = |canvas: &Canvas, x: usize, y: usize| {
@@ -8160,7 +8219,7 @@ mod tests {
             assert_eq!(chart.series[0].values[1], None, "NA is never a zero point");
             assert!(chart.series[0].unavailable_points[1]);
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false);
             assert!(
                 ink(&canvas, 150, 50),
                 "Excel16 NA probe connects across NA: {mode}"
@@ -8362,6 +8421,7 @@ mod tests {
                             None,
                             Some(&face),
                             14.0,
+                            false,
                         )
                         .unwrap();
                     } else {
@@ -8609,6 +8669,7 @@ mod tests {
                     None,
                     Some(&face),
                     14.0,
+                    false,
                 )
                 .unwrap();
                 // Left of the negative end, right of zero, and right of positive
@@ -10599,7 +10660,7 @@ mod tests {
         assert_eq!(ticks, vec![1.0, 10.0, 100.0, 1000.0]);
         let ys: Vec<i32> = ticks
             .iter()
-            .map(|v| super::y_map(*v, 1.0, 1000.0, &plot, Some(10.0)).round() as i32)
+            .map(|v| super::y_map(*v, 1.0, 1000.0, &plot, Some(10.0), false).round() as i32)
             .collect();
         assert_eq!(ys, vec![310, 210, 110, 10]);
         assert_eq!(
@@ -10638,6 +10699,7 @@ mod tests {
             10.0,
             Some(10.0),
             1.0,
+            false,
         );
         let accent = FALLBACK_ACCENTS[0];
         let near = |px: &[u8]| {
@@ -10784,7 +10846,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0);
+        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0, false);
         let origin_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 2.0);
         let zero_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 0.0);
         assert_ne!(origin_y, zero_y);
@@ -10959,6 +11021,7 @@ mod tests {
             2.0,
             None,
             -8.0,
+            false,
         );
         let mut below_min = 0u32;
         let mut min_fill = 0u32;
@@ -10987,6 +11050,7 @@ mod tests {
             2.0,
             None,
             8.0,
+            false,
         );
         let mut above_max = 0u32;
         let mut max_fill = 0u32;
@@ -11319,6 +11383,308 @@ mod tests {
             "",
         )
         .expect_err("currency formatCode stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_orientation(xml: &str, mode: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let inject = format!(r#"<c:orientation val="{mode}"/>"#);
+        let new_val = if let Some((head, tail)) = val.split_once("<c:orientation val=\"") {
+            let close = tail.find('"').expect("orientation close");
+            format!("{}<c:orientation val=\"{}{}", head, mode, &tail[close..])
+        } else if val.contains("<c:scaling>") {
+            val.replacen("<c:scaling>", &format!("<c:scaling>{inject}"), 1)
+        } else {
+            let gt = val.find('>').expect("valAx open tag");
+            format!(
+                "{}<c:scaling>{inject}</c:scaling>{}",
+                &val[..=gt],
+                &val[gt + 1..]
+            )
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..].contains(&inject),
+            "fixture must carry valAx orientation {mode}"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_orientation_max_min_flips_columns_lines_and_bars() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let xml = with_val_orientation(&mixed, "maxMin");
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(
+            &doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(chart.axis.reversed);
+        let mixed_scale = super::axis::scale(&chart.series, chart.axis, 10).unwrap();
+        assert!(!mixed_scale.category_labels_above());
+        assert!(!mixed_scale.category_labels_below());
+
+        let png = render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let minmax_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let minmax_png = render_rgb_chart(
+            &minmax_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let (_, _, minmax_rgb) = png_rgb(&minmax_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let centroid_y = |rgb: &[u8], x0: u32, x1: u32| {
+            let mut sum = 0u64;
+            let mut n = 0u64;
+            for y in 0..h {
+                for x in x0..x1 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        sum += u64::from(y);
+                        n += 1;
+                    }
+                }
+            }
+            assert!(n > 0, "expected accent fill in x={x0}..{x1}");
+            sum as f64 / n as f64
+        };
+        // Official F19-2: negative A/B grow upward (toward -8 at the top).
+        // The first category (A=-4) occupies the left of the plot. Do not use
+        // the longest dark row as the crossing: major grids are the same length
+        // as the category axis and the top grid wins first.
+        let mid = w / 2;
+        let left_maxmin = centroid_y(&rgb, 0, mid);
+        let right_maxmin = centroid_y(&rgb, mid, w);
+        assert!(
+            left_maxmin + 8.0 < right_maxmin,
+            "official maxMin grows negative columns toward the top; left={left_maxmin} right={right_maxmin}"
+        );
+        let left_minmax = centroid_y(&minmax_rgb, 0, mid);
+        let right_minmax = centroid_y(&minmax_rgb, mid, w);
+        assert!(
+            left_minmax > right_minmax + 8.0,
+            "minMax control grows negative columns downward; left={left_minmax} right={right_minmax}"
+        );
+
+        let pos = with_val_orientation(
+            &mixed_column_xml(&[2.0, 4.0, 6.0, 8.0])
+                .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="0"/>"#)
+                .replace(r#"<c:max val="5"/>"#, r#"<c:max val="10"/>"#)
+                .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#),
+            "maxMin",
+        );
+        let pos_doc = crate::xml::parse(pos.as_bytes()).unwrap();
+        let pos_chart = read_chart(
+            &pos_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(pos_chart.axis.reversed);
+        let pos_scale = super::axis::scale(&pos_chart.series, pos_chart.axis, 10).unwrap();
+        assert!(pos_scale.category_labels_above());
+        assert!(!pos_scale.category_labels_below());
+        let pos_png = render_rgb_chart(
+            &pos_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let pos_minmax_xml = mixed_column_xml(&[2.0, 4.0, 6.0, 8.0])
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="0"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="10"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#);
+        let pos_minmax_png = render_rgb_chart(
+            &crate::xml::parse(pos_minmax_xml.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let dark_band = |png: &[u8], y0: u32, y1: u32| {
+            let (w, _, rgb) = png_rgb(png);
+            let mut n = 0u32;
+            for y in y0..y1 {
+                for x in 0..w {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let (_, ph, _) = png_rgb(&pos_png);
+        let top = dark_band(&pos_png, 0, ph / 6);
+        let bottom = dark_band(&pos_png, (ph * 5) / 6, ph);
+        let top_ctrl = dark_band(&pos_minmax_png, 0, ph / 6);
+        let bottom_ctrl = dark_band(&pos_minmax_png, (ph * 5) / 6, ph);
+        assert!(
+            top > bottom && top > top_ctrl,
+            "positive maxMin keeps category labels in the top gutter; top={top} bottom={bottom} ctrl_top={top_ctrl} ctrl_bottom={bottom_ctrl}"
+        );
+        assert!(
+            bottom_ctrl > bottom,
+            "positive minMax keeps category labels in the bottom gutter; bottom={bottom} ctrl_bottom={bottom_ctrl}"
+        );
+
+        let neg = with_val_orientation(
+            &mixed_column_xml(&[-8.0, -5.0, -3.0, -1.0])
+                .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-10"/>"#)
+                .replace(r#"<c:max val="5"/>"#, r#"<c:max val="0"/>"#)
+                .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#),
+            "maxMin",
+        );
+        let neg_doc = crate::xml::parse(neg.as_bytes()).unwrap();
+        let neg_chart = read_chart(
+            &neg_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let neg_scale = super::axis::scale(&neg_chart.series, neg_chart.axis, 10).unwrap();
+        assert!(neg_scale.category_labels_below());
+        assert!(!neg_scale.category_labels_above());
+        render_rgb_chart(
+            &neg_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+
+        render_line(&with_val_orientation(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "maxMin",
+        ))
+        .unwrap();
+
+        let bar_vals = [Some(2.0), Some(4.0), Some(6.0), Some(8.0)];
+        let bar_base = bar_xml(&line_ser(0, "S", &bar_vals, ""), "", "minMax", Some("bar"));
+        let bar_png = render_bar(&with_val_orientation(&bar_base, "maxMin")).unwrap();
+        let minmax_bar = render_bar(&bar_base).unwrap();
+        let (bw, bh, brgb) = png_rgb(&bar_png);
+        let (_, _, mrgb) = png_rgb(&minmax_bar);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let centroid_x = |rgb: &[u8]| {
+            let mut sum = 0u64;
+            let mut n = 0u64;
+            for y in 0..bh {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        sum += u64::from(x);
+                        n += 1;
+                    }
+                }
+            }
+            assert!(n > 0, "expected horizontal-bar accent fill");
+            sum as f64 / n as f64
+        };
+        let maxmin_x = centroid_x(&brgb);
+        let minmax_x = centroid_x(&mrgb);
+        // Positive bars grow from the visual zero. Official F19-7 puts max
+        // on the left, so autoZero sits on the right and the fill centroid
+        // stays right of a minMax control (whose zero is on the left).
+        assert!(
+            maxmin_x > minmax_x + 8.0,
+            "official bar maxMin places max on the left so positives grow left from a right-hand zero; maxmin={maxmin_x} minmax={minmax_x}"
+        );
+        // Official F19-7 writes catAx axPos=r with valAx orientation=maxMin.
+        render_bar(&with_val_orientation(
+            &bar_base.replace(r#"<c:axPos val="l"/>"#, r#"<c:axPos val="r"/>"#),
+            "maxMin",
+        ))
+        .unwrap();
+
+        let log = with_val_orientation(
+            &inject_explicit_log10(&mixed_column_xml(&[1.0, 10.0, 100.0, 1000.0])),
+            "maxMin",
+        );
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus orientation=maxMin stays NI"
+        );
+
+        let labeled = xml.replacen(
+            "</c:ser>",
+            r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:ser>"#,
+            1,
+        );
+        let labeled_doc = crate::xml::parse(labeled.as_bytes()).unwrap();
+        let err = render_rgb_chart(
+            &labeled_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect_err("visible value labels plus orientation=maxMin stay NI");
         assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     }
 }

@@ -19,6 +19,8 @@ pub(super) struct Spec {
     /// Official Excel 16 value-axis TickLabels.NumberFormat, written on
     /// valAx/numFmt. Only the uniquely locked literal codes are stored.
     pub tick_format: TickFormat,
+    /// Official Excel 16 valAx scaling orientation=maxMin (ReversePlotOrder).
+    pub reversed: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum CatCrosses {
@@ -36,6 +38,7 @@ pub(super) struct Scale {
     pub crosses_at: Option<f64>,
     pub cat_crosses: CatCrosses,
     pub tick_format: TickFormat,
+    pub reversed: bool,
 }
 /// Official Excel 16 valAx formatCode values locked from Chart.Export at
 /// window DPI 106 (decimal `.`, thousands `,`). Any other code stays NI.
@@ -62,8 +65,23 @@ impl Scale {
         }
     }
     /// Official crosses=max places category labels in the top gutter.
+    /// Official valAx orientation=maxMin places min at the top, so autoZero
+    /// labels sit in the top gutter when the crossing is at min.
     pub fn category_labels_above(&self) -> bool {
-        matches!(self.cat_crosses, CatCrosses::Max)
+        if self.reversed {
+            (self.crossing() - self.min).abs() <= 1e-12
+        } else {
+            matches!(self.cat_crosses, CatCrosses::Max)
+        }
+    }
+    /// Category labels occupy the bottom gutter when the crossing sits on
+    /// the visual bottom edge (minMax at min, or maxMin at max).
+    pub fn category_labels_below(&self) -> bool {
+        if self.reversed {
+            (self.crossing() - self.max).abs() <= 1e-12
+        } else {
+            (self.crossing() - self.min).abs() <= 1e-12
+        }
     }
 }
 
@@ -168,6 +186,13 @@ impl Spec {
         let (crosses_at, cat_crosses) = read_cat_crosses(plot)?;
         spec.crosses_at = crosses_at;
         spec.cat_crosses = cat_crosses;
+        // Official F19 evidence is linear autoZero only. catAx crosses are
+        // applied after read_axis, so the combination is rejected here.
+        if spec.reversed
+            && (spec.crosses_at.is_some() || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
+        }
         Ok(spec)
     }
 
@@ -180,13 +205,14 @@ impl Spec {
             return Err(unsupported());
         }
         let scaling = axis.child_by_local("scaling");
-        if scaling.is_some_and(|s| {
-            s.child_by_local("orientation")
-                .and_then(|e| e.attr_local("val"))
-                .is_some_and(|v| v != "minMax")
-        }) {
-            return Err(unsupported());
-        }
+        let reversed = match scaling
+            .and_then(|s| s.child_by_local("orientation"))
+            .and_then(|e| e.attr_local("val"))
+        {
+            None | Some("minMax") => false,
+            Some("maxMin") => true,
+            _ => return Err(unsupported()),
+        };
         let log_base = match scaling.and_then(|s| s.child_by_local("logBase")) {
             Some(el) => {
                 let value = el
@@ -230,6 +256,7 @@ impl Spec {
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
             tick_format,
+            reversed,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -258,6 +285,14 @@ impl Spec {
             if spec.tick_format != TickFormat::General {
                 return Err(unsupported());
             }
+        }
+        // Official F19 evidence is linear autoZero only.
+        if spec.reversed
+            && (spec.log_base.is_some()
+                || spec.crosses_at.is_some()
+                || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
         }
         Ok(spec)
     }
@@ -357,7 +392,18 @@ pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
         .child_by_local("axPos")
         .and_then(|e| e.attr_local("val"))
         .unwrap_or("");
-    if cat_pos != "l" || val_pos != "b" {
+    let val_orient = val
+        .child_by_local("scaling")
+        .and_then(|s| s.child_by_local("orientation"))
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("minMax");
+    // Official F19-7 writes catAx axPos=r when the value axis is maxMin, but
+    // the category labels still follow the autoZero crossing (mid-plot), not
+    // the right edge. axPos is not a reliable layout signal here; accept r
+    // only in that locked combination. Other positions stay NI.
+    if val_pos != "b"
+        || (cat_pos != "l" && !(cat_pos == "r" && val_orient == "maxMin"))
+    {
         return Err(unsupported());
     }
     if cat
@@ -428,6 +474,7 @@ pub(super) fn scale_values(
         if spec.crosses_at.is_some()
             || !matches!(spec.cat_crosses, CatCrosses::AutoZero)
             || spec.tick_format != TickFormat::General
+            || spec.reversed
         {
             return Err(unsupported());
         }
@@ -444,6 +491,7 @@ pub(super) fn scale_values(
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
             tick_format: TickFormat::General,
+            reversed: false,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -520,6 +568,7 @@ pub(super) fn scale_values(
         crosses_at: spec.crosses_at,
         cat_crosses: spec.cat_crosses,
         tick_format: spec.tick_format,
+        reversed: spec.reversed,
     })
 }
 
@@ -552,6 +601,7 @@ mod tests {
                 crosses_at: None,
                 cat_crosses: CatCrosses::AutoZero,
                 tick_format: TickFormat::General,
+                reversed: false,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -646,11 +696,33 @@ mod tests {
             (s.min, s.max, s.major, s.minor),
             (Some(-2.0), Some(8.0), Some(2.0), Some(0.5))
         );
-        for bad in ["<logBase val='10'/>", "<orientation val='maxMin'/>"] {
+        for bad in ["<logBase val='10'/>", "<orientation val='xyz'/>"] {
             let xml = format!("<plotArea><valAx><scaling>{bad}</scaling></valAx></plotArea>");
             let d = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(Spec::read(&d.root).is_err());
         }
+        let rev = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&rev.root).unwrap();
+        assert!(s.reversed);
+        let log_rev = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><logBase val='10'/><min val='1'/><max val='1000'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&log_rev.root).is_err(),
+            "log plus orientation=maxMin stays NI"
+        );
+        let crosses_rev = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling></valAx><catAx><crosses val='max'/></catAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&crosses_rev.root).is_err(),
+            "orientation=maxMin plus crosses=min/max stays NI"
+        );
         let log = crate::xml::parse(
             b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling></valAx></plotArea>",
         )
@@ -681,6 +753,7 @@ mod tests {
             crosses_at: None,
             cat_crosses: CatCrosses::AutoZero,
             tick_format: TickFormat::General,
+            reversed: false,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
