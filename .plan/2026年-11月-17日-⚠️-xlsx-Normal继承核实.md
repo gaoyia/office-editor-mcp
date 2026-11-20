@@ -10,3 +10,8 @@
 精确缺证：公开兼容规则说明此载入字体语义改写，或Office能保留非零Normal-font引用的独立同语义合法文件。现仅证明本探针族现象，停止扩探针，不研究AA/legend/5 Export边界，不恢复十项功能。
 
 证据：桌面office-editor-PR10-Normal继承核实-20261117-151855；normal-inheritance-certificates.json/six-path-certificates.csv/finite-control-results.csv/index/README。官方规范解释：https://learn.microsoft.com/en-us/answers/questions/1110580/where-is-the-normal-style-font-defined-in-an-xlsx 。
+
+
+## 2026-11-20 t106u 盘点（不改绿）
+
+Office 同语义可比证据仍不足：公开规则只说明载入时可能改写 Normal 字体语义，没有可保留非零 Normal-font 引用的独立合法对照文件。本轮不扩探针、不改 renderer、不把此 6 项强判为仅 DPI 或库 bug。计划保持 ⚠️，不放入待审对照。
