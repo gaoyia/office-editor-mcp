@@ -9,6 +9,9 @@ pub(super) struct Spec {
     pub major: Option<f64>,
     pub minor: Option<f64>,
     pub log_base: Option<f64>,
+    /// Category-axis crossesAt on the value scale. Official Excel 16 writes
+    /// this on catAx when the value-axis CrossesAt is set; valAx stays autoZero.
+    pub crosses_at: Option<f64>,
 }
 pub(super) struct Scale {
     pub min: f64,
@@ -16,16 +19,49 @@ pub(super) struct Scale {
     pub major: f64,
     pub minor: f64,
     pub log_base: Option<f64>,
+    pub crosses_at: Option<f64>,
 }
 impl Scale {
-    /// Default autoZero crosses at zero, or the nearer bound when zero is outside.
+    /// autoZero crosses at zero, or the nearer bound when zero is outside.
+    /// A finite catAx crossesAt uses that value, clamped to the visible scale.
     pub fn crossing(&self) -> f64 {
-        0.0_f64.clamp(self.min, self.max)
+        self.crosses_at.unwrap_or(0.0).clamp(self.min, self.max)
     }
 }
 
 fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
+}
+
+fn read_cat_crosses_at(plot: &Element) -> Result<Option<f64>, Error> {
+    let cats: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .collect();
+    if cats.len() > 1 {
+        return Err(unsupported());
+    }
+    let Some(cat) = cats.first() else {
+        return Ok(None);
+    };
+    let crosses = cat
+        .child_by_local("crosses")
+        .and_then(|e| e.attr_local("val"));
+    if cat.child_by_local("crossesAt").is_some() && crosses.is_some() {
+        return Err(unsupported());
+    }
+    if let Some(el) = cat.child_by_local("crossesAt") {
+        let value = el
+            .attr_local("val")
+            .and_then(|v| v.parse::<f64>().ok())
+            .filter(|v| v.is_finite())
+            .ok_or_else(unsupported)?;
+        return Ok(Some(value));
+    }
+    if crosses.is_some_and(|v| v != "autoZero") {
+        return Err(unsupported());
+    }
+    Ok(None)
 }
 
 fn values_out_of_log_range(raw_min: f64, raw_max: f64, min: f64, max: f64) -> bool {
@@ -55,7 +91,9 @@ impl Spec {
         let Some(axis) = axes.first() else {
             return Ok(Self::default());
         };
-        Self::read_axis(axis)
+        let mut spec = Self::read_axis(axis)?;
+        spec.crosses_at = read_cat_crosses_at(plot)?;
+        Ok(spec)
     }
 
     pub fn read_axis(axis: &Element) -> Result<Self, Error> {
@@ -120,6 +158,7 @@ impl Spec {
             major: read(Some(axis), "majorUnit")?,
             minor: read(Some(axis), "minorUnit")?,
             log_base,
+            crosses_at: None,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -267,6 +306,15 @@ pub(super) fn bar_axes(plot: &Element) -> Result<(Spec, bool), Error> {
     {
         return Err(unsupported());
     }
+    // Horizontal bar crossesAt is not in the F16 official column/line/area set.
+    if cat.child_by_local("crossesAt").is_some()
+        || cat
+            .child_by_local("crosses")
+            .and_then(|e| e.attr_local("val"))
+            .is_some_and(|v| v != "autoZero")
+    {
+        return Err(unsupported());
+    }
     let from_bottom = match cat_orient {
         "minMax" => true,
         "maxMin" => false,
@@ -301,6 +349,10 @@ pub(super) fn scale_values(
     if let Some(base) = spec.log_base {
         let min = spec.min.ok_or_else(unsupported)?;
         let max = spec.max.ok_or_else(unsupported)?;
+        // Official F16 log evidence had autoZero only; custom crosses stay NI.
+        if spec.crosses_at.is_some() {
+            return Err(unsupported());
+        }
         // Out-of-range values (official clip stubs) and non-positive points stay NI.
         if values_out_of_log_range(raw_min, raw_max, min, max) {
             return Err(unsupported());
@@ -311,6 +363,7 @@ pub(super) fn scale_values(
             major: base,
             minor: base,
             log_base: Some(base),
+            crosses_at: None,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -384,6 +437,7 @@ pub(super) fn scale_values(
         major,
         minor,
         log_base: None,
+        crosses_at: spec.crosses_at,
     })
 }
 
@@ -413,6 +467,7 @@ mod tests {
                 major: e["majorUnit"].as_f64(),
                 minor: e["minorUnit"].as_f64(),
                 log_base: None,
+                crosses_at: None,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -539,6 +594,7 @@ mod tests {
             major: None,
             minor: None,
             log_base: Some(10.0),
+            crosses_at: None,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
@@ -553,6 +609,59 @@ mod tests {
         assert!(
             scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10).is_err(),
             "values below the explicit log min must stay NI"
+        );
+    }
+
+    #[test]
+    fn cat_axis_crosses_at_sets_crossing_and_clamps() {
+        let doc = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/></valAx><catAx><crossesAt val='2'/></catAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&doc.root).unwrap();
+        assert_eq!(s.crosses_at, Some(2.0));
+        let got = scale_values(
+            [Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)].into_iter(),
+            s,
+            10,
+        )
+        .unwrap();
+        assert_eq!(got.crossing(), 2.0);
+        let outside = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling></valAx><catAx><crossesAt val='10'/></catAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&outside.root).unwrap();
+        let got = scale_values([Some(-4.0), Some(6.0)].into_iter(), s, 10).unwrap();
+        assert_eq!(
+            got.crossing(),
+            8.0,
+            "official F16-6 clamps crossesAt to max"
+        );
+        let val_ax = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><crossesAt val='2'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&val_ax.root).is_err(),
+            "valAx crossesAt is not the official Excel 16 encoding"
+        );
+        let crosses_min = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling></valAx><catAx><crosses val='min'/></catAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&crosses_min.root).is_err(),
+            "catAx crosses=min/max stay NI until F17"
+        );
+        let log = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling></valAx><catAx><crossesAt val='10'/></catAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&log.root).unwrap();
+        assert!(
+            scale_values([Some(1.0), Some(10.0), Some(100.0)].into_iter(), s, 10).is_err(),
+            "log plus custom crossesAt stays NI"
         );
     }
 }

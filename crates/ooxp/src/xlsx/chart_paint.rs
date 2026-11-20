@@ -1667,6 +1667,14 @@ fn read_chart(
     if axis.log_base.is_some() && series.iter().any(|ser| ser.value_label.is_some()) {
         return Err(unsupported());
     }
+    if axis.crosses_at.is_some()
+        && !matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::StandardLine | PlotKind::StandardArea
+        )
+    {
+        return Err(unsupported());
+    }
     Ok(ColumnChart {
         categories,
         series,
@@ -2686,11 +2694,20 @@ fn paint(
         }
     }
     match chart.kind {
-        PlotKind::ClusteredColumn => {
-            draw_bars(canvas, chart, &plot, axis_min, axis_max, step, log_base)
-        }
+        PlotKind::ClusteredColumn => draw_bars(
+            canvas,
+            chart,
+            &plot,
+            axis_min,
+            axis_max,
+            step,
+            log_base,
+            scale.crossing(),
+        ),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base),
-        PlotKind::StandardArea => draw_areas(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::StandardArea => {
+            draw_areas(canvas, chart, &plot, axis_min, axis_max, scale.crossing())
+        }
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
@@ -2913,13 +2930,20 @@ fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3
     }
 }
 
-fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+fn draw_areas(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    origin: f64,
+) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
         return;
     }
-    let zero_y = y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let zero_y = y_of(origin.clamp(axis_min, axis_max), axis_min, axis_max, plot);
     for ser in &chart.series {
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
@@ -3438,6 +3462,7 @@ fn column_bar_bounds(
     y_zero: i32,
     y_val: i32,
     value: f64,
+    origin: f64,
     invert: bool,
 ) -> [i32; 4] {
     if value < 0.0 && invert {
@@ -3454,8 +3479,8 @@ fn column_bar_bounds(
     } else {
         let x0 = round_half_even(x0);
         let x1_open = round_half_even(x1);
-        if value >= 0.0 {
-            // Keep the supplied positive shape edge, independently of the grid.
+        if value >= origin {
+            // Keep the supplied shape edge on the side away from the crossing.
             [x0, y_val, x1_open, y_zero]
         } else {
             [x0, y_zero + 1, x1_open, y_val]
@@ -3471,6 +3496,7 @@ fn draw_bars(
     axis_max: f64,
     step: f64,
     log_base: Option<f64>,
+    axis_origin: f64,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
@@ -3493,7 +3519,7 @@ fn draw_bars(
         axis_min,
         axis_max,
         step,
-        0.0_f64.clamp(axis_min, axis_max),
+        axis_origin.clamp(axis_min, axis_max),
         log_base,
     );
     for (ci, _) in chart.categories.iter().enumerate() {
@@ -3507,7 +3533,7 @@ fn draw_bars(
             }
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
             let clipped = value.clamp(axis_min, axis_max);
-            let y_val = if value < 0.0 && log_base.is_none() {
+            let y_val = if value < axis_origin && log_base.is_none() {
                 crossing_axis_y(plot, axis_min, axis_max, step, clipped)
             } else {
                 y_map(clipped, axis_min, axis_max, plot, log_base).round() as i32
@@ -3526,7 +3552,7 @@ fn draw_bars(
                 .copied()
                 .flatten()
                 .unwrap_or(ser.invert_if_negative);
-            let bounds = column_bar_bounds(x, x + bar_w, y_zero, y_val, value, invert);
+            let bounds = column_bar_bounds(x, x + bar_w, y_zero, y_val, value, axis_origin, invert);
             // Inclusive outline edges may coincide for a visible 1px column;
             // coincident half-open fill edges are empty.
             if bounds[2] < bounds[0]
@@ -5462,15 +5488,15 @@ mod tests {
         // Invert frames use inclusive edges; positive fills retain the
         // supplied shape edge rather than unconditionally clearing a grid.
         assert_eq!(
-            column_bar_bounds(57.1, 86.56666666666666, 133, 180, -2.0, true),
+            column_bar_bounds(57.1, 86.56666666666666, 133, 180, -2.0, 0.0, true),
             [57, 133, 86, 180]
         );
         assert_eq!(
-            column_bar_bounds(57.1, 86.56666666666666, 16, 53, -1.0, true),
+            column_bar_bounds(57.1, 86.56666666666666, 16, 53, -1.0, 0.0, true),
             [57, 16, 86, 53]
         );
         assert_eq!(
-            column_bar_bounds(70.0, 107.0, 334, 51, 1.0, true),
+            column_bar_bounds(70.0, 107.0, 334, 51, 1.0, 0.0, true),
             [70, 51, 107, 334]
         );
     }
@@ -5770,7 +5796,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0);
         // Three equal path widths are 221 / 7.5 pixels. The middle path
         // crosses columns 130..160: rounding two fill edges and subtracting
         // one instead loses both outline sides (131..159).
@@ -5801,7 +5827,7 @@ mod tests {
             w: 2.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0);
         assert_eq!(row_ink_runs(&canvas.px, canvas.w, 30), vec![(35, 37)]);
     }
 
@@ -5809,7 +5835,7 @@ mod tests {
     fn inverted_path_edges_keep_fractional_phase_and_integer_translation() {
         for x in [-20.75, -0.25, 0.0, 0.5, 3.9, 130.76666666666665] {
             for width in [0.21, 1.0, 2.5, 29.466666666666665] {
-                let bounds = column_bar_bounds(x, x + width, 10, 40, -1.0, true);
+                let bounds = column_bar_bounds(x, x + width, 10, 40, -1.0, 0.0, true);
                 assert_eq!(
                     bounds,
                     [x.floor() as i32, 10, (x + width).floor() as i32, 40]
@@ -5821,6 +5847,7 @@ mod tests {
                         10,
                         40,
                         -1.0,
+                        0.0,
                         true,
                     );
                     assert_eq!(shifted, [bounds[0] + offset, 10, bounds[2] + offset, 40]);
@@ -5834,7 +5861,7 @@ mod tests {
         // A rasterized shape edge is not the same thing as a grid row.
         // Moving every positive endpoint by 1 also shifts non-major values.
         assert_eq!(
-            column_bar_bounds(10.0, 20.0, 100, 40, 2.3, false),
+            column_bar_bounds(10.0, 20.0, 100, 40, 2.3, 0.0, false),
             [10, 40, 20, 100]
         );
     }
@@ -5858,7 +5885,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None);
+        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0);
         // Verify both path edges of all 60 columns, not a run count: an
         // unfilled 1.47px-wide path can have two separated 1px edges.
         let slot = 221.0 / 60.0;
@@ -10512,6 +10539,7 @@ mod tests {
             1000.0,
             10.0,
             Some(10.0),
+            1.0,
         );
         let accent = FALLBACK_ACCENTS[0];
         let near = |px: &[u8]| {
@@ -10602,6 +10630,138 @@ mod tests {
             Some("bar"),
         ));
         let err = render_bar(&bar).expect_err("bar log scale stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_cat_crosses_at(xml: &str, value: &str) -> String {
+        let xml = xml.replace(
+            r#"<c:crosses val="autoZero"/>
+      </c:catAx>"#,
+            &format!(
+                r#"<c:crossesAt val="{value}"/>
+      </c:catAx>"#
+            ),
+        );
+        let xml = if xml.contains(r#"<c:catAx/>"#) {
+            xml.replace(
+                r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>"#,
+                &format!(
+                    r#"<c:valAx><c:scaling><c:min val="-8"/><c:max val="8"/></c:scaling><c:majorUnit val="2"/><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:crossesAt val="{value}"/></c:catAx>"#
+                ),
+            )
+        } else {
+            xml
+        };
+        // Compact bar fixtures keep autoZero on the same line as </c:catAx>.
+        xml.replace(
+            r#"<c:crosses val="autoZero"/></c:catAx>"#,
+            &format!(r#"<c:crossesAt val="{value}"/></c:catAx>"#),
+        )
+    }
+
+    fn mixed_column_explicit_pm8(values: &[f64]) -> String {
+        mixed_column_xml(values)
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-8"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="8"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#)
+    }
+
+    #[test]
+    fn cat_axis_crosses_at_grows_columns_and_areas_from_the_crossing() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let xml = with_cat_crosses_at(&mixed_column_explicit_pm8(&values), "2");
+        assert!(
+            xml.contains(r#"<c:crossesAt val="2"/>"#),
+            "fixture must carry catAx crossesAt"
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(chart.axis.crosses_at, Some(2.0));
+        let mut canvas = Canvas::new(300, 220);
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0);
+        let origin_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 2.0);
+        let zero_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 0.0);
+        assert_ne!(origin_y, zero_y);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let mut above_origin = 0u32;
+        let mut between_origin_and_zero = 0u32;
+        for y in 0..canvas.h {
+            for x in 0..canvas.w {
+                let i = (y as usize * canvas.w as usize + x as usize) * 3;
+                if !near(&canvas.px[i..i + 3]) {
+                    continue;
+                }
+                if (y as i32) < origin_y {
+                    above_origin += 1;
+                }
+                if origin_y < y as i32 && (y as i32) < zero_y {
+                    between_origin_and_zero += 1;
+                }
+            }
+        }
+        assert!(
+            above_origin > 0,
+            "values above the crossing must fill toward it"
+        );
+        assert_eq!(
+            between_origin_and_zero, 0,
+            "columns must not keep growing to zero once crossesAt is set"
+        );
+
+        render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_line(&with_cat_crosses_at(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "2",
+        ))
+        .unwrap();
+        render_area(&with_cat_crosses_at(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "2",
+        ))
+        .unwrap();
+        let bar = with_cat_crosses_at(
+            &bar_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+                "maxMin",
+                Some("bar"),
+            ),
+            "2",
+        );
+        assert!(
+            bar.contains(r#"<c:crossesAt val="2"/>"#),
+            "bar fixture must carry catAx crossesAt"
+        );
+        let err = render_bar(&bar).expect_err("bar crossesAt stays NI");
         assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
     }
 }
