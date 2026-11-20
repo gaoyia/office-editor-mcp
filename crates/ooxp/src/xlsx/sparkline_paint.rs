@@ -75,6 +75,48 @@ impl Raster {
         }
         encode_png(self.width, self.height, &rgb, self.dpi)
     }
+
+    /// 把可绘制宿主扩成官方 CopyPicture 画布：宽高各 +1。
+    /// 网格开着时外框为 #E0E0E0，关掉时外缝留白。墨迹仍在原矩形，不拉到外缝上。
+    pub fn with_copy_picture_frame(self, grid: bool) -> Result<Self, Error> {
+        let w = self.width;
+        let h = self.height;
+        let Some(nw) = w.checked_add(1) else {
+            return Err(unsupported());
+        };
+        let Some(nh) = h.checked_add(1) else {
+            return Err(unsupported());
+        };
+        if nw > MAX_PX || nh > MAX_PX {
+            return Err(unsupported());
+        }
+        let mut out = Raster::new(nw, nh, self.dpi);
+        for y in 0..h {
+            for x in 0..w {
+                let si = (y * w + x) as usize;
+                let di = (y * nw + x) as usize;
+                out.rgb[di * 3..di * 3 + 3].copy_from_slice(&self.rgb[si * 3..si * 3 + 3]);
+                out.coverage[di] = self.coverage[si];
+            }
+        }
+        if grid {
+            const GRID: [u8; 3] = [224, 224, 224];
+            let stamp = |canvas: &mut Raster, x: u32, y: u32| {
+                let i = (y * canvas.width + x) as usize;
+                canvas.rgb[i * 3..i * 3 + 3].copy_from_slice(&GRID);
+                canvas.coverage[i] = 1.0;
+            };
+            for x in 0..nw {
+                stamp(&mut out, x, 0);
+                stamp(&mut out, x, nh - 1);
+            }
+            for y in 0..nh {
+                stamp(&mut out, 0, y);
+                stamp(&mut out, nw - 1, y);
+            }
+        }
+        Ok(out)
+    }
 }
 
 #[allow(dead_code)]

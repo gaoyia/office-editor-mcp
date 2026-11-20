@@ -132,7 +132,8 @@ fn normal_font_matrix_matches_across_exports() {
                 (4 * col + 1, 21),
                 "sheet {face} {pt} default={default}"
             );
-            assert_eq!((pw, ph), (col, 20), "spark {face}");
+            // standalone spark uses the same CopyPicture +1 frame as a one-cell sheet
+            assert_eq!((pw, ph), (col + 1, 21), "spark {face}");
             let (cw, ch, _) = png(
                 &chart(&book, false),
                 "exportChartImage",

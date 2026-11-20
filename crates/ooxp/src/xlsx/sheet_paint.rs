@@ -351,7 +351,10 @@ fn reject_rtl_extras(sheet: &Element) -> Result<(), Error> {
 }
 
 /// 没写 `showGridLines` 时默认开着。`0` 和 `false` 关掉。
-fn shows_grid(sheet: &Element) -> bool {
+/// 官方 Excel 16.0 `Range.CopyPicture(xlScreen, xlBitmap)` 在窗口网格开启时画出
+/// #E0E0E0 网格，关掉时同一尺寸留白；两种情况的画布都是 Σpx+1。库按文件属性出图，
+/// 不跟随实时窗口开关。
+pub(crate) fn shows_grid(sheet: &Element) -> bool {
     let Some(view) = sheet
         .child_by_local("sheetViews")
         .and_then(|views| views.child_by_local("sheetView"))
@@ -361,6 +364,36 @@ fn shows_grid(sheet: &Element) -> bool {
     !view
         .attr("showGridLines")
         .is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+}
+
+/// 独立迷你图宿主的可绘制宽高（不含 CopyPicture 右边/底边那 1 像素外缝）。
+/// 列规则与 `GeometryContext` 相同；行规则与工作表出图相同：写了 `defaultRowHeight`
+/// 但没有 `customHeight` 时，不用这个字面值，改用常规样式行高
+///（Calibri 11 / 等线 11 为 14.25 磅，106 dpi 为 21 像素）。
+/// 官方 raw 画布是可绘制宽高各 +1，见 `Axis::bitmap`。
+pub(crate) fn spark_host_drawable_px(
+    pkg: &Package,
+    sheet_name: &str,
+    sheet: &Element,
+    col: u32,
+    row: u32,
+    dpi: RenderDpi,
+) -> Result<(u32, u32), Error> {
+    let wb_part = crate::opc::office_document_part(pkg)?;
+    let rels = Relationships::from_package(pkg, &wb_part)?;
+    let sst = inspect::load_shared_strings(pkg, &wb_part, &rels)?;
+    let mut styles = load_styles(pkg, &wb_part, &rels)?;
+    styles.geometry = styles.geometry.with_dpi(dpi)?;
+    let mut session = eval::FormulaSession::open(pkg, sheet_name)?;
+    let cells = read_cells(sheet, &sst, &mut session)?;
+    let cols = column_sizes(sheet, &styles.geometry, col, col)?;
+    let rows = row_sizes(sheet, &styles, &cells, row, row)?;
+    let width = *cols.first().ok_or_else(unsupported)?;
+    let height = *rows.first().ok_or_else(unsupported)?;
+    if width < 1 || height < 1 {
+        return Err(unsupported());
+    }
+    Ok((width as u32, height as u32))
 }
 
 /// 条件格式把隐藏格子算进最小、最大时，可见格子的颜色会变。这一期不猜，整表不画。
@@ -8387,7 +8420,11 @@ mod wrap_indent_space_overflow {
         let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
         assert_eq!(
             trimmed,
-            vec!["one two".to_string(), "three four".to_string(), "five".to_string()],
+            vec![
+                "one two".to_string(),
+                "three four".to_string(),
+                "five".to_string()
+            ],
             "lines={lines:?} max_w={max_w} three four width={}",
             face.width("three four")
         );
@@ -8402,7 +8439,11 @@ mod wrap_indent_space_overflow {
         let trimmed: Vec<String> = lines.iter().map(|s| s.trim_end().to_string()).collect();
         assert_eq!(
             trimmed,
-            vec!["one two".to_string(), "three four".to_string(), "five".to_string()]
+            vec![
+                "one two".to_string(),
+                "three four".to_string(),
+                "five".to_string()
+            ]
         );
     }
 }

@@ -943,18 +943,16 @@ fn raster_group(
     {
         return Err(image_unsupported());
     }
-    let (width, height) = match host_size {
-        Some(size) => size,
+    // 内嵌迷你图由工作表提供可绘制格子大小（画布外缝已在 Axis::bitmap 里）。
+    // 独立出图对齐官方 CopyPicture：用与工作表出图相同的可绘制宽高，再加 1 像素外缝。
+    let (width, height, framed) = match host_size {
+        Some(size) => (size.0, size.1, false),
         None => {
-            let geometry = super::geometry::GeometryContext::from_package(pkg)
-                .map_err(|_| image_unsupported())?
-                .with_dpi(dpi)
-                .map_err(|_| image_unsupported())?;
-            let width = geometry
-                .column_px(sheet, host.col)
-                .map_err(|_| image_unsupported())? as u32;
-            let height = layout::row_height_px_at(sheet, host.row, dpi);
-            (width, height)
+            let (width, height) = super::sheet_paint::spark_host_drawable_px(
+                pkg, sheet_name, sheet, host.col, host.row, dpi,
+            )
+            .map_err(|_| image_unsupported())?;
+            (width, height, true)
         }
     };
     let dates = group_dates(group, pkg, sheets, sheet_name, sheet, cells, cached.len())?;
@@ -973,14 +971,15 @@ fn raster_group(
             }
         }
         let colors = column_colors(group, &values, color)?;
-        return super::sparkline_paint::raster_columns_at(
+        let raster = super::sparkline_paint::raster_columns_at(
             width,
             height,
             &values,
             &colors,
             dates.as_deref(),
             dpi,
-        );
+        )?;
+        return frame_standalone(raster, sheet, framed);
     }
     if win_loss {
         let axis_min = axis_end(group, "minAxisType", "manualMin")?;
@@ -998,7 +997,7 @@ fn raster_group(
             values.push(win_loss_point(value)?);
         }
         let neg = negative_rgb(group)?;
-        return super::sparkline_paint::raster_win_loss_at(
+        let raster = super::sparkline_paint::raster_win_loss_at(
             width,
             height,
             &values,
@@ -1007,7 +1006,8 @@ fn raster_group(
             attr_on(group, "negative"),
             dates.as_deref(),
             dpi,
-        );
+        )?;
+        return frame_standalone(raster, sheet, framed);
     }
     let values = cached.iter().map(point_of).collect();
     let spec = super::sparkline_paint::LineSpec {
@@ -1019,7 +1019,20 @@ fn raster_group(
         weight_px: line_weight_px(group, dpi)?,
         dates,
     };
-    super::sparkline_paint::raster_line_at(width, height, &spec, dpi)
+    let raster = super::sparkline_paint::raster_line_at(width, height, &spec, dpi)?;
+    frame_standalone(raster, sheet, framed)
+}
+
+fn frame_standalone(
+    raster: super::sparkline_paint::Raster,
+    sheet: &Element,
+    framed: bool,
+) -> Result<super::sparkline_paint::Raster, Error> {
+    if framed {
+        raster.with_copy_picture_frame(super::sheet_paint::shows_grid(sheet))
+    } else {
+        Ok(raster)
+    }
 }
 
 fn plain_flags(group: &Element) -> bool {
