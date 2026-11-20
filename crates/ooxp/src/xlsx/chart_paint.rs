@@ -1680,6 +1680,15 @@ fn read_chart(
     {
         return Err(unsupported());
     }
+    // Official F20 evidence is clustered column, standard line, and clustered bar.
+    if axis.deleted
+        && !matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::StandardLine | PlotKind::ClusteredBar
+        )
+    {
+        return Err(unsupported());
+    }
     Ok(ColumnChart {
         categories,
         series,
@@ -1750,7 +1759,7 @@ fn paint_scatter(
         chart.axis,
         axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
-    if y_scale.reversed {
+    if y_scale.reversed || y_scale.deleted {
         return Err(unsupported());
     }
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
@@ -1814,7 +1823,7 @@ fn paint_scatter(
         x_spec,
         x_budget,
     )?;
-    if x_scale.reversed {
+    if x_scale.reversed || x_scale.deleted {
         return Err(unsupported());
     }
     // When 0 is inside the X scale, the vertical axis sits at x=0 inside the
@@ -2111,6 +2120,7 @@ fn paint_bar(
     // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
     // INSET_BOTTOM. This is not a guessed 1px shift.
     let val_axis_at_top = !chart.cats_from_bottom;
+    let val_deleted = chart.axis.deleted;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
     let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
@@ -2128,11 +2138,11 @@ fn paint_bar(
         if matches!(host, ChartHost::Slide) {
             y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
-        if val_axis_at_top {
+        if val_axis_at_top && !val_deleted {
             y += val_label_top;
         }
         y
-    } else if val_axis_at_top {
+    } else if val_axis_at_top && !val_deleted {
         val_label_top
     } else {
         unused_top
@@ -2140,7 +2150,7 @@ fn paint_bar(
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
-        - if val_axis_at_top {
+        - if val_axis_at_top || val_deleted {
             unused_bottom
         } else {
             val_label_bottom
@@ -2191,18 +2201,20 @@ fn paint_bar(
             canvas.vline_i(x, plot_y, plot_b, INK);
         }
     }
-    for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
-        let at_major = (value - axis_min) / step;
-        if (at_major - at_major.round()).abs() < 1e-8 {
-            continue;
+    if !scale.deleted {
+        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+            let at_major = (value - axis_min) / step;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let x = x_of_dir(value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
+            canvas.vline_i(
+                x,
+                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
         }
-        let x = x_of_dir(value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
-        canvas.vline_i(
-            x,
-            axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
-            axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
-            INK,
-        );
     }
     if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
@@ -2221,7 +2233,9 @@ fn paint_bar(
     )?;
     let zero_x = x_of_dir(scale.crossing(), axis_min, axis_max, &plot, scale.reversed).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
-    canvas.hline_i(plot_x, plot_r, axis_y, INK);
+    if !scale.deleted {
+        canvas.hline_i(plot_x, plot_r, axis_y, INK);
+    }
     draw_cat_ticks_y(
         canvas,
         chart.categories.len(),
@@ -2254,25 +2268,27 @@ fn paint_bar(
             INK,
         );
     }
-    let tick_h = text_height(font, label_px);
-    let label_top = if val_axis_at_top {
-        f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
-    } else {
-        f64::from(axis_y) + canvas.dpi.scale_f(10.0)
-    };
-    for (tick, label) in ticks.iter().zip(&tick_labels) {
-        let w = text_width(font, gdi.as_ref(), label, label_px);
-        let x = x_of_dir(*tick, axis_min, axis_max, &plot, scale.reversed) - w / 2.0;
-        draw_text(
-            canvas,
-            font,
-            gdi.as_ref(),
-            label,
-            x,
-            label_top,
-            label_px,
-            INK,
-        );
+    if !scale.deleted {
+        let tick_h = text_height(font, label_px);
+        let label_top = if val_axis_at_top {
+            f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
+        } else {
+            f64::from(axis_y) + canvas.dpi.scale_f(10.0)
+        };
+        for (tick, label) in ticks.iter().zip(&tick_labels) {
+            let w = text_width(font, gdi.as_ref(), label, label_px);
+            let x = x_of_dir(*tick, axis_min, axis_max, &plot, scale.reversed) - w / 2.0;
+            draw_text(
+                canvas,
+                font,
+                gdi.as_ref(),
+                label,
+                x,
+                label_top,
+                label_px,
+                INK,
+            );
+        }
     }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -2599,21 +2615,27 @@ fn paint(
     };
     let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let widest_tick = tick_labels
-        .iter()
-        .map(|label| {
-            let width = text_width(font, gdi.as_ref(), label, label_px);
-            // Excel hangs half the minus advance outside the numeric label
-            // column. Counting it as a full digit widens all signed plots.
-            let hanging = if label.starts_with('-') {
-                text_width(font, gdi.as_ref(), "-", label_px) / 2.0
-            } else {
-                0.0
-            };
-            (width - hanging).ceil() as i32
-        })
-        .max()
-        .unwrap_or(0);
+    let widest_tick = if scale.deleted {
+        // Official valAx delete=true releases the value-label gutter; the
+        // axis line and tick labels are omitted. This is not a 1px fudge.
+        0
+    } else {
+        tick_labels
+            .iter()
+            .map(|label| {
+                let width = text_width(font, gdi.as_ref(), label, label_px);
+                // Excel hangs half the minus advance outside the numeric label
+                // column. Counting it as a full digit widens all signed plots.
+                let hanging = if label.starts_with('-') {
+                    text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                } else {
+                    0.0
+                };
+                (width - hanging).ceil() as i32
+            })
+            .max()
+            .unwrap_or(0)
+    };
     let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
     let title_top = canvas.dpi.scale_f(4.0);
@@ -2684,20 +2706,27 @@ fn paint(
     let regular = log_base.is_some()
         || (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
             <= step * 1e-8;
+    let grid_x0 = if scale.deleted {
+        plot_x
+    } else {
+        axis_x - canvas.dpi.scale_px(TICK_OUT)
+    };
     if chart.grid && regular {
         for i in 0..=intervals {
             let y = regular_grid_y(plot_y, plot_b, i, intervals);
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            canvas.hline_i(grid_x0, plot_r, y, INK);
         }
     }
     if chart.grid && !regular {
         for value in &ticks {
             let y = y_map(*value, axis_min, axis_max, &plot, log_base, scale.reversed).ceil() as i32;
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            canvas.hline_i(grid_x0, plot_r, y, INK);
         }
     }
     let parts = step / scale.minor;
-    if log_base.is_some() {
+    if scale.deleted {
+        // Official F20 omits value-axis tick marks along with the axis line.
+    } else if log_base.is_some() {
         // Official Excel 16 log axes in this subset have minorTickMark=none.
     } else if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
         draw_value_minor_ticks(
@@ -2764,7 +2793,9 @@ fn paint(
         gdi.as_ref(),
         label_px,
     )?;
-    canvas.vline_i(axis_x, plot_y, plot_b, INK);
+    if !scale.deleted {
+        canvas.vline_i(axis_x, plot_y, plot_b, INK);
+    }
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     let category_y =
         crossing_axis_y_mode(&plot, axis_min, axis_max, step, scale.crossing(), log_base, scale.reversed);
@@ -2792,6 +2823,7 @@ fn paint(
         log_base,
         scale.category_labels_above(),
         scale.reversed,
+        !scale.deleted,
     );
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -3642,7 +3674,9 @@ fn draw_tick_labels(
     log_base: Option<f64>,
     labels_above: bool,
     reversed: bool,
+    draw_value: bool,
 ) {
+    if draw_value {
     for (tick, label) in ticks.iter().zip(labels) {
         let y = y_map(*tick, axis_min, axis_max, plot, log_base, reversed);
         let w = text_width(font, gdi, label, px);
@@ -3657,6 +3691,7 @@ fn draw_tick_labels(
             px,
             INK,
         );
+    }
     }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
@@ -11686,5 +11721,160 @@ mod tests {
         )
         .expect_err("visible value labels plus orientation=maxMin stay NI");
         assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_delete(xml: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let new_val = if let Some((head, tail)) = val.split_once(r#"<c:delete val=""#) {
+            let close = tail.find('"').expect("delete close");
+            format!(r#"{}<c:delete val="1{}"#, head, &tail[close..])
+        } else {
+            let gt = val.find('>').expect("valAx open tag");
+            format!(r#"{}<c:delete val="1"/>{}"#, &val[..=gt], &val[gt + 1..])
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..].contains(r#"<c:delete val="1"/>"#),
+            "fixture must carry valAx delete=true"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_delete_hides_axis_line_and_releases_gutter() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let control_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let delete_doc = crate::xml::parse(with_val_delete(&mixed).as_bytes()).unwrap();
+        let control_chart = read_chart(
+            &control_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let delete_chart = read_chart(
+            &delete_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(!control_chart.axis.deleted);
+        assert!(delete_chart.axis.deleted);
+
+        let render = |root: &crate::xml::Element| {
+            render_rgb_chart(
+                root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap()
+        };
+        let control_png = render(&control_doc.root);
+        let delete_png = render(&delete_doc.root);
+        let (w, h, crgb) = png_rgb(&control_png);
+        let (_, _, drgb) = png_rgb(&delete_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let first_accent_x = |rgb: &[u8]| {
+            for x in 0..w {
+                for y in 0..h {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        return x;
+                    }
+                }
+            }
+            panic!("expected accent fill");
+        };
+        let left_x = first_accent_x(&crgb);
+        let del_x = first_accent_x(&drgb);
+        assert!(
+            del_x + 8 < left_x,
+            "official delete=true releases the value-label gutter; delete={del_x} control={left_x}"
+        );
+        let dark_left = |rgb: &[u8]| {
+            let mut n = 0u32;
+            for y in h / 6..(h * 5) / 6 {
+                for x in 0..w / 8 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let control_left = dark_left(&crgb);
+        let delete_left = dark_left(&drgb);
+        assert!(
+            control_left > 20 && delete_left + 10 < control_left,
+            "official delete=true omits value tick labels; control_left={control_left} delete_left={delete_left}"
+        );
+
+        render_line(&with_val_delete(&standard_line_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+        )))
+        .unwrap();
+
+        let bar_base = bar_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+            "minMax",
+            Some("bar"),
+        );
+        let bar_ctrl = render_bar(&bar_base).unwrap();
+        let bar_del = render_bar(&with_val_delete(&bar_base)).unwrap();
+        let (bw, bh, brgb) = png_rgb(&bar_ctrl);
+        let (_, _, bdrgb) = png_rgb(&bar_del);
+        let bottom_dark = |rgb: &[u8]| {
+            let mut n = 0u32;
+            for y in (bh * 5) / 6..bh {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let bar_bottom = bottom_dark(&brgb);
+        let bar_del_bottom = bottom_dark(&bdrgb);
+        assert!(
+            bar_bottom > bar_del_bottom + 10,
+            "official bar delete=true releases the bottom value-label gutter; control={bar_bottom} delete={bar_del_bottom}"
+        );
+
+        let log = with_val_delete(&inject_explicit_log10(&mixed_column_xml(&[
+            1.0, 10.0, 100.0, 1000.0,
+        ])));
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus valAx delete=true stays NI"
+        );
     }
 }

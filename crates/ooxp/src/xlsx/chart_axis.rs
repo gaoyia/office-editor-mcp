@@ -21,6 +21,9 @@ pub(super) struct Spec {
     pub tick_format: TickFormat,
     /// Official Excel 16 valAx scaling orientation=maxMin (ReversePlotOrder).
     pub reversed: bool,
+    /// Official Excel 16 valAx/delete=true (HasAxis(xlValue)=false or Axes.Delete).
+    /// Distinct from tickLblPos=none, which keeps the axis line.
+    pub deleted: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum CatCrosses {
@@ -39,6 +42,7 @@ pub(super) struct Scale {
     pub cat_crosses: CatCrosses,
     pub tick_format: TickFormat,
     pub reversed: bool,
+    pub deleted: bool,
 }
 /// Official Excel 16 valAx formatCode values locked from Chart.Export at
 /// window DPI 106 (decimal `.`, thousands `,`). Any other code stays NI.
@@ -193,17 +197,19 @@ impl Spec {
         {
             return Err(unsupported());
         }
+        if spec.deleted
+            && (spec.crosses_at.is_some() || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
+        }
         Ok(spec)
     }
 
     pub fn read_axis(axis: &Element) -> Result<Self, Error> {
-        if axis
+        let deleted = axis
             .child_by_local("delete")
             .and_then(|e| e.attr_local("val"))
-            .is_some_and(|v| !matches!(v, "0" | "false" | "off"))
-        {
-            return Err(unsupported());
-        }
+            .is_some_and(|v| !matches!(v, "0" | "false" | "off"));
         let scaling = axis.child_by_local("scaling");
         let reversed = match scaling
             .and_then(|s| s.child_by_local("orientation"))
@@ -257,6 +263,7 @@ impl Spec {
             cat_crosses: CatCrosses::AutoZero,
             tick_format,
             reversed,
+            deleted,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -289,6 +296,15 @@ impl Spec {
         // Official F19 evidence is linear autoZero only.
         if spec.reversed
             && (spec.log_base.is_some()
+                || spec.crosses_at.is_some()
+                || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
+        }
+        // Official F20 evidence is linear autoZero minMax only.
+        if spec.deleted
+            && (spec.log_base.is_some()
+                || spec.reversed
                 || spec.crosses_at.is_some()
                 || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
         {
@@ -475,6 +491,7 @@ pub(super) fn scale_values(
             || !matches!(spec.cat_crosses, CatCrosses::AutoZero)
             || spec.tick_format != TickFormat::General
             || spec.reversed
+            || spec.deleted
         {
             return Err(unsupported());
         }
@@ -492,6 +509,7 @@ pub(super) fn scale_values(
             cat_crosses: CatCrosses::AutoZero,
             tick_format: TickFormat::General,
             reversed: false,
+            deleted: false,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -569,6 +587,7 @@ pub(super) fn scale_values(
         cat_crosses: spec.cat_crosses,
         tick_format: spec.tick_format,
         reversed: spec.reversed,
+        deleted: spec.deleted,
     })
 }
 
@@ -602,6 +621,7 @@ mod tests {
                 cat_crosses: CatCrosses::AutoZero,
                 tick_format: TickFormat::General,
                 reversed: false,
+                deleted: false,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -723,6 +743,28 @@ mod tests {
             Spec::read(&crosses_rev.root).is_err(),
             "orientation=maxMin plus crosses=min/max stays NI"
         );
+        let deleted = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><delete val='1'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&deleted.root).unwrap();
+        assert!(s.deleted);
+        let log_del = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><delete val='1'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&log_del.root).is_err(),
+            "log plus valAx delete=true stays NI"
+        );
+        let rev_del = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><delete val='1'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&rev_del.root).is_err(),
+            "orientation=maxMin plus valAx delete=true stays NI"
+        );
         let log = crate::xml::parse(
             b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling></valAx></plotArea>",
         )
@@ -754,6 +796,7 @@ mod tests {
             cat_crosses: CatCrosses::AutoZero,
             tick_format: TickFormat::General,
             reversed: false,
+            deleted: false,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
