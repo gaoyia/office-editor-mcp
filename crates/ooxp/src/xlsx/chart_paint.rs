@@ -1,9 +1,9 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。折线堆积见 F23。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。已锁定的 lineChart grouping=stacked/percentStacked（线性显式 min/max autoZero、marker=none、crossBetween=between）按系列顺序把各类目的代数累加端点连成折线，见 F23；省略 min/max、可见标记、空点、percentStacked 异号或缺值仍是 NotImplemented。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。已锁定的 barChart grouping=stacked/percentStacked（overlap=100，线性显式 min/max autoZero）见 F22；三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
-//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。已锁定的 areaChart grouping=stacked/percentStacked（线性显式 min/max autoZero、valAx crossBetween=midCat）按系列顺序代数累加，并填充相邻累加线之间的带（后画的系列盖住先画的），见 F23；省略 min/max、空点、between 类目位、percentStacked 异号或缺值、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
@@ -86,7 +86,9 @@ enum PlotKind {
     Scatter { connect: bool },
 }
 
-/// Official Excel 16 barChart grouping for clustered / stacked / percentStacked.
+/// Official Excel 16 grouping for barChart clustered / stacked / percentStacked,
+/// and for lineChart / areaChart stacked / percentStacked (F23). `Clustered` also
+/// means a standard (non-stacked) line or area.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stacking {
     Clustered,
@@ -1200,9 +1202,12 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("standard");
-            if grouping != "standard" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "standard" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if flag(wrapper, "varyColors").unwrap_or(false) {
                 return Err(unsupported());
             }
@@ -1264,9 +1269,12 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("standard");
-            if grouping != "standard" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "standard" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if flag(wrapper, "varyColors").unwrap_or(false) {
                 return Err(unsupported());
             }
@@ -1387,7 +1395,10 @@ fn read_chart(
     let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     // Official Excel 16 stacked / percentStacked barChart writes overlap=100.
-    if stacking != Stacking::Clustered {
+    // lineChart / areaChart have no overlap element.
+    if stacking != Stacking::Clustered
+        && matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
+    {
         match number_val(wrapper, "overlap") {
             Some(v) if (v - 100.0).abs() <= 1e-9 => {}
             _ => return Err(unsupported()),
@@ -1707,7 +1718,17 @@ fn read_chart(
                 .unwrap_or("between")
                 == "between"
         });
-    if !between {
+    // Official Excel 16 areaChart stacked / percentStacked writes valAx
+    // crossBetween=midCat (first/last categories on the plot edges). Standard
+    // area and all line charts stay on the existing between path.
+    let area_midcat = matches!(kind, PlotKind::StandardArea)
+        && stacking != Stacking::Clustered
+        && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
+            el.child_by_local("crossBetween")
+                .and_then(|c| c.attr_local("val"))
+                == Some("midCat")
+        });
+    if !between && !area_midcat {
         return Err(unsupported());
     }
     let vary_points = (matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
@@ -1847,6 +1868,36 @@ fn read_chart(
                     return Err(unsupported());
                 }
             }
+        }
+        // Official F23 line/area evidence has every cache point finite.
+        // Blanks, packing, and percentStacked mixed/missing stay NI.
+        if matches!(kind, PlotKind::StandardLine | PlotKind::StandardArea) {
+            if series.iter().any(|ser| {
+                ser.values.iter().any(|v| !v.is_some_and(|n| n.is_finite()))
+            }) {
+                return Err(unsupported());
+            }
+        }
+        // Official xlLineStacked writes c:marker/symbol=none. Auto or shaped
+        // markers on stacked lines are not uniquely locked.
+        if kind == PlotKind::StandardLine
+            && series
+                .iter()
+                .any(|ser| !matches!(ser.marker, MarkerKind::None))
+        {
+            return Err(unsupported());
+        }
+        if kind == PlotKind::StandardArea && !area_midcat {
+            return Err(unsupported());
+        }
+        if !matches!(
+            kind,
+            PlotKind::ClusteredColumn
+                | PlotKind::ClusteredBar
+                | PlotKind::StandardLine
+                | PlotKind::StandardArea
+        ) {
+            return Err(unsupported());
         }
     }
     Ok(ColumnChart {
@@ -3241,26 +3292,44 @@ fn draw_lines(
     if slot <= 0.0 {
         return;
     }
-    for ser in chart.series.iter().filter(|ser| {
-        group_secondary
+    let stacked = chart.stacking != Stacking::Clustered;
+    let percent = chart.stacking == Stacking::PercentStacked;
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| !ser.values.is_empty())
+        .collect();
+    for (si, ser) in group.iter().enumerate() {
+        if !group_secondary
             .map(|flag| ser.on_secondary == flag)
             .unwrap_or(true)
-    }) {
+        {
+            continue;
+        }
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         if ser.line_visible && ser.line_width > 0.0 {
             let mut run = Vec::new();
             for (ci, value) in ser.values.iter().enumerate() {
-                match value {
-                    Some(v) if v.is_finite() => {
-                        run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
+                let plotted = if stacked {
+                    stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
+                } else if let Some(v) = value {
+                    if v.is_finite() {
+                        Some(*v)
+                    } else {
+                        None
                     }
-                    _ if ser.unavailable_points.get(ci).copied().unwrap_or(false)
-                        || (ser.span_blanks
-                            && !ser.error_points.get(ci).copied().unwrap_or(false)) => {}
-                    _ => {
-                        stroke_run(canvas, &run, ser.line_width, color);
-                        run.clear();
-                    }
+                } else if ser.unavailable_points.get(ci).copied().unwrap_or(false)
+                    || (ser.span_blanks
+                        && !ser.error_points.get(ci).copied().unwrap_or(false))
+                {
+                    None
+                } else {
+                    stroke_run(canvas, &run, ser.line_width, color);
+                    run.clear();
+                    None
+                };
+                if let Some(v) = plotted {
+                    run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
             stroke_run(canvas, &run, ser.line_width, color);
@@ -3268,13 +3337,15 @@ fn draw_lines(
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
             for (ci, value) in ser.values.iter().enumerate() {
-                let Some(v) = value else {
+                let plotted = if stacked {
+                    stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
+                } else {
+                    value.filter(|n| n.is_finite())
+                };
+                let Some(v) = plotted else {
                     continue;
                 };
-                if !v.is_finite() {
-                    continue;
-                }
-                let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
+                let (x, y) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
                 paint_marker(canvas, ser.marker, x, y, marker_color);
             }
         }
@@ -3324,6 +3395,10 @@ fn draw_areas(
         return;
     }
     let zero_y = y_map(origin.clamp(axis_min, axis_max), axis_min, axis_max, plot, None, reversed);
+    if chart.stacking != Stacking::Clustered {
+        draw_stacked_areas(canvas, chart, plot, axis_min, axis_max, reversed);
+        return;
+    }
     for ser in &chart.series {
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
@@ -3352,6 +3427,71 @@ fn draw_areas(
     }
 }
 
+fn draw_stacked_areas(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+) {
+    let cats = chart.categories.len().max(1) as f64;
+    let percent = chart.stacking == Stacking::PercentStacked;
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| !ser.values.is_empty())
+        .collect();
+    for (si, ser) in group.iter().enumerate() {
+        let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
+        let stroke = ser.line_color.unwrap_or(fill);
+        let mut tops = Vec::new();
+        let mut bases = Vec::new();
+        for ci in 0..ser.values.len() {
+            let Some((base, end)) = stack_cumulative(&group, ci, si, percent) else {
+                fill_area_bands(canvas, &tops, &bases, fill);
+                if ser.line_visible && ser.line_width > 0.0 {
+                    stroke_run(canvas, &tops, ser.line_width, stroke);
+                }
+                tops.clear();
+                bases.clear();
+                continue;
+            };
+            let x = category_x_midcat(plot, ci, cats);
+            let y_end = y_map(
+                end.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            );
+            let y_base = y_map(
+                base.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            );
+            tops.push((x, y_end));
+            bases.push((x, y_base));
+        }
+        fill_area_bands(canvas, &tops, &bases, fill);
+        if ser.line_visible && ser.line_width > 0.0 {
+            stroke_run(canvas, &tops, ser.line_width, stroke);
+        }
+    }
+}
+
+fn category_x_midcat(plot: &Rect, ci: usize, cats: f64) -> f64 {
+    if cats <= 1.0 {
+        plot.x + plot.w / 2.0
+    } else {
+        plot.x + plot.w * (ci as f64) / (cats - 1.0)
+    }
+}
+
 fn fill_area_run(canvas: &mut Canvas, run: &[(f64, f64)], zero_y: f64, color: [u8; 3]) {
     for pair in run.windows(2) {
         fill_area_span(canvas, pair[0], pair[1], zero_y, color);
@@ -3365,20 +3505,52 @@ fn fill_area_span(
     zero_y: f64,
     color: [u8; 3],
 ) {
-    let (x0, y0) = start;
-    let (x1, y1) = end;
-    if ![x0, y0, x1, y1, zero_y].iter().all(|v| v.is_finite()) {
+    fill_area_band(canvas, start, (start.0, zero_y), end, (end.0, zero_y), color);
+}
+
+fn fill_area_bands(
+    canvas: &mut Canvas,
+    tops: &[(f64, f64)],
+    bases: &[(f64, f64)],
+    color: [u8; 3],
+) {
+    let n = tops.len().min(bases.len());
+    for i in 1..n {
+        fill_area_band(canvas, tops[i - 1], bases[i - 1], tops[i], bases[i], color);
+    }
+}
+
+/// Fill the band between the previous cumulative polyline and the current one.
+/// Official mixed stacked areas can have those polylines cross; split there
+/// so the fill does not depend on a self-intersecting quad.
+fn fill_area_band(
+    canvas: &mut Canvas,
+    top0: (f64, f64),
+    base0: (f64, f64),
+    top1: (f64, f64),
+    base1: (f64, f64),
+    color: [u8; 3],
+) {
+    let (x0, y0) = top0;
+    let (_, b0) = base0;
+    let (x1, y1) = top1;
+    let (_, b1) = base1;
+    if ![x0, y0, b0, x1, y1, b1].iter().all(|v| v.is_finite()) {
         return;
     }
-    let s0 = y0 - zero_y;
-    let s1 = y1 - zero_y;
+    if (y0 - b0).abs() < 1e-12 && (y1 - b1).abs() < 1e-12 {
+        return;
+    }
+    let s0 = y0 - b0;
+    let s1 = y1 - b1;
     if s0 * s1 < 0.0 {
         let t = s0 / (s0 - s1);
         let xc = x0 + t * (x1 - x0);
-        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (xc, zero_y)], color);
-        canvas.fill_polygon(&[(xc, zero_y), (x1, y1), (x1, zero_y)], color);
+        let yc = y0 + t * (y1 - y0);
+        canvas.fill_polygon(&[(x0, b0), (x0, y0), (xc, yc)], color);
+        canvas.fill_polygon(&[(xc, yc), (x1, y1), (x1, b1)], color);
     } else {
-        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (x1, y1), (x1, zero_y)], color);
+        canvas.fill_polygon(&[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], color);
     }
 }
 
@@ -3624,6 +3796,47 @@ fn stack_segment(group: &[&Series], ci: usize, si: usize, percent: bool) -> Opti
                 return None;
             }
             return Some((base, end));
+        }
+    }
+    None
+}
+
+/// Official Excel 16 lineChart / areaChart stacked and percentStacked use an
+/// algebraic running total in series order (F23). This is not the F22 bar
+/// rule that stacks positives and negatives independently from zero.
+fn stack_cumulative(
+    group: &[&Series],
+    ci: usize,
+    si: usize,
+    percent: bool,
+) -> Option<(f64, f64)> {
+    if si >= group.len() {
+        return None;
+    }
+    let mut denom = 0.0;
+    if percent {
+        for ser in group {
+            let v = ser.values.get(ci).copied().flatten()?;
+            if !v.is_finite() || v <= 0.0 {
+                return None;
+            }
+            denom += v;
+        }
+        if denom <= 0.0 {
+            return None;
+        }
+    }
+    let mut acc = 0.0;
+    for (i, ser) in group.iter().enumerate() {
+        let v = ser.values.get(ci).copied().flatten()?;
+        if !v.is_finite() {
+            return None;
+        }
+        let v = if percent { v / denom } else { v };
+        let base = acc;
+        acc += v;
+        if i == si {
+            return Some((base, acc));
         }
     }
     None
@@ -13013,6 +13226,456 @@ mod tests {
         assert!(
             read_chart(&no_over_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
             "stacked without official overlap=100 stays NI"
+        );
+    }
+
+    fn line_area_stacked_xml(
+        kind: &str,
+        grouping: &str,
+        series: &[&[Option<f64>]],
+        auto: bool,
+        min: &str,
+        max: &str,
+        midcat: bool,
+        marker_none: bool,
+    ) -> String {
+        let n = series[0].len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let mut sers = String::new();
+        for (si, vals) in series.iter().enumerate() {
+            let pts = vals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    v.map(|x| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#))
+                })
+                .collect::<String>();
+            let present = vals.iter().filter(|v| v.is_some()).count();
+            let marker = if kind == "lineChart" && marker_none {
+                r#"<c:marker><c:symbol val="none"/></c:marker>"#
+            } else {
+                ""
+            };
+            let smooth = if kind == "lineChart" {
+                r#"<c:smooth val="0"/>"#
+            } else {
+                ""
+            };
+            sers.push_str(&format!(
+                r#"<c:ser><c:idx val="{si}"/><c:order val="{si}"/><c:tx><c:v>S{si}</c:v></c:tx>{marker}{smooth}<c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{present}"/>{pts}</c:numLit></c:val></c:ser>"#
+            ));
+        }
+        let (major, numfmt) = if grouping == "percentStacked" {
+            ("0.2", r#"<c:numFmt formatCode="0%" sourceLinked="1"/>"#)
+        } else {
+            ("20", "")
+        };
+        let scaling = if auto {
+            r#"<c:scaling><c:orientation val="minMax"/></c:scaling>"#.to_string()
+        } else {
+            format!(
+                r#"<c:scaling><c:orientation val="minMax"/><c:min val="{min}"/><c:max val="{max}"/></c:scaling>"#
+            )
+        };
+        let cross = if midcat { "midCat" } else { "between" };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:{kind}>
+        <c:grouping val="{grouping}"/><c:varyColors val="0"/>
+        {sers}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:{kind}>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn accent_pixels(rgb: &[u8], w: u32, h: u32, accent: [u8; 3]) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 20) {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    fn polylines_match(a: &[(u32, u32)], b: &[(u32, u32)]) -> bool {
+        if a.len() < 40 || b.len() < 40 {
+            return false;
+        }
+        let close = |pts: &[(u32, u32)], other: &[(u32, u32)]| {
+            let mut hit = 0usize;
+            for &(x, y) in pts {
+                if other.iter().any(|&(ox, oy)| x.abs_diff(ox) <= 2 && y.abs_diff(oy) <= 2) {
+                    hit += 1;
+                }
+            }
+            hit * 100 / pts.len() >= 80
+        };
+        close(a, b) && close(b, a)
+    }
+
+    fn area_column_bands(rgb: &[u8], w: u32, h: u32, x: u32, accents: [[u8; 3]; 3]) -> Vec<(usize, u32, u32)> {
+        let mut bands = Vec::new();
+        let mut cur: Option<usize> = None;
+        let mut y0 = 0u32;
+        for y in 0..h {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+            let hit = accents.iter().position(|a| near(px, *a, 24));
+            if hit != cur {
+                if let Some(idx) = cur {
+                    bands.push((idx, y0, y.saturating_sub(1)));
+                }
+                cur = hit;
+                y0 = y;
+            }
+        }
+        if let Some(idx) = cur {
+            bands.push((idx, y0, h.saturating_sub(1)));
+        }
+        bands
+    }
+
+    fn leftmost_area_column(rgb: &[u8], w: u32, h: u32, accents: [[u8; 3]; 3]) -> u32 {
+        for x in 0..w {
+            let mut seen = [false; 3];
+            for y in 0..h {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if let Some(idx) = accents.iter().position(|a| near(px, *a, 24)) {
+                    seen[idx] = true;
+                }
+            }
+            if seen.iter().filter(|v| **v).count() >= 2 {
+                return x;
+            }
+        }
+        panic!("no stacked area column with at least two series");
+    }
+
+    #[test]
+    fn stacked_and_percent_stacked_lines_and_areas_use_algebraic_cumulative() {
+        let s1 = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let s2 = [Some(20.0), Some(10.0), Some(20.0), Some(10.0)];
+        let s3 = [Some(20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let series: [&[Option<f64>]; 3] = [&s1, &s2, &s3];
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let a2 = FALLBACK_ACCENTS[2];
+
+        let dummy = Series {
+            values: s1.to_vec(),
+            ..Series::default()
+        };
+        let dummy2 = Series {
+            values: s2.to_vec(),
+            ..Series::default()
+        };
+        let dummy3 = Series {
+            values: s3.to_vec(),
+            ..Series::default()
+        };
+        let group = [&dummy, &dummy2, &dummy3];
+        assert_eq!(stack_cumulative(&group, 0, 0, false), Some((0.0, 10.0)));
+        assert_eq!(stack_cumulative(&group, 0, 1, false), Some((10.0, 30.0)));
+        assert_eq!(stack_cumulative(&group, 0, 2, false), Some((30.0, 50.0)));
+        assert_eq!(stack_cumulative(&group, 3, 2, false), Some((50.0, 70.0)));
+        let p0 = stack_cumulative(&group, 0, 0, true).unwrap();
+        let p2 = stack_cumulative(&group, 0, 2, true).unwrap();
+        assert!((p0.0 - 0.0).abs() < 1e-12 && (p0.1 - 0.2).abs() < 1e-12);
+        assert!((p2.0 - 0.6).abs() < 1e-12 && (p2.1 - 1.0).abs() < 1e-12);
+
+        let m1v = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let m2v = [Some(20.0), Some(-10.0), Some(20.0), Some(-10.0)];
+        let m3v = [Some(-20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let mix1 = Series {
+            values: m1v.to_vec(),
+            ..Series::default()
+        };
+        let mix2 = Series {
+            values: m2v.to_vec(),
+            ..Series::default()
+        };
+        let mix3 = Series {
+            values: m3v.to_vec(),
+            ..Series::default()
+        };
+        let mixed_group = [&mix1, &mix2, &mix3];
+        // Algebraic, not F22 pos/neg packing: cat A S3 ends at 10, not -20.
+        assert_eq!(stack_cumulative(&mixed_group, 0, 2, false), Some((30.0, 10.0)));
+        assert_eq!(stack_cumulative(&mixed_group, 2, 2, false), Some((-10.0, 0.0)));
+        assert_eq!(stack_cumulative(&mixed_group, 3, 2, false), Some((30.0, 50.0)));
+
+        let line_xml = line_area_stacked_xml("lineChart", "stacked", &series, false, "0", "80", false, true);
+        let line_doc = crate::xml::parse(line_xml.as_bytes()).unwrap();
+        let line = read_chart(&line_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(line.stacking, Stacking::Stacked);
+        assert!(matches!(line.kind, PlotKind::StandardLine));
+        let line_png = render_rgb_chart(
+            &line_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (lw, lh, lrgb) = png_rgb(&line_png);
+
+        let s2_end = [Some(30.0), Some(30.0), Some(50.0), Some(50.0)];
+        let s3_end = [Some(50.0), Some(60.0), Some(60.0), Some(70.0)];
+        let ends: [&[Option<f64>]; 3] = [&s1, &s2_end, &s3_end];
+        let ctrl_xml = line_area_stacked_xml("lineChart", "standard", &ends, false, "0", "80", false, true);
+        let ctrl_doc = crate::xml::parse(ctrl_xml.as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(ctrl.stacking, Stacking::Clustered);
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (_, _, crgb) = png_rgb(&ctrl_png);
+        for (i, accent) in [a0, a1, a2].into_iter().enumerate() {
+            let got = accent_pixels(&lrgb, lw, lh, accent);
+            let exp = accent_pixels(&crgb, lw, lh, accent);
+            assert!(
+                polylines_match(&got, &exp),
+                "stacked line S{i} should match a standard line of algebraic ends; stacked={} control={}",
+                got.len(),
+                exp.len()
+            );
+        }
+
+        let pct_xml = line_area_stacked_xml(
+            "lineChart",
+            "percentStacked",
+            &series,
+            false,
+            "0",
+            "1",
+            false,
+            true,
+        );
+        let pct_doc = crate::xml::parse(pct_xml.as_bytes()).unwrap();
+        let pct = read_chart(&pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(pct.stacking, Stacking::PercentStacked);
+        assert_eq!(pct.axis.tick_format, super::axis::TickFormat::Percent);
+        let pct_png = render_rgb_chart(
+            &pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (pw, ph, prgb) = png_rgb(&pct_png);
+        let p1 = [Some(0.2), Some(20.0 / 60.0), Some(0.5), Some(40.0 / 70.0)];
+        let p2 = [Some(0.6), Some(0.5), Some(50.0 / 60.0), Some(50.0 / 70.0)];
+        let p3 = [Some(1.0), Some(1.0), Some(1.0), Some(1.0)];
+        let pct_ends: [&[Option<f64>]; 3] = [&p1, &p2, &p3];
+        let pct_ctrl_xml = line_area_stacked_xml(
+            "lineChart",
+            "standard",
+            &pct_ends,
+            false,
+            "0",
+            "1",
+            false,
+            true,
+        );
+        let pct_ctrl_png = render_rgb_chart(
+            &crate::xml::parse(pct_ctrl_xml.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (_, _, pcrgb) = png_rgb(&pct_ctrl_png);
+        let got3 = accent_pixels(&prgb, pw, ph, a2);
+        let exp3 = accent_pixels(&pcrgb, pw, ph, a2);
+        assert!(
+            polylines_match(&got3, &exp3),
+            "percentStacked line S3 should sit on the 100% cumulative, stacked={} control={}",
+            got3.len(),
+            exp3.len()
+        );
+
+        let area_xml = line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", true, false);
+        let area_doc = crate::xml::parse(area_xml.as_bytes()).unwrap();
+        let area = read_chart(&area_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(area.stacking, Stacking::Stacked);
+        assert!(matches!(area.kind, PlotKind::StandardArea));
+        let area_png = render_rgb_chart(
+            &area_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (aw, ah, argb) = png_rgb(&area_png);
+        let x0 = leftmost_area_column(&argb, aw, ah, [a0, a1, a2]);
+        let bands = area_column_bands(&argb, aw, ah, x0, [a0, a1, a2]);
+        let stacked_bands: Vec<_> = bands.into_iter().filter(|(_idx, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(
+            stacked_bands.len() >= 3,
+            "stacked area cat A should show S3/S2/S1 bands, got {stacked_bands:?} x={x0}"
+        );
+        assert_eq!(stacked_bands[0].0, 2, "top band is S3, {stacked_bands:?}");
+        assert_eq!(stacked_bands[1].0, 1, "middle band is S2, {stacked_bands:?}");
+        assert_eq!(stacked_bands[2].0, 0, "bottom band is S1, {stacked_bands:?}");
+        let h1 = stacked_bands[2].2 - stacked_bands[2].1 + 1;
+        let h2 = stacked_bands[1].2 - stacked_bands[1].1 + 1;
+        let h3 = stacked_bands[0].2 - stacked_bands[0].1 + 1;
+        assert!(
+            (h2 as i32 - h3 as i32).abs() <= 3 && (h1 * 2 + 3) >= h2 && h1 + 3 >= h2 / 2,
+            "area cat A heights should be ~10/20/20, got {h1},{h2},{h3}"
+        );
+
+        let area_pct_xml = line_area_stacked_xml(
+            "areaChart",
+            "percentStacked",
+            &series,
+            false,
+            "0",
+            "1",
+            true,
+            false,
+        );
+        let area_pct_doc = crate::xml::parse(area_pct_xml.as_bytes()).unwrap();
+        let area_pct =
+            read_chart(&area_pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(area_pct.stacking, Stacking::PercentStacked);
+        let area_pct_png = render_rgb_chart(
+            &area_pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (apw, aph, aprgb) = png_rgb(&area_pct_png);
+        let apx = leftmost_area_column(&aprgb, apw, aph, [a0, a1, a2]);
+        let ap_bands = area_column_bands(&aprgb, apw, aph, apx, [a0, a1, a2]);
+        let ap_stack: Vec<_> = ap_bands.into_iter().filter(|(_, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(ap_stack.len() >= 3, "percent area bands {ap_stack:?}");
+        assert_eq!(ap_stack[0].0, 2);
+        assert_eq!(ap_stack[ap_stack.len() - 1].0, 0);
+
+        let mixed: [&[Option<f64>]; 3] = [&m1v, &m2v, &m3v];
+        let mix_xml = line_area_stacked_xml("lineChart", "stacked", &mixed, false, "-40", "80", false, true);
+        let mix_doc = crate::xml::parse(mix_xml.as_bytes()).unwrap();
+        read_chart(&mix_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mix_png = render_rgb_chart(
+            &mix_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (mw, mh, mrgb) = png_rgb(&mix_png);
+        let mix_s1 = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let mix_s2 = [Some(30.0), Some(10.0), Some(-10.0), Some(30.0)];
+        let mix_s3 = [Some(10.0), Some(40.0), Some(0.0), Some(50.0)];
+        let mix_ends: [&[Option<f64>]; 3] = [&mix_s1, &mix_s2, &mix_s3];
+        let mix_ctrl_png = render_rgb_chart(
+            &crate::xml::parse(
+                line_area_stacked_xml("lineChart", "standard", &mix_ends, false, "-40", "80", false, true)
+                    .as_bytes(),
+            )
+            .unwrap()
+            .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (_, _, mcrgb) = png_rgb(&mix_ctrl_png);
+        let got_m3 = accent_pixels(&mrgb, mw, mh, a2);
+        let exp_m3 = accent_pixels(&mcrgb, mw, mh, a2);
+        assert!(
+            polylines_match(&got_m3, &exp_m3),
+            "mixed stacked line is algebraic (not F22 pos/neg pack); stacked={} control={}",
+            got_m3.len(),
+            exp_m3.len()
+        );
+
+        let mix_area_xml =
+            line_area_stacked_xml("areaChart", "stacked", &mixed, false, "-40", "80", true, false);
+        let mix_area_doc = crate::xml::parse(mix_area_xml.as_bytes()).unwrap();
+        read_chart(
+            &mix_area_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let mix_area_png = render_rgb_chart(
+            &mix_area_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (maw, mah, margb) = png_rgb(&mix_area_png);
+        let xa = leftmost_area_column(&margb, maw, mah, [a0, a1, a2]);
+        let mix_bands = area_column_bands(&margb, maw, mah, xa, [a0, a1, a2]);
+        let mix_stack: Vec<_> = mix_bands.into_iter().filter(|(_, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(
+            mix_stack.iter().any(|(idx, _, _)| *idx == 0)
+                && mix_stack.iter().any(|(idx, _, _)| *idx == 2),
+            "mixed area cat A shows S1 and S3, got {mix_stack:?}"
+        );
+        assert!(
+            !mix_stack.iter().any(|(idx, _, _)| *idx == 1),
+            "mixed area cat A S3 covers the S2 band, got {mix_stack:?}"
+        );
+
+        let auto = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &series, true, "0", "80", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on stacked line stays NI"
+        );
+        let between_area = crate::xml::parse(
+            line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", false, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&between_area.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked area with crossBetween=between stays NI"
+        );
+        let marked = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &series, false, "0", "80", false, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&marked.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked line without official marker=none stays NI"
+        );
+        let blank_s2 = [Some(20.0), None, Some(20.0), Some(10.0)];
+        let blank: [&[Option<f64>]; 3] = [&s1, &blank_s2, &s3];
+        let blank_doc = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &blank, false, "0", "80", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&blank_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked line with a missing cache point stays NI"
+        );
+        let pct_mixed = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "percentStacked", &mixed, false, "0", "1", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&pct_mixed.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "percentStacked mixed signs on a line stay NI"
         );
     }
 }
