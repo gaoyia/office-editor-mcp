@@ -1128,7 +1128,6 @@ fn read_chart(
                 return Err(unsupported());
             }
             if dir == "bar" {
-                data_labels_hidden(wrapper.child_by_local("dLbls"))?;
                 let blanks = chart
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
@@ -1304,7 +1303,10 @@ fn read_chart(
             }
             (values, Vec::new())
         };
-        let value_label = if matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+        let value_label = if matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
+        ) {
             read_value_label(wrapper, ser, kind)?
         } else {
             data_labels_hidden(ser.child_by_local("dLbls"))?;
@@ -1485,7 +1487,7 @@ fn read_chart(
         ser.values.resize(n, None);
         // Column blank/error label text has not yet been locked by a public
         // probe. Never report successful showVal while silently omitting it.
-        if kind == PlotKind::ClusteredColumn
+        if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
             && ser.value_label.is_some()
             && ser.values.iter().any(Option::is_none)
         {
@@ -2111,6 +2113,16 @@ fn paint_bar(
         );
     }
     draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
+    draw_horizontal_value_labels(
+        canvas,
+        chart,
+        &plot,
+        axis_min,
+        axis_max,
+        font,
+        gdi.as_ref(),
+        label_px,
+    )?;
     let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
     canvas.hline_i(plot_x, plot_r, axis_y, INK);
@@ -3132,6 +3144,68 @@ fn draw_clustered_bars(
             draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
+}
+
+/// OutsideEnd on horizontal bars follows the same category/cluster order as
+/// the marks. General integer formatting, plain font and complete values only.
+fn draw_horizontal_value_labels(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+) -> Result<(), Error> {
+    let n = chart.series.len().max(1);
+    let overlap = chart.overlap / 100.0;
+    let slot = (plot.h + 1.0) / chart.categories.len().max(1) as f64;
+    let bar_h = slot / (n as f64 - (n - 1) as f64 * overlap + chart.gap_width / 100.0);
+    let side = (slot - bar_h * (n as f64 - (n - 1) as f64 * overlap)) / 2.0;
+    let pad = canvas.dpi.pt_to_px_font(6.0);
+    for (si, ser) in chart.series.iter().enumerate() {
+        if ser.value_label != Some(ValueLabel::OutsideEnd) {
+            continue;
+        }
+        let place = if chart.cats_from_bottom {
+            n - 1 - si
+        } else {
+            si
+        };
+        for (ci, value) in ser.values.iter().enumerate() {
+            let Some(value) = value else {
+                continue;
+            };
+            let Some(text) = value_label_text(*value) else {
+                continue;
+            };
+            let end = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let width = text_width(font, gdi, &text, px);
+            let height = value_label_height(font, gdi, px);
+            let x = if *value < 0.0 {
+                end - pad - width
+            } else {
+                end + pad
+            };
+            let top =
+                category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom)
+                    + side
+                    + place as f64 * bar_h * (1.0 - overlap)
+                    + (bar_h - height) / 2.0;
+            if !x.is_finite()
+                || !top.is_finite()
+                || x < 0.0
+                || top < 0.0
+                || x + width > f64::from(canvas.w)
+                || top + height > f64::from(canvas.h)
+            {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
+            draw_text(canvas, font, gdi, &text, x, top, px, INK);
+        }
+    }
+    Ok(())
 }
 
 fn draw_cat_ticks_y(
@@ -4459,7 +4533,9 @@ fn read_value_label(
         }
     }
     match (kind, position) {
-        (PlotKind::ClusteredColumn, "outEnd") => Ok(Some(ValueLabel::OutsideEnd)),
+        (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "outEnd") => {
+            Ok(Some(ValueLabel::OutsideEnd))
+        }
         (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
         _ => Err(unsupported()),
     }
@@ -7784,7 +7860,11 @@ mod tests {
 
     #[test]
     fn plain_value_labels_are_parsed_and_unsupported_styles_are_never_omitted() {
-        for kind in [PlotKind::ClusteredColumn, PlotKind::StandardLine] {
+        for kind in [
+            PlotKind::ClusteredColumn,
+            PlotKind::ClusteredBar,
+            PlotKind::StandardLine,
+        ] {
             let wrapper = crate::xml::parse(
                 b"<wrapper><dLbls><showVal val='1'/><showBubbleSize val='1'/></dLbls></wrapper>",
             )
@@ -7815,6 +7895,94 @@ mod tests {
                     "must not ignore {config}"
                 );
             }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn horizontal_outside_end_labels_paint_and_keep_other_subranges_ni() {
+        let base = standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-4.0), Some(0.0), Some(9.0)],
+                "<c:dLbls><c:showVal val='1'/><c:dLblPos val='outEnd'/></c:dLbls>",
+            ),
+            "<c:dispBlanksAs val='gap'/>",
+        )
+        .replace("lineChart", "barChart")
+        .replace(
+            "<c:grouping val=\"standard\"/>",
+            "<c:barDir val='bar'/><c:grouping val='clustered'/>",
+        );
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for orient in ["minMax", "maxMin"] {
+                let xml = base.replace(
+                    "<c:catAx/>",
+                    &format!("<c:catAx><c:axPos val='l'/><c:scaling><c:orientation val='{orient}'/></c:scaling></c:catAx>"),
+                );
+                let xml = xml.replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>");
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                assert_eq!(chart.series[0].value_label, Some(ValueLabel::OutsideEnd));
+                let mut actual = Canvas::with_dpi(576, 336, dpi);
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 100.0,
+                    y: 50.0,
+                    w: 300.0,
+                    h: 220.0,
+                };
+                draw_horizontal_value_labels(
+                    &mut actual,
+                    &chart,
+                    &plot,
+                    -10.0,
+                    10.0,
+                    None,
+                    Some(&face),
+                    14.0,
+                )
+                .unwrap();
+                // Left of the negative end, right of zero, and right of positive
+                // end must each contain actual glyph ink (not success + omission).
+                let pad = dpi.pt_to_px_font(6.0);
+                for (ci, v) in [-4.0, 0.0, 9.0].into_iter().enumerate() {
+                    let end = x_of(v, -10.0, 10.0, &plot);
+                    let y = category_mid_y(&plot, ci, 3, chart.cats_from_bottom);
+                    let xr = if v < 0.0 {
+                        (end - pad - 25.0) as i32..(end - pad + 1.0) as i32
+                    } else {
+                        (end + pad) as i32..(end + pad + 20.0) as i32
+                    };
+                    let mut ink = 0;
+                    for yy in (y - 16.0) as i32..(y + 16.0) as i32 {
+                        for xx in xr.clone() {
+                            if xx >= 0 && yy >= 0 && xx < 576 && yy < 336 {
+                                let i = (yy as usize * 576 + xx as usize) * 3;
+                                ink += usize::from(actual.px[i..i + 3] != [255; 3]);
+                            }
+                        }
+                    }
+                    assert!(ink > 0, "missing value {v} at {dpi_value}/{orient}");
+                }
+            }
+        }
+        for xml in [
+            base.replace("val='outEnd'", "val='inEnd'"),
+            base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"),
+            base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"),
+        ] {
+            let xml = xml
+                .replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
+                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>");
+            assert!(
+                render_line(&xml).is_err(),
+                "unlocked bar labels must remain NI"
+            );
         }
     }
 
@@ -8953,7 +9121,7 @@ mod tests {
             ),
             bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
                 r#"</c:barChart>"#,
-                r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:barChart>"#,
+                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls></c:barChart>"#,
                 1,
             ),
             bar_xml(&two, "", "maxMin", Some("bar")).replacen(
