@@ -522,6 +522,93 @@ code {
 
 #log p { margin: 0 0 6px; }
 
+
+.preview-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.preview-dpi-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.preview-dpi {
+  width: 5.5em;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbf7f1;
+  color: var(--ink);
+  font: inherit;
+}
+
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 12px;
+}
+
+.preview-count {
+  min-width: 3.5em;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.preview-download {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.preview-download:hover { text-decoration: underline; }
+
+.preview-stage {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbf7f1;
+}
+
+.preview-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.preview-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: var(--shadow);
+}
+
+.preview-caption {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.preview-status { margin: 0 0 8px; }
+
+input.preview-dpi:focus-visible {
+  outline: 2px solid var(--tone);
+  outline-offset: 2px;
+}
+
 @media (max-width: 860px) {
   h1 { font-size: 26px; }
   .page,

@@ -94,7 +94,7 @@ const UI = {
     cardPptx: "幻灯片、形状、图示、图表和切换，支持写入动画。",
     gotoPptx: "看演示文稿示例",
     formatsTitle: "支持的格式",
-    formatsBody: "只读写 .docx、.xlsx、.pptx。老的二进制 .doc、.xls、.ppt 不在范围内。库不排版、不算公式、也不放映。",
+    formatsBody: "只读写 .docx、.xlsx、.pptx。老的二进制 .doc、.xls、.ppt 不在范围内。库不排版、不算公式、也不放映。每种格式都可以在这一页导出 PNG，并立刻预览。",
     landTitle: "文件怎么落地",
     landBody: "示例不从浏览器另存。先在右侧选择一个目录，再点「写入目录」，文件直接出现在那里。",
     mcpBody: "把命令行接到编辑器。command 也可以写成这个程序的完整路径。",
@@ -136,6 +136,28 @@ const UI = {
     dirReady: "已授权「{name}」。示例会直接改这里的文件。",
     unsupported: "当前浏览器没有目录选择接口。请更新到新版 Chrome 或 Edge。",
     unsupportedEmpty: "更新浏览器之后，才能把示例写进本地目录。",
+    previewTitle: "导出预览图",
+    previewBody: "把当前格式的包按库的导出动作画成 PNG，并立刻显示在这一页。预览的是刚才在会话里生成的文件，也可以选择本地文件，不必先授权目录。库尚未实现的绘制会按错误显示出来，这是后续要补齐的部分。这是库的近似预览，不是和 Office 逐像素相同。",
+    previewSession: "预览会话里的文件",
+    previewPick: "选择本地文件",
+    previewing: "正在导出…",
+    previewPage: "正在导出 {id}…",
+    previewDone: "已导出 {n} 张。",
+    previewPartial: "已导出 {ok} 张，{fail} 张失败。",
+    previewNone: "会话里还没有这份格式的文件。请先运行上面的创建，或选择本地文件。",
+    previewBadDpi: "dpi 必须是 24 到 600 的整数。",
+    previewNoImage: "没有得到 PNG。",
+    previewDownload: "下载这张 PNG",
+    previewWrite: "写入目录",
+    previewPrev: "上一张",
+    previewNext: "下一张",
+    previewCount: "{current} / {total}",
+    previewDpi: "DPI（仅工作表，默认 96）",
+    previewWrongType: "请选择 .{ext} 文件。",
+    previewNeedDir: "写入目录需要先选择目录。",
+    previewWrote: "已写入 {path}",
+    previewEmpty: "还没有预览图。",
+    previewFailAll: "导出失败。",
     licenseTitle: "许可证",
     license: "本软件以 Business Source License 1.0 发布。",
     donate: "捐赠",
@@ -162,7 +184,7 @@ const UI = {
     cardPptx: "Slides, shapes, diagrams, charts, and transitions. Animation can be written into the file.",
     gotoPptx: "Open the presentation examples",
     formatsTitle: "Formats",
-    formatsBody: "The library reads and writes .docx, .xlsx, and .pptx. The older binary formats .doc, .xls, and .ppt are outside its scope. It does not paginate, calculate formulas, or run a slide show.",
+    formatsBody: "The library reads and writes .docx, .xlsx, and .pptx. The older binary formats .doc, .xls, and .ppt are outside its scope. It does not paginate, calculate formulas, or run a slide show. Each format can also export a PNG on this page and show it immediately.",
     landTitle: "Where files go",
     landBody: "Examples are not saved through the browser download. Choose a directory on the right, then click Write. The file appears there.",
     mcpBody: "Connect the command-line program to an editor. command may also be the full path of that program.",
@@ -204,6 +226,28 @@ const UI = {
     dirReady: "“{name}” is authorized. Examples write into this directory.",
     unsupported: "This browser has no directory picker. Update to a current Chrome or Edge.",
     unsupportedEmpty: "After the browser is updated, examples can be written into a local directory.",
+    previewTitle: "Export a preview image",
+    previewBody: "Export the current format to a PNG with the library's export actions, and show it on this page immediately. The preview is the package just created in the session, or a local file you choose. A directory does not have to be authorized first. Features the library cannot draw yet are shown as errors; those are left to later work. This is the library's approximate preview, not a pixel-identical Office export.",
+    previewSession: "Preview the session file",
+    previewPick: "Choose a local file",
+    previewing: "Exporting…",
+    previewPage: "Exporting {id}…",
+    previewDone: "Exported {n} image(s).",
+    previewPartial: "Exported {ok} image(s); {fail} failed.",
+    previewNone: "There is no package for this format in the session yet. Run the create example above, or choose a local file.",
+    previewBadDpi: "dpi must be an integer from 24 to 600.",
+    previewNoImage: "The export did not return a PNG.",
+    previewDownload: "Download this PNG",
+    previewWrite: "Write to the directory",
+    previewPrev: "Previous",
+    previewNext: "Next",
+    previewCount: "{current} / {total}",
+    previewDpi: "DPI (worksheets only, default 96)",
+    previewWrongType: "Choose a .{ext} file.",
+    previewNeedDir: "Choose a directory before writing.",
+    previewWrote: "Wrote {path}",
+    previewEmpty: "No preview yet.",
+    previewFailAll: "The export failed.",
     licenseTitle: "License",
     license: "This software is released under the Business Source License 1.0.",
     donate: "Donate",
@@ -544,6 +588,16 @@ let session = null;
 let root = null;
 let listing = [];
 let busy = false;
+const memoryPackages = new Map();
+const lastPackageByFormat = { xlsx: "", docx: "", pptx: "" };
+const previewState = {
+  xlsx: { urls: [], items: [], index: 0, source: "" },
+  docx: { urls: [], items: [], index: 0, source: "" },
+  pptx: { urls: [], items: [], index: 0, source: "" },
+};
+const previewStatusText = { xlsx: null, docx: null, pptx: null };
+let previewDpi = "96";
+
 
 function append(text) {
   const p = document.createElement("p");
@@ -619,7 +673,7 @@ async function writeBytes(path, bytes) {
 }
 
 function needsPackage(action) {
-  return action === "inspect" || action === "apply" || action === "exportMedia" || action === "exportChartData";
+  return action === "inspect" || action === "apply" || action === "exportMedia" || action === "exportChartData" || action === "exportChartImage" || action === "exportSparklineImage" || action === "exportSheetImage" || action === "exportSlideImage" || action === "exportPageImage" || action === "layoutCheck";
 }
 
 function formatSize(size) {
@@ -715,7 +769,12 @@ function showDir() {
 
 function setBusy(next) {
   busy = next;
-  for (const button of document.querySelectorAll(".write")) button.disabled = next || !session;
+  for (const button of document.querySelectorAll(".write, .preview-run, .preview-pick, .preview-write")) {
+    button.disabled = next || !session;
+  }
+  if (!next) {
+    for (const format of ["xlsx", "docx", "pptx"]) showPreview(format, previewState[format].index);
+  }
 }
 
 async function runRequest(raw, statusEl) {
@@ -750,6 +809,7 @@ async function runRequest(raw, statusEl) {
     return;
   }
   const path = out.path || request.output || request.path;
+  if (out.bytes) rememberPackage(path, out.bytes);
   await writeBytes(path, out.bytes);
   const marks = await refreshFiles(before);
   const code = marks && marks.get(path.split(/[/\\]/).pop());
@@ -760,6 +820,444 @@ async function runRequest(raw, statusEl) {
   statusEl.textContent = line;
   statusEl.className = "status ok";
   append(line);
+}
+
+function formatOfPath(path) {
+  const name = String(path || "").toLowerCase();
+  if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) return "xlsx";
+  if (name.endsWith(".docx")) return "docx";
+  if (name.endsWith(".pptx")) return "pptx";
+  return "";
+}
+
+function rememberPackage(path, bytes) {
+  const name = String(path || "").trim().replace(/\\/g, "/").split("/").pop();
+  if (!name) return;
+  const copy = bytes instanceof Uint8Array ? new Uint8Array(bytes) : new Uint8Array(bytes);
+  memoryPackages.set(name, copy);
+  const format = formatOfPath(name);
+  if (format) lastPackageByFormat[format] = name;
+}
+
+function packageOf(format) {
+  const name = lastPackageByFormat[format];
+  if (name && memoryPackages.has(name)) {
+    return { path: name, bytes: memoryPackages.get(name) };
+  }
+  for (const [path, bytes] of memoryPackages) {
+    if (formatOfPath(path) === format) return { path, bytes };
+  }
+  return null;
+}
+
+function runSession(request, pkg) {
+  if (!session) throw new Error(t("libFail"));
+  session.clear_files();
+  const payload = pkg && pkg.length ? pkg : new Uint8Array(0);
+  return session.run(JSON.stringify(request), payload);
+}
+
+function failMessage(out) {
+  return out && out.error && out.error.message ? out.error.message : t("fail");
+}
+
+function failCode(out) {
+  return out && out.error && out.error.code ? String(out.error.code) : "";
+}
+
+function takeBytes(out) {
+  if (!out || !out.ok) throw new Error(failMessage(out));
+  if (out.kind !== "bytes" || !out.bytes) throw new Error(t("previewNoImage"));
+  return {
+    path: out.path || "",
+    bytes: new Uint8Array(out.bytes),
+    contentType: out.contentType || "",
+  };
+}
+
+function isPng(item) {
+  const bytes = item.bytes;
+  return (
+    item.contentType === "image/png" ||
+    (bytes && bytes.length >= 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+  );
+}
+
+function inspectValue(path, bytes) {
+  const out = runSession({
+    schemaVersion: 1,
+    action: "inspect",
+    path,
+    locale: lang === "zh" ? "zh" : "en",
+  }, bytes);
+  if (!out || !out.ok) throw new Error(failMessage(out));
+  if (out.kind !== "json" || !out.value) throw new Error(t("fail"));
+  return out.value;
+}
+
+function sheetTargets(value) {
+  const sheets = value && Array.isArray(value.sheets) ? value.sheets : [];
+  const ids = [];
+  for (const sheet of sheets) {
+    if (!sheet || typeof sheet.id !== "string") continue;
+    if (!sheet.id.startsWith("sheet:") || sheet.id.includes("/")) continue;
+    if (sheet.kind && sheet.kind !== "worksheet") continue;
+    ids.push({ id: sheet.id, label: sheet.name || sheet.id });
+  }
+  return ids;
+}
+
+function slideTargets(value) {
+  const slides = value && Array.isArray(value.slides) ? value.slides : [];
+  const ids = [];
+  for (const slide of slides) {
+    if (!slide || typeof slide.id !== "string") continue;
+    if (!/^slide:\d+$/.test(slide.id)) continue;
+    ids.push({ id: slide.id, label: slide.id });
+  }
+  return ids;
+}
+
+function parseDpi(format, input) {
+  if (format !== "xlsx") return null;
+  const raw = input && String(input.value).trim();
+  if (!raw) return null;
+  if (!/^\d+$/.test(raw)) throw new Error(t("previewBadDpi"));
+  const dpi = Number(raw);
+  if (dpi < 24 || dpi > 600) throw new Error(t("previewBadDpi"));
+  return dpi;
+}
+
+function outputName(path, id) {
+  const stem = String(path || "preview").replace(/\.[^.]+$/, "").replace(/[\\/]/g, "-");
+  const safe = String(id).replace(/[^A-Za-z0-9._-]+/g, "-");
+  return stem + "-" + safe + ".png";
+}
+
+async function yieldUi() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function clearPreview(format) {
+  const state = previewState[format];
+  for (const url of state.urls) URL.revokeObjectURL(url);
+  state.urls = [];
+  state.items = [];
+  state.index = 0;
+  state.source = "";
+}
+
+function showPreview(format, index) {
+  const state = previewState[format];
+  const card = document.querySelector('.preview-card[data-format="' + format + '"]');
+  if (!card) return;
+  const img = card.querySelector(".preview-image");
+  const empty = card.querySelector(".preview-empty");
+  const toolbar = card.querySelector(".preview-toolbar");
+  const caption = card.querySelector(".preview-caption");
+  const counter = card.querySelector(".preview-count");
+  const prev = card.querySelector(".preview-prev");
+  const next = card.querySelector(".preview-next");
+  const download = card.querySelector(".preview-download");
+  if (!state.items.length) {
+    img.removeAttribute("src");
+    img.hidden = true;
+    empty.hidden = false;
+    toolbar.hidden = true;
+    caption.textContent = "";
+    return;
+  }
+  const i = Math.max(0, Math.min(index, state.items.length - 1));
+  state.index = i;
+  const item = state.items[i];
+  img.src = state.urls[i];
+  img.hidden = false;
+  empty.hidden = true;
+  toolbar.hidden = false;
+  caption.textContent = item.label || item.id;
+  counter.textContent = fill("previewCount", { current: String(i + 1), total: String(state.items.length) });
+  prev.disabled = i <= 0;
+  next.disabled = i >= state.items.length - 1;
+  download.setAttribute("href", state.urls[i]);
+  download.setAttribute("download", item.output || "preview.png");
+}
+
+function setPreviewStatus(format, text, kind) {
+  previewStatusText[format] = { text: text || "", kind: kind || "" };
+  const status = document.querySelector('.preview-card[data-format="' + format + '"] .preview-status');
+  if (!status) return;
+  status.textContent = text;
+  status.className = "status preview-status" + (kind ? " " + kind : "");
+}
+
+async function listTargets(format, path, bytes, statusEl) {
+  if (format === "docx") {
+    const ids = [];
+    for (let n = 1; n <= 40; n += 1) {
+      const id = "page:" + n;
+      if (statusEl) statusEl.textContent = fill("previewPage", { id });
+      await yieldUi();
+      const probe = runSession({
+        schemaVersion: 1,
+        action: "exportPageImage",
+        path,
+        id,
+        output: outputName(path, id),
+      }, bytes);
+      if (!probe.ok && failCode(probe) === "IdNotFound") break;
+      ids.push({ id, label: id, probe });
+    }
+    return ids;
+  }
+  const inspected = inspectValue(path, bytes);
+  if (format === "xlsx") return sheetTargets(inspected);
+  return slideTargets(inspected);
+}
+
+function exportRequest(format, path, id, output, dpi) {
+  const action = format === "xlsx" ? "exportSheetImage" : format === "docx" ? "exportPageImage" : "exportSlideImage";
+  const request = { schemaVersion: 1, action, path, id, output };
+  if (format === "xlsx" && dpi != null && dpi !== 96) request.dpi = dpi;
+  return request;
+}
+
+async function exportPackage(format, path, bytes, dpi) {
+  const stateStatus = document.querySelector('.preview-card[data-format="' + format + '"] .preview-status');
+  const targets = await listTargets(format, path, bytes, stateStatus);
+  const items = [];
+  const errors = [];
+  for (const target of targets) {
+    let out = target.probe;
+    if (!out) {
+      if (stateStatus) stateStatus.textContent = fill("previewPage", { id: target.id });
+      await yieldUi();
+      out = runSession(exportRequest(format, path, target.id, outputName(path, target.id), dpi), bytes);
+    }
+    if (!out.ok) {
+      errors.push((target.id || "") + "：" + failMessage(out));
+      continue;
+    }
+    let item;
+    try {
+      item = takeBytes(out);
+    } catch (err) {
+      errors.push((target.id || "") + "：" + (err.message || String(err)));
+      continue;
+    }
+    if (!isPng(item)) {
+      errors.push((target.id || "") + "：" + t("previewNoImage"));
+      continue;
+    }
+    items.push({
+      id: target.id,
+      label: target.label || target.id,
+      output: item.path || outputName(path, target.id),
+      bytes: item.bytes,
+    });
+  }
+  return { items, errors };
+}
+
+function applyPreviewItems(format, path, items) {
+  clearPreview(format);
+  const state = previewState[format];
+  state.source = path;
+  state.items = items;
+  state.urls = items.map((item) => URL.createObjectURL(new Blob([item.bytes], { type: "image/png" })));
+  showPreview(format, 0);
+}
+
+async function runPreview(format, source) {
+  if (busy) return;
+  const card = document.querySelector('.preview-card[data-format="' + format + '"]');
+  if (!card) return;
+  try {
+    setBusy(true);
+    setPreviewStatus(format, t("previewing"));
+    const dpi = parseDpi(format, card.querySelector(".preview-dpi"));
+    let pack = source;
+    if (!pack) throw new Error(t("previewNone"));
+    rememberPackage(pack.path, pack.bytes);
+    const { items, errors } = await exportPackage(format, pack.path, pack.bytes, dpi);
+    if (!items.length) {
+      const message = errors[0] || t("previewFailAll");
+      setPreviewStatus(format, message, "bad");
+      append(message);
+      clearPreview(format);
+      showPreview(format, 0);
+      return;
+    }
+    applyPreviewItems(format, pack.path, items);
+    const text = errors.length
+      ? fill("previewPartial", { ok: String(items.length), fail: String(errors.length) }) + " " + errors[0]
+      : fill("previewDone", { n: String(items.length) });
+    setPreviewStatus(format, text, errors.length ? "bad" : "ok");
+    append(text);
+    if (errors.length) append(errors.join("；"));
+  } catch (err) {
+    const message = err.message || String(err);
+    setPreviewStatus(format, message, "bad");
+    append(message);
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function previewFromSession(format) {
+  const pack = packageOf(format);
+  if (!pack) {
+    setPreviewStatus(format, t("previewNone"), "bad");
+    return;
+  }
+  await runPreview(format, pack);
+}
+
+async function previewFromFile(format, file) {
+  const name = file && file.name ? file.name : "";
+  const found = formatOfPath(name);
+  if (!found) {
+    setPreviewStatus(format, fill("previewWrongType", { ext: format }), "bad");
+    return;
+  }
+  if (found !== format) {
+    selectFormat(found);
+    format = found;
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  rememberPackage(name, bytes);
+  await runPreview(format, { path: name, bytes });
+}
+
+async function writePreviewPng(format) {
+  const state = previewState[format];
+  const item = state.items[state.index];
+  if (!item) throw new Error(t("previewEmpty"));
+  if (!root) throw new Error(t("previewNeedDir"));
+  const path = item.output || outputName(state.source || "preview", item.id || "image");
+  const before = listing.slice();
+  await writeBytes(path, item.bytes);
+  await refreshFiles(before);
+  const line = t("written") + " " + path;
+  changeEl.hidden = false;
+  changeEl.textContent = t("thisTime") + line;
+  append(line);
+  return fill("previewWrote", { path });
+}
+
+function bindPreviewCard(card, format) {
+  const file = card.querySelector(".preview-file");
+  card.querySelector(".preview-session").addEventListener("click", () => previewFromSession(format));
+  card.querySelector(".preview-pick").addEventListener("click", () => file.click());
+  file.addEventListener("change", () => {
+    const chosen = file.files && file.files[0];
+    file.value = "";
+    if (chosen) previewFromFile(format, chosen);
+  });
+  card.querySelector(".preview-prev").addEventListener("click", () => showPreview(format, previewState[format].index - 1));
+  card.querySelector(".preview-next").addEventListener("click", () => showPreview(format, previewState[format].index + 1));
+  card.querySelector(".preview-write").addEventListener("click", () => {
+    writePreviewPng(format)
+      .then((text) => setPreviewStatus(format, text, "ok"))
+      .catch((err) => {
+        const message = err.message || String(err);
+        setPreviewStatus(format, message, "bad");
+        append(message);
+      });
+  });
+  const dpiInput = card.querySelector(".preview-dpi");
+  if (dpiInput) {
+    dpiInput.value = String(previewDpi);
+    dpiInput.addEventListener("change", () => {
+      previewDpi = dpiInput.value;
+    });
+  }
+  showPreview(format, previewState[format].index);
+  if (previewStatusText[format]) {
+    setPreviewStatus(format, previewStatusText[format].text, previewStatusText[format].kind);
+  }
+}
+
+function renderPreviewCard(format) {
+  const card = document.createElement("article");
+  card.className = "card preview-card";
+  card.dataset.format = format;
+  const title = document.createElement("h3");
+  title.textContent = t("previewTitle");
+  const blurb = document.createElement("p");
+  blurb.className = "blurb";
+  blurb.textContent = t("previewBody");
+  const controls = document.createElement("div");
+  controls.className = "preview-controls";
+  if (format === "xlsx") {
+    const label = document.createElement("label");
+    label.className = "preview-dpi-label";
+    label.append(document.createTextNode(t("previewDpi")));
+    const dpi = document.createElement("input");
+    dpi.type = "number";
+    dpi.className = "preview-dpi";
+    dpi.min = "24";
+    dpi.max = "600";
+    dpi.step = "1";
+    dpi.value = String(previewDpi);
+    dpi.inputMode = "numeric";
+    label.append(dpi);
+    controls.append(label);
+  }
+  const sessionBtn = document.createElement("button");
+  sessionBtn.type = "button";
+  sessionBtn.className = "preview-run preview-session";
+  sessionBtn.textContent = t("previewSession");
+  sessionBtn.disabled = busy || !session;
+  const pickBtn = document.createElement("button");
+  pickBtn.type = "button";
+  pickBtn.className = "ghost preview-run preview-pick";
+  pickBtn.textContent = t("previewPick");
+  pickBtn.disabled = busy || !session;
+  const file = document.createElement("input");
+  file.type = "file";
+  file.className = "preview-file";
+  file.hidden = true;
+  file.accept = format === "xlsx" ? ".xlsx,.xlsm" : "." + format;
+  controls.append(sessionBtn, pickBtn, file);
+  const status = document.createElement("p");
+  status.className = "status preview-status";
+  const toolbar = document.createElement("div");
+  toolbar.className = "preview-toolbar";
+  toolbar.hidden = true;
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.className = "ghost preview-prev";
+  prev.textContent = t("previewPrev");
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "ghost preview-next";
+  next.textContent = t("previewNext");
+  const count = document.createElement("span");
+  count.className = "preview-count";
+  const download = document.createElement("a");
+  download.className = "preview-download";
+  download.textContent = t("previewDownload");
+  const write = document.createElement("button");
+  write.type = "button";
+  write.className = "ghost preview-write";
+  write.textContent = t("previewWrite");
+  write.disabled = busy || !session;
+  toolbar.append(prev, count, next, download, write);
+  const stage = document.createElement("figure");
+  stage.className = "preview-stage";
+  const empty = document.createElement("p");
+  empty.className = "preview-empty";
+  empty.textContent = t("previewEmpty");
+  const img = document.createElement("img");
+  img.className = "preview-image";
+  img.alt = t("previewTitle");
+  img.hidden = true;
+  const caption = document.createElement("figcaption");
+  caption.className = "preview-caption";
+  stage.append(empty, img, caption);
+  card.append(title, blurb, controls, status, toolbar, stage);
+  return card;
 }
 
 function renderExamples() {
@@ -841,6 +1339,9 @@ function renderExamples() {
       card.append(title, blurb, details, actions);
       panel.append(card);
     }
+    const preview = renderPreviewCard(format.id);
+    panel.append(preview);
+    bindPreviewCard(preview, format.id);
     panels.append(panel);
   });
   selectFormat(current);

@@ -149,7 +149,7 @@ If Chinese text is garbled in PowerShell, set the output encoding to UTF-8 first
 
 ## Browser demo
 
-The temporary page lives in `demo/web`. The published examples are at <https://gaoyia.github.io/office-editor-mcp/>. The title is Office Open XML Patch. The page compiles the library to wasm, introduces the formats, MCP setup, and the latest downloads in Chinese or English, then lists a create request and an edit request for the workbook, the document, and the deck. A local directory must be authorized first. Results are written only into that directory, and new or changed files are marked. The page does not offer a separate download of the examples. If the browser cannot authorize a directory, the page says so. See `docs/wasm-demo.md`.
+The temporary page lives in `demo/web`. The published examples are at <https://gaoyia.github.io/office-editor-mcp/>. The title is Office Open XML Patch. The page compiles the library to wasm, introduces the formats, MCP setup, and the latest downloads in Chinese or English, then lists a create request and an edit request for the workbook, the document, and the deck. Each format can also export a PNG and show it on the page immediately, from a package already in the session or from a local file; that preview does not require a directory. To write example Office files, a local directory must be authorized first. Results of those writes go only into that directory, and new or changed files are marked. The page does not offer a separate download of the examples. If the browser cannot authorize a directory, the page says so. See `docs/wasm-demo.md`.
 
 ## Call it from Rust
 
