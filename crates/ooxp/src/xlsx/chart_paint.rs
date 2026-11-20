@@ -220,6 +220,7 @@ struct LineSeriesStyle {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueLabel {
     OutsideEnd,
+    InsideEnd,
     Right,
 }
 
@@ -1314,6 +1315,10 @@ fn read_chart(
             data_labels_hidden(ser.child_by_local("dLbls"))?;
             None
         };
+        if value_label == Some(ValueLabel::InsideEnd) && values.iter().flatten().any(|v| *v == 0.0)
+        {
+            return Err(unsupported());
+        }
         if value_label.is_some()
             && values
                 .iter()
@@ -2639,7 +2644,7 @@ fn paint(
         font,
         gdi.as_ref(),
         label_px,
-    );
+    )?;
     canvas.vline_i(axis_x, plot_y, plot_b, INK);
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
     let category_y = crossing_axis_y(&plot, axis_min, axis_max, step, scale.crossing());
@@ -3269,7 +3274,7 @@ fn draw_value_labels(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
-) {
+) -> Result<(), Error> {
     let slot = (plot.w + 1.0) / chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
     let overlap = chart.overlap / 100.0;
@@ -3296,13 +3301,33 @@ fn draw_value_labels(
             let h = value_label_height(font, gdi, px);
             let y = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
             let (x, top) = match position {
-                ValueLabel::OutsideEnd => {
+                ValueLabel::OutsideEnd | ValueLabel::InsideEnd => {
                     let x = plot.x
                         + slot * ci as f64
                         + side
                         + si as f64 * width * (1.0 - overlap)
                         + width / 2.0;
-                    (x - w / 2.0, if value < 0.0 { y + pad } else { y - h - pad })
+                    let top = if position == ValueLabel::InsideEnd {
+                        // Public inEnd box is 3pt from the mark end; its text
+                        // has the same 3pt inset as the locked outEnd labels.
+                        let zero =
+                            y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+                        // Short/zero marks and box overflow are not auto-fitted
+                        // or silently clipped; their placement remains NI.
+                        if value == 0.0 || (zero - y).abs() < h + 2.0 * pad || width < w + pad {
+                            return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+                        }
+                        if value < 0.0 {
+                            y - h - pad
+                        } else {
+                            y + pad
+                        }
+                    } else if value < 0.0 {
+                        y + pad
+                    } else {
+                        y - h - pad
+                    };
+                    (x - w / 2.0, top)
                 }
                 ValueLabel::Right => (
                     plot.x
@@ -3315,9 +3340,20 @@ fn draw_value_labels(
                     y - h / 2.0,
                 ),
             };
+            if position == ValueLabel::InsideEnd
+                && (!x.is_finite()
+                    || !top.is_finite()
+                    || x < 0.0
+                    || top < 0.0
+                    || x + w > f64::from(canvas.w)
+                    || top + h > f64::from(canvas.h))
+            {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
             draw_text(canvas, font, gdi, &text, x, top, px, INK);
         }
     }
+    Ok(())
 }
 
 fn column_bar_bounds(
@@ -4646,6 +4682,7 @@ fn read_value_label(
         (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "outEnd") => {
             Ok(Some(ValueLabel::OutsideEnd))
         }
+        (PlotKind::ClusteredColumn, "inEnd") => Ok(Some(ValueLabel::InsideEnd)),
         (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
         _ => Err(unsupported()),
     }
@@ -8094,7 +8131,8 @@ mod tests {
                         )
                         .unwrap();
                     } else {
-                        draw_value_labels(canvas, chart, &plot, 0.0, 10.0, None, Some(&face), 14.0);
+                        draw_value_labels(canvas, chart, &plot, 0.0, 10.0, None, Some(&face), 14.0)
+                            .unwrap();
                     }
                 }
                 let mut removed = 0;
@@ -8122,6 +8160,130 @@ mod tests {
                     removed > 0 && kept > 0,
                     "both real deleted and retained glyphs required at {dpi_value}"
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn inside_end_is_column_only_and_zero_is_explicit_ni() {
+        let wrapper = crate::xml::parse(b"<wrapper/>").unwrap();
+        let ser = crate::xml::parse(
+            b"<ser><dLbls><showVal val='1'/><dLblPos val='inEnd'/></dLbls></ser>",
+        )
+        .unwrap();
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
+            Some(ValueLabel::InsideEnd)
+        );
+        for kind in [PlotKind::ClusteredBar, PlotKind::StandardLine] {
+            assert!(read_value_label(&wrapper.root, &ser.root, kind).is_err());
+        }
+        let ser = line_ser(
+            0,
+            "S1",
+            &[Some(0.0), Some(6.0), Some(9.0)],
+            "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+        );
+        let xml = bar_xml(&ser, "", "minMax", Some("col"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "zero fallback placement is not silently approximated"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn column_inside_end_labels_paint_inside_marks_and_reject_nonfitting_boxes() {
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for sign in [-1.0, 1.0] {
+                let values = [Some(4.0 * sign), Some(6.0 * sign), Some(9.0 * sign)];
+                let ser = line_ser(
+                    0,
+                    "S1",
+                    &values,
+                    "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+                );
+                let xml = bar_xml(&ser, "", "minMax", Some("col"));
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 80.0,
+                    y: 30.0,
+                    w: 400.0,
+                    h: 280.0,
+                };
+                let (lo, hi) = if sign < 0.0 {
+                    (-10.0, 0.0)
+                } else {
+                    (0.0, 10.0)
+                };
+                let mut canvas = Canvas::with_dpi(576, 336, dpi);
+                draw_value_labels(&mut canvas, &chart, &plot, lo, hi, None, Some(&face), 14.0)
+                    .unwrap();
+                let slot = (plot.w + 1.0) / 3.0;
+                let mark_width = slot / (1.0 + chart.gap_width / 100.0);
+                let baseline = y_of(0.0, lo, hi, &plot);
+                let mut ink = [0; 3];
+                for y in 0..336 {
+                    for x in 0..576 {
+                        let i = (y * 576 + x) * 3;
+                        if canvas.px[i..i + 3] == [255; 3] {
+                            continue;
+                        }
+                        let mut found = false;
+                        for ci in 0..3 {
+                            let center = plot.x + slot * (ci as f64 + 0.5);
+                            let end = y_of(values[ci].unwrap(), lo, hi, &plot);
+                            if (x as f64 - center).abs() <= mark_width / 2.0
+                                && (y as f64) >= baseline.min(end)
+                                && (y as f64) <= baseline.max(end)
+                            {
+                                ink[ci] += 1;
+                                found = true;
+                            }
+                        }
+                        assert!(found, "inside-end glyph escaped every mark");
+                    }
+                }
+                assert!(
+                    ink.into_iter().all(|n| n > 0),
+                    "every value must paint real glyph ink"
+                );
+                for small in [
+                    Rect {
+                        x: 80.0,
+                        y: 30.0,
+                        w: 20.0,
+                        h: 280.0,
+                    },
+                    Rect {
+                        x: 80.0,
+                        y: 30.0,
+                        w: 400.0,
+                        h: 20.0,
+                    },
+                ] {
+                    let mut canvas = Canvas::with_dpi(576, 336, dpi);
+                    assert!(
+                        draw_value_labels(
+                            &mut canvas,
+                            &chart,
+                            &small,
+                            lo,
+                            hi,
+                            None,
+                            Some(&face),
+                            14.0
+                        )
+                        .is_err(),
+                        "short/narrow boxes remain NI instead of clipped/fitted"
+                    );
+                }
             }
         }
     }
