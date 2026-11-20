@@ -6,7 +6,7 @@
 
 页面在 `demo/web`。绑定在 `crates/ooxp-wasm`。推到 `main` 后，`.github/workflows/pages.yml` 编出 wasm 并发布到 GitHub Pages。
 
-页面标题是 Office Open XML Patch。页头的描述和关键词包含 `office-edit`、`xlsx-edit`、`docx-edit`、`pptx-edit`，以及 `office-edit-mcp`、`xlsx-edit-mcp`、`docx-edit-mcp`、`pptx-edit-mcp`。标题下面写明这是 ooxp 的 WebAssembly 示例。页面可以在中文和 English 之间切换，示例请求里的可见文字跟着切换。介绍页说明支持的格式。演示文稿那一卡顺带写了一句：支持写入动画。页面也说明文件如何写入目录、MCP 接入，以及按最新 GitHub Release 拼出的下载地址。下载里有 TypeScript 包 `ooxp-v<版本>-wasm.tar.gz`。许可证仍是 Business Source License 1.0。每种格式两份请求：一份创建，一份就地修改。请求可以改。当前标签会换成对应的按钮颜色。
+页面标题是 Office Open XML Patch。页头的描述和关键词包含 `office-edit`、`xlsx-edit`、`docx-edit`、`pptx-edit`，以及 `office-edit-mcp`、`xlsx-edit-mcp`、`docx-edit-mcp`、`pptx-edit-mcp`。标题下面写明这是 ooxp 的 WebAssembly 示例。页面可以在中文和 English 之间切换，示例请求里的可见文字跟着切换。介绍页说明支持的格式。演示文稿那一卡顺带写了一句：支持写入动画。页面也说明文件如何写入目录、MCP 接入，以及按最新 GitHub Release 拼出的下载地址。下载里有 TypeScript 包 `ooxp-v<版本>-wasm.tar.gz`。许可证仍是 Business Source License 1.0。每种格式两份请求：一份创建，一份就地修改。请求可以改。当前标签会换成对应的按钮颜色。每种格式还可以导出 PNG，并立刻在页面上预览。
 
 示例写这些文件：
 
@@ -31,6 +31,13 @@
   - 英文界面写成 `ooxp-example-strategy.pptx`
 
 修改请求不写 `output`，结果覆盖 `path`。目录里还没有该文件时，修改会失败。
+
+
+## 导出预览
+
+每种格式都可以在页面上导出 PNG，并立刻显示。不必先授权目录。可以预览刚才在会话里用 create 或 apply 得到的包，也可以用文件选择器打开本地的 .docx、.xlsx、.pptx。工作表导出可以填写可选的 `dpi`（24 到 600；省略或 96 时不把该字段写入请求，沿用库的缺省 96）。幻灯片和文档页按契约不接受 `dpi`。
+
+浏览器里的 wasm 没有 Windows GDI+，带文字的文档或工作表往往会失败，页面会显示库返回的错误。需要看效果时，可以先生成一份浏览器能画的简单示例（色块工作表、无文字填色表、形状幻灯片）。这是库的近似预览，不是和 Office 逐像素相同。若已授权目录，也可以把当前这张 PNG 写进去。
 
 ## 本地目录
 
