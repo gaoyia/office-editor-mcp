@@ -4050,6 +4050,9 @@ fn row_auto_pt(
             raise(styles.font(cell.style)?);
         }
     }
+    if row_has_icon_set(&parsed_icon_rules(sheet)?, row) {
+        pt = pt.max(super::icon_set::ICON_AUTO_ROW_MIN_PT);
+    }
     Ok(pt)
 }
 
@@ -4467,7 +4470,7 @@ fn paint_window(
             session,
         )?;
     }
-    paint_rules(&mut canvas, sheet, cells, &xs, &ys, c0, r0)?;
+    paint_rules(&mut canvas, sheet, styles, cells, &xs, &ys, c0, r0)?;
     let mut fonts = FontBook {
         dpi: styles.geometry.dpi(),
         faces: Vec::new(),
@@ -5170,12 +5173,14 @@ fn line_on(kind: LineKind, along: i32, across: i32, boundary: i32) -> bool {
 fn paint_rules(
     canvas: &mut Canvas,
     sheet: &Element,
+    styles: &Styles,
     cells: &HashMap<(u32, u32), CellRec>,
     xs: &Axis,
     ys: &Axis,
     c0: u32,
     r0: u32,
 ) -> Result<(), Error> {
+    let icons = parsed_icon_rules(sheet)?;
     let mut rules = Vec::new();
     for block in sheet.children_by_local("conditionalFormatting") {
         let sqref = block.attr("sqref").unwrap_or("");
@@ -5206,14 +5211,154 @@ fn paint_rules(
             "containsErrors" | "notContainsErrors" => {
                 let _ = error_mode(rule, areas)?;
             }
-            // iconSet：选择语义见 `icon_set` 模块；无合法字形资产前整表仍 NI（不冒充出图）。
-            "iconSet" => return Err(unsupported()),
+            // iconSet：最小三色子集在 paint_icon_sets 绘制；其它集合已在 parsed_icon_rules NI。
+            "iconSet" => {}
             _ => return Err(unsupported()),
         }
     }
     for (_, areas, rule) in &rules {
         if rule.attr("type") == Some("dataBar") {
             paint_bar(canvas, sheet, cells, xs, ys, c0, r0, areas, rule)?;
+        }
+    }
+    paint_icon_sets(canvas, sheet, styles, cells, xs, ys, c0, r0, &icons)?;
+    Ok(())
+}
+
+struct IconRule<'a> {
+    priority: i32,
+    areas: Vec<(CellRef, CellRef)>,
+    set: super::icon_set::ThreeIconSet,
+    show_value: bool,
+    reverse: bool,
+    cfvos: Vec<&'a Element>,
+}
+
+fn parsed_icon_rules(sheet: &Element) -> Result<Vec<IconRule<'_>>, Error> {
+    let mut out = Vec::new();
+    for block in sheet.children_by_local("conditionalFormatting") {
+        let areas = parse_areas(block.attr("sqref").unwrap_or(""))?;
+        for rule in block.children_by_local("cfRule") {
+            if rule.attr("type") != Some("iconSet") {
+                continue;
+            }
+            out.push(parse_one_icon_rule(areas.clone(), rule)?);
+        }
+    }
+    Ok(out)
+}
+
+fn parse_one_icon_rule<'a>(
+    areas: Vec<(CellRef, CellRef)>,
+    rule: &'a Element,
+) -> Result<IconRule<'a>, Error> {
+    let priority = rule
+        .attr("priority")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(i32::MAX);
+    let Some(iset) = rule.child_by_local("iconSet") else {
+        return Err(unsupported());
+    };
+    if icon_set_is_custom(iset) {
+        return Err(unsupported());
+    }
+    let name = super::icon_set::icon_set_name(iset.attr("iconSet"));
+    let Some(set) = super::icon_set::parse_minimal_set(name) else {
+        return Err(unsupported());
+    };
+    let cfvos = iset.children_by_local("cfvo");
+    if cfvos.len() != 3 {
+        return Err(unsupported());
+    }
+    Ok(IconRule {
+        priority,
+        areas,
+        set,
+        show_value: super::icon_set::show_value(iset.attr("showValue")),
+        reverse: super::icon_set::reverse_icons(iset.attr("reverse")),
+        cfvos,
+    })
+}
+
+fn icon_set_is_custom(iset: &Element) -> bool {
+    matches!(iset.attr("custom"), Some("1" | "true" | "True"))
+        || !iset.children_by_local("cfIcon").is_empty()
+}
+
+fn icon_show_value(rules: &[IconRule<'_>], col: u32, row: u32) -> Option<bool> {
+    let mut best: Option<(i32, bool)> = None;
+    for rule in rules {
+        if !in_areas(col, row, &rule.areas) {
+            continue;
+        }
+        if best.map(|(p, _)| rule.priority < p).unwrap_or(true) {
+            best = Some((rule.priority, rule.show_value));
+        }
+    }
+    best.map(|(_, show)| show)
+}
+
+fn row_has_icon_set(rules: &[IconRule<'_>], row: u32) -> bool {
+    rules.iter().any(|rule| {
+        rule.areas
+            .iter()
+            .any(|(a, b)| row >= a.row.min(b.row) && row <= a.row.max(b.row))
+    })
+}
+
+fn cell_typo_center_y(y0: i32, y1: i32, xf: &Xf, font: &FontInfo, dpi: RenderDpi) -> f64 {
+    let pitch = f64::from(excel_row_px_at(auto_row_pt(&font.name, font.pt), dpi).max(1));
+    let top0 = match xf.v_align {
+        VAlign::Top => f64::from(y0) + 2.0,
+        VAlign::Center => f64::from(y0) + (f64::from(y1 - y0) - pitch) / 2.0,
+        VAlign::Bottom => f64::from(y1) - pitch,
+    };
+    super::icon_set::typo_line_center(top0, pitch)
+}
+
+fn paint_icon_sets(
+    canvas: &mut Canvas,
+    _sheet: &Element,
+    styles: &Styles,
+    cells: &HashMap<(u32, u32), CellRec>,
+    xs: &Axis,
+    ys: &Axis,
+    c0: u32,
+    r0: u32,
+    icons: &[IconRule<'_>],
+) -> Result<(), Error> {
+    let dpi = styles.geometry.dpi();
+    for rule in icons {
+        let values = area_numbers(cells, &rule.areas);
+        let mut thresholds = Vec::with_capacity(rule.cfvos.len());
+        let mut gte = Vec::with_capacity(rule.cfvos.len());
+        for cfvo in &rule.cfvos {
+            thresholds.push(cfvo_value(cfvo, &values)?);
+            gte.push(super::icon_set::cfvo_gte(cfvo.attr("gte")));
+        }
+        for ((col, row), cell) in cells {
+            let Shown::Num(n) = cell.shown else {
+                continue;
+            };
+            if !in_areas(*col, *row, &rule.areas) {
+                continue;
+            }
+            let Some((x0, y0, x1, y1)) = cell_rect(xs, ys, c0, r0, *col, *row) else {
+                continue;
+            };
+            let xf = styles.xf(cell.style)?;
+            let font = styles.font(cell.style)?;
+            let typo = cell_typo_center_y(y0, y1, xf, font, dpi);
+            let slot = super::icon_set::icon_slot_px(font.pt, dpi.get());
+            let Some((ix, iy, size)) = super::icon_set::icon_slot_rect(x0, y0, x1, y1, slot, typo)
+            else {
+                continue;
+            };
+            let index = super::icon_set::select_icon_index(n, &thresholds, &gte, rule.reverse)
+                .map_err(|_| unsupported())?;
+            super::icon_set::paint_three_icon(rule.set, index, ix, iy, size, |x, y, rgb, cov| {
+                canvas.blend(x, y, rgb, cov);
+            });
         }
     }
     Ok(())
@@ -5471,7 +5616,7 @@ fn cf_fill(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(i32::MAX);
             let color = match rule.attr("type").unwrap_or("") {
-                "dataBar" => None,
+                "dataBar" | "iconSet" => None,
                 "colorScale" => scale_of(cells, &areas, rule, col, row)?,
                 "cellIs" => cell_is_fill(styles, cells, rule, col, row)?,
                 "expression" | "timePeriod" => {
@@ -6126,6 +6271,7 @@ fn paint_labels(
     session: &mut Option<FormulaSession>,
 ) -> Result<(), Error> {
     let filter = filter_header(sheet)?;
+    let icon_rules = parsed_icon_rules(sheet)?;
     let mut jobs = Vec::new();
     for merge in merges {
         jobs.push((merge.c0, merge.r0, merge.c1, merge.r1));
@@ -6163,6 +6309,10 @@ fn paint_labels(
         if text.is_empty() {
             continue;
         }
+        let icon_show = icon_show_value(&icon_rules, col, row);
+        if icon_show == Some(false) {
+            continue;
+        }
         // readingOrder=2 / 强 RTL 文种需要整段 bidi+shaping。
         // Face::width 与 draw_cells 是逐字 glyph advance，接 DirectionRightToLeft 会测画错配——NI。
         // 不把 Unicode 反序当 RTL；不与 sheetView.rightToLeft（列镜像）混同。
@@ -6180,6 +6330,11 @@ fn paint_labels(
             (x0, x1)
         };
         let mut clip_r = x1;
+        let icon_reserve = if icon_show == Some(true) {
+            super::icon_set::icon_text_reserve(font.pt, fonts.dpi.get())
+        } else {
+            0
+        };
         if filter_hit(filter, col, row, col_end) {
             clip_r = if rtl {
                 (x0 + 17).min(x1)
@@ -6217,7 +6372,8 @@ fn paint_labels(
             + match h_align {
                 HAlign::Right => 0.0,
                 _ => indent_px,
-            };
+            }
+            + f64::from(icon_reserve);
         let inner_right = f64::from(clip_r)
             - 2.0
             - match h_align {
@@ -6295,7 +6451,7 @@ fn paint_labels(
             let top = line_top + pitch * (1.0 - dy_descent) - face.line_height();
             let mut paint = |x: f64, s: &str| {
                 face.draw_cells(s, x, top, color, |px, py, rgb, cov| {
-                    if px < x0 || py < y0 || px >= clip_r || py >= y1 {
+                    if px < x0 + icon_reserve || py < y0 || px >= clip_r || py >= y1 {
                         return;
                     }
                     canvas.blend(px, py, rgb, cov);
