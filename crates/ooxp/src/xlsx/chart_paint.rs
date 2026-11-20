@@ -546,16 +546,25 @@ pub(crate) fn render_chart_at(
         // Chart area and plot area have independent fills. The default Cartesian
         // plot is white, not the explicitly coloured chart-area background.
         canvas.rounded_frame = frame.rounded;
-        canvas.fill_rect(0, 0, width as i32, height as i32, frame.fill);
+        match frame.fill {
+            FrameFill::NoFill => canvas.clear_to_transparent(),
+            FrameFill::Default => canvas.fill_rect(0, 0, width as i32, height as i32, [255; 3]),
+            FrameFill::Solid(color) => canvas.fill_rect(0, 0, width as i32, height as i32, color),
+        }
         canvas.plot_fill = if chart.kind == PlotKind::Pie {
             // A pie's automatic plot area is transparent. Explicit pie plot-area
             // formatting needs its own layout evidence, not an inscribed square.
-            if frame.plot_fill.is_some_and(|c| c != [255; 3]) {
+            // Plot noFill is already transparent and is not the F09 non-white case.
+            if matches!(frame.plot_fill, FrameFill::Solid(c) if c != [255; 3]) {
                 return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
             }
             None
         } else {
-            Some(frame.plot_fill.unwrap_or([255; 3]))
+            match frame.plot_fill {
+                FrameFill::NoFill => None,
+                FrameFill::Default => Some([255; 3]),
+                FrameFill::Solid(color) => Some(color),
+            }
         };
     }
     paint(&mut canvas, &chart, font.as_ref(), host)?;
@@ -564,10 +573,19 @@ pub(crate) fn render_chart_at(
 
 /// Supported frame styles are semantic fills and a round/rectangle switch;
 /// effects, transparency, gradients and custom strokes remain explicit NI.
+/// Default (missing spPr) is white; explicit noFill is transparent and
+/// must not collapse to that default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FrameFill {
+    Default,
+    Solid([u8; 3]),
+    NoFill,
+}
+
 struct FrameStyle {
     rounded: bool,
-    fill: [u8; 3],
-    plot_fill: Option<[u8; 3]>,
+    fill: FrameFill,
+    plot_fill: FrameFill,
 }
 
 fn read_frame(root: &Element) -> Result<FrameStyle, Error> {
@@ -576,41 +594,89 @@ fn read_frame(root: &Element) -> Result<FrameStyle, Error> {
         .and_then(|c| c.child_by_local("plotArea"));
     Ok(FrameStyle {
         rounded: flag(root, "roundedCorners").unwrap_or(true),
-        fill: read_frame_fill(root)?.unwrap_or([255; 3]),
-        plot_fill: plot.map(read_frame_fill).transpose()?.flatten(),
+        fill: read_frame_fill(root)?,
+        plot_fill: plot
+            .map(read_frame_fill)
+            .transpose()?
+            .unwrap_or(FrameFill::Default),
     })
 }
 
-fn read_frame_fill(node: &Element) -> Result<Option<[u8; 3]>, Error> {
+fn read_frame_fill(node: &Element) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    let mut fill = None;
-    if let Some(props) = node.child_by_local("spPr") {
-        for prop in props.element_children() {
-            match prop.local_name() {
-                "solidFill" => {
-                    let mut colors = prop.element_children();
-                    let color = colors.next().ok_or_else(unsupported)?;
-                    if colors.next().is_some()
-                        || color.local_name() != "srgbClr"
-                        || color.element_children().any(|c| {
-                            c.local_name() != "alpha" || c.attr_local("val") != Some("100000")
-                        })
-                    {
-                        return Err(unsupported());
-                    }
-                    fill = Some(
-                        color
-                            .attr_local("val")
-                            .and_then(parse_hex)
-                            .ok_or_else(unsupported)?,
-                    );
+    let Some(props) = node.child_by_local("spPr") else {
+        return Ok(FrameFill::Default);
+    };
+    let mut fill = FrameFill::Default;
+    let mut saw_fill = false;
+    let mut saw_hidden_ext = false;
+    for prop in props.element_children() {
+        match prop.local_name() {
+            "noFill" => {
+                if saw_fill {
+                    return Err(unsupported());
                 }
-                "effectLst" if prop.element_children().next().is_none() => (),
-                _ => return Err(unsupported()),
+                saw_fill = true;
+                fill = FrameFill::NoFill;
             }
+            "solidFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                let mut colors = prop.element_children();
+                let color = colors.next().ok_or_else(unsupported)?;
+                if colors.next().is_some()
+                    || color.local_name() != "srgbClr"
+                    || color
+                        .element_children()
+                        .any(|c| c.local_name() != "alpha" || c.attr_local("val") != Some("100000"))
+                {
+                    return Err(unsupported());
+                }
+                fill = FrameFill::Solid(
+                    color
+                        .attr_local("val")
+                        .and_then(parse_hex)
+                        .ok_or_else(unsupported)?,
+                );
+            }
+            "effectLst" if prop.element_children().next().is_none() => (),
+            // Excel 16 writes a:noFill plus an Office 2010 hiddenFill ext that
+            // only remembers the previous fill; it is not a visible fill.
+            "extLst" if is_office_hidden_fill_ext(prop) => saw_hidden_ext = true,
+            _ => return Err(unsupported()),
         }
     }
+    if saw_hidden_ext && fill != FrameFill::NoFill {
+        return Err(unsupported());
+    }
     Ok(fill)
+}
+
+fn is_office_hidden_fill_ext(ext_lst: &Element) -> bool {
+    let mut exts = ext_lst.element_children();
+    let Some(ext) = exts.next() else {
+        return false;
+    };
+    if exts.next().is_some() || ext.local_name() != "ext" {
+        return false;
+    }
+    if ext.attr_local("uri") != Some("{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}") {
+        return false;
+    }
+    let mut kids = ext.element_children();
+    let Some(hidden) = kids.next() else {
+        return false;
+    };
+    if kids.next().is_some() || hidden.local_name() != "hiddenFill" {
+        return false;
+    }
+    let mut fills = hidden.element_children();
+    let Some(remembered) = fills.next() else {
+        return false;
+    };
+    fills.next().is_none() && matches!(remembered.local_name(), "solidFill" | "noFill")
 }
 
 fn read_chart(
@@ -4209,6 +4275,11 @@ impl Canvas {
         }
     }
 
+    fn clear_to_transparent(&mut self) {
+        self.px.fill(0);
+        self.alpha = Some(vec![0; (self.w as usize) * (self.h as usize)]);
+    }
+
     fn sx(&self, px96: i32) -> i32 {
         self.dpi.scale_px(px96)
     }
@@ -4225,10 +4296,42 @@ impl Canvas {
             }
             return;
         }
-        let c = u16::from(cov);
-        for (k, src) in rgb.into_iter().enumerate() {
-            let dst = u16::from(self.px[i + k]);
-            self.px[i + k] = ((u16::from(src) * c + dst * (255 - c) + 127) / 255) as u8;
+        let src_a = u16::from(cov);
+        let dst_a = self
+            .alpha
+            .as_ref()
+            .map(|alpha| u16::from(alpha[i / 3]))
+            .unwrap_or(255);
+        if dst_a == 255 {
+            // Opaque destination keeps the existing coverage blend; the
+            // rounded-corner path relies on this and then overwrites outside alpha.
+            for (k, src) in rgb.into_iter().enumerate() {
+                let dst = u16::from(self.px[i + k]);
+                self.px[i + k] = ((u16::from(src) * src_a + dst * (255 - src_a) + 127) / 255) as u8;
+            }
+            return;
+        }
+        if dst_a == 0 {
+            // Unassociated source over a transparent pixel, same silhouette
+            // convention as the rounded-frame coverage mask.
+            self.px[i..i + 3].copy_from_slice(&rgb);
+            if let Some(alpha) = &mut self.alpha {
+                alpha[i / 3] = cov;
+            }
+            return;
+        }
+        let out_a = src_a + (dst_a * (255 - src_a) + 127) / 255;
+        if out_a == 0 {
+            self.px[i..i + 3].copy_from_slice(&[0; 3]);
+        } else {
+            for (k, src) in rgb.into_iter().enumerate() {
+                let dst = u16::from(self.px[i + k]);
+                let premul = u16::from(src) * src_a + (dst * dst_a * (255 - src_a) + 127) / 255;
+                self.px[i + k] = ((premul + out_a / 2) / out_a) as u8;
+            }
+        }
+        if let Some(alpha) = &mut self.alpha {
+            alpha[i / 3] = out_a as u8;
         }
     }
 
@@ -4417,7 +4520,10 @@ impl Canvas {
             self.vline_i(w - 1, 0, h - 1, color);
             return;
         }
-        self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        if self.alpha.is_none() {
+            // Do not reset an existing noFill alpha mask to opaque white.
+            self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        }
         self.stroke_quarter(r, r, 0, r, 0, r, color);
         self.stroke_quarter(w - r, r, w - r, w - 1, 0, r, color);
         self.stroke_quarter(r, h - r, 0, r, h - r, h - 1, color);
@@ -5138,10 +5244,7 @@ mod tests {
 
     #[test]
     fn valid_unsupported_backgrounds_are_not_silently_defaulted() {
-        for config in [
-            "<c:spPr><a:noFill/></c:spPr>",
-            "<c:spPr><a:ln w='25400'/></c:spPr>",
-        ] {
+        for config in ["<c:spPr><a:ln w='25400'/></c:spPr>"] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(
@@ -5164,6 +5267,7 @@ mod tests {
             "<c:spPr><a:solidFill><a:srgbClr val='123456'/></a:solidFill></c:spPr>",
             "<c:roundedCorners val='1'/>",
             "<c:spPr><a:solidFill><a:srgbClr val='FFFFFF'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:noFill/></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
@@ -5192,8 +5296,8 @@ mod tests {
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             let frame = read_frame(&doc.root).unwrap();
             assert!(!frame.rounded);
-            assert_eq!(frame.fill, [234, 247, 247]);
-            assert_eq!(frame.plot_fill, Some([255, 240, 221]));
+            assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+            assert_eq!(frame.plot_fill, FrameFill::Solid([255, 240, 221]));
             let png = render_chart_at(
                 &doc.root,
                 576,
@@ -5245,9 +5349,151 @@ mod tests {
     }
 
     #[test]
+    fn chart_and_plot_nofill_are_not_silently_white() {
+        let hidden = "<c:spPr><a:noFill/><a:extLst><a:ext uri=\"{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}\"><a14:hiddenFill xmlns:a14=\"http://schemas.microsoft.com/office/drawing/2010/main\"><a:solidFill><a:sysClr val=\"window\" lastClr=\"FFFFFF\"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>";
+        for chart_sppr in ["<c:spPr><a:noFill/></c:spPr>", hidden] {
+            let xml = LONG_LEGEND.replace(
+                "<c:chart>",
+                &format!("<c:roundedCorners val='0'/>{chart_sppr}<c:chart>"),
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let frame = read_frame(&doc.root).unwrap();
+            assert_eq!(frame.fill, FrameFill::NoFill, "{chart_sppr}");
+            assert_eq!(frame.plot_fill, FrameFill::Default);
+            let png = super::render_chart(
+                &doc.root,
+                576,
+                336,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap();
+            let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+                .read_info()
+                .unwrap();
+            let mut buf = vec![0; reader.output_buffer_size()];
+            let info = reader.next_frame(&mut buf).unwrap();
+            assert_eq!(info.color_type, png::ColorType::Rgba);
+            let i = (5 * 576 + 5) * 4;
+            assert_eq!(
+                buf[i + 3],
+                0,
+                "chart-area noFill must be transparent, not white"
+            );
+            assert_ne!(&buf[i..i + 3], &[255, 255, 255]);
+        }
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:noFill/></c:spPr>",
+            );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+        assert_eq!(frame.plot_fill, FrameFill::NoFill);
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(
+            info.color_type,
+            png::ColorType::Rgb,
+            "opaque chart fill with plot noFill stays RGB"
+        );
+        let px = |x: usize, y: usize| &buf[(y * 576 + x) * 3..(y * 576 + x) * 3 + 3];
+        assert_eq!(
+            px(5, 5),
+            &[234, 247, 247],
+            "plot noFill must not paint a white plot over the chart fill"
+        );
+        assert!(
+            buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[234, 247, 247]),
+            "chart-area fill must remain visible in the plot"
+        );
+        assert!(
+            !buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[255, 255, 255]),
+            "plot noFill over a non-white chart fill must not introduce a white fallback"
+        );
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:noFill/></c:spPr><c:chart>",
+            )
+            .replace("<c:plotArea>", "<c:plotArea><c:spPr><a:noFill/></c:spPr>");
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::NoFill);
+        assert_eq!(frame.plot_fill, FrameFill::NoFill);
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        let margin = (5 * 576 + 5) * 4;
+        assert_eq!(
+            buf[margin + 3],
+            0,
+            "both noFill must keep the chart margin transparent"
+        );
+        let mut transparent = 0usize;
+        for px in buf[..info.buffer_size()].chunks_exact(4) {
+            if px[3] == 0 {
+                transparent += 1;
+                assert_ne!(
+                    &px[..3],
+                    &[255, 255, 255],
+                    "transparent noFill must not use a white key"
+                );
+            }
+        }
+        assert!(
+            transparent > 1000,
+            "both noFill must leave a transparent field, got {transparent}"
+        );
+    }
+
+    #[test]
     fn unsupported_frame_semantics_do_not_fall_back_to_white() {
         for config in [
-            "<c:spPr><a:noFill/></c:spPr>",
             "<c:spPr><a:gradFill/></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
