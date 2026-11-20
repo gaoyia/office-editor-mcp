@@ -25,6 +25,9 @@ const INK: [u8; 3] = [0, 0, 0];
 const BORDER: [u8; 3] = [0x89, 0x89, 0x89];
 /// 下列边距、刻度臂长和图例间距是 96 dpi 下的像素。出图时经 `RenderDpi::scale_px`，
 /// 96 dpi 保持原值。圆角 `CORNER_R` 仍固定，圆角框另案处理。
+/// 绘图区顶/底边距不用各自四舍五入：106 dpi 下 14→15.458、34→37.542，
+/// 四舍五入得到 15+38，官方 Chart.Export 的网格顶/底却是 16 与 37（总边距同为 53）。
+/// 起点边距向上取整、对边向下取整，96/144 等整倍数不变。
 const INSET_TOP: i32 = 14;
 const INSET_RIGHT: i32 = 60;
 const INSET_BOTTOM: i32 = 34;
@@ -121,6 +124,34 @@ enum MarkerSymbol {
 enum MarkerKind {
     None,
     Shaped { symbol: MarkerSymbol, size: f64 },
+}
+
+/// Excel Chart.Export keeps a 96px gutter's leading edge by ceiling the
+/// scaled length, and the trailing edge by flooring it. Independently
+/// rounding both sides at 106dpi yields 15 and 38, but official untitled
+/// 636x371 / 424x265 plots start at y=16 and end at 334 / 228 (insets 16
+/// and 37). The total chrome is the same 53px. Exact at 96dpi.
+fn scale_plot_leading(dpi: RenderDpi, px96: i32) -> i32 {
+    if dpi.is_default() {
+        px96
+    } else {
+        (f64::from(px96) * dpi.get() / RenderDpi::DEFAULT.get()).ceil() as i32
+    }
+}
+
+fn scale_plot_trailing(dpi: RenderDpi, px96: i32) -> i32 {
+    if dpi.is_default() {
+        px96
+    } else {
+        (f64::from(px96) * dpi.get() / RenderDpi::DEFAULT.get()).floor() as i32
+    }
+}
+
+/// Regular major-grid rows: truncate from the official plot top,
+/// `y = plot_y + i * span / intervals`. The old `+ intervals - 1` bias
+/// pushed several 106dpi ticks one pixel past unstretched official grids.
+fn regular_grid_y(plot_y: i32, plot_b: i32, i: i32, intervals: i32) -> i32 {
+    plot_y + i * (plot_b - plot_y) / intervals
 }
 
 fn default_marker_symbol(slot: usize) -> MarkerSymbol {
@@ -1162,11 +1193,11 @@ fn paint_scatter(
         }
         y
     } else {
-        canvas.dpi.scale_px(INSET_TOP)
+        scale_plot_leading(canvas.dpi, INSET_TOP)
     };
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
+    let mut plot_b = canvas.h as i32 - scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
@@ -1182,7 +1213,7 @@ fn paint_scatter(
     // inside the plot, so the bottom no longer reserves a label gutter.
     let y_cross_interior = y_scale.min < -1e-12 && y_scale.max > 1e-12;
     if y_cross_interior {
-        plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_TOP);
+        plot_b = canvas.h as i32 - scale_plot_trailing(canvas.dpi, INSET_TOP);
         if !chart.legend_spec.legacy {
             plot_b -= legend_layout.reserve()[3];
         }
@@ -1244,7 +1275,7 @@ fn paint_scatter(
     };
     if chart.grid && y_regular {
         for i in 0..=y_intervals {
-            let y = plot_y + (i * (plot_b - plot_y) + y_intervals - 1) / y_intervals;
+            let y = regular_grid_y(plot_y, plot_b, i, y_intervals);
             canvas.hline_i(grid_left, plot_r, y, INK);
         }
     }
@@ -1352,7 +1383,8 @@ fn paint_scatter(
     let baseline = if y_cross_interior {
         f64::from(axis_line_y) + canvas.dpi.scale_f(10.0)
     } else {
-        f64::from(canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM)) + canvas.dpi.scale_f(10.0)
+        f64::from(canvas.h as i32 - scale_plot_trailing(canvas.dpi, INSET_BOTTOM))
+            + canvas.dpi.scale_f(10.0)
     };
     for (tick, label) in x_ticks.iter().zip(&x_labels) {
         let x = x_of(*tick, x_scale.min, x_scale.max, &plot);
@@ -1481,8 +1513,10 @@ fn paint_bar(
     // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
     // INSET_BOTTOM. This is not a guessed 1px shift.
     let val_axis_at_top = !chart.cats_from_bottom;
-    let val_label_inset = canvas.dpi.scale_px(INSET_BOTTOM);
-    let unused_inset = canvas.dpi.scale_px(INSET_TOP);
+    let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
+    let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
+    let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
+    let unused_bottom = scale_plot_trailing(canvas.dpi, INSET_TOP);
     let mut plot_y = if chart.title.is_some() {
         let band = title_face
             .as_ref()
@@ -1497,21 +1531,21 @@ fn paint_bar(
             y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
         if val_axis_at_top {
-            y += val_label_inset;
+            y += val_label_top;
         }
         y
     } else if val_axis_at_top {
-        val_label_inset
+        val_label_top
     } else {
-        unused_inset
+        unused_top
     };
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
         - if val_axis_at_top {
-            unused_inset
+            unused_bottom
         } else {
-            val_label_inset
+            val_label_bottom
         };
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
@@ -1965,11 +1999,11 @@ fn paint(
         }
         y
     } else {
-        canvas.dpi.scale_px(INSET_TOP)
+        scale_plot_leading(canvas.dpi, INSET_TOP)
     };
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
-    let mut plot_b = canvas.h as i32 - canvas.dpi.scale_px(INSET_BOTTOM);
+    let mut plot_b = canvas.h as i32 - scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
         axis_x += reserve[0];
@@ -2000,7 +2034,7 @@ fn paint(
         <= step * 1e-8;
     if chart.grid && regular {
         for i in 0..=intervals {
-            let y = plot_y + (i * (plot_b - plot_y) + intervals - 1) / intervals;
+            let y = regular_grid_y(plot_y, plot_b, i, intervals);
             canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
         }
     }
@@ -2164,8 +2198,8 @@ fn draw_value_minor_ticks(
         return;
     }
     for i in 0..intervals {
-        let y0 = plot_y + (i * span + intervals - 1) / intervals;
-        let y1 = plot_y + ((i + 1) * span + intervals - 1) / intervals;
+        let y0 = regular_grid_y(plot_y, plot_b, i, intervals);
+        let y1 = regular_grid_y(plot_y, plot_b, i + 1, intervals);
         let gap = y1 - y0;
         for k in 1..parts {
             let y = y0 + (k * gap + parts / 2) / parts;
@@ -5250,6 +5284,85 @@ mod tests {
         assert_eq!(dpi106.scale_px(TICK_GAP), 12);
         assert_eq!(axis_x_of(7, dpi106), 29);
         assert_eq!(axis_x_of(19, dpi106), 41);
+    }
+
+    #[test]
+    fn plot_insets_and_regular_grids_match_official_106dpi_edges() {
+        let dpi106 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        assert_eq!(scale_plot_leading(dpi106, INSET_TOP), 16);
+        assert_eq!(scale_plot_trailing(dpi106, INSET_BOTTOM), 37);
+        assert_eq!(scale_plot_leading(RenderDpi::DEFAULT, INSET_TOP), 14);
+        assert_eq!(scale_plot_trailing(RenderDpi::DEFAULT, INSET_BOTTOM), 34);
+        let dpi144 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 144}).as_object().unwrap()).unwrap();
+        assert_eq!(scale_plot_leading(dpi144, INSET_TOP), 21);
+        assert_eq!(scale_plot_trailing(dpi144, INSET_BOTTOM), 51);
+        // Official untitled 636x371 / 424x265 grids at 106dpi.
+        assert_eq!(
+            (0..=9)
+                .map(|i| regular_grid_y(16, 334, i, 9))
+                .collect::<Vec<_>>(),
+            vec![16, 51, 86, 122, 157, 192, 228, 263, 298, 334]
+        );
+        assert_eq!(regular_grid_y(16, 228, 0, 9), 16);
+        assert_eq!(regular_grid_y(16, 228, 9, 9), 228);
+
+        let series = line_ser(
+            0,
+            "S1",
+            &[Some(4.0), Some(2.0), Some(3.0), Some(1.0)],
+            r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+        );
+        let doc = crate::xml::parse(standard_line_xml(&series, "").as_bytes()).unwrap();
+        let png = render_chart_at(
+            &doc.root,
+            636,
+            371,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            dpi106,
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let bpp = match info.color_type {
+            png::ColorType::Rgb => 3usize,
+            png::ColorType::Rgba => 4usize,
+            other => panic!("unexpected color type {other:?}"),
+        };
+        let w = info.width;
+        let h = info.height;
+        assert_eq!((w, h), (636, 371));
+        let mut rows = Vec::new();
+        for y in 1..h - 1 {
+            let mut ink = 0u32;
+            for x in 80..400 {
+                let i = ((y * w + x) * bpp as u32) as usize;
+                let r = buf[i];
+                let g = buf[i + 1];
+                let b = buf[i + 2];
+                let mx = r.max(g).max(b);
+                let mn = r.min(g).min(b);
+                if mx < 230 && mx - mn < 20 {
+                    ink += 1;
+                }
+            }
+            if ink >= 160 {
+                rows.push(y as i32);
+            }
+        }
+        assert_eq!(
+            rows,
+            vec![16, 51, 86, 122, 157, 192, 228, 263, 298, 334],
+            "106dpi 636x371 major grids must sit on official rows, got {rows:?}"
+        );
     }
 
     #[test]
