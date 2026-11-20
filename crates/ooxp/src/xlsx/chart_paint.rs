@@ -2111,7 +2111,7 @@ fn paint(
         }
     }
     match chart.kind {
-        PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max, step),
         PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::StandardArea => draw_areas(canvas, chart, &plot, axis_min, axis_max),
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
@@ -2738,7 +2738,45 @@ fn draw_value_labels(
     }
 }
 
-fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+fn column_bar_bounds(
+    x0: f64,
+    x1: f64,
+    y_zero: i32,
+    y_val: i32,
+    value: f64,
+    invert: bool,
+) -> [i32; 4] {
+    if value < 0.0 && invert {
+        // A 1px sharp outline chooses the pixel center nearest each continuous
+        // path edge (ties toward the positive side): floor(x) + 0.5. Both path
+        // edges are inclusive; a fill's rounded half-open end minus 1 is not
+        // an outline edge and can inset both sides of the same narrow column.
+        [
+            x0.floor() as i32,
+            y_zero.min(y_val),
+            x1.floor() as i32,
+            y_zero.max(y_val),
+        ]
+    } else {
+        let x0 = round_half_even(x0);
+        let x1_open = round_half_even(x1);
+        if value >= 0.0 {
+            // Keep the supplied positive shape edge, independently of the grid.
+            [x0, y_val, x1_open, y_zero]
+        } else {
+            [x0, y_zero + 1, x1_open, y_val]
+        }
+    }
+}
+
+fn draw_bars(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+) {
     let cats = chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
     let overlap = chart.overlap / 100.0;
@@ -2752,7 +2790,16 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
     let bar_w = slot / denom;
     let cluster = bar_w * (n - (n - 1.0) * overlap);
     let side = (slot - cluster) / 2.0;
-    let y_zero = y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    // Use the same major-grid raster as the axis. Independent y_of(0).round()
+    // lands one row below the 0-grid on mixed-sign half-pixel spans (e.g.
+    // [-3, 5] at 106dpi), so the inverted "A" box missed the axis by 1px.
+    let y_zero = crossing_axis_y(
+        plot,
+        axis_min,
+        axis_max,
+        step,
+        0.0_f64.clamp(axis_min, axis_max),
+    );
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin = plot.x + slot * ci as f64 + side;
         for (si, ser) in chart.series.iter().enumerate() {
@@ -2763,10 +2810,13 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
                 continue;
             }
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
-            let y_val = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
-            let top = y_zero.min(y_val);
-            let h = (y_zero - y_val).abs();
-            if h < 0.2 || bar_w < 0.2 {
+            let clipped = value.clamp(axis_min, axis_max);
+            let y_val = if value < 0.0 {
+                crossing_axis_y(plot, axis_min, axis_max, step, clipped)
+            } else {
+                y_of(clipped, axis_min, axis_max, plot).round() as i32
+            };
+            if y_val == y_zero || bar_w < 0.2 {
                 continue;
             }
             let color = if chart.vary_points {
@@ -2774,11 +2824,22 @@ fn draw_bars(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f6
             } else {
                 ser.color.unwrap_or(chart.accents[ser.slot % 6])
             };
-            let x0 = round_half_even(x);
-            let x1 = round_half_even(x + bar_w);
-            let y0 = top.round() as i32;
-            let y1 = (top + h).round() as i32;
-            draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
+            let invert = ser
+                .point_inversion
+                .get(ci)
+                .copied()
+                .flatten()
+                .unwrap_or(ser.invert_if_negative);
+            let bounds = column_bar_bounds(x, x + bar_w, y_zero, y_val, value, invert);
+            // Inclusive outline edges may coincide for a visible 1px column;
+            // coincident half-open fill edges are empty.
+            if bounds[2] < bounds[0]
+                || bounds[3] <= bounds[1]
+                || (bounds[2] == bounds[0] && !(value < 0.0 && invert))
+            {
+                continue;
+            }
+            draw_bar_value(canvas, ser, ci, value, bounds, color);
         }
     }
 }
@@ -4467,9 +4528,26 @@ mod tests {
             h: 188.0,
         };
         assert_eq!(crossing_axis_y(&p, -3.0, 5.0, 1.0, 0.0), 133);
+        assert_eq!(crossing_axis_y(&p, -3.0, 5.0, 1.0, -1.0), 157);
+        assert_eq!(crossing_axis_y(&p, -3.0, 5.0, 1.0, -2.0), 180);
+        assert_eq!(crossing_axis_y(&p, -3.0, 5.0, 1.0, 4.0), 39);
         assert_eq!(crossing_axis_y(&p, -2.0, 8.0, 2.0, 0.0), 166);
         assert_eq!(crossing_axis_y(&p, 0.0, 5.0, 1.0, 0.0), 204);
         assert_eq!(crossing_axis_y(&p, -5.0, 0.0, 1.0, 0.0), 16);
+        // Invert frames use inclusive edges; positive fills retain the
+        // supplied shape edge rather than unconditionally clearing a grid.
+        assert_eq!(
+            column_bar_bounds(57.1, 86.56666666666666, 133, 180, -2.0, true),
+            [57, 133, 86, 180]
+        );
+        assert_eq!(
+            column_bar_bounds(57.1, 86.56666666666666, 16, 53, -1.0, true),
+            [57, 16, 86, 53]
+        );
+        assert_eq!(
+            column_bar_bounds(70.0, 107.0, 334, 51, 1.0, true),
+            [70, 51, 107, 334]
+        );
     }
 
     #[test]
@@ -4642,6 +4720,332 @@ mod tests {
             }
             assert_eq!(pixel(x0 - 1, y0 - 1), bg, "outside corner @ {dpi_value}");
         }
+    }
+
+    fn mixed_column_xml(values: &[f64]) -> String {
+        let pts = values
+            .iter()
+            .enumerate()
+            .map(|(i, _v)| {
+                let name = (b'A' + i as u8) as char;
+                format!("<c:pt idx=\"{i}\"><c:v>{name}</c:v></c:pt>",)
+            })
+            .collect::<String>();
+        let nums = values
+            .iter()
+            .enumerate()
+            .map(|(i, v)| format!("<c:pt idx=\"{i}\"><c:v>{v}</c:v></c:pt>"))
+            .collect::<String>();
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:ser>
+          <c:order val="0"/>
+          <c:tx><c:v>S</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="{n}"/>{pts}</c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="{n}"/>{nums}</c:numLit></c:val>
+        </c:ser>
+      </c:barChart>
+      <c:valAx>
+        <c:scaling>
+          <c:min val="-3"/>
+          <c:max val="5"/>
+        </c:scaling>
+        <c:majorUnit val="1"/>
+        <c:majorGridlines/>
+        <c:crosses val="autoZero"/>
+      </c:valAx>
+      <c:catAx>
+        <c:scaling><c:orientation val="minMax"/></c:scaling>
+        <c:crosses val="autoZero"/>
+      </c:catAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            n = values.len(),
+            pts = pts,
+            nums = nums
+        )
+    }
+
+    fn decode_rgb(png: &[u8]) -> (u32, u32, Vec<u8>) {
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let data = &buf[..info.buffer_size()];
+        if info.color_type == png::ColorType::Rgb {
+            return (info.width, info.height, data.to_vec());
+        }
+        let rgb: Vec<u8> = data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|p| {
+                p[..3].iter().map(move |c| {
+                    ((u16::from(*c) * u16::from(p[3]) + 255 * (255 - u16::from(p[3])) + 127) / 255)
+                        as u8
+                })
+            })
+            .collect();
+        (info.width, info.height, rgb)
+    }
+
+    fn row_ink_runs(rgb: &[u8], w: u32, y: i32) -> Vec<(i32, i32)> {
+        let mut runs = Vec::new();
+        let mut start = None;
+        for x in 0..=w as i32 {
+            let ink = if x < w as i32 {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40
+            } else {
+                false
+            };
+            match (ink, start) {
+                (true, None) => start = Some(x),
+                (false, Some(s)) => {
+                    runs.push((s, x - 1));
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+        runs
+    }
+
+    fn long_ink_rows(rgb: &[u8], w: u32, h: u32, min_dark: i32) -> Vec<i32> {
+        (0..h as i32)
+            .filter(|&y| {
+                row_ink_runs(rgb, w, y)
+                    .iter()
+                    .map(|(a, b)| b - a + 1)
+                    .sum::<i32>()
+                    >= min_dark
+            })
+            .collect()
+    }
+
+    #[test]
+    fn inverted_columns_rasterize_both_path_edges_without_a_fill_inset() {
+        let xml = mixed_column_xml(&[-1.0, -4.0, -2.0]);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let mut chart =
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        chart.series[0].invert_if_negative = true;
+        let mut canvas = Canvas::new(300, 220);
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0);
+        // Three equal path widths are 221 / 7.5 pixels. The middle path
+        // crosses columns 130..160: rounding two fill edges and subtracting
+        // one instead loses both outline sides (131..159).
+        assert_eq!(
+            row_ink_runs(&canvas.px, canvas.w, 30),
+            vec![
+                (57, 57),
+                (86, 86),
+                (130, 130),
+                (160, 160),
+                (204, 204),
+                (233, 233)
+            ]
+        );
+    }
+
+    #[test]
+    fn coincident_inverted_path_edges_remain_visible_vertical_hairlines() {
+        let xml = mixed_column_xml(&[-1.0, -4.0, -2.0]);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mut canvas = Canvas::new(80, 220);
+        // Each .4px path has both edges in one pixel. All three must remain
+        // visible, even though inclusive x0 == x1 for every outline.
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 2.0,
+            h: 188.0,
+        };
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0);
+        assert_eq!(row_ink_runs(&canvas.px, canvas.w, 30), vec![(35, 37)]);
+    }
+
+    #[test]
+    fn inverted_path_edges_keep_fractional_phase_and_integer_translation() {
+        for x in [-20.75, -0.25, 0.0, 0.5, 3.9, 130.76666666666665] {
+            for width in [0.21, 1.0, 2.5, 29.466666666666665] {
+                let bounds = column_bar_bounds(x, x + width, 10, 40, -1.0, true);
+                assert_eq!(
+                    bounds,
+                    [x.floor() as i32, 10, (x + width).floor() as i32, 40]
+                );
+                for offset in [-7, -1, 1, 11] {
+                    let shifted = column_bar_bounds(
+                        x + f64::from(offset),
+                        x + width + f64::from(offset),
+                        10,
+                        40,
+                        -1.0,
+                        true,
+                    );
+                    assert_eq!(shifted, [bounds[0] + offset, 10, bounds[2] + offset, 40]);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn positive_column_bounds_preserve_the_supplied_shape_edge() {
+        // A rasterized shape edge is not the same thing as a grid row.
+        // Moving every positive endpoint by 1 also shifts non-major values.
+        assert_eq!(
+            column_bar_bounds(10.0, 20.0, 100, 40, 2.3, false),
+            [10, 40, 20, 100]
+        );
+    }
+
+    #[test]
+    fn thin_inverted_columns_keep_their_single_pixel_outline() {
+        // Thin path edges can fall in the same pixel or in separate pixels.
+        // Neither case is empty; a small outline need not be a solid ink run.
+        let xml = mixed_column_xml(&[-2.0; 60]);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let dpi =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        // Supply the plot explicitly: this is an outline-coverage regression,
+        // not a dependency on installed fonts or automatic axis label layout.
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+        let mut canvas = Canvas::new(314, 221);
+        canvas.dpi = dpi;
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0);
+        // Verify both path edges of all 60 columns, not a run count: an
+        // unfilled 1.47px-wide path can have two separated 1px edges.
+        let slot = 221.0 / 60.0;
+        let width = slot / 2.5;
+        let mut expected = Vec::new();
+        for i in 0..60 {
+            let x = 35.0 + slot * f64::from(i) + (slot - width) / 2.0;
+            expected.push(x.floor() as i32);
+            expected.push((x + width).floor() as i32);
+        }
+        expected.sort_unstable();
+        expected.dedup();
+        let actual: Vec<i32> = row_ink_runs(&canvas.px, canvas.w, 167)
+            .into_iter()
+            .flat_map(|(a, b)| a..=b)
+            .collect();
+        assert_eq!(actual, expected, "all 60 thin path outlines");
+    }
+
+    #[test]
+    fn inverted_column_outline_sits_on_zero_axis_and_value_grid() {
+        // 106dpi mixed-sign columns (official A=-2 on [-3,5]) must press the
+        // zero axis and land the bottom hairline on the -2 grid, not hang a
+        // 1px framed box below / beside those rows.
+        let xml = mixed_column_xml(&[-2.0, 4.0, 1.0]);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let dpi =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        let png = render_chart_at(
+            &doc.root,
+            314,
+            221,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            dpi,
+        )
+        .unwrap();
+        let (w, h, rgb) = decode_rgb(&png);
+        assert_eq!((w, h), (314, 221));
+        let grids = long_ink_rows(&rgb, w, h, 160);
+        assert!(
+            grids.len() >= 5,
+            "expected signed major grids, got {grids:?}"
+        );
+        // Explicit -3..5 / major 1 yields 9 grids; 0 is the sixth, -2 the eighth, 4 the second.
+        assert_eq!(grids.len(), 9, "signed major grids {grids:?}");
+        let zero = grids[5];
+        let neg2 = grids[7];
+        let pos4 = grids[1];
+        let ink = |x: i32, y: i32| {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40
+        };
+        // Side strokes are 1px verticals under the 0 axis; skip the value axis.
+        let probe = zero + ((neg2 - zero) / 3).max(8);
+        let sides: Vec<i32> = (50..w as i32 - 20)
+            .filter(|&x| ink(x, probe) && ink(x, probe + 8))
+            .collect();
+        assert!(
+            sides.len() >= 2,
+            "expected inverted A sides, got {sides:?} grids={grids:?} zero={zero} probe={probe}"
+        );
+        let x0 = sides[0];
+        let x1 = *sides
+            .iter()
+            .find(|&&x| x >= x0 + 16)
+            .unwrap_or_else(|| panic!("A right edge after {x0} in {sides:?} grids={grids:?}"));
+        assert!(
+            x1 - x0 >= 16,
+            "A box too narrow {x0}..{x1} sides={sides:?} grids={grids:?}"
+        );
+        let span_ink = |y: i32| (x0..=x1).filter(|&x| ink(x, y)).count();
+        assert!(
+            span_ink(zero) >= (x1 - x0) as usize,
+            "zero axis must press the A box top; zero={zero} box={x0}..{x1} ink={}",
+            span_ink(zero)
+        );
+        assert!(
+            span_ink(zero + 1) <= 4,
+            "no separate top stroke 1px below the axis; ink={} box={x0}..{x1}",
+            span_ink(zero + 1)
+        );
+        assert!(
+            span_ink(neg2) >= (x1 - x0) as usize,
+            "A bottom must sit on the -2 grid; y={neg2} ink={}",
+            span_ink(neg2)
+        );
+        assert!(
+            neg2 + 1 >= h as i32 || span_ink(neg2 + 1) <= 4,
+            "A box must not hang 1px past the value grid; ink={}",
+            span_ink(neg2 + 1)
+        );
+        // Positive 4 must start 1px below its grid, not cover the line.
+        let is_teal = |x: i32, y: i32| {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            let (r, g, b) = (rgb[i], rgb[i + 1], rgb[i + 2]);
+            b > 80 && u16::from(b) > u16::from(r) + 20 && g > r
+        };
+        let teal_on = |y: i32| (0..w as i32).filter(|&x| is_teal(x, y)).count();
+        assert_eq!(
+            teal_on(pos4),
+            0,
+            "value grid must not be covered by the bar"
+        );
+        assert!(
+            teal_on(pos4 + 1) >= 10,
+            "positive bar must start immediately under the value grid; n={}",
+            teal_on(pos4 + 1)
+        );
     }
 
     #[test]
