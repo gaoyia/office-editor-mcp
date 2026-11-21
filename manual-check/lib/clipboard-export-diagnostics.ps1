@@ -54,3 +54,14 @@ function Get-NamedCopyPictureChart($Charts, [string]$ExpectedName) {
         return $chart
     } catch { if($chart){Release-Com $chart}; throw }
 }
+
+# Fixture precondition only; no geometry adjustment, export or Office mutation.
+function Assert-CopyPictureChartContext([Collections.IDictionary]$Record, [Collections.IDictionary]$Expected) {
+    $Record.contextVerified=$false
+    if($Record.chartSheetName -cne $Expected.Name -or $Record.activeSheetName -cne $Expected.Name){throw 'Requested/active chart identity mismatch before CopyPicture'}
+    if($Record.paperSize -ne $Expected.PaperSize -or $Record.orientation -ne $Expected.Orientation){throw 'Chart PageSetup mismatch before CopyPicture'}
+    foreach($edge in @('Left','Right','Top','Bottom')){
+        if(-not $Record.marginsPt.Contains($edge) -or [double]$Record.marginsPt[$edge] -ne [double]$Expected.MarginPt){throw "Chart $edge margin mismatch before CopyPicture"}
+    }
+    $Record.contextVerified=$true
+}

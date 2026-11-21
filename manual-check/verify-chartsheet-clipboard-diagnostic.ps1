@@ -67,6 +67,11 @@ try{
       $null=$chart.Activate();$window.Zoom=100;$activeSheet=$app.ActiveSheet
       $c.activeSheetName=[string]$activeSheet.Name;$c.activeObjectTypeValue=[int]$activeSheet.Type;$c.zoom=[int]$window.Zoom
      }finally{foreach($o in @($activeSheet,$setup,$area)){Release-Com $o};$activeSheet=$null;$setup=$null;$area=$null}
+     # This source's named A4 control is an explicit fixture contract, not a rendering formula.
+     if($key -eq 'A4p36'){
+      $c.expectedContext=[ordered]@{Name='A4p36';PaperSize=9;Orientation=1;MarginPt=36}
+      $c.stage='verify_control_context';Assert-CopyPictureChartContext $c $c.expectedContext
+     }
      Start-Sleep -Milliseconds 300
      $c.copyRequestedAt=[DateTimeOffset]::Now.ToString('o');$c.stage='copy_picture_call'
      $seq=[LegendLifecycleNative]::GetClipboardSequenceNumber();$c.clipboardSequenceBefore=$seq

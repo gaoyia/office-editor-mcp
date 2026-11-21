@@ -73,4 +73,15 @@ try{Get-NamedCopyPictureChart $charts 'A4p36'}catch{$bad=$_.Exception.Message}
 Assert-Equal ($bad -like 'Expected named chart A4p36 but received B5l72') $true 'wrong identity rejected before CopyPicture'
 Assert-Equal $script:released 1 'rejected chart reference released'
 Assert-Equal ($text -match 'Get-NamedCopyPictureChart \$objects \$key') $true 'bounded runner uses name-verified lookup'
+$expected=[ordered]@{Name='A4p36';PaperSize=9;Orientation=1;MarginPt=36}
+$good=[ordered]@{chartSheetName='A4p36';activeSheetName='A4p36';paperSize=9;orientation=1;marginsPt=[ordered]@{Left=36;Right=36;Top=36;Bottom=36}}
+Assert-CopyPictureChartContext $good $expected
+Assert-Equal $good.contextVerified $true 'correct named A4 PageSetup verified'
+foreach($field in @('chartSheetName','activeSheetName','paperSize','orientation','Left','Right','Top','Bottom')){
+ $copy=[ordered]@{chartSheetName='A4p36';activeSheetName='A4p36';paperSize=9;orientation=1;marginsPt=[ordered]@{Left=36;Right=36;Top=36;Bottom=36}}
+ if($field -in @('Left','Right','Top','Bottom')){$copy.marginsPt[$field]=72}elseif($field -in @('paperSize','orientation')){$copy[$field]=13}else{$copy[$field]='B5l72'}
+ $errorMessage=$null;try{Assert-CopyPictureChartContext $copy $expected}catch{$errorMessage=$_.Exception.Message}
+ Assert-Equal ([bool]$errorMessage -and -not $copy.contextVerified) $true ('mismatch rejected: '+$field)
+}
+Assert-Equal ($text.IndexOf('Assert-CopyPictureChartContext $c') -lt $text.IndexOf('$null=$chart.CopyPicture(')) $true 'identity/PageSetup checked before export'
 Write-Output "PASS $count checks: injected metadata readers only, guard/persistence/parser checks; no Office or real clipboard accessed. Unit logs: $root"
