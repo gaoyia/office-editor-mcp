@@ -718,6 +718,15 @@ fn frame_hue(rgb: [u8; 3], factor: u32) -> [u8; 3] {
     hsl_rgb((hue * f64::from(factor) / 100_000.0).rem_euclid(1.0), sat, light)
 }
 
+/// Excel frame rendering uses a signed ST_Angle offset (60000 per degree).
+/// Native controls discriminate periodic hue from the clamp wording in the
+/// SDK HueOffset.Val remarks. This is an Excel-only frame profile, not a claim
+/// that the two contracts agree or that other hosts have been validated.
+fn frame_hue_offset(rgb: [u8; 3], offset: i32) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    hsl_rgb((hue + f64::from(offset) / (360.0 * 60_000.0)).rem_euclid(1.0), sat, light)
+}
+
 /// Two integer-thousandth opacity operands retain their exact product until
 /// final 8-bit coverage conversion. Rounding to an intermediate percentage
 /// loses the distinction between 50000*33333 and 50001*33333 at the 42/43 edge.
@@ -771,6 +780,8 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
         ["alpha"] => frame_alpha_fill(rgb, kids[0]),
+        ["hueOff"] => Ok(FrameFill::Solid(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
+        ["hueOff", "alpha"] => frame_alpha_fill(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
         ["alphaMod"] => Ok(frame_alpha_mod_fill(rgb, 100_000, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?)),
         ["alpha", "alphaMod"] => Ok(frame_alpha_mod_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_positive_percentage(kids[1]).ok_or_else(unsupported)?)),
         ["alphaMod", "alpha"] => {
@@ -8846,6 +8857,87 @@ mod tests {
     }
 
     #[test]
+    fn hue_off_signed_angle_range_and_strict_structure() {
+        for value in [i32::MIN, -27_000_000, 0, 27_000_000, i32::MAX] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff val='{value}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_ok());
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='90deg'", "val='90%'", "val='0.5'", "val='5400000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn hue_off_units_signed_rotation_and_complete_turns() {
+        assert_eq!(frame_hue_offset([255, 0, 0], 60 * 60_000), [255, 255, 0]);
+        assert_eq!(frame_hue_offset([255, 0, 0], -120 * 60_000), [0, 0, 255]);
+        assert_eq!(frame_hue_offset([21, 96, 130], -360 * 60_000), [21, 96, 130]);
+    }
+
+    #[test]
+    fn hue_off_excel_native_profile_does_not_clamp_overflow_to_red() {
+        assert_eq!(frame_hue_offset([210, 126, 74], -90 * 60_000), [194, 74, 210]);
+        assert_eq!(frame_hue_offset([210, 126, 74], 450 * 60_000), [90, 210, 74]);
+        assert_ne!(frame_hue_offset([21, 96, 130], -360 * 60_000), [130, 21, 21]);
+    }
+
+    #[test]
+    fn hue_off_achromatic_identity_and_large_signed_angles_stay_stable() {
+        for rgb in [[0,0,0], [128,128,128], [255,255,255]] {
+            for off in [i32::MIN, -27_000_000, 0, 27_000_000, i32::MAX] {
+                assert_eq!(frame_hue_offset(rgb, off), rgb);
+            }
+        }
+        for rgb in [[21,96,130], [210,126,74]] { assert_eq!(frame_hue_offset(rgb, 0), rgb); }
+    }
+
+    #[test]
+    fn hue_off_theme_and_srgb_share_the_same_angle_semantics() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:hueOff val='27000000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid(frame_hue_offset([21,96,130],27_000_000)));
+        }
+    }
+
+    #[test]
+    fn hue_off_trailing_alpha_reuses_legacy_opacity() {
+        let xml = "<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff val='5400000'/><a:alpha val='50000'/></a:srgbClr>";
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Translucent(frame_hue_offset([21,96,130],5_400_000),50000));
+    }
+
+    #[test]
+    fn hue_off_chart_plot_at_three_dpis_match_explicit_color_references() {
+        for plot in [false,true] {
+            for offset in [-27_000_000,5_400_000,27_000_000] {
+                // Integration locks existing HSL quantization, not a fitted native RGB.
+                let c=frame_hue_offset([21,96,130],offset);let rgb=format!("{:02X}{:02X}{:02X}",c[0],c[1],c[2]);
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueOff val='{offset}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill:&str| if plot { LONG_LEGEND.replace("<c:plotArea>",&format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")) };
+                let doc=crate::xml::parse(make(&fill).as_bytes()).unwrap();let reference=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&doc.root),render(&reference.root),"plot={plot} offset={offset} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_off_unverified_mixed_repeated_or_nested_transforms_remain_ni() {
+        for transforms in ["<a:hueOff val='5400000'/><a:hueOff val='5400000'/>","<a:alpha val='50000'/><a:hueOff val='5400000'/>","<a:hueOff val='5400000'/><a:alphaMod val='50000'/>","<a:hueMod val='50000'/><a:hueOff val='5400000'/>","<a:hueOff val='5400000'><a:alpha val='50000'/></a:hueOff>"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");let doc=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&doc.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{transforms}");
+        }
+    }
+
+    #[test]
     fn alpha_mod_standalone_uses_opaque_input_and_caps_at_one() {
         let rgb = [21, 96, 130];
         for (factor, expected) in [(0, FrameFill::Translucent(rgb, 0)), (25_000, FrameFill::Translucent(rgb, 25_000)), (50_000, FrameFill::Translucent(rgb, 50_000)), (100_000, FrameFill::Solid(rgb)), (200_000, FrameFill::Solid(rgb)), (i32::MAX as u32, FrameFill::Solid(rgb))] {
@@ -9020,7 +9112,7 @@ mod tests {
 
     #[test]
     fn hue_modulation_unverified_transform_sequences_stay_unsupported() {
-        for transforms in ["<a:alpha val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:lumOff val='10000'/>", "<a:satMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:satMod val='50000'/>", "<a:hueOff val='600000'/>"] {
+        for transforms in ["<a:alpha val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:lumOff val='10000'/>", "<a:satMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:satMod val='50000'/>", "<a:hueOff val='600000'/><a:hueMod val='50000'/>"] {
             let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
