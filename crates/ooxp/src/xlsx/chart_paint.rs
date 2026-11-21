@@ -703,6 +703,21 @@ fn frame_sat(rgb: [u8; 3], factor: i32) -> [u8; 3] {
     })
 }
 
+/// DrawingML CT_PositivePercentage uses ST_Percentage (i32) with minimum 0.
+/// It is not alpha's bounded 0..100000 percentage. Keep the same strict node
+/// and integer-thousandth lexical contract as the other new color transforms.
+fn parse_positive_percentage(node: &Element) -> Option<u32> {
+    u32::try_from(parse_signed_percentage(node)?).ok()
+}
+
+/// Modulate the angular HSL hue, retaining saturation and lightness. Reduce
+/// complete turns before the existing RGB conversion; clamping at one turn
+/// would turn every overshoot into red and contradict native hueMod behavior.
+fn frame_hue(rgb: [u8; 3], factor: u32) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    hsl_rgb((hue * f64::from(factor) / 100_000.0).rem_euclid(1.0), sat, light)
+}
+
 fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let alpha = parse_ooxml_alpha(alpha.attr_local("val")).ok_or_else(unsupported)?;
@@ -736,6 +751,8 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
         ["tint", "alpha"] => frame_alpha_fill(frame_tint(rgb, pct(kids[0])?), kids[1]),
         ["shade"] => Ok(FrameFill::Solid(frame_shade(rgb, pct(kids[0])?))),
         ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
+        ["hueMod"] => Ok(FrameFill::Solid(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?))),
+        ["hueMod", "alpha"] => frame_alpha_fill(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
         ["satMod"] => Ok(FrameFill::Solid(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
         ["satMod", "alpha"] => frame_alpha_fill(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
         ["lumMod"] => Ok(FrameFill::Solid(frame_lum(rgb, Some(pct(kids[0])?), None))),
@@ -8783,6 +8800,93 @@ mod tests {
     }
 
     #[test]
+    fn hue_percentage_accepts_zero_and_modulation_above_one_turn() {
+        for value in [0, 50_000, 100_000, 200_000, 300_000, i32::MAX] {
+            let doc = crate::xml::parse(format!("<hueMod val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_positive_percentage(&doc.root), Some(value as u32));
+        }
+        let negative = crate::xml::parse(b"<satMod val='-50000'/>").unwrap();
+        assert_eq!(parse_signed_percentage(&negative.root), Some(-50_000), "signed saturation is unchanged");
+        assert_eq!(parse_positive_percentage(&negative.root), None);
+    }
+
+    #[test]
+    fn hue_percentage_rejects_negative_and_unimplemented_lexical_structure() {
+        for xml in ["<hueMod/>", "<hueMod val='-1'/>", "<hueMod val='2147483648'/>", "<hueMod val='+50000'/>", "<hueMod val='50%'/>", "<hueMod val='0.5'/>", "<hueMod val=' 50000'/>", "<hueMod val=''/>", "<hueMod val='50000' other='1'/>", "<hueMod val='50000'><alpha val='50000'/></hueMod>"] {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_positive_percentage(&doc.root), None, "{xml}");
+        }
+    }
+
+    #[test]
+    fn hue_modulation_multiplies_angles_and_wraps_complete_turns() {
+        for (factor, expected) in [(0, [255, 0, 0]), (50_000, [0, 255, 0]), (100_000, [0, 0, 255]), (150_000, [255, 0, 0]), (200_000, [0, 255, 0]), (300_000, [255, 0, 0])] {
+            assert_eq!(frame_hue([0, 0, 255], factor), expected, "{factor}");
+        }
+        assert_eq!(frame_hue([21, 96, 130], 0), [130, 21, 21]);
+        assert_eq!(frame_hue([21, 96, 130], 200_000), [130, 89, 21]);
+        assert_eq!(frame_hue([21, 96, 130], 300_000), [21, 28, 130]);
+    }
+
+    #[test]
+    fn hue_modulation_preserves_identity_and_achromatic_colors() {
+        for rgb in [[0; 3], [128; 3], [255; 3], [21, 96, 130], [210, 126, 74]] {
+            assert_eq!(frame_hue(rgb, 100_000), rgb);
+            if rgb[0] == rgb[1] && rgb[1] == rgb[2] {
+                for factor in [0, 50_000, 200_000, i32::MAX as u32] {
+                    assert_eq!(frame_hue(rgb, factor), rgb);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_modulation_resolves_srgb_and_theme_frames() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<c:chartSpace xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><c:spPr><a:solidFill><a:{kind} val='{base}'><a:hueMod val='200000'/></a:{kind}></a:solidFill></c:spPr></c:chartSpace>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(read_frame_with(&doc.root, &scheme).unwrap().fill, FrameFill::Solid([130, 89, 21]));
+        }
+    }
+
+    #[test]
+    fn hue_modulation_trailing_alpha_preserves_straight_color() {
+        for (alpha, expected) in [(0, FrameFill::Translucent([130, 89, 21], 0)), (50_000, FrameFill::Translucent([130, 89, 21], 50_000)), (100_000, FrameFill::Solid([130, 89, 21]))] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueMod val='200000'/><a:alpha val='{alpha}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn hue_modulation_chart_and_plot_match_explicit_color_at_three_dpis() {
+        for plot in [false, true] {
+            for alpha in ["", "<a:alpha val='50000'/>"] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='0000FF'><a:hueMod val='50000'/>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='00FF00'>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} alpha={alpha} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_modulation_unverified_transform_sequences_stay_unsupported() {
+        for transforms in ["<a:alpha val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:lumOff val='10000'/>", "<a:satMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:satMod val='50000'/>", "<a:hueOff val='600000'/>"] {
+            let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
     fn saturation_modulation_scales_hsl_distance_without_early_clipping() {
         for (factor, expected) in [(-50_000, [103, 65, 48]), (0, [76, 76, 76]), (50_000, [48, 86, 103]), (100_000, [21, 96, 130]), (200_000, [0, 117, 185])] {
             assert_eq!(frame_sat([21, 96, 130], factor), expected);
@@ -8935,7 +9039,7 @@ mod tests {
             "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/><a:lumMod val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:ln w='25400'/></c:spPr>",
