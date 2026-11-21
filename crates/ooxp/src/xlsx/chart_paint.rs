@@ -5307,9 +5307,20 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
             "prstDash" => {
                 if dash_declared { return Err(unsupported()); }
                 dash_declared = true;
-                let dash = child.attr_local("val").unwrap_or("solid");
-                if dash != "solid" {
-                    return Err(unsupported());
+                let value = child.attr_local("val").unwrap_or("solid");
+                if value != "solid" {
+                    // Presets reuse the same run/cap/join sampler as custom
+                    // dashes. Explicit flat pens are native-verified for all
+                    // ten tokens; round dash/dot are separately discriminated.
+                    // No inferred default cap/width, square terminal-gap rule,
+                    // other host expansion, or legend/plot compensation.
+                    if !explicit_caps || ln.attr_local("cap").is_none()
+                        || !(cap == stroke::Cap::Flat || (cap == stroke::Cap::Round && matches!(value,"dash"|"dot")))
+                        || ln.attr_local("w").and_then(|v|v.parse::<f64>().ok()).is_none_or(|w|!w.is_finite() || w<=0.0)
+                        || child.element_children().next().is_some()
+                        || child.attrs.iter().any(|(k,_)| k!="val" && !k.starts_with("xmlns"))
+                    { return Err(unsupported()); }
+                    dash=Some(std::sync::Arc::new(stroke::DashPattern::from_preset_width(value,width).ok_or_else(unsupported)?));
                 }
             }
             "round" => {},
@@ -8002,6 +8013,49 @@ mod tests {
             assert_eq!(read_line_sp_pr(&doc.root,FALLBACK_ACCENTS,dpi,false).unwrap().width,scatter);
         }
     }
+
+    #[test]
+    fn preset_dash_parser_requires_explicit_native_validated_cap_and_pen() {
+        for name in ["dash","dashDot","dot","lgDash","lgDashDot","lgDashDotDot","sysDash","sysDot","sysDashDot","sysDashDotDot"] {
+            for cap in ["flat","rnd"] {
+                let doc=crate::xml::parse(format!("<ln w='50800' cap='{cap}'><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
+                let a=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true);
+                if cap=="flat" || matches!(name,"dash"|"dot") {assert!(a.unwrap().dash.is_some());}else{assert!(a.is_err());}
+                assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default()).is_err());
+            }
+        }
+    }
+    #[test]
+    fn preset_dash_rejects_unverified_bounds_ambiguity_and_complex_pens() {
+        for attrs in ["", "w='50800'", "cap='flat'", "w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'", "w='50800' cap='sq'"] {
+            let doc=crate::xml::parse(format!("<ln {attrs}><prstDash val='dash'/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err());
+        }
+        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>","<prstDash val='dash'/><headEnd type='triangle'/>"] {
+            let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err(),"{body}");
+        }
+    }
+    #[test]
+    fn preset_dash_end_to_end_reuses_custom_plot_legend_and_gap_phase() {
+        for (name,stops) in [("dash",vec![(400000,300000)]),("dot",vec![(100000,300000)]),("sysDashDotDot",vec![(300000,100000),(100000,100000),(100000,100000)])] {
+            for cap in ["flat","rnd"] {
+                if cap=="rnd" && name=="sysDashDotDot" {continue;}
+                for ys in [vec![Some(40.);8],vec![Some(40.),Some(40.),Some(60.),Some(40.),Some(40.)],vec![Some(40.),Some(40.),None,Some(40.),Some(40.)]] {
+                    let make=|dash:&str|standard_line_xml(&line_ser(0,"H",&ys,&format!("<c:spPr><a:ln w='50800' cap='{cap}'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill>{dash}<a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>")),"");
+                    let custom=format!("<a:custDash>{}</a:custDash>",stops.iter().map(|(d,s)|format!("<a:ds d='{d}' sp='{s}'/>")).collect::<String>());let preset=format!("<a:prstDash val='{name}'/>");
+                    let a=make(&preset);let b=make(&custom);assert_eq!(render_line(&a).unwrap(),render_line(&b).unwrap());
+                    assert_eq!(render_line(&a.replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>")).unwrap(),render_line(&b.replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>")).unwrap());
+                }
+            }
+        }
+    }
+    #[test]
+    fn preset_dash_does_not_change_omitted_or_solid_legacy_styles() {
+        for attrs in ["", "w='50800'", "cap='rnd'", "w='50800' cap='flat'"] {
+            let make=|dash:&str|crate::xml::parse(format!("<ln {attrs}>{dash}<round/></ln>").as_bytes()).unwrap();let a=make("");let b=make("<prstDash val='solid'/>");let c=make("<prstDash/>");
+            for node in [&a,&b,&c] {let style=read_ln_with_caps(&node.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).unwrap();assert!(style.dash.is_none());}
+        }
+    }
+
     #[test]
     fn positive_flat_custom_dash_parses_percentages_of_the_explicit_device_pen() {
         for (width,device) in [(12700,1.0),(25400,3.0),(50800,6.0)] {

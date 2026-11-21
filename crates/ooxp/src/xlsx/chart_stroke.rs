@@ -1,4 +1,4 @@
-//! Geometry-only stroke prerequisites. No preset dash periods or Excel offsets.
+//! Shared stroke geometry and contract-derived dash patterns. No Excel offsets.
 //! Explicit solid-line caps are native-validated; other stroke users retain parser gates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Cap {
@@ -294,12 +294,36 @@ pub(super) fn simplify_collinear(points: &mut Vec<Point>) {
 }
 
 /// Ordered custom dash/space lengths in device units, derived from OOXML
-/// percentages of the resolved pen width. No preset table or phase adjustment.
+/// percentages of the resolved pen width. No empirical period/phase adjustment.
 #[derive(Debug)]
 pub(super) struct DashPattern {
     stops: Vec<(f64, f64)>,
 }
 impl DashPattern {
+    /// DrawingML ST_PresetLineDashVal binary runs: each bit is one pen width.
+    /// These are contract tokens, not an estimated Excel period table. Native
+    /// two-width controls verify their interior lengths/phase; caller separately
+    /// gates supported caps/hosts and retains legend/layout residuals.
+    pub(super) fn from_preset_width(value: &str, width: f64) -> Option<Self> {
+        let bits = match value {
+            "dash" => "1111000", "dashDot" => "11110001000", "dot" => "1000",
+            "lgDash" => "11111111000", "lgDashDot" => "111111110001000",
+            "lgDashDotDot" => "1111111100010001000", "sysDash" => "1110",
+            "sysDot" => "10", "sysDashDot" => "111010", "sysDashDotDot" => "11101010",
+            _ => return None, // solid has no finite repeating off interval.
+        };
+        let bits = bits.as_bytes();
+        let mut stops = Vec::new();
+        let mut start = 0;
+        while start < bits.len() {
+            let on = bits[start..].iter().take_while(|&&b| b == b'1').count();
+            let off = bits[start+on..].iter().take_while(|&&b| b == b'0').count();
+            if on == 0 || off == 0 { return None; }
+            stops.push((on as f64 * 100_000.0, off as f64 * 100_000.0));
+            start += on + off;
+        }
+        Self::from_width_percent(&stops, width)
+    }
     pub(super) fn from_width_percent(stops: &[(f64, f64)], width: f64) -> Option<Self> {
         if !width.is_finite() || width <= 0.0 || stops.is_empty() || stops.len() > 256 {
             return None;
@@ -436,6 +460,47 @@ impl Run<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preset_dash_binary_contract_scales_all_positive_runs() {
+        for (name, units) in [
+            ("dash",vec![(4.,3.)]), ("dashDot",vec![(4.,3.),(1.,3.)]),
+            ("dot",vec![(1.,3.)]), ("lgDash",vec![(8.,3.)]),
+            ("lgDashDot",vec![(8.,3.),(1.,3.)]),
+            ("lgDashDotDot",vec![(8.,3.),(1.,3.),(1.,3.)]),
+            ("sysDash",vec![(3.,1.)]), ("sysDot",vec![(1.,1.)]),
+            ("sysDashDot",vec![(3.,1.),(1.,1.)]),
+            ("sysDashDotDot",vec![(3.,1.),(1.,1.),(1.,1.)]),
+        ] {
+            for width in [1.,2.5,6.,12.] {
+                let pattern=DashPattern::from_preset_width(name,width).unwrap();
+                assert_eq!(pattern.stops,units.iter().map(|(d,s)|(d*width,s*width)).collect::<Vec<_>>());
+            }
+        }
+    }
+    #[test]
+    fn preset_dash_rejects_unknown_solid_and_unresolved_widths() {
+        for name in ["", "solid", "Dash", " dash", "1111000", "unknown"] {
+            assert!(DashPattern::from_preset_width(name,6.).is_none());
+        }
+        for width in [0.,-1.,f64::NAN,f64::INFINITY] {
+            assert!(DashPattern::from_preset_width("dash",width).is_none());
+        }
+    }
+    #[test]
+    fn preset_dash_uses_shared_run_phase_caps_and_resource_budget() {
+        let points=[(0.,0.),(5.,0.),(5.,30.),(60.,30.)];let run=Run::new(&points).unwrap();
+        let preset=DashPattern::from_preset_width("dashDot",2.).unwrap();
+        let custom=DashPattern::from_width_percent(&[(400000.,300000.),(100000.,300000.)],2.).unwrap();
+        for cap in [Cap::Flat,Cap::Round] {
+            let a=run.dashed_capped(&preset,Style::new(2.,cap).unwrap(),32).unwrap();
+            let b=run.dashed_capped(&custom,Style::new(2.,cap).unwrap(),32).unwrap();
+            assert_eq!(a.len(),b.len());
+            for (a,b) in a.iter().zip(b.iter()) {assert_eq!(a.points,b.points);assert_eq!(a.first,b.first);assert_eq!(a.last,b.last);}
+        }
+        assert_eq!(preset.painted_intervals(30.,8).unwrap(),[(0.,8.),(14.,16.),(22.,30.)]);
+        assert!(preset.painted_intervals(30.,2).is_none());
+    }
+
     #[test]
     fn bevel_outer_hull_shaves_round_corner_and_reflects_turns() {
         let b=BevelJoin::new((0.0,0.0),(10.0,0.0),(10.0,10.0),4.0).unwrap();
