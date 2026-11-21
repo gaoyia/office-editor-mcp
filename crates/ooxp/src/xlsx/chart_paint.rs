@@ -719,6 +719,20 @@ fn frame_sat_offset(rgb: [u8; 3], offset: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(hue, shifted, light))
 }
 
+/// Absolute DrawingML saturation replaces S, retaining H and L. Limit this
+/// standalone profile to the documented typical range; do not guess native
+/// extrapolation or assign an arbitrary hue to a previously gray color.
+fn frame_saturation(rgb: [u8; 3], value: i32) -> Option<[u8; 3]> {
+    if !(0..=100_000).contains(&value) {
+        return None;
+    }
+    let (hue, sat, light) = rgb_hsl(rgb);
+    if sat == 0.0 {
+        return (value == 0).then_some(rgb);
+    }
+    Some(hsl_rgb(hue, f64::from(value) / 100_000.0, light))
+}
+
 /// DrawingML CT_PositivePercentage uses ST_Percentage (i32) with minimum 0.
 /// It is not alpha's bounded 0..100000 percentage. Keep the same strict node
 /// and integer-thousandth lexical contract as the other new color transforms.
@@ -828,6 +842,7 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
         ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
         ["hueMod"] => Ok(FrameFill::Solid(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?))),
         ["hueMod", "alpha"] => frame_alpha_fill(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
+        ["sat"] => Ok(FrameFill::Solid(frame_saturation(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
         ["satOff"] => Ok(FrameFill::Solid(frame_sat_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
         ["satMod"] => Ok(FrameFill::Solid(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
         ["satMod", "alpha"] => frame_alpha_fill(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
@@ -9204,6 +9219,100 @@ mod tests {
             let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_replaces_s_instead_of_multiplying_or_adding() {
+        for (value, expected) in [(0, [76, 76, 76]), (25_000, [57, 83, 94]), (50_000, [38, 90, 113]), (75_000, [19, 97, 132]), (100_000, [0, 104, 151])] {
+            assert_eq!(frame_saturation([21, 96, 130], value), Some(expected));
+        }
+        assert_ne!(frame_saturation([21, 96, 130], 50_000), Some(frame_sat([21, 96, 130], 50_000)));
+        assert_ne!(frame_saturation([21, 96, 130], 25_000), frame_sat_offset([21, 96, 130], 25_000));
+    }
+
+    #[test]
+    fn saturation_absolute_preserves_hue_lightness_for_chromatic_colors() {
+        for base in [[21, 96, 130], [210, 126, 74], [255, 0, 0], [0, 0, 255]] {
+            let (h, _, l) = rgb_hsl(base);
+            for value in [25_000, 50_000, 75_000, 100_000] {
+                let rgb = frame_saturation(base, value).unwrap();
+                let (new_h, _, new_l) = rgb_hsl(rgb);
+                assert!((h - new_h).abs() < 1.0 / 255.0);
+                assert!((l - new_l).abs() <= 0.5 / 255.0);
+            }
+        }
+        assert_eq!(frame_saturation([255, 0, 0], 100_000), Some([255, 0, 0]));
+        assert_eq!(frame_saturation([255, 0, 0], 50_000), Some([191, 64, 64]));
+    }
+
+    #[test]
+    fn saturation_absolute_zero_neutralizes_and_preserves_existing_grays() {
+        for gray in 0..=255 { assert_eq!(frame_saturation([gray; 3], 0), Some([gray; 3])); }
+        for base in [[21, 96, 130], [210, 126, 74], [255, 0, 0], [0, 0, 255]] {
+            let rgb = frame_saturation(base, 0).unwrap();
+            let mid = ((u16::from(*base.iter().min().unwrap()) + u16::from(*base.iter().max().unwrap()) + 1) / 2) as u8;
+            assert_eq!(rgb, [mid; 3]);
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_unverified_range_and_gray_hue_stay_ni() {
+        for value in [i32::MIN, -100_000, -1, 100_001, i32::MAX] {
+            assert_eq!(frame_saturation([21, 96, 130], value), None);
+        }
+        for gray in [0, 1, 128, 254, 255] {
+            for value in [1, 25_000, 100_000] { assert_eq!(frame_saturation([gray; 3], value), None); }
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_uses_strict_percentage_leaf_parser() {
+        for value in [i32::MIN, -100_001, 0, 25_000, 100_001, i32::MAX] {
+            let doc = crate::xml::parse(format!("<sat val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), Some(value));
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+25000'", "val='25%'", "val='0.25'", "val=' 25000'", "val=''", "val='25000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:sat {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_resolves_srgb_and_theme() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:sat val='50000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([38, 90, 113]));
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_chart_and_contrasting_plot_match_rgb_references() {
+        for plot in [false, true] {
+            for (value, rgb) in [(25_000, "39535E"), (75_000, "136184")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:sat val='{value}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_mixed_repeated_nested_and_sat_offset_gates_stay_ni() {
+        for transforms in ["<a:sat val='25000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:sat val='25000'/>", "<a:sat val='25000'/><a:sat val='75000'/>", "<a:satMod val='50000'/><a:sat val='25000'/>", "<a:sat val='25000'/><a:satOff val='10000'/>", "<a:sat val='25000'><a:alpha val='50000'/></a:sat>", "<a:satOff val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
         }
     }
 
