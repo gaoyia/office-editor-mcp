@@ -277,3 +277,46 @@ fn entry_font_size_bold_and_family_have_real_ink_and_pack_together() {
     .is_err());
     assert!(bytes(&legend("u='sng'>")).is_err());
 }
+
+#[test]
+fn legend_solid_alpha_and_explicit_rectangular_border_paint_in_all_positions() {
+    for pos in ["l", "r", "t", "b", "tr"] {
+        let legend = |sp: &str| {
+            format!("<c:legend><c:legendPos val='{pos}'/><c:spPr>{sp}</c:spPr></c:legend>")
+        };
+        let (_, _, solid) = pixels(&legend(
+            "<a:solidFill><a:srgbClr val='FFFF00'/></a:solidFill>",
+        ));
+        assert!(
+            solid.iter().filter(|c| **c == [255, 255, 0]).count() > 30,
+            "{pos}"
+        );
+        let (_, _, alpha) = pixels(&legend(
+            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
+        ));
+        assert!(
+            alpha
+                .iter()
+                .any(|c| c[0] == 255 && c[1] == 255 && (120..=135).contains(&c[2])),
+            "{pos}"
+        );
+        let (_, _, border) = pixels(&legend(
+            "<a:ln w='25400'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>",
+        ));
+        assert!(
+            border.iter().filter(|c| **c == [255, 0, 0]).count() > 20,
+            "{pos}"
+        );
+    }
+    let normal = bytes("<c:legend><c:legendPos val='r'/></c:legend>").unwrap();
+    assert_eq!(
+        normal,
+        bytes("<c:legend><c:legendPos val='r'/><c:spPr><a:noFill/></c:spPr></c:legend>").unwrap()
+    );
+}
+#[test]
+fn unimplemented_legend_effects_gradients_and_complex_lines_remain_explicit_ni() {
+    for sp in ["<a:gradFill/>","<a:effectLst><a:outerShdw/></a:effectLst>","<a:ln w='25400'><a:prstDash val='dash'/><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:solidFill><a:schemeClr val='accent1'/></a:solidFill>"] {
+        assert!(bytes(&format!("<c:legend><c:legendPos val='r'/><c:spPr>{sp}</c:spPr></c:legend>")).is_err(),"{sp}");
+    }
+}

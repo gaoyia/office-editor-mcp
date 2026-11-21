@@ -40,6 +40,8 @@ pub(super) struct Spec {
     manual: Option<Manual>,
     deleted: Vec<usize>,
     entries: Vec<(usize, TextStyle)>,
+    background: FrameFill,
+    border: Option<([u8; 3], f64)>,
 }
 pub(super) fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
@@ -79,6 +81,8 @@ impl Spec {
             && self.manual.is_none()
             && self.deleted.is_empty()
             && self.entries.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
     }
     pub(super) fn read(root: &Element, accents: [[u8; 3]; 6]) -> Result<Self, Error> {
         let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
@@ -91,6 +95,8 @@ impl Spec {
             manual: None,
             deleted: Vec::new(),
             entries: Vec::new(),
+            background: FrameFill::NoFill,
+            border: None,
         };
         let Some(legend) = chart.child_by_local("legend").filter(|_| pos.is_some()) else {
             return Ok(result);
@@ -163,11 +169,49 @@ impl Spec {
             }
         }
         if let Some(sp) = legend.child_by_local("spPr") {
+            let mut saw_fill = false;
+            let mut saw_line = false;
             for child in sp.element_children() {
                 match child.local_name() {
-                    "noFill" | "extLst" => (),
+                    "noFill" | "solidFill" if !saw_fill => {
+                        saw_fill = true;
+                        result.background = if child.local_name() == "noFill" {
+                            FrameFill::NoFill
+                        } else {
+                            legend_solid(child, accents)?
+                        };
+                    }
+                    "extLst" => (),
                     "effectLst" | "effectDag" if child.element_children().next().is_none() => (),
-                    "ln" if child.child_by_local("noFill").is_some() => (),
+                    "ln" if !saw_line => {
+                        saw_line = true;
+                        if child.child_by_local("noFill").is_some() {
+                            continue;
+                        }
+                        if unhandled_attrs(child, &["w"]) {
+                            return Err(unsupported());
+                        }
+                        let width = child
+                            .attr_local("w")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .filter(|v| *v > 0)
+                            .ok_or_else(unsupported)?;
+                        let mut color = None;
+                        for part in child.element_children() {
+                            match part.local_name() {
+                                "solidFill" if color.is_none() => {
+                                    let FrameFill::Solid(rgb) = legend_solid(part, accents)? else {
+                                        return Err(unsupported());
+                                    };
+                                    color = Some(rgb);
+                                }
+                                "prstDash" if part.attr_local("val") == Some("solid") => (),
+                                _ => return Err(unsupported()),
+                            }
+                        }
+                        result.border =
+                            Some((color.ok_or_else(unsupported)?, width as f64 / 12_700.0));
+                    }
                     _ => return Err(unsupported()),
                 }
             }
@@ -176,6 +220,23 @@ impl Spec {
         Ok(result)
     }
 }
+// Reuse the already tested sRGB/straight-alpha conversion, but keep the
+// initial legend frame subset explicit. Gradients/effects remain NI.
+fn legend_solid(solid: &Element, accents: [[u8; 3]; 6]) -> Result<FrameFill, Error> {
+    let colors: Vec<_> = solid.element_children().collect();
+    if colors.len() != 1 {
+        return Err(unsupported());
+    }
+    let color = colors[0];
+    if color.local_name() != "srgbClr"
+        || unhandled_attrs(color, &["val"])
+        || color.element_children().any(|n| n.local_name() != "alpha")
+    {
+        return Err(unsupported());
+    }
+    resolve_frame_solid(color, &theme_scheme(None, accents))
+}
+
 impl TextStyle {
     fn read(&mut self, tx: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
         if let Some(body) = tx.child_by_local("bodyPr") {
@@ -715,6 +776,36 @@ impl<'a> Layout<'a> {
         r
     }
     pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
+        if self.items.is_empty() {
+            return;
+        }
+        // The existing layout frame is the semantic frame, independent of glyph
+        // ink bounds. Paint before keys/text, with no COM-origin compensation.
+        let (x0, y0, x1, y1) = (
+            self.frame.x.round() as i32,
+            self.frame.y.round() as i32,
+            (self.frame.x + self.frame.w).round() as i32,
+            (self.frame.y + self.frame.h).round() as i32,
+        );
+        match self.spec.background {
+            FrameFill::Solid(rgb) => canvas.fill_rect(x0, y0, x1, y1, rgb),
+            FrameFill::Translucent(rgb, alpha) => {
+                canvas.fill_rect_cov(x0, y0, x1, y1, rgb, ooxml_alpha_to_u8(alpha))
+            }
+            _ => (),
+        }
+        if let Some((rgb, pt)) = self.spec.border {
+            let width = canvas.dpi.pt_to_px_font(pt);
+            let (x, y, r, b) = (
+                self.frame.x,
+                self.frame.y,
+                self.frame.x + self.frame.w,
+                self.frame.y + self.frame.h,
+            );
+            for (xa, ya, xb, yb) in [(x, y, r, y), (r, y, r, b), (r, b, x, b), (x, b, x, y)] {
+                canvas.stroke_segment(xa, ya, xb, yb, width, rgb);
+            }
+        }
         let height = self.rows.len() as f64 * self.line
             + self.rows.len().saturating_sub(1) as f64 * (self.pitch - self.line).max(0.0);
         let mut y = self.frame.y + (self.frame.h - height) / 2.0;
@@ -915,6 +1006,8 @@ mod overlay_ink_tests {
             manual: None,
             deleted: Vec::new(),
             entries: Vec::new(),
+            background: FrameFill::NoFill,
+            border: None,
         };
         assert!(spec.default_right_ink());
         spec.overlay = true;
