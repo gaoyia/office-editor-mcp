@@ -8,6 +8,7 @@ $Log=Join-Path $EvidenceRoot 'logs\real-lifecycle.log'
 function Write-Log($s){$s="$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') $s";Add-Content -LiteralPath $Log -Value $s -Encoding UTF8;Write-Host $s}
 . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $RepoRoot 'manual-check\lib\office-com.ps1'),[Text.Encoding]::UTF8)))
 . ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $RepoRoot 'manual-check\lib\owned-excel-books.ps1'),[Text.Encoding]::UTF8)))
+. ([scriptblock]::Create([IO.File]::ReadAllText((Join-Path $RepoRoot 'manual-check\lib\clipboard-export-diagnostics.ps1'),[Text.Encoding]::UTF8)))
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 [void][Reflection.Assembly]::LoadWithPartialName('Microsoft.Office.Interop.Excel')
@@ -55,22 +56,30 @@ try{
     $key=$names[$i-1];$prefix=if($phase -eq 'success'){$key}else{'exception-proof'}
     $out=Join-Path $EvidenceRoot "office-raw\$prefix-copypicture.png";$export=Join-Path $EvidenceRoot "office-raw\$prefix-chartexport.png"
     $c=[ordered]@{when=(Get-Date).ToString('yyyy-MM-dd HH:mm:ss zzz');zone='Asia/Shanghai';phase=$phase;sourceKind='derived-controlled-same-title-anchor-data-from-public-api-source';source=$paths[$phase][1];sourceMaster=$source;sourceShaBefore=$sourceSha;exclusiveReadBefore=$true;output=$out;id="sheet:Sheet1/chart:$($i+1)";excelVersion=[string]$app.Version;excelWindowDpi=$dpi;excelPid=$global:OoxpExcelPid;readOnly=[bool]$book.ReadOnly;saveCalled=$false;quitCalled=$false;status='NOT_EXPORTED'}
+    $c.copyApi='ChartObject.CopyPicture(xlScreen,xlBitmap)';$c.copyInputs=[ordered]@{Appearance=1;AppearanceName='xlScreen';Format=2;FormatName='xlBitmap';Size=$null;Receiver='ChartObject'};$c.stage='chart_metadata'
+    $certs.Add([pscustomobject]@{Path=(Join-Path $EvidenceRoot "certs\$prefix.json");Data=$c})
     try{
      $obj=$objects.Item($i);$chart=$obj.Chart;$title=$chart.ChartTitle;$c.title=[string]$title.Text
      $c.chartWidthPt=[double]$obj.Width;$c.chartHeightPt=[double]$obj.Height;$c.chartLeftPt=[double]$obj.Left;$c.chartTopPt=[double]$obj.Top
      $tl=$obj.TopLeftCell;$window.ScrollRow=[int]$tl.Row;$window.ScrollColumn=[int]$tl.Column;$null=$obj.Activate()
      Start-Sleep -Milliseconds 300
-     $seq=[LegendLifecycleNative]::GetClipboardSequenceNumber()
+     $c.copyRequestedAt=[DateTimeOffset]::Now.ToString('o');$c.stage='copy_picture_call'
+     $seq=[LegendLifecycleNative]::GetClipboardSequenceNumber();$c.clipboardSequenceBefore=$seq
      $null=$obj.CopyPicture([Microsoft.Office.Interop.Excel.XlPictureAppearance]::xlScreen,[Microsoft.Office.Interop.Excel.XlCopyPictureFormat]::xlBitmap)
+     $c.copyReturnedAt=[DateTimeOffset]::Now.ToString('o');$c.stage='clipboard_image_read'
      Start-Sleep -Milliseconds 200
      $img=[Windows.Forms.Clipboard]::GetImage();$after=[LegendLifecycleNative]::GetClipboardSequenceNumber();$c.clipboardSequenceBefore=$seq;$c.clipboardSequenceAfter=$after;$c.clipboardFormats=@([Windows.Forms.Clipboard]::GetDataObject().GetFormats())
+     $c.clipboardImageReadAt=[DateTimeOffset]::Now.ToString('o');$c.bitmapImageReturned=[bool]$img;$c.guardEvaluated=$true;$c.stage='bitmap_freshness_guard'
      if(-not $img -or $seq -eq $after){throw 'Reject missing/stale Bitmap clipboard'}
-     $c.copyApi='ChartObject.CopyPicture(xlScreen,xlBitmap)';$c.width=$img.Width;$c.height=$img.Height;$img.Save($out,[Drawing.Imaging.ImageFormat]::Png);$img.Dispose();$img=$null
+     $c.guardPassed=$true;$c.stage='save_copy_and_export';$c.width=$img.Width;$c.height=$img.Height;$img.Save($out,[Drawing.Imaging.ImageFormat]::Png);$img.Dispose();$img=$null
      $c.outputSha256=Sha $out;$c.chartExportReturned=[bool]$chart.Export($export,'PNG',$false);if(-not $c.chartExportReturned){throw 'Chart.Export returned false'}
      $img=[Drawing.Image]::FromFile($export);$c.exportWidth=$img.Width;$c.exportHeight=$img.Height;$img.Dispose();$img=$null;$c.exportSha256=Sha $export
-     $c.status='EXPORTED_PENDING_CLOSE';$certs.Add([pscustomobject]@{Path=(Join-Path $EvidenceRoot "certs\$prefix.json");Data=$c})
+     $c.status='EXPORTED_PENDING_CLOSE';$c.stage='export_complete'
      Write-Log "$phase $key CopyPicture=$($c.width)x$($c.height) Export=$($c.exportWidth)x$($c.exportHeight)"
-    }finally{if($img){$img.Dispose()};foreach($o in @($tl,$title,$chart,$obj)){Release-Com $o};$tl=$null;$title=$null;$chart=$null;$obj=$null}
+    }catch{$c.attemptError=$_.Exception.Message;$c.attemptErrorType=$_.Exception.GetType().FullName;$c.attemptErrorHResult=('0x{0:X8}' -f ($_.Exception.HResult -band 0xffffffffL));$c.errorAt=[DateTimeOffset]::Now.ToString('o');throw
+    }finally{
+     try{Save-CopyPictureAttemptDiagnostic -Record $c -Path (Join-Path $EvidenceRoot "logs\$prefix-clipboard-attempt.json")}catch{$c.diagnosticPersistenceError=$_.Exception.Message;if(-not $c.attemptError){throw};Write-Log "Diagnostic write failed; preserving original attempt error: $($c.diagnosticPersistenceError)"}finally{if($img){$img.Dispose()};foreach($o in @($tl,$title,$chart,$obj)){Release-Com $o};$tl=$null;$title=$null;$chart=$null;$obj=$null}
+    }
    }
    if($phase -eq 'exception'){throw 'INTENTIONAL_OWNED_EXPORT_EXCEPTION'}
   }catch{
