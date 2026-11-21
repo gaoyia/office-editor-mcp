@@ -16,6 +16,42 @@ impl Cap {
         }
     }
 }
+/// Internal join geometry is independent from true run/dash end caps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Join { Round, Bevel }
+
+/// Local join disk clipped by the outer offset-edge chord. Its visible outer
+/// boundary is the bevel hull; the interior overlaps both butt-ended bodies,
+/// avoiding an artificial AA seam where triangle/rectangles merely touch.
+/// No miter length, angle threshold, device offset or preset table.
+pub(super) struct BevelJoin { vertices: [Point;3], radius: f64 }
+impl BevelJoin {
+    pub(super) fn new(a: Point,b: Point,c: Point,width: f64)->Option<Self> {
+        let incoming=CapSegment::new(a,b,width,Cap::Flat,Cap::Flat)?;
+        let outgoing=CapSegment::new(b,c,width,Cap::Flat,Cap::Flat)?;
+        let u=incoming.direction;let v=outgoing.direction;
+        let turn=u.0*v.1-u.1*v.0;
+        // No unique outer triangle for a straight edge/exact reversal. Do not
+        // invent a round/square degeneracy rule here.
+        if turn==0.0 {return None;}
+        let side=if turn>0.0 {-1.0}else{1.0};let radius=width/2.0;
+        let p=(b.0-side*u.1*radius,b.1+side*u.0*radius);
+        let q=(b.0-side*v.1*radius,b.1+side*v.0*radius);
+        [p.0,p.1,q.0,q.1].iter().all(|x|x.is_finite()).then_some(Self{vertices:[b,p,q],radius})
+    }
+    pub(super) fn bounds(&self)->(Point,Point) {
+        let b=self.vertices[0];((b.0-self.radius,b.1-self.radius),(b.0+self.radius,b.1+self.radius))
+    }
+    pub(super) fn signed_distance(&self,p:Point)->f64 {
+        let b=self.vertices[0];let a=self.vertices[1];let c=self.vertices[2];let e=(c.0-a.0,c.1-a.1);
+        let cross=|p:Point|e.0*(p.1-a.1)-e.1*(p.0-a.0);
+        let side=if cross(b)>0.0 {1.0}else{-1.0};
+        let plane=-side*cross(p)/e.0.hypot(e.1);
+        let circle=(p.0-b.0).hypot(p.1-b.1)-self.radius;
+        circle.max(plane)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Style {
     pub(super) width: f64,
@@ -331,6 +367,27 @@ impl Run<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn bevel_outer_hull_shaves_round_corner_and_reflects_turns() {
+        let b=BevelJoin::new((0.0,0.0),(10.0,0.0),(10.0,10.0),4.0).unwrap();
+        assert!(b.signed_distance((10.5,-0.5))<0.0);
+        assert!(b.signed_distance((10.0,0.0)) < -1.0); // No artificial internal AA edge at the vertex.
+        assert!(b.signed_distance((11.5,-1.5))>0.0);
+        assert!(b.signed_distance((11.0,-1.0)).abs()<1e-12);
+        let reflected=BevelJoin::new((0.0,0.0),(10.0,0.0),(10.0,-10.0),4.0).unwrap();
+        for p in [(10.5,-0.5),(11.5,-1.5),(8.0,-1.0)] {assert!((b.signed_distance(p)-reflected.signed_distance((p.0,-p.1))).abs()<1e-12);}
+    }
+    #[test]
+    fn bevel_has_no_invented_degenerate_or_nonfinite_join() {
+        for points in [[(0.0,0.0),(0.0,0.0),(1.0,1.0)],[(0.0,0.0),(1.0,0.0),(2.0,0.0)],[(0.0,0.0),(1.0,0.0),(0.0,0.0)],[(f64::NAN,0.0),(1.0,0.0),(1.0,1.0)]] {assert!(BevelJoin::new(points[0],points[1],points[2],4.0).is_none());}
+        for width in [0.0,-1.0,f64::INFINITY] {assert!(BevelJoin::new((0.0,0.0),(1.0,0.0),(1.0,1.0),width).is_none());}
+    }
+    #[test]
+    fn bevel_geometry_scales_and_translates_without_angle_tables() {
+        let a=BevelJoin::new((0.0,0.0),(10.0,0.0),(15.0,8.0),4.0).unwrap();
+        let b=BevelJoin::new((7.0,9.0),(37.0,9.0),(52.0,33.0),12.0).unwrap();
+        for p in [(10.0,-1.0),(12.0,-2.0),(9.0,1.0)] {assert!((3.0*a.signed_distance(p)-b.signed_distance((3.0*p.0+7.0,3.0*p.1+9.0))).abs()<1e-10);}
+    }
     #[test]
     fn explicit_cap_tokens_and_positive_finite_styles() {
         for (s, c) in [

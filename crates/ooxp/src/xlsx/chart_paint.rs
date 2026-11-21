@@ -245,6 +245,7 @@ fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
 struct LineSeriesStyle {
     dash: Option<std::sync::Arc<stroke::DashPattern>>,
     cap: stroke::Cap,
+    join: stroke::Join,
     color: Option<[u8; 3]>,
     visible: bool,
     width: f64,
@@ -267,6 +268,7 @@ struct Series {
     line_visible: bool,
     line_width: f64,
     line_cap: stroke::Cap,
+    line_join: stroke::Join,
     line_dash: Option<std::sync::Arc<stroke::DashPattern>>,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
@@ -298,6 +300,7 @@ impl Default for Series {
             line_visible: false,
             line_width: 0.0,
             line_cap: stroke::Cap::Round,
+            line_join: stroke::Join::Round,
             line_dash: None,
             marker: MarkerKind::None,
             marker_color: None,
@@ -1566,6 +1569,7 @@ fn read_chart(
         let mut line_color = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
+        join: stroke::Join::Round,
         dash: None,
                 cap: stroke::Cap::Round,
                 color: series_color(ser, accents),
@@ -1579,6 +1583,7 @@ fn read_chart(
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
                 LineSeriesStyle {
+        join: stroke::Join::Round,
         dash: None,
                 cap: stroke::Cap::Round,
                     color: area.fill,
@@ -1636,6 +1641,7 @@ fn read_chart(
             line_visible: style.visible,
             line_width: style.width,
             line_cap: style.cap,
+            line_join: style.join,
             line_dash: style.dash,
             marker: style.marker,
             marker_color: style.marker_color,
@@ -3444,7 +3450,7 @@ fn draw_lines(
                 {
                     None
                 } else {
-                    stroke_run_pattern(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), color)?;
+                    stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
                     run.clear();
                     None
                 };
@@ -3452,7 +3458,7 @@ fn draw_lines(
                     run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run_pattern(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), color)?;
+            stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
@@ -3504,6 +3510,10 @@ fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3
 const MAX_CUSTOM_DASH_PIECES: usize = 65_536; // Resource bound, not a visual period.
 fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::Style,
     pattern: Option<&stroke::DashPattern>, color: [u8;3]) -> Result<(),Error> {
+    stroke_run_pattern_join(canvas,points,style,pattern,stroke::Join::Round,color)
+}
+fn stroke_run_pattern_join(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::Style,
+    pattern: Option<&stroke::DashPattern>, join: stroke::Join, color: [u8;3]) -> Result<(),Error> {
     if let Some(pattern) = pattern {
         if let Some(run) = stroke::Run::new(points) {
             let paths=run.dashed_capped(pattern,style,canvas.custom_dash_budget)
@@ -3513,7 +3523,10 @@ fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::
                 // Do not brighten an otherwise identical straight dash merely
                 // because a category/cache point split it into two edges.
                 stroke::simplify_collinear(&mut piece.points);
-                stroke_run_dash_caps(canvas,&piece.points,style.width,piece.first,piece.last,color);
+                // No internal join exists on one edge or a zero-body dot. Keep
+                // the locked endpoint caps and single-circle primitive.
+                if join==stroke::Join::Round || piece.points.len()<=2 {stroke_run_dash_caps(canvas,&piece.points,style.width,piece.first,piece.last,color);}
+                else {canvas.stroke_custom_dash_union_join(&piece.points,style.width,piece.first,piece.last,join,color);}
             }
         }
     } else { stroke_run_style(canvas,points,style,color); }
@@ -5120,6 +5133,7 @@ fn read_line_series(
     }
     let mut dash = None;
     let mut cap = stroke::Cap::Round;
+    let mut join = stroke::Join::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
@@ -5127,6 +5141,7 @@ fn read_line_series(
         let style = read_line_sp_pr(sp, accents, dpi, explicit_pens)?;
         dash = style.dash;
         cap = style.cap;
+        join = style.join;
         visible = style.visible;
         width = excel_chart_line_width_px(style.width);
         color = style.color;
@@ -5138,6 +5153,7 @@ fn read_line_series(
     Ok(LineSeriesStyle {
         dash,
         cap,
+        join,
         color,
         visible,
         width,
@@ -5155,6 +5171,7 @@ fn read_line_sp_pr(
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut dash = None;
     let mut cap = stroke::Cap::Round;
+    let mut join = stroke::Join::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
@@ -5170,6 +5187,7 @@ fn read_line_sp_pr(
                 let line = read_ln_with_caps(child, accents, width, dpi, explicit_pens)?;
                 dash = line.dash;
                 cap = line.cap;
+                join = line.join;
                 visible = line.visible;
                 width = excel_chart_line_width_px(line.width);
                 if line.color.is_some() {
@@ -5187,6 +5205,7 @@ fn read_line_sp_pr(
     Ok(LineSeriesStyle {
         dash,
         cap,
+        join,
         color,
         visible,
         width,
@@ -5240,6 +5259,7 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
     if explicit_caps && ln.attr_local("w").is_some() {
         width = stroke::explicit_pen_width_px(width).ok_or_else(unsupported)?;
     }
+    let mut join = stroke::Join::Round;
     let mut dash = None;
     let mut dash_declared = false;
     let mut visible = true;
@@ -5286,6 +5306,7 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                 }
             }
             "round" => {},
+            "bevel" if explicit_caps => {},
             "miter" | "bevel" if cap == stroke::Cap::Round => {},
             "effectLst" => {
                 if child.element_children().next().is_some() {
@@ -5296,9 +5317,17 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
         }
     }
     if dash.is_some() && (!visible || ln.element_children().any(|child|
-        matches!(child.local_name(),"miter"|"bevel") ||
+        matches!(child.local_name(),"miter") ||
         (child.local_name()=="solidFill" && child.element_children()
             .any(|color| color.element_children().next().is_some())))) {
+        return Err(unsupported());
+    }
+    let joins:Vec<_>=ln.element_children().filter(|c|matches!(c.local_name(),"round"|"bevel"|"miter")).collect();
+    if dash.is_some() {
+        if joins.len()>1 || joins.iter().any(|c|c.local_name()=="miter" || c.element_children().next().is_some() || c.attrs.iter().any(|(k,_)|!k.starts_with("xmlns"))) {return Err(unsupported());}
+        if joins.first().is_some_and(|c|c.local_name()=="bevel") {join=stroke::Join::Bevel;}
+    } else if cap!=stroke::Cap::Round && joins.iter().any(|c|c.local_name()=="bevel") {
+        // Do not silently widen legacy solid-cap handling.
         return Err(unsupported());
     }
     if !visible {
@@ -5307,6 +5336,7 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
     Ok(LineSeriesStyle {
         dash,
         cap,
+        join,
         color,
         visible,
         width,
@@ -5413,6 +5443,7 @@ fn read_pie_series_style(
         let _ = read_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
+        join: stroke::Join::Round,
         dash: None,
                 cap: stroke::Cap::Round,
         color: series_color(ser, accents),
@@ -6648,9 +6679,14 @@ impl Canvas {
     /// One custom dash is one painted shape, including its round internal joins.
     /// Max coverage is composited once: overlapping edges/retracing must not
     /// darken antialiased boundaries. Solid/one-edge legacy rasterizers are
-    /// intentionally unchanged. This does not implement miter/bevel joins.
+    /// intentionally unchanged. The explicit custom-bevel branch below adds the
+    /// offset-edge hull; miter and exact reversal remain separate boundaries.
     fn stroke_custom_dash_union(&mut self, points: &[stroke::Point], width: f64,
         first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+        self.stroke_custom_dash_union_join(points,width,first,last,stroke::Join::Round,color);
+    }
+    fn stroke_custom_dash_union_join(&mut self, points: &[stroke::Point], width: f64,
+        first: stroke::Cap, last: stroke::Cap, join: stroke::Join, color: [u8;3]) {
         let Some(run)=stroke::Run::new(points) else {return;};
         if !width.is_finite() || width<=0.0 {return;}
         let edges:Vec<_>=run.segments().filter(|e| e.length>0.0).collect();
@@ -6667,8 +6703,8 @@ impl Canvas {
         let mut mask=vec![0u8;mw*(y1-y0+1) as usize];
         for edge in &edges {
             let Some(g)=stroke::CapSegment::new(edge.from,edge.to,width,
-                if edge.index==start.index {first}else{stroke::Cap::Round},
-                if edge.index==end.index {last}else{stroke::Cap::Round}) else {continue;};
+                if edge.index==start.index {first}else if join==stroke::Join::Round {stroke::Cap::Round}else{stroke::Cap::Flat},
+                if edge.index==end.index {last}else if join==stroke::Join::Round {stroke::Cap::Round}else{stroke::Cap::Flat}) else {continue;};
             let ax=((edge.from.0.min(edge.to.0)-pad).floor() as i32).max(x0);
             let bx=((edge.from.0.max(edge.to.0)+pad).ceil() as i32).min(x1);
             let ay=((edge.from.1.min(edge.to.1)-pad).floor() as i32).max(y0);
@@ -6678,6 +6714,17 @@ impl Canvas {
                 let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];
                 *slot=(*slot).max(alpha);
             }}
+        }
+        if join==stroke::Join::Bevel {
+            for pair in edges.windows(2) {
+                let Some(g)=stroke::BevelJoin::new(pair[0].from,pair[0].to,pair[1].to,width) else {continue;};
+                let (low,high)=g.bounds();let ax=((low.0-1.0).floor() as i32).max(x0);let bx=((high.0+1.0).ceil() as i32).min(x1);
+                let ay=((low.1-1.0).floor() as i32).max(y0);let by=((high.1+1.0).ceil() as i32).min(y1);
+                for y in ay..=by {for x in ax..=bx {
+                    let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                    let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];*slot=(*slot).max(alpha);
+                }}
+            }
         }
         for y in y0..=y1 {for x in x0..=x1 {
             let alpha=mask[(y-y0) as usize*mw+(x-x0) as usize];
@@ -7929,6 +7976,47 @@ mod tests {
         }
     }
     #[test]
+    fn bevel_is_irrelevant_for_a_single_edge_or_round_dot() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            for d in [25000.0,100000.0,10000000.0] {
+                let pattern=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let style=stroke::Style::new(6.0,cap).unwrap();
+                let mut a=Canvas::new(100,50);let mut b=Canvas::new(100,50);
+                for (canvas,join) in [(&mut a,stroke::Join::Round),(&mut b,stroke::Join::Bevel)] {
+                    stroke_run_pattern_join(canvas,&[(20.25,20.25),(70.25,20.25)],style,Some(&pattern),join,[23,93,181]).unwrap();
+                }
+                assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);assert_eq!(a.custom_dash_budget,b.custom_dash_budget);
+            }
+        }
+    }
+    #[test]
+    fn bevel_custom_parser_is_explicit_and_does_not_expand_miter_or_legacy_solid() {
+        for cap in ["flat","sq","rnd"] {
+            let xml=format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='10000000' sp='100000'/></custDash><bevel/></ln>");
+            let doc=crate::xml::parse(xml.as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,stroke::Join::Bevel);
+            for bad in ["<miter lim='800000'/>","<bevel lim='1'/>","<bevel><x/></bevel>","<round/><bevel/>","<bevel/><bevel/>"] {
+                let doc=crate::xml::parse(xml.replace("<bevel/>",bad).as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
+            }
+        }
+        let doc=crate::xml::parse(b"<ln w='50800' cap='rnd'><solidFill><srgbClr val='175DB5'/></solidFill><bevel/></ln>").unwrap();assert_eq!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default()).unwrap().join,stroke::Join::Round);
+    }
+    #[test]
+    fn bevel_custom_joins_fill_hull_without_round_bulge_or_butt_gap() {
+        let pts=[(15.0,40.0),(40.0,15.0),(65.0,40.0)];let mut round=Canvas::new(80,60);let mut bevel=Canvas::new(80,60);
+        for (canvas,join) in [(&mut round,stroke::Join::Round),(&mut bevel,stroke::Join::Bevel)] {canvas.stroke_custom_dash_union_join(&pts,14.0,stroke::Cap::Flat,stroke::Cap::Flat,join,[23,93,181]);}
+        assert_ne!(round.px,bevel.px);let at=|c:&Canvas,x:usize,y:usize|c.px[(y*80+x)*3..(y*80+x+1)*3].to_vec();
+        assert_eq!(at(&bevel,40,15),vec![23,93,181]);assert_eq!(at(&bevel,40,9),vec![255,255,255]);assert_ne!(at(&round,40,9),vec![255,255,255]);
+    }
+    #[test]
+    fn bevel_custom_round_trip_reaches_line_renderer_and_respects_budget() {
+        let make=|join:&str| {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='10000000' sp='100000'/></a:custDash><a:{join}/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0)],&extra),"")
+        };
+        assert_ne!(render_line(&make("round")).unwrap(),render_line(&make("bevel")).unwrap());assert!(render_line(&make("miter")).is_err());
+        let mut c=Canvas::new(80,60);c.custom_dash_budget=1;let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();
+        stroke_run_pattern_join(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Bevel,[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+    }
+    #[test]
     fn custom_dash_union_retrace_does_not_reblend_boundary() {
         let mut once=Canvas::new(80,60);let mut retrace=Canvas::new(80,60);
         let a=(18.25,20.25);let b=(58.25,20.25);let color=[23,93,181];
@@ -8009,7 +8097,8 @@ mod tests {
             let make=|extra:&str,d:i32| format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='{d}' sp='100000'/></custDash>{extra}</ln>");
             let parse=|xml:String| {let doc=crate::xml::parse(xml.as_bytes()).unwrap();read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true)};
             assert!(parse(make("<round/>",200000)).is_ok());
-            for join in ["<miter/>","<bevel/>"] {assert!(parse(make(join,200000)).is_err());}
+            assert!(parse(make("<bevel/>",200000)).is_ok());
+            assert!(parse(make("<miter/>",200000)).is_err());
             let alpha=make("",200000).replace("val='175DB5'/>","val='175DB5'><alpha val='50000'/></srgbClr>");
             assert!(parse(alpha).is_err());
             for d in [1,25000,50000,100000] {assert!(parse(make("",d)).is_ok());}
