@@ -3506,18 +3506,33 @@ fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::
     pattern: Option<&stroke::DashPattern>, color: [u8;3]) -> Result<(),Error> {
     if let Some(pattern) = pattern {
         if let Some(run) = stroke::Run::new(points) {
-            let paths=run.dashed(pattern,canvas.custom_dash_budget)
+            let paths=run.dashed_capped(pattern,style,canvas.custom_dash_budget)
                 .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported,"id"))?;
             canvas.custom_dash_budget -= paths.len();
-            for mut path in paths {
+            for mut piece in paths {
                 // Do not brighten an otherwise identical straight dash merely
                 // because a category/cache point split it into two edges.
-                stroke::simplify_collinear(&mut path);
-                stroke_run_style(canvas,&path,style,color);
+                stroke::simplify_collinear(&mut piece.points);
+                stroke_run_dash_caps(canvas,&piece.points,style.width,piece.first,piece.last,color);
             }
         }
     } else { stroke_run_style(canvas,points,style,color); }
     Ok(())
+}
+
+// Only the new custom-dash path uses independently resolved dash/run caps.
+// The accepted solid rasterizer and default cap behavior stay byte-for-byte.
+fn stroke_run_dash_caps(canvas: &mut Canvas, points: &[(f64,f64)], width: f64,
+    first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+    let Some(run)=stroke::Run::new(points) else {return;};
+    let mut nonzero=run.segments().filter(|edge| edge.length>0.0);
+    let Some(start)=nonzero.next() else {return;};
+    let end=nonzero.last().map_or(start.index,|edge| edge.index);
+    for edge in run.segments().filter(|edge| edge.length>0.0) {
+        canvas.stroke_segment_capped(edge.from,edge.to,width,
+            if edge.index==start.index {first}else{stroke::Cap::Round},
+            if edge.index==end {last}else{stroke::Cap::Round},color);
+    }
 }
 
 fn stroke_run_style(canvas: &mut Canvas, points: &[(f64, f64)], style: stroke::Style, color: [u8; 3]) {
@@ -5238,10 +5253,10 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                 color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
             }
             "custDash" => {
-                // Explicit positive opaque flat custom dashes only. Native round
-                // dash caps consume their own logical lengths differently;
-                // square changes only the true run ends. Do not guess those.
-                if dash_declared || !explicit_caps || cap != stroke::Cap::Flat
+                // Explicit opaque custom dashes: flat and square positive stops;
+                // round keeps a positive centerline after including its caps.
+                // Omitted caps, dots and ambiguous short-round dashes stay NI.
+                if dash_declared || !explicit_caps || ln.attr_local("cap").is_none()
                     || child.attrs.iter().any(|(key,_)| !key.starts_with("xmlns"))
                     || ln.attr_local("w").and_then(|v| v.parse::<f64>().ok())
                         .is_none_or(|w| !w.is_finite() || w <= 0.0)
@@ -5253,7 +5268,9 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                     { return Err(unsupported()); }
                     let percentage = |key| stop.attr_local(key).and_then(|v| v.parse::<i32>().ok())
                         .filter(|v| *v > 0).map(f64::from).ok_or_else(unsupported);
-                    stops.push((percentage("d")?,percentage("sp")?));
+                    let d=percentage("d")?;
+                    if cap==stroke::Cap::Round && d<=100_000.0 {return Err(unsupported());}
+                    stops.push((d,percentage("sp")?));
                 }
                 dash = Some(std::sync::Arc::new(stroke::DashPattern::from_width_percent(&stops,width).ok_or_else(unsupported)?));
                 dash_declared = true;
@@ -5276,7 +5293,12 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
             _ => return Err(unsupported()),
         }
     }
-    if dash.is_some() && !visible { return Err(unsupported()); }
+    if dash.is_some() && (!visible || ln.element_children().any(|child|
+        matches!(child.local_name(),"miter"|"bevel") ||
+        (child.local_name()=="solidFill" && child.element_children()
+            .any(|color| color.element_children().next().is_some())))) {
+        return Err(unsupported());
+    }
     if !visible {
         color = None;
     }
@@ -7855,7 +7877,7 @@ mod tests {
     }
     #[test]
     fn custom_dash_rejects_unimplemented_caps_missing_width_and_ambiguous_stops() {
-        for attrs in ["w='50800' cap='rnd'","w='50800' cap='sq'","w='50800'","cap='flat'","w='0' cap='flat'"] {
+        for attrs in ["w='50800'","cap='flat'","w='0' cap='flat'"] {
             let doc=crate::xml::parse(format!("<ln {attrs}><custDash><ds d='200000' sp='100000'/></custDash></ln>").as_bytes()).unwrap();
             assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err());
         }
@@ -7864,6 +7886,53 @@ mod tests {
             assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err(),"{body}");
         }
     }
+    #[test]
+    fn explicit_round_square_custom_dash_parser_supports_only_evidenced_baseline() {
+        for cap in ["rnd","sq","flat"] {
+            let make=|extra:&str,d:i32| format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='{d}' sp='100000'/></custDash>{extra}</ln>");
+            let parse=|xml:String| {let doc=crate::xml::parse(xml.as_bytes()).unwrap();read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true)};
+            assert!(parse(make("<round/>",200000)).is_ok());
+            for join in ["<miter/>","<bevel/>"] {assert!(parse(make(join,200000)).is_err());}
+            let alpha=make("",200000).replace("val='175DB5'/>","val='175DB5'><alpha val='50000'/></srgbClr>");
+            assert!(parse(alpha).is_err());
+            for d in [1,50000,100000] {assert_eq!(parse(make("",d)).is_err(),cap=="rnd");}
+        }
+    }
+    #[test]
+    fn round_square_custom_raster_does_not_depend_on_collinear_tessellation() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Square] {
+            let p=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+            let style=stroke::Style::new(6.0,cap).unwrap();let mut a=Canvas::new(120,40);let mut b=Canvas::new(120,40);
+            stroke_run_pattern(&mut a,&[(20.0,20.0),(100.0,20.0)],style,Some(&p),[23,93,181]).unwrap();
+            stroke_run_pattern(&mut b,&[(20.0,20.0),(23.0,20.0),(54.0,20.0),(100.0,20.0)],style,Some(&p),[23,93,181]).unwrap();
+            assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);
+        }
+    }
+    #[test]
+    fn square_internal_dash_is_flat_while_true_run_ends_extend_half_a_pen() {
+        let p=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+        let mut flat=Canvas::new(120,40);let mut square=Canvas::new(120,40);
+        for (c,cap) in [(&mut flat,stroke::Cap::Flat),(&mut square,stroke::Cap::Square)] {
+            stroke_run_pattern(c,&[(20.0,20.0),(100.0,20.0)],stroke::Style::new(6.0,cap).unwrap(),Some(&p),[23,93,181]).unwrap();
+        }
+        assert_ne!(flat.px,square.px);
+        // Exclude BOTH actual run endpoints: each legitimately gets a cap.
+        for y in 0..40 {assert_eq!(&flat.px[(y*120+25)*3..(y*120+95)*3],&square.px[(y*120+25)*3..(y*120+95)*3]);}
+        assert_ne!(&flat.px[(20*120+101)*3..(20*120+102)*3],&square.px[(20*120+101)*3..(20*120+102)*3]);
+    }
+    #[test]
+    fn round_square_custom_keys_render_in_both_legacy_and_advanced_legends() {
+        for pos in ["r","b"] {
+            let mut images=Vec::new();
+            for cap in ["flat","sq","rnd"] {
+                let extra=format!("<c:spPr><a:ln w='50800' cap='{cap}'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='200000' sp='100000'/></a:custDash><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+                let xml=standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&extra),"").replace("<c:legendPos val=\"r\"/>",&format!("<c:legendPos val=\"{pos}\"/>"));
+                images.push(render_line(&xml).unwrap());
+            }
+            assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
+        }
+    }
+
     #[test]
     fn patterned_strokes_share_an_image_budget_and_never_silently_truncate() {
         let pattern=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],2.0).unwrap();

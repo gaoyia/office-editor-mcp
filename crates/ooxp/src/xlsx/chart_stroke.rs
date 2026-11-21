@@ -249,14 +249,65 @@ impl DashPattern {
         Some(intervals)
     }
 }
+/// A painted piece has dash caps distinct from the true polyline endpoints.
+pub(super) struct CappedDash {
+    pub(super) points: Vec<Point>,
+    pub(super) first: Cap,
+    pub(super) last: Cap,
+}
+impl DashPattern {
+    /// Round native controls preserve the logical period, but include the caps
+    /// within the logical dash length: the centerline is one pen shorter.
+    /// Clip that nominal centerline to the run, never shorten an already clipped
+    /// last dash. Positive bodies only; zero/short dot semantics remain gated.
+    fn round_intervals(&self, length: f64, width: f64, budget: usize) -> Option<Vec<(f64,f64)>> {
+        if !length.is_finite() || length < 0.0 || !width.is_finite() || width <= 0.0
+            || self.stops.iter().any(|(dash,_)| *dash <= width) { return None; }
+        let mut result=Vec::new();
+        let mut start=0.0;
+        let mut stop=0;
+        while start < length {
+            if result.len()==budget { return None; }
+            let (dash,space)=self.stops[stop];
+            let nominal_end=start+dash-width;
+            if !nominal_end.is_finite() || nominal_end<=start { return None; }
+            result.push((start,nominal_end.min(length)));
+            let next=start+dash+space;
+            if !next.is_finite() || next<=start { return None; }
+            start=next;
+            stop=(stop+1)%self.stops.len();
+        }
+        Some(result)
+    }
+}
 impl Run<'_> {
+    pub(super) fn dashed_capped(&self, pattern: &DashPattern, style: Style, budget: usize) -> Option<Vec<CappedDash>> {
+        let intervals=if style.cap==Cap::Round {
+            pattern.round_intervals(self.length,style.width,budget)?
+        } else { pattern.painted_intervals(self.length,budget)? };
+        let paths=self.paths_for_intervals(&intervals)?;
+        Some(paths.into_iter().zip(intervals).map(|(points,(start,end))| {
+            let (first,last)=match style.cap {
+                Cap::Round => (Cap::Round,Cap::Round),
+                Cap::Flat => (Cap::Flat,Cap::Flat),
+                // Square is a true run-end cap, not a cap on every dash.
+                Cap::Square => (if start==0.0 {Cap::Square}else{Cap::Flat},
+                    if end==self.length {Cap::Square}else{Cap::Flat}),
+            };
+            CappedDash {points,first,last}
+        }).collect())
+    }
     /// Subdivide a continuous polyline in O(edges + intervals). Vertices inside
     /// a painted dash are retained as joins, not new capped dash endpoints.
+    #[cfg(test)]
     pub(super) fn dashed(&self, pattern: &DashPattern, budget: usize) -> Option<Vec<Vec<Point>>> {
         let intervals = pattern.painted_intervals(self.length, budget)?;
+        self.paths_for_intervals(&intervals)
+    }
+    fn paths_for_intervals(&self, intervals: &[(f64,f64)]) -> Option<Vec<Vec<Point>>> {
         let mut edges = self.segments().filter(|edge| edge.length > 0.0).peekable();
         let mut paths = Vec::with_capacity(intervals.len());
-        for (start, end) in intervals {
+        for &(start, end) in intervals {
             while edges.peek().is_some_and(|e| e.start + e.length <= start) {
                 edges.next();
             }
@@ -484,4 +535,73 @@ mod tests {
             assert_eq!(actual, points);
         }
     }
+    #[test]
+    fn round_dash_caps_are_included_in_logical_lengths_without_changing_periods() {
+        for w in [1.0,3.0,6.0] {
+            let pattern=DashPattern::from_width_percent(&[(200000.0,100000.0)],w).unwrap();
+            let points=[(0.0,0.0),(w*8.0,0.0)];
+            let paths=Run::new(&points).unwrap().dashed_capped(&pattern,Style::new(w,Cap::Round).unwrap(),10).unwrap();
+            assert_eq!(paths.len(),3);
+            for (i,path) in paths.iter().enumerate() {
+                let start=i as f64*w*3.0;
+                assert_eq!(path.points,[(start,0.0),(start+w,0.0)]);
+                assert_eq!((path.first,path.last),(Cap::Round,Cap::Round));
+                // Two half-width caps + one-width body = the requested 200%.
+                assert_eq!(path.points[1].0-path.points[0].0+w,w*2.0);
+            }
+        }
+    }
+    #[test]
+    fn round_nominal_centerline_is_clipped_after_cap_length_resolution() {
+        let p=DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+        for length in [2.0,5.0,20.0,23.0] {
+            let points=[(0.0,0.0),(length,0.0)];
+            let v=Run::new(&points).unwrap().dashed_capped(&p,Style::new(6.0,Cap::Round).unwrap(),10).unwrap();
+            assert_eq!(v.last().unwrap().points.last(),Some(&(length,0.0)));
+        }
+    }
+    #[test]
+    fn square_cap_applies_only_at_true_run_ends_not_internal_dash_ends() {
+        let p=DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+        let points=[(0.0,0.0),(50.0,0.0)];
+        let v=Run::new(&points).unwrap().dashed_capped(&p,Style::new(6.0,Cap::Square).unwrap(),10).unwrap();
+        assert_eq!(v.len(),3);
+        assert_eq!((v[0].first,v[0].last),(Cap::Square,Cap::Flat));
+        assert_eq!((v[1].first,v[1].last),(Cap::Flat,Cap::Flat));
+        assert_eq!((v[2].first,v[2].last),(Cap::Flat,Cap::Flat));
+        // The true endpoint falls in a space: never invent a terminal mark.
+        assert_eq!(v[2].points.last(),Some(&(48.0,0.0)));
+        let clipped=[(0.0,0.0),(22.0,0.0)];
+        let v=Run::new(&clipped).unwrap().dashed_capped(&p,Style::new(6.0,Cap::Square).unwrap(),10).unwrap();
+        assert_eq!((v[1].first,v[1].last),(Cap::Flat,Cap::Square));
+    }
+    #[test]
+    fn round_multi_stop_lengths_keep_order_and_include_caps_for_every_stop() {
+        let p=DashPattern::from_width_percent(&[(200000.0,100000.0),(300000.0,200000.0)],4.0).unwrap();
+        assert_eq!(p.round_intervals(64.0,4.0,10).unwrap(),[(0.0,4.0),(12.0,20.0),(32.0,36.0),(44.0,52.0)]);
+    }
+    #[test]
+    fn capped_dashes_preserve_true_turns_and_restart_only_for_separate_runs() {
+        let p=DashPattern::from_width_percent(&[(300000.0,100000.0)],2.0).unwrap();
+        let a=[(0.0,0.0),(3.0,0.0),(3.0,12.0)];
+        let b=[(10.0,0.0),(25.0,0.0)];
+        let style=Style::new(2.0,Cap::Round).unwrap();
+        let v=Run::new(&a).unwrap().dashed_capped(&p,style,10).unwrap();
+        assert_eq!(v[0].points,[(0.0,0.0),(3.0,0.0),(3.0,1.0)]);
+        assert_eq!(v[1].points,[(3.0,5.0),(3.0,9.0)]);
+        let other=Run::new(&b).unwrap().dashed_capped(&p,style,10).unwrap();
+        assert_eq!(other[0].points,[(10.0,0.0),(14.0,0.0)]);
+    }
+    #[test]
+    fn round_dots_short_bodies_and_resource_overflow_remain_explicit_errors() {
+        for percent in [1.0,50000.0,100000.0] {
+            let p=DashPattern::from_width_percent(&[(percent,100000.0)],6.0).unwrap();
+            assert!(p.round_intervals(30.0,6.0,10).is_none());
+        }
+        let p=DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+        assert!(p.round_intervals(50.0,6.0,2).is_none());
+        for bad in [-1.0,f64::NAN,f64::INFINITY] {assert!(p.round_intervals(bad,6.0,10).is_none());}
+        assert!(p.round_intervals(50.0,0.0,10).is_none());
+    }
+
 }
