@@ -39,6 +39,7 @@ pub(super) struct Spec {
     overlay: bool,
     manual: Option<Manual>,
     deleted: Vec<usize>,
+    entries: Vec<(usize, TextStyle)>,
 }
 pub(super) fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
@@ -77,6 +78,7 @@ impl Spec {
             && self.style == TextStyle::default()
             && self.manual.is_none()
             && self.deleted.is_empty()
+            && self.entries.is_empty()
     }
     pub(super) fn read(root: &Element, accents: [[u8; 3]; 6]) -> Result<Self, Error> {
         let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
@@ -88,6 +90,7 @@ impl Spec {
             overlay: true,
             manual: None,
             deleted: Vec::new(),
+            entries: Vec::new(),
         };
         let Some(legend) = chart.child_by_local("legend").filter(|_| pos.is_some()) else {
             return Ok(result);
@@ -150,8 +153,13 @@ impl Spec {
                 .is_some_and(|n| bool_attr(n.attr_local("val"), false))
             {
                 result.deleted.push(index);
-            } else if entry.child_by_local("txPr").is_some() {
-                return Err(unsupported());
+            } else if let Some(tx) = entry.child_by_local("txPr") {
+                if result.entries.iter().any(|(idx, _)| *idx == index) {
+                    return Err(unsupported());
+                }
+                let mut style = result.style.clone();
+                style.read(tx, accents)?;
+                result.entries.push((index, style));
             }
         }
         if let Some(sp) = legend.child_by_local("spPr") {
@@ -353,6 +361,13 @@ impl TextStyle {
                         return Err(unsupported());
                     }
                 }
+                "cs" if fill
+                    .attr_local("typeface")
+                    .is_some_and(|name| Some(name) == latin.or(ea))
+                    && !unhandled_attrs(fill, &["typeface"]) =>
+                {
+                    ()
+                }
                 "latin" | "ea" | "extLst" => (),
                 "effectLst" | "effectDag" if fill.element_children().next().is_none() => (),
                 _ => return Err(unsupported()),
@@ -361,15 +376,64 @@ impl TextStyle {
         Ok(())
     }
 }
+fn style_face(
+    style: &TextStyle,
+    px: f32,
+    dpi: RenderDpi,
+) -> Result<Option<super::super::chart_gdi::Face>, Error> {
+    #[cfg(not(windows))]
+    if style.bold || style.italic || !style.name.is_empty() {
+        return Err(unsupported());
+    }
+    let face = if style.name.is_empty() {
+        let face = super::super::chart_gdi::Face::open_dpi(px, style.bold, dpi.get());
+        #[cfg(windows)]
+        let face = if style.italic {
+            face.and_then(|f| {
+                super::super::chart_gdi::Face::open_cell_dpi(
+                    px,
+                    style.bold,
+                    true,
+                    f.family_name(),
+                    dpi.get(),
+                )
+            })
+        } else {
+            face
+        };
+        face
+    } else {
+        let face = super::super::chart_gdi::Face::open_cell_dpi(
+            px,
+            style.bold,
+            style.italic,
+            &style.name,
+            dpi.get(),
+        );
+        #[cfg(windows)]
+        if face
+            .as_ref()
+            .is_none_or(|f| !same_name(f.family_name(), &style.name))
+        {
+            return Err(unsupported());
+        }
+        face
+    };
+    Ok(face)
+}
+
 struct Item<'a> {
     series: &'a Series,
     width: f64,
+    style: TextStyle,
+    face: Option<super::super::chart_gdi::Face>,
+    px: f32,
+    line: f64,
+    space: f64,
 }
 pub(super) struct Layout<'a> {
     spec: &'a Spec,
     items: Vec<Item<'a>>,
-    face: Option<super::super::chart_gdi::Face>,
-    px: f32,
     key: f64,
     space: f64,
     line: f64,
@@ -389,46 +453,22 @@ impl<'a> Layout<'a> {
     ) -> Result<Self, Error> {
         let spec = &chart.legend_spec;
         let px = canvas.dpi.pt_to_px_font(spec.style.pt) as f32;
-        #[cfg(not(windows))]
-        if spec.style.bold || spec.style.italic || !spec.style.name.is_empty() {
+        if spec
+            .entries
+            .iter()
+            .any(|(idx, _)| *idx >= chart.series.len())
+        {
             return Err(unsupported());
         }
-        let face = if spec.style.name.is_empty() {
-            let face =
-                super::super::chart_gdi::Face::open_dpi(px, spec.style.bold, canvas.dpi.get());
-            #[cfg(windows)]
-            let face = if spec.style.italic {
-                face.and_then(|f| {
-                    super::super::chart_gdi::Face::open_cell_dpi(
-                        px,
-                        spec.style.bold,
-                        true,
-                        f.family_name(),
-                        canvas.dpi.get(),
-                    )
-                })
-            } else {
-                face
-            };
-            face
-        } else {
-            let face = super::super::chart_gdi::Face::open_cell_dpi(
-                px,
-                spec.style.bold,
-                spec.style.italic,
-                &spec.style.name,
-                canvas.dpi.get(),
-            );
-            #[cfg(windows)]
-            if face
-                .as_ref()
-                .is_none_or(|f| !same_name(f.family_name(), &spec.style.name))
-            {
-                return Err(unsupported());
-            }
-            face
-        };
-        let key = (f64::from(px) * 0.5).ceil().max(1.0);
+        let face = style_face(&spec.style, px, canvas.dpi)?;
+        let max_pt = spec
+            .entries
+            .iter()
+            .filter(|(idx, _)| !spec.deleted.contains(idx))
+            .map(|(_, style)| style.pt)
+            .fold(spec.style.pt, f64::max);
+        let row_px = canvas.dpi.pt_to_px_font(max_pt);
+        let key = (row_px * 0.5).ceil().max(1.0);
         let space = text_width(font, face.as_ref(), " ", px).ceil().max(1.0);
         let line = face
             .as_ref()
@@ -439,25 +479,50 @@ impl<'a> Layout<'a> {
         // Native legend rows use the font size plus an 8pt entry gutter,
         // not the GDI em-box plus two measured spaces (which grows too much
         // for large/bold fonts and is too small for the default 10pt face).
-        let pitch = f64::from(px) + canvas.dpi.pt_to_px_font(8.0);
+        let pitch = row_px + canvas.dpi.pt_to_px_font(8.0);
         let mut items = Vec::new();
         if spec.pos.is_some() {
             for (idx, series) in chart.series.iter().enumerate() {
                 if spec.deleted.contains(&idx) {
                     continue;
                 }
-                let width = face
+                let style = spec
+                    .entries
+                    .iter()
+                    .find(|(i, _)| *i == idx)
+                    .map(|(_, style)| style)
+                    .unwrap_or(&spec.style)
+                    .clone();
+                let item_px = canvas.dpi.pt_to_px_font(style.pt) as f32;
+                let item_face = style_face(&style, item_px, canvas.dpi)?;
+                let item_space = text_width(font, item_face.as_ref(), " ", item_px)
+                    .ceil()
+                    .max(1.0);
+                let item_line = item_face
+                    .as_ref()
+                    .map(|f| f.em_box())
+                    .filter(|v| *v > 0.0)
+                    .unwrap_or_else(|| text_height(font, item_px))
+                    .max(f64::from(item_px));
+                let width = item_face
                     .as_ref()
                     .map(|f| f.typo_width(&series.name))
-                    .unwrap_or_else(|| text_width(font, None, &series.name, px));
+                    .unwrap_or_else(|| text_width(font, None, &series.name, item_px));
                 items.push(Item {
                     series,
                     width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
                         as f64
                         + width,
+                    style,
+                    face: item_face,
+                    px: item_px,
+                    line: item_line,
+                    space: item_space,
                 });
             }
         }
+        let line = items.iter().map(|i| i.line).fold(line, f64::max);
+        let space = items.iter().map(|i| i.space).fold(space, f64::max);
         if !spec.legacy && !items.is_empty() && face.is_none() && font.is_none() {
             return Err(unsupported());
         }
@@ -479,15 +544,13 @@ impl<'a> Layout<'a> {
         // Plot reservation uses the padded font layout box. Ink packing above
         // uses typographic advances; conflating the two shrinks a left legend's
         // reserved band when its text has GDI overhang padding.
-        let reservation_width = chart
-            .series
+        let reservation_width = items
             .iter()
-            .enumerate()
-            .filter(|(idx, _)| !spec.deleted.contains(idx))
-            .map(|(_, ser)| {
-                face.as_ref()
-                    .map(|f| f.layout_width(&ser.name))
-                    .unwrap_or_else(|| text_width(font, None, &ser.name, px))
+            .map(|item| {
+                item.face
+                    .as_ref()
+                    .map(|f| f.layout_width(&item.series.name))
+                    .unwrap_or_else(|| text_width(font, None, &item.series.name, item.px))
             })
             .fold(0.0, f64::max)
             + key
@@ -555,8 +618,6 @@ impl<'a> Layout<'a> {
         let mut result = Self {
             spec,
             items,
-            face,
-            px,
             key,
             space,
             line,
@@ -687,16 +748,16 @@ impl<'a> Layout<'a> {
                 draw_text(
                     canvas,
                     font,
-                    self.face.as_ref(),
+                    item.face.as_ref(),
                     &ser.name,
                     x + f64::from(super::legend_key_width(
                         chart.kind,
                         self.key.round() as i32,
                         canvas.dpi,
-                    )) + self.space,
-                    y,
-                    self.px,
-                    self.spec.style.color,
+                    )) + item.space,
+                    y + (self.line - item.line) / 2.0,
+                    item.px,
+                    item.style.color,
                 );
                 x += item.width + gap;
             }
@@ -853,6 +914,7 @@ mod overlay_ink_tests {
             overlay: false,
             manual: None,
             deleted: Vec::new(),
+            entries: Vec::new(),
         };
         assert!(spec.default_right_ink());
         spec.overlay = true;

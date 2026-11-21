@@ -202,3 +202,78 @@ fn all_five_excel_positions_distinguish_reserved_from_overlay_but_not_omitted_tr
         );
     }
 }
+
+// Controlled packages below are library-generated regressions, not Office gold.
+fn entry_style(idx: usize, props: &str) -> String {
+    format!("<c:legendEntry><c:idx val='{idx}'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr {props}</a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry>")
+}
+#[test]
+fn entry_color_inherits_metrics_and_recolors_only_its_own_text() {
+    let tx = |color| {
+        entry_style(
+            0,
+            &format!("><a:solidFill><a:srgbClr val='{color}'/></a:solidFill>"),
+        )
+    };
+    let legend = |color| {
+        format!(
+            "<c:legend><c:legendPos val='r'/><c:overlay val='0'/>{}</c:legend>",
+            tx(color)
+        )
+    };
+    let (w, h, a) = pixels(&legend("000000"));
+    let (ww, hh, b) = pixels(&legend("FF0000"));
+    assert_eq!((w, h), (ww, hh));
+    let changed: Vec<_> = a
+        .iter()
+        .zip(&b)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .collect();
+    assert!(!changed.is_empty());
+    assert!(changed.iter().all(|(idx, _)| idx % w > w / 2));
+    assert!(b.iter().any(|p| p[0] > 180 && p[1] < 70 && p[2] < 70));
+    // Series keys remain their series colors, not the text override.
+    for c in [[21, 96, 130], [233, 113, 50]] {
+        let pa: Vec<_> = a
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| **p == c)
+            .map(|(i, _)| i)
+            .collect();
+        let pb: Vec<_> = b
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| **p == c)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(pa, pb);
+    }
+}
+#[test]
+fn entry_font_size_bold_and_family_have_real_ink_and_pack_together() {
+    let legend = |props: &str| {
+        format!(
+            "<c:legend><c:legendPos val='r'/><c:overlay val='0'/>{}</c:legend>",
+            entry_style(0, props)
+        )
+    };
+    let ordinary = bytes(&legend("> ")).unwrap();
+    for props in ["sz='1800'>", "b='1'>", "><a:latin typeface='Arial'/><a:ea typeface='Arial'/><a:cs typeface='Arial'/>", "sz='1800' b='1'><a:latin typeface='Arial'/><a:ea typeface='Arial'/><a:cs typeface='Arial'/>"] {
+        assert_ne!(ordinary,bytes(&legend(props)).unwrap(),"{props}");
+    }
+    let (w, _, small) = pixels(&legend(">"));
+    let (_, _, large) = pixels(&legend("sz='1800'>"));
+    let key_count = |p: &Vec<[u8; 3]>| {
+        p.iter()
+            .enumerate()
+            .filter(|(i, c)| i % w > w - 100 && **c == [21, 96, 130])
+            .count()
+    };
+    assert!(key_count(&large) > key_count(&small));
+    assert!(bytes(&legend(
+        "><a:latin typeface='Arial'/><a:cs typeface='Courier New'/> "
+    ))
+    .is_err());
+    assert!(bytes(&legend("u='sng'>")).is_err());
+}
