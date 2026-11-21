@@ -820,9 +820,9 @@ impl<'a> Layout<'a> {
         }
         r
     }
-    pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
+    pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) -> Result<(),Error> {
         if self.items.is_empty() {
-            return;
+            return Ok(());
         }
         // The existing layout frame is the semantic frame, independent of glyph
         // ink bounds. Paint before keys/text, with no COM-origin compensation.
@@ -874,7 +874,7 @@ impl<'a> Layout<'a> {
                 let item = &self.items[*idx];
                 let ser = item.series;
                 let ky = y + (self.line - self.key) / 2.0;
-                draw_plot_key(
+                super::draw_plot_key_styled(
                     canvas,
                     chart.kind,
                     x.round() as i32,
@@ -884,7 +884,9 @@ impl<'a> Layout<'a> {
                     (ky + self.key).round() as i32,
                     ser.color.unwrap_or(chart.accents[ser.slot % 6]),
                     ser.marker,
-                );
+                    if ser.line_visible { super::stroke::Style::new(ser.line_width,ser.line_cap) } else { None },
+                    ser.line_dash.as_deref(),
+                )?;
                 draw_text(
                     canvas,
                     font,
@@ -907,6 +909,7 @@ impl<'a> Layout<'a> {
             }
             y += self.pitch;
         }
+        Ok(())
     }
 }
 fn position(

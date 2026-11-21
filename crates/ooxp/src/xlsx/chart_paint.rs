@@ -1,6 +1,6 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。已锁定的 lineChart grouping=stacked/percentStacked（线性显式 min/max autoZero、marker=none、crossBetween=between）按系列顺序把各类目的代数累加端点连成折线，见 F23；省略 min/max、可见标记、空点、percentStacked 异号或缺值仍是 NotImplemented。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、预设虚线、复杂自定义虚线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。已锁定的 lineChart grouping=stacked/percentStacked（线性显式 min/max autoZero、marker=none、crossBetween=between）按系列顺序把各类目的代数累加端点连成折线，见 F23；省略 min/max、可见标记、空点、percentStacked 异号或缺值仍是 NotImplemented。
 //! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。官方 Excel 16 公开 API 的散点 valAx 写 crossBetween=midCat（不是类目槽公式，数值仍按线性 min/max 定位）；xlXYScatterLinesNoMarkers 写 scatterStyle=lineMarker 且 marker symbol=none，不是 scatterStyle=line；xlXYScatter 写 lineMarker 加系列 a:ln/a:noFill。这些已锁定路径在 midCat 下同样出图。scatterStyle=none/line/smooth，以及 scatterStyle=smoothMarker 或系列 smooth=1 的平滑曲线，仍是 NotImplemented。
 //! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。已锁定的 barChart grouping=stacked/percentStacked（overlap=100，线性显式 min/max autoZero）见 F22；三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
 //! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。已锁定的 areaChart grouping=stacked/percentStacked（线性显式 min/max autoZero、valAx crossBetween=midCat）按系列顺序代数累加，并填充相邻累加线之间的带（后画的系列盖住先画的），见 F23；省略 min/max、空点、between 类目位、percentStacked 异号或缺值、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
@@ -243,6 +243,7 @@ fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
 }
 
 struct LineSeriesStyle {
+    dash: Option<std::sync::Arc<stroke::DashPattern>>,
     cap: stroke::Cap,
     color: Option<[u8; 3]>,
     visible: bool,
@@ -266,6 +267,7 @@ struct Series {
     line_visible: bool,
     line_width: f64,
     line_cap: stroke::Cap,
+    line_dash: Option<std::sync::Arc<stroke::DashPattern>>,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
     /// Area stroke color when a solid outline is present. Lines keep this unset.
@@ -296,6 +298,7 @@ impl Default for Series {
             line_visible: false,
             line_width: 0.0,
             line_cap: stroke::Cap::Round,
+            line_dash: None,
             marker: MarkerKind::None,
             marker_color: None,
             line_color: None,
@@ -368,6 +371,7 @@ struct Canvas {
     alpha: Option<Vec<u8>>,
     rounded_frame: bool,
     chart_border: bool,
+    custom_dash_budget: usize,
     plot_fill: Option<PlotPaint>,
     dpi: RenderDpi,
 }
@@ -1562,6 +1566,7 @@ fn read_chart(
         let mut line_color = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
+        dash: None,
                 cap: stroke::Cap::Round,
                 color: series_color(ser, accents),
                 visible: false,
@@ -1569,11 +1574,12 @@ fn read_chart(
                 marker: MarkerKind::None,
                 marker_color: None,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order)?,
+            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order, true)?,
             PlotKind::StandardArea => {
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
                 LineSeriesStyle {
+        dash: None,
                 cap: stroke::Cap::Round,
                     color: area.fill,
                     visible: area.line_visible,
@@ -1584,8 +1590,8 @@ fn read_chart(
             }
             PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
             PlotKind::Scatter { connect } => {
-                let mut style = read_line_series(ser, accents, dpi, order)?;
-                if style.cap != stroke::Cap::Round { return Err(unsupported()); }
+                let mut style = read_line_series(ser, accents, dpi, order, false)?;
+                if style.cap != stroke::Cap::Round || style.dash.is_some() { return Err(unsupported()); }
                 if !connect {
                     style.visible = false;
                 }
@@ -1630,6 +1636,7 @@ fn read_chart(
             line_visible: style.visible,
             line_width: style.width,
             line_cap: style.cap,
+            line_dash: style.dash,
             marker: style.marker,
             marker_color: style.marker_color,
             line_color,
@@ -2293,9 +2300,9 @@ fn paint_scatter(
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
         if canvas.chart_border {
@@ -2585,9 +2592,9 @@ fn paint_bar(
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
         if canvas.chart_border {
@@ -3194,7 +3201,7 @@ fn paint(
                     log_base,
                     scale.reversed,
                     Some(false),
-                );
+                )?;
                 draw_lines(
                     canvas,
                     chart,
@@ -3204,9 +3211,9 @@ fn paint(
                     sec.log_base,
                     sec.reversed,
                     Some(true),
-                );
+                )?;
             } else {
-                draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)
+                draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)?;
             }
         }
         PlotKind::StandardArea => draw_areas(
@@ -3303,9 +3310,9 @@ fn paint(
         // An overlay must release plot space without changing the default legend.
         // Anchor its ink at the same right edge, not at the expanded plot edge.
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
         if canvas.chart_border {
@@ -3399,11 +3406,11 @@ fn draw_lines(
     log_base: Option<f64>,
     reversed: bool,
     group_secondary: Option<bool>,
-) {
+) -> Result<(),Error> {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
-        return;
+        return Ok(());
     }
     let stacked = chart.stacking != Stacking::Clustered;
     let percent = chart.stacking == Stacking::PercentStacked;
@@ -3437,7 +3444,7 @@ fn draw_lines(
                 {
                     None
                 } else {
-                    stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+                    stroke_run_pattern(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), color)?;
                     run.clear();
                     None
                 };
@@ -3445,7 +3452,7 @@ fn draw_lines(
                     run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+            stroke_run_pattern(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), color)?;
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
@@ -3463,6 +3470,7 @@ fn draw_lines(
             }
         }
     }
+    Ok(())
 }
 
 fn line_point(
@@ -3491,6 +3499,25 @@ fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3
     if let Some(style) = stroke::Style::new(width, stroke::Cap::Round) {
         stroke_run_style(canvas, run, style, color);
     }
+}
+
+const MAX_CUSTOM_DASH_PIECES: usize = 65_536; // Resource bound, not a visual period.
+fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::Style,
+    pattern: Option<&stroke::DashPattern>, color: [u8;3]) -> Result<(),Error> {
+    if let Some(pattern) = pattern {
+        if let Some(run) = stroke::Run::new(points) {
+            let paths=run.dashed(pattern,canvas.custom_dash_budget)
+                .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported,"id"))?;
+            canvas.custom_dash_budget -= paths.len();
+            for mut path in paths {
+                // Do not brighten an otherwise identical straight dash merely
+                // because a category/cache point split it into two edges.
+                stroke::simplify_collinear(&mut path);
+                stroke_run_style(canvas,&path,style,color);
+            }
+        }
+    } else { stroke_run_style(canvas,points,style,color); }
+    Ok(())
 }
 
 fn stroke_run_style(canvas: &mut Canvas, points: &[(f64, f64)], style: stroke::Style, color: [u8; 3]) {
@@ -3784,6 +3811,7 @@ fn legend_key_gap(kind: PlotKind, dpi: RenderDpi) -> i32 {
     }
 }
 
+#[cfg(test)]
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -3794,10 +3822,10 @@ fn draw_plot_key(
     color: [u8; 3],
     marker: MarkerKind,
 ) {
-    draw_plot_key_styled(canvas,kind,x0,y0,x1,y1,color,marker,None);
+    draw_plot_key_styled(canvas,kind,x0,y0,x1,y1,color,marker,None,None).unwrap();
 }
 
-fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i32,y1:i32,color:[u8;3],marker:MarkerKind,style:Option<stroke::Style>) {
+fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i32,y1:i32,color:[u8;3],marker:MarkerKind,style:Option<stroke::Style>,pattern:Option<&stroke::DashPattern>) -> Result<(),Error> {
     match kind {
         PlotKind::ClusteredColumn
         | PlotKind::ClusteredBar
@@ -3808,7 +3836,7 @@ fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i3
             let line_end = f64::from(x0) + canvas.dpi.pt_to_px_font(20.0);
             let mid_x = (f64::from(x0) + line_end) / 2.0;
             if let Some(style)=style {
-                canvas.stroke_segment_capped((f64::from(x0),mid_y),(line_end,mid_y),style.width,style.cap,style.cap,color);
+                stroke_run_pattern(canvas,&[(f64::from(x0),mid_y),(line_end,mid_y)],style,pattern,color)?;
             } else {
             canvas.stroke_segment(
                 f64::from(x0),
@@ -3829,6 +3857,7 @@ fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i3
             paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
     }
+    Ok(())
 }
 
 fn category_slot_origin(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> f64 {
@@ -4621,16 +4650,16 @@ fn draw_legend(
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
     plot_r: i32,
-) {
+) -> Result<(),Error> {
     if chart.legend != Some(LegendPos::Right) {
-        return;
+        return Ok(());
     }
     let key_width = legend_key_width(chart.kind, canvas.dpi.scale_px(LEGEND_SWATCH), canvas.dpi);
     let key_gap = legend_key_gap(chart.kind, canvas.dpi);
     let pitch = canvas.dpi.scale_px(24);
     let n = chart.series.len() as i32;
     if n == 0 {
-        return;
+        return Ok(());
     }
     let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
@@ -4662,7 +4691,8 @@ fn draw_legend(
             color,
             ser.marker,
             if ser.line_visible { stroke::Style::new(ser.line_width, ser.line_cap) } else { None },
-        );
+            ser.line_dash.as_deref(),
+        )?;
         draw_text(
             canvas,
             font,
@@ -4675,6 +4705,7 @@ fn draw_legend(
         );
         y += pitch;
     }
+    Ok(())
 }
 
 /// 短名字维持测过的 60 像素。长名字把绘图区右缘向左推，避免字被画布切掉。
@@ -5037,15 +5068,10 @@ fn series_name(
         .find(|label| !label.is_empty())
 }
 
-/// Excel Chart.Export paints ordinary line/scatter series strokes with a
-/// whole-pixel device pen. The implicit default is 2.25pt (28575 EMU).
-/// At 96dpi that is exactly 3px and stays 3. At 106dpi the unsnapped
-/// width is 3.3125px, but unstretched official exports show a 4px opaque
-/// core and an any-ink band out to about +/-2.5px (one device pixel
-/// wider than a fractional 3.3125px stroke). Non-integer device widths
-/// therefore ceil; exact integers are preserved so 96dpi does not change.
-/// Applied only to line/scatter series and matching legend keys, not to
-/// bar outlines or area borders.
+/// Preserved inherited chart pen / legacy scatter normalization. Native
+/// explicit width controls have a distinct nearest-pixel rule (chart_stroke).
+/// In particular omitted w remains the accepted 2.25pt/default 4px at 106dpi;
+/// an explicit 2.25pt resolves to 3px. Do not globally replace this old rule.
 fn excel_chart_line_width_px(px: f64) -> f64 {
     if !px.is_finite() || px <= 0.0 {
         return px;
@@ -5063,6 +5089,7 @@ fn read_line_series(
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
     slot: usize,
+    explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
@@ -5073,12 +5100,14 @@ fn read_line_series(
             return Err(unsupported());
         }
     }
+    let mut dash = None;
     let mut cap = stroke::Cap::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
-        let style = read_line_sp_pr(sp, accents, dpi)?;
+        let style = read_line_sp_pr(sp, accents, dpi, explicit_pens)?;
+        dash = style.dash;
         cap = style.cap;
         visible = style.visible;
         width = excel_chart_line_width_px(style.width);
@@ -5089,6 +5118,7 @@ fn read_line_series(
     }
     let (marker, marker_color) = read_line_marker(ser, accents, dpi, slot)?;
     Ok(LineSeriesStyle {
+        dash,
         cap,
         color,
         visible,
@@ -5102,8 +5132,10 @@ fn read_line_sp_pr(
     sp: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut dash = None;
     let mut cap = stroke::Cap::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
@@ -5117,7 +5149,8 @@ fn read_line_sp_pr(
                 }
             }
             "ln" => {
-                let line = read_ln_with_caps(child, accents, width, dpi, true)?;
+                let line = read_ln_with_caps(child, accents, width, dpi, explicit_pens)?;
+                dash = line.dash;
                 cap = line.cap;
                 visible = line.visible;
                 width = excel_chart_line_width_px(line.width);
@@ -5134,6 +5167,7 @@ fn read_line_sp_pr(
         }
     }
     Ok(LineSeriesStyle {
+        dash,
         cap,
         color,
         visible,
@@ -5177,7 +5211,7 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
             return Err(unsupported());
         }
     }
-    let width = ln
+    let mut width = ln
         .attr_local("w")
         .and_then(|raw| raw.parse::<f64>().ok())
         .map(|emu| dpi.emu_to_px_f(emu))
@@ -5185,6 +5219,11 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
     if !width.is_finite() || width < 0.0 {
         return Err(unsupported());
     }
+    if explicit_caps && ln.attr_local("w").is_some() {
+        width = stroke::explicit_pen_width_px(width).ok_or_else(unsupported)?;
+    }
+    let mut dash = None;
+    let mut dash_declared = false;
     let mut visible = true;
     let mut color = None;
     for child in ln.element_children() {
@@ -5198,7 +5237,30 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                 }
                 color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
             }
+            "custDash" => {
+                // Explicit positive opaque flat custom dashes only. Native round
+                // dash caps consume their own logical lengths differently;
+                // square changes only the true run ends. Do not guess those.
+                if dash_declared || !explicit_caps || cap != stroke::Cap::Flat
+                    || child.attrs.iter().any(|(key,_)| !key.starts_with("xmlns"))
+                    || ln.attr_local("w").and_then(|v| v.parse::<f64>().ok())
+                        .is_none_or(|w| !w.is_finite() || w <= 0.0)
+                { return Err(unsupported()); }
+                let mut stops = Vec::new();
+                for stop in child.element_children() {
+                    if stop.local_name() != "ds" || stop.element_children().next().is_some()
+                        || stop.attrs.iter().any(|(k,_)| !matches!(k.as_str(), "d"|"sp") && !k.starts_with("xmlns"))
+                    { return Err(unsupported()); }
+                    let percentage = |key| stop.attr_local(key).and_then(|v| v.parse::<i32>().ok())
+                        .filter(|v| *v > 0).map(f64::from).ok_or_else(unsupported);
+                    stops.push((percentage("d")?,percentage("sp")?));
+                }
+                dash = Some(std::sync::Arc::new(stroke::DashPattern::from_width_percent(&stops,width).ok_or_else(unsupported)?));
+                dash_declared = true;
+            }
             "prstDash" => {
+                if dash_declared { return Err(unsupported()); }
+                dash_declared = true;
                 let dash = child.attr_local("val").unwrap_or("solid");
                 if dash != "solid" {
                     return Err(unsupported());
@@ -5214,10 +5276,12 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
             _ => return Err(unsupported()),
         }
     }
+    if dash.is_some() && !visible { return Err(unsupported()); }
     if !visible {
         color = None;
     }
     Ok(LineSeriesStyle {
+        dash,
         cap,
         color,
         visible,
@@ -5325,6 +5389,7 @@ fn read_pie_series_style(
         let _ = read_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
+        dash: None,
                 cap: stroke::Cap::Round,
         color: series_color(ser, accents),
         visible: false,
@@ -6325,6 +6390,7 @@ impl Canvas {
             alpha: None,
             rounded_frame: true,
             chart_border: true,
+            custom_dash_budget: MAX_CUSTOM_DASH_PIECES,
             plot_fill: None,
             dpi,
         }
@@ -7767,6 +7833,71 @@ mod tests {
         assert_eq!(buf[i + 3], 64, "alpha 25000 maps to coverage 64");
     }
 
+
+    #[test]
+    fn explicit_width_and_inherited_chart_pen_are_distinct_and_scatter_is_preserved() {
+        let dpi=RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        for (attribute,ordinary,scatter) in [("",4.0,4.0),("w='28575'",3.0,4.0),("w='12700'",1.0,2.0)] {
+            let doc=crate::xml::parse(format!("<spPr><ln {attribute}/></spPr>").as_bytes()).unwrap();
+            assert_eq!(read_line_sp_pr(&doc.root,FALLBACK_ACCENTS,dpi,true).unwrap().width,ordinary);
+            assert_eq!(read_line_sp_pr(&doc.root,FALLBACK_ACCENTS,dpi,false).unwrap().width,scatter);
+        }
+    }
+    #[test]
+    fn positive_flat_custom_dash_parses_percentages_of_the_explicit_device_pen() {
+        for (width,device) in [(12700,1.0),(25400,3.0),(50800,6.0)] {
+            let doc=crate::xml::parse(format!("<ln w='{width}' cap='flat'><custDash><ds d='200000' sp='100000'/></custDash><round/></ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap(),true).unwrap();
+            assert_eq!(style.width,device);
+            assert_eq!(style.dash.unwrap().painted_intervals(device*5.0,16).unwrap(),[(0.0,device*2.0),(device*3.0,device*5.0)]);
+            assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap()).is_err());
+        }
+    }
+    #[test]
+    fn custom_dash_rejects_unimplemented_caps_missing_width_and_ambiguous_stops() {
+        for attrs in ["w='50800' cap='rnd'","w='50800' cap='sq'","w='50800'","cap='flat'","w='0' cap='flat'"] {
+            let doc=crate::xml::parse(format!("<ln {attrs}><custDash><ds d='200000' sp='100000'/></custDash></ln>").as_bytes()).unwrap();
+            assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err());
+        }
+        for body in ["<custDash/>","<custDash offset='1'><ds d='1' sp='1'/></custDash>","<custDash><ds d='0' sp='1'/></custDash>","<custDash><ds d='1.5' sp='1'/></custDash>","<custDash><ds d='1'/></custDash>","<custDash><ds d='2147483648' sp='1'/></custDash>","<custDash><ds d='1' sp='1' other='1'/></custDash>","<prstDash val='solid'/><custDash><ds d='1' sp='1'/></custDash>","<custDash><ds d='1' sp='1'/></custDash><noFill/>","<custDash><ds d='1' sp='1'/></custDash><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>"] {
+            let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();
+            assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err(),"{body}");
+        }
+    }
+    #[test]
+    fn patterned_strokes_share_an_image_budget_and_never_silently_truncate() {
+        let pattern=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],2.0).unwrap();
+        let style=stroke::Style::new(2.0,stroke::Cap::Flat).unwrap();
+        let mut c=Canvas::new(80,40);c.custom_dash_budget=2;
+        stroke_run_pattern(&mut c,&[(20.0,20.0),(30.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        assert_eq!(c.custom_dash_budget,0);
+        let pixel=|c:&Canvas,x:usize| &c.px[(20*80+x)*3..(20*80+x)*3+3]==[23,93,181];
+        assert!(pixel(&c,21));assert!(!pixel(&c,25));assert!(pixel(&c,27));
+        let before=c.px.clone();
+        assert!(stroke_run_pattern(&mut c,&[(40.0,20.0),(50.0,20.0)],style,Some(&pattern),[23,93,181]).is_err());
+        assert_eq!(before,c.px);
+    }
+
+    #[test]
+    fn custom_flat_raster_is_invariant_to_collinear_subdivision_without_touching_legacy_solids() {
+        let pattern=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],1.0).unwrap();
+        let style=stroke::Style::new(1.0,stroke::Cap::Flat).unwrap();
+        let mut a=Canvas::new(80,40);let mut b=Canvas::new(80,40);
+        stroke_run_pattern(&mut a,&[(20.0,20.0),(60.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        stroke_run_pattern(&mut b,&[(20.0,20.0),(23.5,20.0),(41.5,20.0),(60.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        assert_eq!(a.px,b.px);
+    }
+    #[test]
+    fn flat_custom_dash_and_actual_pen_are_painted_in_advanced_legend_too() {
+        let make=|dash:&str| standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&format!("<c:spPr><a:ln w='50800' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill>{dash}<a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>")),"")
+            .replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>");
+        let (_,_,solid)=png_rgb(&render_line(&make("<a:prstDash val='solid'/>")).unwrap());
+        let (_,_,dashed)=png_rgb(&render_line(&make("<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>")).unwrap());
+        let a=count_in(&solid,576,0,576,300,336,[23,93,181],0);
+        let b=count_in(&dashed,576,0,576,300,336,[23,93,181],0);
+        assert!(b>0 && b<a,"the advanced legend must show a real dashed key: solid={a},dash={b}");
+    }
+
     #[test]
     fn explicit_line_caps_and_key_width_use_shared_style_but_other_strokes_stay_gated() {
         let mut images=Vec::new();
@@ -7782,7 +7913,7 @@ mod tests {
             let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
         }
         let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
-        for (canvas,width) in [(&mut thin,1.0),(&mut thick,6.0)] {draw_plot_key_styled(canvas,PlotKind::StandardLine,20,10,49,19,[0,0,0],MarkerKind::None,stroke::Style::new(width,stroke::Cap::Flat));}
+        for (canvas,width) in [(&mut thin,1.0),(&mut thick,6.0)] {draw_plot_key_styled(canvas,PlotKind::StandardLine,20,10,49,19,[0,0,0],MarkerKind::None,stroke::Style::new(width,stroke::Cap::Flat),None).unwrap();}
         assert_ne!(thin.px,thick.px);
     }
 
@@ -9501,7 +9632,7 @@ mod tests {
                 if mode == "zero" { Some(0.0) } else { None }
             );
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None).unwrap();
             canvases.push(canvas);
         }
         let ink = |canvas: &Canvas, x: usize, y: usize| {
@@ -9525,7 +9656,7 @@ mod tests {
             assert_eq!(chart.series[0].values[1], None, "NA is never a zero point");
             assert!(chart.series[0].unavailable_points[1]);
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None).unwrap();
             assert!(
                 ink(&canvas, 150, 50),
                 "Excel16 NA probe connects across NA: {mode}"

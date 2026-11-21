@@ -156,6 +156,124 @@ impl CapSegment {
         qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0)
     }
 }
+
+/// Native controls distinguish explicit pens from the inherited chart pen.
+/// Explicit positive widths round to a nearest device pixel with a one-pixel
+/// minimum; an omitted width must keep its separately resolved chart default.
+/// This is not a replacement for bar/area outlines or legacy scatter pens.
+pub(super) fn explicit_pen_width_px(px: f64) -> Option<f64> {
+    (px.is_finite() && px >= 0.0).then(|| if px == 0.0 { 0.0 } else { px.round().max(1.0) })
+}
+
+/// Exact same-direction collinear subdivisions must not invent round joins.
+/// This is topology simplification, not coordinate snapping or an angle epsilon.
+/// True turns and reversals retain their vertices and existing join semantics.
+pub(super) fn simplify_collinear(points: &mut Vec<Point>) {
+    let mut used = 0;
+    for read in 0..points.len() {
+        let p = points[read];
+        while used >= 2 {
+            let a = points[used - 2];
+            let b = points[used - 1];
+            let u = (b.0 - a.0, b.1 - a.1);
+            let v = (p.0 - b.0, p.1 - b.1);
+            if u.0 * v.1 - u.1 * v.0 != 0.0 || u.0 * v.0 + u.1 * v.1 < 0.0 {
+                break;
+            }
+            used -= 1;
+        }
+        points[used] = p;
+        used += 1;
+    }
+    points.truncate(used);
+}
+
+/// Ordered custom dash/space lengths in device units, derived from OOXML
+/// percentages of the resolved pen width. No preset table or phase adjustment.
+#[derive(Debug)]
+pub(super) struct DashPattern {
+    stops: Vec<(f64, f64)>,
+}
+impl DashPattern {
+    pub(super) fn from_width_percent(stops: &[(f64, f64)], width: f64) -> Option<Self> {
+        if !width.is_finite() || width <= 0.0 || stops.is_empty() || stops.len() > 256 {
+            return None;
+        }
+        let mut scaled = Vec::with_capacity(stops.len());
+        let mut period = 0.0;
+        for &(dash, space) in stops {
+            // Zero-length dots/touching stops have separate cap semantics, not
+            // this positive-length flat-dash baseline.
+            if !dash.is_finite() || !space.is_finite() || dash <= 0.0 || space <= 0.0 {
+                return None;
+            }
+            let d = dash * width / 100_000.0;
+            let sp = space * width / 100_000.0;
+            if !d.is_finite() || !sp.is_finite() || d <= 0.0 || sp <= 0.0 {
+                return None;
+            }
+            period += d + sp;
+            scaled.push((d, sp));
+        }
+        period.is_finite().then_some(Self { stops: scaled })
+    }
+    /// Whole-run intervals, never one independent pattern per polyline edge.
+    /// Resource overflow is an error, not silent pattern truncation.
+    pub(super) fn painted_intervals(&self, length: f64, budget: usize) -> Option<Vec<(f64, f64)>> {
+        if !length.is_finite() || length < 0.0 {
+            return None;
+        }
+        let mut intervals = Vec::new();
+        let mut position = 0.0;
+        let mut stop = 0;
+        while position < length {
+            if intervals.len() == budget {
+                return None;
+            }
+            let (dash, space) = self.stops[stop];
+            let end = position + dash;
+            if !end.is_finite() || end <= position {
+                return None;
+            }
+            intervals.push((position, end.min(length)));
+            if end >= length {
+                break;
+            }
+            let next = end + space;
+            if !next.is_finite() || next <= end {
+                return None;
+            }
+            position = next;
+            stop = (stop + 1) % self.stops.len();
+        }
+        Some(intervals)
+    }
+}
+impl Run<'_> {
+    /// Subdivide a continuous polyline in O(edges + intervals). Vertices inside
+    /// a painted dash are retained as joins, not new capped dash endpoints.
+    pub(super) fn dashed(&self, pattern: &DashPattern, budget: usize) -> Option<Vec<Vec<Point>>> {
+        let intervals = pattern.painted_intervals(self.length, budget)?;
+        let mut edges = self.segments().filter(|edge| edge.length > 0.0).peekable();
+        let mut paths = Vec::with_capacity(intervals.len());
+        for (start, end) in intervals {
+            while edges.peek().is_some_and(|e| e.start + e.length <= start) {
+                edges.next();
+            }
+            let mut edge = *edges.peek()?;
+            let mut path = vec![edge.at(start - edge.start)?];
+            while edge.start + edge.length < end {
+                path.push(edge.to);
+                edges.next();
+                edge = *edges.peek()?;
+            }
+            path.push(edge.at(end - edge.start)?);
+            paths.push(path);
+        }
+        Some(paths)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -251,5 +369,119 @@ mod tests {
         assert!(
             CapSegment::new((0.0, 0.0), (f64::NAN, 0.0), 2.0, Cap::Round, Cap::Round).is_none()
         );
+    }
+    #[test]
+    fn explicit_device_pen_matrix_does_not_ceil_every_positive_width() {
+        let widths = [
+            0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 3.0, 4.0,
+        ];
+        let expected = [1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 6.0];
+        for (pt, px) in widths.into_iter().zip(expected) {
+            assert_eq!(explicit_pen_width_px(pt * 106.0 / 72.0), Some(px));
+        }
+        assert_eq!(explicit_pen_width_px(0.0), Some(0.0));
+        for v in [-1.0, f64::NAN, f64::INFINITY] {
+            assert!(explicit_pen_width_px(v).is_none());
+        }
+    }
+    #[test]
+    fn custom_percentages_scale_by_resolved_width_not_absolute_units() {
+        for w in [1.0, 3.0, 6.0] {
+            let p = DashPattern::from_width_percent(&[(200000.0, 100000.0)], w).unwrap();
+            assert_eq!(
+                p.painted_intervals(w * 8.0, 16).unwrap(),
+                [(0.0, 2.0 * w), (3.0 * w, 5.0 * w), (6.0 * w, 8.0 * w)]
+            );
+        }
+    }
+    #[test]
+    fn ordered_multi_stop_pattern_repeats_without_collapsing_to_one_pair() {
+        let p = DashPattern::from_width_percent(&[(100000.0, 100000.0), (300000.0, 200000.0)], 6.0)
+            .unwrap();
+        assert_eq!(
+            p.painted_intervals(60.0, 16).unwrap(),
+            [(0.0, 6.0), (12.0, 30.0), (42.0, 48.0), (54.0, 60.0)]
+        );
+    }
+    #[test]
+    fn painted_dash_keeps_internal_vertex_and_gap_owns_new_phase_domain() {
+        let points = [(0.0, 0.0), (3.0, 0.0), (3.0, 4.0), (6.0, 4.0)];
+        let p = DashPattern::from_width_percent(&[(500000.0, 100000.0)], 1.0).unwrap();
+        let paths = Run::new(&points).unwrap().dashed(&p, 16).unwrap();
+        assert_eq!(paths[0], [(0.0, 0.0), (3.0, 0.0), (3.0, 2.0)]);
+        assert_eq!(paths[1], [(3.0, 3.0), (3.0, 4.0), (6.0, 4.0)]);
+        let other = [(20.0, 0.0), (30.0, 0.0)];
+        assert_eq!(
+            Run::new(&other).unwrap().dashed(&p, 16).unwrap()[0],
+            [(20.0, 0.0), (25.0, 0.0)]
+        );
+    }
+    #[test]
+    fn zero_edges_and_exact_vertex_boundaries_do_not_reset_or_duplicate_a_dash() {
+        let points = [(0.0, 0.0), (0.0, 0.0), (2.0, 0.0), (2.0, 0.0), (8.0, 0.0)];
+        let p = DashPattern::from_width_percent(&[(200000.0, 100000.0)], 1.0).unwrap();
+        assert_eq!(
+            Run::new(&points).unwrap().dashed(&p, 16).unwrap(),
+            vec![
+                vec![(0.0, 0.0), (2.0, 0.0)],
+                vec![(3.0, 0.0), (5.0, 0.0)],
+                vec![(6.0, 0.0), (8.0, 0.0)]
+            ]
+        );
+    }
+    #[test]
+    fn equivalent_collinear_tessellations_have_identical_dash_endpoints() {
+        let p = DashPattern::from_width_percent(&[(200000.0, 100000.0)], 2.0).unwrap();
+        let a = [(0.0, 0.0), (20.0, 0.0)];
+        let b = [(0.0, 0.0), (3.0, 0.0), (11.0, 0.0), (20.0, 0.0)];
+        let ends = |points: &[Point]| {
+            Run::new(points)
+                .unwrap()
+                .dashed(&p, 16)
+                .unwrap()
+                .into_iter()
+                .map(|v| (v[0], *v.last().unwrap()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ends(&a), ends(&b));
+    }
+    #[test]
+    fn invalid_zero_nonfinite_and_resource_exhaustion_do_not_spin_or_truncate() {
+        for pair in [
+            (0.0, 1.0),
+            (1.0, 0.0),
+            (-1.0, 1.0),
+            (f64::NAN, 1.0),
+            (f64::INFINITY, 1.0),
+        ] {
+            assert!(DashPattern::from_width_percent(&[pair], 1.0).is_none());
+        }
+        assert!(DashPattern::from_width_percent(&[], 1.0).is_none());
+        assert!(DashPattern::from_width_percent(&[(1.0, 1.0); 257], 1.0).is_none());
+        let p = DashPattern::from_width_percent(&[(200000.0, 100000.0)], 1.0).unwrap();
+        assert!(p.painted_intervals(100.0, 2).is_none());
+        assert!(p.painted_intervals(f64::INFINITY, 2).is_none());
+        assert!(p.painted_intervals(-1.0, 2).is_none());
+        assert_eq!(p.painted_intervals(0.0, 0).unwrap(), []);
+    }
+    #[test]
+    fn exact_collinear_simplification_keeps_real_turns_and_reversals() {
+        for mut points in [
+            vec![(0.0, 0.0), (2.0, 0.0), (5.0, 0.0)],
+            vec![(0.0, 0.0), (2.0, 2.0), (5.0, 5.0)],
+            vec![(0.0, 0.0), (0.0, 0.0), (0.0, 5.0)],
+        ] {
+            let ends = [points[0], *points.last().unwrap()];
+            simplify_collinear(&mut points);
+            assert_eq!(points, ends);
+        }
+        for points in [
+            vec![(0.0, 0.0), (2.0, 0.0), (2.0, 5.0)],
+            vec![(0.0, 0.0), (2.0, 0.0), (0.0, 0.0)],
+        ] {
+            let mut actual = points.clone();
+            simplify_collinear(&mut actual);
+            assert_eq!(actual, points);
+        }
     }
 }
