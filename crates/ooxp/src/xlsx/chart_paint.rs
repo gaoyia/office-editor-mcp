@@ -755,6 +755,23 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Exactly two alphaMod operations, with the ceiling applied at EACH stage.
+/// First opacity is min(first,100000)/100000 exactly; reuse the unchanged
+/// precise product helper for the second stage without intermediate rounding.
+/// Saturation makes the factor order significant. This is not a general
+/// chain evaluator or a claim of combined native fidelity.
+fn frame_alpha_mod_pair(rgb: [u8; 3], first: &Element, second: &Element) -> Option<FrameFill> {
+    let parse = |node: &Element| {
+        let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+        if node.local_name() != "alphaMod" || attrs.len() != 1 || attrs[0].0 != "val"
+            || node.element_children().next().is_some() || !node.text_content().trim().is_empty() { return None; }
+        u32::try_from(parse_frame_integer(&attrs[0].1)?).ok()
+    };
+    let initial = parse(first)?.min(100_000);
+    let factor = parse(second)?;
+    Some(frame_alpha_mod_fill(rgb, initial, factor))
+}
+
 /// Exactly one alphaMod and alphaOff, evaluated in their XML order.
 /// ECMA20.1.2.3.2/.3 specifies the bounds of EACH operation; postponing
 /// saturation until the end or reordering the operations changes the result.
@@ -1254,6 +1271,10 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
+        ["alphaMod", "alphaMod"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_pair(rgb, kids[0], kids[1]).ok_or_else(unsupported)
+        }
         ["alphaMod", "alphaOff"] => {
             if color.local_name() != "srgbClr" { return Err(unsupported()); }
             frame_alpha_mod_off(rgb, kids[0], kids[1], true).ok_or_else(unsupported)
@@ -9604,7 +9625,7 @@ mod tests {
 
     #[test]
     fn alpha_mod_unverified_other_color_sequences_remain_unsupported() {
-        for transforms in ["<a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:alpha val='50000'/><a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:hueMod val='50000'/><a:alphaMod val='50000'/>", "<a:alphaMod val='50000'/><a:satMod val='50000'/>", "<a:lumOff val='10000'/><a:alphaMod val='50000'/>"] {
+        for transforms in ["<a:alphaMod val='50000'/><a:alphaMod val='-1'/>", "<a:alpha val='50000'/><a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:hueMod val='50000'/><a:alphaMod val='50000'/>", "<a:alphaMod val='50000'/><a:satMod val='50000'/>", "<a:lumOff val='10000'/><a:alphaMod val='50000'/>"] {
             let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
@@ -9699,6 +9720,48 @@ mod tests {
     }
 
     #[test]
+    fn alpha_mod_pair_retains_exact_products_and_rgb() {
+        for (a,b,product,byte) in [(50000,33333,1666650000,42),(50001,33333,1666683333,43),(33333,50000,1666650000,42),(33333,50001,1666683333,43)] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(FrameFill::AlphaProduct([61,101,71],product)));assert_eq!(alpha_product_to_u8(product),byte);}
+    }
+
+    #[test]
+    fn alpha_mod_pair_early_saturation_preserves_factor_order() {
+        let x=crate::xml::parse(b"<alphaMod val='200000'/>").unwrap();let y=crate::xml::parse(b"<alphaMod val='50000'/>").unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(FrameFill::Translucent([61,101,71],50000)));assert_eq!(frame_alpha_mod_pair([61,101,71],&y.root,&x.root),Some(FrameFill::Solid([61,101,71])));
+    }
+
+    #[test]
+    fn alpha_mod_pair_zero_identity_and_full_opacity() {
+        for (a,b,alpha) in [(0,2147483647,0),(2147483647,0,0),(100000,50000,50000),(50000,100000,50000),(100000,100000,100000),(25000,25000,6250)] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();let expected=if alpha==100000{FrameFill::Solid([61,101,71])}else{FrameFill::Translucent([61,101,71],alpha)};assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(expected));}
+    }
+
+    #[test]
+    fn alpha_mod_pair_maximum_factor_and_d_minus_one_remain_exact() {
+        for (a,b,expected) in [(1,2147483647,FrameFill::AlphaProduct([61,101,71],2147483647)),(2147483647,1,FrameFill::Translucent([61,101,71],1)),(2147483647,2147483647,FrameFill::Solid([61,101,71])),(99999,100001,FrameFill::AlphaProduct([61,101,71],9999999999))] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(expected));}assert_eq!(alpha_product_to_u8(9999999999),255);
+    }
+
+    #[test]
+    fn alpha_mod_pair_strict_operands_both_sides_even_under_zero() {
+        let zero=crate::xml::parse(b"<alphaMod val='0'/>").unwrap();
+        for raw in ["<alphaMod/>","<alphaMod val='-1'/>","<alphaMod val='2147483648'/>","<alphaMod val='50%'/>","<alphaMod val='+1'/>","<alphaMod val=' 1'/>","<alphaMod val='1.0'/>","<alphaMod val='1' extra='0'/>","<alphaMod val='1'><alphaMod val='0'/></alphaMod>","<alphaMod val='1'>x</alphaMod>","<alphaMod xmlns:x='urn:test' x:val='1'/>","<alphaOff val='0'/>"] {let x=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&zero.root),None);assert_eq!(frame_alpha_mod_pair([61,101,71],&zero.root,&x.root),None);}
+        let mut x=crate::xml::parse(b"<alphaMod val='1'/>").unwrap();x.root.attrs.push(("val".to_owned(),"0".to_owned()));assert_eq!(frame_alpha_mod_pair([61,101,71],&zero.root,&x.root),None);let x=crate::xml::parse(b"<a:alphaMod xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='100000'>\n</a:alphaMod>").unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&zero.root),Some(FrameFill::Translucent([61,101,71],0)));
+    }
+
+    #[test]
+    fn alpha_mod_pair_frame_plot_reference_at_three_dpis() {
+        for (a,b) in [(200000_i32,50000),(50000,200000),(50001,33333),(99999,100001)] {for plot in [false,true] {let make=|t:&str|{let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{t}</a:srgbClr></a:solidFill></c:spPr>");if plot{LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))}};let x=crate::xml::parse(make(&format!("<a:alphaMod val='{a}'/><a:alphaMod val='{b}'/>")).as_bytes()).unwrap();let y=crate::xml::parse(make(&format!("<a:alpha val='{}'/><a:alphaMod val='{b}'/>",a.min(100000))).as_bytes()).unwrap();for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&x.root),render(&y.root));}}}
+    }
+
+    #[test]
+    fn alpha_mod_pair_other_bases_and_longer_chains_remain_gated() {
+        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaMod val='50000'/></schemeClr>","<prstClr val='red'><alphaMod val='50000'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaMod val='50000'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaMod val='50000'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>"] {let x=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&x.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
+    }
+
+    #[test]
+    fn alpha_mod_pair_does_not_enable_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='3D6547'><a:alphaMod val='200000'/><a:alphaMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
     fn alpha_mod_off_is_noncommutative_and_keeps_rgb() {
         for (m,o,first,expected) in [(50000,25000,true,75000),(50000,25000,false,50000),(50000,-25000,true,25000),(50000,-25000,false,37500)] {
             let a=crate::xml::parse(format!("<alphaMod val='{m}'/>").as_bytes()).unwrap();let b=crate::xml::parse(format!("<alphaOff val='{o}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,first),Some(FrameFill::Translucent([61,101,71],expected)));
@@ -9743,7 +9806,7 @@ mod tests {
 
     #[test]
     fn alpha_mod_off_no_scheme_newbase_or_extra_chain_promotion() {
-        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaOff val='25000'/></schemeClr>","<prstClr val='red'><alphaOff val='0'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaOff val='0'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaOff val='0'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaOff val='0'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaOff val='25000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='3D6547'><alphaOff val='-10000'/><alphaOff val='10000'/></srgbClr>"] {let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
+        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaOff val='25000'/></schemeClr>","<prstClr val='red'><alphaOff val='0'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaOff val='0'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaOff val='0'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaOff val='0'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaOff val='25000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='-1'/></srgbClr>","<srgbClr val='3D6547'><alphaOff val='-10000'/><alphaOff val='10000'/></srgbClr>"] {let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
     }
 
     #[test]
