@@ -320,3 +320,54 @@ fn unimplemented_legend_effects_gradients_and_complex_lines_remain_explicit_ni()
         assert!(bytes(&format!("<c:legend><c:legendPos val='r'/><c:spPr>{sp}</c:spPr></c:legend>")).is_err(),"{sp}");
     }
 }
+
+#[test]
+fn entry_only_color_preserves_unstyled_default_geometry_and_other_ink() {
+    for title in ["", "<!--title-->"] {
+        for overlay in ["0", "1"] {
+            let make = |entry: &str| {
+                format!("{title}<c:legend><c:legendPos val='r'/><c:overlay val='{overlay}'/>{entry}</c:legend>")
+            };
+            let base = make("");
+            let (w, h, before) = pixels(&base);
+            for index in 0..2 {
+                let entry = |color| {
+                    format!("<c:legendEntry><c:idx val='{index}'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr><a:solidFill><a:srgbClr val='{color}'/></a:solidFill></a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry>")
+                };
+                assert_eq!(
+                    bytes(&base).unwrap(),
+                    bytes(&make(&entry("000000"))).unwrap()
+                );
+                let (ww, hh, after) = pixels(&make(&entry("FF0000")));
+                assert_eq!((w, h), (ww, hh));
+                let mut changed = 0;
+                for (i, (a, b)) in before.iter().zip(&after).enumerate() {
+                    if a != b {
+                        changed += 1;
+                        assert!(i % w > w * 4 / 5, "color moved non-legend ink");
+                        assert!(a[0] == a[1] && a[1] == a[2], "color changed a series key");
+                        assert!(b[0] > b[1] && b[1] == b[2], "not just red glyph coverage");
+                    }
+                }
+                assert!(changed > 10);
+            }
+        }
+    }
+}
+
+#[test]
+fn mixed_entry_font_widths_keep_a_shared_vertical_key_column() {
+    for properties in ["sz='1800'", "sz='1800' b='1'"] {
+        let legend = format!("<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:legendEntry><c:idx val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr {properties}><a:latin typeface='Arial'/></a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry></c:legend>");
+        let (w, _, p) = pixels(&legend);
+        let right = |color| {
+            p.iter()
+                .enumerate()
+                .filter(|(_, c)| **c == color)
+                .map(|(i, _)| i % w)
+                .max()
+                .unwrap()
+        };
+        assert_eq!(right([21, 96, 130]), right([233, 113, 50]));
+    }
+}

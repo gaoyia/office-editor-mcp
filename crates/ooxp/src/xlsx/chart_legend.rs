@@ -84,6 +84,29 @@ impl Spec {
             && self.background == FrameFill::NoFill
             && self.border.is_none()
     }
+    // Entry-only paint changes do not change the inherited font metrics.
+    // Controlled Excel exports confirm that the existing default-right geometry
+    // stays fixed. Keep default_right_ink strict for the separate pie boundary.
+    pub(super) fn default_right_geometry(&self) -> bool {
+        self.pos == Some(LegendPos::Right)
+            && self.style == TextStyle::default()
+            && self.manual.is_none()
+            && self.deleted.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
+            && self.entries.iter().all(|(_, style)| {
+                let mut metrics = style.clone();
+                metrics.color = self.style.color;
+                metrics == self.style
+            })
+    }
+    pub(super) fn entry_text_color(&self, index: usize) -> [u8; 3] {
+        self.entries
+            .iter()
+            .find(|(i, _)| *i == index)
+            .map(|(_, style)| style.color)
+            .unwrap_or(self.style.color)
+    }
     pub(super) fn read(root: &Element, accents: [[u8; 3]; 6]) -> Result<Self, Error> {
         let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
         let pos = legend_pos(chart);
@@ -216,7 +239,7 @@ impl Spec {
                 }
             }
         }
-        result.legacy = result.default_right_ink() && !result.overlay;
+        result.legacy = result.default_right_geometry() && !result.overlay;
         Ok(result)
     }
 }
@@ -820,7 +843,11 @@ impl<'a> Layout<'a> {
                 self.space * 2.0
             };
             let width = items_width + row.len().saturating_sub(1) as f64 * gap;
-            let mut x = self.frame.x + (self.frame.w - width) / 2.0;
+            // A vertical legend is one shared key/text column, not separately
+            // centred rows. Mixed font widths must not stagger its keys.
+            let column_width = self.items.iter().map(|item| item.width).fold(0.0, f64::max);
+            let packed_width = if self.horizontal { width } else { column_width };
+            let mut x = self.frame.x + (self.frame.w - packed_width) / 2.0;
             for idx in row {
                 let item = &self.items[*idx];
                 let ser = item.series;
@@ -845,7 +872,11 @@ impl<'a> Layout<'a> {
                         chart.kind,
                         self.key.round() as i32,
                         canvas.dpi,
-                    )) + item.space,
+                    )) + if self.horizontal {
+                        item.space
+                    } else {
+                        self.space
+                    },
                     y + (self.line - item.line) / 2.0,
                     item.px,
                     item.style.color,

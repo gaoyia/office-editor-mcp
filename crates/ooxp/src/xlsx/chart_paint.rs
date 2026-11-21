@@ -2252,7 +2252,7 @@ fn paint_scatter(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
         draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
     } else {
@@ -2544,7 +2544,7 @@ fn paint_bar(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
         draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
     } else {
@@ -3260,7 +3260,7 @@ fn paint(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         // An overlay must release plot space without changing the default legend.
         // Anchor its ink at the same right edge, not at the expanded plot edge.
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -4574,13 +4574,13 @@ fn draw_legend(
     // S2) but flips the default right legend when catAx is minMax, so the
     // keys follow the visual stack (S2 above S1). Package legend/series XML
     // is otherwise identical. Other chart kinds keep series-index order.
-    let legend_series: Vec<&Series> =
+    let legend_series: Vec<(usize, &Series)> =
         if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
-            chart.series.iter().rev().collect()
+            chart.series.iter().enumerate().rev().collect()
         } else {
-            chart.series.iter().collect()
+            chart.series.iter().enumerate().collect()
         };
-    for ser in legend_series {
+    for (index, ser) in legend_series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key(
             canvas,
@@ -4600,7 +4600,7 @@ fn draw_legend(
             f64::from(x + key_width + key_gap),
             f64::from(y - canvas.dpi.scale_px(2)),
             px,
-            INK,
+            chart.legend_spec.entry_text_color(index),
         );
         y += pitch;
     }
