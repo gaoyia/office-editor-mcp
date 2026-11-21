@@ -14,6 +14,8 @@ mod axis;
 mod legend;
 #[path = "chart_gradient.rs"]
 mod gradient;
+#[path = "chart_stroke.rs"]
+mod stroke;
 
 use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
@@ -241,6 +243,7 @@ fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
 }
 
 struct LineSeriesStyle {
+    cap: stroke::Cap,
     color: Option<[u8; 3]>,
     visible: bool,
     width: f64,
@@ -262,6 +265,7 @@ struct Series {
     slot: usize,
     line_visible: bool,
     line_width: f64,
+    line_cap: stroke::Cap,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
     /// Area stroke color when a solid outline is present. Lines keep this unset.
@@ -291,6 +295,7 @@ impl Default for Series {
             slot: 0,
             line_visible: false,
             line_width: 0.0,
+            line_cap: stroke::Cap::Round,
             marker: MarkerKind::None,
             marker_color: None,
             line_color: None,
@@ -1557,6 +1562,7 @@ fn read_chart(
         let mut line_color = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
+                cap: stroke::Cap::Round,
                 color: series_color(ser, accents),
                 visible: false,
                 width: 0.0,
@@ -1568,6 +1574,7 @@ fn read_chart(
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
                 LineSeriesStyle {
+                cap: stroke::Cap::Round,
                     color: area.fill,
                     visible: area.line_visible,
                     width: area.line_width,
@@ -1578,6 +1585,7 @@ fn read_chart(
             PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
             PlotKind::Scatter { connect } => {
                 let mut style = read_line_series(ser, accents, dpi, order)?;
+                if style.cap != stroke::Cap::Round { return Err(unsupported()); }
                 if !connect {
                     style.visible = false;
                 }
@@ -1621,6 +1629,7 @@ fn read_chart(
             slot: order,
             line_visible: style.visible,
             line_width: style.width,
+            line_cap: style.cap,
             marker: style.marker,
             marker_color: style.marker_color,
             line_color,
@@ -2343,14 +2352,14 @@ fn draw_scatter(
                 }
                 _ => {
                     if ser.line_visible && ser.line_width > 0.0 {
-                        stroke_run(canvas, &run, ser.line_width, color);
+                        stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     }
                     run.clear();
                 }
             }
         }
         if ser.line_visible && ser.line_width > 0.0 {
-            stroke_run(canvas, &run, ser.line_width, color);
+            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
@@ -3428,7 +3437,7 @@ fn draw_lines(
                 {
                     None
                 } else {
-                    stroke_run(canvas, &run, ser.line_width, color);
+                    stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     run.clear();
                     None
                 };
@@ -3436,7 +3445,7 @@ fn draw_lines(
                     run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run(canvas, &run, ser.line_width, color);
+            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
@@ -3479,8 +3488,31 @@ fn line_point(
 }
 
 fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3]) {
-    for pair in run.windows(2) {
-        canvas.stroke_segment(pair[0].0, pair[0].1, pair[1].0, pair[1].1, width, color);
+    if let Some(style) = stroke::Style::new(width, stroke::Cap::Round) {
+        stroke_run_style(canvas, run, style, color);
+    }
+}
+
+fn stroke_run_style(canvas: &mut Canvas, points: &[(f64, f64)], style: stroke::Style, color: [u8; 3]) {
+    if let Some(run) = stroke::Run::new(points) {
+        let endpoints = if style.cap == stroke::Cap::Round { Some((0,run.last_segment())) } else {
+            let mut nonzero=run.segments().filter(|segment| segment.length > 0.0);
+            nonzero.next().map(|first| (first.index,nonzero.last().map_or(first.index,|last| last.index)))
+        };
+        let Some((first_index,last_index))=endpoints else { return; };
+        for segment in run.segments() {
+            if style.cap != stroke::Cap::Round && segment.length == 0.0 { continue; }
+            // Only true run endpoints receive caps; internal joins retain the
+            // existing round-join baseline. Arc coordinates never reset here.
+            let first = if segment.index == first_index { style.cap } else { stroke::Cap::Round };
+            let last = if segment.index == last_index { style.cap } else { stroke::Cap::Round };
+            canvas.stroke_segment_capped(segment.from, segment.to, style.width, first, last, color);
+        }
+    } else if style.cap == stroke::Cap::Round {
+        // Preserve the old valid-segment behavior for a nonfinite legacy run.
+        for pair in points.windows(2) {
+            canvas.stroke_segment(pair[0].0, pair[0].1, pair[1].0, pair[1].1, style.width, color);
+        }
     }
 }
 
@@ -3762,6 +3794,10 @@ fn draw_plot_key(
     color: [u8; 3],
     marker: MarkerKind,
 ) {
+    draw_plot_key_styled(canvas,kind,x0,y0,x1,y1,color,marker,None);
+}
+
+fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i32,y1:i32,color:[u8;3],marker:MarkerKind,style:Option<stroke::Style>) {
     match kind {
         PlotKind::ClusteredColumn
         | PlotKind::ClusteredBar
@@ -3771,6 +3807,9 @@ fn draw_plot_key(
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let line_end = f64::from(x0) + canvas.dpi.pt_to_px_font(20.0);
             let mid_x = (f64::from(x0) + line_end) / 2.0;
+            if let Some(style)=style {
+                canvas.stroke_segment_capped((f64::from(x0),mid_y),(line_end,mid_y),style.width,style.cap,style.cap,color);
+            } else {
             canvas.stroke_segment(
                 f64::from(x0),
                 mid_y,
@@ -3779,6 +3818,7 @@ fn draw_plot_key(
                 excel_chart_line_width_px(canvas.dpi.pt_to_px_font(2.25)),
                 color,
             );
+            }
             let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
             paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
@@ -4612,7 +4652,7 @@ fn draw_legend(
         };
     for (index, ser) in legend_series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
-        draw_plot_key(
+        draw_plot_key_styled(
             canvas,
             chart.kind,
             x,
@@ -4621,6 +4661,7 @@ fn draw_legend(
             y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
             ser.marker,
+            if ser.line_visible { stroke::Style::new(ser.line_width, ser.line_cap) } else { None },
         );
         draw_text(
             canvas,
@@ -5032,11 +5073,13 @@ fn read_line_series(
             return Err(unsupported());
         }
     }
+    let mut cap = stroke::Cap::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
         let style = read_line_sp_pr(sp, accents, dpi)?;
+        cap = style.cap;
         visible = style.visible;
         width = excel_chart_line_width_px(style.width);
         color = style.color;
@@ -5046,6 +5089,7 @@ fn read_line_series(
     }
     let (marker, marker_color) = read_line_marker(ser, accents, dpi, slot)?;
     Ok(LineSeriesStyle {
+        cap,
         color,
         visible,
         width,
@@ -5060,6 +5104,7 @@ fn read_line_sp_pr(
     dpi: RenderDpi,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut cap = stroke::Cap::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
@@ -5072,7 +5117,8 @@ fn read_line_sp_pr(
                 }
             }
             "ln" => {
-                let line = read_solid_ln(child, accents, width, dpi)?;
+                let line = read_ln_with_caps(child, accents, width, dpi, true)?;
+                cap = line.cap;
                 visible = line.visible;
                 width = excel_chart_line_width_px(line.width);
                 if line.color.is_some() {
@@ -5088,6 +5134,7 @@ fn read_line_sp_pr(
         }
     }
     Ok(LineSeriesStyle {
+        cap,
         color,
         visible,
         width,
@@ -5102,9 +5149,16 @@ fn read_solid_ln(
     default_width: f64,
     dpi: RenderDpi,
 ) -> Result<LineSeriesStyle, Error> {
+    read_ln_with_caps(ln, accents, default_width, dpi, false)
+}
+
+fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi: RenderDpi, explicit_caps: bool) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    // Omitted cap deliberately retains the accepted chart baseline, not a new
+    // guessed global default. Only explicit cap values are expanded here.
+    let cap = match ln.attr_local("cap") { Some(v) => stroke::Cap::from_ooxml(v).ok_or_else(unsupported)?, None => stroke::Cap::Round };
+    if !explicit_caps && cap != stroke::Cap::Round { return Err(unsupported()); }
     for (attr, allowed) in [
-        ("cap", &["rnd"][..]),
         ("cmpd", &["sng"][..]),
         ("algn", &["ctr"][..]),
     ] {
@@ -5137,6 +5191,11 @@ fn read_solid_ln(
         match child.local_name() {
             "noFill" => visible = false,
             "solidFill" => {
+                if cap != stroke::Cap::Round && child.element_children().any(|node| node.element_children().next().is_some()) {
+                    // New cap coverage is an opaque-color baseline, not permission
+                    // to flatten alpha or invent additional color transforms.
+                    return Err(unsupported());
+                }
                 color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
             }
             "prstDash" => {
@@ -5145,7 +5204,8 @@ fn read_solid_ln(
                     return Err(unsupported());
                 }
             }
-            "miter" | "round" | "bevel" => {}
+            "round" => {},
+            "miter" | "bevel" if cap == stroke::Cap::Round => {},
             "effectLst" => {
                 if child.element_children().next().is_some() {
                     return Err(unsupported());
@@ -5158,6 +5218,7 @@ fn read_solid_ln(
         color = None;
     }
     Ok(LineSeriesStyle {
+        cap,
         color,
         visible,
         width,
@@ -5264,6 +5325,7 @@ fn read_pie_series_style(
         let _ = read_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
+                cap: stroke::Cap::Round,
         color: series_color(ser, accents),
         visible: false,
         width: 0.0,
@@ -6493,6 +6555,25 @@ impl Canvas {
         }
     }
 
+    fn stroke_segment_capped(&mut self, from: stroke::Point, to: stroke::Point, width: f64, first: stroke::Cap, last: stroke::Cap, color: [u8; 3]) {
+        if first == stroke::Cap::Round && last == stroke::Cap::Round {
+            // Accepted round pixels go through the untouched legacy rasterizer.
+            self.stroke_segment(from.0, from.1, to.0, to.1, width, color);
+            return;
+        }
+        let Some(geometry) = stroke::CapSegment::new(from, to, width, first, last) else { return; };
+        let pad = width / 2.0 + 1.0;
+        let x0 = ((from.0.min(to.0)-pad).floor() as i32).max(0);
+        let x1 = ((from.0.max(to.0)+pad).ceil() as i32).min(self.w as i32-1);
+        let y0 = ((from.1.min(to.1)-pad).floor() as i32).max(0);
+        let y1 = ((from.1.max(to.1)+pad).ceil() as i32).min(self.h as i32-1);
+        for y in y0..=y1 { for x in x0..=x1 {
+            let distance = geometry.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5));
+            let alpha = coverage(distance,0.0);
+            if alpha > 0 { self.blend(x,y,color,alpha); }
+        }}
+    }
+
     fn stroke_segment(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, width: f64, color: [u8; 3]) {
         if width <= 0.0 || !x0.is_finite() || !y0.is_finite() || !x1.is_finite() || !y1.is_finite()
         {
@@ -7684,6 +7765,60 @@ mod tests {
         let i = (5 * 576 + 5) * 4;
         assert_eq!(&buf[i..i + 3], &[234, 247, 247]);
         assert_eq!(buf[i + 3], 64, "alpha 25000 maps to coverage 64");
+    }
+
+    #[test]
+    fn explicit_line_caps_and_key_width_use_shared_style_but_other_strokes_stay_gated() {
+        let mut images=Vec::new();
+        for cap in ["rnd","flat","sq"] {
+            let extra=format!("<c:spPr><a:ln w='50800' cap='{cap}' cmpd='sng' algn='ctr'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:prstDash val='solid'/><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            let xml=standard_line_xml(&line_ser(0,"H",&[Some(40.0),Some(40.0),Some(40.0)],&extra),"");images.push(render_line(&xml).unwrap());
+            let node=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='{cap}' w='50800'><a:prstDash val='solid'/><a:round/></a:ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).unwrap();assert_eq!(style.cap,stroke::Cap::from_ooxml(cap).unwrap());
+            if cap!="rnd" {assert!(read_solid_ln(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default()).is_err());}
+        }
+        assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
+        for body in ["<a:prstDash val='dash'/>","<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
+            let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
+        }
+        let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
+        for (canvas,width) in [(&mut thin,1.0),(&mut thick,6.0)] {draw_plot_key_styled(canvas,PlotKind::StandardLine,20,10,49,19,[0,0,0],MarkerKind::None,stroke::Style::new(width,stroke::Cap::Flat));}
+        assert_ne!(thin.px,thick.px);
+    }
+
+    #[test]
+    fn duplicate_endpoint_edges_do_not_steal_nonround_run_caps() {
+        for cap in [stroke::Cap::Flat,stroke::Cap::Square] {
+            let mut simple=Canvas::new(80,40);let mut repeated=Canvas::new(80,40);let style=stroke::Style::new(8.0,cap).unwrap();
+            stroke_run_style(&mut simple,&[(20.0,20.0),(60.0,20.0)],style,[0,0,0]);
+            stroke_run_style(&mut repeated,&[(20.0,20.0),(20.0,20.0),(60.0,20.0),(60.0,20.0)],style,[0,0,0]);assert_eq!(simple.px,repeated.px);
+        }
+    }
+
+    #[test]
+    fn shared_stroke_round_runs_preserve_legacy_pixels_exactly() {
+        for width in [1.0, 2.25, 4.0, 7.5] {
+            for points in [vec![(10.0,20.0),(40.0,20.0),(40.0,50.0),(90.0,50.0)], vec![(10.0,20.0),(10.0,20.0),(90.0,50.0)], vec![(-5.0,10.0),(50.5,40.5),(130.0,10.0)]] {
+                let mut before=Canvas::new(120,70);let mut after=Canvas::new(120,70);
+                for pair in points.windows(2) { before.stroke_segment(pair[0].0,pair[0].1,pair[1].0,pair[1].1,width,[23,93,181]); }
+                stroke_run(&mut after,&points,width,[23,93,181]);assert_eq!(before.px,after.px);assert_eq!(before.alpha,after.alpha);
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_cap_prerequisites_render_document_contract_not_native_gold() {
+        let mut image=Canvas::new(280,180);
+        for (i,cap) in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square].into_iter().enumerate() {
+            let y=25.0+i as f64*55.0;
+            stroke_run_style(&mut image,&[(30.0,y),(130.0,y),(180.0,y+20.0),(240.0,y+20.0)],stroke::Style::new(12.0,cap).unwrap(),[23,93,181]);
+        }
+        let mut round=Canvas::new(80,30);let mut flat=Canvas::new(80,30);let mut square=Canvas::new(80,30);
+        for (canvas,cap) in [(&mut round,stroke::Cap::Round),(&mut flat,stroke::Cap::Flat),(&mut square,stroke::Cap::Square)] {stroke_run_style(canvas,&[(20.0,15.0),(60.0,15.0)],stroke::Style::new(8.0,cap).unwrap(),[0,0,0]);}
+        assert_ne!(round.px,flat.px);assert_ne!(round.px,square.px);assert_ne!(flat.px,square.px);
+        if let Some(dir)=std::env::var_os("OOXP_STROKE_FOUNDATION_REVIEW_DIR") {
+            let dir=std::path::PathBuf::from(dir);assert!(dir.is_dir());let path=dir.join("document-contract-cap-primitives.png");assert!(!path.exists());std::fs::write(path,image.encode_png().unwrap()).unwrap();
+        }
     }
 
     #[test]
