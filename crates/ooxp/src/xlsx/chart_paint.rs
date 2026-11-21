@@ -645,7 +645,7 @@ fn frame_shade(rgb: [u8; 3], val: u32) -> [u8; 3] {
     rgb.map(|channel| linear_to_srgb(srgb_to_linear(channel) * share))
 }
 
-fn frame_lum(rgb: [u8; 3], lum_mod: Option<u32>, lum_off: Option<u32>) -> [u8; 3] {
+fn frame_lum(rgb: [u8; 3], lum_mod: Option<u32>, lum_off: Option<i32>) -> [u8; 3] {
     let (hue, sat, light) = rgb_hsl(rgb);
     let mut light = light;
     if let Some(factor) = lum_mod {
@@ -655,6 +655,22 @@ fn frame_lum(rgb: [u8; 3], lum_mod: Option<u32>, lum_off: Option<u32>) -> [u8; 3
         light += f64::from(offset) / 100_000.0;
     }
     hsl_rgb(hue, sat, light.clamp(0.0, 1.0))
+}
+
+/// Baseline signed DrawingML luminance offset, in thousandths of a percent.
+/// Alpha/modulation percentages remain unsigned. Unsupported ranges are not
+/// silently clamped as input; only the resulting HSL luminance is clamped.
+fn parse_luminance_offset(node: &Element) -> Option<i32> {
+    if node.attrs.len() != 1 || node.element_children().next().is_some() {
+        return None;
+    }
+    let raw = node.attr_local("val")?;
+    let digits = raw.strip_prefix('-').unwrap_or(raw);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let value: i32 = raw.parse().ok()?;
+    (-100_000..=100_000).contains(&value).then_some(value)
 }
 
 fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
@@ -692,13 +708,22 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
         ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
         ["lumMod"] => Ok(FrameFill::Solid(frame_lum(rgb, Some(pct(kids[0])?), None))),
         ["lumMod", "alpha"] => frame_alpha_fill(frame_lum(rgb, Some(pct(kids[0])?), None), kids[1]),
+        ["lumOff"] => Ok(FrameFill::Solid(frame_lum(
+            rgb,
+            None,
+            Some(parse_luminance_offset(kids[0]).ok_or_else(unsupported)?),
+        ))),
+        ["lumOff", "alpha"] => frame_alpha_fill(
+            frame_lum(rgb, None, Some(parse_luminance_offset(kids[0]).ok_or_else(unsupported)?)),
+            kids[1],
+        ),
         ["lumMod", "lumOff"] => Ok(FrameFill::Solid(frame_lum(
             rgb,
             Some(pct(kids[0])?),
-            Some(pct(kids[1])?),
+            Some(parse_luminance_offset(kids[1]).ok_or_else(unsupported)?),
         ))),
         ["lumMod", "lumOff", "alpha"] => frame_alpha_fill(
-            frame_lum(rgb, Some(pct(kids[0])?), Some(pct(kids[1])?)),
+            frame_lum(rgb, Some(pct(kids[0])?), Some(parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
             kids[2],
         ),
         _ => Err(unsupported()),
@@ -7861,6 +7886,75 @@ mod tests {
     }
 
     #[test]
+    fn signed_luminance_offset_is_distinct_from_alpha_percentage() {
+        for (raw, expected) in [("0", 0), ("-0", 0), ("40000", 40_000), ("-20000", -20_000), ("100000", 100_000), ("-100000", -100_000)] {
+            let xml = crate::xml::parse(format!(r#"<lumOff val="{raw}"/>"#).as_bytes()).unwrap();
+            assert_eq!(parse_luminance_offset(&xml.root), Some(expected));
+        }
+        assert_eq!(parse_ooxml_alpha(Some("-20000")), None);
+        assert_eq!(frame_lum([21, 96, 130], None, Some(-100_000)), [0, 0, 0]);
+        assert_eq!(frame_lum([21, 96, 130], None, Some(100_000)), [255, 255, 255]);
+    }
+
+    #[test]
+    fn standalone_luminance_offset_matches_controlled_native_colors() {
+        // Six same-title/data/288x180pt fixtures were re-exported readonly by
+        // Excel16/DPI106. These are native color probes, not full-image passes.
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base, offset, alpha, expected) in [
+            ("srgbClr", "156082", "40000", "", FrameFill::Solid([122, 199, 233])),
+            ("srgbClr", "156082", "-20000", "", FrameFill::Solid([7, 31, 42])),
+            ("srgbClr", "156082", "100000", "", FrameFill::Solid([255, 255, 255])),
+            ("schemeClr", "accent1", "40000", "", FrameFill::Solid([122, 199, 233])),
+            ("srgbClr", "156082", "40000", "<a:alpha val='50000'/>", FrameFill::Translucent([122, 199, 233], 50_000)),
+        ] {
+            let xml = format!("<c:chartSpace xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><c:spPr><a:solidFill><a:{kind} val='{base}'><a:lumOff val='{offset}'/>{alpha}</a:{kind}></a:solidFill></c:spPr></c:chartSpace>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(read_frame_with(&doc.root, &scheme).unwrap().fill, expected);
+        }
+        // Derived algebra regression; preserves existing positive mod+off and
+        // extends its offset operand without inventing a transform-order rule.
+        assert_eq!(frame_lum([21, 96, 130], Some(100_000), Some(-20_000)), [7, 31, 42]);
+    }
+
+    #[test]
+    fn luminance_offset_paints_chart_and_plot_pixels_at_three_dpis() {
+        for plot in [false, true] {
+            for (offset, rgb, opacity, byte_alpha) in [(40_000, [122, 199, 233], 100_000, 255u8), (-20_000, [7, 31, 42], 100_000, 255), (40_000, [122, 199, 233], 50_000, 128)] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='{offset}'/><a:alpha val='{opacity}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let xml = if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let image = render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    let mut decoder = png::Decoder::new(std::io::Cursor::new(image)).read_info().unwrap();
+                    let mut buffer = vec![0; decoder.output_buffer_size()];
+                    let info = decoder.next_frame(&mut buffer).unwrap();
+                    let stride = if info.color_type == png::ColorType::Rgba { 4 } else { 3 };
+                    // Plot paint composites over the existing opaque white
+                    // chart frame; chart alpha itself stays straight RGBA.
+                    let (expected_rgb, expected_alpha) = if plot {
+                        (rgb.map(|channel| ((u32::from(channel) * u32::from(byte_alpha) + 255 * (255 - u32::from(byte_alpha)) + 127) / 255) as u8), 255)
+                    } else {
+                        (rgb, byte_alpha)
+                    };
+                    let count = buffer[..info.buffer_size()].chunks_exact(stride).filter(|px| px[..3] == expected_rgb && (stride == 3 || px[3] == expected_alpha)).count();
+                    assert!(count > 100, "plot={plot} offset={offset} alpha={opacity} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_luminance_offset_inputs_do_not_lose_semantics() {
+        for transform in ["<a:lumOff/>", "<a:lumOff val='-100001'/>", "<a:lumOff val='100001'/>", "<a:lumOff val='1.5'/>", "<a:lumOff val='+20000'/>", "<a:lumOff val='40000'><a:alpha val='50000'/></a:lumOff>", "<a:lumOff val='40000'/><a:lumOff val='40000'/>", "<a:lumOff val='40000'/><a:satMod val='50000'/>"] {
+            let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transform}</a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err(), "{transform}");
+        }
+    }
+
+    #[test]
     fn rectangular_chart_no_line_preserves_fill_and_alpha_to_the_edge() {
         for (fill, rgb, alpha) in [
             (
@@ -7934,7 +8028,7 @@ mod tests {
             "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/><a:lumMod val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:ln w='25400'/></c:spPr>",
         ] {

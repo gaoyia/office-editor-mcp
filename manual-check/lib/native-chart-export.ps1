@@ -12,3 +12,14 @@ function Read-NativeChartPng([string]$Path,[bool]$ExportReturned) {
  $image=$null;try{$image=[Drawing.Image]::FromFile($Path);if($image.Width -ne $w -or $image.Height -ne $h){throw 'PNG header/decode dimension mismatch'}}finally{if($image){$image.Dispose()}}
  [pscustomobject]@{Path=$Path;Width=$w;Height=$h;Bytes=$bytes.Length;Sha256=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash}
 }
+
+# Pure preflight validation, before Office launch or a derived source is opened.
+function Assert-ControlledNativeCases($Cases) {
+ if(-not $Cases -or @($Cases).Count -eq 0){throw 'Empty controlled case manifest'}
+ $ids=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+ foreach($case in $Cases){
+  if([string]$case.Id -notmatch '^[A-Za-z0-9_-]+$' -or -not $ids.Add([string]$case.Id)){throw 'Unsafe or duplicate output id'}
+  foreach($key in @('Sheet','Name','Title')){if([string]::IsNullOrWhiteSpace([string]$case.$key)){throw 'Missing explicit chart identity'}}
+  foreach($key in @('WidthPt','HeightPt')){$value=[double]$case.$key;if([double]::IsNaN($value) -or [double]::IsInfinity($value) -or $value -le 0){throw 'Invalid expected geometry'}}
+ }
+}
