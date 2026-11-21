@@ -1437,7 +1437,11 @@ fn read_chart(
             (ys, xs)
         } else {
             let values = series_numbers(ser.child_by_local("val"), sheet, cells);
-            if values.is_empty() {
+            // Official all-empty pies omit every val cache pt while keeping
+            // category pts. Do not drop that series here; the category domain
+            // is applied below. Do not size the domain from untrusted ptCount
+            // alone.
+            if values.is_empty() && kind != PlotKind::Pie {
                 continue;
             }
             (values, Vec::new())
@@ -11434,16 +11438,35 @@ mod tests {
             "",
         ))
         .unwrap();
-        // Official all-empty Chart.Export matches all-zero in the plot (no
-        // wedges, legend kept), but omitted val cache points still take a
-        // later NI path and stay leftover under F36.
-        let all_empty_err = render_pie(&standard_pie_xml(
+        let all_empty_ser = r#"<c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:tx><c:v>S1</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
+        </c:ser>"#;
+        let all_empty = render_pie(&standard_pie_xml(
+            all_empty_ser,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        assert_eq!(
+            all_zero, all_empty,
+            "official-like all-empty (ptCount, no val pts) should match all-zero"
+        );
+        // line_ser omits val pts and ptCount, but still writes category pts.
+        // That is the same locked domain rule, not a second painter.
+        let omitted_pts = render_pie(&standard_pie_xml(
             &line_ser(0, "S1", &[None, None, None, None], ""),
             r#"<c:dispBlanksAs val="gap"/>"#,
             "",
         ))
-        .expect_err("all-empty omitted val points stay NotImplemented");
-        assert_eq!(all_empty_err.code(), crate::error::ErrorCode::NotImplemented);
+        .unwrap();
+        assert_eq!(
+            all_zero, omitted_pts,
+            "omitted val pts with category pts should match all-zero"
+        );
         let (w, h, rgb) = png_rgb(&all_zero);
         assert_eq!((w, h), (576, 336));
         let a1 = FALLBACK_ACCENTS[0];
@@ -11535,8 +11558,15 @@ mod tests {
             line_ser(1, "S2", &[Some(1.0), Some(2.0), Some(3.0)], "")
         );
         let cases = [
+            // Leftover: a val cache ptCount with no val pts and no category
+            // pts is not sized from untrusted ptCount.
             standard_pie_xml(
-                &line_ser(0, "S1", &[None, None, None], ""),
+                r#"<c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:tx><c:v>S1</c:v></c:tx>
+          <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
+        </c:ser>"#,
                 r#"<c:dispBlanksAs val="gap"/>"#,
                 "",
             ),
