@@ -27,10 +27,14 @@ Lifecycle record: both explicitly owned readonly seed/copy closed with finally C
 
 ## Evidence and preserved review scope
 
-Desktop unified INDEX links unique generation `20261121-F07-saturation-modulation-g13/F07-saturation-modulation-foundation-待审.html`, its source/native certificates, failed clamp-hypothesis references, new/baseline/historical PNGs, test logs, provenance/ownership audit and guarded INDEX-only rollback. Prior68 artifacts/2413 archived files, localStorage URLs/review states, all manifests/rollback and g8a correction remain byte-intact.
+Desktop unified INDEX links unique generation `20261121-F07-saturation-modulation-g13/F07-saturation-modulation-foundation-待审.html`, its source/native certificates, failed clamp-hypothesis references, new/baseline/historical PNGs, test logs, provenance/ownership audit and guarded INDEX-only rollback. Prior68 artifacts/2413 protected files (2367 in the archive and 46 intentionally retained at their desktop URLs), localStorage URLs/review states, all manifests/rollback and g8a correction remain byte-intact.
 
 49 groups remain **4accepted /5pending /26partial /10NI /1safety /3illegal**. No acceptance, merge or widening of protected criteria. Independent next prerequisite candidates are standalone hue modulation or shared visible-frame stroke; auto-key layout, square terminal gap, lim4 plot, retracing and scatter remain explicit boundaries.
 
 ## PR audit preservation
 
 The exact current PR14 body (62450 characters) is archived before body compression in [pr14-body-before-g13-20261121.md](pr14-body-before-g13-20261121.md), UTF8 SHA256 `cb8c0f1cee992b0690fb21305491a9535b0f194f8bdfc926cd57d9f77eb193c6`. Historical audit content stays versioned; a concise PR body can link this archive, the plan and this current implementation note. No comments/outreach or title/base/state change.
+
+## Inventory-label correction (metadata only)
+
+The first g13 page incorrectly called all2413 protected old files archive files. Exact inventory proves2367 old archive files plus46 retained desktop pages; no missing/unexpected file and every old SHA is intact. With g13 added417 files plus its manifest, archive file count is2785 and all-scope protected files2831. Preserve the published g13 page/manifest bytes and review state; an INDEX-linked supplemental JSON records this correction. This does not change renderer/tests/PNG residuals or acceptance.
