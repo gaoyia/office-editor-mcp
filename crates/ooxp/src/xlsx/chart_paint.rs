@@ -755,6 +755,36 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Exactly one alphaMod and alphaOff, evaluated in their XML order.
+/// ECMA20.1.2.3.2/.3 specifies the bounds of EACH operation; postponing
+/// saturation until the end or reordering the operations changes the result.
+/// Preserve numerator/1e10 through the existing exact-alpha final conversion.
+/// This is an isolated sRGB library profile, not a generic chain evaluator or
+/// a claim of combined native fidelity. Both strict operands are always read.
+fn frame_alpha_mod_off(rgb: [u8; 3], modulation: &Element, offset: &Element, modulation_first: bool) -> Option<FrameFill> {
+    let parse = |node: &Element| {
+        let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+        if attrs.len() != 1 || attrs[0].0 != "val" || node.element_children().next().is_some() || !node.text_content().trim().is_empty() { return None; }
+        parse_frame_integer(&attrs[0].1)
+    };
+    if modulation.local_name() != "alphaMod" || offset.local_name() != "alphaOff" { return None; }
+    let factor = u64::from(u32::try_from(parse(modulation)?).ok()?);
+    let off = parse(offset)?;
+    if !(-100_000..=100_000).contains(&off) { return None; }
+    let product = if modulation_first {
+        // Starting opacity is100%; cap modulation BEFORE applying the offset.
+        ((100_000 * factor).min(ALPHA_PRODUCT_DENOM) as i64 + i64::from(off) * 100_000)
+            .clamp(0, ALPHA_PRODUCT_DENOM as i64) as u64
+    } else {
+        // Clamp the offset stage first, then keep the exact modulation product.
+        let initial = (100_000 + i64::from(off)).clamp(0, 100_000) as u64;
+        (initial * factor).min(ALPHA_PRODUCT_DENOM)
+    };
+    Some(if product == ALPHA_PRODUCT_DENOM { FrameFill::Solid(rgb) }
+        else if product % 100_000 == 0 { FrameFill::Translucent(rgb, (product / 100_000) as u32) }
+        else { FrameFill::AlphaProduct(rgb, product) })
+}
+
 /// Isolated component replacement plus absolute opacity for the Excel frame profile.
 /// ECMA20.1.2.3.4/.10/.23 changes one RGB component;20.1.2.3.1 sets
 /// opacity without changing color. Apply these independent fields in either
@@ -1224,6 +1254,14 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
+        ["alphaMod", "alphaOff"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_off(rgb, kids[0], kids[1], true).ok_or_else(unsupported)
+        }
+        ["alphaOff", "alphaMod"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_off(rgb, kids[1], kids[0], false).ok_or_else(unsupported)
+        }
         ["red", "alpha"] | ["green", "alpha"] | ["blue", "alpha"] => {
             if color.local_name() != "srgbClr" { return Err(unsupported()); }
             frame_rgb_component_alpha(rgb, kids[0], kids[1]).ok_or_else(unsupported)
@@ -9394,7 +9432,7 @@ mod tests {
     }
     #[test]
     fn alpha_off_unverified_mixed_repeated_and_nested_sequences_remain_ni() {
-        for t in ["<a:alphaOff val='-10000'/><a:alphaOff val='10000'/>","<a:alphaMod val='50000'/><a:alphaOff val='10000'/>","<a:hueOff val='600000'/><a:alphaOff val='10000'/>","<a:alphaOff val='10000'><a:alpha val='40000'/></a:alphaOff>","<a:alpha val='40000'/><a:alphaOff val='10000'/><a:alpha val='40000'/>"]{let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{t}</a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{t}");}
+        for t in ["<a:alphaOff val='-10000'/><a:alphaOff val='10000'/>","<a:alphaMod val='50000'/><a:alphaOff val='100001'/>","<a:hueOff val='600000'/><a:alphaOff val='10000'/>","<a:alphaOff val='10000'><a:alpha val='40000'/></a:alphaOff>","<a:alpha val='40000'/><a:alphaOff val='10000'/><a:alpha val='40000'/>"]{let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{t}</a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{t}");}
     }
 
     #[test]
@@ -9658,6 +9696,59 @@ mod tests {
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
         }
+    }
+
+    #[test]
+    fn alpha_mod_off_is_noncommutative_and_keeps_rgb() {
+        for (m,o,first,expected) in [(50000,25000,true,75000),(50000,25000,false,50000),(50000,-25000,true,25000),(50000,-25000,false,37500)] {
+            let a=crate::xml::parse(format!("<alphaMod val='{m}'/>").as_bytes()).unwrap();let b=crate::xml::parse(format!("<alphaOff val='{o}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,first),Some(FrameFill::Translucent([61,101,71],expected)));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_pins_each_stage_not_only_final_result() {
+        for (m,o,first,expected) in [(200000,-50000,true,FrameFill::Translucent([61,101,71],50000)),(200000,-50000,false,FrameFill::Solid([61,101,71])),(0,25000,true,FrameFill::Translucent([61,101,71],25000)),(0,25000,false,FrameFill::Translucent([61,101,71],0))] {
+            let a=crate::xml::parse(format!("<alphaMod val='{m}'/>").as_bytes()).unwrap();let b=crate::xml::parse(format!("<alphaOff val='{o}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,first),Some(expected));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_preserves_exact_42_43_coverage_edge() {
+        let a=crate::xml::parse(b"<alphaMod val='33333'/>").unwrap();
+        for (off,product,byte) in [(-50000,1666650000,42),(-49999,1666683333,43)] {
+            let b=crate::xml::parse(format!("<alphaOff val='{off}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,false),Some(FrameFill::AlphaProduct([61,101,71],product)));assert_eq!(alpha_product_to_u8(product),byte);
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_strict_operands_even_when_zero() {
+        let valid_m=crate::xml::parse(b"<alphaMod val='0'/>").unwrap();let valid_o=crate::xml::parse(b"<alphaOff val='0'/>").unwrap();
+        for raw in ["<alphaMod/>","<alphaMod val='-1'/>","<alphaMod val='2147483648'/>","<alphaMod val='50%'/>","<alphaMod val='+1'/>","<alphaMod val=' 1'/>","<alphaMod val='1.0'/>","<alphaMod val='1' extra='0'/>","<alphaMod val='1'><alphaOff val='0'/></alphaMod>","<alphaMod val='1'>x</alphaMod>","<alphaMod xmlns:x='urn:test' x:val='1'/>"] {let a=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),None);}
+        for raw in ["<alphaOff/>","<alphaOff val='-100001'/>","<alphaOff val='100001'/>","<alphaOff val='10%'/>","<alphaOff val='1' extra='0'/>","<alphaOff val='1'>x</alphaOff>","<alphaOff xmlns:x='urn:test' x:val='1'/>"] {let b=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&valid_m.root,&b.root,true),None);}
+        let mut a=crate::xml::parse(b"<alphaMod val='1'/>").unwrap();a.root.attrs.push(("val".to_owned(),"0".to_owned()));assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),None);
+        let a=crate::xml::parse(b"<a:alphaMod xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'/>").unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),Some(FrameFill::Translucent([61,101,71],50000)));
+    }
+
+    #[test]
+    fn alpha_mod_off_maximum_i32_factor_no_overflow_or_input_cap_guess() {
+        let a=crate::xml::parse(b"<alphaMod val='2147483647'/>").unwrap();let b=crate::xml::parse(b"<alphaOff val='-99999'/>").unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,false),Some(FrameFill::AlphaProduct([61,101,71],2147483647)));assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,true),Some(FrameFill::Translucent([61,101,71],1)));
+    }
+
+    #[test]
+    fn alpha_mod_off_exact_reference_frame_plot_three_dpis() {
+        for (transforms,reference) in [("<a:alphaMod val='50000'/><a:alphaOff val='25000'/>","<a:alpha val='75000'/>"),("<a:alphaOff val='25000'/><a:alphaMod val='50000'/>","<a:alpha val='50000'/>"),("<a:alphaOff val='-49999'/><a:alphaMod val='33333'/>","<a:alpha val='50001'/><a:alphaMod val='33333'/>")] {
+            for plot in [false,true] {let make=|t:&str|{let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{t}</a:srgbClr></a:solidFill></c:spPr>");if plot{LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))}};let a=crate::xml::parse(make(transforms).as_bytes()).unwrap();let b=crate::xml::parse(make(reference).as_bytes()).unwrap();for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&a.root),render(&b.root));}}
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_no_scheme_newbase_or_extra_chain_promotion() {
+        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaOff val='25000'/></schemeClr>","<prstClr val='red'><alphaOff val='0'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaOff val='0'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaOff val='0'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaOff val='0'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaOff val='25000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='3D6547'><alphaOff val='-10000'/><alphaOff val='10000'/></srgbClr>"] {let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
+    }
+
+    #[test]
+    fn alpha_mod_off_does_not_enable_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='3D6547'><a:alphaMod val='50000'/><a:alphaOff val='25000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
     }
 
     #[test]
