@@ -12,6 +12,8 @@ use fontdue::{Font, FontSettings};
 mod axis;
 #[path = "chart_legend.rs"]
 mod legend;
+#[path = "chart_gradient.rs"]
+mod gradient;
 
 use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
@@ -819,7 +821,7 @@ pub(crate) fn render_chart_with_theme(
                 }
             }
             FrameFill::Linear(grad) => {
-                canvas.fill_linear_rect(0, 0, width as i32, height as i32, grad)
+                canvas.fill_linear_rect(0, 0, width as i32, height as i32, &grad)
             }
         }
         canvas.plot_fill = if chart.kind == PlotKind::Pie {
@@ -855,8 +857,8 @@ pub(crate) fn render_chart_with_theme(
 /// Default (missing spPr) is white; explicit noFill is transparent; a solid
 /// srgbClr with alpha other than 100000 is straight translucency, not a
 /// flatten onto white.
-/// `Linear` is a two-stop opaque sRGB `a:lin` at 0 or 90 degrees only.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `Linear` uses an opaque sRGB stop table at the existing 0/90 degree geometry.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum FrameFill {
     Default,
     Solid([u8; 3]),
@@ -867,19 +869,32 @@ enum FrameFill {
     NoFill,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct LinearFrameGrad {
-    start: [u8; 3],
-    end: [u8; 3],
+    stops: gradient::StopTable,
     /// DrawingML `a:lin/@ang` in 60000ths of a degree. Only 0 (left to right)
     /// and 5_400_000 (top to bottom in y-down space) are locked.
     ang: i64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum PlotPaint {
     Solid([u8; 3], u8),
     Linear(LinearFrameGrad),
+}
+
+impl LinearFrameGrad {
+    fn sample(&self, t: f64) -> [u8; 3] {
+        let segment = self.stops.segment(t).expect("finite axis-aligned fill coordinate");
+        if self.stops.len() == 2 {
+            // Preserve the locked two-stop policy exactly. Fresh three/four-stop
+            // Excel controls instead use encoded-sRGB piecewise interpolation.
+            let share = office_grad_weight(segment.fraction);
+            std::array::from_fn(|i| office_gamma_mix(segment.start[i], segment.end[i], share))
+        } else {
+            segment.encoded_srgb()
+        }
+    }
 }
 
 const LINEAR_ANG_HORIZONTAL: i64 = 0;
@@ -1063,7 +1078,7 @@ fn ooxml_alpha_to_u8(alpha: u32) -> u8 {
     ((u64::from(alpha) * 255 + 50_000) / 100_000) as u8
 }
 
-/// Two-stop opaque sRGB linear gradFill at 0 or 90 degrees. Path fills,
+/// Opaque sRGB stop-table linear gradFill at the existing 0/90 geometry. Path fills,
 /// other angles, pattern, blip, and color transforms stay NI.
 fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
@@ -1115,7 +1130,7 @@ fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
         if gs.local_name() != "gs" {
             return Err(unsupported());
         }
-        let pos: i64 = gs
+        let pos: u32 = gs
             .attr_local("pos")
             .ok_or_else(unsupported)?
             .parse()
@@ -1134,18 +1149,8 @@ fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
             .ok_or_else(unsupported)?;
         stops.push((pos, rgb));
     }
-    if stops.len() != 2 {
-        return Err(unsupported());
-    }
-    stops.sort_by_key(|s| s.0);
-    if stops[0].0 != 0 || stops[1].0 != 100_000 {
-        return Err(unsupported());
-    }
-    Ok(FrameFill::Linear(LinearFrameGrad {
-        start: stops[0].1,
-        end: stops[1].1,
-        ang,
-    }))
+    let stops = gradient::StopTable::new(stops).ok_or_else(unsupported)?;
+    Ok(FrameFill::Linear(LinearFrameGrad { stops, ang }))
 }
 
 const OFFICE_GRAD_WEIGHT: [f64; 17] = [
@@ -2117,7 +2122,7 @@ fn paint_scatter(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
+    if let Some(fill) = canvas.plot_fill.clone() {
         canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
@@ -2436,7 +2441,7 @@ fn paint_bar(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
+    if let Some(fill) = canvas.plot_fill.clone() {
         canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
@@ -3061,7 +3066,7 @@ fn paint(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
+    if let Some(fill) = canvas.plot_fill.clone() {
         canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
@@ -6359,39 +6364,33 @@ impl Canvas {
     fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) {
         match fill {
             PlotPaint::Solid(color, cov) => self.fill_rect_cov(x0, y0, x1, y1, color, cov),
-            PlotPaint::Linear(grad) => self.fill_linear_rect(x0, y0, x1, y1, grad),
+            PlotPaint::Linear(grad) => self.fill_linear_rect(x0, y0, x1, y1, &grad),
         }
     }
 
-    /// Locked two-stop Excel chart linear fill. Parameter `t` is the pixel
-    /// center over the fill rectangle, including the 1px border later stroked
-    /// on top. Interpolation is the same gamma 2.2 plus Office weight curve
-    /// already used for PowerPoint two-stop linear fills, not a sheet-cell
-    /// sRGB lerp.
-    fn fill_linear_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, grad: LinearFrameGrad) {
+    /// Existing axis-aligned pixel-center geometry. Cache at most one clipped
+    /// axis (<= canvas edge) so many-stop interval searches are not per pixel.
+    /// Neither the two-stop interpolation nor border/plot geometry is changed.
+    fn fill_linear_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, grad: &LinearFrameGrad) {
         let x0c = x0.max(0);
         let y0c = y0.max(0);
         let x1c = x1.min(self.w as i32);
         let y1c = y1.min(self.h as i32);
         let w = f64::from(x1 - x0);
         let h = f64::from(y1 - y0);
-        if w <= 0.0 || h <= 0.0 {
+        if w <= 0.0 || h <= 0.0 || x1c <= x0c || y1c <= y0c {
             return;
         }
+        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+        let colors: Vec<[u8; 3]> = if vertical {
+            (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
+        } else {
+            (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
+        };
         for y in y0c..y1c {
             for x in x0c..x1c {
-                let along = if grad.ang == LINEAR_ANG_VERTICAL {
-                    (f64::from(y - y0) + 0.5) / h
-                } else {
-                    (f64::from(x - x0) + 0.5) / w
-                };
-                let share = office_grad_weight(along);
-                let color = [
-                    office_gamma_mix(grad.start[0], grad.end[0], share),
-                    office_gamma_mix(grad.start[1], grad.end[1], share),
-                    office_gamma_mix(grad.start[2], grad.end[2], share),
-                ];
-                self.blend(x, y, color, 255);
+                let index = if vertical { y - y0c } else { x - x0c } as usize;
+                self.blend(x, y, colors[index], 255);
             }
         }
     }
@@ -7698,8 +7697,7 @@ mod tests {
         assert_eq!(
             frame.fill,
             FrameFill::Linear(LinearFrameGrad {
-                start: [234, 247, 247],
-                end: [15, 96, 130],
+                stops: gradient::StopTable::new(vec![(0, [234, 247, 247]), (100_000, [15, 96, 130])]).unwrap(),
                 ang: LINEAR_ANG_HORIZONTAL,
             })
         );
@@ -7746,8 +7744,7 @@ mod tests {
         assert_eq!(
             read_frame(&doc.root).unwrap().plot_fill,
             FrameFill::Linear(LinearFrameGrad {
-                start: [15, 96, 130],
-                end: [234, 247, 247],
+                stops: gradient::StopTable::new(vec![(0, [15, 96, 130]), (100_000, [234, 247, 247])]).unwrap(),
                 ang: LINEAR_ANG_VERTICAL,
             })
         );
@@ -7782,6 +7779,62 @@ mod tests {
     </a:clrScheme>
   </a:themeElements>
 </a:theme>"#;
+
+    #[test]
+    fn stop_table_axis_cache_preserves_all_legacy_pixels_exactly() {
+        let start = [234, 247, 247];
+        let end = [15, 96, 130];
+        for (width, height) in [(2, 3), (17, 9), (424, 265), (4096, 3)] {
+            for ang in [LINEAR_ANG_HORIZONTAL, LINEAR_ANG_VERTICAL] {
+                for clip in [false, true] {
+                    let (x0, y0, x1, y1) = if clip { (-5, -2, width + 7, height + 3) } else { (0, 0, width, height) };
+                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang };
+                    let mut canvas = Canvas::new(width as u32, height as u32);
+                    canvas.fill_linear_rect(x0, y0, x1, y1, &grad);
+                    for y in 0..height {
+                        for x in 0..width {
+                            let along = if ang == LINEAR_ANG_VERTICAL { (f64::from(y - y0) + 0.5) / f64::from(y1 - y0) } else { (f64::from(x - x0) + 0.5) / f64::from(x1 - x0) };
+                            let share = office_grad_weight(along);
+                            let expected = std::array::from_fn::<_, 3, _>(|i| office_gamma_mix(start[i], end[i], share));
+                            let i = ((y * width + x) * 3) as usize;
+                            assert_eq!(&canvas.px[i..i + 3], &expected, "{width}x{height} angle={ang} clip={clip} x={x} y={y}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn multistop_frame_and_plot_use_segmented_srgb_not_two_stop_gamma() {
+        let stops = "<a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='50000'><a:srgbClr val='0F6082'/></a:gs><a:gs pos='100000'><a:srgbClr val='F04020'/></a:gs>";
+        for plot in [false, true] {
+            for ang in [0, 5_400_000] {
+                let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='{ang}' scaled='1'/></a:gradFill></c:spPr>");
+                let xml = if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let frame = read_frame(&doc.root).unwrap();
+                let FrameFill::Linear(grad) = (if plot { frame.plot_fill } else { frame.fill }) else { panic!("expected gradient table"); };
+                assert_eq!(grad.stops.len(), 3);
+                assert_eq!(grad.sample(0.25), [125, 172, 189]);
+                assert_eq!(grad.sample(0.5), [15, 96, 130]);
+                assert_eq!(grad.sample(0.75), [128, 80, 81]);
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    assert!(render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).is_ok());
+                }
+            }
+        }
+        for stops in [
+            "<a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='0'><a:srgbClr val='000000'/></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+            "<a:gs pos='10000'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='50000'><a:srgbClr val='000000'/></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+            "<a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='50000'><a:srgbClr val='000000'><a:alpha val='50000'/></a:srgbClr></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+        ] {
+            let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='0'/></a:gradFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err());
+        }
+    }
 
     #[test]
     fn frame_scheme_tint_shade_and_lum_match_official_excel_pixels() {
