@@ -1763,12 +1763,9 @@ fn read_chart(
     };
     if kind == PlotKind::Pie {
         let values = &series[0].values;
-        if values
-            .iter()
-            .any(|v| v.is_some_and(|n| n.is_finite() && n < 0.0))
-        {
-            return Err(unsupported());
-        }
+        // Official Excel 16 public pies keep signed cache values and paint
+        // finite negatives at |v| (not skip, zero, or omit). All-zero /
+        // all-empty / all-negative (no finite positive) stay NI under F36.
         if !values
             .iter()
             .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
@@ -2684,7 +2681,10 @@ fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
             // Official Excel still lists omitted/blank categories in the pie
             // legend and keeps their accent slot, even though they take no slice.
             match ser.values.get(index).copied().flatten() {
-                Some(value) if !value.is_finite() || value < 0.0 => None,
+                // Official Excel still lists omitted/blank/zero categories in
+                // the pie legend and keeps their accent slot. Finite negatives
+                // stay in the legend as well, because they take a |v| slice.
+                Some(value) if !value.is_finite() => None,
                 _ => Some((name.clone(), pie_slice_color(chart, index))),
             }
         })
@@ -2768,11 +2768,14 @@ fn draw_pie_legend(
 
 fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
     let ser = &chart.series[0];
+    // Official Chart.Export of mixed-sign pies matches the same categories
+    // at |v|, not a skip-zero or omitted-category layout.
     let sum: f64 = ser
         .values
         .iter()
         .flatten()
-        .filter(|value| value.is_finite() && **value > 0.0)
+        .filter(|value| value.is_finite() && value.abs() > 0.0)
+        .map(|value| value.abs())
         .sum();
     if !sum.is_finite() || sum <= 0.0 {
         return;
@@ -2788,10 +2791,10 @@ fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
         let Some(value) = *value else {
             continue;
         };
-        if !value.is_finite() || value <= 0.0 {
+        if !value.is_finite() || value.abs() <= 0.0 {
             continue;
         }
-        let end = start + 360.0 * (value / sum);
+        let end = start + 360.0 * (value.abs() / sum);
         canvas.fill_wedge(cx, cy, radius, start, end, pie_slice_color(chart, index));
         start = end;
     }
@@ -11391,6 +11394,72 @@ mod tests {
     }
 
     #[test]
+    fn pie_finite_negatives_use_absolute_slice_weight_and_stay_in_legend() {
+        let cases: &[(&[Option<f64>], &[Option<f64>])] = &[
+            (
+                &[Some(10.0), Some(-20.0), Some(30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(-10.0), Some(20.0), Some(30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(10.0), Some(-20.0), Some(-30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(1.0), Some(-2.0), Some(3.0)],
+                &[Some(1.0), Some(2.0), Some(3.0)],
+            ),
+        ];
+        for (signed, absed) in cases {
+            let signed_png = render_pie(&standard_pie_xml(
+                &line_ser(0, "S1", signed, ""),
+                "",
+                "",
+            ))
+            .unwrap();
+            let abs_png = render_pie(&standard_pie_xml(
+                &line_ser(0, "S1", absed, ""),
+                "",
+                "",
+            ))
+            .unwrap();
+            assert_eq!(
+                signed_png, abs_png,
+                "finite negatives should paint as |v|, signed={signed:?}"
+            );
+        }
+        let mixed = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(-20.0), Some(30.0), Some(40.0)],
+                "",
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        let skip_zero = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(0.0), Some(30.0), Some(40.0)],
+                "",
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(
+            mixed, skip_zero,
+            "finite negatives are not skipped as zero"
+        );
+    }
+
+    #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
@@ -11401,7 +11470,17 @@ mod tests {
         );
         let cases = [
             standard_pie_xml(
-                &line_ser(0, "S1", &[Some(1.0), Some(-2.0), Some(3.0)], ""),
+                &line_ser(0, "S1", &[Some(-1.0), Some(-2.0), Some(-3.0)], ""),
+                "",
+                "",
+            ),
+            standard_pie_xml(
+                &line_ser(0, "S1", &[Some(0.0), Some(0.0), Some(0.0)], ""),
+                "",
+                "",
+            ),
+            standard_pie_xml(
+                &line_ser(0, "S1", &[None, None, None], ""),
                 "",
                 "",
             ),
