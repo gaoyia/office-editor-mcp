@@ -744,6 +744,17 @@ fn frame_luminance(rgb: [u8; 3], value: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(hue, sat, f64::from(value) / 100_000.0))
 }
 
+/// Absolute DrawingML hue uses ST_PositiveFixedAngle, not a percentage or
+/// offset: replace H and preserve S/L. The schema domain is [0, 360 degrees)
+/// with 60000 units per degree; reject invalid turns instead of guessing wrap.
+fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
+    if !(0..21_600_000).contains(&angle) {
+        return None;
+    }
+    let (_, sat, light) = rgb_hsl(rgb);
+    Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
+}
+
 /// DrawingML CT_PositivePercentage uses ST_Percentage (i32) with minimum 0.
 /// It is not alpha's bounded 0..100000 percentage. Keep the same strict node
 /// and integer-thousandth lexical contract as the other new color transforms.
@@ -851,6 +862,9 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
         ["tint", "alpha"] => frame_alpha_fill(frame_tint(rgb, pct(kids[0])?), kids[1]),
         ["shade"] => Ok(FrameFill::Solid(frame_shade(rgb, pct(kids[0])?))),
         ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
+        // Reuse the strict leaf/i32 lexical parser, but interpret this value as
+        // fixed-angle units. The helper enforces the angle's schema domain.
+        ["hue"] => Ok(FrameFill::Solid(frame_absolute_hue(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
         ["hueMod"] => Ok(FrameFill::Solid(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?))),
         ["hueMod", "alpha"] => frame_alpha_fill(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
         ["sat"] => Ok(FrameFill::Solid(frame_saturation(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
@@ -9231,6 +9245,105 @@ mod tests {
             let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn hue_absolute_replaces_h_with_six_primary_and_secondary_angles() {
+        for (angle, expected) in [(0, [130, 21, 21]), (3_600_000, [130, 130, 21]), (7_200_000, [21, 130, 21]), (10_800_000, [21, 130, 130]), (14_400_000, [21, 21, 130]), (18_000_000, [130, 21, 130])] {
+            assert_eq!(frame_absolute_hue([21, 96, 130], angle), Some(expected));
+        }
+        assert_eq!(frame_absolute_hue([210, 126, 74], 2_700_000), Some([210, 176, 74]));
+    }
+
+    #[test]
+    fn hue_absolute_uses_fixed_angle_not_percentage_modulation_or_offset() {
+        assert_eq!(frame_absolute_hue([21, 96, 130], 21_599_999), Some([130, 21, 21]));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 0), Some([21, 96, 130]));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 0), Some(frame_hue_offset([21, 96, 130], 0)));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 3_600_000), Some(frame_hue([21, 96, 130], 3_600_000)));
+        assert_eq!(frame_absolute_hue([255, 0, 0], 60_000), Some([255, 4, 0]));
+    }
+
+    #[test]
+    fn hue_absolute_achromatic_inputs_are_identity_at_every_declared_angle() {
+        for gray in 0..=255 {
+            for angle in [0, 1, 60_000, 7_200_000, 21_599_999] {
+                assert_eq!(frame_absolute_hue([gray; 3], angle), Some([gray; 3]));
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_strict_i32_leaf_and_positive_fixed_angle_domain() {
+        for angle in [i32::MIN, -1, 21_600_000, 21_600_001, i32::MAX] {
+            assert_eq!(frame_absolute_hue([21, 96, 130], angle), None);
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hue val='{angle}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+60000'", "val='60%'", "val='1.0'", "val=' 60000'", "val=''", "val='60000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hue {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+        for angle in [0, 1, 21_599_999] {
+            let doc = crate::xml::parse(format!("<hue val='{angle}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), Some(angle));
+            assert!(frame_absolute_hue([21, 96, 130], angle).is_some());
+        }
+    }
+
+    #[test]
+    fn hue_absolute_resolves_srgb_and_theme_with_the_same_angle_contract() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:hue val='14400000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([21, 21, 130]));
+        }
+    }
+
+    #[test]
+    fn hue_absolute_chart_and_contrasting_plot_match_declared_rgb() {
+        for plot in [false, true] {
+            for (angle, rgb) in [(3_600_000, "828215"), (14_400_000, "151582")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hue val='{angle}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_preserves_saturation_and_lightness_via_rgb_extrema() {
+        for r in (0..=255).step_by(51) {
+            for g in (0..=255).step_by(51) {
+                for b in (0..=255).step_by(51) {
+                    let base = [r, g, b];
+                    for angle in [0, 2_700_000, 7_200_000, 14_400_000, 21_599_999] {
+                        let out = frame_absolute_hue(base, angle).unwrap();
+                        assert_eq!(out.iter().min(), base.iter().min());
+                        assert_eq!(out.iter().max(), base.iter().max());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_mixed_repeated_nested_and_existing_other_gates_remain_ni() {
+        for transforms in ["<a:hue val='60000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:hue val='60000'/>", "<a:hue val='60000'/><a:hue val='7200000'/>", "<a:hueMod val='50000'/><a:hue val='60000'/>", "<a:hue val='60000'/><a:lum val='50000'/>", "<a:hue val='60000'><a:alpha val='50000'/></a:hue>", "<a:satOff val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
         }
     }
 
