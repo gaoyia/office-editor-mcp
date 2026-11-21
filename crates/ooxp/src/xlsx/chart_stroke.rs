@@ -18,7 +18,7 @@ impl Cap {
 }
 /// Internal join geometry is independent from true run/dash end caps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Join { Round, Bevel }
+pub(super) enum Join { Round, Bevel, Miter { limit: u32 } }
 
 /// Local join disk clipped by the outer offset-edge chord. Its visible outer
 /// boundary is the bevel hull; the interior overlaps both butt-ended bodies,
@@ -49,6 +49,75 @@ impl BevelJoin {
         let plane=-side*cross(p)/e.0.hypot(e.1);
         let circle=(p.0-b.0).hypot(p.1-b.1)-self.radius;
         circle.max(plane)
+    }
+}
+
+/// Offset-edge intersection with Office's inner-to-outer corner limit. This
+/// distance / full pen width is the same ratio as tip distance / half width.
+/// Limit units are OOXML positive percentages (100000 = 100%). Exceeding the
+/// limit falls back to the existing bevel hull, independently at each vertex.
+/// MS-OI29500 20.1.8.43 and same-source 1/2/4/8x native controls define this,
+/// not an empirical angle threshold. Exact straight/reversed edges have no
+/// unique outer intersection and stay outside this nondegenerate primitive.
+pub(super) struct MiterJoin { bevel: BevelJoin, tip: Option<Point> }
+impl MiterJoin {
+    pub(super) fn new(a: Point, b: Point, c: Point, width: f64, limit: u32) -> Option<Self> {
+        let bevel = BevelJoin::new(a, b, c, width)?;
+        let p = bevel.vertices[1];
+        let q = bevel.vertices[2];
+        let sum = (p.0 + q.0 - 2.0*b.0, p.1 + q.1 - 2.0*b.1);
+        let length = sum.0.hypot(sum.1);
+        if length == 0.0 || !length.is_finite() { return None; }
+        let direction = (sum.0/length, sum.1/length);
+        let cosine = ((p.0-b.0)*direction.0 + (p.1-b.1)*direction.1)/bevel.radius;
+        if cosine <= 0.0 || !cosine.is_finite() { return None; }
+        let ratio = 1.0/cosine;
+        // Compare before extending: a near reversal must not create a giant
+        // mask or nonfinite tip just to discover it exceeds the supplied limit.
+        let tip = if ratio > f64::from(limit)/100_000.0 { None } else {
+            let distance = bevel.radius*ratio;
+            let tip = (b.0 + direction.0*distance, b.1 + direction.1*distance);
+            if !tip.0.is_finite() || !tip.1.is_finite() { return None; }
+            Some(tip)
+        };
+        Some(Self { bevel, tip })
+    }
+    pub(super) fn bounds(&self) -> (Point, Point) {
+        let (mut low, mut high) = self.bevel.bounds();
+        if let Some(p) = self.tip {
+            low = (low.0.min(p.0), low.1.min(p.1));
+            high = (high.0.max(p.0), high.1.max(p.1));
+        }
+        (low, high)
+    }
+    pub(super) fn signed_distance(&self, point: Point) -> f64 {
+        let Some(tip) = self.tip else { return self.bevel.signed_distance(point); };
+        let [b, p, q] = self.bevel.vertices;
+        let segment_distance = |a: Point, c: Point| {
+            let edge = (c.0-a.0, c.1-a.1);
+            let length = edge.0.hypot(edge.1);
+            if length == 0.0 { return (point.0-a.0).hypot(point.1-a.1); }
+            let u = (edge.0/length, edge.1/length);
+            let t = ((point.0-a.0)*u.0 + (point.1-a.1)*u.1).clamp(0.0, length);
+            (point.0-a.0-u.0*t).hypot(point.1-a.1-u.1*t)
+        };
+        // Boundary of the convex hull of the local disk and offset-edge tip:
+        // two tangent segments plus the remaining circular arc. Using the real
+        // boundary (not two touching triangles) avoids an interior AA seam.
+        let v = (point.0-b.0, point.1-b.1);
+        let distance = v.0.hypot(v.1);
+        let axis = (tip.0-b.0, tip.1-b.1);
+        let axis_length = axis.0.hypot(axis.1);
+        let chord = ((p.0-b.0)*axis.0 + (p.1-b.1)*axis.1)/(self.bevel.radius*axis_length);
+        let arc = if distance == 0.0 || (v.0*axis.0+v.1*axis.1)/(distance*axis_length) <= chord {
+            (distance-self.bevel.radius).abs()
+        } else { (point.0-p.0).hypot(point.1-p.1).min((point.0-q.0).hypot(point.1-q.1)) };
+        let boundary = arc.min(segment_distance(p, tip)).min(segment_distance(tip, q));
+        let cross = |a: Point, c: Point| (c.0-a.0)*(point.1-a.1)-(c.1-a.1)*(point.0-a.0);
+        let signs = [cross(p, tip), cross(tip, q), cross(q, p)];
+        let area = (tip.0-p.0)*(q.1-p.1)-(tip.1-p.1)*(q.0-p.0);
+        let in_triangle = area != 0.0 && (signs.iter().all(|s| *s>=0.0) || signs.iter().all(|s| *s<=0.0));
+        if distance <= self.bevel.radius || in_triangle { -boundary } else { boundary }
     }
 }
 
@@ -706,4 +775,59 @@ mod tests {
         assert_eq!(p.round_intervals(35.0,6.0,10).unwrap(),[(0.0,6.0),(15.0,21.0),(30.0,35.0)]);
     }
 
+}
+
+#[cfg(test)]
+mod miter_tests {
+    use super::*;
+    #[test]
+    fn miter_intersects_offset_edges_and_applies_dimensionless_limit() {
+        let points = [(0.0,0.0),(20.0,0.0),(20.0,20.0)];
+        let m = MiterJoin::new(points[0],points[1],points[2],4.0,200000).unwrap();
+        let b = MiterJoin::new(points[0],points[1],points[2],4.0,100000).unwrap();
+        let bevel = BevelJoin::new(points[0],points[1],points[2],4.0).unwrap();
+        assert_eq!(m.tip,Some((22.0,-2.0)));
+        assert!(m.signed_distance((21.8,-1.8))<0.0);
+        for p in [(21.8,-1.8),(20.0,0.0),(19.0,1.0),(30.0,30.0)] {
+            assert_eq!(b.signed_distance(p),bevel.signed_distance(p));
+        }
+        assert!(MiterJoin::new(points[0],points[1],points[2],4.0,141421).unwrap().tip.is_none());
+        assert!(MiterJoin::new(points[0],points[1],points[2],4.0,141422).unwrap().tip.is_some());
+    }
+    #[test]
+    fn miter_is_mirrored_scaled_and_reversed_without_an_angle_table() {
+        let a=(0.0,12.0);let b=(4.0,0.0);let c=(8.0,12.0);
+        let m=MiterJoin::new(a,b,c,4.0,800000).unwrap();
+        let rev=MiterJoin::new(c,b,a,4.0,800000).unwrap();
+        let reflect=|p:Point|(30.0-p.0*3.0,10.0+p.1*3.0);
+        let mirror=MiterJoin::new(reflect(a),reflect(b),reflect(c),12.0,800000).unwrap();
+        for p in [(4.0,-5.0),(3.5,-3.0),(0.0,0.0),(4.0,1.0),(20.0,20.0)] {
+            let d=m.signed_distance(p);
+            assert!((rev.signed_distance(p)-d).abs()<1e-10);
+            assert!((mirror.signed_distance(reflect(p))-d*3.0).abs()<1e-10);
+        }
+    }
+    #[test]
+    fn miter_boundary_has_no_artificial_chord_seam_and_expands_bounds() {
+        let m=MiterJoin::new((0.0,0.0),(20.0,0.0),(20.0,20.0),4.0,800000).unwrap();
+        assert!(m.signed_distance((21.0,-1.0)) < -0.9);
+        assert!(m.signed_distance((22.0,-2.0)).abs()<1e-12);
+        assert!(m.signed_distance((22.2,-2.2))>0.0);
+        let acute=MiterJoin::new((30.0,70.0),(40.0,30.0),(50.0,70.0),12.0,800000).unwrap();
+        assert!(acute.bounds().0.1<6.0);
+    }
+    #[test]
+    fn miter_degenerate_nonfinite_and_near_reversal_are_bounded() {
+        for c in [(20.0,0.0),(0.0,0.0),(f64::NAN,1.0)] {
+            assert!(MiterJoin::new((0.0,0.0),(10.0,0.0),c,4.0,800000).is_none());
+        }
+        assert!(MiterJoin::new((0.0,0.0),(10.0,0.0),(10.0,10.0),f64::INFINITY,800000).is_none());
+        let near=MiterJoin::new((0.0,0.0),(10.0,0.0),(0.0,0.000001),4.0,800000).unwrap();
+        assert!(near.tip.is_none());assert_eq!(near.bounds(),((8.0,-2.0),(12.0,2.0)));
+        assert!(near.signed_distance((10.0,0.0)).is_finite());
+        // A nearly straight floating-point triangle can have zero area. Its
+        // three zero cross products must not make every point inside.
+        let flat=MiterJoin::new((0.0,0.0),(10.0,0.0),(20.0,1e-14),4.0,800000).unwrap();
+        assert!(flat.signed_distance((10.0,-100.0))>90.0);
+    }
 }

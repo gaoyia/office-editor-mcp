@@ -5306,7 +5306,7 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                 }
             }
             "round" => {},
-            "bevel" if explicit_caps => {},
+            "bevel" | "miter" if explicit_caps => {},
             "miter" | "bevel" if cap == stroke::Cap::Round => {},
             "effectLst" => {
                 if child.element_children().next().is_some() {
@@ -5317,16 +5317,31 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
         }
     }
     if dash.is_some() && (!visible || ln.element_children().any(|child|
-        matches!(child.local_name(),"miter") ||
-        (child.local_name()=="solidFill" && child.element_children()
-            .any(|color| color.element_children().next().is_some())))) {
+        child.local_name()=="solidFill" && child.element_children()
+            .any(|color| color.element_children().next().is_some()))) {
         return Err(unsupported());
     }
     let joins:Vec<_>=ln.element_children().filter(|c|matches!(c.local_name(),"round"|"bevel"|"miter")).collect();
     if dash.is_some() {
-        if joins.len()>1 || joins.iter().any(|c|c.local_name()=="miter" || c.element_children().next().is_some() || c.attrs.iter().any(|(k,_)|!k.starts_with("xmlns"))) {return Err(unsupported());}
-        if joins.first().is_some_and(|c|c.local_name()=="bevel") {join=stroke::Join::Bevel;}
-    } else if cap!=stroke::Cap::Round && joins.iter().any(|c|c.local_name()=="bevel") {
+        if joins.len()>1 { return Err(unsupported()); }
+        if let Some(c)=joins.first() {
+            if c.element_children().next().is_some() || c.attrs.iter().any(|(k,_)|
+                !k.starts_with("xmlns") && !(c.local_name()=="miter" && k=="lim")) { return Err(unsupported()); }
+            join=match c.local_name() {
+                "bevel" => stroke::Join::Bevel,
+                "miter" => {
+                    // Office DrawingML default: 800%; verified against omitted
+                    // lim native controls, not an invented renderer constant.
+                    let limit=match c.attr_local("lim") {
+                        Some(v)=>v.parse::<i32>().ok().filter(|v| *v>=0).ok_or_else(unsupported)? as u32,
+                        None=>800000,
+                    };
+                    stroke::Join::Miter { limit }
+                },
+                _ => stroke::Join::Round,
+            };
+        }
+    } else if cap!=stroke::Cap::Round && joins.iter().any(|c|matches!(c.local_name(),"bevel"|"miter")) {
         // Do not silently widen legacy solid-cap handling.
         return Err(unsupported());
     }
@@ -6680,7 +6695,7 @@ impl Canvas {
     /// Max coverage is composited once: overlapping edges/retracing must not
     /// darken antialiased boundaries. Solid/one-edge legacy rasterizers are
     /// intentionally unchanged. The explicit custom-bevel branch below adds the
-    /// offset-edge hull; miter and exact reversal remain separate boundaries.
+    /// offset-edge hull; miter uses its limited intersection; exact reversal stays separate.
     fn stroke_custom_dash_union(&mut self, points: &[stroke::Point], width: f64,
         first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
         self.stroke_custom_dash_union_join(points,width,first,last,stroke::Join::Round,color);
@@ -6692,10 +6707,20 @@ impl Canvas {
         let edges:Vec<_>=run.segments().filter(|e| e.length>0.0).collect();
         let (Some(start),Some(end))=(edges.first(),edges.last()) else {return;};
         let pad=width/2.0+1.0;
-        let x0=((points.iter().map(|p|p.0).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
-        let x1=((points.iter().map(|p|p.0).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.w as i32-1);
-        let y0=((points.iter().map(|p|p.1).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
-        let y1=((points.iter().map(|p|p.1).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.h as i32-1);
+        let mut x0=((points.iter().map(|p|p.0).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let mut x1=((points.iter().map(|p|p.0).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.w as i32-1);
+        let mut y0=((points.iter().map(|p|p.1).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let mut y1=((points.iter().map(|p|p.1).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.h as i32-1);
+        let miters:Vec<_>=if let stroke::Join::Miter {limit}=join {
+            edges.windows(2).filter_map(|pair|stroke::MiterJoin::new(pair[0].from,pair[0].to,pair[1].to,width,limit)).collect()
+        } else {Vec::new()};
+        for g in &miters {
+            let (low,high)=g.bounds();
+            x0=x0.min(((low.0-1.0).floor() as i32).max(0));
+            x1=x1.max(((high.0+1.0).ceil() as i32).min(self.w as i32-1));
+            y0=y0.min(((low.1-1.0).floor() as i32).max(0));
+            y1=y1.max(((high.1+1.0).ceil() as i32).min(self.h as i32-1));
+        }
         if x1<x0 || y1<y0 {return;}
         // Allocation is clipped to this piece's canvas rectangle, never to
         // off-canvas coordinates or a new unbounded world-space surface.
@@ -6725,6 +6750,14 @@ impl Canvas {
                     let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];*slot=(*slot).max(alpha);
                 }}
             }
+        }
+        for g in &miters {
+            let (low,high)=g.bounds();let ax=((low.0-1.0).floor() as i32).max(x0);let bx=((high.0+1.0).ceil() as i32).min(x1);
+            let ay=((low.1-1.0).floor() as i32).max(y0);let by=((high.1+1.0).ceil() as i32).min(y1);
+            for y in ay..=by {for x in ax..=bx {
+                let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];*slot=(*slot).max(alpha);
+            }}
         }
         for y in y0..=y1 {for x in x0..=x1 {
             let alpha=mask[(y-y0) as usize*mw+(x-x0) as usize];
@@ -7976,6 +8009,55 @@ mod tests {
         }
     }
     #[test]
+    fn miter_custom_parser_validates_limits_without_expanding_other_strokes() {
+        for cap in ["flat","rnd","sq"] {
+            let make=|extra:&str|format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='10000000' sp='100000'/></custDash>{extra}</ln>");
+            for (tag,expected) in [("<miter/>",800000),("<miter lim='0'/>",0),("<miter lim='200000'/>",200000),("<miter lim='2147483647'/>",2147483647)] {
+                let doc=crate::xml::parse(make(tag).as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,stroke::Join::Miter {limit:expected});
+            }
+            if cap!="rnd" {
+                let solid=make("<miter/>").replace("<custDash><ds d='10000000' sp='100000'/></custDash>","");
+                let doc=crate::xml::parse(solid.as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
+            }
+            for bad in ["<miter lim='-1'/>","<miter lim='1.5'/>","<miter lim='NaN'/>","<miter lim='2147483648'/>","<miter lim='800%'/>","<miter other='1'/>","<miter><x/></miter>","<miter/><round/>"] {
+                let doc=crate::xml::parse(make(bad).as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err(),"{bad}");
+            }
+        }
+        let legacy=crate::xml::parse(b"<ln w='50800' cap='rnd'><solidFill><srgbClr val='175DB5'/></solidFill><miter/></ln>").unwrap();
+        assert_eq!(read_solid_ln(&legacy.root,FALLBACK_ACCENTS,6.0,RenderDpi::default()).unwrap().join,stroke::Join::Round);
+    }
+    #[test]
+    fn miter_true_tip_is_not_clipped_to_half_width_mask() {
+        let points=[(30.0,70.0),(40.0,30.0),(50.0,70.0)];let mut m=Canvas::new(80,80);let mut b=Canvas::new(80,80);
+        m.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Miter {limit:800000},[23,93,181]);
+        b.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Bevel,[23,93,181]);
+        let pixel=|c:&Canvas,x:usize,y:usize|c.px[(y*80+x)*3..(y*80+x+1)*3].to_vec();
+        assert_eq!(pixel(&m,40,12),vec![23,93,181]);assert_eq!(pixel(&b,40,12),vec![255,255,255]);
+        let mut limited=Canvas::new(80,80);limited.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Miter {limit:200000},[23,93,181]);assert_eq!(limited.px,b.px);
+    }
+    #[test]
+    fn miter_limit_round_trip_and_default_are_vertex_local() {
+        let make=|tag:&str| {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='10000000' sp='100000'/></a:custDash>{tag}</a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0),Some(10.0)],&extra),"")
+        };
+        let bevel=render_line(&make("<a:bevel/>")).unwrap();let one=render_line(&make("<a:miter lim='100000'/>")).unwrap();let two=render_line(&make("<a:miter lim='200000'/>")).unwrap();let eight=render_line(&make("<a:miter lim='800000'/>")).unwrap();
+        assert_eq!(bevel,one);assert_ne!(bevel,two);assert_ne!(two,eight);assert_eq!(eight,render_line(&make("<a:miter/>")).unwrap());
+    }
+    #[test]
+    fn miter_single_edge_short_dots_budget_and_offcanvas_are_preserved() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            for d in [25000.0,100000.0,10000000.0] {
+                let p=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let style=stroke::Style::new(6.0,cap).unwrap();let mut a=Canvas::new(100,50);let mut b=Canvas::new(100,50);
+                for (canvas,join) in [(&mut a,stroke::Join::Round),(&mut b,stroke::Join::Miter {limit:800000})] {stroke_run_pattern_join(canvas,&[(20.25,20.25),(70.25,20.25)],style,Some(&p),join,[23,93,181]).unwrap();}
+                assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);assert_eq!(a.custom_dash_budget,b.custom_dash_budget);
+            }
+        }
+        let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();let mut c=Canvas::new(80,60);c.custom_dash_budget=1;
+        stroke_run_pattern_join(&mut c,&[(-50.0,40.0),(40.0,-50.0),(130.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Miter {limit:800000},[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+        let before=c.px.clone();assert!(stroke_run_pattern_join(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Miter {limit:800000},[23,93,181]).is_err());assert_eq!(before,c.px);
+    }
+    #[test]
     fn bevel_is_irrelevant_for_a_single_edge_or_round_dot() {
         for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
             for d in [25000.0,100000.0,10000000.0] {
@@ -7989,11 +8071,11 @@ mod tests {
         }
     }
     #[test]
-    fn bevel_custom_parser_is_explicit_and_does_not_expand_miter_or_legacy_solid() {
+    fn bevel_custom_parser_is_explicit_and_does_not_expand_legacy_solid() {
         for cap in ["flat","sq","rnd"] {
             let xml=format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='10000000' sp='100000'/></custDash><bevel/></ln>");
             let doc=crate::xml::parse(xml.as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,stroke::Join::Bevel);
-            for bad in ["<miter lim='800000'/>","<bevel lim='1'/>","<bevel><x/></bevel>","<round/><bevel/>","<bevel/><bevel/>"] {
+            for bad in ["<miter lim='-1'/>","<bevel lim='1'/>","<bevel><x/></bevel>","<round/><bevel/>","<bevel/><bevel/>"] {
                 let doc=crate::xml::parse(xml.replace("<bevel/>",bad).as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
             }
         }
@@ -8012,7 +8094,7 @@ mod tests {
             let extra=format!("<c:spPr><a:ln w='101600' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='10000000' sp='100000'/></a:custDash><a:{join}/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
             standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0)],&extra),"")
         };
-        assert_ne!(render_line(&make("round")).unwrap(),render_line(&make("bevel")).unwrap());assert!(render_line(&make("miter")).is_err());
+        assert_ne!(render_line(&make("round")).unwrap(),render_line(&make("bevel")).unwrap());assert_ne!(render_line(&make("miter")).unwrap(),render_line(&make("bevel")).unwrap());
         let mut c=Canvas::new(80,60);c.custom_dash_budget=1;let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();
         stroke_run_pattern_join(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Bevel,[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
     }
@@ -8098,7 +8180,7 @@ mod tests {
             let parse=|xml:String| {let doc=crate::xml::parse(xml.as_bytes()).unwrap();read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true)};
             assert!(parse(make("<round/>",200000)).is_ok());
             assert!(parse(make("<bevel/>",200000)).is_ok());
-            assert!(parse(make("<miter/>",200000)).is_err());
+            assert!(parse(make("<miter/>",200000)).is_ok());
             let alpha=make("",200000).replace("val='175DB5'/>","val='175DB5'><alpha val='50000'/></srgbClr>");
             assert!(parse(alpha).is_err());
             for d in [1,25000,50000,100000] {assert!(parse(make("",d)).is_ok());}
