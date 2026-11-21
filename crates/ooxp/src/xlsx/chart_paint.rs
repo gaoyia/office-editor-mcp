@@ -3531,14 +3531,10 @@ fn stroke_run_dash_caps(canvas: &mut Canvas, points: &[(f64,f64)], width: f64,
         canvas.stroke_segment(points[0].0,points[0].1,points[0].0,points[0].1,width,color);
         return;
     }
-    let Some(run)=stroke::Run::new(points) else {return;};
-    let mut nonzero=run.segments().filter(|edge| edge.length>0.0);
-    let Some(start)=nonzero.next() else {return;};
-    let end=nonzero.last().map_or(start.index,|edge| edge.index);
-    for edge in run.segments().filter(|edge| edge.length>0.0) {
-        canvas.stroke_segment_capped(edge.from,edge.to,width,
-            if edge.index==start.index {first}else{stroke::Cap::Round},
-            if edge.index==end {last}else{stroke::Cap::Round},color);
+    if points.len()==2 {
+        canvas.stroke_segment_capped(points[0],points[1],width,first,last,color);
+    } else {
+        canvas.stroke_custom_dash_union(points,width,first,last,color);
     }
 }
 
@@ -6649,6 +6645,46 @@ impl Canvas {
         }
     }
 
+    /// One custom dash is one painted shape, including its round internal joins.
+    /// Max coverage is composited once: overlapping edges/retracing must not
+    /// darken antialiased boundaries. Solid/one-edge legacy rasterizers are
+    /// intentionally unchanged. This does not implement miter/bevel joins.
+    fn stroke_custom_dash_union(&mut self, points: &[stroke::Point], width: f64,
+        first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+        let Some(run)=stroke::Run::new(points) else {return;};
+        if !width.is_finite() || width<=0.0 {return;}
+        let edges:Vec<_>=run.segments().filter(|e| e.length>0.0).collect();
+        let (Some(start),Some(end))=(edges.first(),edges.last()) else {return;};
+        let pad=width/2.0+1.0;
+        let x0=((points.iter().map(|p|p.0).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let x1=((points.iter().map(|p|p.0).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.w as i32-1);
+        let y0=((points.iter().map(|p|p.1).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let y1=((points.iter().map(|p|p.1).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.h as i32-1);
+        if x1<x0 || y1<y0 {return;}
+        // Allocation is clipped to this piece's canvas rectangle, never to
+        // off-canvas coordinates or a new unbounded world-space surface.
+        let mw=(x1-x0+1) as usize;
+        let mut mask=vec![0u8;mw*(y1-y0+1) as usize];
+        for edge in &edges {
+            let Some(g)=stroke::CapSegment::new(edge.from,edge.to,width,
+                if edge.index==start.index {first}else{stroke::Cap::Round},
+                if edge.index==end.index {last}else{stroke::Cap::Round}) else {continue;};
+            let ax=((edge.from.0.min(edge.to.0)-pad).floor() as i32).max(x0);
+            let bx=((edge.from.0.max(edge.to.0)+pad).ceil() as i32).min(x1);
+            let ay=((edge.from.1.min(edge.to.1)-pad).floor() as i32).max(y0);
+            let by=((edge.from.1.max(edge.to.1)+pad).ceil() as i32).min(y1);
+            for y in ay..=by {for x in ax..=bx {
+                let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];
+                *slot=(*slot).max(alpha);
+            }}
+        }
+        for y in y0..=y1 {for x in x0..=x1 {
+            let alpha=mask[(y-y0) as usize*mw+(x-x0) as usize];
+            if alpha>0 {self.blend(x,y,color,alpha);}
+        }}
+    }
+
     fn stroke_segment_capped(&mut self, from: stroke::Point, to: stroke::Point, width: f64, first: stroke::Cap, last: stroke::Cap, color: [u8; 3]) {
         if first == stroke::Cap::Round && last == stroke::Cap::Round {
             // Accepted round pixels go through the untouched legacy rasterizer.
@@ -7892,6 +7928,49 @@ mod tests {
             assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err(),"{body}");
         }
     }
+    #[test]
+    fn custom_dash_union_retrace_does_not_reblend_boundary() {
+        let mut once=Canvas::new(80,60);let mut retrace=Canvas::new(80,60);
+        let a=(18.25,20.25);let b=(58.25,20.25);let color=[23,93,181];
+        stroke_run_dash_caps(&mut once,&[a,b],6.0,stroke::Cap::Round,stroke::Cap::Round,color);
+        stroke_run_dash_caps(&mut retrace,&[a,b,a],6.0,stroke::Cap::Round,stroke::Cap::Round,color);
+        assert_eq!(once.px,retrace.px);assert_eq!(once.alpha,retrace.alpha);
+    }
+    #[test]
+    fn custom_dash_union_matches_one_blend_of_max_coverage_at_turn() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            let points=[(18.25,40.25),(38.25,12.25),(58.25,40.25)];let width=6.0;let color=[23,93,181];
+            let mut actual=Canvas::new(80,60);let mut expected=Canvas::new(80,60);
+            stroke_run_dash_caps(&mut actual,&points,width,cap,cap,color);
+            let a=stroke::CapSegment::new(points[0],points[1],width,cap,stroke::Cap::Round).unwrap();
+            let b=stroke::CapSegment::new(points[1],points[2],width,stroke::Cap::Round,cap).unwrap();
+            for y in 0..60 {for x in 0..80 {
+                let p=(f64::from(x)+0.5,f64::from(y)+0.5);
+                let alpha=coverage(a.signed_distance(p),0.0).max(coverage(b.signed_distance(p),0.0));
+                if alpha>0 {expected.blend(x,y,color,alpha);}
+            }}
+            assert_eq!(actual.px,expected.px);assert_eq!(actual.alpha,expected.alpha);
+        }
+    }
+    #[test]
+    fn custom_dash_union_zero_edges_reverse_and_offcanvas_are_stable() {
+        let p=[(-30.25,20.25),(30.25,10.25),(90.25,20.25)];let mut reversed=p;reversed.reverse();
+        let mut a=Canvas::new(60,40);let mut b=Canvas::new(60,40);let mut c=Canvas::new(60,40);
+        for (canvas,points) in [(&mut a,p.as_slice()),(&mut b,reversed.as_slice()),(&mut c,&[p[0],p[0],p[1],p[1],p[2]])] {
+            stroke_run_dash_caps(canvas,points,6.0,stroke::Cap::Flat,stroke::Cap::Flat,[23,93,181]);
+        }
+        assert_eq!(a.px,b.px);assert_eq!(a.px,c.px);
+        let before=a.px.clone();a.stroke_custom_dash_union(&[(-100.0,-100.0),(-80.0,-60.0),(-50.0,-100.0)],6.0,stroke::Cap::Round,stroke::Cap::Round,[23,93,181]);assert_eq!(a.px,before);
+    }
+    #[test]
+    fn custom_dash_union_keeps_phase_and_piece_budget_across_true_turns() {
+        let mut c=Canvas::new(80,60);c.custom_dash_budget=1;
+        let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();
+        stroke_run_pattern(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),[23,93,181]).unwrap();
+        assert_eq!(c.custom_dash_budget,0);let before=c.px.clone();
+        assert!(stroke_run_pattern(&mut c,&[(10.0,50.0),(30.0,50.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),[23,93,181]).is_err());assert_eq!(c.px,before);
+    }
+
     #[test]
     fn round_dot_raster_reuses_one_existing_circle_and_is_invariant_below_one_pen() {
         let mut expected=None;
