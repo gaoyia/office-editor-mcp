@@ -755,6 +755,24 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Isolated absolute-alpha plus one RGB adjustment, in either evidenced order.
+/// ECMA20.1.2.3.1 sets opacity without changing color; the RGB operation changes
+/// one color component. Eighteen new paired native controls validate BOTH orders
+/// in this Excel sRGB-only profile; this does not reorder arbitrary transforms.
+/// Validate both operands even at zero opacity; preserve existing exact-alpha
+/// helpers/products and all other bases/mixed sequences unchanged.
+fn frame_rgb_adjustment_alpha(rgb: [u8; 3], adjustment: &Element, alpha: &Element) -> Option<FrameFill> {
+    let attrs: Vec<_> = alpha.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if alpha.local_name() != "alpha" || attrs.len() != 1 || attrs[0].0 != "val"
+        || alpha.element_children().next().is_some()
+        || !alpha.text_content().trim().is_empty()
+    { return None; }
+    let opacity = u32::try_from(parse_frame_integer(&attrs[0].1)?).ok()?;
+    if opacity > 100_000 { return None; }
+    let rgb = frame_rgb_adjustment(rgb, adjustment)?;
+    Some(if opacity == 100_000 { FrameFill::Solid(rgb) } else { FrameFill::Translucent(rgb, opacity) })
+}
+
 /// Excel-only standalone RGB-channel modulation/offset, normal-domain subset.
 /// ECMA20.1.2.3.5/.6/.11/.12/.24/.25 specify component multiplication/addition
 /// and result bounds0..100%. Its encoded-byte examples differ from our new
@@ -1187,6 +1205,16 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
+        ["redMod", "alpha"] | ["greenMod", "alpha"] | ["blueMod", "alpha"]
+        | ["redOff", "alpha"] | ["greenOff", "alpha"] | ["blueOff", "alpha"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_adjustment_alpha(rgb, kids[0], kids[1]).ok_or_else(unsupported)
+        }
+        ["alpha", "redMod"] | ["alpha", "greenMod"] | ["alpha", "blueMod"]
+        | ["alpha", "redOff"] | ["alpha", "greenOff"] | ["alpha", "blueOff"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_adjustment_alpha(rgb, kids[1], kids[0]).ok_or_else(unsupported)
+        }
         ["redMod"] | ["greenMod"] | ["blueMod"] | ["redOff"] | ["greenOff"] | ["blueOff"] => {
             // Three new scheme controls diverged from the declared theme/reference.
             // Do not guess their style source or widen scheme/new-base semantics.
@@ -9606,6 +9634,78 @@ mod tests {
     }
 
     #[test]
+    fn rgb_alpha_order_all_six_adjustments_both_isolated_orders() {
+        for (name,rgb) in [("redMod",[92,128,128]),("greenMod",[128,92,128]),("blueMod",[128,128,92]),("redOff",[152,128,128]),("greenOff",[128,152,128]),("blueOff",[128,128,152])] {
+            let value=if name.ends_with("Mod") {50000} else {10000};
+            for opacity in [33333,50000,100000] {
+                let expected=if opacity==100000 {FrameFill::Solid(rgb)} else {FrameFill::Translucent(rgb,opacity)};
+                for before in [false,true] {
+                    let a=format!("<alpha val='{opacity}'/>");let c=format!("<{name} val='{value}'/>");let transforms=if before {format!("{a}{c}")} else {format!("{c}{a}")};
+                    let d=crate::xml::parse(format!("<srgbClr val='808080'>{transforms}</srgbClr>").as_bytes()).unwrap();
+                    assert_eq!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).unwrap(),expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_sets_opacity_not_product_with_rgb_modulation() {
+        let c=crate::xml::parse(b"<redMod val='50000'/>").unwrap();
+        for (a,expected) in [(0,FrameFill::Translucent([92,128,128],0)),(50000,FrameFill::Translucent([92,128,128],50000)),(100000,FrameFill::Solid([92,128,128]))] {
+            let alpha=crate::xml::parse(format!("<alpha val='{a}'/>").as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&alpha.root),Some(expected));
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_strict_alpha_leaf_integer_namespace_and_duplicate_contract() {
+        let c=crate::xml::parse(b"<redMod val='50000'/>").unwrap();
+        for xml in ["<alpha/>","<alpha val='-1'/>","<alpha val='100001'/>","<alpha val='50%'/>","<alpha val='+1'/>","<alpha val=' 1'/>","<alpha val='1.0'/>","<alpha val='2147483648'/>","<alpha val='1' extra='0'/>","<alpha val='1'><redMod val='0'/></alpha>","<alpha val='1'>opacity</alpha>","<alpha xmlns:x='urn:test' x:val='1'/>","<alphaMod val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&d.root),None,"{xml}");
+        }
+        let mut a=crate::xml::parse(b"<alpha val='50000'/>").unwrap();a.root.attrs.push(("val".to_owned(),"100000".to_owned()));assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&a.root),None);
+        let a=crate::xml::parse(b"<a:alpha xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>\n</a:alpha>").unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&a.root),Some(FrameFill::Translucent([92,128,128],50000)));
+    }
+
+    #[test]
+    fn rgb_alpha_order_validates_adjustment_even_when_fully_transparent() {
+        let alpha=crate::xml::parse(b"<alpha val='0'/>").unwrap();
+        for xml in ["<redMod val='200000'/>","<redMod val='-1'/>","<redOff val='100001'/>","<redMod val='50000' extra='0'/>","<redMod val='50000'><alpha val='1'/></redMod>","<red val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&d.root,&alpha.root),None);
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_preserves_scheme_new_bases_and_all_other_mixed_gates() {
+        for xml in ["<schemeClr val='accent1'><redMod val='50000'/><alpha val='50000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><alpha val='50000'/><redMod val='50000'/></sysClr>","<prstClr val='red'><alpha val='50000'/><redMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/><redMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alpha val='50000'/><redMod val='50000'/></scrgbClr>","<srgbClr val='808080'><redMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='808080'><alpha val='50000'/><redMod val='50000'/><alpha val='50000'/></srgbClr>","<srgbClr val='808080'><redMod val='50000'/><redOff val='10000'/><alpha val='50000'/></srgbClr>","<srgbClr val='808080'><red val='50000'/><alpha val='50000'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_frame_plot_and_rgb_reference_match_at_three_dpis() {
+        for plot in [false,true] {
+            for before in [false,true] {
+                for opacity in [33333,50000,100000] {
+                    let a=format!("<a:alpha val='{opacity}'/>");let c="<a:redMod val='50000'/>";let transforms=if before {format!("{a}{c}")} else {format!("{c}{a}")};
+                    let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='808080'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='5C8080'>{a}</a:srgbClr></a:solidFill></c:spPr>");
+                    let make=|fill:&str|if plot {LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};let x=crate::xml::parse(make(&fill).as_bytes()).unwrap();let y=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                    for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&x.root),render(&y.root));}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_full_opacity_keeps_standalone_adjustment_pixels() {
+        let a=crate::xml::parse(b"<srgbClr val='808080'><redOff val='10000'/></srgbClr>").unwrap();let b=crate::xml::parse(b"<srgbClr val='808080'><alpha val='100000'/><redOff val='10000'/></srgbClr>").unwrap();let scheme=theme_scheme(None,FALLBACK_ACCENTS);assert_eq!(resolve_frame_solid(&a.root,&scheme).unwrap(),resolve_frame_solid(&b.root,&scheme).unwrap());
+    }
+
+    #[test]
+    fn rgb_alpha_order_does_not_enable_slide_frame_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='808080'><a:alpha val='50000'/><a:redMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
     fn rgb_adjustment_linear_arithmetic_and_untouched_channels() {
         for (channel,index) in [("red",0),("green",1),("blue",2)] {
             for (kind,value,expected) in [("Mod",0,0),("Mod",50000,92),("Mod",100000,128),("Off",-10000,96),("Off",10000,152),("Off",-100000,0),("Off",100000,255)] {
@@ -9677,7 +9777,7 @@ mod tests {
 
     #[test]
     fn rgb_adjustment_unverified_scheme_new_base_and_mixed_gates_remain_ni() {
-        for xml in ["<schemeClr val='accent1'><redMod val='50000'/></schemeClr>","<schemeClr val='accent1'><blueOff val='10000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><redMod val='50000'/></sysClr>","<prstClr val='red'><redMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><redMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><redMod val='50000'/></scrgbClr>","<srgbClr val='808080'><redMod val='50000'/><alpha val='50000'/></srgbClr>","<srgbClr val='808080'><redMod val='50000'/><redOff val='10000'/></srgbClr>","<srgbClr val='808080'><redOff val='10000'/><greenOff val='10000'/></srgbClr>"] {
+        for xml in ["<schemeClr val='accent1'><redMod val='50000'/></schemeClr>","<schemeClr val='accent1'><blueOff val='10000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><redMod val='50000'/></sysClr>","<prstClr val='red'><redMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><redMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><redMod val='50000'/></scrgbClr>","<srgbClr val='808080'><redMod val='50000'/><alpha val='100001'/></srgbClr>","<srgbClr val='808080'><redMod val='50000'/><redOff val='10000'/></srgbClr>","<srgbClr val='808080'><redOff val='10000'/><greenOff val='10000'/></srgbClr>"] {
             let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
         }
     }
