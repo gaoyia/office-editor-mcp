@@ -497,3 +497,65 @@ fn export_chartsheet_uses_a4_page_canvas_at_106_dpi() {
     let height = u32::from_be_bytes(sheet[20..24].try_into().unwrap());
     assert_eq!((width, height), (1077, 704));
 }
+
+/// Public API-derived regression packages, not official Office gold fixtures.
+#[test]
+fn export_chartsheet_jis_b5_both_entries_match_native_canvas_matrix() {
+    let src = create_book("cs-b5-native-matrix");
+    for (orientation, cases) in [
+        (
+            "portrait",
+            [(0.5, 640, 954), (0.75, 587, 901), (1.0, 534, 848)],
+        ),
+        (
+            "landscape",
+            [(0.5, 954, 640), (0.75, 901, 587), (1.0, 848, 534)],
+        ),
+    ] {
+        for (margin, width, height) in cases {
+            let charted = tmp("cs-b5-native-matrix-ins");
+            apply(
+                &src,
+                &charted,
+                json!([
+                    insert_op(),
+                    {"op": "setPrintSetup", "id": "sheet:Chart1", "paperSize": 13,
+                     "orientation": orientation, "left": margin, "right": margin,
+                     "top": margin, "bottom": margin}
+                ]),
+            )
+            .unwrap();
+            let before = std::fs::read(&charted).unwrap();
+            let mut rendered = Vec::new();
+            for (action, id) in [
+                ("exportSheetImage", "sheet:Chart1"),
+                ("exportChartImage", "sheet:Chart1/chart:2"),
+            ] {
+                let output = tmp("cs-b5-native-render").with_extension("png");
+                assert!(matches!(
+                    run(&json!({
+                        "schemaVersion": 1, "action": action, "id": id,
+                        "path": charted.to_string_lossy(), "dpi": 106,
+                        "output": output.to_string_lossy()
+                    })
+                    .to_string())
+                    .unwrap(),
+                    RunOutput::Written { .. }
+                ));
+                let png = std::fs::read(output).unwrap();
+                assert_eq!(&png[..8], &[137, 80, 78, 71, 13, 10, 26, 10]);
+                assert_eq!(
+                    (
+                        u32::from_be_bytes(png[16..20].try_into().unwrap()),
+                        u32::from_be_bytes(png[20..24].try_into().unwrap())
+                    ),
+                    (width, height),
+                    "{orientation} margin={margin} {action}"
+                );
+                rendered.push(png);
+            }
+            assert_eq!(rendered[0], rendered[1]);
+            assert_eq!(std::fs::read(&charted).unwrap(), before);
+        }
+    }
+}
