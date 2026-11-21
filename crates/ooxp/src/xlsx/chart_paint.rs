@@ -727,6 +727,14 @@ fn frame_hue_offset(rgb: [u8; 3], offset: i32) -> [u8; 3] {
     hsl_rgb((hue + f64::from(offset) / (360.0 * 60_000.0)).rem_euclid(1.0), sat, light)
 }
 
+/// An alpha offset adds signed percentage points, not a multiplicative ratio.
+/// Only integer-thousandth operands are admitted here; exact alphaMod products
+/// and unverified transform mixtures continue through their existing paths.
+fn frame_alpha_off_fill(rgb: [u8; 3], initial: u32, offset: i32) -> FrameFill {
+    let alpha = (i64::from(initial) + i64::from(offset)).clamp(0, 100_000) as u32;
+    if alpha == 100_000 { FrameFill::Solid(rgb) } else { FrameFill::Translucent(rgb, alpha) }
+}
+
 /// Two integer-thousandth opacity operands retain their exact product until
 /// final 8-bit coverage conversion. Rounding to an intermediate percentage
 /// loses the distinction between 50000*33333 and 50001*33333 at the 42/43 edge.
@@ -780,6 +788,13 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
         ["alpha"] => frame_alpha_fill(rgb, kids[0]),
+        ["alphaOff"] => Ok(frame_alpha_off_fill(rgb, 100_000, parse_luminance_offset(kids[0]).ok_or_else(unsupported)?)),
+        ["alpha", "alphaOff"] => Ok(frame_alpha_off_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
+        ["alphaOff", "alpha"] => {
+            // A later absolute alpha overrides, but does not excuse an invalid offset.
+            parse_luminance_offset(kids[0]).ok_or_else(unsupported)?;
+            Ok(frame_alpha_off_fill(rgb, frame_initial_alpha(kids[1]).ok_or_else(unsupported)?, 0))
+        }
         ["hueOff"] => Ok(FrameFill::Solid(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
         ["hueOff", "alpha"] => frame_alpha_fill(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
         ["alphaMod"] => Ok(frame_alpha_mod_fill(rgb, 100_000, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?)),
@@ -8854,6 +8869,62 @@ mod tests {
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transform}");
         }
+    }
+
+    #[test]
+    fn alpha_off_adds_percentage_points_not_a_multiplier() {
+        let c=[21,96,130];
+        assert_eq!(frame_alpha_off_fill(c,40_000,10_000),FrameFill::Translucent(c,50_000));
+        assert_eq!(frame_alpha_off_fill(c,40_000,-10_000),FrameFill::Translucent(c,30_000));
+        assert_eq!(frame_alpha_off_fill(c,100_000,-50_000),FrameFill::Translucent(c,50_000));
+    }
+    #[test]
+    fn alpha_off_clamps_at_transparent_and_opaque_with_wide_safe_arithmetic() {
+        let c=[21,96,130];
+        assert_eq!(frame_alpha_off_fill(c,40_000,-50_000),FrameFill::Translucent(c,0));
+        assert_eq!(frame_alpha_off_fill(c,40_000,100_000),FrameFill::Solid(c));
+        assert_eq!(frame_alpha_off_fill(c,100_000,100_000),FrameFill::Solid(c));
+        assert_eq!(frame_alpha_off_fill(c,0,i32::MIN),FrameFill::Translucent(c,0));
+        assert_eq!(frame_alpha_off_fill(c,100_000,i32::MAX),FrameFill::Solid(c));
+    }
+    #[test]
+    fn alpha_off_signed_fixed_percentage_range_and_structure_are_strict() {
+        for v in [-100_000,-50_000,0,50_000,100_000] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='{v}'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_ok());
+        }
+        for attrs in ["","val='-100001'","val='100001'","val='-2147483648'","val='10%'","val='0.1'","val='10000' other='1'"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff {attrs}/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{attrs}");
+        }
+    }
+    #[test]
+    fn alpha_off_later_absolute_alpha_overrides_but_validates_offset() {
+        for off in [-100_000,10_000] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='{off}'/><a:alpha val='40000'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).unwrap(),FrameFill::Translucent([21,96,130],40_000));
+        }
+        let xml="<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='100001'/><a:alpha val='40000'/></a:srgbClr>";let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+    }
+    #[test]
+    fn alpha_off_explicit_alpha_operand_stays_structurally_fixed() {
+        for a in ["<a:alpha val='100001'/>","<a:alpha val='-1'/>","<a:alpha val='40000' other='1'/>"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{a}<a:alphaOff val='-100000'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+        }
+    }
+    #[test]
+    fn alpha_off_theme_preserves_base_rgb_and_uses_existing_coverage() {
+        let xml="<a:schemeClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='accent1'><a:alphaOff val='-50000'/></a:schemeClr>";let d=crate::xml::parse(xml.as_bytes()).unwrap();let scheme=theme_scheme(Some(OFFICE16_THEME.as_bytes()),FALLBACK_ACCENTS);assert_eq!(resolve_frame_solid(&d.root,&scheme).unwrap(),FrameFill::Translucent([21,96,130],50_000));assert_eq!(ooxml_alpha_to_u8(50_000),128);
+    }
+    #[test]
+    fn alpha_off_chart_plot_match_existing_alpha_references_at_three_dpis() {
+        for plot in [false,true] {
+            for (off,reference) in [(-50_000,0),(-10_000,30_000),(10_000,50_000),(100_000,100_000)] {
+                let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='40000'/><a:alphaOff val='{off}'/></a:srgbClr></a:solidFill></c:spPr>");let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{reference}'/></a:srgbClr></a:solidFill></c:spPr>");let make=|fill:&str|if plot{LONG_LEGEND.replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};let d=crate::xml::parse(make(&fill).as_bytes()).unwrap();let reference=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for v in [96,106,144]{let dpi=RenderDpi::from_request(serde_json::json!({"dpi":v}).as_object().unwrap()).unwrap();let render=|r:&Element|render_chart_at(r,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&d.root),render(&reference.root),"plot={plot} off={off} dpi={v}");}
+            }
+        }
+    }
+    #[test]
+    fn alpha_off_unverified_mixed_repeated_and_nested_sequences_remain_ni() {
+        for t in ["<a:alphaOff val='-10000'/><a:alphaOff val='10000'/>","<a:alphaMod val='50000'/><a:alphaOff val='10000'/>","<a:hueOff val='600000'/><a:alphaOff val='10000'/>","<a:alphaOff val='10000'><a:alpha val='40000'/></a:alphaOff>","<a:alpha val='40000'/><a:alphaOff val='10000'/><a:alpha val='40000'/>"]{let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{t}</a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{t}");}
     }
 
     #[test]
