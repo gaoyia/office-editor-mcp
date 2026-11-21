@@ -755,6 +755,42 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Strict integer spelling shared by the new HSL base-color attributes.
+/// Keep existing transform parsers untouched; percent strings and other
+/// otherwise legal OOXML spellings are outside this explicit profile.
+fn parse_frame_integer(raw: &str) -> Option<i32> {
+    let digits = raw.strip_prefix('-').unwrap_or(raw);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
+}
+
+/// Untransformed DrawingML HSL base color. Use the existing perceptual HSL
+/// conversion in its normal domain, not a guessed extrapolation or extra
+/// gamma stage. Transforms on this new base remain explicitly unsupported.
+fn parse_frame_hsl_color(node: &Element) -> Option<[u8; 3]> {
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if node.local_name() != "hslClr"
+        || attrs.len() != 3
+        || attrs.iter().any(|(name, _)| !matches!(name.as_str(), "hue" | "sat" | "lum"))
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    let hue = parse_frame_integer(node.attr_local("hue")?)?;
+    let sat = parse_frame_integer(node.attr_local("sat")?)?;
+    let lum = parse_frame_integer(node.attr_local("lum")?)?;
+    if !(0..21_600_000).contains(&hue)
+        || !(0..=100_000).contains(&sat)
+        || !(0..=100_000).contains(&lum)
+    {
+        return None;
+    }
+    Some(hsl_rgb(f64::from(hue) / 21_600_000.0, f64::from(sat) / 100_000.0, f64::from(lum) / 100_000.0))
+}
+
 /// DrawingML CT_PositivePercentage uses ST_Percentage (i32) with minimum 0.
 /// It is not alpha's bounded 0..100000 percentage. Keep the same strict node
 /// and integer-thousandth lexical contract as the other new color transforms.
@@ -824,6 +860,9 @@ fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
 fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let rgb = match color.local_name() {
+        // Return before generic transform dispatch: this base is supported
+        // only without transforms. Excel frame/plot entry guards are unchanged.
+        "hslClr" => return parse_frame_hsl_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
         "srgbClr" => color
             .attr_local("val")
             .and_then(parse_hex)
@@ -9245,6 +9284,103 @@ mod tests {
             let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn hsl_base_normal_model_primary_secondary_and_nonsector_colors() {
+        for (h, s, l, rgb) in [(0, 100_000, 50_000, [255, 0, 0]), (3_600_000, 100_000, 50_000, [255, 255, 0]), (7_200_000, 100_000, 50_000, [0, 255, 0]), (10_800_000, 100_000, 50_000, [0, 255, 255]), (14_400_000, 100_000, 50_000, [0, 0, 255]), (18_000_000, 100_000, 50_000, [255, 0, 255]), (0, 100_000, 25_000, [128, 0, 0]), (0, 100_000, 75_000, [255, 128, 128]), (2_700_000, 50_000, 50_000, [191, 159, 64])] {
+            let xml = format!("<hslClr hue='{h}' sat='{s}' lum='{l}'/>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_frame_hsl_color(&doc.root), Some(rgb));
+        }
+    }
+
+    #[test]
+    fn hsl_base_normal_model_gray_black_white_and_angle_boundaries() {
+        for hue in [0, 1, 7_200_000, 21_599_999] {
+            for (lum, gray) in [(0, 0), (25_000, 64), (50_000, 128), (75_000, 191), (100_000, 255)] {
+                let doc = crate::xml::parse(format!("<hslClr hue='{hue}' sat='0' lum='{lum}'/>").as_bytes()).unwrap();
+                assert_eq!(parse_frame_hsl_color(&doc.root), Some([gray; 3]));
+            }
+            for sat in [0, 25_000, 100_000] {
+                for (lum, rgb) in [(0, [0; 3]), (100_000, [255; 3])] {
+                    let doc = crate::xml::parse(format!("<hslClr hue='{hue}' sat='{sat}' lum='{lum}'/>").as_bytes()).unwrap();
+                    assert_eq!(parse_frame_hsl_color(&doc.root), Some(rgb));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hsl_base_requires_exact_three_named_attributes_and_no_transforms() {
+        for xml in ["<hslClr/>", "<hslClr hue='0' sat='100000'/>", "<hslClr h='0' s='100000' l='50000'/>", "<hslClr hue='0' sat='100000' lum='50000' val='1'/>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='100000'/></hslClr>", "<hslClr hue='0' sat='100000' lum='50000'><hue val='60000'/></hslClr>", "<hslClr hue='0' sat='100000' lum='50000'>color</hslClr>", "<srgbClr hue='0' sat='100000' lum='50000'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(parse_frame_hsl_color(&d.root).is_none(), "{xml}");
+        }
+        let d = crate::xml::parse(b"<hslClr hue='0' sat='100000' lum='50000'> 
+ </hslClr>").unwrap();
+        assert_eq!(parse_frame_hsl_color(&d.root), Some([255, 0, 0]));
+    }
+
+    #[test]
+    fn hsl_base_strict_integer_normal_ranges_do_not_guess_wrap_or_clamp() {
+        for raw in ["", "+1", " 1", "1 ", "1.0", "50%", "1e2", "2147483648", "-2147483649", "--1"] {
+            assert_eq!(parse_frame_integer(raw), None, "{raw}");
+        }
+        for (h, s, l) in [(-1, 50_000, 50_000), (21_600_000, 50_000, 50_000), (i32::MAX, 0, 0), (0, -1, 50_000), (0, 100_001, 50_000), (0, 50_000, -1), (0, 50_000, 100_001)] {
+            let d = crate::xml::parse(format!("<hslClr hue='{h}' sat='{s}' lum='{l}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_frame_hsl_color(&d.root), None);
+        }
+        assert_eq!(parse_frame_integer("-2147483648"), Some(i32::MIN));
+        assert_eq!(parse_frame_integer("2147483647"), Some(i32::MAX));
+    }
+
+    #[test]
+    fn hsl_base_is_theme_independent_but_existing_srgb_theme_paths_remain() {
+        let d = crate::xml::parse(b"<a:hslClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' hue='14400000' sat='100000' lum='50000'/>").unwrap();
+        for theme in [None, Some(OFFICE16_THEME.as_bytes())] {
+            assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(theme, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid([0, 0, 255]));
+        }
+        let d = crate::xml::parse(b"<srgbClr val='156082'/>").unwrap();
+        assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid([21, 96, 130]));
+    }
+
+    #[test]
+    fn hsl_base_frame_and_contrasting_plot_match_declared_rgb_at_three_dpis() {
+        for plot in [false, true] {
+            for (h, s, l, rgb) in [(3_600_000, 100_000, 25_000, "7F8000"), (14_400_000, 50_000, 75_000, "9F9FDF")] {
+                let fill = format!("<c:spPr><a:solidFill><a:hslClr hue='{h}' sat='{s}' lum='{l}'/></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hsl_base_does_not_enable_frame_rendering_in_the_slide_host() {
+        let fill = "<c:spPr><a:solidFill><a:hslClr hue='0' sat='100000' lum='50000'/></a:solidFill></c:spPr>";
+        let a = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render = |root: &Element, host| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, host, None, "").unwrap();
+        assert_eq!(render(&a.root, ChartHost::Slide), render(&b.root, ChartHost::Slide));
+        assert_ne!(render(&a.root, ChartHost::Excel), render(&b.root, ChartHost::Excel));
+    }
+
+    #[test]
+    fn hsl_base_duplicate_fill_and_other_color_model_gates_are_preserved() {
+        let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><hslClr hue='0' sat='100000' lum='50000'/><srgbClr val='FF0000'/></solidFill></spPr></chartSpace>").unwrap();
+        assert!(read_frame_fill(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<prstClr val='red'/>", "<scrgbClr r='100000' g='0' b='0'/>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{xml}");
         }
     }
 
