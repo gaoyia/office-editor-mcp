@@ -718,6 +718,30 @@ fn frame_hue(rgb: [u8; 3], factor: u32) -> [u8; 3] {
     hsl_rgb((hue * f64::from(factor) / 100_000.0).rem_euclid(1.0), sat, light)
 }
 
+/// Two integer-thousandth opacity operands retain their exact product until
+/// final 8-bit coverage conversion. Rounding to an intermediate percentage
+/// loses the distinction between 50000*33333 and 50001*33333 at the 42/43 edge.
+const ALPHA_PRODUCT_DENOM: u64 = 100_000 * 100_000;
+
+fn frame_alpha_mod_fill(rgb: [u8; 3], initial: u32, factor: u32) -> FrameFill {
+    let product = (u64::from(initial) * u64::from(factor)).min(ALPHA_PRODUCT_DENOM);
+    if product == ALPHA_PRODUCT_DENOM {
+        FrameFill::Solid(rgb)
+    } else if product % 100_000 == 0 {
+        FrameFill::Translucent(rgb, (product / 100_000) as u32)
+    } else {
+        FrameFill::AlphaProduct(rgb, product)
+    }
+}
+
+fn alpha_product_to_u8(product: u64) -> u8 {
+    ((product * 255 + ALPHA_PRODUCT_DENOM / 2) / ALPHA_PRODUCT_DENOM) as u8
+}
+
+fn frame_initial_alpha(node: &Element) -> Option<u32> {
+    parse_positive_percentage(node).filter(|alpha| *alpha <= 100_000)
+}
+
 fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let alpha = parse_ooxml_alpha(alpha.attr_local("val")).ok_or_else(unsupported)?;
@@ -747,6 +771,15 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
         ["alpha"] => frame_alpha_fill(rgb, kids[0]),
+        ["alphaMod"] => Ok(frame_alpha_mod_fill(rgb, 100_000, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?)),
+        ["alpha", "alphaMod"] => Ok(frame_alpha_mod_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_positive_percentage(kids[1]).ok_or_else(unsupported)?)),
+        ["alphaMod", "alpha"] => {
+            // Absolute alpha sets the new opacity; it does not multiply it.
+            // Still validate the overwritten operand rather than ignoring it.
+            parse_positive_percentage(kids[0]).ok_or_else(unsupported)?;
+            Ok(frame_alpha_mod_fill(rgb, frame_initial_alpha(kids[1]).ok_or_else(unsupported)?, 100_000))
+        }
+
         ["tint"] => Ok(FrameFill::Solid(frame_tint(rgb, pct(kids[0])?))),
         ["tint", "alpha"] => frame_alpha_fill(frame_tint(rgb, pct(kids[0])?), kids[1]),
         ["shade"] => Ok(FrameFill::Solid(frame_shade(rgb, pct(kids[0])?))),
@@ -867,6 +900,13 @@ pub(crate) fn render_chart_with_theme(
                     canvas.fill_rect_cov(0, 0, width as i32, height as i32, color, cov);
                 }
             }
+            FrameFill::AlphaProduct(color, product) => {
+                canvas.clear_to_transparent();
+                let cov = alpha_product_to_u8(product);
+                if cov > 0 {
+                    canvas.fill_rect_cov(0, 0, width as i32, height as i32, color, cov);
+                }
+            }
             FrameFill::Linear(grad) => {
                 canvas.fill_linear_rect(0, 0, width as i32, height as i32, &grad)
             }
@@ -890,6 +930,9 @@ pub(crate) fn render_chart_with_theme(
                 FrameFill::Translucent(color, alpha) => {
                     Some(PlotPaint::Solid(color, ooxml_alpha_to_u8(alpha)))
                 }
+                FrameFill::AlphaProduct(color, product) => {
+                    Some(PlotPaint::Solid(color, alpha_product_to_u8(product)))
+                }
                 FrameFill::Linear(grad) => Some(PlotPaint::Linear(grad)),
             }
         };
@@ -912,6 +955,9 @@ enum FrameFill {
     /// Straight sRGB fill with DrawingML alpha in 0..=100000, excluding 100000
     /// (that case is `Solid`).
     Translucent([u8; 3], u32),
+    /// Exact product of two percentage integers, denominator 100000^2.
+    /// Only nonintegral-percent, nonopaque new alphaMod inputs use this path.
+    AlphaProduct([u8; 3], u64),
     Linear(LinearFrameGrad),
     NoFill,
 }
@@ -8800,6 +8846,101 @@ mod tests {
     }
 
     #[test]
+    fn alpha_mod_standalone_uses_opaque_input_and_caps_at_one() {
+        let rgb = [21, 96, 130];
+        for (factor, expected) in [(0, FrameFill::Translucent(rgb, 0)), (25_000, FrameFill::Translucent(rgb, 25_000)), (50_000, FrameFill::Translucent(rgb, 50_000)), (100_000, FrameFill::Solid(rgb)), (200_000, FrameFill::Solid(rgb)), (i32::MAX as u32, FrameFill::Solid(rgb))] {
+            assert_eq!(frame_alpha_mod_fill(rgb, 100_000, factor), expected);
+        }
+    }
+
+    #[test]
+    fn alpha_mod_multiplies_explicit_input_before_clamping() {
+        let rgb = [21, 96, 130];
+        assert_eq!(frame_alpha_mod_fill(rgb, 40_000, 50_000), FrameFill::Translucent(rgb, 20_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 40_000, 200_000), FrameFill::Translucent(rgb, 80_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_000, 200_000), FrameFill::Solid(rgb));
+        assert_eq!(frame_alpha_mod_fill(rgb, 0, i32::MAX as u32), FrameFill::Translucent(rgb, 0));
+    }
+
+    #[test]
+    fn alpha_mod_fractional_products_avoid_intermediate_percentage_rounding() {
+        let rgb = [21, 96, 130];
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_000, 33_333), FrameFill::AlphaProduct(rgb, 1_666_650_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_001, 33_333), FrameFill::AlphaProduct(rgb, 1_666_683_333));
+        assert_eq!(alpha_product_to_u8(1_666_650_000), 42);
+        assert_eq!(alpha_product_to_u8(1_666_683_333), 43);
+        assert_eq!(alpha_product_to_u8(0), 0);
+        assert_eq!(alpha_product_to_u8(ALPHA_PRODUCT_DENOM), 255);
+    }
+
+    #[test]
+    fn alpha_mod_ordered_absolute_alpha_overrides_modulation() {
+        for factor in [50_000, 200_000] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaMod val='{factor}'/><a:alpha val='40000'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Translucent([21, 96, 130], 40_000));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_resolves_srgb_and_theme_without_changing_rgb() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:alphaMod val='50000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Translucent([21, 96, 130], 50_000));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_strict_inputs_reject_negative_and_extra_structure() {
+        for transforms in ["<a:alphaMod/>", "<a:alphaMod val='-1'/>", "<a:alphaMod val='2147483648'/>", "<a:alphaMod val='+50000'/>", "<a:alphaMod val='50%'/>", "<a:alphaMod val='0.5'/>", "<a:alphaMod val='50000' other='1'/>", "<a:alphaMod val='50000'><a:alpha val='50000'/></a:alphaMod>", "<a:alpha val='100001'/><a:alphaMod val='50000'/>", "<a:alpha val='50000' other='1'/><a:alphaMod val='50000'/>", "<a:alphaMod val='-1'/><a:alpha val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn alpha_mod_chart_and_plot_fractional_products_match_coverage_at_three_dpis() {
+        for plot in [false, true] {
+            for (initial, reference) in [(50_000, 16_666), (50_001, 16_667)] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{initial}'/><a:alphaMod val='33333'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{reference}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} initial={initial} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn alpha_mod_straight_rgba_keeps_color_and_final_coverage() {
+        let fill = "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='50001'/><a:alphaMod val='33333'/></a:srgbClr></a:solidFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let image = render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap()).unwrap();
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(image)).read_info().unwrap();
+        let mut buffer = vec![0; decoder.output_buffer_size()];
+        let info = decoder.next_frame(&mut buffer).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        assert!(buffer[..info.buffer_size()].chunks_exact(4).filter(|px| *px == [21, 96, 130, 43]).count() > 100);
+    }
+
+    #[test]
+    fn alpha_mod_unverified_other_color_sequences_remain_unsupported() {
+        for transforms in ["<a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:alpha val='50000'/><a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:hueMod val='50000'/><a:alphaMod val='50000'/>", "<a:alphaMod val='50000'/><a:satMod val='50000'/>", "<a:lumOff val='10000'/><a:alphaMod val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
     fn hue_percentage_accepts_zero_and_modulation_above_one_turn() {
         for value in [0, 50_000, 100_000, 200_000, 300_000, i32::MAX] {
             let doc = crate::xml::parse(format!("<hueMod val='{value}'/>").as_bytes()).unwrap();
@@ -9034,7 +9175,7 @@ mod tests {
             "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
             "<c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
             "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>",
-            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
