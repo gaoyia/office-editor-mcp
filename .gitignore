@@ -12,6 +12,10 @@ manual-check/**
 !manual-check/**/
 !manual-check/README.md
 !manual-check/**/*.ps1
+# Handwritten MC-safe control derivation and regression tests, not evidence outputs.
+!manual-check/derive-controlled-chart-without-legend.py
+!manual-check/lib/controlled_chart_fixture.py
+!manual-check/lib/test_controlled_chart_fixture.py
 !manual-check/office/image-corpus.md
 !manual-check/**/requests/*.json
 # 产物、日志和脚本生成的请求都不入库
