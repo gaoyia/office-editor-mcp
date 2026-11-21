@@ -330,6 +330,12 @@ struct ColumnChart {
     first_slice_ang: f64,
     /// Pie per-point fill overrides (dPt). Empty for other kinds.
     point_colors: Vec<Option<[u8; 3]>>,
+    /// Official series-level pie fill. None when the series has no explicit fill.
+    /// When present, it applies to every slice even if varyColors=1, and a dPt
+    /// fill override still wins for that point.
+    series_fill: Option<SliceFill>,
+    /// Pie per-point fill overrides, including noFill (alpha 0) and straight alpha.
+    point_fills: Vec<Option<SliceFill>>,
     /// Series-level pie explosion percent. Zero when omitted or explicitly 0.
     pie_explosion: f64,
     /// Per-point pie explosion percent (dPt). Empty or all-zero when none.
@@ -1764,18 +1770,19 @@ fn read_chart(
     } else {
         0.0
     };
-    let (point_colors, pie_explosion, point_explosions) = if kind == PlotKind::Pie {
-        if series.len() != 1 {
-            return Err(unsupported());
-        }
-        let ser = wrapper
-            .element_children()
-            .find(|el| el.local_name() == "ser")
-            .ok_or_else(unsupported)?;
-        read_pie_point_colors(ser, accents, n, dpi)?
-    } else {
-        (Vec::new(), 0.0, Vec::new())
-    };
+    let (point_colors, pie_explosion, point_explosions, series_fill, point_fills) =
+        if kind == PlotKind::Pie {
+            if series.len() != 1 {
+                return Err(unsupported());
+            }
+            let ser = wrapper
+                .element_children()
+                .find(|el| el.local_name() == "ser")
+                .ok_or_else(unsupported)?;
+            read_pie_point_colors(ser, accents, n, dpi)?
+        } else {
+            (Vec::new(), 0.0, Vec::new(), None, Vec::new())
+        };
     if kind == PlotKind::Pie {
         // Official Excel 16 public pies paint finite non-zero values at |v|
         // even when every value is negative. All-zero and all-empty pies keep
@@ -1935,6 +1942,8 @@ fn read_chart(
         kind,
         first_slice_ang,
         point_colors,
+        series_fill,
+        point_fills,
         pie_explosion,
         point_explosions,
         area_missing_as_zero,
@@ -2669,20 +2678,32 @@ fn pie_plot_bounds(
     })
 }
 
-fn pie_slice_color(chart: &ColumnChart, index: usize) -> [u8; 3] {
-    if let Some(Some(color)) = chart.point_colors.get(index) {
-        return *color;
+fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
+    if let Some(Some(fill)) = chart.point_fills.get(index) {
+        return *fill;
     }
-    if chart.vary_points {
+    // RGB cache of a non-noFill dPt override; point_fills already won above
+    // when both are populated together.
+    if let Some(Some(color)) = chart.point_colors.get(index) {
+        return SliceFill {
+            color: *color,
+            alpha: 255,
+        };
+    }
+    if let Some(fill) = chart.series_fill {
+        return fill;
+    }
+    let color = if chart.vary_points {
         chart.accents[index % 6]
     } else {
         chart.series[0]
             .color
             .unwrap_or(chart.accents[chart.series[0].slot % 6])
-    }
+    };
+    SliceFill { color, alpha: 255 }
 }
 
-fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
+fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, SliceFill)> {
     let ser = &chart.series[0];
     chart
         .categories
@@ -2696,7 +2717,7 @@ fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
                 // the pie legend and keeps their accent slot. Finite negatives
                 // stay in the legend as well, because they take a |v| slice.
                 Some(value) if !value.is_finite() => None,
-                _ => Some((name.clone(), pie_slice_color(chart, index))),
+                _ => Some((name.clone(), pie_slice_fill(chart, index))),
             }
         })
         .collect()
@@ -2752,17 +2773,17 @@ fn draw_pie_legend(
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
-    for (name, color) in items {
-        draw_plot_key(
-            canvas,
-            PlotKind::Pie,
-            x,
-            y,
-            x + canvas.dpi.scale_px(LEGEND_SWATCH),
-            y + canvas.dpi.scale_px(LEGEND_SWATCH),
-            color,
-            MarkerKind::None,
-        );
+    for (name, fill) in items {
+        if fill.alpha > 0 {
+            canvas.fill_rect_cov(
+                x,
+                y,
+                x + canvas.dpi.scale_px(LEGEND_SWATCH),
+                y + canvas.dpi.scale_px(LEGEND_SWATCH),
+                fill.color,
+                fill.alpha,
+            );
+        }
         draw_text(
             canvas,
             font,
@@ -2833,7 +2854,10 @@ fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
         let mid_rad = mid.to_radians();
         let ox = cx + mid_rad.sin() * offset;
         let oy = cy - mid_rad.cos() * offset;
-        canvas.fill_wedge(ox, oy, r_draw, start, end, pie_slice_color(chart, index));
+        let fill = pie_slice_fill(chart, index);
+        if fill.alpha > 0 {
+            canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+        }
         start = end;
     }
 }
@@ -5207,7 +5231,7 @@ fn read_pie_series_style(
         }
     }
     if let Some(sp) = ser.child_by_local("spPr") {
-        reject_pie_sp_pr(sp, accents, dpi)?;
+        let _ = read_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
         color: series_color(ser, accents),
@@ -5218,17 +5242,119 @@ fn read_pie_series_style(
     })
 }
 
-fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6], dpi: RenderDpi) -> Result<(), Error> {
+/// Official Excel 16 hidden-fill memory on a pie noFill. The remembered
+/// solid is not painted; the visible fill is noFill.
+const PIE_HIDDEN_FILL_URI: &str = "{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SliceFill {
+    color: [u8; 3],
+    alpha: u8,
+}
+
+fn pie_color_node(slot: &Element) -> Option<&Element> {
+    slot.child_by_local("srgbClr")
+        .or_else(|| slot.child_by_local("sysClr"))
+        .or_else(|| slot.child_by_local("schemeClr"))
+        .or_else(|| {
+            if matches!(slot.local_name(), "srgbClr" | "sysClr" | "schemeClr") {
+                Some(slot)
+            } else {
+                None
+            }
+        })
+}
+
+fn pie_solid_fill(slot: &Element, accents: &[[u8; 3]; 6]) -> Result<SliceFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let color = color_of_slot(slot, accents).ok_or_else(unsupported)?;
+    let Some(node) = pie_color_node(slot) else {
+        return Err(unsupported());
+    };
+    let mut alpha = 255u8;
+    let mut saw_alpha = false;
+    for child in node.element_children() {
+        match child.local_name() {
+            "alpha" => {
+                if saw_alpha {
+                    return Err(unsupported());
+                }
+                saw_alpha = true;
+                let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                let val = raw
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 100_000.0)
+                    .ok_or_else(unsupported)?;
+                alpha = ooxml_alpha_to_u8(val.round() as u32);
+            }
+            "alphaMod" | "alphaOff" => return Err(unsupported()),
+            "lumMod" | "lumOff" | "shade" | "tint" => {
+                // Opaque F07 transforms already resolve through color_of_slot.
+                // Official pie evidence did not lock those transforms with a
+                // non-opaque alpha, so that combination stays NI.
+                if saw_alpha || color_has_non_opaque_alpha(slot) {
+                    return Err(unsupported());
+                }
+            }
+            _ => {}
+        }
+    }
+    if alpha < 255 && node.local_name() != "srgbClr" {
+        return Err(unsupported());
+    }
+    Ok(SliceFill { color, alpha })
+}
+
+fn pie_hidden_fill_memory(ext_lst: &Element) -> bool {
+    let mut count = 0;
+    for ext in ext_lst.element_children() {
+        if ext.local_name() != "ext" {
+            return false;
+        }
+        count += 1;
+        let uri = ext.attr_local("uri").unwrap_or("");
+        if uri != PIE_HIDDEN_FILL_URI {
+            return false;
+        }
+        let mut kids = ext.element_children();
+        let Some(hidden) = kids.next() else {
+            return false;
+        };
+        if kids.next().is_some() || hidden.local_name() != "hiddenFill" {
+            return false;
+        }
+    }
+    count == 1
+}
+
+fn read_pie_sp_pr(
+    sp: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<Option<SliceFill>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut fill = None;
+    let mut no_fill = false;
     for child in sp.element_children() {
         match child.local_name() {
             "solidFill" => {
-                if color_has_non_opaque_alpha(child) {
+                if no_fill || fill.is_some() {
                     return Err(unsupported());
                 }
-                let _ = color_of_slot(child, &accents).ok_or_else(unsupported)?;
+                fill = Some(pie_solid_fill(child, &accents)?);
             }
-            "noFill" | "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
+            "noFill" => {
+                if no_fill || fill.is_some() {
+                    return Err(unsupported());
+                }
+                no_fill = true;
+                fill = Some(SliceFill {
+                    color: [0, 0, 0],
+                    alpha: 0,
+                });
+            }
+            "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
             "ln" => {
                 let line = read_solid_ln(child, accents, 0.0, dpi)?;
                 if line.visible {
@@ -5240,10 +5366,15 @@ fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6], dpi: RenderDpi) -> Resu
                     return Err(unsupported());
                 }
             }
+            "extLst" => {
+                if !no_fill || !pie_hidden_fill_memory(child) {
+                    return Err(unsupported());
+                }
+            }
             _ => return Err(unsupported()),
         }
     }
-    Ok(())
+    Ok(fill)
 }
 
 fn read_pie_point_colors(
@@ -5251,14 +5382,28 @@ fn read_pie_point_colors(
     accents: [[u8; 3]; 6],
     n: usize,
     dpi: RenderDpi,
-) -> Result<(Vec<Option<[u8; 3]>>, f64, Vec<f64>), Error> {
+) -> Result<
+    (
+        Vec<Option<[u8; 3]>>,
+        f64,
+        Vec<f64>,
+        Option<SliceFill>,
+        Vec<Option<SliceFill>>,
+    ),
+    Error,
+> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let pie_explosion = match number_val(ser, "explosion") {
         Some(v) if v.is_finite() && v >= 0.0 => v,
         None => 0.0,
         _ => return Err(unsupported()),
     };
+    let series_fill = match ser.child_by_local("spPr") {
+        Some(sp) => read_pie_sp_pr(sp, accents, dpi)?,
+        None => None,
+    };
     let mut colors = vec![None; n];
+    let mut point_fills = vec![None; n];
     let mut point_explosions = vec![0.0; n];
     for dpt in ser.element_children().filter(|el| el.local_name() == "dPt") {
         let idx = number_val(dpt, "idx").ok_or_else(unsupported)?;
@@ -5266,7 +5411,11 @@ fn read_pie_point_colors(
             return Err(unsupported());
         }
         let idx = idx as usize;
-        if idx >= n || colors[idx].is_some() || point_explosions[idx] != 0.0 {
+        if idx >= n
+            || colors[idx].is_some()
+            || point_fills[idx].is_some()
+            || point_explosions[idx] != 0.0
+        {
             return Err(unsupported());
         }
         if let Some(explosion) = number_val(dpt, "explosion") {
@@ -5300,13 +5449,15 @@ fn read_pie_point_colors(
             }
         }
         if let Some(sp) = dpt.child_by_local("spPr") {
-            reject_pie_sp_pr(sp, accents, dpi)?;
-            if let Some(fill) = sp.child_by_local("solidFill") {
-                colors[idx] = Some(color_of_slot(fill, &accents).ok_or_else(unsupported)?);
+            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi)? {
+                point_fills[idx] = Some(fill);
+                if fill.alpha > 0 {
+                    colors[idx] = Some(fill.color);
+                }
             }
         }
     }
-    Ok((colors, pie_explosion, point_explosions))
+    Ok((colors, pie_explosion, point_explosions, series_fill, point_fills))
 }
 
 struct AreaSeriesStyle {
@@ -6267,6 +6418,7 @@ impl Canvas {
         start_deg: f64,
         end_deg: f64,
         color: [u8; 3],
+        alpha: u8,
     ) {
         if radius <= 0.0
             || !cx.is_finite()
@@ -6294,6 +6446,7 @@ impl Canvas {
                 let dy = py - cy;
                 let dist = dx.hypot(dy);
                 let cov = coverage(dist, radius);
+                let cov = ((u16::from(cov) * u16::from(alpha) + 127) / 255) as u8;
                 if cov == 0 {
                     continue;
                 }
@@ -11743,6 +11896,144 @@ mod tests {
     }
 
     #[test]
+    fn pie_slice_fills_reuse_locked_solid_alpha_and_nofill() {
+        let vals = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let with_plot = |xml: String| {
+            xml.replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='FFFFCC'/></a:solidFill></c:spPr>",
+            )
+        };
+        let src_over = |src: [u8; 3], dst: [u8; 3], cov: u8| -> [u8; 3] {
+            let src_a = u16::from(cov);
+            std::array::from_fn(|k| {
+                ((u16::from(src[k]) * src_a + u16::from(dst[k]) * (255 - src_a) + 127) / 255) as u8
+            })
+        };
+        let exact = |rgb: &[u8], w: u32, h: u32, color: [u8; 3]| {
+            let mut n = 0usize;
+            for i in 0..(w * h) as usize {
+                if rgb[i * 3..i * 3 + 3] == color {
+                    n += 1;
+                }
+            }
+            n
+        };
+
+        let ser_solid = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_solid);
+        assert!(
+            exact(&rgb, w, h, [255, 0, 0]) >= 200,
+            "series solidFill should paint every slice even when varyColors=1"
+        );
+        for accent in &FALLBACK_ACCENTS[..4] {
+            assert!(
+                exact(&rgb, w, h, *accent) < 40,
+                "varyColors must not keep accent slices once the series has an explicit solid"
+            );
+        }
+
+        let cov = ooxml_alpha_to_u8(50_000);
+        assert_eq!(cov, 128);
+        let plot = [255, 255, 204];
+        let red_over_plot = src_over([255, 0, 0], plot, cov);
+        assert_eq!(red_over_plot, [255, 127, 102]);
+        let ser_alpha = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_alpha);
+        assert!(
+            exact(&rgb, w, h, red_over_plot) >= 200,
+            "series alpha 50000 should use locked straight alpha over the plot fill"
+        );
+        assert_eq!(exact(&rgb, w, h, [255, 0, 0]), 0);
+
+        let hidden = r#"<c:spPr><a:noFill/><a:extLst><a:ext uri="{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}"><a14:hiddenFill xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>"#;
+        let ser_nofill = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(0, "S1", &vals, hidden),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_nofill);
+        assert!(exact(&rgb, w, h, plot) >= 200, "series noFill shows the plot");
+        assert_eq!(exact(&rgb, w, h, [255, 0, 0]), 0);
+        assert_eq!(exact(&rgb, w, h, [0x15, 0x60, 0x82]), 0);
+        for accent in &FALLBACK_ACCENTS[..4] {
+            assert_eq!(
+                exact(&rgb, w, h, *accent),
+                0,
+                "series noFill should not paint accent wedges or keys"
+            );
+        }
+
+        let pt_nofill = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                &format!(r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/>{hidden}</c:dPt>"#),
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&pt_nofill);
+        assert_eq!(
+            exact(&rgb, w, h, FALLBACK_ACCENTS[0]),
+            0,
+            "dPt noFill removes that slice and its legend key"
+        );
+        for accent in &FALLBACK_ACCENTS[1..4] {
+            assert!(
+                exact(&rgb, w, h, *accent) >= 80,
+                "other slices stay on the default accent"
+            );
+        }
+
+        let lime_over_plot = src_over([0, 255, 0], plot, cov);
+        assert_eq!(lime_over_plot, [127, 255, 102]);
+        let mixed = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>
+          <c:dPt><c:idx val="1"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></c:spPr></c:dPt>
+          <c:dPt><c:idx val="2"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="00FF00"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr></c:dPt>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&mixed);
+        assert!(exact(&rgb, w, h, [255, 0, 0]) >= 80, "unoverridden slices use the series solid");
+        assert!(exact(&rgb, w, h, [0, 0, 255]) >= 80, "dPt solid overrides that slice");
+        assert!(
+            exact(&rgb, w, h, lime_over_plot) >= 80,
+            "dPt alpha overrides that slice with locked straight alpha"
+        );
+    }
+
+    #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
@@ -11805,7 +12096,7 @@ mod tests {
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                    r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
                 ),
                 "",
                 "",
