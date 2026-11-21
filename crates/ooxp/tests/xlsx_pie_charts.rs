@@ -246,15 +246,30 @@ fn read_existing_pie_chart_part_exports_and_unsupported_details_stay_ni() {
     let err = export_chart_png(&doughnut_path, "sheet:Sheet1/chart:1", "doughnut-png").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 
-    let exploded = if xml.contains("explosion") {
-        xml.clone()
+    let exploded = if decorated.contains("<c:explosion") {
+        decorated.clone()
     } else {
-        xml.replacen("<c:ser>", "<c:ser><c:explosion val=\"10\"/>", 1)
+        decorated.replacen("<c:ser>", "<c:ser><c:explosion val=\"10\"/>", 1)
     };
     let exploded_path = tmp("read-exploded");
     rewrite_part(&book, &exploded_path, &part, &exploded);
-    let err = export_chart_png(&exploded_path, "sheet:Sheet1/chart:1", "exploded-png").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let exploded_before = std::fs::read(&exploded_path).unwrap();
+    let exploded_png = export_chart_png(&exploded_path, "sheet:Sheet1/chart:1", "exploded-png").unwrap();
+    assert_eq!(std::fs::read(&exploded_path).unwrap(), exploded_before);
+    let exploded_bytes = std::fs::read(&exploded_png).unwrap();
+    assert_ne!(
+        exploded_bytes,
+        std::fs::read(&png_path).unwrap(),
+        "series explosion should not paint the unexploded pie"
+    );
+    let (ew, eh, ergbd) = decode_rgb(&exploded_bytes);
+    assert_eq!((ew, eh), (576, 336));
+    let red_hits = count_color(&ergbd, DPT_RED, 18);
+    let a2_hits = count_color(&ergbd, ACCENT2, 18);
+    assert!(
+        red_hits >= 40 && a2_hits >= 80,
+        "exploded pie should still paint the dPt and second slice colors; red={red_hits} a2={a2_hits}"
+    );
 }
 
 #[test]

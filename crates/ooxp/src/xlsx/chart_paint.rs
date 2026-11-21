@@ -330,6 +330,10 @@ struct ColumnChart {
     first_slice_ang: f64,
     /// Pie per-point fill overrides (dPt). Empty for other kinds.
     point_colors: Vec<Option<[u8; 3]>>,
+    /// Series-level pie explosion percent. Zero when omitted or explicitly 0.
+    pie_explosion: f64,
+    /// Per-point pie explosion percent (dPt). Empty or all-zero when none.
+    point_explosions: Vec<f64>,
     /// Official Excel 16.0 area charts with omitted c:dispBlanksAs plot
     /// missing cells / omitted cache points as 0 (a V to the baseline).
     /// Explicit dispBlanksAs=gap still leaves a hole. Unused for other kinds.
@@ -1760,7 +1764,7 @@ fn read_chart(
     } else {
         0.0
     };
-    let point_colors = if kind == PlotKind::Pie {
+    let (point_colors, pie_explosion, point_explosions) = if kind == PlotKind::Pie {
         if series.len() != 1 {
             return Err(unsupported());
         }
@@ -1770,7 +1774,7 @@ fn read_chart(
             .ok_or_else(unsupported)?;
         read_pie_point_colors(ser, accents, n, dpi)?
     } else {
-        Vec::new()
+        (Vec::new(), 0.0, Vec::new())
     };
     if kind == PlotKind::Pie {
         // Official Excel 16 public pies paint finite non-zero values at |v|
@@ -1931,6 +1935,8 @@ fn read_chart(
         kind,
         first_slice_ang,
         point_colors,
+        pie_explosion,
+        point_explosions,
         area_missing_as_zero,
     })
 }
@@ -2791,6 +2797,19 @@ fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
     if radius <= 0.5 {
         return;
     }
+    // Official Excel 16 series explosion shrinks the pie about the same
+    // center by 1/(1+e/100) and offsets every slice along its bisector by
+    // (e/100)*R' so the outer radius stays R. A single dPt explosion leaves
+    // the other slices and R unchanged and offsets only that slice by
+    // (e/100)*R along its bisector. Series and dPt explosion together are
+    // not uniquely locked and stay NI at read time.
+    let series_exp = chart.pie_explosion;
+    let scale = if series_exp > 0.0 {
+        1.0 / (1.0 + series_exp / 100.0)
+    } else {
+        1.0
+    };
+    let r_draw = radius * scale;
     let mut start = chart.first_slice_ang.rem_euclid(360.0);
     for (index, value) in ser.values.iter().enumerate() {
         let Some(value) = *value else {
@@ -2800,7 +2819,21 @@ fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
             continue;
         }
         let end = start + 360.0 * (value.abs() / sum);
-        canvas.fill_wedge(cx, cy, radius, start, end, pie_slice_color(chart, index));
+        let mid = (start + end) / 2.0;
+        let point_exp = chart
+            .point_explosions
+            .get(index)
+            .copied()
+            .unwrap_or(0.0);
+        let offset = if series_exp > 0.0 {
+            (series_exp / 100.0) * r_draw
+        } else {
+            (point_exp / 100.0) * radius
+        };
+        let mid_rad = mid.to_radians();
+        let ox = cx + mid_rad.sin() * offset;
+        let oy = cy - mid_rad.cos() * offset;
+        canvas.fill_wedge(ox, oy, r_draw, start, end, pie_slice_color(chart, index));
         start = end;
     }
 }
@@ -5165,8 +5198,11 @@ fn read_pie_series_style(
             return Err(unsupported());
         }
     }
+    // Series explosion is applied in draw_pie_slices after the category
+    // domain is known. A non-zero value is accepted here and validated
+    // together with dPt explosion in read_pie_point_colors.
     if let Some(explosion) = number_val(ser, "explosion") {
-        if explosion != 0.0 {
+        if !explosion.is_finite() || explosion < 0.0 {
             return Err(unsupported());
         }
     }
@@ -5215,29 +5251,50 @@ fn read_pie_point_colors(
     accents: [[u8; 3]; 6],
     n: usize,
     dpi: RenderDpi,
-) -> Result<Vec<Option<[u8; 3]>>, Error> {
+) -> Result<(Vec<Option<[u8; 3]>>, f64, Vec<f64>), Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    if let Some(explosion) = number_val(ser, "explosion") {
-        if explosion != 0.0 {
-            return Err(unsupported());
-        }
-    }
+    let pie_explosion = match number_val(ser, "explosion") {
+        Some(v) if v.is_finite() && v >= 0.0 => v,
+        None => 0.0,
+        _ => return Err(unsupported()),
+    };
     let mut colors = vec![None; n];
+    let mut point_explosions = vec![0.0; n];
     for dpt in ser.element_children().filter(|el| el.local_name() == "dPt") {
         let idx = number_val(dpt, "idx").ok_or_else(unsupported)?;
         if !idx.is_finite() || idx < 0.0 || idx.fract() != 0.0 {
             return Err(unsupported());
         }
         let idx = idx as usize;
-        if idx >= n || colors[idx].is_some() {
+        if idx >= n || colors[idx].is_some() || point_explosions[idx] != 0.0 {
             return Err(unsupported());
         }
         if let Some(explosion) = number_val(dpt, "explosion") {
-            if explosion != 0.0 {
+            if !explosion.is_finite() || explosion < 0.0 {
+                return Err(unsupported());
+            }
+            // Official point explosion and series explosion were not written
+            // together; that combination stays NI.
+            if pie_explosion != 0.0 && explosion != 0.0 {
+                return Err(unsupported());
+            }
+            point_explosions[idx] = explosion;
+        }
+        if let Some(bubble) = dpt.child_by_local("bubble3D") {
+            // Official exploded dPt writes bubble3D=0 on a 2D pie; treat that
+            // as a no-op. Other values stay NI.
+            let val = bubble
+                .attr_local("val")
+                .unwrap_or("1")
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .ok_or_else(unsupported)?;
+            if val != 0.0 {
                 return Err(unsupported());
             }
         }
-        for name in ["invertIfNegative", "marker", "bubble3D", "pictureOptions"] {
+        for name in ["invertIfNegative", "marker", "pictureOptions"] {
             if dpt.child_by_local(name).is_some() {
                 return Err(unsupported());
             }
@@ -5249,7 +5306,7 @@ fn read_pie_point_colors(
             }
         }
     }
-    Ok(colors)
+    Ok((colors, pie_explosion, point_explosions))
 }
 
 struct AreaSeriesStyle {
@@ -11549,6 +11606,143 @@ mod tests {
     }
 
     #[test]
+    fn pie_explosion_follows_official_series_shrink_and_point_bisector() {
+        let vals = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let ctrl = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let exp0 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="0"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(ctrl, exp0, "explicit explosion 0 should match an omitted explosion");
+
+        let ser10 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="10"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        let ser25 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="25"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(ser10, ctrl, "series explosion 10 should move the slices");
+        assert_ne!(ser25, ser10, "series explosion 25 is not the same as 10");
+
+        let (w, h, ctrl_rgb) = png_rgb(&ctrl);
+        let (_, _, s10_rgb) = png_rgb(&ser10);
+        let (_, _, s25_rgb) = png_rgb(&ser25);
+        let accents = [
+            FALLBACK_ACCENTS[0],
+            FALLBACK_ACCENTS[1],
+            FALLBACK_ACCENTS[2],
+            FALLBACK_ACCENTS[3],
+        ];
+        let ctrl_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&ctrl_rgb, w, h, *c, 2).expect("ctrl slice"))
+            .collect();
+        let s10_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&s10_rgb, w, h, *c, 2).expect("ser10 slice"))
+            .collect();
+        let s25_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&s25_rgb, w, h, *c, 2).expect("ser25 slice"))
+            .collect();
+        let cx: f64 = ctrl_c.iter().map(|c| c.0).sum::<f64>() / 4.0;
+        let cy: f64 = ctrl_c.iter().map(|c| c.1).sum::<f64>() / 4.0;
+        for i in 0..4 {
+            let r0 = ((ctrl_c[i].0 - cx).hypot(ctrl_c[i].1 - cy)).max(1.0);
+            let r10 = (s10_c[i].0 - cx).hypot(s10_c[i].1 - cy);
+            let r25 = (s25_c[i].0 - cx).hypot(s25_c[i].1 - cy);
+            assert!(
+                r10 > r0 && r25 > r10,
+                "series explosion should move slice {i} outward; r0={r0:.2} r10={r10:.2} r25={r25:.2}"
+            );
+            assert!(
+                s10_c[i].2 < ctrl_c[i].2 && s25_c[i].2 < s10_c[i].2,
+                "series explosion should shrink slice {i} area; n0={} n10={} n25={}",
+                ctrl_c[i].2,
+                s10_c[i].2,
+                s25_c[i].2
+            );
+        }
+
+        let pt_a = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/><c:explosion val="20"/></c:dPt>"#,
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        let pt_b = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:dPt><c:idx val="1"/><c:bubble3D val="0"/><c:explosion val="20"/></c:dPt>"#,
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(pt_a, ctrl);
+        assert_ne!(pt_b, ctrl);
+        assert_ne!(pt_a, pt_b);
+        let (_, _, a_rgb) = png_rgb(&pt_a);
+        let (_, _, b_rgb) = png_rgb(&pt_b);
+        let a_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&a_rgb, w, h, *c, 2).expect("ptA slice"))
+            .collect();
+        let b_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&b_rgb, w, h, *c, 2).expect("ptB slice"))
+            .collect();
+        let dx_a = a_c[0].0 - ctrl_c[0].0;
+        let dy_a = a_c[0].1 - ctrl_c[0].1;
+        let ang_a = dx_a.atan2(-dy_a).to_degrees();
+        assert!(
+            dy_a < -8.0 && ang_a > 10.0 && ang_a < 26.0,
+            "point A explosion should move the first slice up along its ~18 deg bisector; d=({dx_a:.2},{dy_a:.2}) ang={ang_a:.1}"
+        );
+        for i in 1..4 {
+            let d = (a_c[i].0 - ctrl_c[i].0).hypot(a_c[i].1 - ctrl_c[i].1);
+            assert!(
+                d < 2.0,
+                "unexploded slices should stay put on a point-A explosion; slice {i} moved {d:.2}"
+            );
+        }
+        let dx_b = b_c[1].0 - ctrl_c[1].0;
+        let dy_b = b_c[1].1 - ctrl_c[1].1;
+        let ang_b = dx_b.atan2(-dy_b).to_degrees();
+        assert!(
+            dx_b > 8.0 && ang_b > 64.0 && ang_b < 80.0,
+            "point B explosion should move the second slice along its ~72 deg bisector; d=({dx_b:.2},{dy_b:.2}) ang={ang_b:.1}"
+        );
+        for i in [0, 2, 3] {
+            let d = (b_c[i].0 - ctrl_c[i].0).hypot(b_c[i].1 - ctrl_c[i].1);
+            assert!(
+                d < 2.0,
+                "unexploded slices should stay put on a point-B explosion; slice {i} moved {d:.2}"
+            );
+        }
+    }
+
+    #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
@@ -11585,12 +11779,13 @@ mod tests {
                 "",
             ),
             standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),
+            // Leftover: series explosion plus a dPt explosion is not uniquely locked.
             standard_pie_xml(
                 &line_ser(
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:explosion val="10"/>"#,
+                    r#"<c:explosion val="10"/><c:dPt><c:idx val="0"/><c:explosion val="20"/></c:dPt>"#,
                 ),
                 "",
                 "",
@@ -11600,7 +11795,7 @@ mod tests {
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:dPt><c:idx val="0"/><c:explosion val="8"/></c:dPt>"#,
+                    r#"<c:dPt><c:idx val="0"/><c:bubble3D val="1"/><c:explosion val="20"/></c:dPt>"#,
                 ),
                 "",
                 "",
