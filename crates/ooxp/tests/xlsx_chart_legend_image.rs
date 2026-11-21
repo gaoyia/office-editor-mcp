@@ -371,3 +371,35 @@ fn mixed_entry_font_widths_keep_a_shared_vertical_key_column() {
         assert_eq!(right([21, 96, 130]), right([233, 113, 50]));
     }
 }
+
+#[test]
+fn legend_key_and_pitch_follow_family_cells_not_only_point_size() {
+    let measure = |family, size| {
+        let legend = format!("<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz='{size}'><a:latin typeface='{family}'/></a:defRPr></a:pPr></a:p></c:txPr></c:legend>");
+        let (w, _, pixels) = pixels(&legend);
+        let key = |color| {
+            let x = pixels
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| **c == color)
+                .map(|(i, _)| i % w)
+                .max()
+                .unwrap();
+            let ys: Vec<_> = pixels
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| **c == color && i % w == x)
+                .map(|(i, _)| i / w)
+                .collect();
+            (*ys.iter().min().unwrap(), *ys.iter().max().unwrap())
+        };
+        let a = key([21, 96, 130]);
+        let b = key([233, 113, 50]);
+        (a.1 - a.0 + 1, b.0 - a.0)
+    };
+    let arial = measure("Arial", 1800);
+    let segoe = measure("Segoe UI", 1800);
+    let large = measure("Arial", 2400);
+    assert!(segoe.0 > arial.0 && segoe.1 > arial.1);
+    assert!(large.0 > arial.0 && large.1 > arial.1);
+}

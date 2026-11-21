@@ -895,6 +895,38 @@ mod win {
                 .unwrap_or(12.0)
         }
 
+        /// Design ascent + descent at this face's point size and export DPI.
+        /// Unlike TEXTMETRIC height this excludes device-rounded internal/extra
+        /// leading, so different families retain their real typographic cells.
+        pub fn cell_height(&self) -> Option<f64> {
+            gdiplus_token()?;
+            let mut name: Vec<u16> = self.name.encode_utf16().collect();
+            name.push(0);
+            unsafe {
+                let mut family = std::ptr::null_mut();
+                if GdipCreateFontFamilyFromName(name.as_ptr(), std::ptr::null_mut(), &mut family)
+                    != 0
+                    || family.is_null()
+                {
+                    return None;
+                }
+                let (mut em, mut ascent, mut descent) = (0u16, 0u16, 0u16);
+                let style = self.gdip_style();
+                let valid = GdipGetEmHeight(family, style, &mut em) == 0
+                    && GdipGetCellAscent(family, style, &mut ascent) == 0
+                    && GdipGetCellDescent(family, style, &mut descent) == 0;
+                GdipDeleteFontFamily(family);
+                if !valid || em == 0 {
+                    return None;
+                }
+                Some(
+                    f64::from(self.pt) * f64::from(self.dpi) / 72.0
+                        * (f64::from(ascent) + f64::from(descent))
+                        / f64::from(em),
+                )
+            }
+        }
+
         /// 一整行的高度，含内部行距。标题下面的绘图区从这里往下排。
         pub fn em_box(&self) -> f64 {
             self.text_metric()
@@ -947,6 +979,9 @@ mod win {
         fn GdipGetImageGraphicsContext(image: *mut c_void, graphics: *mut *mut c_void) -> i32;
         fn GdipSetPageUnit(graphics: *mut c_void, unit: i32) -> i32;
         fn GdipSetTextRenderingHint(graphics: *mut c_void, hint: i32) -> i32;
+        fn GdipGetEmHeight(family: *mut c_void, style: i32, value: *mut u16) -> i32;
+        fn GdipGetCellAscent(family: *mut c_void, style: i32, value: *mut u16) -> i32;
+        fn GdipGetCellDescent(family: *mut c_void, style: i32, value: *mut u16) -> i32;
         fn GdipCreateFontFamilyFromName(
             name: *const u16,
             collection: *mut c_void,
@@ -2523,6 +2558,9 @@ impl Face {
 
     pub fn line_height(&self) -> f64 {
         0.0
+    }
+    pub fn cell_height(&self) -> Option<f64> {
+        None
     }
 
     pub fn em_box(&self) -> f64 {

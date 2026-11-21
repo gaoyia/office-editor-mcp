@@ -514,6 +514,7 @@ struct Item<'a> {
     px: f32,
     line: f64,
     space: f64,
+    cell: f64,
 }
 pub(super) struct Layout<'a> {
     spec: &'a Spec,
@@ -545,14 +546,6 @@ impl<'a> Layout<'a> {
             return Err(unsupported());
         }
         let face = style_face(&spec.style, px, canvas.dpi)?;
-        let max_pt = spec
-            .entries
-            .iter()
-            .filter(|(idx, _)| !spec.deleted.contains(idx))
-            .map(|(_, style)| style.pt)
-            .fold(spec.style.pt, f64::max);
-        let row_px = canvas.dpi.pt_to_px_font(max_pt);
-        let key = (row_px * 0.5).ceil().max(1.0);
         let space = text_width(font, face.as_ref(), " ", px).ceil().max(1.0);
         let line = face
             .as_ref()
@@ -560,10 +553,6 @@ impl<'a> Layout<'a> {
             .filter(|v| *v > 0.0)
             .unwrap_or_else(|| text_height(font, px))
             .max(f64::from(px));
-        // Native legend rows use the font size plus an 8pt entry gutter,
-        // not the GDI em-box plus two measured spaces (which grows too much
-        // for large/bold fonts and is too small for the default 10pt face).
-        let pitch = row_px + canvas.dpi.pt_to_px_font(8.0);
         let mut items = Vec::new();
         if spec.pos.is_some() {
             for (idx, series) in chart.series.iter().enumerate() {
@@ -592,18 +581,51 @@ impl<'a> Layout<'a> {
                     .as_ref()
                     .map(|f| f.typo_width(&series.name))
                     .unwrap_or_else(|| text_width(font, None, &series.name, item_px));
+                let item_face_cell = item_face
+                    .as_ref()
+                    .and_then(|f| f.cell_height())
+                    .filter(|v| v.is_finite() && *v > 0.0)
+                    .unwrap_or(item_line);
                 items.push(Item {
                     series,
-                    width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
-                        as f64
-                        + width,
+                    width,
                     style,
                     face: item_face,
                     px: item_px,
                     line: item_line,
                     space: item_space,
+                    cell: item_face_cell,
                 });
             }
+        }
+        // Controlled family/point matrices: key size follows 45% of the
+        // design cell, and rows add a 6pt gutter to that cell. Do not use a
+        // family lookup, COM bounds, or a fitted device-coordinate correction.
+        let base_cell = face
+            .as_ref()
+            .and_then(|f| f.cell_height())
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .unwrap_or(line);
+        let cell = items.iter().map(|i| i.cell).fold(base_cell, f64::max);
+        // An omitted family still depends on unresolved chart/theme defaults;
+        // preserve its established point-based model rather than silently
+        // substituting the locally selected fallback face for native Excel.
+        let (key, pitch) = if !spec.style.name.is_empty() {
+            ((cell * 0.45).max(1.0), cell + canvas.dpi.pt_to_px_font(6.0))
+        } else {
+            let max_pt = items
+                .iter()
+                .map(|i| i.style.pt)
+                .fold(spec.style.pt, f64::max);
+            let row_px = canvas.dpi.pt_to_px_font(max_pt);
+            (
+                (row_px * 0.5).ceil().max(1.0),
+                row_px + canvas.dpi.pt_to_px_font(8.0),
+            )
+        };
+        for item in &mut items {
+            item.width +=
+                super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi) as f64;
         }
         let line = items.iter().map(|i| i.line).fold(line, f64::max);
         let space = items.iter().map(|i| i.space).fold(space, f64::max);
