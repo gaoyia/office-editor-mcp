@@ -755,6 +755,31 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Standalone normal-domain red/green/blue component replacement for the
+/// Excel frame/Cartesian-plot profile. ECMA-376 20.1.2.3.4/.10/.23 leaves the
+/// other two components unchanged. The predeclared 48-control native matrix
+/// discriminates linear-IEC component intensity from encoded-byte percentage.
+/// Reuse the exact IEC encoder, not a guessed gamma or sample compensation.
+/// Broader ST_Percentage ranges/spellings and transform mixtures remain NI.
+fn frame_rgb_component(mut rgb: [u8; 3], node: &Element) -> Option<[u8; 3]> {
+    let channel = match node.local_name() {
+        "red" => 0,
+        "green" => 1,
+        "blue" => 2,
+        _ => return None,
+    };
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if attrs.len() != 1
+        || attrs[0].0 != "val"
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    rgb[channel] = linear_srgb_channel(parse_frame_integer(&attrs[0].1)?)?;
+    Some(rgb)
+}
+
 /// Encode a normal-domain linear sRGB/scRGB component using the IEC61966-2-1
 /// transfer function published by ICC (sRGB characterization,A.8), not a
 /// guessed power2.2. Quantize nearest to eight bits; do not extrapolate/clamp.
@@ -1134,6 +1159,9 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
     let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
     match names.as_slice() {
         [] => Ok(FrameFill::Solid(rgb)),
+        ["red"] | ["green"] | ["blue"] => Ok(FrameFill::Solid(
+            frame_rgb_component(rgb, kids[0]).ok_or_else(unsupported)?,
+        )),
         ["alpha"] => frame_alpha_fill(rgb, kids[0]),
         ["alphaOff"] => Ok(frame_alpha_off_fill(rgb, 100_000, parse_luminance_offset(kids[0]).ok_or_else(unsupported)?)),
         ["alpha", "alphaOff"] => Ok(frame_alpha_off_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
@@ -9541,6 +9569,100 @@ mod tests {
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "{transforms}");
         }
+    }
+
+    #[test]
+    fn rgb_component_normal_intensity_replaces_only_requested_channel() {
+        for (name, index) in [("red",0), ("green",1), ("blue",2)] {
+            for (value, byte) in [(0,0), (313,10), (314,10), (25_000,137), (50_000,188), (100_000,255)] {
+                let d = crate::xml::parse(format!("<{name} val='{value}'/>").as_bytes()).unwrap();
+                for input in [[0x15,0x60,0x82], [0,255,0], [255,0,255], [31;3]] {
+                    let mut expected = input;
+                    expected[index] = byte;
+                    assert_eq!(frame_rgb_component(input, &d.root), Some(expected));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_half_intensity_is_linear_not_encoded_percentage() {
+        let d = crate::xml::parse(b"<red val='50000'/>").unwrap();
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), Some([188,96,130]));
+        assert_ne!(frame_rgb_component([21,96,130], &d.root), Some([128,96,130]));
+        assert_ne!(frame_rgb_component([21,96,130], &d.root), Some([186,96,130]));
+    }
+
+    #[test]
+    fn rgb_component_no_guessed_clamp_or_broad_percentage_lexical_forms() {
+        for name in ["red", "green", "blue"] {
+            for raw in ["-1", "100001", "2147483648", "-2147483649", "+1", "50%", "1.0", " 1", "1 ", "", "NaN"] {
+                let d = crate::xml::parse(format!("<{name} val='{raw}'/>").as_bytes()).unwrap();
+                assert_eq!(frame_rgb_component([21,96,130], &d.root), None, "{name} {raw}");
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_strict_leaf_and_attribute_identity_preserve_namespaces() {
+        for xml in ["<red/>", "<red val='1' extra='0'/>", "<red val='1'><alpha val='1'/></red>", "<red val='1'>color</red>", "<red xmlns:x='urn:test' x:val='1'/>", "<redOff val='1'/>", "<srgbClr val='123456'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(frame_rgb_component([21,96,130], &d.root), None, "{xml}");
+        }
+        let mut d = crate::xml::parse(b"<red val='0'/>").unwrap();
+        d.root.attrs.push(("val".to_owned(), "50000".to_owned()));
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), None);
+        let d = crate::xml::parse(b"<a:blue xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>\n\t</a:blue>").unwrap();
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), Some([21,96,188]));
+    }
+
+    #[test]
+    fn rgb_component_srgb_and_scheme_resolve_same_verified_component_contract() {
+        let scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        for (name,index) in [("red",0), ("green",1), ("blue",2)] {
+            let d = crate::xml::parse(format!("<srgbClr val='156082'><{name} val='50000'/></srgbClr>").as_bytes()).unwrap();
+            let mut expected = [21,96,130];expected[index]=188;
+            assert_eq!(resolve_frame_solid(&d.root, &scheme).unwrap(), FrameFill::Solid(expected));
+            let d = crate::xml::parse(format!("<schemeClr val='accent1'><{name} val='50000'/></schemeClr>").as_bytes()).unwrap();
+            let mut expected = scheme.accents[0];expected[index]=188;
+            assert_eq!(resolve_frame_solid(&d.root, &scheme).unwrap(), FrameFill::Solid(expected));
+        }
+    }
+
+    #[test]
+    fn rgb_component_frame_and_contrasting_plot_match_rgb_at_three_dpis() {
+        for plot in [false,true] {
+            for (name,rgb) in [("red","BC6082"), ("green","15BC82"), ("blue","1560BC")] {
+                let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:{name} val='50000'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make=|fill:&str| if plot { LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}")) } else {LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};
+                let a=crate::xml::parse(make(&fill).as_bytes()).unwrap();let b=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render=|root:&Element| render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&a.root),render(&b.root),"{plot} {name} {value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_preserves_sysclr_other_base_and_mixed_transform_gates() {
+        let scheme=theme_scheme(None,FALLBACK_ACCENTS);
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<sysClr val='windowText' lastClr='FF0000'><red val='50000'/></sysClr>", "<hslClr hue='0' sat='100000' lum='50000'><red val='50000'/></hslClr>", "<scrgbClr r='0' g='0' b='0'><red val='50000'/></scrgbClr>", "<prstClr val='red'><blue val='50000'/></prstClr>", "<srgbClr val='156082'><red val='50000'/><alpha val='50000'/></srgbClr>", "<srgbClr val='156082'><alpha val='50000'/><red val='50000'/></srgbClr>", "<srgbClr val='156082'><red val='50000'/><green val='50000'/></srgbClr>", "<srgbClr val='156082'><redOff val='50000'/></srgbClr>", "<srgbClr val='156082'><blueMod val='50000'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root,&scheme).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_component_does_not_enable_frame_in_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='156082'><a:red val='50000'/></a:srgbClr></a:solidFill></c:spPr>";
+        let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();
+        assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));
+        assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
     }
 
     #[test]
