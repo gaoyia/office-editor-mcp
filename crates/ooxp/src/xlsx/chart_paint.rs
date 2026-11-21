@@ -755,6 +755,43 @@ fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
     Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
 }
 
+/// Encode a normal-domain linear sRGB/scRGB component using the IEC61966-2-1
+/// transfer function published by ICC (sRGB characterization,A.8), not a
+/// guessed power2.2. Quantize nearest to eight bits; do not extrapolate/clamp.
+fn linear_srgb_channel(value: i32) -> Option<u8> {
+    if !(0..=100_000).contains(&value) {
+        return None;
+    }
+    let linear = f64::from(value) / 100_000.0;
+    let encoded = if linear <= 0.0031308 {
+        12.92 * linear
+    } else {
+        1.055 * linear.powf(1.0 / 2.4) - 0.055
+    };
+    Some((encoded * 255.0).round() as u8)
+}
+
+/// Untransformed CT_ScRgbColor normal-domain subset. ECMA-376 Part1(2016),
+///20.1.2.3.30 specifies linear gamma1.0 and0..100%, with50% gray=BCBCBC.
+/// ST_Percentage permits broader spellings/ranges, but no such extrapolation
+/// or transforms are enabled here. Preserve all old color/transform paths.
+fn parse_frame_scrgb_color(node: &Element) -> Option<[u8; 3]> {
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if node.local_name() != "scrgbClr"
+        || attrs.len() != 3
+        || attrs.iter().any(|(name, _)| !matches!(name.as_str(), "r" | "g" | "b"))
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    Some([
+        linear_srgb_channel(parse_frame_integer(node.attr_local("r")?)?)?,
+        linear_srgb_channel(parse_frame_integer(node.attr_local("g")?)?)?,
+        linear_srgb_channel(parse_frame_integer(node.attr_local("b")?)?)?,
+    ])
+}
+
 /// Exact named RGB values from ECMA-376 Part1 (2016),20.1.10.48.
 /// This is not a CSS palette or case/abbreviation normalization. In particular
 /// darkSeaGreen/dkSeaGreen and lightGoldenrodYellow/ltGoldenrodYellow have
@@ -1077,6 +1114,7 @@ fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
 fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let rgb = match color.local_name() {
+        "scrgbClr" => return parse_frame_scrgb_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
         "prstClr" => return parse_frame_preset_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
         // Return before generic transform dispatch: this base is supported
         // only without transforms. Excel frame/plot entry guards are unchanged.
@@ -9506,6 +9544,97 @@ mod tests {
     }
 
     #[test]
+    fn scrgb_base_iec_transfer_matches_documented_gray_not_raw_or_power22() {
+        for (v, b) in [(0,0), (1,0), (100,3), (313,10), (314,10), (400,13), (1000,25), (25_000,137), (50_000,188), (75_000,225), (100_000,255)] {
+            assert_eq!(linear_srgb_channel(v), Some(b), "{v}");
+        }
+        assert_ne!(linear_srgb_channel(50_000), Some(128));
+        assert_ne!(linear_srgb_channel(50_000), Some((0.5_f64.powf(1.0/2.2)*255.0).round() as u8));
+    }
+
+    #[test]
+    fn scrgb_base_transfer_is_monotone_for_every_supported_integer_component() {
+        let mut previous = 0;
+        for value in 0..=100_000 {
+            let current = linear_srgb_channel(value).unwrap();
+            assert!(current >= previous, "{value}");
+            previous = current;
+        }
+        assert_eq!(previous, 255);
+        for value in [i32::MIN, -1, 100_001, i32::MAX] {
+            assert_eq!(linear_srgb_channel(value), None);
+        }
+    }
+
+    #[test]
+    fn scrgb_base_normal_channels_and_theme_independence() {
+        for (r,g,b,rgb) in [(100_000,0,0,[255,0,0]), (0,100_000,0,[0,255,0]), (0,0,100_000,[0,0,255]), (50_000,25_000,75_000,[188,137,225]), (50_000,50_000,50_000,[188;3])] {
+            let d = crate::xml::parse(format!("<scrgbClr r='{r}' g='{g}' b='{b}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_frame_scrgb_color(&d.root), Some(rgb));
+            for theme in [None, Some(OFFICE16_THEME.as_bytes())] {
+                assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(theme, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid(rgb));
+            }
+        }
+    }
+
+    #[test]
+    fn scrgb_base_strict_leaf_attributes_and_no_guessed_range_or_percent_parser() {
+        for xml in ["<scrgbClr/>", "<scrgbClr r='0' g='0'/>", "<scrgbClr r='0' g='0' b='0' val='1'/>", "<scrgbClr r='50%' g='50%' b='50%'/>", "<scrgbClr r='-1' g='0' b='0'/>", "<scrgbClr r='100001' g='0' b='0'/>", "<scrgbClr r='0' g='2147483648' b='0'/>", "<scrgbClr r='0' g='0' b='+1'/>", "<scrgbClr r='0' g='0' b=' 1'/>", "<scrgbClr r='0' g='0' b='1.0'/>", "<scrgbClr r='0' g='0' b='0'><alpha val='100000'/></scrgbClr>", "<scrgbClr r='0' g='0' b='0'>color</scrgbClr>", "<srgbClr r='0' g='0' b='0'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_frame_scrgb_color(&d.root), None, "{xml}");
+        }
+        let d = crate::xml::parse(b"<a:scrgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' r='50000' g='50000' b='50000'>\n\t</a:scrgbClr>").unwrap();
+        assert_eq!(parse_frame_scrgb_color(&d.root), Some([188;3]));
+    }
+
+    #[test]
+    fn scrgb_base_duplicate_or_qualified_semantic_attributes_are_not_silently_picked() {
+        let mut d = crate::xml::parse(b"<scrgbClr r='0' g='0' b='0'/>").unwrap();
+        d.root.attrs.push(("r".to_owned(), "50000".to_owned()));
+        assert_eq!(parse_frame_scrgb_color(&d.root), None);
+        let d = crate::xml::parse(b"<scrgbClr xmlns:x='urn:test' x:r='0' g='0' b='0'/>").unwrap();
+        assert_eq!(parse_frame_scrgb_color(&d.root), None);
+    }
+
+    #[test]
+    fn scrgb_base_frame_and_plot_match_predeclared_rgb_at_three_dpis() {
+        for plot in [false, true] {
+            for (r,g,b,rgb) in [(50_000,50_000,50_000,"BCBCBC"), (50_000,25_000,75_000,"BC89E1"), (100,313,1000,"030A19")] {
+                let fill = format!("<c:spPr><a:solidFill><a:scrgbClr r='{r}' g='{g}' b='{b}'/></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let d = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&d.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scrgb_base_does_not_enable_the_slide_frame_host() {
+        let fill = "<c:spPr><a:solidFill><a:scrgbClr r='50000' g='50000' b='50000'/></a:solidFill></c:spPr>";
+        let a = crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render = |root: &Element, host| render_chart(root,424,265,FALLBACK_ACCENTS,None,host,None,"").unwrap();
+        assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));
+        assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn scrgb_base_single_fill_other_models_and_mixed_gates_remain() {
+        let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><scrgbClr r='0' g='0' b='0'/><srgbClr val='000000'/></solidFill></spPr></chartSpace>").unwrap();
+        assert!(read_frame_fill(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<scrgbClr r='50000' g='50000' b='50000'><hue val='60000'/></scrgbClr>", "<prstClr val='red'><alpha val='50000'/></prstClr>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/></hslClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
     fn preset_base_contract_values_do_not_infer_css_aliases() {
         for (name, rgb) in [("aliceBlue", [240,248,255]), ("black", [0,0,0]), ("green", [0,128,0]), ("lime", [0,255,0]), ("fuchsia", [255,0,255]), ("grey", [128,128,128]), ("darkBlue", [0,0,139]), ("dkBlue", [0,0,139]), ("medPurple", [147,112,219]), ("mediumPurple", [147,112,219]), ("white", [255,255,255]), ("yellowGreen", [154,205,50])] {
             assert_eq!(drawingml_preset_rgb(name), Some(rgb), "{name}");
@@ -9590,7 +9719,7 @@ mod tests {
     fn preset_base_duplicate_fill_other_models_and_mixed_gates_remain() {
         let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><prstClr val='red'/><srgbClr val='FF0000'/></solidFill></spPr></chartSpace>").unwrap();
         assert!(read_frame_fill(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
-        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<scrgbClr r='100000' g='0' b='0'/>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/></hslClr>"] {
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<scrgbClr r='100000' g='0' b='0'><alpha val='50000'/></scrgbClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/></hslClr>"] {
             let d = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{xml}");
         }
@@ -9687,7 +9816,7 @@ mod tests {
     fn hsl_base_duplicate_fill_and_other_color_model_gates_are_preserved() {
         let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><hslClr hue='0' sat='100000' lum='50000'/><srgbClr val='FF0000'/></solidFill></spPr></chartSpace>").unwrap();
         assert!(read_frame_fill(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
-        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<prstClr val='red'><alpha val='50000'/></prstClr>", "<scrgbClr r='100000' g='0' b='0'/>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<prstClr val='red'><alpha val='50000'/></prstClr>", "<scrgbClr r='100000' g='0' b='0'><alpha val='50000'/></scrgbClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
             let d = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{xml}");
         }
