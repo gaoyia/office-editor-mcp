@@ -3524,6 +3524,13 @@ fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::
 // The accepted solid rasterizer and default cap behavior stay byte-for-byte.
 fn stroke_run_dash_caps(canvas: &mut Canvas, points: &[(f64,f64)], width: f64,
     first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+    // Only an explicit zero-body ROUND dash is a point. Do not change legacy
+    // solid degenerate runs or turn a closed polyline into a dot.
+    if points.len()==2 && points[0]==points[1]
+        && first==stroke::Cap::Round && last==stroke::Cap::Round {
+        canvas.stroke_segment(points[0].0,points[0].1,points[0].0,points[0].1,width,color);
+        return;
+    }
     let Some(run)=stroke::Run::new(points) else {return;};
     let mut nonzero=run.segments().filter(|edge| edge.length>0.0);
     let Some(start)=nonzero.next() else {return;};
@@ -5254,8 +5261,8 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
             }
             "custDash" => {
                 // Explicit opaque custom dashes: flat and square positive stops;
-                // round keeps a positive centerline after including its caps.
-                // Omitted caps, dots and ambiguous short-round dashes stay NI.
+                // round includes its caps and clamps short positive d to a dot.
+                // Omitted caps and zero dash/space remain separately gated.
                 if dash_declared || !explicit_caps || ln.attr_local("cap").is_none()
                     || child.attrs.iter().any(|(key,_)| !key.starts_with("xmlns"))
                     || ln.attr_local("w").and_then(|v| v.parse::<f64>().ok())
@@ -5269,7 +5276,6 @@ fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi:
                     let percentage = |key| stop.attr_local(key).and_then(|v| v.parse::<i32>().ok())
                         .filter(|v| *v > 0).map(f64::from).ok_or_else(unsupported);
                     let d=percentage("d")?;
-                    if cap==stroke::Cap::Round && d<=100_000.0 {return Err(unsupported());}
                     stops.push((d,percentage("sp")?));
                 }
                 dash = Some(std::sync::Arc::new(stroke::DashPattern::from_width_percent(&stops,width).ok_or_else(unsupported)?));
@@ -7887,6 +7893,38 @@ mod tests {
         }
     }
     #[test]
+    fn round_dot_raster_reuses_one_existing_circle_and_is_invariant_below_one_pen() {
+        let mut expected=None;
+        for d in [25000.0,50000.0,100000.0] {
+            let p=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let mut c=Canvas::new(100,40);
+            stroke_run_pattern(&mut c,&[(20.0,20.0),(70.0,20.0)],stroke::Style::new(6.0,stroke::Cap::Round).unwrap(),Some(&p),[23,93,181]).unwrap();
+            if let Some(ref pixels)=expected {assert_eq!(&c.px,pixels);}else{expected=Some(c.px.clone());}
+            let mut primitive=Canvas::new(100,40);
+            for x in [20.0,32.0,44.0,56.0,68.0] {primitive.stroke_segment(x,20.0,x,20.0,6.0,[23,93,181]);}
+            assert_eq!(c.px,primitive.px);assert_eq!(c.alpha,primitive.alpha);
+        }
+    }
+    #[test]
+    fn round_dot_is_not_a_closed_polyline_and_uses_the_shared_budget() {
+        let p=stroke::DashPattern::from_width_percent(&[(50000.0,100000.0)],2.0).unwrap();let mut c=Canvas::new(100,50);c.custom_dash_budget=2;
+        let style=stroke::Style::new(2.0,stroke::Cap::Round).unwrap();
+        stroke_run_pattern(&mut c,&[(20.0,20.0),(25.0,20.0)],style,Some(&p),[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+        let before=c.px.clone();assert!(stroke_run_pattern(&mut c,&[(30.0,20.0),(35.0,20.0)],style,Some(&p),[23,93,181]).is_err());assert_eq!(c.px,before);
+        let mut looped=Canvas::new(100,50);stroke_run_dash_caps(&mut looped,&[(20.0,20.0),(40.0,20.0),(20.0,20.0)],6.0,stroke::Cap::Round,stroke::Cap::Round,[23,93,181]);
+        assert_eq!(&looped.px[(20*100+35)*3..(20*100+36)*3],&[23,93,181]);
+    }
+    #[test]
+    fn positive_round_dots_reach_legacy_and_advanced_legend_keys_without_enabling_zero_stops() {
+        for pos in ["r","b"] {
+            let make=|d| {
+                let extra=format!("<c:spPr><a:ln w='50800' cap='rnd'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='{d}' sp='100000'/></a:custDash><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+                standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&extra),"").replace("<c:legendPos val=\"r\"/>",&format!("<c:legendPos val=\"{pos}\"/>"))
+            };
+            assert_eq!(render_line(&make(25000)).unwrap(),render_line(&make(100000)).unwrap());assert!(render_line(&make(0)).is_err());
+        }
+    }
+
+    #[test]
     fn explicit_round_square_custom_dash_parser_supports_only_evidenced_baseline() {
         for cap in ["rnd","sq","flat"] {
             let make=|extra:&str,d:i32| format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='{d}' sp='100000'/></custDash>{extra}</ln>");
@@ -7895,7 +7933,7 @@ mod tests {
             for join in ["<miter/>","<bevel/>"] {assert!(parse(make(join,200000)).is_err());}
             let alpha=make("",200000).replace("val='175DB5'/>","val='175DB5'><alpha val='50000'/></srgbClr>");
             assert!(parse(alpha).is_err());
-            for d in [1,50000,100000] {assert_eq!(parse(make("",d)).is_err(),cap=="rnd");}
+            for d in [1,25000,50000,100000] {assert!(parse(make("",d)).is_ok());}
         }
     }
     #[test]

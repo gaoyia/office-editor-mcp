@@ -259,20 +259,23 @@ impl DashPattern {
     /// Round native controls preserve the logical period, but include the caps
     /// within the logical dash length: the centerline is one pen shorter.
     /// Clip that nominal centerline to the run, never shorten an already clipped
-    /// last dash. Positive bodies only; zero/short dot semantics remain gated.
+    /// last dash. Native short-round controls clamp logical d to one pen before
+    /// advancing the period: d <= 100% is a point, not a shorter-period circle.
     fn round_intervals(&self, length: f64, width: f64, budget: usize) -> Option<Vec<(f64,f64)>> {
-        if !length.is_finite() || length < 0.0 || !width.is_finite() || width <= 0.0
-            || self.stops.iter().any(|(dash,_)| *dash <= width) { return None; }
+        if !length.is_finite() || length < 0.0 || !width.is_finite() || width <= 0.0 { return None; }
         let mut result=Vec::new();
         let mut start=0.0;
         let mut stop=0;
         while start < length {
             if result.len()==budget { return None; }
             let (dash,space)=self.stops[stop];
-            let nominal_end=start+dash-width;
-            if !nominal_end.is_finite() || nominal_end<=start { return None; }
+            let effective_dash=dash.max(width);
+            // Preserve an exact point even when fractional spaces accumulate;
+            // adding then subtracting a pen could round below the start.
+            let nominal_end=if dash<=width {start}else{start+dash-width};
+            if !nominal_end.is_finite() || nominal_end<start { return None; }
             result.push((start,nominal_end.min(length)));
-            let next=start+dash+space;
+            let next=start+effective_dash+space;
             if !next.is_finite() || next<=start { return None; }
             start=next;
             stop=(stop+1)%self.stops.len();
@@ -593,15 +596,57 @@ mod tests {
         assert_eq!(other[0].points,[(10.0,0.0),(14.0,0.0)]);
     }
     #[test]
-    fn round_dots_short_bodies_and_resource_overflow_remain_explicit_errors() {
-        for percent in [1.0,50000.0,100000.0] {
+    fn round_short_bodies_share_a_pen_sized_dot_and_resource_errors_stay_explicit() {
+        for percent in [1.0,25000.0,50000.0,100000.0] {
             let p=DashPattern::from_width_percent(&[(percent,100000.0)],6.0).unwrap();
-            assert!(p.round_intervals(30.0,6.0,10).is_none());
+            assert_eq!(p.round_intervals(30.0,6.0,10).unwrap(),[(0.0,0.0),(12.0,12.0),(24.0,24.0)]);
         }
         let p=DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
         assert!(p.round_intervals(50.0,6.0,2).is_none());
         for bad in [-1.0,f64::NAN,f64::INFINITY] {assert!(p.round_intervals(bad,6.0,10).is_none());}
         assert!(p.round_intervals(50.0,0.0,10).is_none());
+    }
+
+    #[test]
+    fn round_short_dash_clamps_both_body_and_period_at_multiple_device_widths() {
+        for width in [1.0,3.0,6.0] {
+            let mut expected=None;
+            for d in [1.0,25000.0,50000.0,100000.0] {
+                let p=DashPattern::from_width_percent(&[(d,100000.0)],width).unwrap();
+                let intervals=p.round_intervals(width*5.0,width,10).unwrap();
+                assert_eq!(intervals,[(0.0,0.0),(2.0*width,2.0*width),(4.0*width,4.0*width)]);
+                if let Some(ref e)=expected {assert_eq!(&intervals,e);}else{expected=Some(intervals);}
+            }
+        }
+    }
+    #[test]
+    fn round_dot_points_use_continuous_arc_and_real_gap_runs_restart() {
+        let p=DashPattern::from_width_percent(&[(50000.0,100000.0)],2.0).unwrap();
+        let a=[(0.0,0.0),(3.0,0.0),(3.0,10.0)];let b=[(10.0,10.0),(20.0,10.0)];
+        let style=Style::new(2.0,Cap::Round).unwrap();
+        let dots=Run::new(&a).unwrap().dashed_capped(&p,style,10).unwrap();
+        assert_eq!(dots.iter().map(|x|x.points.clone()).collect::<Vec<_>>(),[vec![(0.0,0.0);2],vec![(3.0,1.0);2],vec![(3.0,5.0);2],vec![(3.0,9.0);2]]);
+        let other=Run::new(&b).unwrap().dashed_capped(&p,style,10).unwrap();assert_eq!(other[0].points,[(10.0,10.0);2]);
+    }
+    #[test]
+    fn round_mixed_dot_dash_table_clamps_each_stop_without_changing_order() {
+        let p=DashPattern::from_width_percent(&[(50000.0,100000.0),(300000.0,100000.0)],2.0).unwrap();
+        assert_eq!(p.round_intervals(23.0,2.0,10).unwrap(),[(0.0,0.0),(4.0,8.0),(12.0,12.0),(16.0,20.0)]);
+    }
+    #[test]
+    fn round_fractional_space_dots_remain_exact_points_and_obey_budget() {
+        let p=DashPattern::from_width_percent(&[(25000.0,33333.0)],6.0).unwrap();
+        let dots=p.round_intervals(1000.0,6.0,1000).unwrap();assert!(dots.len()>100);
+        assert!(dots.iter().all(|(a,b)|a==b));assert!(p.round_intervals(1000.0,6.0,10).is_none());
+    }
+    #[test]
+    fn final_round_phase_uses_nominal_body_before_clipping_not_the_logical_tail() {
+        let p=DashPattern::from_width_percent(&[(300000.0,100000.0)],6.0).unwrap();
+        assert_eq!(p.round_intervals(38.5,6.0,10).unwrap(),[(0.0,12.0),(24.0,36.0)]);
+        let p=DashPattern::from_width_percent(&[(200000.0,50000.0)],6.0).unwrap();
+        assert_eq!(p.round_intervals(38.5,6.0,10).unwrap(),[(0.0,6.0),(15.0,21.0),(30.0,36.0)]);
+        // A terminal gap does not stretch the last round body to the endpoint.
+        assert_eq!(p.round_intervals(35.0,6.0,10).unwrap(),[(0.0,6.0),(15.0,21.0),(30.0,35.0)]);
     }
 
 }
