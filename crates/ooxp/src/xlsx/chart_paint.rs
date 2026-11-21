@@ -1604,7 +1604,11 @@ fn read_chart(
         };
     }
     }
-    series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
+    // Official all-empty pies keep category cache points but omit every val
+    // pt. Do not drop that series before the category domain is applied.
+    if kind != PlotKind::Pie {
+        series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
+    }
     if series.is_empty() {
         return Err(unsupported());
     }
@@ -1613,7 +1617,7 @@ fn read_chart(
         .map(|ser| ser.values.len().max(ser.x_values.len()))
         .max()
         .unwrap_or(0);
-    if n == 0 {
+    if n == 0 && kind != PlotKind::Pie {
         return Err(unsupported());
     }
     let mut categories = if matches!(kind, PlotKind::Scatter { .. }) {
@@ -1628,8 +1632,11 @@ fn read_chart(
             }
         }
     }
-    if kind == PlotKind::StandardLine {
+    if kind == PlotKind::StandardLine || kind == PlotKind::Pie {
         n = n.max(categories.len());
+    }
+    if n == 0 {
+        return Err(unsupported());
     }
     if !matches!(kind, PlotKind::Scatter { .. }) {
         if categories.len() < n {
@@ -1762,16 +1769,10 @@ fn read_chart(
         Vec::new()
     };
     if kind == PlotKind::Pie {
-        let values = &series[0].values;
-        // Official Excel 16 public pies keep signed cache values and paint
-        // finite negatives at |v| (not skip, zero, or omit). All-zero /
-        // all-empty / all-negative (no finite positive) stay NI under F36.
-        if !values
-            .iter()
-            .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
-        {
-            return Err(unsupported());
-        }
+        // Official Excel 16 public pies paint finite non-zero values at |v|
+        // even when every value is negative. All-zero and all-empty pies keep
+        // the frame and legend but take no slice. The previous "at least one
+        // finite positive" gate is therefore not required.
         if legend_pos(chart).is_some() && !legend::Spec::read(root, accents)?.default_right_ink() {
             return Err(unsupported());
         }
@@ -11394,6 +11395,71 @@ mod tests {
     }
 
     #[test]
+    fn pie_all_zero_all_empty_and_all_negative_follow_official_empty_or_abs_plot() {
+        let all_neg = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(-10.0), Some(-20.0), Some(-30.0), Some(-40.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let all_abs = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(all_neg, all_abs, "all-negative pies should paint as |v|");
+
+        let zero_neg = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(-20.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let zero_abs = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(20.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(
+            zero_neg, zero_abs,
+            "a lone finite negative among zeros should paint as |v|"
+        );
+        assert_ne!(zero_neg, all_abs, "zero-and-negative is not a four-slice abs pie");
+
+        let all_zero = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(0.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        // Official all-empty Chart.Export matches all-zero in the plot (no
+        // wedges, legend kept), but omitted val cache points still take a
+        // later NI path and stay leftover under F36.
+        let all_empty_err = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[None, None, None, None], ""),
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .expect_err("all-empty omitted val points stay NotImplemented");
+        assert_eq!(all_empty_err.code(), crate::error::ErrorCode::NotImplemented);
+        let (w, h, rgb) = png_rgb(&all_zero);
+        assert_eq!((w, h), (576, 336));
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let a3 = FALLBACK_ACCENTS[2];
+        let a4 = FALLBACK_ACCENTS[3];
+        for (i, accent) in [a1, a2, a3, a4].iter().enumerate() {
+            let hits = color_centroid(&rgb, w, h, *accent, 2).map(|c| c.2).unwrap_or(0);
+            assert!(
+                hits > 0 && hits < 80,
+                "all-zero/empty should keep legend swatch {i}, not a slice; hits={hits}"
+            );
+        }
+    }
+
+    #[test]
     fn pie_finite_negatives_use_absolute_slice_weight_and_stay_in_legend() {
         let cases: &[(&[Option<f64>], &[Option<f64>])] = &[
             (
@@ -11470,18 +11536,8 @@ mod tests {
         );
         let cases = [
             standard_pie_xml(
-                &line_ser(0, "S1", &[Some(-1.0), Some(-2.0), Some(-3.0)], ""),
-                "",
-                "",
-            ),
-            standard_pie_xml(
-                &line_ser(0, "S1", &[Some(0.0), Some(0.0), Some(0.0)], ""),
-                "",
-                "",
-            ),
-            standard_pie_xml(
                 &line_ser(0, "S1", &[None, None, None], ""),
-                "",
+                r#"<c:dispBlanksAs val="gap"/>"#,
                 "",
             ),
             pie_space(
