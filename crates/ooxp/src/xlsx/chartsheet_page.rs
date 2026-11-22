@@ -34,6 +34,7 @@ const PAPERS: &[(u32, i64, i64)] = &[
     (8, mm(297), mm(420)),                  // A3
     (9, mm(210), mm(297)),                  // A4
     (11, mm(148), mm(210)),                 // A5
+    (13, mm(182), mm(257)),                 // JIS B5 (not ISO B5 176×250mm)
 ];
 
 const fn inch_tenths(tenths: i64) -> i64 {
@@ -47,9 +48,14 @@ const fn mm(value: i64) -> i64 {
 /// 与纸张一边对应的稳定内边界。值来自 36/54/72 磅等边距下的公开 ChartArea。
 fn side_inset_emu(side: i64) -> Option<i64> {
     match side {
-        5_328_000 => Some(126_272),  // 148mm
+        5_328_000 => Some(126_272), // 148mm
+        // F44 native Excel16/DPI106: both orientations, 36/54/72pt, repeat exports.
+        // These side insets are independently constant in ChartArea and native PNG;
+        // they extend the existing physical-side rule, not per-case pixel patches.
+        6_552_000 => Some(116_694),  // 182mm JIS B5
         7_560_000 => Some(115_404),  // 210mm
         7_772_400 => Some(112_143),  // 8.5in
+        9_252_000 => Some(108_000),  // 257mm JIS B5
         10_058_400 => Some(112_143), // 11in
         10_692_000 => Some(124_642), // 297mm
         12_801_600 => Some(112_143), // 14in
@@ -262,6 +268,56 @@ mod tests {
                 "paper={paper} {orient} margins={lr}/{tb}"
             );
         }
+    }
+
+    /// Native Chart.Export, not CopyPicture bitmap or printed-page gold. All six
+    /// pairs were measured twice in the same readonly Excel16/DPI106 source.
+    #[test]
+    fn jis_b5_native_paper_margin_orientation_matrix() {
+        for (orientation, cases) in [
+            (
+                "portrait",
+                [("0.5", 640, 954), ("0.75", 587, 901), ("1", 534, 848)],
+            ),
+            (
+                "landscape",
+                [("0.5", 954, 640), ("0.75", 901, 587), ("1", 848, 534)],
+            ),
+        ] {
+            for (margin, width, height) in cases {
+                let sheet = parse(&format!(
+                    r#"<pageMargins left="{margin}" right="{margin}" top="{margin}" bottom="{margin}"/><pageSetup paperSize="13" orientation="{orientation}"/>"#
+                ));
+                assert_eq!(canvas_px(&sheet.root, dpi(106)).unwrap(), (width, height));
+            }
+        }
+    }
+
+    #[test]
+    fn jis_b5_reuses_axis_margin_sum_and_dpi_contract() {
+        // Derived regression: asymmetric margin sums, not another official gold.
+        let sheet = parse(
+            r#"<pageMargins left="0.25" right="0.75" top="0.5" bottom="1"/><pageSetup paperSize="13" orientation="portrait"/>"#,
+        );
+        assert_eq!(canvas_px(&sheet.root, dpi(106)).unwrap(), (640, 901));
+        let symmetric = parse(
+            r#"<pageMargins left="0.5" right="0.5" top="0.5" bottom="0.5"/><pageSetup paperSize="13" orientation="portrait"/>"#,
+        );
+        assert_eq!(canvas_px(&symmetric.root, dpi(96)).unwrap(), (580, 864));
+    }
+
+    #[test]
+    fn jis_b5_does_not_allow_nonpositive_canvas_or_guess_other_papers() {
+        let sheet = parse(
+            r#"<pageMargins left="4" right="4" top="4" bottom="4"/><pageSetup paperSize="13" orientation="portrait"/>"#,
+        );
+        assert!(canvas_px(&sheet.root, dpi(106)).is_err());
+        assert!(canvas_px(&parse(r#"<pageSetup paperSize="12"/>"#).root, dpi(106)).is_err());
+        assert!(canvas_px(
+            &parse(r#"<pageSetup paperWidth="182mm" paperHeight="258mm"/>"#).root,
+            dpi(106)
+        )
+        .is_err());
     }
 
     #[test]

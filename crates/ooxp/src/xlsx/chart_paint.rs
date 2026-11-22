@@ -1,9 +1,9 @@
 //! 簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图只读栅格化。优先读图部件里已有的缓存。没有缓存时，读公式所指格子里已有的值。不写回包，也不算公式。
 //! 像素差要改这里的布局、颜色和字形，不要靠放宽对照容差。
-//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。堆积、百分比堆积、平滑线、虚线、空值按零或连线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。
-//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。仅连线（scatterStyle=line）、平滑、虚线、空值按零或连线、非数值 X/Y、次轴及其余类型仍是 NotImplemented。
-//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。堆积、百分比、三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
-//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。堆积、百分比堆积、三维、可见数据标签、显式空值按零或连线（dispBlanksAs=zero/span）、半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
+//! 折线本切片只画 `c:lineChart` 且 grouping 为 standard 或省略的图：实线、缺省/auto 按系列循环标记（diamond、square、triangle、x、star、circle、plus、dot、dash，9 个一圈）、显式符号、缺格子或省略的 cache 点按缺口断线、空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线。省略 `c:marker` 时尺寸为 9 磅；写出的 `c:size` 优先，写出标记但省略尺寸时按 OOXML 缺省 5 磅。平滑线、预设虚线、复杂自定义虚线、三维折线、组合图及其余类型仍是 NotImplemented，不用缺一块的图充数。已锁定的 lineChart grouping=stacked/percentStacked（线性显式 min/max autoZero、marker=none、crossBetween=between）按系列顺序把各类目的代数累加端点连成折线，见 F23；省略 min/max、可见标记、空点、percentStacked 异号或缺值仍是 NotImplemented。
+//! 散点本切片只画 `c:scatterChart` 且 scatterStyle 为 marker 或 lineMarker（缺省按 lineMarker）的图：X/Y 都是数值轴，点按系列顺序用数值坐标定位；autoZero 在 0 落在轴范围内时把坐标轴画在原点并在轴旁标刻度，0 在轴外时轴仍在较近端；marker 与 lineMarker 都画实线（官方 Excel 把 scatterStyle=marker 且系列未隐藏线条的图报为 xlXYScatterLines=74），缺格子或省略的 cache 点断开，空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连线；系列 `a:ln`/`a:noFill` 仍可关掉连线只留标记；标记规则与折线相同。官方 Excel 16 公开 API 的散点 valAx 写 crossBetween=midCat（不是类目槽公式，数值仍按线性 min/max 定位）；xlXYScatterLinesNoMarkers 写 scatterStyle=lineMarker 且 marker symbol=none，不是 scatterStyle=line；xlXYScatter 写 lineMarker 加系列 a:ln/a:noFill。这些已锁定路径在 midCat 下同样出图。scatterStyle=none/line/smooth，以及 scatterStyle=smoothMarker 或系列 smooth=1 的平滑曲线，仍是 NotImplemented。
+//! 条形本切片只画 `c:barChart` 且 `barDir` 为 `bar` 或省略、grouping 为 clustered 或省略的簇状条形图：类目轴在左；类目 maxMin 时数值轴在上、minMax（或缺省）时数值轴在下；类目 minMax（或缺省）时第一类在下，maxMin 时第一类在上；系列 0 在类目轴方向的槽起点（maxMin 时槽顶，minMax 时槽底）；正值向右、负值向左，缺值不画该条。已锁定的 barChart grouping=stacked/percentStacked（overlap=100，线性显式 min/max autoZero）见 F22；三维、可见数据标签、空值按零或连线、类目轴网格、非 l/b 轴位及其余类型仍是 NotImplemented。
+//! 面积本切片只画 `c:areaChart` 且 grouping 为 standard 或省略的图：按与折线相同的类目槽公式定位，用不透明纯色填到数值轴交叉（autoZero 为零，零在轴外时取较近端）；正值在交叉之上、负值在下，相邻异号在交叉处剖开以免自交；系列按 order 先画后盖；缺格子或省略的 cache 点：未写 dispBlanksAs 时按官方画到零基线（连续 V 形谷），显式 dispBlanksAs=gap 时仍按缺口断开、不跨空点相连；空 inlineStr 与空 cache/lit <c:v></c:v> 按 0 连接填充。有写出的实线描边才画上沿线，不默认画标记。已锁定的 areaChart grouping=stacked/percentStacked（线性显式 min/max autoZero、valAx crossBetween=midCat）按系列顺序代数累加，并填充相邻累加线之间的带（后画的系列盖住先画的），见 F23；省略 min/max、空点、between 类目位、percentStacked 异号或缺值、三维、可见数据标签、显式 dispBlanksAs=zero 与显式 dispBlanksAs=span 对真实空点/省略 cache 点按与省略项相同的零基线 V 形填充（官方面积 span 不是 4-到-9 弦）；span 下的 #N/A 亦按该 V 形填充，其余错误点仍 NI；半透明填充、组合图、标记及其余类型仍是 NotImplemented，不用缺一块的图充数。
 //! 饼图本切片只画单系列 `c:pieChart`：扇区从 12 点方向按 firstSliceAng（缺省 0，顺时针，单位度）起算，只把有限正值按总和比例切开；空值跳过该扇区但仍出现在图例并占用 accent 槽，零值不占角度但仍可出现在图例；负值、多系列、三维、环形、复合饼、爆炸、可见数据标签、半透明或非纯色扇区、非右侧缺省图例及其余类型仍是 NotImplemented，不用缺一块的图充数。
 
 use fontdue::{Font, FontSettings};
@@ -12,6 +12,10 @@ use fontdue::{Font, FontSettings};
 mod axis;
 #[path = "chart_legend.rs"]
 mod legend;
+#[path = "chart_gradient.rs"]
+mod gradient;
+#[path = "chart_stroke.rs"]
+mod stroke;
 
 use super::render_dpi::RenderDpi;
 use crate::error::{Error, ErrorKind};
@@ -86,6 +90,16 @@ enum PlotKind {
     Scatter { connect: bool },
 }
 
+/// Official Excel 16 grouping for barChart clustered / stacked / percentStacked,
+/// and for lineChart / areaChart stacked / percentStacked (F23). `Clustered` also
+/// means a standard (non-stacked) line or area.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stacking {
+    Clustered,
+    Stacked,
+    PercentStacked,
+}
+
 /// Excel default auto-marker cycle when `c:marker` is omitted or `symbol=auto`.
 /// Locked from Excel 16.0 Chart.Export of a dedicated 10-series Temp workbook
 /// (omitted `c:marker`) plus Series.MarkerSize=9: S1 diamond … S9 dash, S10 wraps
@@ -158,8 +172,27 @@ fn regular_grid_y(plot_y: i32, plot_b: i32, i: i32, intervals: i32) -> i32 {
 // Rounding y_of(0) separately puts mixed-sign axes one row below the 0 grid
 // whenever the exact position is a half pixel (e.g. [-3,5], 106dpi).
 fn crossing_axis_y(plot: &Rect, min: f64, max: f64, major: f64, crossing: f64) -> i32 {
+    crossing_axis_y_mode(plot, min, max, major, crossing, None, false)
+}
+
+fn crossing_axis_y_mode(
+    plot: &Rect,
+    min: f64,
+    max: f64,
+    major: f64,
+    crossing: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+) -> i32 {
+    if log_base.is_some() {
+        return y_map(crossing, min, max, plot, log_base, reversed).round() as i32;
+    }
     let intervals = (max - min) / major;
-    let index = (max - crossing) / major;
+    let index = if reversed {
+        (crossing - min) / major
+    } else {
+        (max - crossing) / major
+    };
     if major > 0.0
         && (intervals - intervals.round()).abs() < 1e-8
         && (index - index.round()).abs() < 1e-8
@@ -172,7 +205,7 @@ fn crossing_axis_y(plot: &Rect, min: f64, max: f64, major: f64, crossing: f64) -
             intervals.round() as i32,
         )
     } else {
-        y_of(crossing, min, max, plot).round() as i32
+        y_map(crossing, min, max, plot, None, reversed).round() as i32
     }
 }
 
@@ -210,6 +243,9 @@ fn with_marker_size(marker: MarkerKind, size: f64) -> MarkerKind {
 }
 
 struct LineSeriesStyle {
+    dash: Option<std::sync::Arc<stroke::DashPattern>>,
+    cap: stroke::Cap,
+    join: stroke::Join,
     color: Option<[u8; 3]>,
     visible: bool,
     width: f64,
@@ -220,6 +256,7 @@ struct LineSeriesStyle {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueLabel {
     OutsideEnd,
+    InsideEnd,
     Right,
 }
 
@@ -230,6 +267,9 @@ struct Series {
     slot: usize,
     line_visible: bool,
     line_width: f64,
+    line_cap: stroke::Cap,
+    line_join: stroke::Join,
+    line_dash: Option<std::sync::Arc<stroke::DashPattern>>,
     marker: MarkerKind,
     marker_color: Option<[u8; 3]>,
     /// Area stroke color when a solid outline is present. Lines keep this unset.
@@ -240,10 +280,14 @@ struct Series {
     point_inversion: Vec<Option<bool>>,
     negative_outline: Option<LineSeriesStyle>,
     value_label: Option<ValueLabel>,
+    deleted_label_points: Vec<usize>,
     /// Distinguish explicit errors from omitted points for dispBlanksAs.
     error_points: Vec<bool>,
     unavailable_points: Vec<bool>,
     span_blanks: bool,
+    /// Official F21 secondary valAx: this series is in the second same-type
+    /// wrapper and is mapped with the secondary scale.
+    on_secondary: bool,
 }
 
 impl Default for Series {
@@ -255,6 +299,9 @@ impl Default for Series {
             slot: 0,
             line_visible: false,
             line_width: 0.0,
+            line_cap: stroke::Cap::Round,
+            line_join: stroke::Join::Round,
+            line_dash: None,
             marker: MarkerKind::None,
             marker_color: None,
             line_color: None,
@@ -263,9 +310,11 @@ impl Default for Series {
             point_inversion: Vec::new(),
             negative_outline: None,
             value_label: None,
+            deleted_label_points: Vec::new(),
             error_points: Vec::new(),
             unavailable_points: Vec::new(),
             span_blanks: false,
+            on_secondary: false,
         }
     }
 }
@@ -275,12 +324,15 @@ struct ColumnChart {
     series: Vec<Series>,
     gap_width: f64,
     overlap: f64,
+    stacking: Stacking,
     vary_points: bool,
     grid: bool,
     legend: Option<LegendPos>,
     legend_spec: legend::Spec,
     axis: axis::Spec,
     axis_x: Option<axis::Spec>,
+    /// Official F21 secondary valAx (axPos=r, crosses=max). None for one axis.
+    axis_secondary: Option<axis::Spec>,
     grid_x: bool,
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     cats_from_bottom: bool,
@@ -291,6 +343,16 @@ struct ColumnChart {
     first_slice_ang: f64,
     /// Pie per-point fill overrides (dPt). Empty for other kinds.
     point_colors: Vec<Option<[u8; 3]>>,
+    /// Official series-level pie fill. None when the series has no explicit fill.
+    /// When present, it applies to every slice even if varyColors=1, and a dPt
+    /// fill override still wins for that point.
+    series_fill: Option<SliceFill>,
+    /// Pie per-point fill overrides, including noFill (alpha 0) and straight alpha.
+    point_fills: Vec<Option<SliceFill>>,
+    /// Series-level pie explosion percent. Zero when omitted or explicitly 0.
+    pie_explosion: f64,
+    /// Per-point pie explosion percent (dPt). Empty or all-zero when none.
+    point_explosions: Vec<f64>,
     /// Official Excel 16.0 area charts with omitted c:dispBlanksAs plot
     /// missing cells / omitted cache points as 0 (a V to the baseline).
     /// Explicit dispBlanksAs=gap still leaves a hole. Unused for other kinds.
@@ -311,7 +373,9 @@ struct Canvas {
     /// Straight alpha generated by the existing rounded-frame coverage, never a white key.
     alpha: Option<Vec<u8>>,
     rounded_frame: bool,
-    plot_fill: Option<[u8; 3]>,
+    chart_border: bool,
+    custom_dash_budget: usize,
+    plot_fill: Option<PlotPaint>,
     dpi: RenderDpi,
 }
 
@@ -489,6 +553,820 @@ pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
     accents
 }
 
+#[derive(Clone, Copy)]
+struct ThemeScheme {
+    accents: [[u8; 3]; 6],
+    dk1: Option<[u8; 3]>,
+    lt1: Option<[u8; 3]>,
+    dk2: Option<[u8; 3]>,
+    lt2: Option<[u8; 3]>,
+    hlink: Option<[u8; 3]>,
+    fol_hlink: Option<[u8; 3]>,
+}
+
+fn theme_slot_rgb(slot: &Element, accents: &[[u8; 3]; 6]) -> Option<[u8; 3]> {
+    if let Some(sys) = slot.child_by_local("sysClr") {
+        // Theme clrScheme records the slot in lastClr. Chart-frame sysClr
+        // fills are a different path: Excel paints the live system color
+        // and ignores lastClr, so those fills stay NI.
+        return parse_hex(sys.attr_local("lastClr")?);
+    }
+    color_of_slot(slot, accents)
+}
+
+fn theme_scheme(theme_xml: Option<&[u8]>, accents: [[u8; 3]; 6]) -> ThemeScheme {
+    let mut scheme = ThemeScheme {
+        accents,
+        dk1: None,
+        lt1: None,
+        dk2: None,
+        lt2: None,
+        hlink: None,
+        fol_hlink: None,
+    };
+    let Some(bytes) = theme_xml else {
+        return scheme;
+    };
+    let Ok(doc) = crate::xml::parse(bytes) else {
+        return scheme;
+    };
+    let Some(slots) = find_deep(&doc.root, "clrScheme") else {
+        return scheme;
+    };
+    let color = |name: &str| {
+        slots
+            .child_by_local(name)
+            .and_then(|slot| theme_slot_rgb(slot, &accents))
+    };
+    scheme.dk1 = color("dk1");
+    scheme.lt1 = color("lt1");
+    scheme.dk2 = color("dk2");
+    scheme.lt2 = color("lt2");
+    scheme.hlink = color("hlink");
+    scheme.fol_hlink = color("folHlink");
+    scheme
+}
+
+fn scheme_slot(name: &str, scheme: &ThemeScheme) -> Option<[u8; 3]> {
+    Some(match name {
+        "accent1" => scheme.accents[0],
+        "accent2" => scheme.accents[1],
+        "accent3" => scheme.accents[2],
+        "accent4" => scheme.accents[3],
+        "accent5" => scheme.accents[4],
+        "accent6" => scheme.accents[5],
+        "dk1" | "tx1" => scheme.dk1?,
+        "lt1" | "bg1" => scheme.lt1?,
+        "dk2" | "tx2" => scheme.dk2?,
+        "lt2" | "bg2" => scheme.lt2?,
+        "hlink" => scheme.hlink?,
+        "folHlink" => scheme.fol_hlink?,
+        _ => return None,
+    })
+}
+
+/// IEC 61966-2-1 sRGB. Excel chart-frame tint/shade interpolate in this space,
+/// not in gamma-encoded bytes and not with a pure 2.2 gamma.
+fn srgb_to_linear(channel: u8) -> f64 {
+    let s = f64::from(channel) / 255.0;
+    if s <= 0.04045 {
+        s / 12.92
+    } else {
+        ((s + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(value: f64) -> u8 {
+    let value = value.clamp(0.0, 1.0);
+    let s = if value <= 0.0031308 {
+        12.92 * value
+    } else {
+        1.055 * value.powf(1.0 / 2.4) - 0.055
+    };
+    (s * 255.0).round().clamp(0.0, 255.0) as u8
+}
+
+fn frame_tint(rgb: [u8; 3], val: u32) -> [u8; 3] {
+    let share = f64::from(val) / 100_000.0;
+    rgb.map(|channel| {
+        let lin = srgb_to_linear(channel);
+        linear_to_srgb(lin * share + (1.0 - share))
+    })
+}
+
+fn frame_shade(rgb: [u8; 3], val: u32) -> [u8; 3] {
+    let share = f64::from(val) / 100_000.0;
+    rgb.map(|channel| linear_to_srgb(srgb_to_linear(channel) * share))
+}
+
+fn frame_lum(rgb: [u8; 3], lum_mod: Option<u32>, lum_off: Option<i32>) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    let mut light = light;
+    if let Some(factor) = lum_mod {
+        light *= f64::from(factor) / 100_000.0;
+    }
+    if let Some(offset) = lum_off {
+        light += f64::from(offset) / 100_000.0;
+    }
+    hsl_rgb(hue, sat, light.clamp(0.0, 1.0))
+}
+
+/// Integer-thousandth spelling of DrawingML ST_Percentage. Keep malformed
+/// nodes and other lexical forms unsupported rather than dropping semantics.
+fn parse_signed_percentage(node: &Element) -> Option<i32> {
+    if node.attrs.len() != 1 || node.element_children().next().is_some() {
+        return None;
+    }
+    let raw = node.attr_local("val")?;
+    let digits = raw.strip_prefix('-').unwrap_or(raw);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
+}
+
+/// Preserve the existing bounded luminance-offset contract.
+fn parse_luminance_offset(node: &Element) -> Option<i32> {
+    parse_signed_percentage(node).filter(|value| (-100_000..=100_000).contains(value))
+}
+
+/// HSL saturation modulation with hue and luminance held fixed. In encoded
+/// RGB this scales each channel's distance from (min + max) / 2. Do not clamp
+/// saturation first: signed / >100% factors can invert / oversaturate, with
+/// clipping only on conversion back to RGB. Existing luminance math is untouched.
+fn frame_sat(rgb: [u8; 3], factor: i32) -> [u8; 3] {
+    let mid = (f64::from(*rgb.iter().min().unwrap()) + f64::from(*rgb.iter().max().unwrap())) / 2.0;
+    rgb.map(|channel| {
+        (mid + (f64::from(channel) - mid) * f64::from(factor) / 100_000.0)
+            .round()
+            .clamp(0.0, 255.0) as u8
+    })
+}
+
+/// DrawingML satOff adds percentage points to HSL saturation while keeping
+/// hue and luminance. Only the unambiguous in-gamut standalone subset is
+/// enabled: native extrapolation and achromatic hue selection are unverified.
+/// Do not infer clipping / inversion from the different satMod transform.
+fn frame_sat_offset(rgb: [u8; 3], offset: i32) -> Option<[u8; 3]> {
+    if offset == 0 {
+        return Some(rgb);
+    }
+    let (hue, sat, light) = rgb_hsl(rgb);
+    let shifted = sat + f64::from(offset) / 100_000.0;
+    if sat == 0.0 || !(0.0..=1.0).contains(&shifted) {
+        return None;
+    }
+    Some(hsl_rgb(hue, shifted, light))
+}
+
+/// Absolute DrawingML saturation replaces S, retaining H and L. Limit this
+/// standalone profile to the documented typical range; do not guess native
+/// extrapolation or assign an arbitrary hue to a previously gray color.
+fn frame_saturation(rgb: [u8; 3], value: i32) -> Option<[u8; 3]> {
+    if !(0..=100_000).contains(&value) {
+        return None;
+    }
+    let (hue, sat, light) = rgb_hsl(rgb);
+    if sat == 0.0 {
+        return (value == 0).then_some(rgb);
+    }
+    Some(hsl_rgb(hue, f64::from(value) / 100_000.0, light))
+}
+
+/// Absolute DrawingML luminance replaces HSL L, retaining H and S. The
+/// typical 0..100% subset is explicit; out-of-range native behavior is not
+/// inferred. Achromatic input is well-defined because S remains zero.
+fn frame_luminance(rgb: [u8; 3], value: i32) -> Option<[u8; 3]> {
+    if !(0..=100_000).contains(&value) {
+        return None;
+    }
+    let (hue, sat, _) = rgb_hsl(rgb);
+    Some(hsl_rgb(hue, sat, f64::from(value) / 100_000.0))
+}
+
+/// Absolute DrawingML hue uses ST_PositiveFixedAngle, not a percentage or
+/// offset: replace H and preserve S/L. The schema domain is [0, 360 degrees)
+/// with 60000 units per degree; reject invalid turns instead of guessing wrap.
+fn frame_absolute_hue(rgb: [u8; 3], angle: i32) -> Option<[u8; 3]> {
+    if !(0..21_600_000).contains(&angle) {
+        return None;
+    }
+    let (_, sat, light) = rgb_hsl(rgb);
+    Some(hsl_rgb(f64::from(angle) / 21_600_000.0, sat, light))
+}
+
+/// Exactly two alphaMod operations, with the ceiling applied at EACH stage.
+/// First opacity is min(first,100000)/100000 exactly; reuse the unchanged
+/// precise product helper for the second stage without intermediate rounding.
+/// Saturation makes the factor order significant. This is not a general
+/// chain evaluator or a claim of combined native fidelity.
+fn frame_alpha_mod_pair(rgb: [u8; 3], first: &Element, second: &Element) -> Option<FrameFill> {
+    let parse = |node: &Element| {
+        let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+        if node.local_name() != "alphaMod" || attrs.len() != 1 || attrs[0].0 != "val"
+            || node.element_children().next().is_some() || !node.text_content().trim().is_empty() { return None; }
+        u32::try_from(parse_frame_integer(&attrs[0].1)?).ok()
+    };
+    let initial = parse(first)?.min(100_000);
+    let factor = parse(second)?;
+    Some(frame_alpha_mod_fill(rgb, initial, factor))
+}
+
+/// Exactly one alphaMod and alphaOff, evaluated in their XML order.
+/// ECMA20.1.2.3.2/.3 specifies the bounds of EACH operation; postponing
+/// saturation until the end or reordering the operations changes the result.
+/// Preserve numerator/1e10 through the existing exact-alpha final conversion.
+/// This is an isolated sRGB library profile, not a generic chain evaluator or
+/// a claim of combined native fidelity. Both strict operands are always read.
+fn frame_alpha_mod_off(rgb: [u8; 3], modulation: &Element, offset: &Element, modulation_first: bool) -> Option<FrameFill> {
+    let parse = |node: &Element| {
+        let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+        if attrs.len() != 1 || attrs[0].0 != "val" || node.element_children().next().is_some() || !node.text_content().trim().is_empty() { return None; }
+        parse_frame_integer(&attrs[0].1)
+    };
+    if modulation.local_name() != "alphaMod" || offset.local_name() != "alphaOff" { return None; }
+    let factor = u64::from(u32::try_from(parse(modulation)?).ok()?);
+    let off = parse(offset)?;
+    if !(-100_000..=100_000).contains(&off) { return None; }
+    let product = if modulation_first {
+        // Starting opacity is100%; cap modulation BEFORE applying the offset.
+        ((100_000 * factor).min(ALPHA_PRODUCT_DENOM) as i64 + i64::from(off) * 100_000)
+            .clamp(0, ALPHA_PRODUCT_DENOM as i64) as u64
+    } else {
+        // Clamp the offset stage first, then keep the exact modulation product.
+        let initial = (100_000 + i64::from(off)).clamp(0, 100_000) as u64;
+        (initial * factor).min(ALPHA_PRODUCT_DENOM)
+    };
+    Some(if product == ALPHA_PRODUCT_DENOM { FrameFill::Solid(rgb) }
+        else if product % 100_000 == 0 { FrameFill::Translucent(rgb, (product / 100_000) as u32) }
+        else { FrameFill::AlphaProduct(rgb, product) })
+}
+
+/// Isolated component replacement plus absolute opacity for the Excel frame profile.
+/// ECMA20.1.2.3.4/.10/.23 changes one RGB component;20.1.2.3.1 sets
+/// opacity without changing color. Apply these independent fields in either
+/// order only for this two-operation sRGB profile, not arbitrary chains.
+/// Reuse the independently established setter transfer and exact opacity;
+/// combined Excel export/color fidelity remains a separate evidence boundary.
+/// Validate both operands even when opacity is zero.
+fn frame_rgb_component_alpha(rgb: [u8; 3], component: &Element, alpha: &Element) -> Option<FrameFill> {
+    let attrs: Vec<_> = alpha.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if alpha.local_name() != "alpha" || attrs.len() != 1 || attrs[0].0 != "val"
+        || alpha.element_children().next().is_some()
+        || !alpha.text_content().trim().is_empty()
+    { return None; }
+    let opacity = u32::try_from(parse_frame_integer(&attrs[0].1)?).ok()?;
+    if opacity > 100_000 { return None; }
+    let rgb = frame_rgb_component(rgb, component)?;
+    Some(if opacity == 100_000 { FrameFill::Solid(rgb) } else { FrameFill::Translucent(rgb, opacity) })
+}
+
+/// Isolated absolute-alpha plus one RGB adjustment, in either evidenced order.
+/// ECMA20.1.2.3.1 sets opacity without changing color; the RGB operation changes
+/// one color component. Eighteen new paired native controls validate BOTH orders
+/// in this Excel sRGB-only profile; this does not reorder arbitrary transforms.
+/// Validate both operands even at zero opacity; preserve existing exact-alpha
+/// helpers/products and all other bases/mixed sequences unchanged.
+fn frame_rgb_adjustment_alpha(rgb: [u8; 3], adjustment: &Element, alpha: &Element) -> Option<FrameFill> {
+    let attrs: Vec<_> = alpha.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if alpha.local_name() != "alpha" || attrs.len() != 1 || attrs[0].0 != "val"
+        || alpha.element_children().next().is_some()
+        || !alpha.text_content().trim().is_empty()
+    { return None; }
+    let opacity = u32::try_from(parse_frame_integer(&attrs[0].1)?).ok()?;
+    if opacity > 100_000 { return None; }
+    let rgb = frame_rgb_adjustment(rgb, adjustment)?;
+    Some(if opacity == 100_000 { FrameFill::Solid(rgb) } else { FrameFill::Translucent(rgb, opacity) })
+}
+
+/// Excel-only standalone RGB-channel modulation/offset, normal-domain subset.
+/// ECMA20.1.2.3.5/.6/.11/.12/.24/.25 specify component multiplication/addition
+/// and result bounds0..100%. Its encoded-byte examples differ from our new
+/// controlled Excel sRGB results; retain that explicit contract divergence.
+/// Independent native controls (not setter inference) support IEC linear-light
+/// arithmetic on sRGB bases. Scheme-source controls remain unresolved and NI.
+fn frame_rgb_adjustment(mut rgb: [u8; 3], node: &Element) -> Option<[u8; 3]> {
+    let (channel, offset) = match node.local_name() {
+        "redMod" => (0, false), "greenMod" => (1, false), "blueMod" => (2, false),
+        "redOff" => (0, true), "greenOff" => (1, true), "blueOff" => (2, true),
+        _ => return None,
+    };
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if attrs.len() != 1 || attrs[0].0 != "val"
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    { return None; }
+    let value = parse_frame_integer(&attrs[0].1)?;
+    if !(if offset { -100_000..=100_000 } else { 0..=100_000 }).contains(&value) {
+        return None;
+    }
+    let linear = srgb_to_linear(rgb[channel]);
+    let amount = f64::from(value) / 100_000.0;
+    // Existing exact IEC encoder applies the normatively specified result bounds.
+    rgb[channel] = linear_to_srgb(if offset { linear + amount } else { linear * amount });
+    Some(rgb)
+}
+
+/// Standalone normal-domain red/green/blue component replacement for the
+/// Excel frame/Cartesian-plot profile. ECMA-376 20.1.2.3.4/.10/.23 leaves the
+/// other two components unchanged. The predeclared 48-control native matrix
+/// discriminates linear-IEC component intensity from encoded-byte percentage.
+/// Reuse the exact IEC encoder, not a guessed gamma or sample compensation.
+/// Broader ST_Percentage ranges/spellings and transform mixtures remain NI.
+fn frame_rgb_component(mut rgb: [u8; 3], node: &Element) -> Option<[u8; 3]> {
+    let channel = match node.local_name() {
+        "red" => 0,
+        "green" => 1,
+        "blue" => 2,
+        _ => return None,
+    };
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if attrs.len() != 1
+        || attrs[0].0 != "val"
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    rgb[channel] = linear_srgb_channel(parse_frame_integer(&attrs[0].1)?)?;
+    Some(rgb)
+}
+
+/// Encode a normal-domain linear sRGB/scRGB component using the IEC61966-2-1
+/// transfer function published by ICC (sRGB characterization,A.8), not a
+/// guessed power2.2. Quantize nearest to eight bits; do not extrapolate/clamp.
+fn linear_srgb_channel(value: i32) -> Option<u8> {
+    if !(0..=100_000).contains(&value) {
+        return None;
+    }
+    let linear = f64::from(value) / 100_000.0;
+    let encoded = if linear <= 0.0031308 {
+        12.92 * linear
+    } else {
+        1.055 * linear.powf(1.0 / 2.4) - 0.055
+    };
+    Some((encoded * 255.0).round() as u8)
+}
+
+/// Untransformed CT_ScRgbColor normal-domain subset. ECMA-376 Part1(2016),
+///20.1.2.3.30 specifies linear gamma1.0 and0..100%, with50% gray=BCBCBC.
+/// ST_Percentage permits broader spellings/ranges, but no such extrapolation
+/// or transforms are enabled here. Preserve all old color/transform paths.
+fn parse_frame_scrgb_color(node: &Element) -> Option<[u8; 3]> {
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if node.local_name() != "scrgbClr"
+        || attrs.len() != 3
+        || attrs.iter().any(|(name, _)| !matches!(name.as_str(), "r" | "g" | "b"))
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    Some([
+        linear_srgb_channel(parse_frame_integer(node.attr_local("r")?)?)?,
+        linear_srgb_channel(parse_frame_integer(node.attr_local("g")?)?)?,
+        linear_srgb_channel(parse_frame_integer(node.attr_local("b")?)?)?,
+    ])
+}
+
+/// Exact named RGB values from ECMA-376 Part1 (2016),20.1.10.48.
+/// This is not a CSS palette or case/abbreviation normalization. In particular
+/// darkSeaGreen/dkSeaGreen and lightGoldenrodYellow/ltGoldenrodYellow have
+/// distinct entries in that normative table. No Office-version corrections.
+fn drawingml_preset_rgb(value: &str) -> Option<[u8; 3]> {
+    let rgb = match value {
+        "aliceBlue" => [240, 248, 255],
+        "antiqueWhite" => [250, 235, 215],
+        "aqua" => [0, 255, 255],
+        "aquamarine" => [127, 255, 212],
+        "azure" => [240, 255, 255],
+        "beige" => [245, 245, 220],
+        "bisque" => [255, 228, 196],
+        "black" => [0, 0, 0],
+        "blanchedAlmond" => [255, 235, 205],
+        "blue" => [0, 0, 255],
+        "blueViolet" => [138, 43, 226],
+        "brown" => [165, 42, 42],
+        "burlyWood" => [222, 184, 135],
+        "cadetBlue" => [95, 158, 160],
+        "chartreuse" => [127, 255, 0],
+        "chocolate" => [210, 105, 30],
+        "coral" => [255, 127, 80],
+        "cornflowerBlue" => [100, 149, 237],
+        "cornsilk" => [255, 248, 220],
+        "crimson" => [220, 20, 60],
+        "cyan" => [0, 255, 255],
+        "darkBlue" => [0, 0, 139],
+        "darkCyan" => [0, 139, 139],
+        "darkGoldenrod" => [184, 134, 11],
+        "darkGray" => [169, 169, 169],
+        "darkGreen" => [0, 100, 0],
+        "darkGrey" => [169, 169, 169],
+        "darkKhaki" => [189, 183, 107],
+        "darkMagenta" => [139, 0, 139],
+        "darkOliveGreen" => [85, 107, 47],
+        "darkOrange" => [255, 140, 0],
+        "darkOrchid" => [153, 50, 204],
+        "darkRed" => [139, 0, 0],
+        "darkSalmon" => [233, 150, 122],
+        "darkSeaGreen" => [143, 188, 143],
+        "darkSlateBlue" => [72, 61, 139],
+        "darkSlateGray" => [47, 79, 79],
+        "darkSlateGrey" => [47, 79, 79],
+        "darkTurquoise" => [0, 206, 209],
+        "darkViolet" => [148, 0, 211],
+        "deepPink" => [255, 20, 147],
+        "deepSkyBlue" => [0, 191, 255],
+        "dimGray" => [105, 105, 105],
+        "dimGrey" => [105, 105, 105],
+        "dkBlue" => [0, 0, 139],
+        "dkCyan" => [0, 139, 139],
+        "dkGoldenrod" => [184, 134, 11],
+        "dkGray" => [169, 169, 169],
+        "dkGreen" => [0, 100, 0],
+        "dkGrey" => [169, 169, 169],
+        "dkKhaki" => [189, 183, 107],
+        "dkMagenta" => [139, 0, 139],
+        "dkOliveGreen" => [85, 107, 47],
+        "dkOrange" => [255, 140, 0],
+        "dkOrchid" => [153, 50, 204],
+        "dkRed" => [139, 0, 0],
+        "dkSalmon" => [233, 150, 122],
+        "dkSeaGreen" => [143, 188, 139],
+        "dkSlateBlue" => [72, 61, 139],
+        "dkSlateGray" => [47, 79, 79],
+        "dkSlateGrey" => [47, 79, 79],
+        "dkTurquoise" => [0, 206, 209],
+        "dkViolet" => [148, 0, 211],
+        "dodgerBlue" => [30, 144, 255],
+        "firebrick" => [178, 34, 34],
+        "floralWhite" => [255, 250, 240],
+        "forestGreen" => [34, 139, 34],
+        "fuchsia" => [255, 0, 255],
+        "gainsboro" => [220, 220, 220],
+        "ghostWhite" => [248, 248, 255],
+        "gold" => [255, 215, 0],
+        "goldenrod" => [218, 165, 32],
+        "gray" => [128, 128, 128],
+        "green" => [0, 128, 0],
+        "greenYellow" => [173, 255, 47],
+        "grey" => [128, 128, 128],
+        "honeydew" => [240, 255, 240],
+        "hotPink" => [255, 105, 180],
+        "indianRed" => [205, 92, 92],
+        "indigo" => [75, 0, 130],
+        "ivory" => [255, 255, 240],
+        "khaki" => [240, 230, 140],
+        "lavender" => [230, 230, 250],
+        "lavenderBlush" => [255, 240, 245],
+        "lawnGreen" => [124, 252, 0],
+        "lemonChiffon" => [255, 250, 205],
+        "lightBlue" => [173, 216, 230],
+        "lightCoral" => [240, 128, 128],
+        "lightCyan" => [224, 255, 255],
+        "lightGoldenrodYellow" => [250, 250, 210],
+        "lightGray" => [211, 211, 211],
+        "lightGreen" => [144, 238, 144],
+        "lightGrey" => [211, 211, 211],
+        "lightPink" => [255, 182, 193],
+        "lightSalmon" => [255, 160, 122],
+        "lightSeaGreen" => [32, 178, 170],
+        "lightSkyBlue" => [135, 206, 250],
+        "lightSlateGray" => [119, 136, 153],
+        "lightSlateGrey" => [119, 136, 153],
+        "lightSteelBlue" => [176, 196, 222],
+        "lightYellow" => [255, 255, 224],
+        "lime" => [0, 255, 0],
+        "limeGreen" => [50, 205, 50],
+        "linen" => [250, 240, 230],
+        "ltBlue" => [173, 216, 230],
+        "ltCoral" => [240, 128, 128],
+        "ltCyan" => [224, 255, 255],
+        "ltGoldenrodYellow" => [250, 250, 120],
+        "ltGray" => [211, 211, 211],
+        "ltGreen" => [144, 238, 144],
+        "ltGrey" => [211, 211, 211],
+        "ltPink" => [255, 182, 193],
+        "ltSalmon" => [255, 160, 122],
+        "ltSeaGreen" => [32, 178, 170],
+        "ltSkyBlue" => [135, 206, 250],
+        "ltSlateGray" => [119, 136, 153],
+        "ltSlateGrey" => [119, 136, 153],
+        "ltSteelBlue" => [176, 196, 222],
+        "ltYellow" => [255, 255, 224],
+        "magenta" => [255, 0, 255],
+        "maroon" => [128, 0, 0],
+        "medAquamarine" => [102, 205, 170],
+        "medBlue" => [0, 0, 205],
+        "mediumAquamarine" => [102, 205, 170],
+        "mediumBlue" => [0, 0, 205],
+        "mediumOrchid" => [186, 85, 211],
+        "mediumPurple" => [147, 112, 219],
+        "mediumSeaGreen" => [60, 179, 113],
+        "mediumSlateBlue" => [123, 104, 238],
+        "mediumSpringGreen" => [0, 250, 154],
+        "mediumTurquoise" => [72, 209, 204],
+        "mediumVioletRed" => [199, 21, 133],
+        "medOrchid" => [186, 85, 211],
+        "medPurple" => [147, 112, 219],
+        "medSeaGreen" => [60, 179, 113],
+        "medSlateBlue" => [123, 104, 238],
+        "medSpringGreen" => [0, 250, 154],
+        "medTurquoise" => [72, 209, 204],
+        "medVioletRed" => [199, 21, 133],
+        "midnightBlue" => [25, 25, 112],
+        "mintCream" => [245, 255, 250],
+        "mistyRose" => [255, 228, 225],
+        "moccasin" => [255, 228, 181],
+        "navajoWhite" => [255, 222, 173],
+        "navy" => [0, 0, 128],
+        "oldLace" => [253, 245, 230],
+        "olive" => [128, 128, 0],
+        "oliveDrab" => [107, 142, 35],
+        "orange" => [255, 165, 0],
+        "orangeRed" => [255, 69, 0],
+        "orchid" => [218, 112, 214],
+        "paleGoldenrod" => [238, 232, 170],
+        "paleGreen" => [152, 251, 152],
+        "paleTurquoise" => [175, 238, 238],
+        "paleVioletRed" => [219, 112, 147],
+        "papayaWhip" => [255, 239, 213],
+        "peachPuff" => [255, 218, 185],
+        "peru" => [205, 133, 63],
+        "pink" => [255, 192, 203],
+        "plum" => [221, 160, 221],
+        "powderBlue" => [176, 224, 230],
+        "purple" => [128, 0, 128],
+        "red" => [255, 0, 0],
+        "rosyBrown" => [188, 143, 143],
+        "royalBlue" => [65, 105, 225],
+        "saddleBrown" => [139, 69, 19],
+        "salmon" => [250, 128, 114],
+        "sandyBrown" => [244, 164, 96],
+        "seaGreen" => [46, 139, 87],
+        "seaShell" => [255, 245, 238],
+        "sienna" => [160, 82, 45],
+        "silver" => [192, 192, 192],
+        "skyBlue" => [135, 206, 235],
+        "slateBlue" => [106, 90, 205],
+        "slateGray" => [112, 128, 144],
+        "slateGrey" => [112, 128, 144],
+        "snow" => [255, 250, 250],
+        "springGreen" => [0, 255, 127],
+        "steelBlue" => [70, 130, 180],
+        "tan" => [210, 180, 140],
+        "teal" => [0, 128, 128],
+        "thistle" => [216, 191, 216],
+        "tomato" => [255, 99, 71],
+        "turquoise" => [64, 224, 208],
+        "violet" => [238, 130, 238],
+        "wheat" => [245, 222, 179],
+        "white" => [255, 255, 255],
+        "whiteSmoke" => [245, 245, 245],
+        "yellow" => [255, 255, 0],
+        "yellowGreen" => [154, 205, 50],
+        _ => return None,
+    };
+    Some(rgb)
+}
+
+/// Strict untransformed CT_PresetColor subset. Other schema-legal transform
+/// children remain NI until verified for this base; namespace declarations
+/// are not semantic attributes. Keep this isolated from old transform paths.
+fn parse_frame_preset_color(node: &Element) -> Option<[u8; 3]> {
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if node.local_name() != "prstClr"
+        || attrs.len() != 1
+        || attrs[0].0 != "val"
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    drawingml_preset_rgb(&attrs[0].1)
+}
+
+/// Strict integer spelling shared by the new HSL base-color attributes.
+/// Keep existing transform parsers untouched; percent strings and other
+/// otherwise legal OOXML spellings are outside this explicit profile.
+fn parse_frame_integer(raw: &str) -> Option<i32> {
+    let digits = raw.strip_prefix('-').unwrap_or(raw);
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
+}
+
+/// Untransformed DrawingML HSL base color. Use the existing perceptual HSL
+/// conversion in its normal domain, not a guessed extrapolation or extra
+/// gamma stage. Transforms on this new base remain explicitly unsupported.
+fn parse_frame_hsl_color(node: &Element) -> Option<[u8; 3]> {
+    let attrs: Vec<_> = node.attrs.iter().filter(|(name, _)| name.as_str() != "xmlns" && !name.starts_with("xmlns:")).collect();
+    if node.local_name() != "hslClr"
+        || attrs.len() != 3
+        || attrs.iter().any(|(name, _)| !matches!(name.as_str(), "hue" | "sat" | "lum"))
+        || node.element_children().next().is_some()
+        || !node.text_content().trim().is_empty()
+    {
+        return None;
+    }
+    let hue = parse_frame_integer(node.attr_local("hue")?)?;
+    let sat = parse_frame_integer(node.attr_local("sat")?)?;
+    let lum = parse_frame_integer(node.attr_local("lum")?)?;
+    if !(0..21_600_000).contains(&hue)
+        || !(0..=100_000).contains(&sat)
+        || !(0..=100_000).contains(&lum)
+    {
+        return None;
+    }
+    Some(hsl_rgb(f64::from(hue) / 21_600_000.0, f64::from(sat) / 100_000.0, f64::from(lum) / 100_000.0))
+}
+
+/// DrawingML CT_PositivePercentage uses ST_Percentage (i32) with minimum 0.
+/// It is not alpha's bounded 0..100000 percentage. Keep the same strict node
+/// and integer-thousandth lexical contract as the other new color transforms.
+fn parse_positive_percentage(node: &Element) -> Option<u32> {
+    u32::try_from(parse_signed_percentage(node)?).ok()
+}
+
+/// Modulate the angular HSL hue, retaining saturation and lightness. Reduce
+/// complete turns before the existing RGB conversion; clamping at one turn
+/// would turn every overshoot into red and contradict native hueMod behavior.
+fn frame_hue(rgb: [u8; 3], factor: u32) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    hsl_rgb((hue * f64::from(factor) / 100_000.0).rem_euclid(1.0), sat, light)
+}
+
+/// Excel frame rendering uses a signed ST_Angle offset (60000 per degree).
+/// Native controls discriminate periodic hue from the clamp wording in the
+/// SDK HueOffset.Val remarks. This is an Excel-only frame profile, not a claim
+/// that the two contracts agree or that other hosts have been validated.
+fn frame_hue_offset(rgb: [u8; 3], offset: i32) -> [u8; 3] {
+    let (hue, sat, light) = rgb_hsl(rgb);
+    hsl_rgb((hue + f64::from(offset) / (360.0 * 60_000.0)).rem_euclid(1.0), sat, light)
+}
+
+/// An alpha offset adds signed percentage points, not a multiplicative ratio.
+/// Only integer-thousandth operands are admitted here; exact alphaMod products
+/// and unverified transform mixtures continue through their existing paths.
+fn frame_alpha_off_fill(rgb: [u8; 3], initial: u32, offset: i32) -> FrameFill {
+    let alpha = (i64::from(initial) + i64::from(offset)).clamp(0, 100_000) as u32;
+    if alpha == 100_000 { FrameFill::Solid(rgb) } else { FrameFill::Translucent(rgb, alpha) }
+}
+
+/// Two integer-thousandth opacity operands retain their exact product until
+/// final 8-bit coverage conversion. Rounding to an intermediate percentage
+/// loses the distinction between 50000*33333 and 50001*33333 at the 42/43 edge.
+const ALPHA_PRODUCT_DENOM: u64 = 100_000 * 100_000;
+
+fn frame_alpha_mod_fill(rgb: [u8; 3], initial: u32, factor: u32) -> FrameFill {
+    let product = (u64::from(initial) * u64::from(factor)).min(ALPHA_PRODUCT_DENOM);
+    if product == ALPHA_PRODUCT_DENOM {
+        FrameFill::Solid(rgb)
+    } else if product % 100_000 == 0 {
+        FrameFill::Translucent(rgb, (product / 100_000) as u32)
+    } else {
+        FrameFill::AlphaProduct(rgb, product)
+    }
+}
+
+fn alpha_product_to_u8(product: u64) -> u8 {
+    ((product * 255 + ALPHA_PRODUCT_DENOM / 2) / ALPHA_PRODUCT_DENOM) as u8
+}
+
+fn frame_initial_alpha(node: &Element) -> Option<u32> {
+    parse_positive_percentage(node).filter(|alpha| *alpha <= 100_000)
+}
+
+fn frame_alpha_fill(rgb: [u8; 3], alpha: &Element) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let alpha = parse_ooxml_alpha(alpha.attr_local("val")).ok_or_else(unsupported)?;
+    if alpha == 100_000 {
+        Ok(FrameFill::Solid(rgb))
+    } else {
+        Ok(FrameFill::Translucent(rgb, alpha))
+    }
+}
+
+fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let rgb = match color.local_name() {
+        "scrgbClr" => return parse_frame_scrgb_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
+        "prstClr" => return parse_frame_preset_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
+        // Return before generic transform dispatch: this base is supported
+        // only without transforms. Excel frame/plot entry guards are unchanged.
+        "hslClr" => return parse_frame_hsl_color(color).map(FrameFill::Solid).ok_or_else(unsupported),
+        "srgbClr" => color
+            .attr_local("val")
+            .and_then(parse_hex)
+            .ok_or_else(unsupported)?,
+        "schemeClr" => {
+            let name = color.attr_local("val").ok_or_else(unsupported)?;
+            scheme_slot(name, scheme).ok_or_else(unsupported)?
+        }
+        _ => return Err(unsupported()),
+    };
+    let kids: Vec<&Element> = color.element_children().collect();
+    let names: Vec<&str> = kids.iter().map(|child| child.local_name()).collect();
+    let pct = |node: &Element| parse_ooxml_alpha(node.attr_local("val")).ok_or_else(unsupported);
+    match names.as_slice() {
+        [] => Ok(FrameFill::Solid(rgb)),
+        ["alphaMod", "alphaMod"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_pair(rgb, kids[0], kids[1]).ok_or_else(unsupported)
+        }
+        ["alphaMod", "alphaOff"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_off(rgb, kids[0], kids[1], true).ok_or_else(unsupported)
+        }
+        ["alphaOff", "alphaMod"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_alpha_mod_off(rgb, kids[1], kids[0], false).ok_or_else(unsupported)
+        }
+        ["red", "alpha"] | ["green", "alpha"] | ["blue", "alpha"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_component_alpha(rgb, kids[0], kids[1]).ok_or_else(unsupported)
+        }
+        ["alpha", "red"] | ["alpha", "green"] | ["alpha", "blue"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_component_alpha(rgb, kids[1], kids[0]).ok_or_else(unsupported)
+        }
+        ["redMod", "alpha"] | ["greenMod", "alpha"] | ["blueMod", "alpha"]
+        | ["redOff", "alpha"] | ["greenOff", "alpha"] | ["blueOff", "alpha"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_adjustment_alpha(rgb, kids[0], kids[1]).ok_or_else(unsupported)
+        }
+        ["alpha", "redMod"] | ["alpha", "greenMod"] | ["alpha", "blueMod"]
+        | ["alpha", "redOff"] | ["alpha", "greenOff"] | ["alpha", "blueOff"] => {
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            frame_rgb_adjustment_alpha(rgb, kids[1], kids[0]).ok_or_else(unsupported)
+        }
+        ["redMod"] | ["greenMod"] | ["blueMod"] | ["redOff"] | ["greenOff"] | ["blueOff"] => {
+            // Three new scheme controls diverged from the declared theme/reference.
+            // Do not guess their style source or widen scheme/new-base semantics.
+            if color.local_name() != "srgbClr" { return Err(unsupported()); }
+            Ok(FrameFill::Solid(frame_rgb_adjustment(rgb, kids[0]).ok_or_else(unsupported)?))
+        }
+        ["red"] | ["green"] | ["blue"] => Ok(FrameFill::Solid(
+            frame_rgb_component(rgb, kids[0]).ok_or_else(unsupported)?,
+        )),
+        ["alpha"] => frame_alpha_fill(rgb, kids[0]),
+        ["alphaOff"] => Ok(frame_alpha_off_fill(rgb, 100_000, parse_luminance_offset(kids[0]).ok_or_else(unsupported)?)),
+        ["alpha", "alphaOff"] => Ok(frame_alpha_off_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
+        ["alphaOff", "alpha"] => {
+            // A later absolute alpha overrides, but does not excuse an invalid offset.
+            parse_luminance_offset(kids[0]).ok_or_else(unsupported)?;
+            Ok(frame_alpha_off_fill(rgb, frame_initial_alpha(kids[1]).ok_or_else(unsupported)?, 0))
+        }
+        ["hueOff"] => Ok(FrameFill::Solid(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
+        ["hueOff", "alpha"] => frame_alpha_fill(frame_hue_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
+        ["alphaMod"] => Ok(frame_alpha_mod_fill(rgb, 100_000, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?)),
+        ["alpha", "alphaMod"] => Ok(frame_alpha_mod_fill(rgb, frame_initial_alpha(kids[0]).ok_or_else(unsupported)?, parse_positive_percentage(kids[1]).ok_or_else(unsupported)?)),
+        ["alphaMod", "alpha"] => {
+            // Absolute alpha sets the new opacity; it does not multiply it.
+            // Still validate the overwritten operand rather than ignoring it.
+            parse_positive_percentage(kids[0]).ok_or_else(unsupported)?;
+            Ok(frame_alpha_mod_fill(rgb, frame_initial_alpha(kids[1]).ok_or_else(unsupported)?, 100_000))
+        }
+
+        ["tint"] => Ok(FrameFill::Solid(frame_tint(rgb, pct(kids[0])?))),
+        ["tint", "alpha"] => frame_alpha_fill(frame_tint(rgb, pct(kids[0])?), kids[1]),
+        ["shade"] => Ok(FrameFill::Solid(frame_shade(rgb, pct(kids[0])?))),
+        ["shade", "alpha"] => frame_alpha_fill(frame_shade(rgb, pct(kids[0])?), kids[1]),
+        // Reuse the strict leaf/i32 lexical parser, but interpret this value as
+        // fixed-angle units. The helper enforces the angle's schema domain.
+        ["hue"] => Ok(FrameFill::Solid(frame_absolute_hue(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
+        ["hueMod"] => Ok(FrameFill::Solid(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?))),
+        ["hueMod", "alpha"] => frame_alpha_fill(frame_hue(rgb, parse_positive_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
+        ["sat"] => Ok(FrameFill::Solid(frame_saturation(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
+        ["satOff"] => Ok(FrameFill::Solid(frame_sat_offset(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
+        ["satMod"] => Ok(FrameFill::Solid(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?))),
+        ["satMod", "alpha"] => frame_alpha_fill(frame_sat(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?), kids[1]),
+        ["lum"] => Ok(FrameFill::Solid(frame_luminance(rgb, parse_signed_percentage(kids[0]).ok_or_else(unsupported)?).ok_or_else(unsupported)?)),
+        ["lumMod"] => Ok(FrameFill::Solid(frame_lum(rgb, Some(pct(kids[0])?), None))),
+        ["lumMod", "alpha"] => frame_alpha_fill(frame_lum(rgb, Some(pct(kids[0])?), None), kids[1]),
+        ["lumOff"] => Ok(FrameFill::Solid(frame_lum(
+            rgb,
+            None,
+            Some(parse_luminance_offset(kids[0]).ok_or_else(unsupported)?),
+        ))),
+        ["lumOff", "alpha"] => frame_alpha_fill(
+            frame_lum(rgb, None, Some(parse_luminance_offset(kids[0]).ok_or_else(unsupported)?)),
+            kids[1],
+        ),
+        ["lumMod", "lumOff"] => Ok(FrameFill::Solid(frame_lum(
+            rgb,
+            Some(pct(kids[0])?),
+            Some(parse_luminance_offset(kids[1]).ok_or_else(unsupported)?),
+        ))),
+        ["lumMod", "lumOff", "alpha"] => frame_alpha_fill(
+            frame_lum(rgb, Some(pct(kids[0])?), Some(parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
+            kids[2],
+        ),
+        _ => Err(unsupported()),
+    }
+}
+
 /// Excel 导出带圆角外框，绘图区从标题布局顶起算。
 /// 幻灯片导出没有这圈外框，有标题时绘图区再低一截。
 #[derive(Clone, Copy)]
@@ -531,11 +1409,29 @@ pub(crate) fn render_chart_at(
     sheet: &str,
     dpi: RenderDpi,
 ) -> Result<Vec<u8>, Error> {
+    render_chart_with_theme(
+        root, width, height, accents, font_bytes, host, cells, sheet, dpi, None,
+    )
+}
+
+pub(crate) fn render_chart_with_theme(
+    root: &Element,
+    width: u32,
+    height: u32,
+    accents: [[u8; 3]; 6],
+    font_bytes: Option<&[u8]>,
+    host: ChartHost,
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
+    dpi: RenderDpi,
+    theme_xml: Option<&[u8]>,
+) -> Result<Vec<u8>, Error> {
     if width == 0 || height == 0 || width > MAX_PX || height > MAX_PX {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
+    let scheme = theme_scheme(theme_xml, accents);
     let frame = if matches!(host, ChartHost::Excel) {
-        Some(read_frame(root)?)
+        Some(read_frame_with(root, &scheme)?)
     } else {
         None
     };
@@ -546,71 +1442,382 @@ pub(crate) fn render_chart_at(
         // Chart area and plot area have independent fills. The default Cartesian
         // plot is white, not the explicitly coloured chart-area background.
         canvas.rounded_frame = frame.rounded;
-        canvas.fill_rect(0, 0, width as i32, height as i32, frame.fill);
-        canvas.plot_fill = if chart.kind == PlotKind::Pie {
-            // A pie's automatic plot area is transparent. Explicit pie plot-area
-            // formatting needs its own layout evidence, not an inscribed square.
-            if frame.plot_fill.is_some_and(|c| c != [255; 3]) {
-                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        canvas.chart_border = frame.border;
+        match frame.fill {
+            FrameFill::NoFill => canvas.clear_to_transparent(),
+            FrameFill::Default => canvas.fill_rect(0, 0, width as i32, height as i32, [255; 3]),
+            FrameFill::Solid(color) => canvas.fill_rect(0, 0, width as i32, height as i32, color),
+            FrameFill::Translucent(color, alpha) => {
+                // Translucent chart fill is straight alpha, not flattened onto white.
+                canvas.clear_to_transparent();
+                let cov = ooxml_alpha_to_u8(alpha);
+                if cov > 0 {
+                    canvas.fill_rect_cov(0, 0, width as i32, height as i32, color, cov);
+                }
             }
-            None
+            FrameFill::AlphaProduct(color, product) => {
+                canvas.clear_to_transparent();
+                let cov = alpha_product_to_u8(product);
+                if cov > 0 {
+                    canvas.fill_rect_cov(0, 0, width as i32, height as i32, color, cov);
+                }
+            }
+            FrameFill::Linear(grad) => {
+                canvas.fill_linear_rect(0, 0, width as i32, height as i32, &grad)
+            }
+        }
+        canvas.plot_fill = if chart.kind == PlotKind::Pie {
+            // A pie's automatic plot area is transparent. Explicit opaque solid
+            // fill uses the same title/legend-aware plot rectangle as the pie,
+            // before slices, never the full available host rectangle.
+            match frame.plot_fill {
+                FrameFill::NoFill | FrameFill::Default => None,
+                FrameFill::Solid(color) => Some(PlotPaint::Solid(color, 255)),
+                // Translucent and gradient pie plot fills need their own
+                // fractional-edge compositing locks, not Cartesian assumptions.
+                _ => return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id")),
+            }
         } else {
-            Some(frame.plot_fill.unwrap_or([255; 3]))
+            match frame.plot_fill {
+                FrameFill::NoFill => None,
+                FrameFill::Default => Some(PlotPaint::Solid([255; 3], 255)),
+                FrameFill::Solid(color) => Some(PlotPaint::Solid(color, 255)),
+                FrameFill::Translucent(color, alpha) => {
+                    Some(PlotPaint::Solid(color, ooxml_alpha_to_u8(alpha)))
+                }
+                FrameFill::AlphaProduct(color, product) => {
+                    Some(PlotPaint::Solid(color, alpha_product_to_u8(product)))
+                }
+                FrameFill::Linear(grad) => Some(PlotPaint::Linear(grad)),
+            }
         };
     }
     paint(&mut canvas, &chart, font.as_ref(), host)?;
     canvas.encode_png()
 }
 
-/// Supported frame styles are semantic fills and a round/rectangle switch;
-/// effects, transparency, gradients and custom strokes remain explicit NI.
-struct FrameStyle {
-    rounded: bool,
-    fill: [u8; 3],
-    plot_fill: Option<[u8; 3]>,
+/// Supported frame styles are semantic fills and a round/rectangle switch.
+/// Pattern, blip, path/non-axis-aligned/multi-stop gradients, theme/system
+/// colors, transforms and custom strokes remain NI.
+/// Default (missing spPr) is white; explicit noFill is transparent; a solid
+/// srgbClr with alpha other than 100000 is straight translucency, not a
+/// flatten onto white.
+/// `Linear` uses an opaque sRGB stop table at the existing 0/90 degree geometry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum FrameFill {
+    Default,
+    Solid([u8; 3]),
+    /// Straight sRGB fill with DrawingML alpha in 0..=100000, excluding 100000
+    /// (that case is `Solid`).
+    Translucent([u8; 3], u32),
+    /// Exact product of two percentage integers, denominator 100000^2.
+    /// Only nonintegral-percent, nonopaque new alphaMod inputs use this path.
+    AlphaProduct([u8; 3], u64),
+    Linear(LinearFrameGrad),
+    NoFill,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LinearFrameGrad {
+    stops: gradient::StopTable,
+    /// DrawingML `a:lin/@ang` in 60000ths of a degree. Only 0 (left to right)
+    /// and 5_400_000 (top to bottom in y-down space) are locked.
+    ang: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PlotPaint {
+    Solid([u8; 3], u8),
+    Linear(LinearFrameGrad),
+}
+
+impl LinearFrameGrad {
+    fn sample(&self, t: f64) -> [u8; 3] {
+        let segment = self.stops.segment(t).expect("finite axis-aligned fill coordinate");
+        if self.stops.len() == 2 {
+            // Preserve the locked two-stop policy exactly. Fresh three/four-stop
+            // Excel controls instead use encoded-sRGB piecewise interpolation.
+            let share = office_grad_weight(segment.fraction);
+            std::array::from_fn(|i| office_gamma_mix(segment.start[i], segment.end[i], share))
+        } else {
+            segment.encoded_srgb()
+        }
+    }
+}
+
+const LINEAR_ANG_HORIZONTAL: i64 = 0;
+const LINEAR_ANG_VERTICAL: i64 = 5_400_000;
+
+struct FrameStyle {
+    rounded: bool,
+    border: bool,
+    fill: FrameFill,
+    plot_fill: FrameFill,
+}
+
+#[cfg(test)]
 fn read_frame(root: &Element) -> Result<FrameStyle, Error> {
+    read_frame_with(root, &theme_scheme(None, FALLBACK_ACCENTS))
+}
+
+fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<FrameStyle, Error> {
     let plot = root
         .child_by_local("chart")
         .and_then(|c| c.child_by_local("plotArea"));
+    let rounded = flag(root, "roundedCorners").unwrap_or(true);
+    let border = root
+        .child_by_local("spPr")
+        .and_then(|p| p.child_by_local("ln"))
+        .is_none();
+    // Only the rectangular no-line silhouette is locked. Rounded no-line
+    // needs fill clipping independent of the old rounded stroke coverage.
+    if (!border && rounded)
+        || plot
+            .and_then(|p| p.child_by_local("spPr"))
+            .and_then(|p| p.child_by_local("ln"))
+            .is_some()
+    {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+    }
     Ok(FrameStyle {
-        rounded: flag(root, "roundedCorners").unwrap_or(true),
-        fill: read_frame_fill(root)?.unwrap_or([255; 3]),
-        plot_fill: plot.map(read_frame_fill).transpose()?.flatten(),
+        rounded,
+        border,
+        fill: read_frame_fill(root, scheme)?,
+        plot_fill: plot
+            .map(|node| read_frame_fill(node, scheme))
+            .transpose()?
+            .unwrap_or(FrameFill::Default),
     })
 }
 
-fn read_frame_fill(node: &Element) -> Result<Option<[u8; 3]>, Error> {
+fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    let mut fill = None;
-    if let Some(props) = node.child_by_local("spPr") {
-        for prop in props.element_children() {
-            match prop.local_name() {
-                "solidFill" => {
-                    let mut colors = prop.element_children();
-                    let color = colors.next().ok_or_else(unsupported)?;
-                    if colors.next().is_some()
-                        || color.local_name() != "srgbClr"
-                        || color.element_children().any(|c| {
-                            c.local_name() != "alpha" || c.attr_local("val") != Some("100000")
-                        })
-                    {
-                        return Err(unsupported());
-                    }
-                    fill = Some(
-                        color
-                            .attr_local("val")
-                            .and_then(parse_hex)
-                            .ok_or_else(unsupported)?,
-                    );
+    let Some(props) = node.child_by_local("spPr") else {
+        return Ok(FrameFill::Default);
+    };
+    let mut fill = FrameFill::Default;
+    let mut saw_fill = false;
+    let mut saw_hidden_ext = false;
+    let mut saw_line = false;
+    let mut saw_hidden_line = false;
+    for prop in props.element_children() {
+        match prop.local_name() {
+            "noFill" => {
+                if saw_fill {
+                    return Err(unsupported());
                 }
-                "effectLst" if prop.element_children().next().is_none() => (),
-                _ => return Err(unsupported()),
+                saw_fill = true;
+                fill = FrameFill::NoFill;
             }
+            "gradFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                fill = read_linear_frame_grad(prop)?;
+            }
+            "solidFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                let mut colors = prop.element_children();
+                let color = colors.next().ok_or_else(unsupported)?;
+                if colors.next().is_some() {
+                    return Err(unsupported());
+                }
+                fill = resolve_frame_solid(color, scheme)?;
+            }
+            "ln" if !saw_line && is_invisible_frame_line(prop) => saw_line = true,
+            "effectLst" if prop.element_children().next().is_none() => (),
+            // Excel 16 writes a:noFill plus an Office 2010 hiddenFill ext that
+            // only remembers the previous fill; it is not a visible fill.
+            "extLst" if is_office_hidden_fill_ext(prop) => saw_hidden_ext = true,
+            "extLst" if is_office_hidden_line_ext(prop) => saw_hidden_line = true,
+            _ => return Err(unsupported()),
         }
     }
+    if (saw_hidden_ext && fill != FrameFill::NoFill) || (saw_hidden_line && !saw_line) {
+        return Err(unsupported());
+    }
     Ok(fill)
+}
+
+/// Excel's invisible line retains the old line in a14:hiddenLine. That
+/// extension is editing memory, not a visible stroke or effect.
+fn is_office_hidden_line_ext(ext_lst: &Element) -> bool {
+    let mut exts = ext_lst.element_children();
+    let Some(ext) = exts.next() else {
+        return false;
+    };
+    if exts.next().is_some()
+        || ext.local_name() != "ext"
+        || ext.attr_local("uri") != Some("{91240B29-F687-4F45-9708-019B960494DF}")
+    {
+        return false;
+    }
+    let mut kids = ext.element_children();
+    matches!(kids.next(), Some(node) if node.local_name() == "hiddenLine") && kids.next().is_none()
+}
+
+fn is_invisible_frame_line(line: &Element) -> bool {
+    for (name, value) in &line.attrs {
+        match name.as_str() {
+            "w" if value.parse::<u32>().is_ok() => (),
+            "cap" if value == "flat" => (),
+            "cmpd" if value == "sng" => (),
+            "algn" if value == "ctr" => (),
+            _ => return false,
+        }
+    }
+    let mut no_fill = false;
+    let mut dash = false;
+    let mut join = false;
+    for child in line.element_children() {
+        if child.element_children().next().is_some() {
+            return false;
+        }
+        match child.local_name() {
+            "noFill" if !no_fill && child.attrs.is_empty() => no_fill = true,
+            "prstDash" if !dash && child.attr_local("val") == Some("solid") => dash = true,
+            "round" if !join && child.attrs.is_empty() => join = true,
+            _ => return false,
+        }
+    }
+    no_fill
+}
+
+fn is_office_hidden_fill_ext(ext_lst: &Element) -> bool {
+    let mut exts = ext_lst.element_children();
+    let Some(ext) = exts.next() else {
+        return false;
+    };
+    if exts.next().is_some() || ext.local_name() != "ext" {
+        return false;
+    }
+    if ext.attr_local("uri") != Some("{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}") {
+        return false;
+    }
+    let mut kids = ext.element_children();
+    let Some(hidden) = kids.next() else {
+        return false;
+    };
+    if kids.next().is_some() || hidden.local_name() != "hiddenFill" {
+        return false;
+    }
+    let mut fills = hidden.element_children();
+    let Some(remembered) = fills.next() else {
+        return false;
+    };
+    fills.next().is_none() && matches!(remembered.local_name(), "solidFill" | "noFill")
+}
+
+/// DrawingML `a:alpha` is opacity in thousandths of a percent, 100000 = opaque.
+fn parse_ooxml_alpha(val: Option<&str>) -> Option<u32> {
+    let raw = val?;
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let alpha: u32 = raw.parse().ok()?;
+    (alpha <= 100_000).then_some(alpha)
+}
+
+fn ooxml_alpha_to_u8(alpha: u32) -> u8 {
+    ((u64::from(alpha) * 255 + 50_000) / 100_000) as u8
+}
+
+/// Opaque sRGB stop-table linear gradFill at the existing 0/90 geometry. Path fills,
+/// other angles, pattern, blip, and color transforms stay NI.
+fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let flip = grad.attr_local("flip").unwrap_or("none");
+    if flip != "none" {
+        return Err(unsupported());
+    }
+    match grad.attr_local("rotWithShape") {
+        None | Some("1") => {}
+        _ => return Err(unsupported()),
+    }
+    let mut gs_lst = None;
+    let mut lin = None;
+    let mut saw_tile = false;
+    for child in grad.element_children() {
+        match child.local_name() {
+            "gsLst" if gs_lst.is_none() => gs_lst = Some(child),
+            "lin" if lin.is_none() => lin = Some(child),
+            "tileRect" if !saw_tile => {
+                if child.element_children().next().is_some()
+                    || child.attrs.iter().any(|(_, v)| !v.is_empty() && v != "0")
+                {
+                    return Err(unsupported());
+                }
+                saw_tile = true;
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    let gs_lst = gs_lst.ok_or_else(unsupported)?;
+    let lin = lin.ok_or_else(unsupported)?;
+    let scaled = lin.attr_local("scaled").unwrap_or("1");
+    if scaled != "0" && scaled != "1" {
+        return Err(unsupported());
+    }
+    let ang: i64 = lin
+        .attr_local("ang")
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())?;
+    if ang != LINEAR_ANG_HORIZONTAL && ang != LINEAR_ANG_VERTICAL {
+        return Err(unsupported());
+    }
+    if lin.element_children().next().is_some() {
+        return Err(unsupported());
+    }
+    let mut stops = Vec::new();
+    for gs in gs_lst.element_children() {
+        if gs.local_name() != "gs" {
+            return Err(unsupported());
+        }
+        let pos: u32 = gs
+            .attr_local("pos")
+            .ok_or_else(unsupported)?
+            .parse()
+            .map_err(|_| unsupported())?;
+        let mut colors = gs.element_children();
+        let color = colors.next().ok_or_else(unsupported)?;
+        if colors.next().is_some() || color.local_name() != "srgbClr" {
+            return Err(unsupported());
+        }
+        if color.element_children().next().is_some() {
+            return Err(unsupported());
+        }
+        let rgb = color
+            .attr_local("val")
+            .and_then(parse_hex)
+            .ok_or_else(unsupported)?;
+        stops.push((pos, rgb));
+    }
+    let stops = gradient::StopTable::new(stops).ok_or_else(unsupported)?;
+    Ok(FrameFill::Linear(LinearFrameGrad { stops, ang }))
+}
+
+const OFFICE_GRAD_WEIGHT: [f64; 17] = [
+    0.0, 0.0180, 0.0444, 0.0856, 0.1414, 0.2132, 0.2982, 0.3969, 0.5, 0.6031, 0.7018, 0.7868,
+    0.8586, 0.9144, 0.9556, 0.9820, 1.0,
+];
+
+fn office_grad_weight(t: f64) -> f64 {
+    let x = t.clamp(0.0, 1.0) * 16.0;
+    let i = (x.floor() as usize).min(OFFICE_GRAD_WEIGHT.len() - 2);
+    let f = x - i as f64;
+    OFFICE_GRAD_WEIGHT[i] * (1.0 - f) + OFFICE_GRAD_WEIGHT[i + 1] * f
+}
+
+fn office_gamma_mix(start: u8, end: u8, share: f64) -> u8 {
+    let from = (f64::from(start) / 255.0).powf(2.2);
+    let to = (f64::from(end) / 255.0).powf(2.2);
+    let mixed = (from + (to - from) * share).clamp(0.0, 1.0);
+    (mixed.powf(1.0 / 2.2) * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
 fn read_chart(
@@ -623,17 +1830,21 @@ fn read_chart(
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
     let plot = chart.child_by_local("plotArea").ok_or_else(unsupported)?;
-    let mut wrapper = None;
-    for child in plot.element_children() {
-        if is_chart_wrapper(child.local_name()) {
-            if wrapper.is_some() {
-                return Err(unsupported());
-            }
-            wrapper = Some(child);
-        }
+    let wrappers: Vec<&Element> = plot
+        .element_children()
+        .filter(|child| is_chart_wrapper(child.local_name()))
+        .collect();
+    if wrappers.is_empty() || wrappers.len() > 2 {
+        return Err(unsupported());
     }
-    let wrapper = wrapper.ok_or_else(unsupported)?;
+    let wrapper = wrappers[0];
+    let locked_secondary = if wrappers.len() == 2 {
+        Some(axis::read_locked_secondary_axes(plot)?)
+    } else {
+        None
+    };
     let mut area_missing_as_zero = false;
+    let mut stacking = Stacking::Clustered;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -644,11 +1855,13 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("clustered");
-            if grouping != "clustered" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "clustered" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if dir == "bar" {
-                data_labels_hidden(wrapper.child_by_local("dLbls"))?;
                 let blanks = chart
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
@@ -677,9 +1890,12 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("standard");
-            if grouping != "standard" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "standard" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if flag(wrapper, "varyColors").unwrap_or(false) {
                 return Err(unsupported());
             }
@@ -741,9 +1957,12 @@ fn read_chart(
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("standard");
-            if grouping != "standard" {
-                return Err(unsupported());
-            }
+            stacking = match grouping {
+                "standard" => Stacking::Clustered,
+                "stacked" => Stacking::Stacked,
+                "percentStacked" => Stacking::PercentStacked,
+                _ => return Err(unsupported()),
+            };
             if flag(wrapper, "varyColors").unwrap_or(false) {
                 return Err(unsupported());
             }
@@ -757,12 +1976,16 @@ fn read_chart(
             let blanks = blanks_el
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("gap");
-            if blanks != "gap" {
+            // Omitted dispBlanksAs is official area default (missing as 0).
+            // Excel 16 public saves of that default write explicit val=zero,
+            // which fills the same V-to-baseline. Explicit gap stays a hole.
+            // Official Excel 16 area span paints the same V-to-baseline as
+            // zero, including #N/A; it is not a 4-to-9 chord. Other errors
+            // and non-area types remain NI.
+            area_missing_as_zero = blanks_el.is_none() || blanks == "zero" || blanks == "span";
+            if blanks != "gap" && !area_missing_as_zero {
                 return Err(unsupported());
             }
-            // Omitted dispBlanksAs is official area default (missing as 0).
-            // Explicit gap stays a hole. zero/span remain NotImplemented.
-            area_missing_as_zero = blanks_el.is_none();
             PlotKind::StandardArea
         }
         "pieChart" => {
@@ -792,6 +2015,66 @@ fn read_chart(
         }
         _ => return Err(unsupported()),
     };
+    if let Some(sec) = &locked_secondary {
+        if !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+            return Err(unsupported());
+        }
+        if wrappers[1].local_name() != wrapper.local_name() {
+            return Err(unsupported());
+        }
+        if kind == PlotKind::ClusteredColumn {
+            let dir = wrappers[1]
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("bar");
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            if dir != "col" || grouping != "clustered" {
+                return Err(unsupported());
+            }
+        }
+        if kind == PlotKind::StandardLine {
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard"
+                || flag(wrappers[1], "varyColors").unwrap_or(false)
+                || flag(wrappers[1], "smooth").unwrap_or(false)
+            {
+                return Err(unsupported());
+            }
+        }
+        let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
+        let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
+        if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
+            || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
+        {
+            return Err(unsupported());
+        }
+        for wrap in &wrappers {
+            let nser = wrap
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count();
+            if nser != 1 {
+                return Err(unsupported());
+            }
+            let ids: Vec<_> = wrap
+                .element_children()
+                .filter(|el| el.local_name() == "axId")
+                .filter_map(|el| el.attr_local("val"))
+                .collect();
+            let uses_primary = ids.iter().any(|id| *id == sec.primary_val_id.as_str());
+            let uses_secondary = ids.iter().any(|id| *id == sec.secondary_val_id.as_str());
+            if uses_primary == uses_secondary {
+                return Err(unsupported());
+            }
+        }
+        let _ = sec;
+    }
     let vary = if kind == PlotKind::Pie {
         flag(wrapper, "varyColors").unwrap_or(true)
     } else {
@@ -799,8 +2082,31 @@ fn read_chart(
     };
     let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
+    // Official Excel 16 stacked / percentStacked barChart writes overlap=100.
+    // lineChart / areaChart have no overlap element.
+    if stacking != Stacking::Clustered
+        && matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
+    {
+        match number_val(wrapper, "overlap") {
+            Some(v) if (v - 100.0).abs() <= 1e-9 => {}
+            _ => return Err(unsupported()),
+        }
+    }
     let mut series = Vec::new();
-    for ser in wrapper
+    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() {
+        wrappers.clone()
+    } else {
+        vec![wrapper]
+    };
+    for wrap in &ser_wrappers {
+    let on_secondary = locked_secondary.as_ref().is_some_and(|sec| {
+        wrap
+            .element_children()
+            .filter(|el| el.local_name() == "axId")
+            .filter_map(|el| el.attr_local("val"))
+            .any(|id| id == sec.secondary_val_id)
+    });
+    for ser in wrap
         .element_children()
         .filter(|el| el.local_name() == "ser")
     {
@@ -819,17 +2125,31 @@ fn read_chart(
             (ys, xs)
         } else {
             let values = series_numbers(ser.child_by_local("val"), sheet, cells);
-            if values.is_empty() {
+            // Official all-empty pies omit every val cache pt while keeping
+            // category pts. Do not drop that series here; the category domain
+            // is applied below. Do not size the domain from untrusted ptCount
+            // alone.
+            if values.is_empty() && kind != PlotKind::Pie {
                 continue;
             }
             (values, Vec::new())
         };
-        let value_label = if matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
-            read_value_label(wrapper, ser, kind)?
+        let value_label = if matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
+        ) {
+            read_value_label(wrap, ser, kind)?
         } else {
             data_labels_hidden(ser.child_by_local("dLbls"))?;
             None
         };
+        if on_secondary && value_label.is_some() {
+            return Err(unsupported());
+        }
+        if value_label == Some(ValueLabel::InsideEnd) && values.iter().flatten().any(|v| *v == 0.0)
+        {
+            return Err(unsupported());
+        }
         if value_label.is_some()
             && values
                 .iter()
@@ -843,6 +2163,27 @@ fn read_chart(
         } else {
             (Vec::new(), Vec::new())
         };
+        // Explicit area zero is locked only for true blanks / omitted cache
+        // points. Official area span also locks #N/A as a baseline V, but
+        // other errors stay NI under both modes.
+        if kind == PlotKind::StandardArea
+            && area_missing_as_zero
+            && chart.child_by_local("dispBlanksAs").is_some()
+        {
+            let (errors, unavailable) =
+                series_error_points(ser.child_by_local("val"), sheet, cells, values.len());
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            let unverified = errors
+                .iter()
+                .zip(&unavailable)
+                .any(|(error, na)| *error && (blanks != "span" || !*na));
+            if unverified {
+                return Err(unsupported());
+            }
+        }
         // Like the bubble-only flag, NA-as-blank is inert without NA points.
         // Do not reject a fully numeric ordinary line for an inactive option.
         if kind == PlotKind::StandardLine
@@ -864,17 +2205,23 @@ fn read_chart(
         let mut line_color = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
+        join: stroke::Join::Round,
+        dash: None,
+                cap: stroke::Cap::Round,
                 color: series_color(ser, accents),
                 visible: false,
                 width: 0.0,
                 marker: MarkerKind::None,
                 marker_color: None,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order)?,
+            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order, true)?,
             PlotKind::StandardArea => {
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
                 LineSeriesStyle {
+        join: stroke::Join::Round,
+        dash: None,
+                cap: stroke::Cap::Round,
                     color: area.fill,
                     visible: area.line_visible,
                     width: area.line_width,
@@ -884,7 +2231,8 @@ fn read_chart(
             }
             PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
             PlotKind::Scatter { connect } => {
-                let mut style = read_line_series(ser, accents, dpi, order)?;
+                let mut style = read_line_series(ser, accents, dpi, order, false)?;
+                if style.cap != stroke::Cap::Round || style.dash.is_some() { return Err(unsupported()); }
                 if !connect {
                     style.visible = false;
                 }
@@ -920,6 +2268,7 @@ fn read_chart(
         } else {
             None
         };
+        let values_len = values.len();
         series[order] = Series {
             name,
             values,
@@ -927,6 +2276,9 @@ fn read_chart(
             slot: order,
             line_visible: style.visible,
             line_width: style.width,
+            line_cap: style.cap,
+            line_join: style.join,
+            line_dash: style.dash,
             marker: style.marker,
             marker_color: style.marker_color,
             line_color,
@@ -935,6 +2287,14 @@ fn read_chart(
             point_inversion,
             negative_outline,
             value_label,
+            deleted_label_points: if matches!(
+                kind,
+                PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
+            ) {
+                read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?
+            } else {
+                Vec::new()
+            },
             error_points,
             unavailable_points,
             span_blanks: kind == PlotKind::StandardLine
@@ -942,9 +2302,15 @@ fn read_chart(
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
                     == Some("span"),
+            on_secondary,
         };
     }
-    series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
+    }
+    // Official all-empty pies keep category cache points but omit every val
+    // pt. Do not drop that series before the category domain is applied.
+    if kind != PlotKind::Pie {
+        series.retain(|ser| !ser.values.is_empty() || !ser.x_values.is_empty());
+    }
     if series.is_empty() {
         return Err(unsupported());
     }
@@ -953,7 +2319,7 @@ fn read_chart(
         .map(|ser| ser.values.len().max(ser.x_values.len()))
         .max()
         .unwrap_or(0);
-    if n == 0 {
+    if n == 0 && kind != PlotKind::Pie {
         return Err(unsupported());
     }
     let mut categories = if matches!(kind, PlotKind::Scatter { .. }) {
@@ -968,8 +2334,11 @@ fn read_chart(
             }
         }
     }
-    if kind == PlotKind::StandardLine {
+    if kind == PlotKind::StandardLine || kind == PlotKind::Pie {
         n = n.max(categories.len());
+    }
+    if n == 0 {
+        return Err(unsupported());
     }
     if !matches!(kind, PlotKind::Scatter { .. }) {
         if categories.len() < n {
@@ -982,7 +2351,8 @@ fn read_chart(
         // Do not silently shrink the category domain when both caches omit
         // trailing points. Sparse-domain/resource-budget support is separate;
         // this batch requires a complete domain from parsed values/categories.
-        for ser in wrapper
+        for wrap in &ser_wrappers {
+        for ser in wrap
             .element_children()
             .filter(|e| e.local_name() == "ser")
         {
@@ -1000,12 +2370,13 @@ fn read_chart(
                 }
             }
         }
+        }
     }
     for ser in &mut series {
         ser.values.resize(n, None);
         // Column blank/error label text has not yet been locked by a public
         // probe. Never report successful showVal while silently omitting it.
-        if kind == PlotKind::ClusteredColumn
+        if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
             && ser.value_label.is_some()
             && ser.values.iter().any(Option::is_none)
         {
@@ -1056,7 +2427,26 @@ fn read_chart(
                 .unwrap_or("between")
                 == "between"
         });
-    if !between {
+    // Official Excel 16 areaChart stacked / percentStacked writes valAx
+    // crossBetween=midCat (first/last categories on the plot edges). Standard
+    // area and all line charts stay on the existing between path.
+    let area_midcat = matches!(kind, PlotKind::StandardArea)
+        && stacking != Stacking::Clustered
+        && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
+            el.child_by_local("crossBetween")
+                .and_then(|c| c.attr_local("val"))
+                == Some("midCat")
+        });
+    // Official Excel 16 scatter ChartTypes write crossBetween=midCat on both
+    // numeric valAx. This is not the category-slot midCat rule; scatter x/y
+    // still map linearly over the axis min/max.
+    let scatter_midcat = matches!(kind, PlotKind::Scatter { .. })
+        && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
+            el.child_by_local("crossBetween")
+                .and_then(|c| c.attr_local("val"))
+                == Some("midCat")
+        });
+    if !between && !area_midcat && !scatter_midcat {
         return Err(unsupported());
     }
     let vary_points = (matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
@@ -1068,32 +2458,24 @@ fn read_chart(
     } else {
         0.0
     };
-    let point_colors = if kind == PlotKind::Pie {
-        if series.len() != 1 {
-            return Err(unsupported());
-        }
-        let ser = wrapper
-            .element_children()
-            .find(|el| el.local_name() == "ser")
-            .ok_or_else(unsupported)?;
-        read_pie_point_colors(ser, accents, n, dpi)?
-    } else {
-        Vec::new()
-    };
+    let (point_colors, pie_explosion, point_explosions, series_fill, point_fills) =
+        if kind == PlotKind::Pie {
+            if series.len() != 1 {
+                return Err(unsupported());
+            }
+            let ser = wrapper
+                .element_children()
+                .find(|el| el.local_name() == "ser")
+                .ok_or_else(unsupported)?;
+            read_pie_point_colors(ser, accents, n, dpi)?
+        } else {
+            (Vec::new(), 0.0, Vec::new(), None, Vec::new())
+        };
     if kind == PlotKind::Pie {
-        let values = &series[0].values;
-        if values
-            .iter()
-            .any(|v| v.is_some_and(|n| n.is_finite() && n < 0.0))
-        {
-            return Err(unsupported());
-        }
-        if !values
-            .iter()
-            .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
-        {
-            return Err(unsupported());
-        }
+        // Official Excel 16 public pies paint finite non-zero values at |v|
+        // even when every value is negative. All-zero and all-empty pies keep
+        // the frame and legend but take no slice. The previous "at least one
+        // finite positive" gate is therefore not required.
         if legend_pos(chart).is_some() && !legend::Spec::read(root, accents)?.default_right_ink() {
             return Err(unsupported());
         }
@@ -1114,16 +2496,126 @@ fn read_chart(
         });
         (y, Some(x), grid_x, true)
     } else if kind == PlotKind::ClusteredBar {
-        let (spec, from_bottom) = axis::bar_axes(plot)?;
+        let (spec, from_bottom) = if stacking == Stacking::PercentStacked {
+            axis::bar_axes_percent_stacked(plot)?
+        } else {
+            axis::bar_axes(plot)?
+        };
         (spec, None, false, from_bottom)
+    } else if locked_secondary.is_some() {
+        let sec = locked_secondary.as_ref().unwrap();
+        (sec.primary, None, false, true)
+    } else if stacking == Stacking::PercentStacked {
+        (axis::Spec::read_percent_stacked(plot)?, None, false, true)
     } else {
         (axis::Spec::read(plot)?, None, false, true)
     };
+    let axis_secondary = locked_secondary.as_ref().map(|sec| sec.secondary);
+    if axis_secondary.is_some() {
+        if series.iter().any(|ser| ser.value_label.is_some())
+            || !series.iter().any(|ser| ser.on_secondary)
+            || !series.iter().any(|ser| !ser.on_secondary)
+        {
+            return Err(unsupported());
+        }
+    }
+    if axis.log_base.is_some()
+        && !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine)
+    {
+        return Err(unsupported());
+    }
+    if axis_x.as_ref().is_some_and(|spec| spec.log_base.is_some()) {
+        return Err(unsupported());
+    }
+    if axis.log_base.is_some() && series.iter().any(|ser| ser.value_label.is_some()) {
+        return Err(unsupported());
+    }
+    if (axis.crosses_at.is_some() || !matches!(axis.cat_crosses, axis::CatCrosses::AutoZero))
+        && !matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::StandardLine | PlotKind::StandardArea
+        )
+    {
+        return Err(unsupported());
+    }
+    // Official F20 evidence is clustered column, standard line, and clustered bar.
+    if axis.deleted
+        && !matches!(
+            kind,
+            PlotKind::ClusteredColumn | PlotKind::StandardLine | PlotKind::ClusteredBar
+        )
+    {
+        return Err(unsupported());
+    }
+    if stacking != Stacking::Clustered {
+        // Official F22 evidence is linear autoZero minMax, explicit min/max,
+        // no value labels, no inversion, no log / maxMin / delete / custom crosses.
+        if axis.min.is_none()
+            || axis.max.is_none()
+            || axis.log_base.is_some()
+            || axis.reversed
+            || axis.deleted
+            || axis.crosses_at.is_some()
+            || !matches!(axis.cat_crosses, axis::CatCrosses::AutoZero)
+            || series.iter().any(|ser| ser.value_label.is_some())
+            || series.iter().any(|ser| {
+                ser.invert_if_negative || ser.point_inversion.iter().any(|p| p.is_some())
+            })
+        {
+            return Err(unsupported());
+        }
+        if stacking == Stacking::PercentStacked {
+            if axis.min != Some(0.0)
+                || axis.max != Some(1.0)
+                || axis.tick_format != axis::TickFormat::Percent
+            {
+                return Err(unsupported());
+            }
+            for ser in &series {
+                if ser.values.iter().any(|v| {
+                    !v.is_some_and(|n| n.is_finite() && n > 0.0)
+                }) {
+                    return Err(unsupported());
+                }
+            }
+        }
+        // Official F23 line/area evidence has every cache point finite.
+        // Blanks, packing, and percentStacked mixed/missing stay NI.
+        if matches!(kind, PlotKind::StandardLine | PlotKind::StandardArea) {
+            if series.iter().any(|ser| {
+                ser.values.iter().any(|v| !v.is_some_and(|n| n.is_finite()))
+            }) {
+                return Err(unsupported());
+            }
+        }
+        // Official xlLineStacked writes c:marker/symbol=none. Auto or shaped
+        // markers on stacked lines are not uniquely locked.
+        if kind == PlotKind::StandardLine
+            && series
+                .iter()
+                .any(|ser| !matches!(ser.marker, MarkerKind::None))
+        {
+            return Err(unsupported());
+        }
+        if kind == PlotKind::StandardArea && !area_midcat {
+            return Err(unsupported());
+        }
+        if !matches!(
+            kind,
+            PlotKind::ClusteredColumn
+                | PlotKind::ClusteredBar
+                | PlotKind::StandardLine
+                | PlotKind::StandardArea
+        ) {
+            return Err(unsupported());
+        }
+    }
     Ok(ColumnChart {
         categories,
         series,
         gap_width,
         overlap,
+        stacking,
         vary_points,
         grid,
         grid_x,
@@ -1131,12 +2623,17 @@ fn read_chart(
         legend_spec: legend::Spec::read(root, accents)?,
         axis,
         axis_x,
+        axis_secondary,
         cats_from_bottom,
         title: title_text(chart),
         accents,
         kind,
         first_slice_ang,
         point_colors,
+        series_fill,
+        point_fills,
+        pie_explosion,
+        point_explosions,
         area_missing_as_zero,
     })
 }
@@ -1189,8 +2686,11 @@ fn paint_scatter(
         chart.axis,
         axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
     )?;
+    if y_scale.reversed || y_scale.deleted {
+        return Err(unsupported());
+    }
     let y_ticks = tick_values(y_scale.min, y_scale.max, y_scale.major);
-    let y_labels: Vec<String> = y_ticks.iter().copied().map(fmt_tick).collect();
+    let y_labels: Vec<String> = y_ticks.iter().copied().map(|v| fmt_tick_with(v, y_scale.tick_format)).collect();
     let y_intervals = y_ticks.len().saturating_sub(1).max(1) as i32;
     let widest_tick = y_labels
         .iter()
@@ -1250,6 +2750,9 @@ fn paint_scatter(
         x_spec,
         x_budget,
     )?;
+    if x_scale.reversed || x_scale.deleted {
+        return Err(unsupported());
+    }
     // When 0 is inside the X scale, the vertical axis sits at x=0 inside the
     // plot; drop the left tick-label gutter and use the same frame inset as the top.
     let x_cross_interior = x_scale.min < -1e-12 && x_scale.max > 1e-12;
@@ -1270,15 +2773,15 @@ fn paint_scatter(
         }
     }
     let x_ticks = tick_values(x_scale.min, x_scale.max, x_scale.major);
-    let x_labels: Vec<String> = x_ticks.iter().copied().map(fmt_tick).collect();
+    let x_labels: Vec<String> = x_ticks.iter().copied().map(|v| fmt_tick_with(v, x_scale.tick_format)).collect();
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
-        canvas.fill_rect(
+    if let Some(fill) = canvas.plot_fill.clone() {
+        canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
             (plot.x + plot.w) as i32,
@@ -1437,21 +2940,30 @@ fn paint_scatter(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        canvas.stroke_border(BORDER);
+        if canvas.chart_border {
+            canvas.stroke_border(BORDER);
+        }
     }
     Ok(())
 }
 
 fn x_of(value: f64, axis_min: f64, axis_max: f64, plot: &Rect) -> f64 {
+    x_of_dir(value, axis_min, axis_max, plot, false)
+}
+
+fn x_of_dir(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, reversed: bool) -> f64 {
     let span = (axis_max - axis_min).max(1e-12);
-    let t = (value - axis_min) / span;
+    let mut t = (value - axis_min) / span;
+    if reversed {
+        t = 1.0 - t;
+    }
     plot.x + t * plot.w
 }
 
@@ -1489,14 +3001,14 @@ fn draw_scatter(
                 }
                 _ => {
                     if ser.line_visible && ser.line_width > 0.0 {
-                        stroke_run(canvas, &run, ser.line_width, color);
+                        stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     }
                     run.clear();
                 }
             }
         }
         if ser.line_visible && ser.line_width > 0.0 {
-            stroke_run(canvas, &run, ser.line_width, color);
+            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
@@ -1535,6 +3047,7 @@ fn paint_bar(
     // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
     // INSET_BOTTOM. This is not a guessed 1px shift.
     let val_axis_at_top = !chart.cats_from_bottom;
+    let val_deleted = chart.axis.deleted;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
     let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
@@ -1552,11 +3065,11 @@ fn paint_bar(
         if matches!(host, ChartHost::Slide) {
             y += canvas.dpi.scale_px(TITLE_DROP as i32);
         }
-        if val_axis_at_top {
+        if val_axis_at_top && !val_deleted {
             y += val_label_top;
         }
         y
-    } else if val_axis_at_top {
+    } else if val_axis_at_top && !val_deleted {
         val_label_top
     } else {
         unused_top
@@ -1564,7 +3077,7 @@ fn paint_bar(
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
-        - if val_axis_at_top {
+        - if val_axis_at_top || val_deleted {
             unused_bottom
         } else {
             val_label_bottom
@@ -1586,8 +3099,8 @@ fn paint_bar(
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
-        canvas.fill_rect(
+    if let Some(fill) = canvas.plot_fill.clone() {
+        canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
             (plot.x + plot.w) as i32,
@@ -1606,32 +3119,50 @@ fn paint_bar(
     )?;
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
-    let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
+    let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let axis_y = if val_axis_at_top { plot_y } else { plot_b };
     // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
     if chart.grid {
         for value in &ticks {
-            let x = x_of(*value, axis_min, axis_max, &plot).round() as i32;
+            let x = x_of_dir(*value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
             canvas.vline_i(x, plot_y, plot_b, INK);
         }
     }
-    for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
-        let at_major = (value - axis_min) / step;
-        if (at_major - at_major.round()).abs() < 1e-8 {
-            continue;
+    if !scale.deleted {
+        for value in tick_values(axis_min + scale.minor, axis_max, scale.minor) {
+            let at_major = (value - axis_min) / step;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let x = x_of_dir(value, axis_min, axis_max, &plot, scale.reversed).round() as i32;
+            canvas.vline_i(
+                x,
+                axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
         }
-        let x = x_of(value, axis_min, axis_max, &plot).round() as i32;
-        canvas.vline_i(
-            x,
-            axis_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
-            axis_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
-            INK,
-        );
     }
-    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max);
-    let zero_x = x_of(scale.crossing(), axis_min, axis_max, &plot).round() as i32;
+    if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+    }
+    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed);
+    draw_horizontal_value_labels(
+        canvas,
+        chart,
+        &plot,
+        axis_min,
+        axis_max,
+        font,
+        gdi.as_ref(),
+        label_px,
+        scale.reversed,
+    )?;
+    let zero_x = x_of_dir(scale.crossing(), axis_min, axis_max, &plot, scale.reversed).round() as i32;
     canvas.vline_i(zero_x, plot_y, plot_b, INK);
-    canvas.hline_i(plot_x, plot_r, axis_y, INK);
+    if !scale.deleted {
+        canvas.hline_i(plot_x, plot_r, axis_y, INK);
+    }
     draw_cat_ticks_y(
         canvas,
         chart.categories.len(),
@@ -1664,25 +3195,27 @@ fn paint_bar(
             INK,
         );
     }
-    let tick_h = text_height(font, label_px);
-    let label_top = if val_axis_at_top {
-        f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
-    } else {
-        f64::from(axis_y) + canvas.dpi.scale_f(10.0)
-    };
-    for (tick, label) in ticks.iter().zip(&tick_labels) {
-        let w = text_width(font, gdi.as_ref(), label, label_px);
-        let x = x_of(*tick, axis_min, axis_max, &plot) - w / 2.0;
-        draw_text(
-            canvas,
-            font,
-            gdi.as_ref(),
-            label,
-            x,
-            label_top,
-            label_px,
-            INK,
-        );
+    if !scale.deleted {
+        let tick_h = text_height(font, label_px);
+        let label_top = if val_axis_at_top {
+            f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
+        } else {
+            f64::from(axis_y) + canvas.dpi.scale_f(10.0)
+        };
+        for (tick, label) in ticks.iter().zip(&tick_labels) {
+            let w = text_width(font, gdi.as_ref(), label, label_px);
+            let x = x_of_dir(*tick, axis_min, axis_max, &plot, scale.reversed) - w / 2.0;
+            draw_text(
+                canvas,
+                font,
+                gdi.as_ref(),
+                label,
+                x,
+                label_top,
+                label_px,
+                INK,
+            );
+        }
     }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -1699,14 +3232,16 @@ fn paint_bar(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        canvas.stroke_border(BORDER);
+        if canvas.chart_border {
+            canvas.stroke_border(BORDER);
+        }
     }
     Ok(())
 }
@@ -1779,6 +3314,9 @@ fn paint_pie(
     } else {
         canvas.dpi.scale_px(INSET_TOP)
     };
+    if let Some(PlotPaint::Solid(color, 255)) = canvas.plot_fill {
+        canvas.fill_fractional_rect(&plot, color);
+    }
     draw_pie_slices(canvas, chart, &plot);
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
@@ -1800,7 +3338,9 @@ fn paint_pie(
         draw_pie_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
     }
     if matches!(host, ChartHost::Excel) {
-        canvas.stroke_border(BORDER);
+        if canvas.chart_border {
+            canvas.stroke_border(BORDER);
+        }
     }
     Ok(())
 }
@@ -1826,20 +3366,32 @@ fn pie_plot_bounds(
     })
 }
 
-fn pie_slice_color(chart: &ColumnChart, index: usize) -> [u8; 3] {
-    if let Some(Some(color)) = chart.point_colors.get(index) {
-        return *color;
+fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
+    if let Some(Some(fill)) = chart.point_fills.get(index) {
+        return *fill;
     }
-    if chart.vary_points {
+    // RGB cache of a non-noFill dPt override; point_fills already won above
+    // when both are populated together.
+    if let Some(Some(color)) = chart.point_colors.get(index) {
+        return SliceFill {
+            color: *color,
+            alpha: 255,
+        };
+    }
+    if let Some(fill) = chart.series_fill {
+        return fill;
+    }
+    let color = if chart.vary_points {
         chart.accents[index % 6]
     } else {
         chart.series[0]
             .color
             .unwrap_or(chart.accents[chart.series[0].slot % 6])
-    }
+    };
+    SliceFill { color, alpha: 255 }
 }
 
-fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
+fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, SliceFill)> {
     let ser = &chart.series[0];
     chart
         .categories
@@ -1849,8 +3401,11 @@ fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, [u8; 3])> {
             // Official Excel still lists omitted/blank categories in the pie
             // legend and keeps their accent slot, even though they take no slice.
             match ser.values.get(index).copied().flatten() {
-                Some(value) if !value.is_finite() || value < 0.0 => None,
-                _ => Some((name.clone(), pie_slice_color(chart, index))),
+                // Official Excel still lists omitted/blank/zero categories in
+                // the pie legend and keeps their accent slot. Finite negatives
+                // stay in the legend as well, because they take a |v| slice.
+                Some(value) if !value.is_finite() => None,
+                _ => Some((name.clone(), pie_slice_fill(chart, index))),
             }
         })
         .collect()
@@ -1906,17 +3461,17 @@ fn draw_pie_legend(
     };
     let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
-    for (name, color) in items {
-        draw_plot_key(
-            canvas,
-            PlotKind::Pie,
-            x,
-            y,
-            x + canvas.dpi.scale_px(LEGEND_SWATCH),
-            y + canvas.dpi.scale_px(LEGEND_SWATCH),
-            color,
-            MarkerKind::None,
-        );
+    for (name, fill) in items {
+        if fill.alpha > 0 {
+            canvas.fill_rect_cov(
+                x,
+                y,
+                x + canvas.dpi.scale_px(LEGEND_SWATCH),
+                y + canvas.dpi.scale_px(LEGEND_SWATCH),
+                fill.color,
+                fill.alpha,
+            );
+        }
         draw_text(
             canvas,
             font,
@@ -1933,11 +3488,14 @@ fn draw_pie_legend(
 
 fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
     let ser = &chart.series[0];
+    // Official Chart.Export of mixed-sign pies matches the same categories
+    // at |v|, not a skip-zero or omitted-category layout.
     let sum: f64 = ser
         .values
         .iter()
         .flatten()
-        .filter(|value| value.is_finite() && **value > 0.0)
+        .filter(|value| value.is_finite() && value.abs() > 0.0)
+        .map(|value| value.abs())
         .sum();
     if !sum.is_finite() || sum <= 0.0 {
         return;
@@ -1948,16 +3506,46 @@ fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect) {
     if radius <= 0.5 {
         return;
     }
+    // Official Excel 16 series explosion shrinks the pie about the same
+    // center by 1/(1+e/100) and offsets every slice along its bisector by
+    // (e/100)*R' so the outer radius stays R. A single dPt explosion leaves
+    // the other slices and R unchanged and offsets only that slice by
+    // (e/100)*R along its bisector. Series and dPt explosion together are
+    // not uniquely locked and stay NI at read time.
+    let series_exp = chart.pie_explosion;
+    let scale = if series_exp > 0.0 {
+        1.0 / (1.0 + series_exp / 100.0)
+    } else {
+        1.0
+    };
+    let r_draw = radius * scale;
     let mut start = chart.first_slice_ang.rem_euclid(360.0);
     for (index, value) in ser.values.iter().enumerate() {
         let Some(value) = *value else {
             continue;
         };
-        if !value.is_finite() || value <= 0.0 {
+        if !value.is_finite() || value.abs() <= 0.0 {
             continue;
         }
-        let end = start + 360.0 * (value / sum);
-        canvas.fill_wedge(cx, cy, radius, start, end, pie_slice_color(chart, index));
+        let end = start + 360.0 * (value.abs() / sum);
+        let mid = (start + end) / 2.0;
+        let point_exp = chart
+            .point_explosions
+            .get(index)
+            .copied()
+            .unwrap_or(0.0);
+        let offset = if series_exp > 0.0 {
+            (series_exp / 100.0) * r_draw
+        } else {
+            (point_exp / 100.0) * radius
+        };
+        let mid_rad = mid.to_radians();
+        let ox = cx + mid_rad.sin() * offset;
+        let oy = cy - mid_rad.cos() * offset;
+        let fill = pie_slice_fill(chart, index);
+        if fill.alpha > 0 {
+            canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+        }
         start = end;
     }
 }
@@ -1988,30 +3576,63 @@ fn paint(
     // Glyph drawing can use the existing GDI fallback; label packing must reserve
     // the larger declared line box so the two paths cannot over-pack the axis.
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
-    let scale = axis::scale(
-        &chart.series,
-        chart.axis,
-        axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
-    )?;
+    let budget = axis::interval_budget_dpi(canvas.h, em, canvas.dpi);
+    let scale = if chart.axis_secondary.is_some() {
+        axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| !ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            chart.axis,
+            budget,
+        )?
+    } else {
+        axis::scale(&chart.series, chart.axis, budget)?
+    };
+    let secondary_scale = if let Some(spec) = chart.axis_secondary {
+        Some(axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            spec,
+            budget,
+        )?)
+    } else {
+        None
+    };
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
-    let ticks = tick_values(axis_min, axis_max, step);
-    let tick_labels: Vec<String> = ticks.iter().copied().map(fmt_tick).collect();
+    let log_base = scale.log_base;
+    let ticks = if let Some(base) = log_base {
+        tick_values_log(axis_min, axis_max, base)
+    } else {
+        tick_values(axis_min, axis_max, step)
+    };
+    let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let widest_tick = tick_labels
-        .iter()
-        .map(|label| {
-            let width = text_width(font, gdi.as_ref(), label, label_px);
-            // Excel hangs half the minus advance outside the numeric label
-            // column. Counting it as a full digit widens all signed plots.
-            let hanging = if label.starts_with('-') {
-                text_width(font, gdi.as_ref(), "-", label_px) / 2.0
-            } else {
-                0.0
-            };
-            (width - hanging).ceil() as i32
-        })
-        .max()
-        .unwrap_or(0);
+    let widest_tick = if scale.deleted {
+        // Official valAx delete=true releases the value-label gutter; the
+        // axis line and tick labels are omitted. This is not a 1px fudge.
+        0
+    } else {
+        tick_labels
+            .iter()
+            .map(|label| {
+                let width = text_width(font, gdi.as_ref(), label, label_px);
+                // Excel hangs half the minus advance outside the numeric label
+                // column. Counting it as a full digit widens all signed plots.
+                let hanging = if label.starts_with('-') {
+                    text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                } else {
+                    0.0
+                };
+                (width - hanging).ceil() as i32
+            })
+            .max()
+            .unwrap_or(0)
+    };
     let mut axis_x = axis_x_of(widest_tick, canvas.dpi);
     let mut plot_x = axis_x + 1;
     let title_top = canvas.dpi.scale_f(4.0);
@@ -2050,20 +3671,61 @@ fn paint(
     // autoZero category labels follow the crossing axis. When that axis is
     // inside the plot (or at its top for negative-only values), keeping the
     // bottom category-label gutter shortens every tick interval and moves 0.
-    if scale.crossing() > axis_min + 1e-12 {
+    if !scale.category_labels_below() {
         plot_b = canvas.h as i32 - 1 - scale_plot_leading(canvas.dpi, INSET_TOP);
         if !chart.legend_spec.legacy {
             plot_b -= legend_layout.reserve()[3];
         }
     }
+    // Official crosses=max keeps the category-label gutter on the top edge and
+    // releases the unused bottom gutter. A crossesAt that merely clamps to max
+    // (F16-6) does not get this top gutter. Official valAx maxMin with the
+    // crossing at min likewise keeps the category labels in the top gutter.
+    if scale.category_labels_above() {
+        plot_y += scale_plot_trailing(canvas.dpi, INSET_BOTTOM)
+            - scale_plot_leading(canvas.dpi, INSET_TOP);
+    }
+    let (secondary_ticks, secondary_tick_labels, right_axis_x) =
+        if let Some(sec) = secondary_scale.as_ref() {
+            let ticks = tick_values(sec.min, sec.max, sec.major);
+            let labels: Vec<String> = ticks
+                .iter()
+                .copied()
+                .map(|v| fmt_tick_with(v, sec.tick_format))
+                .collect();
+            let widest = labels
+                .iter()
+                .map(|label| {
+                    let width = text_width(font, gdi.as_ref(), label, label_px);
+                    let hanging = if label.starts_with('-') {
+                        text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                    } else {
+                        0.0
+                    };
+                    (width - hanging).ceil() as i32
+                })
+                .max()
+                .unwrap_or(0);
+            // Reserve the mirrored label column between the plot and the
+            // already-reserved legend. The right axis sits on the new plot
+            // edge; labels start TICK_GAP to its right. Not a 1px fudge.
+            let gutter = widest + canvas.dpi.scale_px(TICK_GAP);
+            plot_r -= gutter;
+            if plot_r <= plot_x {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
+            (ticks, labels, plot_r)
+        } else {
+            (Vec::new(), Vec::new(), plot_r)
+        };
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
         w: f64::from(plot_r - plot_x),
         h: f64::from(plot_b - plot_y),
     };
-    if let Some(fill) = canvas.plot_fill {
-        canvas.fill_rect(
+    if let Some(fill) = canvas.plot_fill.clone() {
+        canvas.paint_plot(
             plot.x as i32,
             plot.y as i32,
             (plot.x + plot.w) as i32,
@@ -2071,22 +3733,37 @@ fn paint(
             fill,
         );
     }
-    let regular = (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
-        <= step * 1e-8;
+    let regular = log_base.is_some()
+        || (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()
+            <= step * 1e-8;
+    let grid_x0 = if scale.deleted {
+        plot_x
+    } else {
+        axis_x - canvas.dpi.scale_px(TICK_OUT)
+    };
+    let grid_x1 = if secondary_scale.is_some() {
+        right_axis_x + canvas.dpi.scale_px(TICK_OUT)
+    } else {
+        plot_r
+    };
     if chart.grid && regular {
         for i in 0..=intervals {
             let y = regular_grid_y(plot_y, plot_b, i, intervals);
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            canvas.hline_i(grid_x0, grid_x1, y, INK);
         }
     }
     if chart.grid && !regular {
         for value in &ticks {
-            let y = y_of(*value, axis_min, axis_max, &plot).ceil() as i32;
-            canvas.hline_i(axis_x - canvas.dpi.scale_px(TICK_OUT), plot_r, y, INK);
+            let y = y_map(*value, axis_min, axis_max, &plot, log_base, scale.reversed).ceil() as i32;
+            canvas.hline_i(grid_x0, grid_x1, y, INK);
         }
     }
     let parts = step / scale.minor;
-    if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
+    if scale.deleted {
+        // Official F20 omits value-axis tick marks along with the axis line.
+    } else if log_base.is_some() {
+        // Official Excel 16 log axes in this subset have minorTickMark=none.
+    } else if regular && (parts - parts.round()).abs() < 1e-8 && (1.0..=100.0).contains(&parts) {
         draw_value_minor_ticks(
             canvas,
             axis_x,
@@ -2101,7 +3778,7 @@ fn paint(
             if (at_major - at_major.round()).abs() < 1e-8 {
                 continue;
             }
-            let y = y_of(value, axis_min, axis_max, &plot).round() as i32;
+            let y = y_map(value, axis_min, axis_max, &plot, None, scale.reversed).round() as i32;
             canvas.hline_i(
                 axis_x - canvas.dpi.scale_px(VAL_MINOR_ARM),
                 axis_x + canvas.dpi.scale_px(VAL_MINOR_ARM),
@@ -2111,12 +3788,91 @@ fn paint(
         }
     }
     match chart.kind {
-        PlotKind::ClusteredColumn => draw_bars(canvas, chart, &plot, axis_min, axis_max, step),
-        PlotKind::StandardLine => draw_lines(canvas, chart, &plot, axis_min, axis_max),
-        PlotKind::StandardArea => draw_areas(canvas, chart, &plot, axis_min, axis_max),
+        PlotKind::ClusteredColumn => {
+            if secondary_scale.is_some() {
+                // Official same-type secondary columns overlap: each wrapper
+                // is a one-series cluster. Paint primary first, secondary on top.
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    step,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
+                let sec = secondary_scale.as_ref().unwrap();
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.major,
+                    sec.log_base,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
+            } else {
+                draw_bars(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    step,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                );
+            }
+        }
+        PlotKind::StandardLine => {
+            if let Some(sec) = secondary_scale.as_ref() {
+                draw_lines(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.reversed,
+                    Some(false),
+                )?;
+                draw_lines(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.reversed,
+                    Some(true),
+                )?;
+            } else {
+                draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)?;
+            }
+        }
+        PlotKind::StandardArea => draw_areas(
+            canvas,
+            chart,
+            &plot,
+            axis_min,
+            axis_max,
+            scale.crossing(),
+            scale.reversed,
+        ),
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
+    }
+    if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
+        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
     draw_value_labels(
         canvas,
@@ -2127,10 +3883,13 @@ fn paint(
         font,
         gdi.as_ref(),
         label_px,
-    );
-    canvas.vline_i(axis_x, plot_y, plot_b, INK);
+    )?;
+    if !scale.deleted {
+        canvas.vline_i(axis_x, plot_y, plot_b, INK);
+    }
     // 次刻度在类目正中，会穿过柱底。先画柱再画刻度，向上的那一截才留得住。
-    let category_y = crossing_axis_y(&plot, axis_min, axis_max, step, scale.crossing());
+    let category_y =
+        crossing_axis_y_mode(&plot, axis_min, axis_max, step, scale.crossing(), log_base, scale.reversed);
     canvas.hline_i(axis_x, plot_r, category_y, INK);
     draw_cat_ticks(
         canvas,
@@ -2152,7 +3911,28 @@ fn paint(
         axis_max,
         &chart.categories,
         category_y,
+        log_base,
+        scale.category_labels_above(),
+        scale.reversed,
+        !scale.deleted,
     );
+    if let Some(sec) = secondary_scale.as_ref() {
+        canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
+        draw_right_tick_labels(
+            canvas,
+            font,
+            gdi.as_ref(),
+            label_px,
+            &plot,
+            right_axis_x,
+            &secondary_ticks,
+            &secondary_tick_labels,
+            sec.min,
+            sec.max,
+            sec.log_base,
+            sec.reversed,
+        );
+    }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
         let width = text_width(font, face, title, label_px);
@@ -2168,16 +3948,18 @@ fn paint(
             INK,
         );
     }
-    if chart.legend_spec.default_right_ink() {
+    if chart.legend_spec.default_right_geometry() {
         // An overlay must release plot space without changing the default legend.
         // Anchor its ink at the same right edge, not at the expanded plot edge.
         let legend_plot_r = canvas.w as i32 - inset_right;
-        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+        draw_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r)?;
     } else {
-        legend_layout.draw(canvas, chart, font);
+        legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        canvas.stroke_border(BORDER);
+        if canvas.chart_border {
+            canvas.stroke_border(BORDER);
+        }
     }
     Ok(())
 }
@@ -2257,46 +4039,80 @@ fn draw_value_minor_ticks(
     }
 }
 
-fn draw_lines(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+fn draw_lines(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+    group_secondary: Option<bool>,
+) -> Result<(),Error> {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
-        return;
+        return Ok(());
     }
-    for ser in &chart.series {
+    let stacked = chart.stacking != Stacking::Clustered;
+    let percent = chart.stacking == Stacking::PercentStacked;
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| !ser.values.is_empty())
+        .collect();
+    for (si, ser) in group.iter().enumerate() {
+        if !group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+        {
+            continue;
+        }
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         if ser.line_visible && ser.line_width > 0.0 {
             let mut run = Vec::new();
             for (ci, value) in ser.values.iter().enumerate() {
-                match value {
-                    Some(v) if v.is_finite() => {
-                        run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
+                let plotted = if stacked {
+                    stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
+                } else if let Some(v) = value {
+                    if v.is_finite() {
+                        Some(*v)
+                    } else {
+                        None
                     }
-                    _ if ser.unavailable_points.get(ci).copied().unwrap_or(false)
-                        || (ser.span_blanks
-                            && !ser.error_points.get(ci).copied().unwrap_or(false)) => {}
-                    _ => {
-                        stroke_run(canvas, &run, ser.line_width, color);
-                        run.clear();
-                    }
+                } else if ser.unavailable_points.get(ci).copied().unwrap_or(false)
+                    || (ser.span_blanks
+                        && !ser.error_points.get(ci).copied().unwrap_or(false))
+                {
+                    None
+                } else {
+                    stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
+                    run.clear();
+                    None
+                };
+                if let Some(v) = plotted {
+                    run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run(canvas, &run, ser.line_width, color);
+            stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);
             for (ci, value) in ser.values.iter().enumerate() {
-                let Some(v) = value else {
+                let plotted = if stacked {
+                    stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
+                } else {
+                    value.filter(|n| n.is_finite())
+                };
+                let Some(v) = plotted else {
                     continue;
                 };
-                if !v.is_finite() {
-                    continue;
-                }
-                let (x, y) = line_point(*v, ci, slot, plot, axis_min, axis_max);
+                let (x, y) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
                 paint_marker(canvas, ser.marker, x, y, marker_color);
             }
         }
     }
+    Ok(())
 }
 
 fn line_point(
@@ -2306,25 +4122,120 @@ fn line_point(
     plot: &Rect,
     axis_min: f64,
     axis_max: f64,
+    log_base: Option<f64>,
+    reversed: bool,
 ) -> (f64, f64) {
     let x = plot.x + slot * (ci as f64 + 0.5);
-    let y = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let y = y_map(
+        value.clamp(axis_min, axis_max),
+        axis_min,
+        axis_max,
+        plot,
+        log_base,
+        reversed,
+    );
     (x, y)
 }
 
 fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3]) {
-    for pair in run.windows(2) {
-        canvas.stroke_segment(pair[0].0, pair[0].1, pair[1].0, pair[1].1, width, color);
+    if let Some(style) = stroke::Style::new(width, stroke::Cap::Round) {
+        stroke_run_style(canvas, run, style, color);
     }
 }
 
-fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f64, axis_max: f64) {
+const MAX_CUSTOM_DASH_PIECES: usize = 65_536; // Resource bound, not a visual period.
+fn stroke_run_pattern(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::Style,
+    pattern: Option<&stroke::DashPattern>, color: [u8;3]) -> Result<(),Error> {
+    stroke_run_pattern_join(canvas,points,style,pattern,stroke::Join::Round,color)
+}
+fn stroke_run_pattern_join(canvas: &mut Canvas, points: &[(f64,f64)], style: stroke::Style,
+    pattern: Option<&stroke::DashPattern>, join: stroke::Join, color: [u8;3]) -> Result<(),Error> {
+    if let Some(pattern) = pattern {
+        if let Some(run) = stroke::Run::new(points) {
+            let paths=run.dashed_capped(pattern,style,canvas.custom_dash_budget)
+                .ok_or_else(|| Error::with_path(ErrorKind::ChartImageUnsupported,"id"))?;
+            canvas.custom_dash_budget -= paths.len();
+            for mut piece in paths {
+                // Do not brighten an otherwise identical straight dash merely
+                // because a category/cache point split it into two edges.
+                stroke::simplify_collinear(&mut piece.points);
+                // No internal join exists on one edge or a zero-body dot. Keep
+                // the locked endpoint caps and single-circle primitive.
+                if join==stroke::Join::Round || piece.points.len()<=2 {stroke_run_dash_caps(canvas,&piece.points,style.width,piece.first,piece.last,color);}
+                else {canvas.stroke_custom_dash_union_join(&piece.points,style.width,piece.first,piece.last,join,color);}
+            }
+        }
+    } else if join!=stroke::Join::Round {
+        // One solid run, not a fabricated enormous dash. Gaps are split by the
+        // caller, so both true ends get their cap and no dash budget is spent.
+        let mut run=points.to_vec();
+        stroke::simplify_collinear(&mut run);
+        if run.len()<=2 {stroke_run_style(canvas,&run,style,color);}
+        else {canvas.stroke_custom_dash_union_join(&run,style.width,style.cap,style.cap,join,color);}
+    } else { stroke_run_style(canvas,points,style,color); }
+    Ok(())
+}
+
+// Only the new custom-dash path uses independently resolved dash/run caps.
+// The accepted solid rasterizer and default cap behavior stay byte-for-byte.
+fn stroke_run_dash_caps(canvas: &mut Canvas, points: &[(f64,f64)], width: f64,
+    first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+    // Only an explicit zero-body ROUND dash is a point. Do not change legacy
+    // solid degenerate runs or turn a closed polyline into a dot.
+    if points.len()==2 && points[0]==points[1]
+        && first==stroke::Cap::Round && last==stroke::Cap::Round {
+        canvas.stroke_segment(points[0].0,points[0].1,points[0].0,points[0].1,width,color);
+        return;
+    }
+    if points.len()==2 {
+        canvas.stroke_segment_capped(points[0],points[1],width,first,last,color);
+    } else {
+        canvas.stroke_custom_dash_union(points,width,first,last,color);
+    }
+}
+
+fn stroke_run_style(canvas: &mut Canvas, points: &[(f64, f64)], style: stroke::Style, color: [u8; 3]) {
+    if let Some(run) = stroke::Run::new(points) {
+        let endpoints = if style.cap == stroke::Cap::Round { Some((0,run.last_segment())) } else {
+            let mut nonzero=run.segments().filter(|segment| segment.length > 0.0);
+            nonzero.next().map(|first| (first.index,nonzero.last().map_or(first.index,|last| last.index)))
+        };
+        let Some((first_index,last_index))=endpoints else { return; };
+        for segment in run.segments() {
+            if style.cap != stroke::Cap::Round && segment.length == 0.0 { continue; }
+            // Only true run endpoints receive caps; internal joins retain the
+            // existing round-join baseline. Arc coordinates never reset here.
+            let first = if segment.index == first_index { style.cap } else { stroke::Cap::Round };
+            let last = if segment.index == last_index { style.cap } else { stroke::Cap::Round };
+            canvas.stroke_segment_capped(segment.from, segment.to, style.width, first, last, color);
+        }
+    } else if style.cap == stroke::Cap::Round {
+        // Preserve the old valid-segment behavior for a nonfinite legacy run.
+        for pair in points.windows(2) {
+            canvas.stroke_segment(pair[0].0, pair[0].1, pair[1].0, pair[1].1, style.width, color);
+        }
+    }
+}
+
+fn draw_areas(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    origin: f64,
+    reversed: bool,
+) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
     if slot <= 0.0 {
         return;
     }
-    let zero_y = y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let zero_y = y_map(origin.clamp(axis_min, axis_max), axis_min, axis_max, plot, None, reversed);
+    if chart.stacking != Stacking::Clustered {
+        draw_stacked_areas(canvas, chart, plot, axis_min, axis_max, reversed);
+        return;
+    }
     for ser in &chart.series {
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
@@ -2332,10 +4243,10 @@ fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
         for (ci, value) in ser.values.iter().enumerate() {
             match value {
                 Some(v) if v.is_finite() => {
-                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max));
+                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, None, reversed));
                 }
                 None if chart.area_missing_as_zero => {
-                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max));
+                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max, None, reversed));
                 }
                 _ => {
                     fill_area_run(canvas, &run, zero_y, fill);
@@ -2353,6 +4264,71 @@ fn draw_areas(canvas: &mut Canvas, chart: &ColumnChart, plot: &Rect, axis_min: f
     }
 }
 
+fn draw_stacked_areas(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+) {
+    let cats = chart.categories.len().max(1) as f64;
+    let percent = chart.stacking == Stacking::PercentStacked;
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| !ser.values.is_empty())
+        .collect();
+    for (si, ser) in group.iter().enumerate() {
+        let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
+        let stroke = ser.line_color.unwrap_or(fill);
+        let mut tops = Vec::new();
+        let mut bases = Vec::new();
+        for ci in 0..ser.values.len() {
+            let Some((base, end)) = stack_cumulative(&group, ci, si, percent) else {
+                fill_area_bands(canvas, &tops, &bases, fill);
+                if ser.line_visible && ser.line_width > 0.0 {
+                    stroke_run(canvas, &tops, ser.line_width, stroke);
+                }
+                tops.clear();
+                bases.clear();
+                continue;
+            };
+            let x = category_x_midcat(plot, ci, cats);
+            let y_end = y_map(
+                end.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            );
+            let y_base = y_map(
+                base.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            );
+            tops.push((x, y_end));
+            bases.push((x, y_base));
+        }
+        fill_area_bands(canvas, &tops, &bases, fill);
+        if ser.line_visible && ser.line_width > 0.0 {
+            stroke_run(canvas, &tops, ser.line_width, stroke);
+        }
+    }
+}
+
+fn category_x_midcat(plot: &Rect, ci: usize, cats: f64) -> f64 {
+    if cats <= 1.0 {
+        plot.x + plot.w / 2.0
+    } else {
+        plot.x + plot.w * (ci as f64) / (cats - 1.0)
+    }
+}
+
 fn fill_area_run(canvas: &mut Canvas, run: &[(f64, f64)], zero_y: f64, color: [u8; 3]) {
     for pair in run.windows(2) {
         fill_area_span(canvas, pair[0], pair[1], zero_y, color);
@@ -2366,20 +4342,52 @@ fn fill_area_span(
     zero_y: f64,
     color: [u8; 3],
 ) {
-    let (x0, y0) = start;
-    let (x1, y1) = end;
-    if ![x0, y0, x1, y1, zero_y].iter().all(|v| v.is_finite()) {
+    fill_area_band(canvas, start, (start.0, zero_y), end, (end.0, zero_y), color);
+}
+
+fn fill_area_bands(
+    canvas: &mut Canvas,
+    tops: &[(f64, f64)],
+    bases: &[(f64, f64)],
+    color: [u8; 3],
+) {
+    let n = tops.len().min(bases.len());
+    for i in 1..n {
+        fill_area_band(canvas, tops[i - 1], bases[i - 1], tops[i], bases[i], color);
+    }
+}
+
+/// Fill the band between the previous cumulative polyline and the current one.
+/// Official mixed stacked areas can have those polylines cross; split there
+/// so the fill does not depend on a self-intersecting quad.
+fn fill_area_band(
+    canvas: &mut Canvas,
+    top0: (f64, f64),
+    base0: (f64, f64),
+    top1: (f64, f64),
+    base1: (f64, f64),
+    color: [u8; 3],
+) {
+    let (x0, y0) = top0;
+    let (_, b0) = base0;
+    let (x1, y1) = top1;
+    let (_, b1) = base1;
+    if ![x0, y0, b0, x1, y1, b1].iter().all(|v| v.is_finite()) {
         return;
     }
-    let s0 = y0 - zero_y;
-    let s1 = y1 - zero_y;
+    if (y0 - b0).abs() < 1e-12 && (y1 - b1).abs() < 1e-12 {
+        return;
+    }
+    let s0 = y0 - b0;
+    let s1 = y1 - b1;
     if s0 * s1 < 0.0 {
         let t = s0 / (s0 - s1);
         let xc = x0 + t * (x1 - x0);
-        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (xc, zero_y)], color);
-        canvas.fill_polygon(&[(xc, zero_y), (x1, y1), (x1, zero_y)], color);
+        let yc = y0 + t * (y1 - y0);
+        canvas.fill_polygon(&[(x0, b0), (x0, y0), (xc, yc)], color);
+        canvas.fill_polygon(&[(xc, yc), (x1, y1), (x1, b1)], color);
     } else {
-        canvas.fill_polygon(&[(x0, zero_y), (x0, y0), (x1, y1), (x1, zero_y)], color);
+        canvas.fill_polygon(&[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], color);
     }
 }
 
@@ -2477,6 +4485,7 @@ fn legend_key_gap(kind: PlotKind, dpi: RenderDpi) -> i32 {
     }
 }
 
+#[cfg(test)]
 fn draw_plot_key(
     canvas: &mut Canvas,
     kind: PlotKind,
@@ -2487,6 +4496,10 @@ fn draw_plot_key(
     color: [u8; 3],
     marker: MarkerKind,
 ) {
+    draw_plot_key_styled(canvas,kind,x0,y0,x1,y1,color,marker,None,None).unwrap();
+}
+
+fn draw_plot_key_styled(canvas: &mut Canvas, kind: PlotKind, x0:i32,y0:i32,x1:i32,y1:i32,color:[u8;3],marker:MarkerKind,style:Option<stroke::Style>,pattern:Option<&stroke::DashPattern>) -> Result<(),Error> {
     match kind {
         PlotKind::ClusteredColumn
         | PlotKind::ClusteredBar
@@ -2496,6 +4509,9 @@ fn draw_plot_key(
             let mid_y = (f64::from(y0) + f64::from(y1)) / 2.0;
             let line_end = f64::from(x0) + canvas.dpi.pt_to_px_font(20.0);
             let mid_x = (f64::from(x0) + line_end) / 2.0;
+            if let Some(style)=style {
+                stroke_run_pattern(canvas,&[(f64::from(x0),mid_y),(line_end,mid_y)],style,pattern,color)?;
+            } else {
             canvas.stroke_segment(
                 f64::from(x0),
                 mid_y,
@@ -2504,6 +4520,7 @@ fn draw_plot_key(
                 excel_chart_line_width_px(canvas.dpi.pt_to_px_font(2.25)),
                 color,
             );
+            }
             let size = f64::from((x1 - x0).abs().min((y1 - y0).abs()));
             paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
@@ -2514,6 +4531,7 @@ fn draw_plot_key(
             paint_marker(canvas, with_marker_size(marker, size), mid_x, mid_y, color);
         }
     }
+    Ok(())
 }
 
 fn category_slot_origin(plot: &Rect, index: usize, cats: usize, from_bottom: bool) -> f64 {
@@ -2578,16 +4596,141 @@ fn draw_bar_value(
     }
 }
 
+
+/// Official Excel 16 stacked / percentStacked: positives accumulate upward
+/// (or right) from zero in series order; negatives accumulate the other way
+/// from zero, independently. Omitted or non-finite points are skipped and
+/// later series pack onto the running total. percentStacked uses value/sum
+/// of all (required positive finite) points in the category.
+fn stack_segment(group: &[&Series], ci: usize, si: usize, percent: bool) -> Option<(f64, f64)> {
+    if si >= group.len() {
+        return None;
+    }
+    let mut denom = 0.0;
+    if percent {
+        for ser in group {
+            let v = ser.values.get(ci).copied().flatten()?;
+            if !v.is_finite() || v <= 0.0 {
+                return None;
+            }
+            denom += v;
+        }
+        if denom <= 0.0 {
+            return None;
+        }
+    }
+    let mut pos = 0.0;
+    let mut neg = 0.0;
+    for (i, ser) in group.iter().enumerate() {
+        let Some(v) = ser.values.get(ci).copied().flatten() else {
+            continue;
+        };
+        if !v.is_finite() {
+            continue;
+        }
+        let v = if percent { v / denom } else { v };
+        let (base, end) = if v >= 0.0 {
+            let b = pos;
+            pos += v;
+            (b, pos)
+        } else {
+            let b = neg;
+            neg += v;
+            (b, neg)
+        };
+        if i == si {
+            if (end - base).abs() < 1e-12 {
+                return None;
+            }
+            return Some((base, end));
+        }
+    }
+    None
+}
+
+/// Official Excel 16 lineChart / areaChart stacked and percentStacked use an
+/// algebraic running total in series order (F23). This is not the F22 bar
+/// rule that stacks positives and negatives independently from zero.
+fn stack_cumulative(
+    group: &[&Series],
+    ci: usize,
+    si: usize,
+    percent: bool,
+) -> Option<(f64, f64)> {
+    if si >= group.len() {
+        return None;
+    }
+    let mut denom = 0.0;
+    if percent {
+        for ser in group {
+            let v = ser.values.get(ci).copied().flatten()?;
+            if !v.is_finite() || v <= 0.0 {
+                return None;
+            }
+            denom += v;
+        }
+        if denom <= 0.0 {
+            return None;
+        }
+    }
+    let mut acc = 0.0;
+    for (i, ser) in group.iter().enumerate() {
+        let v = ser.values.get(ci).copied().flatten()?;
+        if !v.is_finite() {
+            return None;
+        }
+        let v = if percent { v / denom } else { v };
+        let base = acc;
+        acc += v;
+        if i == si {
+            return Some((base, acc));
+        }
+    }
+    None
+}
+
+fn stacked_edge_y(
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    edge: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+    axis_origin: f64,
+) -> i32 {
+    let clipped = edge.clamp(axis_min, axis_max);
+    if (edge - axis_origin).abs() <= 1e-12 || (edge < axis_origin && log_base.is_none()) {
+        crossing_axis_y_mode(
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            clipped,
+            if (edge - axis_origin).abs() <= 1e-12 {
+                log_base
+            } else {
+                None
+            },
+            reversed,
+        )
+    } else {
+        y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
+    }
+}
+
 fn draw_clustered_bars(
     canvas: &mut Canvas,
     chart: &ColumnChart,
     plot: &Rect,
     axis_min: f64,
     axis_max: f64,
+    reversed: bool,
 ) {
     let cats = chart.categories.len().max(1) as f64;
-    let n = chart.series.len().max(1) as f64;
-    let overlap = chart.overlap / 100.0;
+    let stacked = !matches!(chart.stacking, Stacking::Clustered);
+    let n = if stacked { 1.0 } else { chart.series.len().max(1) as f64 };
+    let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     let slot = (plot.h + 1.0) / cats;
     let denom = n - (n - 1.0) * overlap + gap;
@@ -2597,7 +4740,11 @@ fn draw_clustered_bars(
     let bar_h = slot / denom;
     let cluster = bar_h * (n - (n - 1.0) * overlap);
     let side = (slot - cluster) / 2.0;
-    let x_zero = x_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+    let x_zero = x_of_dir(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+    if !matches!(chart.stacking, Stacking::Clustered) {
+        draw_stacked_horizontal_bars(canvas, chart, plot, axis_min, axis_max, reversed, side, slot);
+        return;
+    }
     let n_ser = chart.series.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
@@ -2616,7 +4763,7 @@ fn draw_clustered_bars(
                 si
             };
             let y = origin + place as f64 * bar_h * (1.0 - overlap);
-            let x_val = x_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+            let x_val = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let w = (x_zero - x_val).abs();
             if w < 0.2 || bar_h < 0.2 {
                 continue;
@@ -2641,6 +4788,72 @@ fn draw_clustered_bars(
             draw_bar_value(canvas, ser, ci, value, [x0, y0, x1, y1], color);
         }
     }
+}
+
+/// OutsideEnd on horizontal bars follows the same category/cluster order as
+/// the marks. General integer formatting, plain font and complete values only.
+fn draw_horizontal_value_labels(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+    reversed: bool,
+) -> Result<(), Error> {
+    let n = chart.series.len().max(1);
+    let overlap = chart.overlap / 100.0;
+    let slot = (plot.h + 1.0) / chart.categories.len().max(1) as f64;
+    let bar_h = slot / (n as f64 - (n - 1) as f64 * overlap + chart.gap_width / 100.0);
+    let side = (slot - bar_h * (n as f64 - (n - 1) as f64 * overlap)) / 2.0;
+    let pad = canvas.dpi.pt_to_px_font(6.0);
+    for (si, ser) in chart.series.iter().enumerate() {
+        if ser.value_label != Some(ValueLabel::OutsideEnd) {
+            continue;
+        }
+        let place = if chart.cats_from_bottom {
+            n - 1 - si
+        } else {
+            si
+        };
+        for (ci, value) in ser.values.iter().enumerate() {
+            if ser.deleted_label_points.binary_search(&ci).is_ok() {
+                continue;
+            }
+            let Some(value) = value else {
+                continue;
+            };
+            let Some(text) = value_label_text(*value) else {
+                continue;
+            };
+            let end = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+            let width = text_width(font, gdi, &text, px);
+            let height = value_label_height(font, gdi, px);
+            let x = if *value < 0.0 {
+                end - pad - width
+            } else {
+                end + pad
+            };
+            let top =
+                category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom)
+                    + side
+                    + place as f64 * bar_h * (1.0 - overlap)
+                    + (bar_h - height) / 2.0;
+            if !x.is_finite()
+                || !top.is_finite()
+                || x < 0.0
+                || top < 0.0
+                || x + width > f64::from(canvas.w)
+                || top + height > f64::from(canvas.h)
+            {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
+            draw_text(canvas, font, gdi, &text, x, top, px, INK);
+        }
+    }
+    Ok(())
 }
 
 fn draw_cat_ticks_y(
@@ -2690,7 +4903,7 @@ fn draw_value_labels(
     font: Option<&Font>,
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
-) {
+) -> Result<(), Error> {
     let slot = (plot.w + 1.0) / chart.categories.len().max(1) as f64;
     let n = chart.series.len().max(1) as f64;
     let overlap = chart.overlap / 100.0;
@@ -2704,6 +4917,9 @@ fn draw_value_labels(
             continue;
         };
         for (ci, value) in ser.values.iter().enumerate() {
+            if ser.deleted_label_points.binary_search(&ci).is_ok() {
+                continue;
+            }
             let Some(value) = value.filter(|n| n.is_finite()) else {
                 continue;
             };
@@ -2714,13 +4930,33 @@ fn draw_value_labels(
             let h = value_label_height(font, gdi, px);
             let y = y_of(value.clamp(axis_min, axis_max), axis_min, axis_max, plot);
             let (x, top) = match position {
-                ValueLabel::OutsideEnd => {
+                ValueLabel::OutsideEnd | ValueLabel::InsideEnd => {
                     let x = plot.x
                         + slot * ci as f64
                         + side
                         + si as f64 * width * (1.0 - overlap)
                         + width / 2.0;
-                    (x - w / 2.0, if value < 0.0 { y + pad } else { y - h - pad })
+                    let top = if position == ValueLabel::InsideEnd {
+                        // Public inEnd box is 3pt from the mark end; its text
+                        // has the same 3pt inset as the locked outEnd labels.
+                        let zero =
+                            y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
+                        // Short/zero marks and box overflow are not auto-fitted
+                        // or silently clipped; their placement remains NI.
+                        if value == 0.0 || (zero - y).abs() < h + 2.0 * pad || width < w + pad {
+                            return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+                        }
+                        if value < 0.0 {
+                            y - h - pad
+                        } else {
+                            y + pad
+                        }
+                    } else if value < 0.0 {
+                        y + pad
+                    } else {
+                        y - h - pad
+                    };
+                    (x - w / 2.0, top)
                 }
                 ValueLabel::Right => (
                     plot.x
@@ -2733,9 +4969,20 @@ fn draw_value_labels(
                     y - h / 2.0,
                 ),
             };
+            if position == ValueLabel::InsideEnd
+                && (!x.is_finite()
+                    || !top.is_finite()
+                    || x < 0.0
+                    || top < 0.0
+                    || x + w > f64::from(canvas.w)
+                    || top + h > f64::from(canvas.h))
+            {
+                return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+            }
             draw_text(canvas, font, gdi, &text, x, top, px, INK);
         }
     }
+    Ok(())
 }
 
 fn column_bar_bounds(
@@ -2744,6 +4991,7 @@ fn column_bar_bounds(
     y_zero: i32,
     y_val: i32,
     value: f64,
+    origin: f64,
     invert: bool,
 ) -> [i32; 4] {
     if value < 0.0 && invert {
@@ -2760,8 +5008,12 @@ fn column_bar_bounds(
     } else {
         let x0 = round_half_even(x0);
         let x1_open = round_half_even(x1);
-        if value >= 0.0 {
-            // Keep the supplied positive shape edge, independently of the grid.
+        // Inclusive edge at the crossing belongs to the visually upper
+        // bar; the lower bar starts on the next row. Using y_val vs y_zero
+        // (not value vs origin) keeps this true when orientation=maxMin
+        // flips the growth direction.
+        let _ = origin;
+        if y_val <= y_zero {
             [x0, y_val, x1_open, y_zero]
         } else {
             [x0, y_zero + 1, x1_open, y_val]
@@ -2776,10 +5028,23 @@ fn draw_bars(
     axis_min: f64,
     axis_max: f64,
     step: f64,
+    log_base: Option<f64>,
+    axis_origin: f64,
+    reversed: bool,
+    group_secondary: Option<bool>,
 ) {
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .collect();
+    if group.is_empty() {
+        return;
+    }
     let cats = chart.categories.len().max(1) as f64;
-    let n = chart.series.len().max(1) as f64;
-    let overlap = chart.overlap / 100.0;
+    let stacked = !matches!(chart.stacking, Stacking::Clustered);
+    let n = if stacked { 1.0 } else { group.len().max(1) as f64 };
+    let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     // 右端那一列算进槽宽。左缘仍是轴线右侧的第一列。
     let slot = (plot.w + 1.0) / cats;
@@ -2793,16 +5058,36 @@ fn draw_bars(
     // Use the same major-grid raster as the axis. Independent y_of(0).round()
     // lands one row below the 0-grid on mixed-sign half-pixel spans (e.g.
     // [-3, 5] at 106dpi), so the inverted "A" box missed the axis by 1px.
-    let y_zero = crossing_axis_y(
+    let y_zero = crossing_axis_y_mode(
         plot,
         axis_min,
         axis_max,
         step,
-        0.0_f64.clamp(axis_min, axis_max),
+        axis_origin.clamp(axis_min, axis_max),
+        log_base,
+        reversed,
     );
+    if !matches!(chart.stacking, Stacking::Clustered) {
+        draw_stacked_columns(
+            canvas,
+            chart,
+            &group,
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            log_base,
+            axis_origin,
+            reversed,
+            side,
+            slot,
+            y_zero,
+        );
+        return;
+    }
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin = plot.x + slot * ci as f64 + side;
-        for (si, ser) in chart.series.iter().enumerate() {
+        for (si, ser) in group.iter().enumerate() {
             let Some(value) = ser.values[ci] else {
                 continue;
             };
@@ -2811,10 +5096,10 @@ fn draw_bars(
             }
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
             let clipped = value.clamp(axis_min, axis_max);
-            let y_val = if value < 0.0 {
-                crossing_axis_y(plot, axis_min, axis_max, step, clipped)
+            let y_val = if value < axis_origin && log_base.is_none() {
+                crossing_axis_y_mode(plot, axis_min, axis_max, step, clipped, None, reversed)
             } else {
-                y_of(clipped, axis_min, axis_max, plot).round() as i32
+                y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
             };
             if y_val == y_zero || bar_w < 0.2 {
                 continue;
@@ -2830,7 +5115,7 @@ fn draw_bars(
                 .copied()
                 .flatten()
                 .unwrap_or(ser.invert_if_negative);
-            let bounds = column_bar_bounds(x, x + bar_w, y_zero, y_val, value, invert);
+            let bounds = column_bar_bounds(x, x + bar_w, y_zero, y_val, value, axis_origin, invert);
             // Inclusive outline edges may coincide for a visible 1px column;
             // coincident half-open fill edges are empty.
             if bounds[2] < bounds[0]
@@ -2840,6 +5125,110 @@ fn draw_bars(
                 continue;
             }
             draw_bar_value(canvas, ser, ci, value, bounds, color);
+        }
+    }
+}
+
+fn draw_stacked_columns(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    group: &[&Series],
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    log_base: Option<f64>,
+    axis_origin: f64,
+    reversed: bool,
+    side: f64,
+    slot: f64,
+    y_zero: i32,
+) {
+    let percent = matches!(chart.stacking, Stacking::PercentStacked);
+    let bar_w = slot / (1.0 + chart.gap_width / 100.0);
+    let _ = y_zero;
+    for (ci, _) in chart.categories.iter().enumerate() {
+        let x = plot.x + slot * ci as f64 + side;
+        for (si, ser) in group.iter().enumerate() {
+            let Some((base, end)) = stack_segment(group, ci, si, percent) else {
+                continue;
+            };
+            if bar_w < 0.2 {
+                continue;
+            }
+            let y_base = stacked_edge_y(
+                plot, axis_min, axis_max, step, base, log_base, reversed, axis_origin,
+            );
+            let y_end = stacked_edge_y(
+                plot, axis_min, axis_max, step, end, log_base, reversed, axis_origin,
+            );
+            if y_base == y_end {
+                continue;
+            }
+            let color = if chart.vary_points {
+                chart.accents[ci % 6]
+            } else {
+                ser.color.unwrap_or(chart.accents[ser.slot % 6])
+            };
+            let value = end - base;
+            let bounds = column_bar_bounds(x, x + bar_w, y_base, y_end, value, axis_origin, false);
+            if bounds[2] < bounds[0]
+                || bounds[3] <= bounds[1]
+                || (bounds[2] == bounds[0] && !(value < 0.0))
+            {
+                continue;
+            }
+            let raw = ser.values[ci].unwrap_or(value);
+            draw_bar_value(canvas, ser, ci, raw, bounds, color);
+        }
+    }
+}
+
+fn draw_stacked_horizontal_bars(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+    side: f64,
+    slot: f64,
+) {
+    let percent = matches!(chart.stacking, Stacking::PercentStacked);
+    let bar_h = slot / (1.0 + chart.gap_width / 100.0);
+    let group: Vec<&Series> = chart.series.iter().collect();
+    for (ci, _) in chart.categories.iter().enumerate() {
+        let origin =
+            category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
+        for (si, ser) in group.iter().enumerate() {
+            let Some((base, end)) = stack_segment(&group, ci, si, percent) else {
+                continue;
+            };
+            if bar_h < 0.2 {
+                continue;
+            }
+            let x_base = x_of_dir(base.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+            let x_end = x_of_dir(end.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
+            let w = (x_end - x_base).abs();
+            if w < 0.2 {
+                continue;
+            }
+            let color = if chart.vary_points {
+                chart.accents[ci % 6]
+            } else {
+                ser.color.unwrap_or(chart.accents[ser.slot % 6])
+            };
+            let x_base_i = x_base.round() as i32;
+            let x_end_i = x_end.round() as i32;
+            let (x0, x1) = if x_end_i >= x_base_i {
+                (x_base_i, x_end_i + 1)
+            } else {
+                (x_end_i, x_base_i)
+            };
+            let y0 = round_half_even(origin);
+            let y1 = round_half_even(origin + bar_h);
+            let raw = ser.values[ci].unwrap_or(end - base);
+            draw_bar_value(canvas, ser, ci, raw, [x0, y0, x1, y1], color);
         }
     }
 }
@@ -2861,9 +5250,14 @@ fn draw_tick_labels(
     axis_max: f64,
     categories: &[String],
     category_y: i32,
+    log_base: Option<f64>,
+    labels_above: bool,
+    reversed: bool,
+    draw_value: bool,
 ) {
+    if draw_value {
     for (tick, label) in ticks.iter().zip(labels) {
-        let y = y_of(*tick, axis_min, axis_max, plot);
+        let y = y_map(*tick, axis_min, axis_max, plot, log_base, reversed);
         let w = text_width(font, gdi, label, px);
         let h = text_height(font, px);
         draw_text(
@@ -2877,13 +5271,49 @@ fn draw_tick_labels(
             INK,
         );
     }
+    }
     let cats = categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
-    let baseline = f64::from(category_y) + canvas.dpi.scale_f(10.0);
+    let gap = canvas.dpi.scale_f(10.0);
+    let baseline = if labels_above {
+        f64::from(category_y) - gap - text_height(font, px)
+    } else {
+        f64::from(category_y) + gap
+    };
     for (i, label) in categories.iter().enumerate() {
         let w = text_width(font, gdi, label, px);
         let x = plot.x + slot * (i as f64 + 0.5) - w / 2.0;
         draw_text(canvas, font, gdi, label, x, baseline, px, INK);
+    }
+}
+
+fn draw_right_tick_labels(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    gdi: Option<&super::chart_gdi::Face>,
+    px: f32,
+    plot: &Rect,
+    axis_x: i32,
+    ticks: &[f64],
+    labels: &[String],
+    axis_min: f64,
+    axis_max: f64,
+    log_base: Option<f64>,
+    reversed: bool,
+) {
+    for (tick, label) in ticks.iter().zip(labels) {
+        let y = y_map(*tick, axis_min, axis_max, plot, log_base, reversed);
+        let h = text_height(font, px);
+        draw_text(
+            canvas,
+            font,
+            gdi,
+            label,
+            f64::from(axis_x) + f64::from(canvas.dpi.scale_px(TICK_GAP)),
+            y - h / 2.0,
+            px,
+            INK,
+        );
     }
 }
 
@@ -2894,16 +5324,16 @@ fn draw_legend(
     gdi: Option<&super::chart_gdi::Face>,
     px: f32,
     plot_r: i32,
-) {
+) -> Result<(),Error> {
     if chart.legend != Some(LegendPos::Right) {
-        return;
+        return Ok(());
     }
     let key_width = legend_key_width(chart.kind, canvas.dpi.scale_px(LEGEND_SWATCH), canvas.dpi);
     let key_gap = legend_key_gap(chart.kind, canvas.dpi);
     let pitch = canvas.dpi.scale_px(24);
     let n = chart.series.len() as i32;
     if n == 0 {
-        return;
+        return Ok(());
     }
     let block = pitch * (n - 1) + canvas.dpi.scale_px(LEGEND_SWATCH);
     let title_band = if chart.title.is_some() {
@@ -2917,15 +5347,15 @@ fn draw_legend(
     // S2) but flips the default right legend when catAx is minMax, so the
     // keys follow the visual stack (S2 above S1). Package legend/series XML
     // is otherwise identical. Other chart kinds keep series-index order.
-    let legend_series: Vec<&Series> =
+    let legend_series: Vec<(usize, &Series)> =
         if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
-            chart.series.iter().rev().collect()
+            chart.series.iter().enumerate().rev().collect()
         } else {
-            chart.series.iter().collect()
+            chart.series.iter().enumerate().collect()
         };
-    for ser in legend_series {
+    for (index, ser) in legend_series {
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
-        draw_plot_key(
+        draw_plot_key_styled(
             canvas,
             chart.kind,
             x,
@@ -2934,7 +5364,9 @@ fn draw_legend(
             y + canvas.dpi.scale_px(LEGEND_SWATCH),
             color,
             ser.marker,
-        );
+            if ser.line_visible { stroke::Style::new(ser.line_width, ser.line_cap) } else { None },
+            ser.line_dash.as_deref(),
+        )?;
         draw_text(
             canvas,
             font,
@@ -2943,10 +5375,11 @@ fn draw_legend(
             f64::from(x + key_width + key_gap),
             f64::from(y - canvas.dpi.scale_px(2)),
             px,
-            INK,
+            chart.legend_spec.entry_text_color(index),
         );
         y += pitch;
     }
+    Ok(())
 }
 
 /// 短名字维持测过的 60 像素。长名字把绘图区右缘向左推，避免字被画布切掉。
@@ -3026,15 +5459,72 @@ fn tick_values(min: f64, max: f64, step: f64) -> Vec<f64> {
 }
 
 fn y_of(value: f64, axis_min: f64, axis_max: f64, plot: &Rect) -> f64 {
-    let span = (axis_max - axis_min).max(1e-12);
-    let t = (value - axis_min) / span;
+    y_map(value, axis_min, axis_max, plot, None, false)
+}
+
+fn y_map(
+    value: f64,
+    axis_min: f64,
+    axis_max: f64,
+    plot: &Rect,
+    log_base: Option<f64>,
+    reversed: bool,
+) -> f64 {
+    let mut t = if let Some(base) = log_base {
+        let lo = axis_min.log(base);
+        let hi = axis_max.log(base);
+        let v = value.max(axis_min).log(base);
+        (v - lo) / (hi - lo).max(1e-12)
+    } else {
+        let span = (axis_max - axis_min).max(1e-12);
+        (value - axis_min) / span
+    };
+    if reversed {
+        t = 1.0 - t;
+    }
     plot.y + plot.h - t * plot.h
 }
 
+fn tick_values_log(min: f64, max: f64, base: f64) -> Vec<f64> {
+    let mut out = Vec::new();
+    let mut v = min;
+    for _ in 0..64 {
+        if v > max * (1.0 + 1e-9) {
+            break;
+        }
+        out.push(v);
+        v *= base;
+        if !v.is_finite() {
+            break;
+        }
+    }
+    if out.is_empty() {
+        out.push(min);
+    }
+    out
+}
+
+#[cfg(test)]
 fn fmt_tick(value: f64) -> String {
+    fmt_tick_with(value, axis::TickFormat::General)
+}
+
+fn fmt_tick_with(value: f64, format: axis::TickFormat) -> String {
     if !value.is_finite() {
         return String::new();
     }
+    match format {
+        axis::TickFormat::General => fmt_tick_general(value),
+        axis::TickFormat::Integer => fmt_fixed_int(value, false),
+        axis::TickFormat::Fixed2 => fmt_fixed(value, 2, false),
+        axis::TickFormat::Percent => fmt_fixed_int(value * 100.0, true),
+        axis::TickFormat::PercentFixed2 => fmt_fixed(value * 100.0, 2, true),
+        axis::TickFormat::Thousands => fmt_thousands(value),
+        axis::TickFormat::Scientific2 => fmt_scientific2(value),
+    }
+}
+
+fn fmt_tick_general(value: f64) -> String {
     let abs = value.abs();
     if abs != 0.0 && !(0.0001..10_000_000.0).contains(&abs) {
         return format!("{value:.2e}");
@@ -3047,6 +5537,73 @@ fn fmt_tick(value: f64) -> String {
         text.pop();
     }
     text
+}
+
+fn fmt_fixed_int(value: f64, percent: bool) -> String {
+    let n = value.round();
+    let n = if n == 0.0 { 0_i64 } else { n as i64 };
+    if percent {
+        format!("{n}%")
+    } else {
+        format!("{n}")
+    }
+}
+
+fn fmt_fixed(value: f64, places: u32, percent: bool) -> String {
+    let factor = 10f64.powi(places as i32);
+    let mut n = (value * factor).round();
+    if n == 0.0 {
+        n = 0.0;
+    }
+    let sign = if n < 0.0 { "-" } else { "" };
+    let abs = n.abs() as u64;
+    let div = 10u64.pow(places);
+    let whole = abs / div;
+    let frac = abs % div;
+    let width = places as usize;
+    let body = format!("{sign}{whole}.{frac:0width$}");
+    if percent {
+        format!("{body}%")
+    } else {
+        body
+    }
+}
+
+fn fmt_thousands(value: f64) -> String {
+    let n = value.round();
+    let n = if n == 0.0 { 0_i64 } else { n as i64 };
+    let sign = if n < 0 { "-" } else { "" };
+    let digits = n.unsigned_abs().to_string();
+    let mut grouped = String::new();
+    for (i, ch) in digits.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            grouped.push(',');
+        }
+        grouped.push(ch);
+    }
+    let grouped: String = grouped.chars().rev().collect();
+    format!("{sign}{grouped}")
+}
+
+fn fmt_scientific2(value: f64) -> String {
+    if value == 0.0 {
+        return "0.00E+00".to_owned();
+    }
+    let sign = if value < 0.0 { "-" } else { "" };
+    let abs = value.abs();
+    let mut exp = abs.log10().floor() as i32;
+    let mant = abs / 10f64.powi(exp);
+    let mut scaled = (mant * 100.0).round();
+    if scaled >= 1000.0 {
+        scaled = 100.0;
+        exp += 1;
+    }
+    if scaled == 0.0 {
+        return format!("{sign}0.00E+00");
+    }
+    let whole = (scaled as u64) / 100;
+    let frac = (scaled as u64) % 100;
+    format!("{sign}{whole}.{frac:02}E{exp:+03}")
 }
 
 fn legend_pos(chart: &Element) -> Option<LegendPos> {
@@ -3185,15 +5742,10 @@ fn series_name(
         .find(|label| !label.is_empty())
 }
 
-/// Excel Chart.Export paints ordinary line/scatter series strokes with a
-/// whole-pixel device pen. The implicit default is 2.25pt (28575 EMU).
-/// At 96dpi that is exactly 3px and stays 3. At 106dpi the unsnapped
-/// width is 3.3125px, but unstretched official exports show a 4px opaque
-/// core and an any-ink band out to about +/-2.5px (one device pixel
-/// wider than a fractional 3.3125px stroke). Non-integer device widths
-/// therefore ceil; exact integers are preserved so 96dpi does not change.
-/// Applied only to line/scatter series and matching legend keys, not to
-/// bar outlines or area borders.
+/// Preserved inherited chart pen / legacy scatter normalization. Native
+/// explicit width controls have a distinct nearest-pixel rule (chart_stroke).
+/// In particular omitted w remains the accepted 2.25pt/default 4px at 106dpi;
+/// an explicit 2.25pt resolves to 3px. Do not globally replace this old rule.
 fn excel_chart_line_width_px(px: f64) -> f64 {
     if !px.is_finite() || px <= 0.0 {
         return px;
@@ -3211,6 +5763,7 @@ fn read_line_series(
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
     slot: usize,
+    explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
@@ -3221,11 +5774,17 @@ fn read_line_series(
             return Err(unsupported());
         }
     }
+    let mut dash = None;
+    let mut cap = stroke::Cap::Round;
+    let mut join = stroke::Join::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
     if let Some(sp) = ser.child_by_local("spPr") {
-        let style = read_line_sp_pr(sp, accents, dpi)?;
+        let style = read_line_sp_pr(sp, accents, dpi, explicit_pens)?;
+        dash = style.dash;
+        cap = style.cap;
+        join = style.join;
         visible = style.visible;
         width = excel_chart_line_width_px(style.width);
         color = style.color;
@@ -3235,6 +5794,9 @@ fn read_line_series(
     }
     let (marker, marker_color) = read_line_marker(ser, accents, dpi, slot)?;
     Ok(LineSeriesStyle {
+        dash,
+        cap,
+        join,
         color,
         visible,
         width,
@@ -3247,8 +5809,12 @@ fn read_line_sp_pr(
     sp: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut dash = None;
+    let mut cap = stroke::Cap::Round;
+    let mut join = stroke::Join::Round;
     let mut visible = true;
     let mut width = excel_chart_line_width_px(dpi.pt_to_px_font(2.25));
     let mut color = None;
@@ -3261,7 +5827,10 @@ fn read_line_sp_pr(
                 }
             }
             "ln" => {
-                let line = read_solid_ln(child, accents, width, dpi)?;
+                let line = read_ln_with_caps(child, accents, width, dpi, explicit_pens)?;
+                dash = line.dash;
+                cap = line.cap;
+                join = line.join;
                 visible = line.visible;
                 width = excel_chart_line_width_px(line.width);
                 if line.color.is_some() {
@@ -3277,6 +5846,9 @@ fn read_line_sp_pr(
         }
     }
     Ok(LineSeriesStyle {
+        dash,
+        cap,
+        join,
         color,
         visible,
         width,
@@ -3291,9 +5863,16 @@ fn read_solid_ln(
     default_width: f64,
     dpi: RenderDpi,
 ) -> Result<LineSeriesStyle, Error> {
+    read_ln_with_caps(ln, accents, default_width, dpi, false)
+}
+
+fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width: f64, dpi: RenderDpi, explicit_caps: bool) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    // Omitted cap deliberately retains the accepted chart baseline, not a new
+    // guessed global default. Only explicit cap values are expanded here.
+    let cap = match ln.attr_local("cap") { Some(v) => stroke::Cap::from_ooxml(v).ok_or_else(unsupported)?, None => stroke::Cap::Round };
+    if !explicit_caps && cap != stroke::Cap::Round { return Err(unsupported()); }
     for (attr, allowed) in [
-        ("cap", &["rnd"][..]),
         ("cmpd", &["sng"][..]),
         ("algn", &["ctr"][..]),
     ] {
@@ -3312,7 +5891,7 @@ fn read_solid_ln(
             return Err(unsupported());
         }
     }
-    let width = ln
+    let mut width = ln
         .attr_local("w")
         .and_then(|raw| raw.parse::<f64>().ok())
         .map(|emu| dpi.emu_to_px_f(emu))
@@ -3320,21 +5899,69 @@ fn read_solid_ln(
     if !width.is_finite() || width < 0.0 {
         return Err(unsupported());
     }
+    if explicit_caps && ln.attr_local("w").is_some() {
+        width = stroke::explicit_pen_width_px(width).ok_or_else(unsupported)?;
+    }
+    let mut join = stroke::Join::Round;
+    let mut dash = None;
+    let mut dash_declared = false;
     let mut visible = true;
     let mut color = None;
     for child in ln.element_children() {
         match child.local_name() {
             "noFill" => visible = false,
             "solidFill" => {
-                color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
-            }
-            "prstDash" => {
-                let dash = child.attr_local("val").unwrap_or("solid");
-                if dash != "solid" {
+                if cap != stroke::Cap::Round && child.element_children().any(|node| node.element_children().next().is_some()) {
+                    // New cap coverage is an opaque-color baseline, not permission
+                    // to flatten alpha or invent additional color transforms.
                     return Err(unsupported());
                 }
+                color = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
             }
-            "miter" | "round" | "bevel" => {}
+            "custDash" => {
+                // Explicit opaque custom dashes: flat and square positive stops;
+                // round includes its caps and clamps short positive d to a dot.
+                // Omitted caps and zero dash/space remain separately gated.
+                if dash_declared || !explicit_caps || ln.attr_local("cap").is_none()
+                    || child.attrs.iter().any(|(key,_)| !key.starts_with("xmlns"))
+                    || ln.attr_local("w").and_then(|v| v.parse::<f64>().ok())
+                        .is_none_or(|w| !w.is_finite() || w <= 0.0)
+                { return Err(unsupported()); }
+                let mut stops = Vec::new();
+                for stop in child.element_children() {
+                    if stop.local_name() != "ds" || stop.element_children().next().is_some()
+                        || stop.attrs.iter().any(|(k,_)| !matches!(k.as_str(), "d"|"sp") && !k.starts_with("xmlns"))
+                    { return Err(unsupported()); }
+                    let percentage = |key| stop.attr_local(key).and_then(|v| v.parse::<i32>().ok())
+                        .filter(|v| *v > 0).map(f64::from).ok_or_else(unsupported);
+                    let d=percentage("d")?;
+                    stops.push((d,percentage("sp")?));
+                }
+                dash = Some(std::sync::Arc::new(stroke::DashPattern::from_width_percent(&stops,width).ok_or_else(unsupported)?));
+                dash_declared = true;
+            }
+            "prstDash" => {
+                if dash_declared { return Err(unsupported()); }
+                dash_declared = true;
+                let value = child.attr_local("val").unwrap_or("solid");
+                if value != "solid" {
+                    // Presets reuse the same run/cap/join sampler as custom
+                    // dashes. Explicit flat pens are native-verified for all
+                    // ten tokens; round dash/dot are separately discriminated.
+                    // No inferred default cap/width, square terminal-gap rule,
+                    // other host expansion, or legend/plot compensation.
+                    if !explicit_caps || ln.attr_local("cap").is_none()
+                        || !(cap == stroke::Cap::Flat || (cap == stroke::Cap::Round && matches!(value,"dash"|"dot")))
+                        || ln.attr_local("w").and_then(|v|v.parse::<f64>().ok()).is_none_or(|w|!w.is_finite() || w<=0.0)
+                        || child.element_children().next().is_some()
+                        || child.attrs.iter().any(|(k,_)| k!="val" && !k.starts_with("xmlns"))
+                    { return Err(unsupported()); }
+                    dash=Some(std::sync::Arc::new(stroke::DashPattern::from_preset_width(value,width).ok_or_else(unsupported)?));
+                }
+            }
+            "round" => {},
+            "bevel" | "miter" if explicit_caps => {},
+            "miter" | "bevel" if cap == stroke::Cap::Round => {},
             "effectLst" => {
                 if child.element_children().next().is_some() {
                     return Err(unsupported());
@@ -3343,10 +5970,49 @@ fn read_solid_ln(
             _ => return Err(unsupported()),
         }
     }
+    let joins:Vec<_>=ln.element_children().filter(|c|matches!(c.local_name(),"round"|"bevel"|"miter")).collect();
+    // New noncustom joins require an explicitly resolved simple pen. Omitted
+    // width/cap, default/round joins and other stroke readers keep their exact
+    // legacy path; a styled join must not silently become a round join.
+    let explicit_solid_join = dash.is_none() && explicit_caps
+        && ln.attr_local("cap").is_some()
+        && ln.attr_local("w").and_then(|v|v.parse::<f64>().ok()).is_some_and(|w|w.is_finite() && w>0.0)
+        && joins.iter().any(|c|matches!(c.local_name(),"bevel"|"miter"));
+    if (dash.is_some() || explicit_solid_join) && (!visible || ln.element_children().any(|child|
+        child.local_name()=="solidFill" && child.element_children()
+            .any(|color| color.element_children().next().is_some()))) {
+        return Err(unsupported());
+    }
+    if dash.is_some() || explicit_solid_join {
+        if joins.len()>1 { return Err(unsupported()); }
+        if let Some(c)=joins.first() {
+            if c.element_children().next().is_some() || c.attrs.iter().any(|(k,_)|
+                !k.starts_with("xmlns") && !(c.local_name()=="miter" && k=="lim")) { return Err(unsupported()); }
+            join=match c.local_name() {
+                "bevel" => stroke::Join::Bevel,
+                "miter" => {
+                    // Office DrawingML default: 800%; verified against omitted
+                    // lim native controls, not an invented renderer constant.
+                    let limit=match c.attr_local("lim") {
+                        Some(v)=>v.parse::<i32>().ok().filter(|v| *v>=0).ok_or_else(unsupported)? as u32,
+                        None=>800000,
+                    };
+                    stroke::Join::Miter { limit }
+                },
+                _ => stroke::Join::Round,
+            };
+        }
+    } else if cap!=stroke::Cap::Round && joins.iter().any(|c|matches!(c.local_name(),"bevel"|"miter")) {
+        // Unresolved/non-explicit solid pens remain outside this new path.
+        return Err(unsupported());
+    }
     if !visible {
         color = None;
     }
     Ok(LineSeriesStyle {
+        dash,
+        cap,
+        join,
         color,
         visible,
         width,
@@ -3441,15 +6107,21 @@ fn read_pie_series_style(
             return Err(unsupported());
         }
     }
+    // Series explosion is applied in draw_pie_slices after the category
+    // domain is known. A non-zero value is accepted here and validated
+    // together with dPt explosion in read_pie_point_colors.
     if let Some(explosion) = number_val(ser, "explosion") {
-        if explosion != 0.0 {
+        if !explosion.is_finite() || explosion < 0.0 {
             return Err(unsupported());
         }
     }
     if let Some(sp) = ser.child_by_local("spPr") {
-        reject_pie_sp_pr(sp, accents, dpi)?;
+        let _ = read_pie_sp_pr(sp, accents, dpi)?;
     }
     Ok(LineSeriesStyle {
+        join: stroke::Join::Round,
+        dash: None,
+                cap: stroke::Cap::Round,
         color: series_color(ser, accents),
         visible: false,
         width: 0.0,
@@ -3458,17 +6130,119 @@ fn read_pie_series_style(
     })
 }
 
-fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6], dpi: RenderDpi) -> Result<(), Error> {
+/// Official Excel 16 hidden-fill memory on a pie noFill. The remembered
+/// solid is not painted; the visible fill is noFill.
+const PIE_HIDDEN_FILL_URI: &str = "{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct SliceFill {
+    color: [u8; 3],
+    alpha: u8,
+}
+
+fn pie_color_node(slot: &Element) -> Option<&Element> {
+    slot.child_by_local("srgbClr")
+        .or_else(|| slot.child_by_local("sysClr"))
+        .or_else(|| slot.child_by_local("schemeClr"))
+        .or_else(|| {
+            if matches!(slot.local_name(), "srgbClr" | "sysClr" | "schemeClr") {
+                Some(slot)
+            } else {
+                None
+            }
+        })
+}
+
+fn pie_solid_fill(slot: &Element, accents: &[[u8; 3]; 6]) -> Result<SliceFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let color = color_of_slot(slot, accents).ok_or_else(unsupported)?;
+    let Some(node) = pie_color_node(slot) else {
+        return Err(unsupported());
+    };
+    let mut alpha = 255u8;
+    let mut saw_alpha = false;
+    for child in node.element_children() {
+        match child.local_name() {
+            "alpha" => {
+                if saw_alpha {
+                    return Err(unsupported());
+                }
+                saw_alpha = true;
+                let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                let val = raw
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 100_000.0)
+                    .ok_or_else(unsupported)?;
+                alpha = ooxml_alpha_to_u8(val.round() as u32);
+            }
+            "alphaMod" | "alphaOff" => return Err(unsupported()),
+            "lumMod" | "lumOff" | "shade" | "tint" => {
+                // Opaque F07 transforms already resolve through color_of_slot.
+                // Official pie evidence did not lock those transforms with a
+                // non-opaque alpha, so that combination stays NI.
+                if saw_alpha || color_has_non_opaque_alpha(slot) {
+                    return Err(unsupported());
+                }
+            }
+            _ => {}
+        }
+    }
+    if alpha < 255 && node.local_name() != "srgbClr" {
+        return Err(unsupported());
+    }
+    Ok(SliceFill { color, alpha })
+}
+
+fn pie_hidden_fill_memory(ext_lst: &Element) -> bool {
+    let mut count = 0;
+    for ext in ext_lst.element_children() {
+        if ext.local_name() != "ext" {
+            return false;
+        }
+        count += 1;
+        let uri = ext.attr_local("uri").unwrap_or("");
+        if uri != PIE_HIDDEN_FILL_URI {
+            return false;
+        }
+        let mut kids = ext.element_children();
+        let Some(hidden) = kids.next() else {
+            return false;
+        };
+        if kids.next().is_some() || hidden.local_name() != "hiddenFill" {
+            return false;
+        }
+    }
+    count == 1
+}
+
+fn read_pie_sp_pr(
+    sp: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<Option<SliceFill>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut fill = None;
+    let mut no_fill = false;
     for child in sp.element_children() {
         match child.local_name() {
             "solidFill" => {
-                if color_has_non_opaque_alpha(child) {
+                if no_fill || fill.is_some() {
                     return Err(unsupported());
                 }
-                let _ = color_of_slot(child, &accents).ok_or_else(unsupported)?;
+                fill = Some(pie_solid_fill(child, &accents)?);
             }
-            "noFill" | "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
+            "noFill" => {
+                if no_fill || fill.is_some() {
+                    return Err(unsupported());
+                }
+                no_fill = true;
+                fill = Some(SliceFill {
+                    color: [0, 0, 0],
+                    alpha: 0,
+                });
+            }
+            "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
             "ln" => {
                 let line = read_solid_ln(child, accents, 0.0, dpi)?;
                 if line.visible {
@@ -3480,10 +6254,15 @@ fn reject_pie_sp_pr(sp: &Element, accents: [[u8; 3]; 6], dpi: RenderDpi) -> Resu
                     return Err(unsupported());
                 }
             }
+            "extLst" => {
+                if !no_fill || !pie_hidden_fill_memory(child) {
+                    return Err(unsupported());
+                }
+            }
             _ => return Err(unsupported()),
         }
     }
-    Ok(())
+    Ok(fill)
 }
 
 fn read_pie_point_colors(
@@ -3491,41 +6270,82 @@ fn read_pie_point_colors(
     accents: [[u8; 3]; 6],
     n: usize,
     dpi: RenderDpi,
-) -> Result<Vec<Option<[u8; 3]>>, Error> {
+) -> Result<
+    (
+        Vec<Option<[u8; 3]>>,
+        f64,
+        Vec<f64>,
+        Option<SliceFill>,
+        Vec<Option<SliceFill>>,
+    ),
+    Error,
+> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    if let Some(explosion) = number_val(ser, "explosion") {
-        if explosion != 0.0 {
-            return Err(unsupported());
-        }
-    }
+    let pie_explosion = match number_val(ser, "explosion") {
+        Some(v) if v.is_finite() && v >= 0.0 => v,
+        None => 0.0,
+        _ => return Err(unsupported()),
+    };
+    let series_fill = match ser.child_by_local("spPr") {
+        Some(sp) => read_pie_sp_pr(sp, accents, dpi)?,
+        None => None,
+    };
     let mut colors = vec![None; n];
+    let mut point_fills = vec![None; n];
+    let mut point_explosions = vec![0.0; n];
     for dpt in ser.element_children().filter(|el| el.local_name() == "dPt") {
         let idx = number_val(dpt, "idx").ok_or_else(unsupported)?;
         if !idx.is_finite() || idx < 0.0 || idx.fract() != 0.0 {
             return Err(unsupported());
         }
         let idx = idx as usize;
-        if idx >= n || colors[idx].is_some() {
+        if idx >= n
+            || colors[idx].is_some()
+            || point_fills[idx].is_some()
+            || point_explosions[idx] != 0.0
+        {
             return Err(unsupported());
         }
         if let Some(explosion) = number_val(dpt, "explosion") {
-            if explosion != 0.0 {
+            if !explosion.is_finite() || explosion < 0.0 {
+                return Err(unsupported());
+            }
+            // Official point explosion and series explosion were not written
+            // together; that combination stays NI.
+            if pie_explosion != 0.0 && explosion != 0.0 {
+                return Err(unsupported());
+            }
+            point_explosions[idx] = explosion;
+        }
+        if let Some(bubble) = dpt.child_by_local("bubble3D") {
+            // Official exploded dPt writes bubble3D=0 on a 2D pie; treat that
+            // as a no-op. Other values stay NI.
+            let val = bubble
+                .attr_local("val")
+                .unwrap_or("1")
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite())
+                .ok_or_else(unsupported)?;
+            if val != 0.0 {
                 return Err(unsupported());
             }
         }
-        for name in ["invertIfNegative", "marker", "bubble3D", "pictureOptions"] {
+        for name in ["invertIfNegative", "marker", "pictureOptions"] {
             if dpt.child_by_local(name).is_some() {
                 return Err(unsupported());
             }
         }
         if let Some(sp) = dpt.child_by_local("spPr") {
-            reject_pie_sp_pr(sp, accents, dpi)?;
-            if let Some(fill) = sp.child_by_local("solidFill") {
-                colors[idx] = Some(color_of_slot(fill, &accents).ok_or_else(unsupported)?);
+            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi)? {
+                point_fills[idx] = Some(fill);
+                if fill.alpha > 0 {
+                    colors[idx] = Some(fill.color);
+                }
             }
         }
     }
-    Ok(colors)
+    Ok((colors, pie_explosion, point_explosions, series_fill, point_fills))
 }
 
 struct AreaSeriesStyle {
@@ -3868,9 +6688,94 @@ fn value_label_text(value: f64) -> Option<String> {
     })
 }
 
+/// Only deletion-only series point labels are locked. Known Excel editing
+/// identity extensions carry no paint semantics; unknown extensions stay NI.
+fn read_deleted_label_points(labels: Option<&Element>, len: usize) -> Result<Vec<usize>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let Some(labels) = labels else {
+        return Ok(Vec::new());
+    };
+    let scalar = |e: &Element| {
+        e.element_children().next().is_none()
+            && e.attrs
+                .iter()
+                .filter(|(k, _)| !k.starts_with("xmlns"))
+                .all(|(k, _)| k == "val")
+            && e.attrs.iter().filter(|(k, _)| k == "val").count() <= 1
+    };
+    let mut deleted = Vec::new();
+    for point in labels
+        .element_children()
+        .filter(|e| e.local_name() == "dLbl")
+    {
+        if point.attrs.iter().any(|(k, _)| !k.starts_with("xmlns")) {
+            return Err(unsupported());
+        }
+        let mut idx = None;
+        let mut delete_seen = false;
+        let mut ext_seen = false;
+        for child in point.element_children() {
+            match child.local_name() {
+                "idx" if idx.is_none() && scalar(child) => {
+                    let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+                        return Err(unsupported());
+                    }
+                    idx = Some(raw.parse::<usize>().map_err(|_| unsupported())?);
+                }
+                "delete"
+                    if !delete_seen
+                        && scalar(child)
+                        && matches!(child.attr_local("val"), None | Some("1" | "true")) =>
+                {
+                    delete_seen = true;
+                }
+                "extLst" if !ext_seen => {
+                    ext_seen = true;
+                    for ext in child.element_children() {
+                        if ext.local_name() != "ext" {
+                            return Err(unsupported());
+                        }
+                        let mut settings = ext.element_children();
+                        let inert = match ext.attr_local("uri") {
+                            Some("{CE6537A1-D6FC-4f65-9D91-7224C49458BB}") => {
+                                settings.next().is_none()
+                            }
+                            Some("{C3380CC4-5D6E-409C-BE32-E72D297353CC}") => {
+                                settings.next().is_some_and(|e| {
+                                    e.local_name() == "uniqueId"
+                                        && scalar(e)
+                                        && e.attr_local("val").is_some()
+                                }) && settings.next().is_none()
+                            }
+                            _ => false,
+                        };
+                        if !inert {
+                            return Err(unsupported());
+                        }
+                    }
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+        let idx = idx.ok_or_else(unsupported)?;
+        if !delete_seen || idx >= len {
+            return Err(unsupported());
+        }
+        deleted.push(idx);
+    }
+    // Keep input-sized work O(n log n), including duplicate validation and
+    // point lookup during painting; do not add a quadratic resource path.
+    deleted.sort_unstable();
+    if deleted.windows(2).any(|pair| pair[0] == pair[1]) {
+        return Err(unsupported());
+    }
+    Ok(deleted)
+}
+
 /// Only these non-bubble chart kinds reach this parser. Excel writes
 /// showBubbleSize=1 on ordinary line/column wrappers; it has no visible meaning
-/// there. Real label flags, custom formatting and point overrides remain guarded.
+/// there. Real label flags, custom formatting and visible point overrides remain guarded.
 fn read_value_label(
     wrapper: &Element,
     ser: &Element,
@@ -3883,17 +6788,25 @@ fn read_value_label(
     } else {
         "outEnd"
     };
-    let configs: Vec<_> = [wrapper.child_by_local("dLbls"), ser.child_by_local("dLbls")]
-        .into_iter()
-        .flatten()
-        .collect();
-    for labels in &configs {
+    let configs: Vec<_> = [
+        (false, wrapper.child_by_local("dLbls")),
+        (true, ser.child_by_local("dLbls")),
+    ]
+    .into_iter()
+    .filter_map(|(series_level, labels)| labels.map(|labels| (series_level, labels)))
+    .collect();
+    for (series_level, labels) in &configs {
         if flag(labels, "delete").unwrap_or(false) {
             visible = false;
             continue;
         }
         if labels.element_children().any(|e| e.local_name() == "dLbl") {
-            return Err(unsupported());
+            if !series_level {
+                return Err(unsupported());
+            }
+            // Shape is checked here even for this parser's direct callers;
+            // read_chart additionally checks indices against real values.
+            read_deleted_label_points(Some(labels), usize::MAX)?;
         }
         for name in [
             "showLegendKey",
@@ -3919,7 +6832,7 @@ fn read_value_label(
     if !visible {
         return Ok(None);
     }
-    for labels in configs {
+    for (_, labels) in configs {
         // Hidden label styling cannot affect output. Visible custom styling is
         // not approximated by the default font/background.
 
@@ -3968,7 +6881,10 @@ fn read_value_label(
         }
     }
     match (kind, position) {
-        (PlotKind::ClusteredColumn, "outEnd") => Ok(Some(ValueLabel::OutsideEnd)),
+        (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "outEnd") => {
+            Ok(Some(ValueLabel::OutsideEnd))
+        }
+        (PlotKind::ClusteredColumn, "inEnd") => Ok(Some(ValueLabel::InsideEnd)),
         (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
         _ => Err(unsupported()),
     }
@@ -4204,9 +7120,16 @@ impl Canvas {
             px: vec![255; (w as usize) * (h as usize) * 3],
             alpha: None,
             rounded_frame: true,
+            chart_border: true,
+            custom_dash_budget: MAX_CUSTOM_DASH_PIECES,
             plot_fill: None,
             dpi,
         }
+    }
+
+    fn clear_to_transparent(&mut self) {
+        self.px.fill(0);
+        self.alpha = Some(vec![0; (self.w as usize) * (self.h as usize)]);
     }
 
     fn sx(&self, px96: i32) -> i32 {
@@ -4225,21 +7148,108 @@ impl Canvas {
             }
             return;
         }
-        let c = u16::from(cov);
-        for (k, src) in rgb.into_iter().enumerate() {
-            let dst = u16::from(self.px[i + k]);
-            self.px[i + k] = ((u16::from(src) * c + dst * (255 - c) + 127) / 255) as u8;
+        let src_a = u16::from(cov);
+        let dst_a = self
+            .alpha
+            .as_ref()
+            .map(|alpha| u16::from(alpha[i / 3]))
+            .unwrap_or(255);
+        if dst_a == 255 {
+            // Opaque destination keeps the existing coverage blend; the
+            // rounded-corner path relies on this and then overwrites outside alpha.
+            for (k, src) in rgb.into_iter().enumerate() {
+                let dst = u16::from(self.px[i + k]);
+                self.px[i + k] = ((u16::from(src) * src_a + dst * (255 - src_a) + 127) / 255) as u8;
+            }
+            return;
+        }
+        if dst_a == 0 {
+            // Unassociated source over a transparent pixel, same silhouette
+            // convention as the rounded-frame coverage mask.
+            self.px[i..i + 3].copy_from_slice(&rgb);
+            if let Some(alpha) = &mut self.alpha {
+                alpha[i / 3] = cov;
+            }
+            return;
+        }
+        let src_a32 = u32::from(src_a);
+        let dst_a32 = u32::from(dst_a);
+        let out_a = src_a32 + (dst_a32 * (255 - src_a32) + 127) / 255;
+        if out_a == 0 {
+            self.px[i..i + 3].copy_from_slice(&[0; 3]);
+        } else {
+            for (k, src) in rgb.into_iter().enumerate() {
+                let dst = u32::from(self.px[i + k]);
+                let premul =
+                    u32::from(src) * src_a32 + (dst * dst_a32 * (255 - src_a32) + 127) / 255;
+                self.px[i + k] = ((premul + out_a / 2) / out_a) as u8;
+            }
+        }
+        if let Some(alpha) = &mut self.alpha {
+            alpha[i / 3] = out_a as u8;
         }
     }
 
     fn fill_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: [u8; 3]) {
+        self.fill_rect_cov(x0, y0, x1, y1, color, 255);
+    }
+
+    fn fill_rect_cov(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, color: [u8; 3], cov: u8) {
         let x0 = x0.max(0);
         let y0 = y0.max(0);
         let x1 = x1.min(self.w as i32);
         let y1 = y1.min(self.h as i32);
         for y in y0..y1 {
             for x in x0..x1 {
-                self.blend(x, y, color, 255);
+                self.blend(x, y, color, cov);
+            }
+        }
+    }
+
+    /// Area coverage of an axis-aligned floating rectangle. Pie plot bounds
+    /// are point-derived and must not be shifted/truncated to match one gold.
+    fn fill_fractional_rect(&mut self, rect: &Rect, color: [u8; 3]) {
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                self.blend(x, y, color, (cx * cy * 255.0).round() as u8);
+            }
+        }
+    }
+
+    fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) {
+        match fill {
+            PlotPaint::Solid(color, cov) => self.fill_rect_cov(x0, y0, x1, y1, color, cov),
+            PlotPaint::Linear(grad) => self.fill_linear_rect(x0, y0, x1, y1, &grad),
+        }
+    }
+
+    /// Existing axis-aligned pixel-center geometry. Cache at most one clipped
+    /// axis (<= canvas edge) so many-stop interval searches are not per pixel.
+    /// Neither the two-stop interpolation nor border/plot geometry is changed.
+    fn fill_linear_rect(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, grad: &LinearFrameGrad) {
+        let x0c = x0.max(0);
+        let y0c = y0.max(0);
+        let x1c = x1.min(self.w as i32);
+        let y1c = y1.min(self.h as i32);
+        let w = f64::from(x1 - x0);
+        let h = f64::from(y1 - y0);
+        if w <= 0.0 || h <= 0.0 || x1c <= x0c || y1c <= y0c {
+            return;
+        }
+        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+        let colors: Vec<[u8; 3]> = if vertical {
+            (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
+        } else {
+            (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
+        };
+        for y in y0c..y1c {
+            for x in x0c..x1c {
+                let index = if vertical { y - y0c } else { x - x0c } as usize;
+                self.blend(x, y, colors[index], 255);
             }
         }
     }
@@ -4291,6 +7301,7 @@ impl Canvas {
         start_deg: f64,
         end_deg: f64,
         color: [u8; 3],
+        alpha: u8,
     ) {
         if radius <= 0.0
             || !cx.is_finite()
@@ -4318,6 +7329,7 @@ impl Canvas {
                 let dy = py - cy;
                 let dist = dx.hypot(dy);
                 let cov = coverage(dist, radius);
+                let cov = ((u16::from(cov) * u16::from(alpha) + 127) / 255) as u8;
                 if cov == 0 {
                     continue;
                 }
@@ -4338,6 +7350,100 @@ impl Canvas {
         for y in y0..=y1 {
             self.blend(x, y, color, 255);
         }
+    }
+
+    /// One custom dash is one painted shape, including its round internal joins.
+    /// Max coverage is composited once: overlapping edges/retracing must not
+    /// darken antialiased boundaries. Solid/one-edge legacy rasterizers are
+    /// intentionally unchanged. Explicit nondefault solid joins reuse the same
+    /// geometry as custom pieces. Miter uses its limited intersection; exact
+    /// reversal stays separate. The historical private name is not dash logic.
+    fn stroke_custom_dash_union(&mut self, points: &[stroke::Point], width: f64,
+        first: stroke::Cap, last: stroke::Cap, color: [u8;3]) {
+        self.stroke_custom_dash_union_join(points,width,first,last,stroke::Join::Round,color);
+    }
+    fn stroke_custom_dash_union_join(&mut self, points: &[stroke::Point], width: f64,
+        first: stroke::Cap, last: stroke::Cap, join: stroke::Join, color: [u8;3]) {
+        let Some(run)=stroke::Run::new(points) else {return;};
+        if !width.is_finite() || width<=0.0 {return;}
+        let edges:Vec<_>=run.segments().filter(|e| e.length>0.0).collect();
+        let (Some(start),Some(end))=(edges.first(),edges.last()) else {return;};
+        let pad=width/2.0+1.0;
+        let mut x0=((points.iter().map(|p|p.0).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let mut x1=((points.iter().map(|p|p.0).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.w as i32-1);
+        let mut y0=((points.iter().map(|p|p.1).fold(f64::INFINITY,f64::min)-pad).floor() as i32).max(0);
+        let mut y1=((points.iter().map(|p|p.1).fold(f64::NEG_INFINITY,f64::max)+pad).ceil() as i32).min(self.h as i32-1);
+        let miters:Vec<_>=if let stroke::Join::Miter {limit}=join {
+            edges.windows(2).filter_map(|pair|stroke::MiterJoin::new(pair[0].from,pair[0].to,pair[1].to,width,limit)).collect()
+        } else {Vec::new()};
+        for g in &miters {
+            let (low,high)=g.bounds();
+            x0=x0.min(((low.0-1.0).floor() as i32).max(0));
+            x1=x1.max(((high.0+1.0).ceil() as i32).min(self.w as i32-1));
+            y0=y0.min(((low.1-1.0).floor() as i32).max(0));
+            y1=y1.max(((high.1+1.0).ceil() as i32).min(self.h as i32-1));
+        }
+        if x1<x0 || y1<y0 {return;}
+        // Allocation is clipped to this piece's canvas rectangle, never to
+        // off-canvas coordinates or a new unbounded world-space surface.
+        let mw=(x1-x0+1) as usize;
+        let mut mask=vec![0u8;mw*(y1-y0+1) as usize];
+        for edge in &edges {
+            let Some(g)=stroke::CapSegment::new(edge.from,edge.to,width,
+                if edge.index==start.index {first}else if join==stroke::Join::Round {stroke::Cap::Round}else{stroke::Cap::Flat},
+                if edge.index==end.index {last}else if join==stroke::Join::Round {stroke::Cap::Round}else{stroke::Cap::Flat}) else {continue;};
+            let ax=((edge.from.0.min(edge.to.0)-pad).floor() as i32).max(x0);
+            let bx=((edge.from.0.max(edge.to.0)+pad).ceil() as i32).min(x1);
+            let ay=((edge.from.1.min(edge.to.1)-pad).floor() as i32).max(y0);
+            let by=((edge.from.1.max(edge.to.1)+pad).ceil() as i32).min(y1);
+            for y in ay..=by {for x in ax..=bx {
+                let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];
+                *slot=(*slot).max(alpha);
+            }}
+        }
+        if join==stroke::Join::Bevel {
+            for pair in edges.windows(2) {
+                let Some(g)=stroke::BevelJoin::new(pair[0].from,pair[0].to,pair[1].to,width) else {continue;};
+                let (low,high)=g.bounds();let ax=((low.0-1.0).floor() as i32).max(x0);let bx=((high.0+1.0).ceil() as i32).min(x1);
+                let ay=((low.1-1.0).floor() as i32).max(y0);let by=((high.1+1.0).ceil() as i32).min(y1);
+                for y in ay..=by {for x in ax..=bx {
+                    let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                    let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];*slot=(*slot).max(alpha);
+                }}
+            }
+        }
+        for g in &miters {
+            let (low,high)=g.bounds();let ax=((low.0-1.0).floor() as i32).max(x0);let bx=((high.0+1.0).ceil() as i32).min(x1);
+            let ay=((low.1-1.0).floor() as i32).max(y0);let by=((high.1+1.0).ceil() as i32).min(y1);
+            for y in ay..=by {for x in ax..=bx {
+                let alpha=coverage(g.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5)),0.0);
+                let slot=&mut mask[(y-y0) as usize*mw+(x-x0) as usize];*slot=(*slot).max(alpha);
+            }}
+        }
+        for y in y0..=y1 {for x in x0..=x1 {
+            let alpha=mask[(y-y0) as usize*mw+(x-x0) as usize];
+            if alpha>0 {self.blend(x,y,color,alpha);}
+        }}
+    }
+
+    fn stroke_segment_capped(&mut self, from: stroke::Point, to: stroke::Point, width: f64, first: stroke::Cap, last: stroke::Cap, color: [u8; 3]) {
+        if first == stroke::Cap::Round && last == stroke::Cap::Round {
+            // Accepted round pixels go through the untouched legacy rasterizer.
+            self.stroke_segment(from.0, from.1, to.0, to.1, width, color);
+            return;
+        }
+        let Some(geometry) = stroke::CapSegment::new(from, to, width, first, last) else { return; };
+        let pad = width / 2.0 + 1.0;
+        let x0 = ((from.0.min(to.0)-pad).floor() as i32).max(0);
+        let x1 = ((from.0.max(to.0)+pad).ceil() as i32).min(self.w as i32-1);
+        let y0 = ((from.1.min(to.1)-pad).floor() as i32).max(0);
+        let y1 = ((from.1.max(to.1)+pad).ceil() as i32).min(self.h as i32-1);
+        for y in y0..=y1 { for x in x0..=x1 {
+            let distance = geometry.signed_distance((f64::from(x)+0.5,f64::from(y)+0.5));
+            let alpha = coverage(distance,0.0);
+            if alpha > 0 { self.blend(x,y,color,alpha); }
+        }}
     }
 
     fn stroke_segment(&mut self, x0: f64, y0: f64, x1: f64, y1: f64, width: f64, color: [u8; 3]) {
@@ -4417,7 +7523,10 @@ impl Canvas {
             self.vline_i(w - 1, 0, h - 1, color);
             return;
         }
-        self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        if self.alpha.is_none() {
+            // Do not reset an existing noFill alpha mask to opaque white.
+            self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        }
         self.stroke_quarter(r, r, 0, r, 0, r, color);
         self.stroke_quarter(w - r, r, w - r, w - 1, 0, r, color);
         self.stroke_quarter(r, h - r, 0, r, h - r, h - 1, color);
@@ -4537,15 +7646,15 @@ mod tests {
         // Invert frames use inclusive edges; positive fills retain the
         // supplied shape edge rather than unconditionally clearing a grid.
         assert_eq!(
-            column_bar_bounds(57.1, 86.56666666666666, 133, 180, -2.0, true),
+            column_bar_bounds(57.1, 86.56666666666666, 133, 180, -2.0, 0.0, true),
             [57, 133, 86, 180]
         );
         assert_eq!(
-            column_bar_bounds(57.1, 86.56666666666666, 16, 53, -1.0, true),
+            column_bar_bounds(57.1, 86.56666666666666, 16, 53, -1.0, 0.0, true),
             [57, 16, 86, 53]
         );
         assert_eq!(
-            column_bar_bounds(70.0, 107.0, 334, 51, 1.0, true),
+            column_bar_bounds(70.0, 107.0, 334, 51, 1.0, 0.0, true),
             [70, 51, 107, 334]
         );
     }
@@ -4845,7 +7954,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false, None);
         // Three equal path widths are 221 / 7.5 pixels. The middle path
         // crosses columns 130..160: rounding two fill edges and subtracting
         // one instead loses both outline sides (131..159).
@@ -4876,7 +7985,7 @@ mod tests {
             w: 2.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0);
+        draw_bars(&mut canvas, &chart, &plot, -5.0, 0.0, 1.0, None, 0.0, false, None);
         assert_eq!(row_ink_runs(&canvas.px, canvas.w, 30), vec![(35, 37)]);
     }
 
@@ -4884,7 +7993,7 @@ mod tests {
     fn inverted_path_edges_keep_fractional_phase_and_integer_translation() {
         for x in [-20.75, -0.25, 0.0, 0.5, 3.9, 130.76666666666665] {
             for width in [0.21, 1.0, 2.5, 29.466666666666665] {
-                let bounds = column_bar_bounds(x, x + width, 10, 40, -1.0, true);
+                let bounds = column_bar_bounds(x, x + width, 10, 40, -1.0, 0.0, true);
                 assert_eq!(
                     bounds,
                     [x.floor() as i32, 10, (x + width).floor() as i32, 40]
@@ -4896,6 +8005,7 @@ mod tests {
                         10,
                         40,
                         -1.0,
+                        0.0,
                         true,
                     );
                     assert_eq!(shifted, [bounds[0] + offset, 10, bounds[2] + offset, 40]);
@@ -4909,7 +8019,7 @@ mod tests {
         // A rasterized shape edge is not the same thing as a grid row.
         // Moving every positive endpoint by 1 also shifts non-major values.
         assert_eq!(
-            column_bar_bounds(10.0, 20.0, 100, 40, 2.3, false),
+            column_bar_bounds(10.0, 20.0, 100, 40, 2.3, 0.0, false),
             [10, 40, 20, 100]
         );
     }
@@ -4933,7 +8043,7 @@ mod tests {
             w: 220.0,
             h: 188.0,
         };
-        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0);
+        draw_bars(&mut canvas, &chart, &plot, -3.0, 5.0, 1.0, None, 0.0, false, None);
         // Verify both path edges of all 60 columns, not a run count: an
         // unfilled 1.47px-wide path can have two separated 1px edges.
         let slot = 221.0 / 60.0;
@@ -5138,10 +8248,7 @@ mod tests {
 
     #[test]
     fn valid_unsupported_backgrounds_are_not_silently_defaulted() {
-        for config in [
-            "<c:spPr><a:noFill/></c:spPr>",
-            "<c:spPr><a:ln w='25400'/></c:spPr>",
-        ] {
+        for config in ["<c:spPr><a:ln w='25400'/></c:spPr>"] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(
@@ -5164,6 +8271,19 @@ mod tests {
             "<c:spPr><a:solidFill><a:srgbClr val='123456'/></a:solidFill></c:spPr>",
             "<c:roundedCorners val='1'/>",
             "<c:spPr><a:solidFill><a:srgbClr val='FFFFFF'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:noFill/></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='25000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='100000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='0' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
+            "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='60000'/><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:tint val='60000'/></a:schemeClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:alpha val='50000'/></a:schemeClr></a:solidFill></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
@@ -5192,8 +8312,8 @@ mod tests {
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             let frame = read_frame(&doc.root).unwrap();
             assert!(!frame.rounded);
-            assert_eq!(frame.fill, [234, 247, 247]);
-            assert_eq!(frame.plot_fill, Some([255, 240, 221]));
+            assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+            assert_eq!(frame.plot_fill, FrameFill::Solid([255, 240, 221]));
             let png = render_chart_at(
                 &doc.root,
                 576,
@@ -5245,12 +8365,2597 @@ mod tests {
     }
 
     #[test]
+    fn chart_and_plot_nofill_are_not_silently_white() {
+        let hidden = "<c:spPr><a:noFill/><a:extLst><a:ext uri=\"{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}\"><a14:hiddenFill xmlns:a14=\"http://schemas.microsoft.com/office/drawing/2010/main\"><a:solidFill><a:sysClr val=\"window\" lastClr=\"FFFFFF\"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>";
+        for chart_sppr in ["<c:spPr><a:noFill/></c:spPr>", hidden] {
+            let xml = LONG_LEGEND.replace(
+                "<c:chart>",
+                &format!("<c:roundedCorners val='0'/>{chart_sppr}<c:chart>"),
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let frame = read_frame(&doc.root).unwrap();
+            assert_eq!(frame.fill, FrameFill::NoFill, "{chart_sppr}");
+            assert_eq!(frame.plot_fill, FrameFill::Default);
+            let png = super::render_chart(
+                &doc.root,
+                576,
+                336,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap();
+            let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+                .read_info()
+                .unwrap();
+            let mut buf = vec![0; reader.output_buffer_size()];
+            let info = reader.next_frame(&mut buf).unwrap();
+            assert_eq!(info.color_type, png::ColorType::Rgba);
+            let i = (5 * 576 + 5) * 4;
+            assert_eq!(
+                buf[i + 3],
+                0,
+                "chart-area noFill must be transparent, not white"
+            );
+            assert_ne!(&buf[i..i + 3], &[255, 255, 255]);
+        }
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:noFill/></c:spPr>",
+            );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+        assert_eq!(frame.plot_fill, FrameFill::NoFill);
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(
+            info.color_type,
+            png::ColorType::Rgb,
+            "opaque chart fill with plot noFill stays RGB"
+        );
+        let px = |x: usize, y: usize| &buf[(y * 576 + x) * 3..(y * 576 + x) * 3 + 3];
+        assert_eq!(
+            px(5, 5),
+            &[234, 247, 247],
+            "plot noFill must not paint a white plot over the chart fill"
+        );
+        assert!(
+            buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[234, 247, 247]),
+            "chart-area fill must remain visible in the plot"
+        );
+        assert!(
+            !buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[255, 255, 255]),
+            "plot noFill over a non-white chart fill must not introduce a white fallback"
+        );
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:noFill/></c:spPr><c:chart>",
+            )
+            .replace("<c:plotArea>", "<c:plotArea><c:spPr><a:noFill/></c:spPr>");
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::NoFill);
+        assert_eq!(frame.plot_fill, FrameFill::NoFill);
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        let margin = (5 * 576 + 5) * 4;
+        assert_eq!(
+            buf[margin + 3],
+            0,
+            "both noFill must keep the chart margin transparent"
+        );
+        let mut transparent = 0usize;
+        for px in buf[..info.buffer_size()].chunks_exact(4) {
+            if px[3] == 0 {
+                transparent += 1;
+                assert_ne!(
+                    &px[..3],
+                    &[255, 255, 255],
+                    "transparent noFill must not use a white key"
+                );
+            }
+        }
+        assert!(
+            transparent > 1000,
+            "both noFill must leave a transparent field, got {transparent}"
+        );
+    }
+
+    #[test]
+    fn chart_and_plot_translucent_fills_keep_straight_alpha() {
+        assert_eq!(ooxml_alpha_to_u8(0), 0);
+        assert_eq!(ooxml_alpha_to_u8(25000), 64);
+        assert_eq!(ooxml_alpha_to_u8(50000), 128);
+        assert_eq!(ooxml_alpha_to_u8(100000), 255);
+
+        let xml = LONG_LEGEND.replace(
+            "<c:chart>",
+            "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/></a:srgbClr></a:solidFill></c:spPr><c:chart>",
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::Translucent([234, 247, 247], 50000));
+        assert_eq!(frame.plot_fill, FrameFill::Default);
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        let i = (5 * 576 + 5) * 4;
+        assert_eq!(
+            &buf[i..i + 3],
+            &[234, 247, 247],
+            "chart fill must stay unassociated, not flattened onto white"
+        );
+        assert_eq!(buf[i + 3], 128, "alpha 50000 maps to coverage 128");
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='0F6082'><a:alpha val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+        assert_eq!(
+            frame.plot_fill,
+            FrameFill::Translucent([15, 96, 130], 50000)
+        );
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(
+            info.color_type,
+            png::ColorType::Rgb,
+            "translucent plot over an opaque chart stays opaque"
+        );
+        let px = |x: usize, y: usize| &buf[(y * 576 + x) * 3..(y * 576 + x) * 3 + 3];
+        assert_eq!(px(5, 5), &[234, 247, 247]);
+        assert!(
+            buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[124, 171, 188]),
+            "plot alpha 50000 must composite 0F6082 over the chart fill, not fall back to white or an opaque plot color"
+        );
+        assert!(
+            !buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[255, 255, 255]),
+            "translucent plot over a non-white chart fill must not introduce a white fallback"
+        );
+        assert!(
+            !buf[..info.buffer_size()]
+                .as_chunks::<3>()
+                .0
+                .contains(&[15, 96, 130]),
+            "translucent plot must not paint the source color as opaque"
+        );
+
+        let xml = LONG_LEGEND.replace(
+            "<c:chart>",
+            "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='25000'/></a:srgbClr></a:solidFill></c:spPr><c:chart>",
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert_eq!(
+            read_frame(&doc.root).unwrap().fill,
+            FrameFill::Translucent([234, 247, 247], 25000)
+        );
+        let png = super::render_chart(
+            &doc.root,
+            576,
+            336,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        let i = (5 * 576 + 5) * 4;
+        assert_eq!(&buf[i..i + 3], &[234, 247, 247]);
+        assert_eq!(buf[i + 3], 64, "alpha 25000 maps to coverage 64");
+    }
+
+
+    #[test]
+    fn explicit_width_and_inherited_chart_pen_are_distinct_and_scatter_is_preserved() {
+        let dpi=RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        for (attribute,ordinary,scatter) in [("",4.0,4.0),("w='28575'",3.0,4.0),("w='12700'",1.0,2.0)] {
+            let doc=crate::xml::parse(format!("<spPr><ln {attribute}/></spPr>").as_bytes()).unwrap();
+            assert_eq!(read_line_sp_pr(&doc.root,FALLBACK_ACCENTS,dpi,true).unwrap().width,ordinary);
+            assert_eq!(read_line_sp_pr(&doc.root,FALLBACK_ACCENTS,dpi,false).unwrap().width,scatter);
+        }
+    }
+
+    #[test]
+    fn preset_dash_parser_requires_explicit_native_validated_cap_and_pen() {
+        for name in ["dash","dashDot","dot","lgDash","lgDashDot","lgDashDotDot","sysDash","sysDot","sysDashDot","sysDashDotDot"] {
+            for cap in ["flat","rnd"] {
+                let doc=crate::xml::parse(format!("<ln w='50800' cap='{cap}'><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
+                let a=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true);
+                if cap=="flat" || matches!(name,"dash"|"dot") {assert!(a.unwrap().dash.is_some());}else{assert!(a.is_err());}
+                assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default()).is_err());
+            }
+        }
+    }
+    #[test]
+    fn preset_dash_rejects_unverified_bounds_ambiguity_and_complex_pens() {
+        for attrs in ["", "w='50800'", "cap='flat'", "w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'", "w='50800' cap='sq'"] {
+            let doc=crate::xml::parse(format!("<ln {attrs}><prstDash val='dash'/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err());
+        }
+        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>","<prstDash val='dash'/><headEnd type='triangle'/>"] {
+            let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err(),"{body}");
+        }
+    }
+    #[test]
+    fn preset_dash_end_to_end_reuses_custom_plot_legend_and_gap_phase() {
+        for (name,stops) in [("dash",vec![(400000,300000)]),("dot",vec![(100000,300000)]),("sysDashDotDot",vec![(300000,100000),(100000,100000),(100000,100000)])] {
+            for cap in ["flat","rnd"] {
+                if cap=="rnd" && name=="sysDashDotDot" {continue;}
+                for ys in [vec![Some(40.);8],vec![Some(40.),Some(40.),Some(60.),Some(40.),Some(40.)],vec![Some(40.),Some(40.),None,Some(40.),Some(40.)]] {
+                    let make=|dash:&str|standard_line_xml(&line_ser(0,"H",&ys,&format!("<c:spPr><a:ln w='50800' cap='{cap}'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill>{dash}<a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>")),"");
+                    let custom=format!("<a:custDash>{}</a:custDash>",stops.iter().map(|(d,s)|format!("<a:ds d='{d}' sp='{s}'/>")).collect::<String>());let preset=format!("<a:prstDash val='{name}'/>");
+                    let a=make(&preset);let b=make(&custom);assert_eq!(render_line(&a).unwrap(),render_line(&b).unwrap());
+                    assert_eq!(render_line(&a.replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>")).unwrap(),render_line(&b.replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>")).unwrap());
+                }
+            }
+        }
+    }
+    #[test]
+    fn preset_dash_does_not_change_omitted_or_solid_legacy_styles() {
+        for attrs in ["", "w='50800'", "cap='rnd'", "w='50800' cap='flat'"] {
+            let make=|dash:&str|crate::xml::parse(format!("<ln {attrs}>{dash}<round/></ln>").as_bytes()).unwrap();let a=make("");let b=make("<prstDash val='solid'/>");let c=make("<prstDash/>");
+            for node in [&a,&b,&c] {let style=read_ln_with_caps(&node.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).unwrap();assert!(style.dash.is_none());}
+        }
+    }
+
+    #[test]
+    fn positive_flat_custom_dash_parses_percentages_of_the_explicit_device_pen() {
+        for (width,device) in [(12700,1.0),(25400,3.0),(50800,6.0)] {
+            let doc=crate::xml::parse(format!("<ln w='{width}' cap='flat'><custDash><ds d='200000' sp='100000'/></custDash><round/></ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap(),true).unwrap();
+            assert_eq!(style.width,device);
+            assert_eq!(style.dash.unwrap().painted_intervals(device*5.0,16).unwrap(),[(0.0,device*2.0),(device*3.0,device*5.0)]);
+            assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap()).is_err());
+        }
+    }
+    #[test]
+    fn custom_dash_rejects_unimplemented_caps_missing_width_and_ambiguous_stops() {
+        for attrs in ["w='50800'","cap='flat'","w='0' cap='flat'"] {
+            let doc=crate::xml::parse(format!("<ln {attrs}><custDash><ds d='200000' sp='100000'/></custDash></ln>").as_bytes()).unwrap();
+            assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err());
+        }
+        for body in ["<custDash/>","<custDash offset='1'><ds d='1' sp='1'/></custDash>","<custDash><ds d='0' sp='1'/></custDash>","<custDash><ds d='1.5' sp='1'/></custDash>","<custDash><ds d='1'/></custDash>","<custDash><ds d='2147483648' sp='1'/></custDash>","<custDash><ds d='1' sp='1' other='1'/></custDash>","<prstDash val='solid'/><custDash><ds d='1' sp='1'/></custDash>","<custDash><ds d='1' sp='1'/></custDash><noFill/>","<custDash><ds d='1' sp='1'/></custDash><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>"] {
+            let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();
+            assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true).is_err(),"{body}");
+        }
+    }
+    #[test]
+    fn noncustom_join_parser_requires_explicit_positive_simple_pen() {
+        for cap in ["flat","rnd","sq"] {
+            for dash in ["","<prstDash val='solid'/>"] {
+                for (tag,join) in [("<bevel/>",stroke::Join::Bevel),("<miter/>",stroke::Join::Miter {limit:800000}),("<miter lim='100000'/>",stroke::Join::Miter {limit:100000})] {
+                    let xml=format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill>{dash}{tag}</ln>");
+                    let doc=crate::xml::parse(xml.as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,join);assert!(style.dash.is_none());
+                }
+            }
+            for bad in ["<miter lim='-1'/>","<miter lim='1.5'/>","<miter lim='2147483648'/>","<bevel lim='1'/>","<round/><bevel/>","<miter><x/></miter>"] {
+                let doc=crate::xml::parse(format!("<ln w='50800' cap='{cap}'>{bad}</ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err(),"{bad}");
+            }
+        }
+    }
+    #[test]
+    fn noncustom_join_does_not_change_omitted_unresolved_or_other_readers() {
+        for attrs in ["w='50800'","cap='rnd'","w='0' cap='rnd'",""] {
+            let doc=crate::xml::parse(format!("<ln {attrs}><solidFill><srgbClr val='175DB5'/></solidFill><bevel/></ln>").as_bytes()).unwrap();
+            assert_eq!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap().join,stroke::Join::Round);
+        }
+        for cap in ["flat","sq"] {
+            let doc=crate::xml::parse(format!("<ln cap='{cap}'><bevel/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
+        }
+        for tag in ["<bevel/>","<miter/>"] {
+            let doc=crate::xml::parse(format!("<ln w='50800' cap='rnd'>{tag}</ln>").as_bytes()).unwrap();assert_eq!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default()).unwrap().join,stroke::Join::Round);
+        }
+    }
+    #[test]
+    fn noncustom_join_reuses_full_run_geometry_without_dash_budget() {
+        for cap in [stroke::Cap::Flat,stroke::Cap::Round,stroke::Cap::Square] {
+            for join in [stroke::Join::Bevel,stroke::Join::Miter {limit:800000}] {
+                let pts=[(10.0,40.0),(20.0,40.0),(40.0,10.0),(60.0,40.0),(70.0,40.0)];let style=stroke::Style::new(6.0,cap).unwrap();let p=stroke::DashPattern::from_width_percent(&[(100000000.0,100000.0)],6.0).unwrap();let mut solid=Canvas::new(90,60);solid.custom_dash_budget=0;let mut custom=Canvas::new(90,60);
+                stroke_run_pattern_join(&mut solid,&pts,style,None,join,[23,93,181]).unwrap();stroke_run_pattern_join(&mut custom,&pts,style,Some(&p),join,[23,93,181]).unwrap();assert_eq!(solid.px,custom.px);assert_eq!(solid.alpha,custom.alpha);assert_eq!(solid.custom_dash_budget,0);
+            }
+        }
+    }
+    #[test]
+    fn noncustom_join_keeps_legacy_round_and_single_edge_pixels() {
+        for cap in [stroke::Cap::Flat,stroke::Cap::Round,stroke::Cap::Square] {
+            let style=stroke::Style::new(6.0,cap).unwrap();let mut a=Canvas::new(90,60);let mut b=Canvas::new(90,60);let pts=[(10.0,40.0),(40.0,10.0),(70.0,40.0)];
+            stroke_run_style(&mut a,&pts,style,[23,93,181]);stroke_run_pattern_join(&mut b,&pts,style,None,stroke::Join::Round,[23,93,181]).unwrap();assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);
+            for join in [stroke::Join::Bevel,stroke::Join::Miter {limit:800000}] {
+                let mut a=Canvas::new(90,60);let mut b=Canvas::new(90,60);let pts=[(10.25,20.25),(70.25,30.25)];stroke_run_style(&mut a,&pts,style,[23,93,181]);stroke_run_pattern_join(&mut b,&pts,style,None,join,[23,93,181]).unwrap();assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);
+            }
+        }
+    }
+    #[test]
+    fn noncustom_join_round_trip_honors_previously_ignored_round_cap_join() {
+        let make=|tag:&str,dash:&str| {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='rnd'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill>{dash}{tag}</a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0),Some(10.0)],&extra),"")
+        };
+        let round=render_line(&make("<a:round/>","<a:prstDash val='solid'/>")).unwrap();let bevel=render_line(&make("<a:bevel/>","<a:prstDash val='solid'/>")).unwrap();let miter=render_line(&make("<a:miter/>","<a:prstDash val='solid'/>")).unwrap();assert_ne!(round,bevel);assert_ne!(bevel,miter);assert_ne!(round,miter);
+        assert_eq!(round,render_line(&make("","<a:prstDash val='solid'/>")).unwrap());assert_eq!(bevel,render_line(&make("<a:bevel/>","")).unwrap());assert_eq!(bevel,render_line(&make("<a:miter lim='100000'/>","")).unwrap());
+    }
+    #[test]
+    fn noncustom_join_true_gaps_are_separate_runs_and_complex_pens_stay_gated() {
+        for cap in ["flat","rnd","sq"] {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='{cap}'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:prstDash val='solid'/><a:miter/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            let gap=standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),None,Some(90.0),Some(10.0),Some(10.0),Some(10.0)],&extra),"");let connected=standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(90.0),Some(90.0),Some(10.0),Some(10.0),Some(10.0)],&extra),"");assert_ne!(render_line(&gap).unwrap(),render_line(&connected).unwrap());
+            for fill in ["<noFill/>","<solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>"] {
+                let xml=format!("<ln w='50800' cap='{cap}'>{fill}<miter/></ln>");let doc=crate::xml::parse(xml.as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
+            }
+        }
+        let mut c=Canvas::new(100,60);let style=stroke::Style::new(6.0,stroke::Cap::Square).unwrap();for pts in [&[(10.0,40.0),(35.0,10.0)][..],&[(65.0,10.0),(90.0,40.0)][..]] {stroke_run_pattern_join(&mut c,pts,style,None,stroke::Join::Miter {limit:800000},[23,93,181]).unwrap();}assert_eq!(&c.px[(10*100+50)*3..(10*100+51)*3],&[255,255,255]);
+    }
+    #[test]
+    fn miter_parser_validates_limits_and_preserves_legacy_readers() {
+        for cap in ["flat","rnd","sq"] {
+            let make=|extra:&str|format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='10000000' sp='100000'/></custDash>{extra}</ln>");
+            for (tag,expected) in [("<miter/>",800000),("<miter lim='0'/>",0),("<miter lim='200000'/>",200000),("<miter lim='2147483647'/>",2147483647)] {
+                let doc=crate::xml::parse(make(tag).as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,stroke::Join::Miter {limit:expected});
+            }
+            if cap!="rnd" {
+                let solid=make("<miter/>").replace("<custDash><ds d='10000000' sp='100000'/></custDash>","");
+                let doc=crate::xml::parse(solid.as_bytes()).unwrap();assert_eq!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap().join,stroke::Join::Miter {limit:800000});
+            }
+            for bad in ["<miter lim='-1'/>","<miter lim='1.5'/>","<miter lim='NaN'/>","<miter lim='2147483648'/>","<miter lim='800%'/>","<miter other='1'/>","<miter><x/></miter>","<miter/><round/>"] {
+                let doc=crate::xml::parse(make(bad).as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err(),"{bad}");
+            }
+        }
+        let legacy=crate::xml::parse(b"<ln w='50800' cap='rnd'><solidFill><srgbClr val='175DB5'/></solidFill><miter/></ln>").unwrap();
+        assert_eq!(read_solid_ln(&legacy.root,FALLBACK_ACCENTS,6.0,RenderDpi::default()).unwrap().join,stroke::Join::Round);
+    }
+    #[test]
+    fn miter_true_tip_is_not_clipped_to_half_width_mask() {
+        let points=[(30.0,70.0),(40.0,30.0),(50.0,70.0)];let mut m=Canvas::new(80,80);let mut b=Canvas::new(80,80);
+        m.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Miter {limit:800000},[23,93,181]);
+        b.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Bevel,[23,93,181]);
+        let pixel=|c:&Canvas,x:usize,y:usize|c.px[(y*80+x)*3..(y*80+x+1)*3].to_vec();
+        assert_eq!(pixel(&m,40,12),vec![23,93,181]);assert_eq!(pixel(&b,40,12),vec![255,255,255]);
+        let mut limited=Canvas::new(80,80);limited.stroke_custom_dash_union_join(&points,12.0,stroke::Cap::Flat,stroke::Cap::Flat,stroke::Join::Miter {limit:200000},[23,93,181]);assert_eq!(limited.px,b.px);
+    }
+    #[test]
+    fn miter_limit_round_trip_and_default_are_vertex_local() {
+        let make=|tag:&str| {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='10000000' sp='100000'/></a:custDash>{tag}</a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0),Some(10.0)],&extra),"")
+        };
+        let bevel=render_line(&make("<a:bevel/>")).unwrap();let one=render_line(&make("<a:miter lim='100000'/>")).unwrap();let two=render_line(&make("<a:miter lim='200000'/>")).unwrap();let eight=render_line(&make("<a:miter lim='800000'/>")).unwrap();
+        assert_eq!(bevel,one);assert_ne!(bevel,two);assert_ne!(two,eight);assert_eq!(eight,render_line(&make("<a:miter/>")).unwrap());
+    }
+    #[test]
+    fn miter_single_edge_short_dots_budget_and_offcanvas_are_preserved() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            for d in [25000.0,100000.0,10000000.0] {
+                let p=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let style=stroke::Style::new(6.0,cap).unwrap();let mut a=Canvas::new(100,50);let mut b=Canvas::new(100,50);
+                for (canvas,join) in [(&mut a,stroke::Join::Round),(&mut b,stroke::Join::Miter {limit:800000})] {stroke_run_pattern_join(canvas,&[(20.25,20.25),(70.25,20.25)],style,Some(&p),join,[23,93,181]).unwrap();}
+                assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);assert_eq!(a.custom_dash_budget,b.custom_dash_budget);
+            }
+        }
+        let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();let mut c=Canvas::new(80,60);c.custom_dash_budget=1;
+        stroke_run_pattern_join(&mut c,&[(-50.0,40.0),(40.0,-50.0),(130.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Miter {limit:800000},[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+        let before=c.px.clone();assert!(stroke_run_pattern_join(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Miter {limit:800000},[23,93,181]).is_err());assert_eq!(before,c.px);
+    }
+    #[test]
+    fn bevel_is_irrelevant_for_a_single_edge_or_round_dot() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            for d in [25000.0,100000.0,10000000.0] {
+                let pattern=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let style=stroke::Style::new(6.0,cap).unwrap();
+                let mut a=Canvas::new(100,50);let mut b=Canvas::new(100,50);
+                for (canvas,join) in [(&mut a,stroke::Join::Round),(&mut b,stroke::Join::Bevel)] {
+                    stroke_run_pattern_join(canvas,&[(20.25,20.25),(70.25,20.25)],style,Some(&pattern),join,[23,93,181]).unwrap();
+                }
+                assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);assert_eq!(a.custom_dash_budget,b.custom_dash_budget);
+            }
+        }
+    }
+    #[test]
+    fn bevel_custom_parser_is_explicit_and_does_not_expand_legacy_solid() {
+        for cap in ["flat","sq","rnd"] {
+            let xml=format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='10000000' sp='100000'/></custDash><bevel/></ln>");
+            let doc=crate::xml::parse(xml.as_bytes()).unwrap();let style=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).unwrap();assert_eq!(style.join,stroke::Join::Bevel);
+            for bad in ["<miter lim='-1'/>","<bevel lim='1'/>","<bevel><x/></bevel>","<round/><bevel/>","<bevel/><bevel/>"] {
+                let doc=crate::xml::parse(xml.replace("<bevel/>",bad).as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default(),true).is_err());
+            }
+        }
+        let doc=crate::xml::parse(b"<ln w='50800' cap='rnd'><solidFill><srgbClr val='175DB5'/></solidFill><bevel/></ln>").unwrap();assert_eq!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,6.0,RenderDpi::default()).unwrap().join,stroke::Join::Round);
+    }
+    #[test]
+    fn bevel_custom_joins_fill_hull_without_round_bulge_or_butt_gap() {
+        let pts=[(15.0,40.0),(40.0,15.0),(65.0,40.0)];let mut round=Canvas::new(80,60);let mut bevel=Canvas::new(80,60);
+        for (canvas,join) in [(&mut round,stroke::Join::Round),(&mut bevel,stroke::Join::Bevel)] {canvas.stroke_custom_dash_union_join(&pts,14.0,stroke::Cap::Flat,stroke::Cap::Flat,join,[23,93,181]);}
+        assert_ne!(round.px,bevel.px);let at=|c:&Canvas,x:usize,y:usize|c.px[(y*80+x)*3..(y*80+x+1)*3].to_vec();
+        assert_eq!(at(&bevel,40,15),vec![23,93,181]);assert_eq!(at(&bevel,40,9),vec![255,255,255]);assert_ne!(at(&round,40,9),vec![255,255,255]);
+    }
+    #[test]
+    fn bevel_custom_round_trip_reaches_line_renderer_and_respects_budget() {
+        let make=|join:&str| {
+            let extra=format!("<c:spPr><a:ln w='101600' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='10000000' sp='100000'/></a:custDash><a:{join}/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            standard_line_xml(&line_ser(0,"H",&[Some(10.0),Some(10.0),Some(90.0),Some(10.0)],&extra),"")
+        };
+        assert_ne!(render_line(&make("round")).unwrap(),render_line(&make("bevel")).unwrap());assert_ne!(render_line(&make("miter")).unwrap(),render_line(&make("bevel")).unwrap());
+        let mut c=Canvas::new(80,60);c.custom_dash_budget=1;let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();
+        stroke_run_pattern_join(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),stroke::Join::Bevel,[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+    }
+    #[test]
+    fn custom_dash_union_retrace_does_not_reblend_boundary() {
+        let mut once=Canvas::new(80,60);let mut retrace=Canvas::new(80,60);
+        let a=(18.25,20.25);let b=(58.25,20.25);let color=[23,93,181];
+        stroke_run_dash_caps(&mut once,&[a,b],6.0,stroke::Cap::Round,stroke::Cap::Round,color);
+        stroke_run_dash_caps(&mut retrace,&[a,b,a],6.0,stroke::Cap::Round,stroke::Cap::Round,color);
+        assert_eq!(once.px,retrace.px);assert_eq!(once.alpha,retrace.alpha);
+    }
+    #[test]
+    fn custom_dash_union_matches_one_blend_of_max_coverage_at_turn() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square] {
+            let points=[(18.25,40.25),(38.25,12.25),(58.25,40.25)];let width=6.0;let color=[23,93,181];
+            let mut actual=Canvas::new(80,60);let mut expected=Canvas::new(80,60);
+            stroke_run_dash_caps(&mut actual,&points,width,cap,cap,color);
+            let a=stroke::CapSegment::new(points[0],points[1],width,cap,stroke::Cap::Round).unwrap();
+            let b=stroke::CapSegment::new(points[1],points[2],width,stroke::Cap::Round,cap).unwrap();
+            for y in 0..60 {for x in 0..80 {
+                let p=(f64::from(x)+0.5,f64::from(y)+0.5);
+                let alpha=coverage(a.signed_distance(p),0.0).max(coverage(b.signed_distance(p),0.0));
+                if alpha>0 {expected.blend(x,y,color,alpha);}
+            }}
+            assert_eq!(actual.px,expected.px);assert_eq!(actual.alpha,expected.alpha);
+        }
+    }
+    #[test]
+    fn custom_dash_union_zero_edges_reverse_and_offcanvas_are_stable() {
+        let p=[(-30.25,20.25),(30.25,10.25),(90.25,20.25)];let mut reversed=p;reversed.reverse();
+        let mut a=Canvas::new(60,40);let mut b=Canvas::new(60,40);let mut c=Canvas::new(60,40);
+        for (canvas,points) in [(&mut a,p.as_slice()),(&mut b,reversed.as_slice()),(&mut c,&[p[0],p[0],p[1],p[1],p[2]])] {
+            stroke_run_dash_caps(canvas,points,6.0,stroke::Cap::Flat,stroke::Cap::Flat,[23,93,181]);
+        }
+        assert_eq!(a.px,b.px);assert_eq!(a.px,c.px);
+        let before=a.px.clone();a.stroke_custom_dash_union(&[(-100.0,-100.0),(-80.0,-60.0),(-50.0,-100.0)],6.0,stroke::Cap::Round,stroke::Cap::Round,[23,93,181]);assert_eq!(a.px,before);
+    }
+    #[test]
+    fn custom_dash_union_keeps_phase_and_piece_budget_across_true_turns() {
+        let mut c=Canvas::new(80,60);c.custom_dash_budget=1;
+        let p=stroke::DashPattern::from_width_percent(&[(10000000.0,100000.0)],6.0).unwrap();
+        stroke_run_pattern(&mut c,&[(10.0,40.0),(40.0,10.0),(70.0,40.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),[23,93,181]).unwrap();
+        assert_eq!(c.custom_dash_budget,0);let before=c.px.clone();
+        assert!(stroke_run_pattern(&mut c,&[(10.0,50.0),(30.0,50.0)],stroke::Style::new(6.0,stroke::Cap::Flat).unwrap(),Some(&p),[23,93,181]).is_err());assert_eq!(c.px,before);
+    }
+
+    #[test]
+    fn round_dot_raster_reuses_one_existing_circle_and_is_invariant_below_one_pen() {
+        let mut expected=None;
+        for d in [25000.0,50000.0,100000.0] {
+            let p=stroke::DashPattern::from_width_percent(&[(d,100000.0)],6.0).unwrap();let mut c=Canvas::new(100,40);
+            stroke_run_pattern(&mut c,&[(20.0,20.0),(70.0,20.0)],stroke::Style::new(6.0,stroke::Cap::Round).unwrap(),Some(&p),[23,93,181]).unwrap();
+            if let Some(ref pixels)=expected {assert_eq!(&c.px,pixels);}else{expected=Some(c.px.clone());}
+            let mut primitive=Canvas::new(100,40);
+            for x in [20.0,32.0,44.0,56.0,68.0] {primitive.stroke_segment(x,20.0,x,20.0,6.0,[23,93,181]);}
+            assert_eq!(c.px,primitive.px);assert_eq!(c.alpha,primitive.alpha);
+        }
+    }
+    #[test]
+    fn round_dot_is_not_a_closed_polyline_and_uses_the_shared_budget() {
+        let p=stroke::DashPattern::from_width_percent(&[(50000.0,100000.0)],2.0).unwrap();let mut c=Canvas::new(100,50);c.custom_dash_budget=2;
+        let style=stroke::Style::new(2.0,stroke::Cap::Round).unwrap();
+        stroke_run_pattern(&mut c,&[(20.0,20.0),(25.0,20.0)],style,Some(&p),[23,93,181]).unwrap();assert_eq!(c.custom_dash_budget,0);
+        let before=c.px.clone();assert!(stroke_run_pattern(&mut c,&[(30.0,20.0),(35.0,20.0)],style,Some(&p),[23,93,181]).is_err());assert_eq!(c.px,before);
+        let mut looped=Canvas::new(100,50);stroke_run_dash_caps(&mut looped,&[(20.0,20.0),(40.0,20.0),(20.0,20.0)],6.0,stroke::Cap::Round,stroke::Cap::Round,[23,93,181]);
+        assert_eq!(&looped.px[(20*100+35)*3..(20*100+36)*3],&[23,93,181]);
+    }
+    #[test]
+    fn positive_round_dots_reach_legacy_and_advanced_legend_keys_without_enabling_zero_stops() {
+        for pos in ["r","b"] {
+            let make=|d| {
+                let extra=format!("<c:spPr><a:ln w='50800' cap='rnd'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='{d}' sp='100000'/></a:custDash><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+                standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&extra),"").replace("<c:legendPos val=\"r\"/>",&format!("<c:legendPos val=\"{pos}\"/>"))
+            };
+            assert_eq!(render_line(&make(25000)).unwrap(),render_line(&make(100000)).unwrap());assert!(render_line(&make(0)).is_err());
+        }
+    }
+
+    #[test]
+    fn explicit_round_square_custom_dash_parser_supports_only_evidenced_baseline() {
+        for cap in ["rnd","sq","flat"] {
+            let make=|extra:&str,d:i32| format!("<ln w='50800' cap='{cap}'><solidFill><srgbClr val='175DB5'/></solidFill><custDash><ds d='{d}' sp='100000'/></custDash>{extra}</ln>");
+            let parse=|xml:String| {let doc=crate::xml::parse(xml.as_bytes()).unwrap();read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,4.0,RenderDpi::default(),true)};
+            assert!(parse(make("<round/>",200000)).is_ok());
+            assert!(parse(make("<bevel/>",200000)).is_ok());
+            assert!(parse(make("<miter/>",200000)).is_ok());
+            let alpha=make("",200000).replace("val='175DB5'/>","val='175DB5'><alpha val='50000'/></srgbClr>");
+            assert!(parse(alpha).is_err());
+            for d in [1,25000,50000,100000] {assert!(parse(make("",d)).is_ok());}
+        }
+    }
+    #[test]
+    fn round_square_custom_raster_does_not_depend_on_collinear_tessellation() {
+        for cap in [stroke::Cap::Round,stroke::Cap::Square] {
+            let p=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+            let style=stroke::Style::new(6.0,cap).unwrap();let mut a=Canvas::new(120,40);let mut b=Canvas::new(120,40);
+            stroke_run_pattern(&mut a,&[(20.0,20.0),(100.0,20.0)],style,Some(&p),[23,93,181]).unwrap();
+            stroke_run_pattern(&mut b,&[(20.0,20.0),(23.0,20.0),(54.0,20.0),(100.0,20.0)],style,Some(&p),[23,93,181]).unwrap();
+            assert_eq!(a.px,b.px);assert_eq!(a.alpha,b.alpha);
+        }
+    }
+    #[test]
+    fn square_internal_dash_is_flat_while_true_run_ends_extend_half_a_pen() {
+        let p=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],6.0).unwrap();
+        let mut flat=Canvas::new(120,40);let mut square=Canvas::new(120,40);
+        for (c,cap) in [(&mut flat,stroke::Cap::Flat),(&mut square,stroke::Cap::Square)] {
+            stroke_run_pattern(c,&[(20.0,20.0),(100.0,20.0)],stroke::Style::new(6.0,cap).unwrap(),Some(&p),[23,93,181]).unwrap();
+        }
+        assert_ne!(flat.px,square.px);
+        // Exclude BOTH actual run endpoints: each legitimately gets a cap.
+        for y in 0..40 {assert_eq!(&flat.px[(y*120+25)*3..(y*120+95)*3],&square.px[(y*120+25)*3..(y*120+95)*3]);}
+        assert_ne!(&flat.px[(20*120+101)*3..(20*120+102)*3],&square.px[(20*120+101)*3..(20*120+102)*3]);
+    }
+    #[test]
+    fn round_square_custom_keys_render_in_both_legacy_and_advanced_legends() {
+        for pos in ["r","b"] {
+            let mut images=Vec::new();
+            for cap in ["flat","sq","rnd"] {
+                let extra=format!("<c:spPr><a:ln w='50800' cap='{cap}'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:custDash><a:ds d='200000' sp='100000'/></a:custDash><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+                let xml=standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&extra),"").replace("<c:legendPos val=\"r\"/>",&format!("<c:legendPos val=\"{pos}\"/>"));
+                images.push(render_line(&xml).unwrap());
+            }
+            assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
+        }
+    }
+
+    #[test]
+    fn patterned_strokes_share_an_image_budget_and_never_silently_truncate() {
+        let pattern=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],2.0).unwrap();
+        let style=stroke::Style::new(2.0,stroke::Cap::Flat).unwrap();
+        let mut c=Canvas::new(80,40);c.custom_dash_budget=2;
+        stroke_run_pattern(&mut c,&[(20.0,20.0),(30.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        assert_eq!(c.custom_dash_budget,0);
+        let pixel=|c:&Canvas,x:usize| &c.px[(20*80+x)*3..(20*80+x)*3+3]==[23,93,181];
+        assert!(pixel(&c,21));assert!(!pixel(&c,25));assert!(pixel(&c,27));
+        let before=c.px.clone();
+        assert!(stroke_run_pattern(&mut c,&[(40.0,20.0),(50.0,20.0)],style,Some(&pattern),[23,93,181]).is_err());
+        assert_eq!(before,c.px);
+    }
+
+    #[test]
+    fn custom_flat_raster_is_invariant_to_collinear_subdivision_without_touching_legacy_solids() {
+        let pattern=stroke::DashPattern::from_width_percent(&[(200000.0,100000.0)],1.0).unwrap();
+        let style=stroke::Style::new(1.0,stroke::Cap::Flat).unwrap();
+        let mut a=Canvas::new(80,40);let mut b=Canvas::new(80,40);
+        stroke_run_pattern(&mut a,&[(20.0,20.0),(60.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        stroke_run_pattern(&mut b,&[(20.0,20.0),(23.5,20.0),(41.5,20.0),(60.0,20.0)],style,Some(&pattern),[23,93,181]).unwrap();
+        assert_eq!(a.px,b.px);
+    }
+    #[test]
+    fn flat_custom_dash_and_actual_pen_are_painted_in_advanced_legend_too() {
+        let make=|dash:&str| standard_line_xml(&line_ser(0,"H",&[Some(40.0);8],&format!("<c:spPr><a:ln w='50800' cap='flat'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill>{dash}<a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>")),"")
+            .replace("<c:legendPos val=\"r\"/>","<c:legendPos val=\"b\"/>");
+        let (_,_,solid)=png_rgb(&render_line(&make("<a:prstDash val='solid'/>")).unwrap());
+        let (_,_,dashed)=png_rgb(&render_line(&make("<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>")).unwrap());
+        let a=count_in(&solid,576,0,576,300,336,[23,93,181],0);
+        let b=count_in(&dashed,576,0,576,300,336,[23,93,181],0);
+        assert!(b>0 && b<a,"the advanced legend must show a real dashed key: solid={a},dash={b}");
+    }
+
+    #[test]
+    fn explicit_line_caps_and_key_width_use_shared_style_but_other_strokes_stay_gated() {
+        let mut images=Vec::new();
+        for cap in ["rnd","flat","sq"] {
+            let extra=format!("<c:spPr><a:ln w='50800' cap='{cap}' cmpd='sng' algn='ctr'><a:solidFill><a:srgbClr val='175DB5'/></a:solidFill><a:prstDash val='solid'/><a:round/></a:ln></c:spPr><c:marker><c:symbol val='none'/></c:marker>");
+            let xml=standard_line_xml(&line_ser(0,"H",&[Some(40.0),Some(40.0),Some(40.0)],&extra),"");images.push(render_line(&xml).unwrap());
+            let node=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='{cap}' w='50800'><a:prstDash val='solid'/><a:round/></a:ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).unwrap();assert_eq!(style.cap,stroke::Cap::from_ooxml(cap).unwrap());
+            if cap!="rnd" {assert!(read_solid_ln(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default()).is_err());}
+        }
+        assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
+        for body in ["<a:prstDash val='dash'/>","<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
+            let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
+        }
+        let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
+        for (canvas,width) in [(&mut thin,1.0),(&mut thick,6.0)] {draw_plot_key_styled(canvas,PlotKind::StandardLine,20,10,49,19,[0,0,0],MarkerKind::None,stroke::Style::new(width,stroke::Cap::Flat),None).unwrap();}
+        assert_ne!(thin.px,thick.px);
+    }
+
+    #[test]
+    fn duplicate_endpoint_edges_do_not_steal_nonround_run_caps() {
+        for cap in [stroke::Cap::Flat,stroke::Cap::Square] {
+            let mut simple=Canvas::new(80,40);let mut repeated=Canvas::new(80,40);let style=stroke::Style::new(8.0,cap).unwrap();
+            stroke_run_style(&mut simple,&[(20.0,20.0),(60.0,20.0)],style,[0,0,0]);
+            stroke_run_style(&mut repeated,&[(20.0,20.0),(20.0,20.0),(60.0,20.0),(60.0,20.0)],style,[0,0,0]);assert_eq!(simple.px,repeated.px);
+        }
+    }
+
+    #[test]
+    fn shared_stroke_round_runs_preserve_legacy_pixels_exactly() {
+        for width in [1.0, 2.25, 4.0, 7.5] {
+            for points in [vec![(10.0,20.0),(40.0,20.0),(40.0,50.0),(90.0,50.0)], vec![(10.0,20.0),(10.0,20.0),(90.0,50.0)], vec![(-5.0,10.0),(50.5,40.5),(130.0,10.0)]] {
+                let mut before=Canvas::new(120,70);let mut after=Canvas::new(120,70);
+                for pair in points.windows(2) { before.stroke_segment(pair[0].0,pair[0].1,pair[1].0,pair[1].1,width,[23,93,181]); }
+                stroke_run(&mut after,&points,width,[23,93,181]);assert_eq!(before.px,after.px);assert_eq!(before.alpha,after.alpha);
+            }
+        }
+    }
+
+    #[test]
+    fn explicit_cap_prerequisites_render_document_contract_not_native_gold() {
+        let mut image=Canvas::new(280,180);
+        for (i,cap) in [stroke::Cap::Round,stroke::Cap::Flat,stroke::Cap::Square].into_iter().enumerate() {
+            let y=25.0+i as f64*55.0;
+            stroke_run_style(&mut image,&[(30.0,y),(130.0,y),(180.0,y+20.0),(240.0,y+20.0)],stroke::Style::new(12.0,cap).unwrap(),[23,93,181]);
+        }
+        let mut round=Canvas::new(80,30);let mut flat=Canvas::new(80,30);let mut square=Canvas::new(80,30);
+        for (canvas,cap) in [(&mut round,stroke::Cap::Round),(&mut flat,stroke::Cap::Flat),(&mut square,stroke::Cap::Square)] {stroke_run_style(canvas,&[(20.0,15.0),(60.0,15.0)],stroke::Style::new(8.0,cap).unwrap(),[0,0,0]);}
+        assert_ne!(round.px,flat.px);assert_ne!(round.px,square.px);assert_ne!(flat.px,square.px);
+        if let Some(dir)=std::env::var_os("OOXP_STROKE_FOUNDATION_REVIEW_DIR") {
+            let dir=std::path::PathBuf::from(dir);assert!(dir.is_dir());let path=dir.join("document-contract-cap-primitives.png");assert!(!path.exists());std::fs::write(path,image.encode_png().unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn two_stop_linear_frame_fills_use_office_gamma_weight() {
+        let xml = LONG_LEGEND.replace(
+            "<c:chart>",
+            "<c:roundedCorners val='0'/><c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='0' scaled='1'/><a:tileRect/></a:gradFill></c:spPr><c:chart>",
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert_eq!(
+            frame.fill,
+            FrameFill::Linear(LinearFrameGrad {
+                stops: gradient::StopTable::new(vec![(0, [234, 247, 247]), (100_000, [15, 96, 130])]).unwrap(),
+                ang: LINEAR_ANG_HORIZONTAL,
+            })
+        );
+        let png = super::render_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let mut reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; reader.output_buffer_size()];
+        let info = reader.next_frame(&mut buf).unwrap();
+        let stride = if info.color_type == png::ColorType::Rgba {
+            4
+        } else {
+            3
+        };
+        let mid = (8 * 424 + 212) * stride;
+        assert_eq!(
+            &buf[mid..mid + 3],
+            &[171, 190, 199],
+            "geometric mid must follow gamma 2.2 plus the Office weight curve, not an sRGB lerp"
+        );
+        let left = (8 * 424 + 5) * stride;
+        assert_eq!(&buf[left..left + 3], &[234, 247, 247]);
+
+        let xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='0F6082'/></a:gs><a:gs pos='100000'><a:srgbClr val='EAF7F7'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
+            );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert_eq!(
+            read_frame(&doc.root).unwrap().plot_fill,
+            FrameFill::Linear(LinearFrameGrad {
+                stops: gradient::StopTable::new(vec![(0, [15, 96, 130]), (100_000, [234, 247, 247])]).unwrap(),
+                ang: LINEAR_ANG_VERTICAL,
+            })
+        );
+        assert!(super::render_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .is_ok());
+    }
+
+    const OFFICE16_THEME: &str = r#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <a:themeElements>
+    <a:clrScheme name="Office">
+      <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
+      <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
+      <a:dk2><a:srgbClr val="0E2841"/></a:dk2>
+      <a:lt2><a:srgbClr val="E8E8E8"/></a:lt2>
+      <a:accent1><a:srgbClr val="156082"/></a:accent1>
+      <a:accent2><a:srgbClr val="E97132"/></a:accent2>
+      <a:accent3><a:srgbClr val="196B24"/></a:accent3>
+      <a:accent4><a:srgbClr val="0F9ED5"/></a:accent4>
+      <a:accent5><a:srgbClr val="A02B93"/></a:accent5>
+      <a:accent6><a:srgbClr val="4EA72E"/></a:accent6>
+      <a:hlink><a:srgbClr val="467886"/></a:hlink>
+      <a:folHlink><a:srgbClr val="96607D"/></a:folHlink>
+    </a:clrScheme>
+  </a:themeElements>
+</a:theme>"#;
+
+    #[test]
+    fn stop_table_axis_cache_preserves_all_legacy_pixels_exactly() {
+        let start = [234, 247, 247];
+        let end = [15, 96, 130];
+        for (width, height) in [(2, 3), (17, 9), (424, 265), (4096, 3)] {
+            for ang in [LINEAR_ANG_HORIZONTAL, LINEAR_ANG_VERTICAL] {
+                for clip in [false, true] {
+                    let (x0, y0, x1, y1) = if clip { (-5, -2, width + 7, height + 3) } else { (0, 0, width, height) };
+                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang };
+                    let mut canvas = Canvas::new(width as u32, height as u32);
+                    canvas.fill_linear_rect(x0, y0, x1, y1, &grad);
+                    for y in 0..height {
+                        for x in 0..width {
+                            let along = if ang == LINEAR_ANG_VERTICAL { (f64::from(y - y0) + 0.5) / f64::from(y1 - y0) } else { (f64::from(x - x0) + 0.5) / f64::from(x1 - x0) };
+                            let share = office_grad_weight(along);
+                            let expected = std::array::from_fn::<_, 3, _>(|i| office_gamma_mix(start[i], end[i], share));
+                            let i = ((y * width + x) * 3) as usize;
+                            assert_eq!(&canvas.px[i..i + 3], &expected, "{width}x{height} angle={ang} clip={clip} x={x} y={y}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn multistop_frame_and_plot_use_segmented_srgb_not_two_stop_gamma() {
+        let stops = "<a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='50000'><a:srgbClr val='0F6082'/></a:gs><a:gs pos='100000'><a:srgbClr val='F04020'/></a:gs>";
+        for plot in [false, true] {
+            for ang in [0, 5_400_000] {
+                let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='{ang}' scaled='1'/></a:gradFill></c:spPr>");
+                let xml = if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let frame = read_frame(&doc.root).unwrap();
+                let FrameFill::Linear(grad) = (if plot { frame.plot_fill } else { frame.fill }) else { panic!("expected gradient table"); };
+                assert_eq!(grad.stops.len(), 3);
+                assert_eq!(grad.sample(0.25), [125, 172, 189]);
+                assert_eq!(grad.sample(0.5), [15, 96, 130]);
+                assert_eq!(grad.sample(0.75), [128, 80, 81]);
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    assert!(render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).is_ok());
+                }
+            }
+        }
+        for stops in [
+            "<a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='0'><a:srgbClr val='000000'/></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+            "<a:gs pos='10000'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='50000'><a:srgbClr val='000000'/></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+            "<a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='50000'><a:srgbClr val='000000'><a:alpha val='50000'/></a:srgbClr></a:gs><a:gs pos='100000'><a:srgbClr val='FF0000'/></a:gs>",
+        ] {
+            let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='0'/></a:gradFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err());
+        }
+    }
+
+    #[test]
+    fn frame_scheme_tint_shade_and_lum_match_official_excel_pixels() {
+        let accent1 = [0x15, 0x60, 0x82];
+        assert_eq!(frame_tint(accent1, 60_000), [170, 182, 193]);
+        assert_eq!(frame_shade(accent1, 75_000), [17, 84, 114]);
+        assert_eq!(frame_lum(accent1, Some(75_000), None), [16, 72, 98]);
+        assert_eq!(
+            frame_lum(accent1, Some(60_000), Some(40_000)),
+            [70, 177, 225]
+        );
+        // Pure 2.2 or gamma-encoded lerp must not be used: they miss official by 1+.
+        assert_ne!(
+            accent1.map(|c| {
+                let lin = (f64::from(c) / 255.0).powf(2.2);
+                let mixed = lin * 0.6 + 0.4;
+                (mixed.powf(1.0 / 2.2) * 255.0).round().clamp(0.0, 255.0) as u8
+            }),
+            [170, 182, 193]
+        );
+        assert_ne!(tint_rgb(accent1, 0.6), [170, 182, 193]);
+        assert_ne!(scale_rgb(accent1, 0.75), [17, 84, 114]);
+
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        assert_eq!(scheme_slot("accent1", &scheme), Some(accent1));
+        assert_eq!(scheme_slot("dk2", &scheme), Some([0x0E, 0x28, 0x41]));
+        assert_eq!(scheme_slot("lt2", &scheme), Some([0xE8, 0xE8, 0xE8]));
+        assert_eq!(scheme_slot("dk1", &scheme), Some([0, 0, 0]));
+        assert_eq!(scheme_slot("lt1", &scheme), Some([255, 255, 255]));
+        // Without the theme, dk2 is not the stale hardcoded 1F497D.
+        let fallback = theme_scheme(None, FALLBACK_ACCENTS);
+        assert_eq!(scheme_slot("dk2", &fallback), None);
+        assert_eq!(scheme_slot("accent1", &fallback), Some(accent1));
+
+        let cases = [
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+                FrameFill::Solid(accent1),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
+                FrameFill::Solid([0x0E, 0x28, 0x41]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([170, 182, 193]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:tint val='60000'/></a:schemeClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([170, 182, 193]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([17, 84, 114]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:schemeClr val='accent1'><a:shade val='75000'/></a:schemeClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([17, 84, 114]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([16, 72, 98]),
+            ),
+            (
+                "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumMod val='60000'/><a:lumOff val='40000'/></a:srgbClr></a:solidFill></c:spPr>",
+                FrameFill::Solid([70, 177, 225]),
+            ),
+        ];
+        for (config, expected) in cases {
+            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let frame = read_frame_with(&doc.root, &scheme).unwrap();
+            assert_eq!(frame.fill, expected, "parse {config}");
+            assert!(super::render_chart_with_theme(
+                &doc.root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                RenderDpi::DEFAULT,
+                Some(OFFICE16_THEME.as_bytes()),
+            )
+            .is_ok());
+        }
+
+        let plot_xml = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            );
+        let doc = crate::xml::parse(plot_xml.as_bytes()).unwrap();
+        let frame = read_frame_with(&doc.root, &scheme).unwrap();
+        assert_eq!(frame.fill, FrameFill::Solid([234, 247, 247]));
+        assert_eq!(frame.plot_fill, FrameFill::Solid(accent1));
+    }
+
+    #[test]
+    fn signed_luminance_offset_is_distinct_from_alpha_percentage() {
+        for (raw, expected) in [("0", 0), ("-0", 0), ("40000", 40_000), ("-20000", -20_000), ("100000", 100_000), ("-100000", -100_000)] {
+            let xml = crate::xml::parse(format!(r#"<lumOff val="{raw}"/>"#).as_bytes()).unwrap();
+            assert_eq!(parse_luminance_offset(&xml.root), Some(expected));
+        }
+        assert_eq!(parse_ooxml_alpha(Some("-20000")), None);
+        assert_eq!(frame_lum([21, 96, 130], None, Some(-100_000)), [0, 0, 0]);
+        assert_eq!(frame_lum([21, 96, 130], None, Some(100_000)), [255, 255, 255]);
+    }
+
+    #[test]
+    fn standalone_luminance_offset_matches_controlled_native_colors() {
+        // Six same-title/data/288x180pt fixtures were re-exported readonly by
+        // Excel16/DPI106. These are native color probes, not full-image passes.
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base, offset, alpha, expected) in [
+            ("srgbClr", "156082", "40000", "", FrameFill::Solid([122, 199, 233])),
+            ("srgbClr", "156082", "-20000", "", FrameFill::Solid([7, 31, 42])),
+            ("srgbClr", "156082", "100000", "", FrameFill::Solid([255, 255, 255])),
+            ("schemeClr", "accent1", "40000", "", FrameFill::Solid([122, 199, 233])),
+            ("srgbClr", "156082", "40000", "<a:alpha val='50000'/>", FrameFill::Translucent([122, 199, 233], 50_000)),
+        ] {
+            let xml = format!("<c:chartSpace xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><c:spPr><a:solidFill><a:{kind} val='{base}'><a:lumOff val='{offset}'/>{alpha}</a:{kind}></a:solidFill></c:spPr></c:chartSpace>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(read_frame_with(&doc.root, &scheme).unwrap().fill, expected);
+        }
+        // Derived algebra regression; preserves existing positive mod+off and
+        // extends its offset operand without inventing a transform-order rule.
+        assert_eq!(frame_lum([21, 96, 130], Some(100_000), Some(-20_000)), [7, 31, 42]);
+    }
+
+    #[test]
+    fn luminance_offset_paints_chart_and_plot_pixels_at_three_dpis() {
+        for plot in [false, true] {
+            for (offset, rgb, opacity, byte_alpha) in [(40_000, [122, 199, 233], 100_000, 255u8), (-20_000, [7, 31, 42], 100_000, 255), (40_000, [122, 199, 233], 50_000, 128)] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='{offset}'/><a:alpha val='{opacity}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let xml = if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let image = render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    let mut decoder = png::Decoder::new(std::io::Cursor::new(image)).read_info().unwrap();
+                    let mut buffer = vec![0; decoder.output_buffer_size()];
+                    let info = decoder.next_frame(&mut buffer).unwrap();
+                    let stride = if info.color_type == png::ColorType::Rgba { 4 } else { 3 };
+                    // Plot paint composites over the existing opaque white
+                    // chart frame; chart alpha itself stays straight RGBA.
+                    let (expected_rgb, expected_alpha) = if plot {
+                        (rgb.map(|channel| ((u32::from(channel) * u32::from(byte_alpha) + 255 * (255 - u32::from(byte_alpha)) + 127) / 255) as u8), 255)
+                    } else {
+                        (rgb, byte_alpha)
+                    };
+                    let count = buffer[..info.buffer_size()].chunks_exact(stride).filter(|px| px[..3] == expected_rgb && (stride == 3 || px[3] == expected_alpha)).count();
+                    assert!(count > 100, "plot={plot} offset={offset} alpha={opacity} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unsupported_luminance_offset_inputs_do_not_lose_semantics() {
+        for transform in ["<a:lumOff/>", "<a:lumOff val='-100001'/>", "<a:lumOff val='100001'/>", "<a:lumOff val='1.5'/>", "<a:lumOff val='+20000'/>", "<a:lumOff val='40000'><a:alpha val='50000'/></a:lumOff>", "<a:lumOff val='40000'/><a:lumOff val='40000'/>", "<a:lumOff val='40000'/><a:satMod val='50000'/>"] {
+            let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transform}</a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err(), "{transform}");
+        }
+    }
+
+    #[test]
+    fn alpha_off_adds_percentage_points_not_a_multiplier() {
+        let c=[21,96,130];
+        assert_eq!(frame_alpha_off_fill(c,40_000,10_000),FrameFill::Translucent(c,50_000));
+        assert_eq!(frame_alpha_off_fill(c,40_000,-10_000),FrameFill::Translucent(c,30_000));
+        assert_eq!(frame_alpha_off_fill(c,100_000,-50_000),FrameFill::Translucent(c,50_000));
+    }
+    #[test]
+    fn alpha_off_clamps_at_transparent_and_opaque_with_wide_safe_arithmetic() {
+        let c=[21,96,130];
+        assert_eq!(frame_alpha_off_fill(c,40_000,-50_000),FrameFill::Translucent(c,0));
+        assert_eq!(frame_alpha_off_fill(c,40_000,100_000),FrameFill::Solid(c));
+        assert_eq!(frame_alpha_off_fill(c,100_000,100_000),FrameFill::Solid(c));
+        assert_eq!(frame_alpha_off_fill(c,0,i32::MIN),FrameFill::Translucent(c,0));
+        assert_eq!(frame_alpha_off_fill(c,100_000,i32::MAX),FrameFill::Solid(c));
+    }
+    #[test]
+    fn alpha_off_signed_fixed_percentage_range_and_structure_are_strict() {
+        for v in [-100_000,-50_000,0,50_000,100_000] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='{v}'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_ok());
+        }
+        for attrs in ["","val='-100001'","val='100001'","val='-2147483648'","val='10%'","val='0.1'","val='10000' other='1'"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff {attrs}/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{attrs}");
+        }
+    }
+    #[test]
+    fn alpha_off_later_absolute_alpha_overrides_but_validates_offset() {
+        for off in [-100_000,10_000] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='{off}'/><a:alpha val='40000'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).unwrap(),FrameFill::Translucent([21,96,130],40_000));
+        }
+        let xml="<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaOff val='100001'/><a:alpha val='40000'/></a:srgbClr>";let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+    }
+    #[test]
+    fn alpha_off_explicit_alpha_operand_stays_structurally_fixed() {
+        for a in ["<a:alpha val='100001'/>","<a:alpha val='-1'/>","<a:alpha val='40000' other='1'/>"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{a}<a:alphaOff val='-100000'/></a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+        }
+    }
+    #[test]
+    fn alpha_off_theme_preserves_base_rgb_and_uses_existing_coverage() {
+        let xml="<a:schemeClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='accent1'><a:alphaOff val='-50000'/></a:schemeClr>";let d=crate::xml::parse(xml.as_bytes()).unwrap();let scheme=theme_scheme(Some(OFFICE16_THEME.as_bytes()),FALLBACK_ACCENTS);assert_eq!(resolve_frame_solid(&d.root,&scheme).unwrap(),FrameFill::Translucent([21,96,130],50_000));assert_eq!(ooxml_alpha_to_u8(50_000),128);
+    }
+    #[test]
+    fn alpha_off_chart_plot_match_existing_alpha_references_at_three_dpis() {
+        for plot in [false,true] {
+            for (off,reference) in [(-50_000,0),(-10_000,30_000),(10_000,50_000),(100_000,100_000)] {
+                let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='40000'/><a:alphaOff val='{off}'/></a:srgbClr></a:solidFill></c:spPr>");let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{reference}'/></a:srgbClr></a:solidFill></c:spPr>");let make=|fill:&str|if plot{LONG_LEGEND.replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};let d=crate::xml::parse(make(&fill).as_bytes()).unwrap();let reference=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for v in [96,106,144]{let dpi=RenderDpi::from_request(serde_json::json!({"dpi":v}).as_object().unwrap()).unwrap();let render=|r:&Element|render_chart_at(r,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&d.root),render(&reference.root),"plot={plot} off={off} dpi={v}");}
+            }
+        }
+    }
+    #[test]
+    fn alpha_off_unverified_mixed_repeated_and_nested_sequences_remain_ni() {
+        for t in ["<a:alphaOff val='-10000'/><a:alphaOff val='10000'/>","<a:alphaMod val='50000'/><a:alphaOff val='100001'/>","<a:hueOff val='600000'/><a:alphaOff val='10000'/>","<a:alphaOff val='10000'><a:alpha val='40000'/></a:alphaOff>","<a:alpha val='40000'/><a:alphaOff val='10000'/><a:alpha val='40000'/>"]{let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{t}</a:srgbClr>");let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{t}");}
+    }
+
+    #[test]
+    fn hue_off_signed_angle_range_and_strict_structure() {
+        for value in [i32::MIN, -27_000_000, 0, 27_000_000, i32::MAX] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff val='{value}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_ok());
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='90deg'", "val='90%'", "val='0.5'", "val='5400000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn hue_off_units_signed_rotation_and_complete_turns() {
+        assert_eq!(frame_hue_offset([255, 0, 0], 60 * 60_000), [255, 255, 0]);
+        assert_eq!(frame_hue_offset([255, 0, 0], -120 * 60_000), [0, 0, 255]);
+        assert_eq!(frame_hue_offset([21, 96, 130], -360 * 60_000), [21, 96, 130]);
+    }
+
+    #[test]
+    fn hue_off_excel_native_profile_does_not_clamp_overflow_to_red() {
+        assert_eq!(frame_hue_offset([210, 126, 74], -90 * 60_000), [194, 74, 210]);
+        assert_eq!(frame_hue_offset([210, 126, 74], 450 * 60_000), [90, 210, 74]);
+        assert_ne!(frame_hue_offset([21, 96, 130], -360 * 60_000), [130, 21, 21]);
+    }
+
+    #[test]
+    fn hue_off_achromatic_identity_and_large_signed_angles_stay_stable() {
+        for rgb in [[0,0,0], [128,128,128], [255,255,255]] {
+            for off in [i32::MIN, -27_000_000, 0, 27_000_000, i32::MAX] {
+                assert_eq!(frame_hue_offset(rgb, off), rgb);
+            }
+        }
+        for rgb in [[21,96,130], [210,126,74]] { assert_eq!(frame_hue_offset(rgb, 0), rgb); }
+    }
+
+    #[test]
+    fn hue_off_theme_and_srgb_share_the_same_angle_semantics() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:hueOff val='27000000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid(frame_hue_offset([21,96,130],27_000_000)));
+        }
+    }
+
+    #[test]
+    fn hue_off_trailing_alpha_reuses_legacy_opacity() {
+        let xml = "<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueOff val='5400000'/><a:alpha val='50000'/></a:srgbClr>";
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Translucent(frame_hue_offset([21,96,130],5_400_000),50000));
+    }
+
+    #[test]
+    fn hue_off_chart_plot_at_three_dpis_match_explicit_color_references() {
+        for plot in [false,true] {
+            for offset in [-27_000_000,5_400_000,27_000_000] {
+                // Integration locks existing HSL quantization, not a fitted native RGB.
+                let c=frame_hue_offset([21,96,130],offset);let rgb=format!("{:02X}{:02X}{:02X}",c[0],c[1],c[2]);
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueOff val='{offset}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill:&str| if plot { LONG_LEGEND.replace("<c:plotArea>",&format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")) };
+                let doc=crate::xml::parse(make(&fill).as_bytes()).unwrap();let reference=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&doc.root),render(&reference.root),"plot={plot} offset={offset} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_off_unverified_mixed_repeated_or_nested_transforms_remain_ni() {
+        for transforms in ["<a:hueOff val='5400000'/><a:hueOff val='5400000'/>","<a:alpha val='50000'/><a:hueOff val='5400000'/>","<a:hueOff val='5400000'/><a:alphaMod val='50000'/>","<a:hueMod val='50000'/><a:hueOff val='5400000'/>","<a:hueOff val='5400000'><a:alpha val='50000'/></a:hueOff>"] {
+            let xml=format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");let doc=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&doc.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{transforms}");
+        }
+    }
+
+    #[test]
+    fn alpha_mod_standalone_uses_opaque_input_and_caps_at_one() {
+        let rgb = [21, 96, 130];
+        for (factor, expected) in [(0, FrameFill::Translucent(rgb, 0)), (25_000, FrameFill::Translucent(rgb, 25_000)), (50_000, FrameFill::Translucent(rgb, 50_000)), (100_000, FrameFill::Solid(rgb)), (200_000, FrameFill::Solid(rgb)), (i32::MAX as u32, FrameFill::Solid(rgb))] {
+            assert_eq!(frame_alpha_mod_fill(rgb, 100_000, factor), expected);
+        }
+    }
+
+    #[test]
+    fn alpha_mod_multiplies_explicit_input_before_clamping() {
+        let rgb = [21, 96, 130];
+        assert_eq!(frame_alpha_mod_fill(rgb, 40_000, 50_000), FrameFill::Translucent(rgb, 20_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 40_000, 200_000), FrameFill::Translucent(rgb, 80_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_000, 200_000), FrameFill::Solid(rgb));
+        assert_eq!(frame_alpha_mod_fill(rgb, 0, i32::MAX as u32), FrameFill::Translucent(rgb, 0));
+    }
+
+    #[test]
+    fn alpha_mod_fractional_products_avoid_intermediate_percentage_rounding() {
+        let rgb = [21, 96, 130];
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_000, 33_333), FrameFill::AlphaProduct(rgb, 1_666_650_000));
+        assert_eq!(frame_alpha_mod_fill(rgb, 50_001, 33_333), FrameFill::AlphaProduct(rgb, 1_666_683_333));
+        assert_eq!(alpha_product_to_u8(1_666_650_000), 42);
+        assert_eq!(alpha_product_to_u8(1_666_683_333), 43);
+        assert_eq!(alpha_product_to_u8(0), 0);
+        assert_eq!(alpha_product_to_u8(ALPHA_PRODUCT_DENOM), 255);
+    }
+
+    #[test]
+    fn alpha_mod_ordered_absolute_alpha_overrides_modulation() {
+        for factor in [50_000, 200_000] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:alphaMod val='{factor}'/><a:alpha val='40000'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Translucent([21, 96, 130], 40_000));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_resolves_srgb_and_theme_without_changing_rgb() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:alphaMod val='50000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Translucent([21, 96, 130], 50_000));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_strict_inputs_reject_negative_and_extra_structure() {
+        for transforms in ["<a:alphaMod/>", "<a:alphaMod val='-1'/>", "<a:alphaMod val='2147483648'/>", "<a:alphaMod val='+50000'/>", "<a:alphaMod val='50%'/>", "<a:alphaMod val='0.5'/>", "<a:alphaMod val='50000' other='1'/>", "<a:alphaMod val='50000'><a:alpha val='50000'/></a:alphaMod>", "<a:alpha val='100001'/><a:alphaMod val='50000'/>", "<a:alpha val='50000' other='1'/><a:alphaMod val='50000'/>", "<a:alphaMod val='-1'/><a:alpha val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn alpha_mod_chart_and_plot_fractional_products_match_coverage_at_three_dpis() {
+        for plot in [false, true] {
+            for (initial, reference) in [(50_000, 16_666), (50_001, 16_667)] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{initial}'/><a:alphaMod val='33333'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='{reference}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} initial={initial} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn alpha_mod_straight_rgba_keeps_color_and_final_coverage() {
+        let fill = "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:alpha val='50001'/><a:alphaMod val='33333'/></a:srgbClr></a:solidFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let image = render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap()).unwrap();
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(image)).read_info().unwrap();
+        let mut buffer = vec![0; decoder.output_buffer_size()];
+        let info = decoder.next_frame(&mut buffer).unwrap();
+        assert_eq!(info.color_type, png::ColorType::Rgba);
+        assert!(buffer[..info.buffer_size()].chunks_exact(4).filter(|px| *px == [21, 96, 130, 43]).count() > 100);
+    }
+
+    #[test]
+    fn alpha_mod_unverified_other_color_sequences_remain_unsupported() {
+        for transforms in ["<a:alphaMod val='50000'/><a:alphaMod val='-1'/>", "<a:alpha val='50000'/><a:alphaMod val='50000'/><a:alphaMod val='50000'/>", "<a:hueMod val='50000'/><a:alphaMod val='50000'/>", "<a:alphaMod val='50000'/><a:satMod val='50000'/>", "<a:lumOff val='10000'/><a:alphaMod val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn hue_percentage_accepts_zero_and_modulation_above_one_turn() {
+        for value in [0, 50_000, 100_000, 200_000, 300_000, i32::MAX] {
+            let doc = crate::xml::parse(format!("<hueMod val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_positive_percentage(&doc.root), Some(value as u32));
+        }
+        let negative = crate::xml::parse(b"<satMod val='-50000'/>").unwrap();
+        assert_eq!(parse_signed_percentage(&negative.root), Some(-50_000), "signed saturation is unchanged");
+        assert_eq!(parse_positive_percentage(&negative.root), None);
+    }
+
+    #[test]
+    fn hue_percentage_rejects_negative_and_unimplemented_lexical_structure() {
+        for xml in ["<hueMod/>", "<hueMod val='-1'/>", "<hueMod val='2147483648'/>", "<hueMod val='+50000'/>", "<hueMod val='50%'/>", "<hueMod val='0.5'/>", "<hueMod val=' 50000'/>", "<hueMod val=''/>", "<hueMod val='50000' other='1'/>", "<hueMod val='50000'><alpha val='50000'/></hueMod>"] {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_positive_percentage(&doc.root), None, "{xml}");
+        }
+    }
+
+    #[test]
+    fn hue_modulation_multiplies_angles_and_wraps_complete_turns() {
+        for (factor, expected) in [(0, [255, 0, 0]), (50_000, [0, 255, 0]), (100_000, [0, 0, 255]), (150_000, [255, 0, 0]), (200_000, [0, 255, 0]), (300_000, [255, 0, 0])] {
+            assert_eq!(frame_hue([0, 0, 255], factor), expected, "{factor}");
+        }
+        assert_eq!(frame_hue([21, 96, 130], 0), [130, 21, 21]);
+        assert_eq!(frame_hue([21, 96, 130], 200_000), [130, 89, 21]);
+        assert_eq!(frame_hue([21, 96, 130], 300_000), [21, 28, 130]);
+    }
+
+    #[test]
+    fn hue_modulation_preserves_identity_and_achromatic_colors() {
+        for rgb in [[0; 3], [128; 3], [255; 3], [21, 96, 130], [210, 126, 74]] {
+            assert_eq!(frame_hue(rgb, 100_000), rgb);
+            if rgb[0] == rgb[1] && rgb[1] == rgb[2] {
+                for factor in [0, 50_000, 200_000, i32::MAX as u32] {
+                    assert_eq!(frame_hue(rgb, factor), rgb);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_modulation_resolves_srgb_and_theme_frames() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<c:chartSpace xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><c:spPr><a:solidFill><a:{kind} val='{base}'><a:hueMod val='200000'/></a:{kind}></a:solidFill></c:spPr></c:chartSpace>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(read_frame_with(&doc.root, &scheme).unwrap().fill, FrameFill::Solid([130, 89, 21]));
+        }
+    }
+
+    #[test]
+    fn hue_modulation_trailing_alpha_preserves_straight_color() {
+        for (alpha, expected) in [(0, FrameFill::Translucent([130, 89, 21], 0)), (50_000, FrameFill::Translucent([130, 89, 21], 50_000)), (100_000, FrameFill::Solid([130, 89, 21]))] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hueMod val='200000'/><a:alpha val='{alpha}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn hue_modulation_chart_and_plot_match_explicit_color_at_three_dpis() {
+        for plot in [false, true] {
+            for alpha in ["", "<a:alpha val='50000'/>"] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='0000FF'><a:hueMod val='50000'/>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='00FF00'>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} alpha={alpha} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_modulation_unverified_transform_sequences_stay_unsupported() {
+        for transforms in ["<a:alpha val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:lumOff val='10000'/>", "<a:satMod val='50000'/><a:hueMod val='50000'/>", "<a:hueMod val='50000'/><a:satMod val='50000'/>", "<a:hueOff val='600000'/><a:hueMod val='50000'/>"] {
+            let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn alpha_mod_pair_retains_exact_products_and_rgb() {
+        for (a,b,product,byte) in [(50000,33333,1666650000,42),(50001,33333,1666683333,43),(33333,50000,1666650000,42),(33333,50001,1666683333,43)] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(FrameFill::AlphaProduct([61,101,71],product)));assert_eq!(alpha_product_to_u8(product),byte);}
+    }
+
+    #[test]
+    fn alpha_mod_pair_early_saturation_preserves_factor_order() {
+        let x=crate::xml::parse(b"<alphaMod val='200000'/>").unwrap();let y=crate::xml::parse(b"<alphaMod val='50000'/>").unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(FrameFill::Translucent([61,101,71],50000)));assert_eq!(frame_alpha_mod_pair([61,101,71],&y.root,&x.root),Some(FrameFill::Solid([61,101,71])));
+    }
+
+    #[test]
+    fn alpha_mod_pair_zero_identity_and_full_opacity() {
+        for (a,b,alpha) in [(0,2147483647,0),(2147483647,0,0),(100000,50000,50000),(50000,100000,50000),(100000,100000,100000),(25000,25000,6250)] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();let expected=if alpha==100000{FrameFill::Solid([61,101,71])}else{FrameFill::Translucent([61,101,71],alpha)};assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(expected));}
+    }
+
+    #[test]
+    fn alpha_mod_pair_maximum_factor_and_d_minus_one_remain_exact() {
+        for (a,b,expected) in [(1,2147483647,FrameFill::AlphaProduct([61,101,71],2147483647)),(2147483647,1,FrameFill::Translucent([61,101,71],1)),(2147483647,2147483647,FrameFill::Solid([61,101,71])),(99999,100001,FrameFill::AlphaProduct([61,101,71],9999999999))] {let x=crate::xml::parse(format!("<alphaMod val='{a}'/>").as_bytes()).unwrap();let y=crate::xml::parse(format!("<alphaMod val='{b}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&y.root),Some(expected));}assert_eq!(alpha_product_to_u8(9999999999),255);
+    }
+
+    #[test]
+    fn alpha_mod_pair_strict_operands_both_sides_even_under_zero() {
+        let zero=crate::xml::parse(b"<alphaMod val='0'/>").unwrap();
+        for raw in ["<alphaMod/>","<alphaMod val='-1'/>","<alphaMod val='2147483648'/>","<alphaMod val='50%'/>","<alphaMod val='+1'/>","<alphaMod val=' 1'/>","<alphaMod val='1.0'/>","<alphaMod val='1' extra='0'/>","<alphaMod val='1'><alphaMod val='0'/></alphaMod>","<alphaMod val='1'>x</alphaMod>","<alphaMod xmlns:x='urn:test' x:val='1'/>","<alphaOff val='0'/>"] {let x=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&zero.root),None);assert_eq!(frame_alpha_mod_pair([61,101,71],&zero.root,&x.root),None);}
+        let mut x=crate::xml::parse(b"<alphaMod val='1'/>").unwrap();x.root.attrs.push(("val".to_owned(),"0".to_owned()));assert_eq!(frame_alpha_mod_pair([61,101,71],&zero.root,&x.root),None);let x=crate::xml::parse(b"<a:alphaMod xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='100000'>\n</a:alphaMod>").unwrap();assert_eq!(frame_alpha_mod_pair([61,101,71],&x.root,&zero.root),Some(FrameFill::Translucent([61,101,71],0)));
+    }
+
+    #[test]
+    fn alpha_mod_pair_frame_plot_reference_at_three_dpis() {
+        for (a,b) in [(200000_i32,50000),(50000,200000),(50001,33333),(99999,100001)] {for plot in [false,true] {let make=|t:&str|{let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{t}</a:srgbClr></a:solidFill></c:spPr>");if plot{LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))}};let x=crate::xml::parse(make(&format!("<a:alphaMod val='{a}'/><a:alphaMod val='{b}'/>")).as_bytes()).unwrap();let y=crate::xml::parse(make(&format!("<a:alpha val='{}'/><a:alphaMod val='{b}'/>",a.min(100000))).as_bytes()).unwrap();for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&x.root),render(&y.root));}}}
+    }
+
+    #[test]
+    fn alpha_mod_pair_other_bases_and_longer_chains_remain_gated() {
+        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaMod val='50000'/></schemeClr>","<prstClr val='red'><alphaMod val='50000'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaMod val='50000'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaMod val='50000'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='50000'/><alphaMod val='50000'/></srgbClr>"] {let x=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&x.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
+    }
+
+    #[test]
+    fn alpha_mod_pair_does_not_enable_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='3D6547'><a:alphaMod val='200000'/><a:alphaMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn alpha_mod_off_is_noncommutative_and_keeps_rgb() {
+        for (m,o,first,expected) in [(50000,25000,true,75000),(50000,25000,false,50000),(50000,-25000,true,25000),(50000,-25000,false,37500)] {
+            let a=crate::xml::parse(format!("<alphaMod val='{m}'/>").as_bytes()).unwrap();let b=crate::xml::parse(format!("<alphaOff val='{o}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,first),Some(FrameFill::Translucent([61,101,71],expected)));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_pins_each_stage_not_only_final_result() {
+        for (m,o,first,expected) in [(200000,-50000,true,FrameFill::Translucent([61,101,71],50000)),(200000,-50000,false,FrameFill::Solid([61,101,71])),(0,25000,true,FrameFill::Translucent([61,101,71],25000)),(0,25000,false,FrameFill::Translucent([61,101,71],0))] {
+            let a=crate::xml::parse(format!("<alphaMod val='{m}'/>").as_bytes()).unwrap();let b=crate::xml::parse(format!("<alphaOff val='{o}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,first),Some(expected));
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_preserves_exact_42_43_coverage_edge() {
+        let a=crate::xml::parse(b"<alphaMod val='33333'/>").unwrap();
+        for (off,product,byte) in [(-50000,1666650000,42),(-49999,1666683333,43)] {
+            let b=crate::xml::parse(format!("<alphaOff val='{off}'/>").as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,false),Some(FrameFill::AlphaProduct([61,101,71],product)));assert_eq!(alpha_product_to_u8(product),byte);
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_strict_operands_even_when_zero() {
+        let valid_m=crate::xml::parse(b"<alphaMod val='0'/>").unwrap();let valid_o=crate::xml::parse(b"<alphaOff val='0'/>").unwrap();
+        for raw in ["<alphaMod/>","<alphaMod val='-1'/>","<alphaMod val='2147483648'/>","<alphaMod val='50%'/>","<alphaMod val='+1'/>","<alphaMod val=' 1'/>","<alphaMod val='1.0'/>","<alphaMod val='1' extra='0'/>","<alphaMod val='1'><alphaOff val='0'/></alphaMod>","<alphaMod val='1'>x</alphaMod>","<alphaMod xmlns:x='urn:test' x:val='1'/>"] {let a=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),None);}
+        for raw in ["<alphaOff/>","<alphaOff val='-100001'/>","<alphaOff val='100001'/>","<alphaOff val='10%'/>","<alphaOff val='1' extra='0'/>","<alphaOff val='1'>x</alphaOff>","<alphaOff xmlns:x='urn:test' x:val='1'/>"] {let b=crate::xml::parse(raw.as_bytes()).unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&valid_m.root,&b.root,true),None);}
+        let mut a=crate::xml::parse(b"<alphaMod val='1'/>").unwrap();a.root.attrs.push(("val".to_owned(),"0".to_owned()));assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),None);
+        let a=crate::xml::parse(b"<a:alphaMod xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'/>").unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&valid_o.root,true),Some(FrameFill::Translucent([61,101,71],50000)));
+    }
+
+    #[test]
+    fn alpha_mod_off_maximum_i32_factor_no_overflow_or_input_cap_guess() {
+        let a=crate::xml::parse(b"<alphaMod val='2147483647'/>").unwrap();let b=crate::xml::parse(b"<alphaOff val='-99999'/>").unwrap();assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,false),Some(FrameFill::AlphaProduct([61,101,71],2147483647)));assert_eq!(frame_alpha_mod_off([61,101,71],&a.root,&b.root,true),Some(FrameFill::Translucent([61,101,71],1)));
+    }
+
+    #[test]
+    fn alpha_mod_off_exact_reference_frame_plot_three_dpis() {
+        for (transforms,reference) in [("<a:alphaMod val='50000'/><a:alphaOff val='25000'/>","<a:alpha val='75000'/>"),("<a:alphaOff val='25000'/><a:alphaMod val='50000'/>","<a:alpha val='50000'/>"),("<a:alphaOff val='-49999'/><a:alphaMod val='33333'/>","<a:alpha val='50001'/><a:alphaMod val='33333'/>")] {
+            for plot in [false,true] {let make=|t:&str|{let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{t}</a:srgbClr></a:solidFill></c:spPr>");if plot{LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))}};let a=crate::xml::parse(make(transforms).as_bytes()).unwrap();let b=crate::xml::parse(make(reference).as_bytes()).unwrap();for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&a.root),render(&b.root));}}
+        }
+    }
+
+    #[test]
+    fn alpha_mod_off_no_scheme_newbase_or_extra_chain_promotion() {
+        for xml in ["<schemeClr val='accent1'><alphaMod val='50000'/><alphaOff val='25000'/></schemeClr>","<prstClr val='red'><alphaOff val='0'/><alphaMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alphaMod val='50000'/><alphaOff val='0'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alphaMod val='50000'/><alphaOff val='0'/></scrgbClr>","<sysClr val='window' lastClr='FFFFFF'><alphaMod val='50000'/><alphaOff val='0'/></sysClr>","<srgbClr val='3D6547'><alpha val='50000'/><alphaMod val='50000'/><alphaOff val='25000'/></srgbClr>","<srgbClr val='3D6547'><alphaMod val='50000'/><alphaMod val='-1'/></srgbClr>","<srgbClr val='3D6547'><alphaOff val='-10000'/><alphaOff val='10000'/></srgbClr>"] {let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");}
+    }
+
+    #[test]
+    fn alpha_mod_off_does_not_enable_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='3D6547'><a:alphaMod val='50000'/><a:alphaOff val='25000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn rgb_setter_alpha_all_channels_both_orders_independent_fields() {
+        for (name,index) in [("red",0),("green",1),("blue",2)] {
+            for (value,byte) in [(0,0),(25000,137),(50000,188),(100000,255)] {
+                for opacity in [0,33333,50000,100000] {
+                    let mut rgb=[61,101,71];rgb[index]=byte;let expected=if opacity==100000{FrameFill::Solid(rgb)}else{FrameFill::Translucent(rgb,opacity)};
+                    for before in [false,true] {
+                        let alpha=format!("<alpha val='{opacity}'/>");let component=format!("<{name} val='{value}'/>");let transforms=if before{format!("{alpha}{component}")}else{format!("{component}{alpha}")};let d=crate::xml::parse(format!("<srgbClr val='3D6547'>{transforms}</srgbClr>").as_bytes()).unwrap();assert_eq!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).unwrap(),expected);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_setter_alpha_opacity_is_not_setter_percentage_product() {
+        let c=crate::xml::parse(b"<red val='50000'/>").unwrap();
+        for (a,expected) in [(0,FrameFill::Translucent([188,101,71],0)),(50000,FrameFill::Translucent([188,101,71],50000)),(100000,FrameFill::Solid([188,101,71]))] {
+            let alpha=crate::xml::parse(format!("<alpha val='{a}'/>").as_bytes()).unwrap();assert_eq!(frame_rgb_component_alpha([61,101,71],&c.root,&alpha.root),Some(expected));
+        }
+    }
+
+    #[test]
+    fn rgb_setter_alpha_strict_opacity_leaf_integer_and_namespace_contract() {
+        let c=crate::xml::parse(b"<red val='50000'/>").unwrap();
+        for xml in ["<alpha/>","<alpha val='-1'/>","<alpha val='100001'/>","<alpha val='50%'/>","<alpha val='+1'/>","<alpha val=' 1'/>","<alpha val='1.0'/>","<alpha val='2147483648'/>","<alpha val='1' extra='0'/>","<alpha val='1'><red val='0'/></alpha>","<alpha val='1'>opacity</alpha>","<alpha xmlns:x='urn:test' x:val='1'/>","<alphaMod val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_component_alpha([61,101,71],&c.root,&d.root),None,"{xml}");
+        }
+        let mut a=crate::xml::parse(b"<alpha val='50000'/>").unwrap();a.root.attrs.push(("val".to_owned(),"100000".to_owned()));assert_eq!(frame_rgb_component_alpha([61,101,71],&c.root,&a.root),None);
+        let a=crate::xml::parse(b"<a:alpha xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>
+</a:alpha>").unwrap();assert_eq!(frame_rgb_component_alpha([61,101,71],&c.root,&a.root),Some(FrameFill::Translucent([188,101,71],50000)));
+    }
+
+    #[test]
+    fn rgb_setter_alpha_validates_component_even_when_transparent() {
+        let alpha=crate::xml::parse(b"<alpha val='0'/>").unwrap();
+        for xml in ["<red val='200000'/>","<red val='-1'/>","<blue val='100001'/>","<red val='50000' extra='0'/>","<red val='50000'><alpha val='1'/></red>","<redMod val='50000'/>","<red xmlns:x='urn:test' x:val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_component_alpha([61,101,71],&d.root,&alpha.root),None);
+        }
+    }
+
+    #[test]
+    fn rgb_setter_alpha_preserves_scheme_new_bases_and_other_mixed_gates() {
+        for xml in ["<schemeClr val='accent1'><red val='50000'/><alpha val='50000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><alpha val='50000'/><red val='50000'/></sysClr>","<prstClr val='red'><alpha val='50000'/><red val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/><red val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alpha val='50000'/><red val='50000'/></scrgbClr>","<srgbClr val='3D6547'><red val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='3D6547'><alpha val='50000'/><red val='50000'/><alpha val='50000'/></srgbClr>","<srgbClr val='3D6547'><red val='50000'/><green val='10000'/><alpha val='50000'/></srgbClr>","<srgbClr val='3D6547'><red val='50000'/><alphaOff val='50000'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_setter_alpha_chart_plot_independent_rgb_reference_at_three_dpis() {
+        for (name,rgb) in [("red","BC6547"),("green","3DBC47"),("blue","3D65BC")] {
+            for plot in [false,true] {for before in [false,true] {for opacity in [33333,50000,100000] {
+                let a=format!("<a:alpha val='{opacity}'/>");let c=format!("<a:{name} val='50000'/>");let transforms=if before{format!("{a}{c}")}else{format!("{c}{a}")};let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'>{a}</a:srgbClr></a:solidFill></c:spPr>");let make=|fill:&str|if plot{LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};let x=crate::xml::parse(make(&fill).as_bytes()).unwrap();let y=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&x.root),render(&y.root));}
+            }}}
+        }
+    }
+
+    #[test]
+    fn rgb_setter_alpha_full_opacity_matches_standalone_png() {
+        for name in ["red","green","blue"] {for before in [false,true] {
+            let c=format!("<a:{name} val='50000'/>");let transforms=if before{format!("<a:alpha val='100000'/>{c}")}else{format!("{c}<a:alpha val='100000'/>")};let make=|t:&str|LONG_LEGEND.replace("<c:chart>",&format!("<c:spPr><a:solidFill><a:srgbClr val='3D6547'>{t}</a:srgbClr></a:solidFill></c:spPr><c:chart>"));let a=crate::xml::parse(make(&c).as_bytes()).unwrap();let b=crate::xml::parse(make(&transforms).as_bytes()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root),render(&b.root));
+        }}
+    }
+
+    #[test]
+    fn rgb_setter_alpha_does_not_enable_slide_frame_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='3D6547'><a:alpha val='50000'/><a:red val='50000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn rgb_alpha_order_all_six_adjustments_both_isolated_orders() {
+        for (name,rgb) in [("redMod",[92,128,128]),("greenMod",[128,92,128]),("blueMod",[128,128,92]),("redOff",[152,128,128]),("greenOff",[128,152,128]),("blueOff",[128,128,152])] {
+            let value=if name.ends_with("Mod") {50000} else {10000};
+            for opacity in [33333,50000,100000] {
+                let expected=if opacity==100000 {FrameFill::Solid(rgb)} else {FrameFill::Translucent(rgb,opacity)};
+                for before in [false,true] {
+                    let a=format!("<alpha val='{opacity}'/>");let c=format!("<{name} val='{value}'/>");let transforms=if before {format!("{a}{c}")} else {format!("{c}{a}")};
+                    let d=crate::xml::parse(format!("<srgbClr val='808080'>{transforms}</srgbClr>").as_bytes()).unwrap();
+                    assert_eq!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).unwrap(),expected);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_sets_opacity_not_product_with_rgb_modulation() {
+        let c=crate::xml::parse(b"<redMod val='50000'/>").unwrap();
+        for (a,expected) in [(0,FrameFill::Translucent([92,128,128],0)),(50000,FrameFill::Translucent([92,128,128],50000)),(100000,FrameFill::Solid([92,128,128]))] {
+            let alpha=crate::xml::parse(format!("<alpha val='{a}'/>").as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&alpha.root),Some(expected));
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_strict_alpha_leaf_integer_namespace_and_duplicate_contract() {
+        let c=crate::xml::parse(b"<redMod val='50000'/>").unwrap();
+        for xml in ["<alpha/>","<alpha val='-1'/>","<alpha val='100001'/>","<alpha val='50%'/>","<alpha val='+1'/>","<alpha val=' 1'/>","<alpha val='1.0'/>","<alpha val='2147483648'/>","<alpha val='1' extra='0'/>","<alpha val='1'><redMod val='0'/></alpha>","<alpha val='1'>opacity</alpha>","<alpha xmlns:x='urn:test' x:val='1'/>","<alphaMod val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&d.root),None,"{xml}");
+        }
+        let mut a=crate::xml::parse(b"<alpha val='50000'/>").unwrap();a.root.attrs.push(("val".to_owned(),"100000".to_owned()));assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&a.root),None);
+        let a=crate::xml::parse(b"<a:alpha xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>\n</a:alpha>").unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&c.root,&a.root),Some(FrameFill::Translucent([92,128,128],50000)));
+    }
+
+    #[test]
+    fn rgb_alpha_order_validates_adjustment_even_when_fully_transparent() {
+        let alpha=crate::xml::parse(b"<alpha val='0'/>").unwrap();
+        for xml in ["<redMod val='200000'/>","<redMod val='-1'/>","<redOff val='100001'/>","<redMod val='50000' extra='0'/>","<redMod val='50000'><alpha val='1'/></redMod>","<red val='50000'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment_alpha([128;3],&d.root,&alpha.root),None);
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_preserves_scheme_new_bases_and_all_other_mixed_gates() {
+        for xml in ["<schemeClr val='accent1'><redMod val='50000'/><alpha val='50000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><alpha val='50000'/><redMod val='50000'/></sysClr>","<prstClr val='red'><alpha val='50000'/><redMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/><redMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><alpha val='50000'/><redMod val='50000'/></scrgbClr>","<srgbClr val='808080'><redMod val='50000'/><alphaMod val='50000'/></srgbClr>","<srgbClr val='808080'><alpha val='50000'/><redMod val='50000'/><alpha val='50000'/></srgbClr>","<srgbClr val='808080'><redMod val='50000'/><redOff val='10000'/><alpha val='50000'/></srgbClr>","<srgbClr val='808080'><red val='50000'/><alpha val='100001'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_frame_plot_and_rgb_reference_match_at_three_dpis() {
+        for plot in [false,true] {
+            for before in [false,true] {
+                for opacity in [33333,50000,100000] {
+                    let a=format!("<a:alpha val='{opacity}'/>");let c="<a:redMod val='50000'/>";let transforms=if before {format!("{a}{c}")} else {format!("{c}{a}")};
+                    let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='808080'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='5C8080'>{a}</a:srgbClr></a:solidFill></c:spPr>");
+                    let make=|fill:&str|if plot {LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};let x=crate::xml::parse(make(&fill).as_bytes()).unwrap();let y=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                    for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&x.root),render(&y.root));}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_alpha_order_full_opacity_keeps_standalone_adjustment_pixels() {
+        let a=crate::xml::parse(b"<srgbClr val='808080'><redOff val='10000'/></srgbClr>").unwrap();let b=crate::xml::parse(b"<srgbClr val='808080'><alpha val='100000'/><redOff val='10000'/></srgbClr>").unwrap();let scheme=theme_scheme(None,FALLBACK_ACCENTS);assert_eq!(resolve_frame_solid(&a.root,&scheme).unwrap(),resolve_frame_solid(&b.root,&scheme).unwrap());
+    }
+
+    #[test]
+    fn rgb_alpha_order_does_not_enable_slide_frame_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='808080'><a:alpha val='50000'/><a:redMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>";let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn rgb_adjustment_linear_arithmetic_and_untouched_channels() {
+        for (channel,index) in [("red",0),("green",1),("blue",2)] {
+            for (kind,value,expected) in [("Mod",0,0),("Mod",50000,92),("Mod",100000,128),("Off",-10000,96),("Off",10000,152),("Off",-100000,0),("Off",100000,255)] {
+                let d=crate::xml::parse(format!("<{channel}{kind} val='{value}'/>").as_bytes()).unwrap();
+                let mut input=[32,64,96];input[index]=128;let mut out=input;out[index]=expected;
+                assert_eq!(frame_rgb_adjustment(input,&d.root),Some(out));
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_adjustment_identity_and_zero_hold_for_all_encoded_bytes() {
+        for name in ["red","green","blue"] {
+            for (kind,value,zero) in [("Mod",100000,false),("Off",0,false),("Mod",0,true)] {
+                let d=crate::xml::parse(format!("<{name}{kind} val='{value}'/>").as_bytes()).unwrap();
+                let index=if name=="red" {0} else if name=="green" {1} else {2};
+                for byte in 0..=255 {
+                    let input=[byte;3];let mut expected=input;if zero {expected[index]=0;}
+                    assert_eq!(frame_rgb_adjustment(input,&d.root),Some(expected));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_adjustment_iec_not_encoded_example_or_guessed_gamma() {
+        for (xml,input,expected) in [("<redMod val='50000'/>",[255,64,96],[188,64,96]),("<redMod val='50000'/>",[128,64,96],[92,64,96]),("<redOff val='1000'/>",[10,64,96],[30,64,96]),("<redOff val='1000'/>",[11,64,96],[31,64,96])] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment(input,&d.root),Some(expected));
+        }
+        // ECMA's FF*50%=80 encoded-byte example is NOT claimed to agree with Excel.
+        let d=crate::xml::parse(b"<redMod val='50000'/>").unwrap();
+        assert_ne!(frame_rgb_adjustment([255,0,0],&d.root),Some([128,0,0]));
+    }
+
+    #[test]
+    fn rgb_adjustment_strict_integer_normal_subset_and_no_guessed_extension() {
+        for name in ["redMod","greenMod","blueMod","redOff","greenOff","blueOff"] {
+            for raw in ["100001","200000","-100001","2147483648","+1","50%","1.0"," 1","NaN",""] {
+                let d=crate::xml::parse(format!("<{name} val='{raw}'/>").as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment([128;3],&d.root),None,"{name} {raw}");
+            }
+        }
+        for name in ["redMod","greenMod","blueMod"] {
+            let d=crate::xml::parse(format!("<{name} val='-1'/>").as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment([128;3],&d.root),None);
+        }
+    }
+
+    #[test]
+    fn rgb_adjustment_strict_leaf_semantic_attributes_and_namespaces() {
+        for xml in ["<redMod/>","<redMod val='1' extra='0'/>","<redOff val='1'><alpha val='1'/></redOff>","<redOff val='1'>color</redOff>","<redMod xmlns:x='urn:test' x:val='1'/>","<red val='1'/>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert_eq!(frame_rgb_adjustment([128;3],&d.root),None);
+        }
+        let mut d=crate::xml::parse(b"<redMod val='1'/>").unwrap();d.root.attrs.push(("val".to_owned(),"2".to_owned()));assert_eq!(frame_rgb_adjustment([128;3],&d.root),None);
+        let d=crate::xml::parse(b"<a:blueMod xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>\n</a:blueMod>").unwrap();assert_eq!(frame_rgb_adjustment([128;3],&d.root),Some([128,128,92]));
+    }
+
+    #[test]
+    fn rgb_adjustment_frame_and_plot_rgb_equivalence_three_dpis() {
+        for plot in [false,true] {
+            for (name,rgb) in [("redMod","5C8080"),("greenMod","805C80"),("blueMod","80805C"),("redOff","988080"),("greenOff","809880"),("blueOff","808098")] {
+                let value=if name.ends_with("Mod") {50000} else {10000};
+                let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='808080'><a:{name} val='{value}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make=|fill:&str|if plot {LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}"))}else{LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};
+                let a=crate::xml::parse(make(&fill).as_bytes()).unwrap();let b=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();let render=|root:&Element|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();assert_eq!(render(&a.root),render(&b.root));}
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_adjustment_unverified_scheme_new_base_and_mixed_gates_remain_ni() {
+        for xml in ["<schemeClr val='accent1'><redMod val='50000'/></schemeClr>","<schemeClr val='accent1'><blueOff val='10000'/></schemeClr>","<sysClr val='window' lastClr='FFFFFF'><redMod val='50000'/></sysClr>","<prstClr val='red'><redMod val='50000'/></prstClr>","<hslClr hue='0' sat='100000' lum='50000'><redMod val='50000'/></hslClr>","<scrgbClr r='0' g='0' b='0'><redMod val='50000'/></scrgbClr>","<srgbClr val='808080'><redMod val='50000'/><alpha val='100001'/></srgbClr>","<srgbClr val='808080'><redMod val='50000'/><redOff val='10000'/></srgbClr>","<srgbClr val='808080'><redOff val='10000'/><greenOff val='10000'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_adjustment_does_not_enable_slide_frame_rendering() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='808080'><a:redMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>";
+        let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn rgb_component_normal_intensity_replaces_only_requested_channel() {
+        for (name, index) in [("red",0), ("green",1), ("blue",2)] {
+            for (value, byte) in [(0,0), (313,10), (314,10), (25_000,137), (50_000,188), (100_000,255)] {
+                let d = crate::xml::parse(format!("<{name} val='{value}'/>").as_bytes()).unwrap();
+                for input in [[0x15,0x60,0x82], [0,255,0], [255,0,255], [31;3]] {
+                    let mut expected = input;
+                    expected[index] = byte;
+                    assert_eq!(frame_rgb_component(input, &d.root), Some(expected));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_half_intensity_is_linear_not_encoded_percentage() {
+        let d = crate::xml::parse(b"<red val='50000'/>").unwrap();
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), Some([188,96,130]));
+        assert_ne!(frame_rgb_component([21,96,130], &d.root), Some([128,96,130]));
+        assert_ne!(frame_rgb_component([21,96,130], &d.root), Some([186,96,130]));
+    }
+
+    #[test]
+    fn rgb_component_no_guessed_clamp_or_broad_percentage_lexical_forms() {
+        for name in ["red", "green", "blue"] {
+            for raw in ["-1", "100001", "2147483648", "-2147483649", "+1", "50%", "1.0", " 1", "1 ", "", "NaN"] {
+                let d = crate::xml::parse(format!("<{name} val='{raw}'/>").as_bytes()).unwrap();
+                assert_eq!(frame_rgb_component([21,96,130], &d.root), None, "{name} {raw}");
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_strict_leaf_and_attribute_identity_preserve_namespaces() {
+        for xml in ["<red/>", "<red val='1' extra='0'/>", "<red val='1'><alpha val='1'/></red>", "<red val='1'>color</red>", "<red xmlns:x='urn:test' x:val='1'/>", "<redOff val='1'/>", "<srgbClr val='123456'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(frame_rgb_component([21,96,130], &d.root), None, "{xml}");
+        }
+        let mut d = crate::xml::parse(b"<red val='0'/>").unwrap();
+        d.root.attrs.push(("val".to_owned(), "50000".to_owned()));
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), None);
+        let d = crate::xml::parse(b"<a:blue xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='50000'>\n\t</a:blue>").unwrap();
+        assert_eq!(frame_rgb_component([21,96,130], &d.root), Some([21,96,188]));
+    }
+
+    #[test]
+    fn rgb_component_srgb_and_scheme_resolve_same_verified_component_contract() {
+        let scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        for (name,index) in [("red",0), ("green",1), ("blue",2)] {
+            let d = crate::xml::parse(format!("<srgbClr val='156082'><{name} val='50000'/></srgbClr>").as_bytes()).unwrap();
+            let mut expected = [21,96,130];expected[index]=188;
+            assert_eq!(resolve_frame_solid(&d.root, &scheme).unwrap(), FrameFill::Solid(expected));
+            let d = crate::xml::parse(format!("<schemeClr val='accent1'><{name} val='50000'/></schemeClr>").as_bytes()).unwrap();
+            let mut expected = scheme.accents[0];expected[index]=188;
+            assert_eq!(resolve_frame_solid(&d.root, &scheme).unwrap(), FrameFill::Solid(expected));
+        }
+    }
+
+    #[test]
+    fn rgb_component_frame_and_contrasting_plot_match_rgb_at_three_dpis() {
+        for plot in [false,true] {
+            for (name,rgb) in [("red","BC6082"), ("green","15BC82"), ("blue","1560BC")] {
+                let fill=format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:{name} val='50000'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference=format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make=|fill:&str| if plot { LONG_LEGEND.replace("<c:chart>","<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>",&format!("<c:plotArea>{fill}")) } else {LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>"))};
+                let a=crate::xml::parse(make(&fill).as_bytes()).unwrap();let b=crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi=RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render=|root:&Element| render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&a.root),render(&b.root),"{plot} {name} {value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rgb_component_preserves_sysclr_other_base_and_mixed_transform_gates() {
+        let scheme=theme_scheme(None,FALLBACK_ACCENTS);
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<sysClr val='windowText' lastClr='FF0000'><red val='50000'/></sysClr>", "<hslClr hue='0' sat='100000' lum='50000'><red val='50000'/></hslClr>", "<scrgbClr r='0' g='0' b='0'><red val='50000'/></scrgbClr>", "<prstClr val='red'><blue val='50000'/></prstClr>", "<srgbClr val='156082'><red val='50000'/><alpha val='100001'/></srgbClr>", "<srgbClr val='156082'><alpha val='100001'/><red val='50000'/></srgbClr>", "<srgbClr val='156082'><red val='50000'/><green val='50000'/></srgbClr>", "<srgbClr val='156082'><redOff val='100001'/></srgbClr>", "<srgbClr val='156082'><blueMod val='100001'/></srgbClr>"] {
+            let d=crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root,&scheme).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn rgb_component_does_not_enable_frame_in_slide_host() {
+        let fill="<c:spPr><a:solidFill><a:srgbClr val='156082'><a:red val='50000'/></a:srgbClr></a:solidFill></c:spPr>";
+        let a=crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b=crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render=|root:&Element,host|render_chart_at(root,424,265,FALLBACK_ACCENTS,None,host,None,"",RenderDpi::DEFAULT).unwrap();
+        assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));
+        assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn scrgb_base_iec_transfer_matches_documented_gray_not_raw_or_power22() {
+        for (v, b) in [(0,0), (1,0), (100,3), (313,10), (314,10), (400,13), (1000,25), (25_000,137), (50_000,188), (75_000,225), (100_000,255)] {
+            assert_eq!(linear_srgb_channel(v), Some(b), "{v}");
+        }
+        assert_ne!(linear_srgb_channel(50_000), Some(128));
+        assert_ne!(linear_srgb_channel(50_000), Some((0.5_f64.powf(1.0/2.2)*255.0).round() as u8));
+    }
+
+    #[test]
+    fn scrgb_base_transfer_is_monotone_for_every_supported_integer_component() {
+        let mut previous = 0;
+        for value in 0..=100_000 {
+            let current = linear_srgb_channel(value).unwrap();
+            assert!(current >= previous, "{value}");
+            previous = current;
+        }
+        assert_eq!(previous, 255);
+        for value in [i32::MIN, -1, 100_001, i32::MAX] {
+            assert_eq!(linear_srgb_channel(value), None);
+        }
+    }
+
+    #[test]
+    fn scrgb_base_normal_channels_and_theme_independence() {
+        for (r,g,b,rgb) in [(100_000,0,0,[255,0,0]), (0,100_000,0,[0,255,0]), (0,0,100_000,[0,0,255]), (50_000,25_000,75_000,[188,137,225]), (50_000,50_000,50_000,[188;3])] {
+            let d = crate::xml::parse(format!("<scrgbClr r='{r}' g='{g}' b='{b}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_frame_scrgb_color(&d.root), Some(rgb));
+            for theme in [None, Some(OFFICE16_THEME.as_bytes())] {
+                assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(theme, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid(rgb));
+            }
+        }
+    }
+
+    #[test]
+    fn scrgb_base_strict_leaf_attributes_and_no_guessed_range_or_percent_parser() {
+        for xml in ["<scrgbClr/>", "<scrgbClr r='0' g='0'/>", "<scrgbClr r='0' g='0' b='0' val='1'/>", "<scrgbClr r='50%' g='50%' b='50%'/>", "<scrgbClr r='-1' g='0' b='0'/>", "<scrgbClr r='100001' g='0' b='0'/>", "<scrgbClr r='0' g='2147483648' b='0'/>", "<scrgbClr r='0' g='0' b='+1'/>", "<scrgbClr r='0' g='0' b=' 1'/>", "<scrgbClr r='0' g='0' b='1.0'/>", "<scrgbClr r='0' g='0' b='0'><alpha val='100000'/></scrgbClr>", "<scrgbClr r='0' g='0' b='0'>color</scrgbClr>", "<srgbClr r='0' g='0' b='0'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_frame_scrgb_color(&d.root), None, "{xml}");
+        }
+        let d = crate::xml::parse(b"<a:scrgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' r='50000' g='50000' b='50000'>\n\t</a:scrgbClr>").unwrap();
+        assert_eq!(parse_frame_scrgb_color(&d.root), Some([188;3]));
+    }
+
+    #[test]
+    fn scrgb_base_duplicate_or_qualified_semantic_attributes_are_not_silently_picked() {
+        let mut d = crate::xml::parse(b"<scrgbClr r='0' g='0' b='0'/>").unwrap();
+        d.root.attrs.push(("r".to_owned(), "50000".to_owned()));
+        assert_eq!(parse_frame_scrgb_color(&d.root), None);
+        let d = crate::xml::parse(b"<scrgbClr xmlns:x='urn:test' x:r='0' g='0' b='0'/>").unwrap();
+        assert_eq!(parse_frame_scrgb_color(&d.root), None);
+    }
+
+    #[test]
+    fn scrgb_base_frame_and_plot_match_predeclared_rgb_at_three_dpis() {
+        for plot in [false, true] {
+            for (r,g,b,rgb) in [(50_000,50_000,50_000,"BCBCBC"), (50_000,25_000,75_000,"BC89E1"), (100,313,1000,"030A19")] {
+                let fill = format!("<c:spPr><a:solidFill><a:scrgbClr r='{r}' g='{g}' b='{b}'/></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let d = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96,106,144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root,424,265,FALLBACK_ACCENTS,None,ChartHost::Excel,None,"",dpi).unwrap();
+                    assert_eq!(render(&d.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn scrgb_base_does_not_enable_the_slide_frame_host() {
+        let fill = "<c:spPr><a:solidFill><a:scrgbClr r='50000' g='50000' b='50000'/></a:solidFill></c:spPr>";
+        let a = crate::xml::parse(LONG_LEGEND.replace("<c:chart>",&format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render = |root: &Element, host| render_chart(root,424,265,FALLBACK_ACCENTS,None,host,None,"").unwrap();
+        assert_eq!(render(&a.root,ChartHost::Slide),render(&b.root,ChartHost::Slide));
+        assert_ne!(render(&a.root,ChartHost::Excel),render(&b.root,ChartHost::Excel));
+    }
+
+    #[test]
+    fn scrgb_base_single_fill_other_models_and_mixed_gates_remain() {
+        let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><scrgbClr r='0' g='0' b='0'/><srgbClr val='000000'/></solidFill></spPr></chartSpace>").unwrap();
+        assert!(read_frame_fill(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err());
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<scrgbClr r='50000' g='50000' b='50000'><hue val='60000'/></scrgbClr>", "<prstClr val='red'><alpha val='50000'/></prstClr>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/></hslClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root,&theme_scheme(None,FALLBACK_ACCENTS)).is_err(),"{xml}");
+        }
+    }
+
+    #[test]
+    fn preset_base_contract_values_do_not_infer_css_aliases() {
+        for (name, rgb) in [("aliceBlue", [240,248,255]), ("black", [0,0,0]), ("green", [0,128,0]), ("lime", [0,255,0]), ("fuchsia", [255,0,255]), ("grey", [128,128,128]), ("darkBlue", [0,0,139]), ("dkBlue", [0,0,139]), ("medPurple", [147,112,219]), ("mediumPurple", [147,112,219]), ("white", [255,255,255]), ("yellowGreen", [154,205,50])] {
+            assert_eq!(drawingml_preset_rgb(name), Some(rgb), "{name}");
+        }
+        for name in ["", "AliceBlue", "aliceblue", "darkblue", "transparent", "rebeccaPurple", "red ", " red", "#FF0000"] {
+            assert_eq!(drawingml_preset_rgb(name), None, "{name}");
+        }
+    }
+
+    #[test]
+    fn preset_base_normative_non_equivalent_names_remain_distinct() {
+        assert_eq!(drawingml_preset_rgb("darkSeaGreen"), Some([143,188,143]));
+        assert_eq!(drawingml_preset_rgb("dkSeaGreen"), Some([143,188,139]));
+        assert_eq!(drawingml_preset_rgb("lightGoldenrodYellow"), Some([250,250,210]));
+        assert_eq!(drawingml_preset_rgb("ltGoldenrodYellow"), Some([250,250,120]));
+        // No CSS substitution, alias folding or historical Office2007 table shift.
+        assert_eq!(drawingml_preset_rgb("turquoise"), Some([64,224,208]));
+        assert_eq!(drawingml_preset_rgb("violet"), Some([238,130,238]));
+    }
+
+    #[test]
+    fn preset_base_all_190_normative_names_parse_without_theme() {
+        let names = ["aliceBlue", "antiqueWhite", "aqua", "aquamarine", "azure", "beige", "bisque", "black", "blanchedAlmond", "blue", "blueViolet", "brown", "burlyWood", "cadetBlue", "chartreuse", "chocolate", "coral", "cornflowerBlue", "cornsilk", "crimson", "cyan", "darkBlue", "darkCyan", "darkGoldenrod", "darkGray", "darkGreen", "darkGrey", "darkKhaki", "darkMagenta", "darkOliveGreen", "darkOrange", "darkOrchid", "darkRed", "darkSalmon", "darkSeaGreen", "darkSlateBlue", "darkSlateGray", "darkSlateGrey", "darkTurquoise", "darkViolet", "deepPink", "deepSkyBlue", "dimGray", "dimGrey", "dkBlue", "dkCyan", "dkGoldenrod", "dkGray", "dkGreen", "dkGrey", "dkKhaki", "dkMagenta", "dkOliveGreen", "dkOrange", "dkOrchid", "dkRed", "dkSalmon", "dkSeaGreen", "dkSlateBlue", "dkSlateGray", "dkSlateGrey", "dkTurquoise", "dkViolet", "dodgerBlue", "firebrick", "floralWhite", "forestGreen", "fuchsia", "gainsboro", "ghostWhite", "gold", "goldenrod", "gray", "green", "greenYellow", "grey", "honeydew", "hotPink", "indianRed", "indigo", "ivory", "khaki", "lavender", "lavenderBlush", "lawnGreen", "lemonChiffon", "lightBlue", "lightCoral", "lightCyan", "lightGoldenrodYellow", "lightGray", "lightGreen", "lightGrey", "lightPink", "lightSalmon", "lightSeaGreen", "lightSkyBlue", "lightSlateGray", "lightSlateGrey", "lightSteelBlue", "lightYellow", "lime", "limeGreen", "linen", "ltBlue", "ltCoral", "ltCyan", "ltGoldenrodYellow", "ltGray", "ltGreen", "ltGrey", "ltPink", "ltSalmon", "ltSeaGreen", "ltSkyBlue", "ltSlateGray", "ltSlateGrey", "ltSteelBlue", "ltYellow", "magenta", "maroon", "medAquamarine", "medBlue", "mediumAquamarine", "mediumBlue", "mediumOrchid", "mediumPurple", "mediumSeaGreen", "mediumSlateBlue", "mediumSpringGreen", "mediumTurquoise", "mediumVioletRed", "medOrchid", "medPurple", "medSeaGreen", "medSlateBlue", "medSpringGreen", "medTurquoise", "medVioletRed", "midnightBlue", "mintCream", "mistyRose", "moccasin", "navajoWhite", "navy", "oldLace", "olive", "oliveDrab", "orange", "orangeRed", "orchid", "paleGoldenrod", "paleGreen", "paleTurquoise", "paleVioletRed", "papayaWhip", "peachPuff", "peru", "pink", "plum", "powderBlue", "purple", "red", "rosyBrown", "royalBlue", "saddleBrown", "salmon", "sandyBrown", "seaGreen", "seaShell", "sienna", "silver", "skyBlue", "slateBlue", "slateGray", "slateGrey", "snow", "springGreen", "steelBlue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat", "white", "whiteSmoke", "yellow", "yellowGreen"];
+        assert_eq!(names.len(), 190);
+        assert_eq!(names.iter().collect::<std::collections::HashSet<_>>().len(), 190);
+        for name in names {
+            let d = crate::xml::parse(format!("<prstClr val='{name}'/>").as_bytes()).unwrap();
+            let rgb = drawingml_preset_rgb(name).unwrap();
+            assert_eq!(parse_frame_preset_color(&d.root), Some(rgb));
+            for theme in [None, Some(OFFICE16_THEME.as_bytes())] {
+                assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(theme, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid(rgb));
+            }
+        }
+    }
+
+    #[test]
+    fn preset_base_requires_exact_val_leaf_and_preserves_transform_gate() {
+        for xml in ["<prstClr/>", "<prstClr val='Red'/>", "<prstClr val='red' extra='1'/>", "<prstClr val='red'><alpha val='100000'/></prstClr>", "<prstClr val='red'><hue val='60000'/></prstClr>", "<prstClr val='red'>color</prstClr>", "<srgbClr val='red'/>", "<prstClr xmlns:x='urn:test' x:val='red'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_frame_preset_color(&d.root), None, "{xml}");
+        }
+        let d = crate::xml::parse(b"<a:prstClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='red'>\n\t</a:prstClr>").unwrap();
+        assert_eq!(parse_frame_preset_color(&d.root), Some([255,0,0]));
+    }
+
+    #[test]
+    fn preset_base_duplicate_semantic_attributes_do_not_silently_pick_one() {
+        let mut d = crate::xml::parse(b"<prstClr val='red'/>").unwrap();
+        d.root.attrs.push(("val".to_owned(), "blue".to_owned()));
+        assert_eq!(parse_frame_preset_color(&d.root), None);
+    }
+
+    #[test]
+    fn preset_base_frame_and_plot_match_declared_normative_rgb_at_three_dpis() {
+        for plot in [false, true] {
+            for (name, rgb) in [("red", "FF0000"), ("dkSeaGreen", "8FBC8B"), ("ltGoldenrodYellow", "FAFA78")] {
+                let fill = format!("<c:spPr><a:solidFill><a:prstClr val='{name}'/></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let d = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&d.root), render(&reference.root), "{name} plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn preset_base_does_not_enable_frame_in_slide_host() {
+        let fill = "<c:spPr><a:solidFill><a:prstClr val='red'/></a:solidFill></c:spPr>";
+        let a = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render = |root: &Element, host| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, host, None, "").unwrap();
+        assert_eq!(render(&a.root, ChartHost::Slide), render(&b.root, ChartHost::Slide));
+        assert_ne!(render(&a.root, ChartHost::Excel), render(&b.root, ChartHost::Excel));
+    }
+
+    #[test]
+    fn preset_base_duplicate_fill_other_models_and_mixed_gates_remain() {
+        let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><prstClr val='red'/><srgbClr val='FF0000'/></solidFill></spPr></chartSpace>").unwrap();
+        assert!(read_frame_fill(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<scrgbClr r='100000' g='0' b='0'><alpha val='50000'/></scrgbClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='50000'/></hslClr>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{xml}");
+        }
+    }
+
+    #[test]
+    fn hsl_base_normal_model_primary_secondary_and_nonsector_colors() {
+        for (h, s, l, rgb) in [(0, 100_000, 50_000, [255, 0, 0]), (3_600_000, 100_000, 50_000, [255, 255, 0]), (7_200_000, 100_000, 50_000, [0, 255, 0]), (10_800_000, 100_000, 50_000, [0, 255, 255]), (14_400_000, 100_000, 50_000, [0, 0, 255]), (18_000_000, 100_000, 50_000, [255, 0, 255]), (0, 100_000, 25_000, [128, 0, 0]), (0, 100_000, 75_000, [255, 128, 128]), (2_700_000, 50_000, 50_000, [191, 159, 64])] {
+            let xml = format!("<hslClr hue='{h}' sat='{s}' lum='{l}'/>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_frame_hsl_color(&doc.root), Some(rgb));
+        }
+    }
+
+    #[test]
+    fn hsl_base_normal_model_gray_black_white_and_angle_boundaries() {
+        for hue in [0, 1, 7_200_000, 21_599_999] {
+            for (lum, gray) in [(0, 0), (25_000, 64), (50_000, 128), (75_000, 191), (100_000, 255)] {
+                let doc = crate::xml::parse(format!("<hslClr hue='{hue}' sat='0' lum='{lum}'/>").as_bytes()).unwrap();
+                assert_eq!(parse_frame_hsl_color(&doc.root), Some([gray; 3]));
+            }
+            for sat in [0, 25_000, 100_000] {
+                for (lum, rgb) in [(0, [0; 3]), (100_000, [255; 3])] {
+                    let doc = crate::xml::parse(format!("<hslClr hue='{hue}' sat='{sat}' lum='{lum}'/>").as_bytes()).unwrap();
+                    assert_eq!(parse_frame_hsl_color(&doc.root), Some(rgb));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hsl_base_requires_exact_three_named_attributes_and_no_transforms() {
+        for xml in ["<hslClr/>", "<hslClr hue='0' sat='100000'/>", "<hslClr h='0' s='100000' l='50000'/>", "<hslClr hue='0' sat='100000' lum='50000' val='1'/>", "<hslClr hue='0' sat='100000' lum='50000'><alpha val='100000'/></hslClr>", "<hslClr hue='0' sat='100000' lum='50000'><hue val='60000'/></hslClr>", "<hslClr hue='0' sat='100000' lum='50000'>color</hslClr>", "<srgbClr hue='0' sat='100000' lum='50000'/>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(parse_frame_hsl_color(&d.root).is_none(), "{xml}");
+        }
+        let d = crate::xml::parse(b"<hslClr hue='0' sat='100000' lum='50000'> 
+ </hslClr>").unwrap();
+        assert_eq!(parse_frame_hsl_color(&d.root), Some([255, 0, 0]));
+    }
+
+    #[test]
+    fn hsl_base_strict_integer_normal_ranges_do_not_guess_wrap_or_clamp() {
+        for raw in ["", "+1", " 1", "1 ", "1.0", "50%", "1e2", "2147483648", "-2147483649", "--1"] {
+            assert_eq!(parse_frame_integer(raw), None, "{raw}");
+        }
+        for (h, s, l) in [(-1, 50_000, 50_000), (21_600_000, 50_000, 50_000), (i32::MAX, 0, 0), (0, -1, 50_000), (0, 100_001, 50_000), (0, 50_000, -1), (0, 50_000, 100_001)] {
+            let d = crate::xml::parse(format!("<hslClr hue='{h}' sat='{s}' lum='{l}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_frame_hsl_color(&d.root), None);
+        }
+        assert_eq!(parse_frame_integer("-2147483648"), Some(i32::MIN));
+        assert_eq!(parse_frame_integer("2147483647"), Some(i32::MAX));
+    }
+
+    #[test]
+    fn hsl_base_is_theme_independent_but_existing_srgb_theme_paths_remain() {
+        let d = crate::xml::parse(b"<a:hslClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' hue='14400000' sat='100000' lum='50000'/>").unwrap();
+        for theme in [None, Some(OFFICE16_THEME.as_bytes())] {
+            assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(theme, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid([0, 0, 255]));
+        }
+        let d = crate::xml::parse(b"<srgbClr val='156082'/>").unwrap();
+        assert_eq!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), FrameFill::Solid([21, 96, 130]));
+    }
+
+    #[test]
+    fn hsl_base_frame_and_contrasting_plot_match_declared_rgb_at_three_dpis() {
+        for plot in [false, true] {
+            for (h, s, l, rgb) in [(3_600_000, 100_000, 25_000, "7F8000"), (14_400_000, 50_000, 75_000, "9F9FDF")] {
+                let fill = format!("<c:spPr><a:solidFill><a:hslClr hue='{h}' sat='{s}' lum='{l}'/></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hsl_base_does_not_enable_frame_rendering_in_the_slide_host() {
+        let fill = "<c:spPr><a:solidFill><a:hslClr hue='0' sat='100000' lum='50000'/></a:solidFill></c:spPr>";
+        let a = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
+        let b = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+        let render = |root: &Element, host| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, host, None, "").unwrap();
+        assert_eq!(render(&a.root, ChartHost::Slide), render(&b.root, ChartHost::Slide));
+        assert_ne!(render(&a.root, ChartHost::Excel), render(&b.root, ChartHost::Excel));
+    }
+
+    #[test]
+    fn hsl_base_duplicate_fill_and_other_color_model_gates_are_preserved() {
+        let d = crate::xml::parse(b"<chartSpace><spPr><solidFill><hslClr hue='0' sat='100000' lum='50000'/><srgbClr val='FF0000'/></solidFill></spPr></chartSpace>").unwrap();
+        assert!(read_frame_fill(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
+        for xml in ["<sysClr val='window' lastClr='FFFFFF'/>", "<prstClr val='red'><alpha val='50000'/></prstClr>", "<scrgbClr r='100000' g='0' b='0'><alpha val='50000'/></scrgbClr>", "<srgbClr val='156082'><hue val='60000'/><alpha val='50000'/></srgbClr>"] {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{xml}");
+        }
+    }
+
+    #[test]
+    fn hue_absolute_replaces_h_with_six_primary_and_secondary_angles() {
+        for (angle, expected) in [(0, [130, 21, 21]), (3_600_000, [130, 130, 21]), (7_200_000, [21, 130, 21]), (10_800_000, [21, 130, 130]), (14_400_000, [21, 21, 130]), (18_000_000, [130, 21, 130])] {
+            assert_eq!(frame_absolute_hue([21, 96, 130], angle), Some(expected));
+        }
+        assert_eq!(frame_absolute_hue([210, 126, 74], 2_700_000), Some([210, 176, 74]));
+    }
+
+    #[test]
+    fn hue_absolute_uses_fixed_angle_not_percentage_modulation_or_offset() {
+        assert_eq!(frame_absolute_hue([21, 96, 130], 21_599_999), Some([130, 21, 21]));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 0), Some([21, 96, 130]));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 0), Some(frame_hue_offset([21, 96, 130], 0)));
+        assert_ne!(frame_absolute_hue([21, 96, 130], 3_600_000), Some(frame_hue([21, 96, 130], 3_600_000)));
+        assert_eq!(frame_absolute_hue([255, 0, 0], 60_000), Some([255, 4, 0]));
+    }
+
+    #[test]
+    fn hue_absolute_achromatic_inputs_are_identity_at_every_declared_angle() {
+        for gray in 0..=255 {
+            for angle in [0, 1, 60_000, 7_200_000, 21_599_999] {
+                assert_eq!(frame_absolute_hue([gray; 3], angle), Some([gray; 3]));
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_strict_i32_leaf_and_positive_fixed_angle_domain() {
+        for angle in [i32::MIN, -1, 21_600_000, 21_600_001, i32::MAX] {
+            assert_eq!(frame_absolute_hue([21, 96, 130], angle), None);
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hue val='{angle}'/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err());
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+60000'", "val='60%'", "val='1.0'", "val=' 60000'", "val=''", "val='60000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:hue {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+        for angle in [0, 1, 21_599_999] {
+            let doc = crate::xml::parse(format!("<hue val='{angle}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), Some(angle));
+            assert!(frame_absolute_hue([21, 96, 130], angle).is_some());
+        }
+    }
+
+    #[test]
+    fn hue_absolute_resolves_srgb_and_theme_with_the_same_angle_contract() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:hue val='14400000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([21, 21, 130]));
+        }
+    }
+
+    #[test]
+    fn hue_absolute_chart_and_contrasting_plot_match_declared_rgb() {
+        for plot in [false, true] {
+            for (angle, rgb) in [(3_600_000, "828215"), (14_400_000, "151582")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hue val='{angle}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_preserves_saturation_and_lightness_via_rgb_extrema() {
+        for r in (0..=255).step_by(51) {
+            for g in (0..=255).step_by(51) {
+                for b in (0..=255).step_by(51) {
+                    let base = [r, g, b];
+                    for angle in [0, 2_700_000, 7_200_000, 14_400_000, 21_599_999] {
+                        let out = frame_absolute_hue(base, angle).unwrap();
+                        assert_eq!(out.iter().min(), base.iter().min());
+                        assert_eq!(out.iter().max(), base.iter().max());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hue_absolute_mixed_repeated_nested_and_existing_other_gates_remain_ni() {
+        for transforms in ["<a:hue val='60000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:hue val='60000'/>", "<a:hue val='60000'/><a:hue val='7200000'/>", "<a:hueMod val='50000'/><a:hue val='60000'/>", "<a:hue val='60000'/><a:lum val='50000'/>", "<a:hue val='60000'><a:alpha val='50000'/></a:hue>", "<a:satOff val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_replaces_l_not_a_multiplier_or_offset() {
+        for (value, expected) in [(0, [0, 0, 0]), (25_000, [18, 81, 110]), (50_000, [35, 162, 220]), (75_000, [145, 209, 237]), (100_000, [255, 255, 255])] {
+            assert_eq!(frame_luminance([21, 96, 130], value), Some(expected));
+        }
+        assert_ne!(frame_luminance([21, 96, 130], 50_000), Some(frame_lum([21, 96, 130], Some(50_000), None)));
+        assert_ne!(frame_luminance([21, 96, 130], 25_000), Some(frame_lum([21, 96, 130], None, Some(25_000))));
+    }
+
+    #[test]
+    fn luminance_absolute_achromatic_inputs_keep_zero_saturation() {
+        for gray in 0..=255 {
+            for (value, expected) in [(0, 0), (25_000, 64), (50_000, 128), (75_000, 191), (100_000, 255)] {
+                assert_eq!(frame_luminance([gray; 3], value), Some([expected; 3]));
+            }
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_endpoints_are_black_and_white_for_rgb_cube() {
+        for r in (0..=255).step_by(51) {
+            for g in (0..=255).step_by(51) {
+                for b in (0..=255).step_by(51) {
+                    assert_eq!(frame_luminance([r, g, b], 0), Some([0; 3]));
+                    assert_eq!(frame_luminance([r, g, b], 100_000), Some([255; 3]));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_uses_strict_percentage_and_does_not_guess_clamp() {
+        for value in [i32::MIN, -1, 100_001, i32::MAX] {
+            let d = crate::xml::parse(format!("<lum val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&d.root), Some(value));
+            assert_eq!(frame_luminance([21, 96, 130], value), None);
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+25000'", "val='25%'", "val='0.25'", "val=' 25000'", "val=''", "val='25000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:lum {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_resolves_srgb_and_theme() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:lum val='50000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([35, 162, 220]));
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_chart_and_contrasting_plot_match_explicit_rgb() {
+        for plot in [false, true] {
+            for (value, rgb) in [(25_000, "12516E"), (75_000, "91D1ED")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lum val='{value}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_agrees_with_existing_zero_mod_then_offset_contract() {
+        for base in [[21, 96, 130], [210, 126, 74], [0; 3], [128; 3], [255; 3]] {
+            for value in [0, 1, 25_000, 50_000, 75_000, 99_999, 100_000] {
+                assert_eq!(frame_luminance(base, value), Some(frame_lum(base, Some(0), Some(value))));
+            }
+        }
+    }
+
+    #[test]
+    fn luminance_absolute_mixed_repeated_nested_and_other_gates_stay_ni() {
+        for transforms in ["<a:lum val='25000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:lum val='25000'/>", "<a:lum val='25000'/><a:lum val='75000'/>", "<a:lumMod val='50000'/><a:lum val='25000'/>", "<a:lum val='25000'/><a:satOff val='10000'/>", "<a:lum val='25000'><a:alpha val='50000'/></a:lum>", "<a:satOff val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_replaces_s_instead_of_multiplying_or_adding() {
+        for (value, expected) in [(0, [76, 76, 76]), (25_000, [57, 83, 94]), (50_000, [38, 90, 113]), (75_000, [19, 97, 132]), (100_000, [0, 104, 151])] {
+            assert_eq!(frame_saturation([21, 96, 130], value), Some(expected));
+        }
+        assert_ne!(frame_saturation([21, 96, 130], 50_000), Some(frame_sat([21, 96, 130], 50_000)));
+        assert_ne!(frame_saturation([21, 96, 130], 25_000), frame_sat_offset([21, 96, 130], 25_000));
+    }
+
+    #[test]
+    fn saturation_absolute_preserves_hue_lightness_for_chromatic_colors() {
+        for base in [[21, 96, 130], [210, 126, 74], [255, 0, 0], [0, 0, 255]] {
+            let (h, _, l) = rgb_hsl(base);
+            for value in [25_000, 50_000, 75_000, 100_000] {
+                let rgb = frame_saturation(base, value).unwrap();
+                let (new_h, _, new_l) = rgb_hsl(rgb);
+                assert!((h - new_h).abs() < 1.0 / 255.0);
+                assert!((l - new_l).abs() <= 0.5 / 255.0);
+            }
+        }
+        assert_eq!(frame_saturation([255, 0, 0], 100_000), Some([255, 0, 0]));
+        assert_eq!(frame_saturation([255, 0, 0], 50_000), Some([191, 64, 64]));
+    }
+
+    #[test]
+    fn saturation_absolute_zero_neutralizes_and_preserves_existing_grays() {
+        for gray in 0..=255 { assert_eq!(frame_saturation([gray; 3], 0), Some([gray; 3])); }
+        for base in [[21, 96, 130], [210, 126, 74], [255, 0, 0], [0, 0, 255]] {
+            let rgb = frame_saturation(base, 0).unwrap();
+            let mid = ((u16::from(*base.iter().min().unwrap()) + u16::from(*base.iter().max().unwrap()) + 1) / 2) as u8;
+            assert_eq!(rgb, [mid; 3]);
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_unverified_range_and_gray_hue_stay_ni() {
+        for value in [i32::MIN, -100_000, -1, 100_001, i32::MAX] {
+            assert_eq!(frame_saturation([21, 96, 130], value), None);
+        }
+        for gray in [0, 1, 128, 254, 255] {
+            for value in [1, 25_000, 100_000] { assert_eq!(frame_saturation([gray; 3], value), None); }
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_uses_strict_percentage_leaf_parser() {
+        for value in [i32::MIN, -100_001, 0, 25_000, 100_001, i32::MAX] {
+            let doc = crate::xml::parse(format!("<sat val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), Some(value));
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+25000'", "val='25%'", "val='0.25'", "val=' 25000'", "val=''", "val='25000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:sat {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_resolves_srgb_and_theme() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:sat val='50000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([38, 90, 113]));
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_chart_and_contrasting_plot_match_rgb_references() {
+        for plot in [false, true] {
+            for (value, rgb) in [(25_000, "39535E"), (75_000, "136184")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:sat val='{value}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn saturation_absolute_mixed_repeated_nested_and_sat_offset_gates_stay_ni() {
+        for transforms in ["<a:sat val='25000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:sat val='25000'/>", "<a:sat val='25000'/><a:sat val='75000'/>", "<a:satMod val='50000'/><a:sat val='25000'/>", "<a:sat val='25000'/><a:satOff val='10000'/>", "<a:sat val='25000'><a:alpha val='50000'/></a:sat>", "<a:satOff val='50000'/>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn saturation_offset_adds_percentage_points_not_a_scale() {
+        for (base, offset, expected) in [
+            ([21, 96, 130], -50_000, [59, 82, 92]),
+            ([21, 96, 130], -25_000, [40, 89, 111]),
+            ([21, 96, 130], 25_000, [2, 103, 149]),
+            ([210, 126, 74], -25_000, [182, 133, 102]),
+            ([210, 126, 74], 25_000, [238, 119, 46]),
+            ([255, 0, 0], -25_000, [223, 32, 32]),
+        ] {
+            assert_eq!(frame_sat_offset(base, offset), Some(expected));
+        }
+        assert_ne!(frame_sat_offset([21, 96, 130], -50_000), Some(frame_sat([21, 96, 130], 50_000)));
+    }
+
+    #[test]
+    fn saturation_offset_zero_is_exact_for_rgb_cube_and_grays() {
+        for r in (0..=255).step_by(17) {
+            for g in (0..=255).step_by(17) {
+                for b in (0..=255).step_by(17) {
+                    assert_eq!(frame_sat_offset([r, g, b], 0), Some([r, g, b]));
+                }
+            }
+        }
+        for gray in 0..=255 { assert_eq!(frame_sat_offset([gray; 3], 0), Some([gray; 3])); }
+    }
+
+    #[test]
+    fn saturation_offset_keeps_hue_lightness_and_neutral_endpoint() {
+        for offset in [-50_000, -25_000, 25_000] {
+            let base = [21, 96, 130];
+            let result = frame_sat_offset(base, offset).unwrap();
+            assert_eq!(u16::from(*result.iter().min().unwrap()) + u16::from(*result.iter().max().unwrap()), 151);
+            let (h, _, l) = rgb_hsl(base);
+            let (new_h, _, new_l) = rgb_hsl(result);
+            // Conversion to 8-bit RGB alone accounts for this bounded quantization.
+            assert!((h - new_h).abs() < 1.0 / 255.0);
+            assert_eq!(l, new_l);
+        }
+        assert_eq!(frame_sat_offset([255, 0, 0], -100_000), Some([128; 3]));
+    }
+
+    #[test]
+    fn saturation_offset_unverified_extrapolation_and_gray_hue_stay_ni() {
+        for offset in [i32::MIN, -100_001, -100_000, 50_000, 100_000, i32::MAX] {
+            assert_eq!(frame_sat_offset([21, 96, 130], offset), None);
+        }
+        assert_eq!(frame_sat_offset([255, 0, 0], 1), None);
+        for gray in [0, 1, 128, 254, 255] {
+            for offset in [-1, 1, 25_000] { assert_eq!(frame_sat_offset([gray; 3], offset), None); }
+        }
+    }
+
+    #[test]
+    fn saturation_offset_uses_percentage_not_fixed_percentage_parser() {
+        for value in [i32::MIN, -100_001, -25_000, 0, 100_001, i32::MAX] {
+            let doc = crate::xml::parse(format!("<satOff val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), Some(value));
+        }
+        for attrs in ["", "val='2147483648'", "val='-2147483649'", "val='+25000'", "val='25%'", "val='0.25'", "val=' 25000'", "val=''", "val='25000' other='1'"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'><a:satOff {attrs}/></a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{attrs}");
+        }
+    }
+
+    #[test]
+    fn saturation_offset_resolves_srgb_and_theme_standalone_only() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<a:{kind} xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='{base}'><a:satOff val='-25000'/></a:{kind}>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&doc.root, &scheme).unwrap(), FrameFill::Solid([40, 89, 111]));
+        }
+    }
+
+    #[test]
+    fn saturation_offset_chart_and_contrasting_plot_match_explicit_color() {
+        for plot in [false, true] {
+            for (offset, rgb) in [(-25_000, "28596F"), (25_000, "026795")] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satOff val='{offset}'/></a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{rgb}'/></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot {
+                    LONG_LEGEND.replace("<c:chart>", "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>").replace("<c:plotArea>", &format!("<c:plotArea>{fill}"))
+                } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} offset={offset} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn saturation_offset_mixed_repeated_and_nested_transforms_stay_ni() {
+        for transforms in ["<a:satOff val='-25000'/><a:alpha val='50000'/>", "<a:alpha val='50000'/><a:satOff val='-25000'/>", "<a:satOff val='-25000'/><a:satOff val='25000'/>", "<a:satMod val='50000'/><a:satOff val='25000'/>", "<a:satOff val='-25000'/><a:lumOff val='10000'/>", "<a:satOff val='-25000'><a:alpha val='50000'/></a:satOff>"] {
+            let xml = format!("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='156082'>{transforms}</a:srgbClr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&doc.root, &theme_scheme(None, FALLBACK_ACCENTS)).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn saturation_modulation_scales_hsl_distance_without_early_clipping() {
+        for (factor, expected) in [(-50_000, [103, 65, 48]), (0, [76, 76, 76]), (50_000, [48, 86, 103]), (100_000, [21, 96, 130]), (200_000, [0, 117, 185])] {
+            assert_eq!(frame_sat([21, 96, 130], factor), expected);
+        }
+        assert_eq!(frame_sat([210, 126, 74], -50_000), [108, 150, 176]);
+        assert_eq!(frame_sat([210, 126, 74], 200_000), [255, 110, 6]);
+    }
+
+    #[test]
+    fn saturation_modulation_preserves_achromatic_and_identity_colors() {
+        for rgb in [[0; 3], [128; 3], [255; 3], [21, 96, 130], [210, 126, 74]] {
+            assert_eq!(frame_sat(rgb, 100_000), rgb);
+            if rgb[0] == rgb[1] && rgb[1] == rgb[2] {
+                for factor in [i32::MIN, -50_000, 0, 200_000, i32::MAX] {
+                    assert_eq!(frame_sat(rgb, factor), rgb);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn saturation_percentage_accepts_signed_integer_thousandths() {
+        for value in [i32::MIN, -50_000, 0, 50_000, 200_000, i32::MAX] {
+            let xml = crate::xml::parse(format!("<satMod val='{value}'/>").as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&xml.root), Some(value));
+        }
+        for xml in ["<satMod/>", "<satMod val='2147483648'/>", "<satMod val='-2147483649'/>", "<satMod val='+50000'/>", "<satMod val='50%'/>", "<satMod val='0.5'/>", "<satMod val=' 50000'/>", "<satMod val=''/>", "<satMod val='50000' other='1'/>", "<satMod val='50000'><alpha val='50000'/></satMod>"] {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(parse_signed_percentage(&doc.root), None, "{xml}");
+        }
+    }
+
+    #[test]
+    fn saturation_modulation_resolves_srgb_and_theme_frames() {
+        let scheme = theme_scheme(Some(OFFICE16_THEME.as_bytes()), FALLBACK_ACCENTS);
+        for (kind, base) in [("srgbClr", "156082"), ("schemeClr", "accent1")] {
+            let xml = format!("<c:chartSpace xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><c:spPr><a:solidFill><a:{kind} val='{base}'><a:satMod val='50000'/></a:{kind}></a:solidFill></c:spPr></c:chartSpace>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(read_frame_with(&doc.root, &scheme).unwrap().fill, FrameFill::Solid([48, 86, 103]));
+        }
+    }
+
+    #[test]
+    fn saturation_modulation_trailing_alpha_keeps_straight_color() {
+        for (alpha, expected) in [(0, FrameFill::Translucent([48, 86, 103], 0)), (50_000, FrameFill::Translucent([48, 86, 103], 50_000)), (100_000, FrameFill::Solid([48, 86, 103]))] {
+            let xml = format!("<c:spPr xmlns:c='http://schemas.openxmlformats.org/drawingml/2006/chart' xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main'><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/><a:alpha val='{alpha}'/></a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let color = doc.root.element_children().find(|c| c.local_name() == "solidFill").unwrap().element_children().find(|c| c.local_name() == "srgbClr").unwrap();
+            assert_eq!(resolve_frame_solid(color, &theme_scheme(None, FALLBACK_ACCENTS)).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn saturation_modulation_chart_and_plot_match_explicit_color_at_three_dpis() {
+        for plot in [false, true] {
+            for alpha in ["", "<a:alpha val='50000'/>"] {
+                let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='305667'>{alpha}</a:srgbClr></a:solidFill></c:spPr>");
+                let make = |fill: &str| if plot { LONG_LEGEND.replace("<c:plotArea>", &format!("<c:plotArea>{fill}")) } else { LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")) };
+                let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+                let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+                for value in [96, 106, 144] {
+                    let dpi = RenderDpi::from_request(serde_json::json!({"dpi":value}).as_object().unwrap()).unwrap();
+                    let render = |root: &Element| render_chart_at(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi).unwrap();
+                    assert_eq!(render(&doc.root), render(&reference.root), "plot={plot} alpha={alpha} dpi={value}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn saturation_modulation_unverified_sequences_stay_unsupported() {
+        for transforms in ["<a:alpha val='50000'/><a:satMod val='50000'/>", "<a:satMod val='50000'/><a:satMod val='50000'/>", "<a:satMod val='50000'/><a:lumOff val='10000'/>", "<a:tint val='10000'/><a:satMod val='50000'/>", "<a:satMod val='50000'/><a:hueMod val='50000'/>"] {
+            let config = format!("<c:spPr><a:solidFill><a:srgbClr val='156082'>{transforms}</a:srgbClr></a:solidFill></c:spPr>");
+            let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>")).as_bytes()).unwrap();
+            assert!(read_frame(&doc.root).is_err(), "{transforms}");
+        }
+    }
+
+    #[test]
+    fn rectangular_chart_no_line_preserves_fill_and_alpha_to_the_edge() {
+        for (fill, rgb, alpha) in [
+            (
+                "<a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill>",
+                [234, 247, 247],
+                255,
+            ),
+            ("<a:noFill/>", [0, 0, 0], 0),
+        ] {
+            let config = format!("<c:roundedCorners val='0'/><c:spPr>{fill}<a:ln w='12700' cap='flat' cmpd='sng' algn='ctr'><a:noFill/><a:prstDash val='solid'/><a:round/></a:ln><a:effectLst/><a:extLst><a:ext uri='{{91240B29-F687-4F45-9708-019B960494DF}}'><a14:hiddenLine><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a14:hiddenLine></a:ext></a:extLst></c:spPr>");
+            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let frame = read_frame(&doc.root).unwrap();
+            assert!(!frame.border);
+            for dpi_value in [96, 106, 144] {
+                let dpi = RenderDpi::from_request(
+                    serde_json::json!({"dpi":dpi_value}).as_object().unwrap(),
+                )
+                .unwrap();
+                let png = render_chart_at(
+                    &doc.root,
+                    424,
+                    265,
+                    FALLBACK_ACCENTS,
+                    None,
+                    ChartHost::Excel,
+                    None,
+                    "",
+                    dpi,
+                )
+                .unwrap();
+                let mut decoder = png::Decoder::new(std::io::Cursor::new(png))
+                    .read_info()
+                    .unwrap();
+                let mut buf = vec![0; decoder.output_buffer_size()];
+                let info = decoder.next_frame(&mut buf).unwrap();
+                let stride = if info.color_type == png::ColorType::Rgba {
+                    4
+                } else {
+                    3
+                };
+                for (x, y) in [(0, 0), (100, 0), (423, 100), (100, 264)] {
+                    let i = (y * 424 + x) * stride;
+                    assert_eq!(&buf[i..i + 3], &rgb);
+                    if stride == 4 {
+                        assert_eq!(buf[i + 3], alpha);
+                    }
+                }
+            }
+        }
+        for config in [
+            "<c:roundedCorners val='1'/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>",
+            "<c:roundedCorners val='0'/><c:spPr><a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>",
+            "<c:roundedCorners val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr>",
+        ] {
+            let xml=LONG_LEGEND.replace("<c:chart>",&format!("{config}<c:chart>"));
+            assert!(read_frame(&crate::xml::parse(xml.as_bytes()).unwrap().root).is_err());
+        }
+    }
+
+    #[test]
     fn unsupported_frame_semantics_do_not_fall_back_to_white() {
         for config in [
-            "<c:spPr><a:noFill/></c:spPr>",
             "<c:spPr><a:gradFill/></c:spPr>",
-            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:solidFill><a:schemeClr val='accent1'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
+            "<c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
+            "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:schemeClr val='dk2'/></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:satMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/><a:lumMod val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
+            "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:ln w='25400'/></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
@@ -5263,7 +10968,9 @@ mod tests {
     fn rounded_frame_has_straight_alpha_not_a_white_key() {
         let mut canvas = Canvas::new(80, 60);
         canvas.fill_rect(20, 20, 30, 30, [255; 3]);
-        canvas.stroke_border(BORDER);
+        if canvas.chart_border {
+            canvas.stroke_border(BORDER);
+        }
         let alpha = canvas.alpha.as_ref().unwrap();
         assert_eq!(alpha[0], 0);
         assert_eq!(&canvas.px[..3], &[0; 3]);
@@ -6532,7 +12239,7 @@ mod tests {
                 if mode == "zero" { Some(0.0) } else { None }
             );
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None).unwrap();
             canvases.push(canvas);
         }
         let ink = |canvas: &Canvas, x: usize, y: usize| {
@@ -6556,7 +12263,7 @@ mod tests {
             assert_eq!(chart.series[0].values[1], None, "NA is never a zero point");
             assert!(chart.series[0].unavailable_points[1]);
             let mut canvas = Canvas::new(300, 110);
-            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0);
+            draw_lines(&mut canvas, &chart, &plot, 0.0, 4.0, None, false, None).unwrap();
             assert!(
                 ink(&canvas, 150, 50),
                 "Excel16 NA probe connects across NA: {mode}"
@@ -6636,8 +12343,296 @@ mod tests {
     }
 
     #[test]
+    fn point_label_deletion_only_validates_indices_and_preserves_ni() {
+        let valid = "<dLbl><idx val='1'/><delete val='1'/></dLbl>";
+        let read = |body: &str, len| {
+            let doc = crate::xml::parse(format!("<dLbls>{body}</dLbls>").as_bytes()).unwrap();
+            read_deleted_label_points(Some(&doc.root), len)
+        };
+        assert_eq!(read(valid, 3).unwrap(), vec![1]);
+        assert_eq!(
+            read(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3).unwrap(),
+            vec![1]
+        );
+        let metadata = valid.replace("</dLbl>", "<extLst><ext uri='{CE6537A1-D6FC-4f65-9D91-7224C49458BB}'/><ext uri='{C3380CC4-5D6E-409C-BE32-E72D297353CC}'><uniqueId val='{00000001-2765-4173-A018-3A6CF43989F2}'/></ext></extLst></dLbl>");
+        assert_eq!(read(&metadata, 3).unwrap(), vec![1]);
+        for bad in [
+            valid.replace("idx val='1'", "idx val='-1'"),
+            valid.replace("idx val='1'", "idx val='3'"),
+            valid.replace("idx val='1'", "idx val='1.5'"),
+            valid.replace("idx val='1'", "idx val=''"),
+            valid.replace("idx val='1'", "idx val='184467440737095516160'"),
+            valid.replace("<idx val='1'/>", ""),
+            valid.replace("<delete val='1'/>", ""),
+            valid.replace("delete val='1'", "delete val='0'"),
+            valid.replace("</dLbl>", "<showVal val='1'/></dLbl>"),
+            valid.replace("</dLbl>", "<spPr><solidFill/></spPr></dLbl>"),
+            valid.replace("</dLbl>", "<dLblPos val='outEnd'/></dLbl>"),
+            valid.replace("</dLbl>", "<tx><rich/></tx></dLbl>"),
+            metadata.replace("uniqueId", "showLeaderLines"),
+            metadata.replace("{CE6537A1-D6FC-4f65-9D91-7224C49458BB}", "unknown"),
+            format!("{valid}{valid}"),
+        ] {
+            assert_eq!(
+                read(&bad, 3).unwrap_err().code(),
+                crate::error::ErrorCode::NotImplemented,
+                "{bad}"
+            );
+        }
+        let wrapper = crate::xml::parse(b"<wrapper/>").unwrap();
+        let ser = crate::xml::parse(
+            format!("<ser><dLbls>{valid}<showVal val='1'/></dLbls></ser>").as_bytes(),
+        )
+        .unwrap();
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
+            Some(ValueLabel::OutsideEnd)
+        );
+        assert!(
+            read_value_label(&ser.root, &wrapper.root, PlotKind::ClusteredColumn).is_err(),
+            "wrapper-level per-point overrides remain NI"
+        );
+        let other_kind = crate::xml::parse(format!("<dLbls>{valid}</dLbls>").as_bytes()).unwrap();
+        assert!(
+            data_labels_hidden(Some(&other_kind.root)).is_err(),
+            "other chart kinds remain NI"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn deleted_point_labels_remove_only_the_requested_glyphs() {
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for kind in [
+                PlotKind::ClusteredColumn,
+                PlotKind::ClusteredBar,
+                PlotKind::StandardLine,
+            ] {
+                let pos = if kind == PlotKind::StandardLine {
+                    "r"
+                } else {
+                    "outEnd"
+                };
+                let labels =
+                    format!("<c:dLbls><c:showVal val='1'/><c:dLblPos val='{pos}'/></c:dLbls>");
+                let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], &labels);
+                let base = match kind {
+                    PlotKind::StandardLine => {
+                        standard_line_xml(&ser, "<c:dispBlanksAs val='gap'/>")
+                    }
+                    PlotKind::ClusteredColumn => bar_xml(&ser, "", "minMax", Some("col")),
+                    PlotKind::ClusteredBar => bar_xml(&ser, "", "minMax", Some("bar")),
+                    _ => unreachable!(),
+                };
+                let deleted = base.replace(
+                    "<c:dLbls>",
+                    "<c:dLbls><c:dLbl><c:idx val='1'/><c:delete val='1'/></c:dLbl>",
+                );
+                let control_doc = crate::xml::parse(base.as_bytes()).unwrap();
+                let deleted_doc = crate::xml::parse(deleted.as_bytes()).unwrap();
+                let control_chart =
+                    read_chart(&control_doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                let deleted_chart =
+                    read_chart(&deleted_doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                assert_eq!(deleted_chart.series[0].deleted_label_points, vec![1]);
+                assert_eq!(
+                    deleted_chart.series[0].values, control_chart.series[0].values,
+                    "deleting labels must not delete chart marks"
+                );
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 100.0,
+                    y: 50.0,
+                    w: 300.0,
+                    h: 220.0,
+                };
+                let mut control = Canvas::with_dpi(576, 336, dpi);
+                let mut actual = Canvas::with_dpi(576, 336, dpi);
+                for (canvas, chart) in [
+                    (&mut control, &control_chart),
+                    (&mut actual, &deleted_chart),
+                ] {
+                    if kind == PlotKind::ClusteredBar {
+                        draw_horizontal_value_labels(
+                            canvas,
+                            chart,
+                            &plot,
+                            0.0,
+                            10.0,
+                            None,
+                            Some(&face),
+                            14.0,
+                            false,
+                        )
+                        .unwrap();
+                    } else {
+                        draw_value_labels(canvas, chart, &plot, 0.0, 10.0, None, Some(&face), 14.0)
+                            .unwrap();
+                    }
+                }
+                let mut removed = 0;
+                let mut kept = 0;
+                for y in 0..336 {
+                    for x in 0..576 {
+                        let i = (y * 576 + x) * 3;
+                        let before = &control.px[i..i + 3];
+                        let after = &actual.px[i..i + 3];
+                        let middle = if kind == PlotKind::ClusteredBar {
+                            (270..330).contains(&x) && (140..180).contains(&y)
+                        } else {
+                            (225..285).contains(&x) && (100..155).contains(&y)
+                        };
+                        if middle {
+                            assert_eq!(after, [255; 3], "deleted glyph must disappear");
+                            removed += usize::from(before != after);
+                        } else {
+                            assert_eq!(before, after, "unrelated point labels must not move");
+                            kept += usize::from(after != [255; 3]);
+                        }
+                    }
+                }
+                assert!(
+                    removed > 0 && kept > 0,
+                    "both real deleted and retained glyphs required at {dpi_value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn inside_end_is_column_only_and_zero_is_explicit_ni() {
+        let wrapper = crate::xml::parse(b"<wrapper/>").unwrap();
+        let ser = crate::xml::parse(
+            b"<ser><dLbls><showVal val='1'/><dLblPos val='inEnd'/></dLbls></ser>",
+        )
+        .unwrap();
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
+            Some(ValueLabel::InsideEnd)
+        );
+        for kind in [PlotKind::ClusteredBar, PlotKind::StandardLine] {
+            assert!(read_value_label(&wrapper.root, &ser.root, kind).is_err());
+        }
+        let ser = line_ser(
+            0,
+            "S1",
+            &[Some(0.0), Some(6.0), Some(9.0)],
+            "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+        );
+        let xml = bar_xml(&ser, "", "minMax", Some("col"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "zero fallback placement is not silently approximated"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn column_inside_end_labels_paint_inside_marks_and_reject_nonfitting_boxes() {
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for sign in [-1.0, 1.0] {
+                let values = [Some(4.0 * sign), Some(6.0 * sign), Some(9.0 * sign)];
+                let ser = line_ser(
+                    0,
+                    "S1",
+                    &values,
+                    "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+                );
+                let xml = bar_xml(&ser, "", "minMax", Some("col"));
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 80.0,
+                    y: 30.0,
+                    w: 400.0,
+                    h: 280.0,
+                };
+                let (lo, hi) = if sign < 0.0 {
+                    (-10.0, 0.0)
+                } else {
+                    (0.0, 10.0)
+                };
+                let mut canvas = Canvas::with_dpi(576, 336, dpi);
+                draw_value_labels(&mut canvas, &chart, &plot, lo, hi, None, Some(&face), 14.0)
+                    .unwrap();
+                let slot = (plot.w + 1.0) / 3.0;
+                let mark_width = slot / (1.0 + chart.gap_width / 100.0);
+                let baseline = y_of(0.0, lo, hi, &plot);
+                let mut ink = [0; 3];
+                for y in 0..336 {
+                    for x in 0..576 {
+                        let i = (y * 576 + x) * 3;
+                        if canvas.px[i..i + 3] == [255; 3] {
+                            continue;
+                        }
+                        let mut found = false;
+                        for ci in 0..3 {
+                            let center = plot.x + slot * (ci as f64 + 0.5);
+                            let end = y_of(values[ci].unwrap(), lo, hi, &plot);
+                            if (x as f64 - center).abs() <= mark_width / 2.0
+                                && (y as f64) >= baseline.min(end)
+                                && (y as f64) <= baseline.max(end)
+                            {
+                                ink[ci] += 1;
+                                found = true;
+                            }
+                        }
+                        assert!(found, "inside-end glyph escaped every mark");
+                    }
+                }
+                assert!(
+                    ink.into_iter().all(|n| n > 0),
+                    "every value must paint real glyph ink"
+                );
+                for small in [
+                    Rect {
+                        x: 80.0,
+                        y: 30.0,
+                        w: 20.0,
+                        h: 280.0,
+                    },
+                    Rect {
+                        x: 80.0,
+                        y: 30.0,
+                        w: 400.0,
+                        h: 20.0,
+                    },
+                ] {
+                    let mut canvas = Canvas::with_dpi(576, 336, dpi);
+                    assert!(
+                        draw_value_labels(
+                            &mut canvas,
+                            &chart,
+                            &small,
+                            lo,
+                            hi,
+                            None,
+                            Some(&face),
+                            14.0
+                        )
+                        .is_err(),
+                        "short/narrow boxes remain NI instead of clipped/fitted"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn plain_value_labels_are_parsed_and_unsupported_styles_are_never_omitted() {
-        for kind in [PlotKind::ClusteredColumn, PlotKind::StandardLine] {
+        for kind in [
+            PlotKind::ClusteredColumn,
+            PlotKind::ClusteredBar,
+            PlotKind::StandardLine,
+        ] {
             let wrapper = crate::xml::parse(
                 b"<wrapper><dLbls><showVal val='1'/><showBubbleSize val='1'/></dLbls></wrapper>",
             )
@@ -6668,6 +12663,95 @@ mod tests {
                     "must not ignore {config}"
                 );
             }
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn horizontal_outside_end_labels_paint_and_keep_other_subranges_ni() {
+        let base = standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-4.0), Some(0.0), Some(9.0)],
+                "<c:dLbls><c:showVal val='1'/><c:dLblPos val='outEnd'/></c:dLbls>",
+            ),
+            "<c:dispBlanksAs val='gap'/>",
+        )
+        .replace("lineChart", "barChart")
+        .replace(
+            "<c:grouping val=\"standard\"/>",
+            "<c:barDir val='bar'/><c:grouping val='clustered'/>",
+        );
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            for orient in ["minMax", "maxMin"] {
+                let xml = base.replace(
+                    "<c:catAx/>",
+                    &format!("<c:catAx><c:axPos val='l'/><c:scaling><c:orientation val='{orient}'/></c:scaling></c:catAx>"),
+                );
+                let xml = xml.replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>");
+                let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+                let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", dpi).unwrap();
+                assert_eq!(chart.series[0].value_label, Some(ValueLabel::OutsideEnd));
+                let mut actual = Canvas::with_dpi(576, 336, dpi);
+                let face = super::super::chart_gdi::Face::open(14.0, false).unwrap();
+                let plot = Rect {
+                    x: 100.0,
+                    y: 50.0,
+                    w: 300.0,
+                    h: 220.0,
+                };
+                draw_horizontal_value_labels(
+                    &mut actual,
+                    &chart,
+                    &plot,
+                    -10.0,
+                    10.0,
+                    None,
+                    Some(&face),
+                    14.0,
+                    false,
+                )
+                .unwrap();
+                // Left of the negative end, right of zero, and right of positive
+                // end must each contain actual glyph ink (not success + omission).
+                let pad = dpi.pt_to_px_font(6.0);
+                for (ci, v) in [-4.0, 0.0, 9.0].into_iter().enumerate() {
+                    let end = x_of(v, -10.0, 10.0, &plot);
+                    let y = category_mid_y(&plot, ci, 3, chart.cats_from_bottom);
+                    let xr = if v < 0.0 {
+                        (end - pad - 25.0) as i32..(end - pad + 1.0) as i32
+                    } else {
+                        (end + pad) as i32..(end + pad + 20.0) as i32
+                    };
+                    let mut ink = 0;
+                    for yy in (y - 16.0) as i32..(y + 16.0) as i32 {
+                        for xx in xr.clone() {
+                            if xx >= 0 && yy >= 0 && xx < 576 && yy < 336 {
+                                let i = (yy as usize * 576 + xx as usize) * 3;
+                                ink += usize::from(actual.px[i..i + 3] != [255; 3]);
+                            }
+                        }
+                    }
+                    assert!(ink > 0, "missing value {v} at {dpi_value}/{orient}");
+                }
+            }
+        }
+        for xml in [
+            base.replace("val='outEnd'", "val='inEnd'"),
+            base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"),
+            base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"),
+        ] {
+            let xml = xml
+                .replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
+                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>");
+            assert!(
+                render_line(&xml).is_err(),
+                "unlocked bar labels must remain NI"
+            );
         }
     }
 
@@ -7083,6 +13167,7 @@ mod tests {
         );
         let cases = [
             scatter_xml("line", &ser, ""),
+            scatter_xml("none", &ser, ""),
             scatter_xml("smoothMarker", &ser, ""),
             scatter_xml("smooth", &ser, ""),
             scatter_xml(
@@ -7134,6 +13219,68 @@ mod tests {
                 .replace(r#"<c:scatterStyle val="lineMarker"/>"#, ""),
         )
         .unwrap();
+
+        // Official Excel 16 scatter valAx writes midCat. Locked styles still
+        // paint; this is not the category-slot midCat rule.
+        let midcat = scatter_xml("lineMarker", &ser, "").replace(
+            "</c:valAx>",
+            r#"<c:crossBetween val="midCat"/></c:valAx>"#,
+        );
+        assert_eq!(
+            midcat.matches(r#"<c:crossBetween val="midCat"/>"#).count(),
+            2,
+            "both official scatter valAx should carry midCat",
+        );
+        render_scatter(&midcat).unwrap();
+        let line_no_markers = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(1.0), Some(2.0), Some(3.0)],
+                &[Some(4.0), Some(5.0), Some(6.0)],
+                r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
+            ),
+            "",
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:crossBetween val="midCat"/></c:valAx>"#,
+        );
+        render_scatter(&line_no_markers).unwrap();
+        let markers_only = scatter_xml(
+            "lineMarker",
+            &scatter_ser(
+                0,
+                "S1",
+                &[Some(1.0), Some(2.0), Some(3.0)],
+                &[Some(4.0), Some(5.0), Some(6.0)],
+                r#"<c:spPr><a:ln w="38100"><a:noFill/></a:ln></c:spPr><c:smooth val="0"/>"#,
+            ),
+            "",
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:crossBetween val="midCat"/></c:valAx>"#,
+        );
+        render_scatter(&markers_only).unwrap();
+        let mixed = scatter_xml("lineMarker", &ser, "").replacen(
+            "</c:valAx>",
+            r#"<c:crossBetween val="midCat"/></c:valAx>"#,
+            1,
+        );
+        assert!(
+            render_scatter(&mixed).is_err(),
+            "mixed midCat/between scatter valAx stays NI"
+        );
+        let smooth_midcat = scatter_xml("smoothMarker", &ser, "").replace(
+            "</c:valAx>",
+            r#"<c:crossBetween val="midCat"/></c:valAx>"#,
+        );
+        assert!(
+            render_scatter(&smooth_midcat).is_err(),
+            "smoothMarker stays NI even with official midCat"
+        );
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
@@ -7806,7 +13953,7 @@ mod tests {
             ),
             bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
                 r#"</c:barChart>"#,
-                r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:barChart>"#,
+                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls></c:barChart>"#,
                 1,
             ),
             bar_xml(&two, "", "maxMin", Some("bar")).replacen(
@@ -8002,6 +14149,67 @@ mod tests {
             omitted_png, png,
             "explicit dispBlanksAs=gap must still leave a hole, unlike the omitted default"
         );
+        let explicit_zero_png = render_area(&standard_area_xml(
+            &gapped,
+            r#"<c:dispBlanksAs val="zero"/>"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            explicit_zero_png, omitted_png,
+            "explicit area zero must fill the same V-to-baseline as omitted default"
+        );
+        let na = gapped.replace("<c:v>2</c:v>", "<c:v>#N/A</c:v>");
+        let div = gapped.replace("<c:v>2</c:v>", "<c:v>#DIV/0!</c:v>");
+        for body in [&na, &div] {
+            assert!(
+                render_area(&standard_area_xml(body, r#"<c:dispBlanksAs val="zero"/>"#)).is_err(),
+                "unverified area error points must not silently become baseline zero"
+            );
+        }
+        let explicit_span_png = render_area(&standard_area_xml(
+            &gapped,
+            r#"<c:dispBlanksAs val="span"/>"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            explicit_span_png, omitted_png,
+            "explicit area span must fill the same V-to-baseline as omitted default"
+        );
+        // Mid-only #N/A / #DIV/0! — do not reuse the all-points error XML
+        // used for the explicit-zero NI asserts above.
+        let na_mid = gapped.replace(
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let div_mid = gapped.replace(
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>#DIV/0!</c:v></c:pt>"#,
+        );
+        assert!(
+            render_area(&standard_area_xml(
+                &na_mid,
+                r#"<c:dispBlanksAs val="span"/>"#
+            ))
+            .is_ok(),
+            "official area span paints #N/A as the same baseline V"
+        );
+        let span_na_png = render_area(&standard_area_xml(
+            &na_mid,
+            r#"<c:dispBlanksAs val="span"/>"#,
+        ))
+        .unwrap();
+        assert_eq!(
+            span_na_png, explicit_span_png,
+            "area span + #N/A must match the blank-mid span fill"
+        );
+        assert!(
+            render_area(&standard_area_xml(
+                &div_mid,
+                r#"<c:dispBlanksAs val="span"/>"#
+            ))
+            .is_err(),
+            "unverified area #DIV/0! under span must stay not implemented"
+        );
     }
 
     fn count_fill_band(rgb: &[u8], w: u32, x: u32, y0: u32, y1: u32, color: [u8; 3]) -> usize {
@@ -8080,8 +14288,6 @@ mod tests {
                 r#"crossBetween val="between""#,
                 r#"crossBetween val="midCat""#,
             ),
-            standard_area_xml(&ser, r#"<c:dispBlanksAs val="zero"/>"#),
-            standard_area_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#),
             base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
             base.replacen(
                 r#"</c:areaChart>"#,
@@ -8219,6 +14425,62 @@ mod tests {
             }
         }
         (n > 0).then_some((sx / n as f64, sy / n as f64, n))
+    }
+
+    #[test]
+    fn pie_opaque_plot_fill_paints_bounding_square_before_slices() {
+        let ser = line_ser(0, "S1", &[Some(1.0), Some(1.0), Some(1.0), Some(1.0)], "");
+        for dpi_value in [96, 106, 144] {
+            let dpi =
+                RenderDpi::from_request(serde_json::json!({"dpi":dpi_value}).as_object().unwrap())
+                    .unwrap();
+            let xml = standard_pie_xml(&ser, "", "").replace(r#"<c:legend><c:legendPos val="r"/></c:legend>"#, "").replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='FFFF00'/></a:solidFill></c:spPr>",
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let png = render_chart_at(
+                &doc.root,
+                576,
+                336,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                dpi,
+            )
+            .unwrap();
+            let (w, h, rgb) = decode_rgb(&png);
+            let rect = pie_plot_bounds(576.0, 336.0, 0.0, 0.0, dpi).unwrap();
+            let x = rect.x.ceil() as u32 + 2;
+            let y = rect.y.ceil() as u32 + 2;
+            let i = ((y * w + x) * 3) as usize;
+            assert_eq!(
+                &rgb[i..i + 3],
+                &[255, 255, 0],
+                "bounding-square corner, not just wedge"
+            );
+            let outside = ((y * w + x - 5) * 3) as usize;
+            assert_eq!(
+                &rgb[outside..outside + 3],
+                &[255, 255, 255],
+                "not full host fill"
+            );
+            for accent in &FALLBACK_ACCENTS[..4] {
+                assert!(
+                    color_centroid(&rgb, w, h, *accent, 0).unwrap().2 > 100,
+                    "fill must stay below slices"
+                );
+            }
+        }
+        for fill in [
+            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
+            "<a:gradFill><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='0'/></a:gradFill>",
+        ] {
+            let xml=standard_pie_xml(&ser,"","").replace("<c:plotArea>",&format!("<c:plotArea><c:spPr>{fill}</c:spPr>"));
+            assert!(render_pie(&xml).is_err(),"unlocked pie plot fill must remain NI");
+        }
     }
 
     #[test]
@@ -8367,6 +14629,431 @@ mod tests {
     }
 
     #[test]
+    fn pie_all_zero_all_empty_and_all_negative_follow_official_empty_or_abs_plot() {
+        let all_neg = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(-10.0), Some(-20.0), Some(-30.0), Some(-40.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let all_abs = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(all_neg, all_abs, "all-negative pies should paint as |v|");
+
+        let zero_neg = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(-20.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let zero_abs = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(20.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(
+            zero_neg, zero_abs,
+            "a lone finite negative among zeros should paint as |v|"
+        );
+        assert_ne!(zero_neg, all_abs, "zero-and-negative is not a four-slice abs pie");
+
+        let all_zero = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[Some(0.0), Some(0.0), Some(0.0), Some(0.0)], ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let all_empty_ser = r#"<c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:tx><c:v>S1</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
+        </c:ser>"#;
+        let all_empty = render_pie(&standard_pie_xml(
+            all_empty_ser,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        assert_eq!(
+            all_zero, all_empty,
+            "official-like all-empty (ptCount, no val pts) should match all-zero"
+        );
+        // line_ser omits val pts and ptCount, but still writes category pts.
+        // That is the same locked domain rule, not a second painter.
+        let omitted_pts = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &[None, None, None, None], ""),
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        assert_eq!(
+            all_zero, omitted_pts,
+            "omitted val pts with category pts should match all-zero"
+        );
+        let (w, h, rgb) = png_rgb(&all_zero);
+        assert_eq!((w, h), (576, 336));
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let a3 = FALLBACK_ACCENTS[2];
+        let a4 = FALLBACK_ACCENTS[3];
+        for (i, accent) in [a1, a2, a3, a4].iter().enumerate() {
+            let hits = color_centroid(&rgb, w, h, *accent, 2).map(|c| c.2).unwrap_or(0);
+            assert!(
+                hits > 0 && hits < 80,
+                "all-zero/empty should keep legend swatch {i}, not a slice; hits={hits}"
+            );
+        }
+    }
+
+    #[test]
+    fn pie_finite_negatives_use_absolute_slice_weight_and_stay_in_legend() {
+        let cases: &[(&[Option<f64>], &[Option<f64>])] = &[
+            (
+                &[Some(10.0), Some(-20.0), Some(30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(-10.0), Some(20.0), Some(30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(10.0), Some(-20.0), Some(-30.0), Some(40.0)],
+                &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            ),
+            (
+                &[Some(1.0), Some(-2.0), Some(3.0)],
+                &[Some(1.0), Some(2.0), Some(3.0)],
+            ),
+        ];
+        for (signed, absed) in cases {
+            let signed_png = render_pie(&standard_pie_xml(
+                &line_ser(0, "S1", signed, ""),
+                "",
+                "",
+            ))
+            .unwrap();
+            let abs_png = render_pie(&standard_pie_xml(
+                &line_ser(0, "S1", absed, ""),
+                "",
+                "",
+            ))
+            .unwrap();
+            assert_eq!(
+                signed_png, abs_png,
+                "finite negatives should paint as |v|, signed={signed:?}"
+            );
+        }
+        let mixed = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(-20.0), Some(30.0), Some(40.0)],
+                "",
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        let skip_zero = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(0.0), Some(30.0), Some(40.0)],
+                "",
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(
+            mixed, skip_zero,
+            "finite negatives are not skipped as zero"
+        );
+    }
+
+    #[test]
+    fn pie_explosion_follows_official_series_shrink_and_point_bisector() {
+        let vals = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let ctrl = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, ""),
+            "",
+            "",
+        ))
+        .unwrap();
+        let exp0 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="0"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_eq!(ctrl, exp0, "explicit explosion 0 should match an omitted explosion");
+
+        let ser10 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="10"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        let ser25 = render_pie(&standard_pie_xml(
+            &line_ser(0, "S1", &vals, r#"<c:explosion val="25"/>"#),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(ser10, ctrl, "series explosion 10 should move the slices");
+        assert_ne!(ser25, ser10, "series explosion 25 is not the same as 10");
+
+        let (w, h, ctrl_rgb) = png_rgb(&ctrl);
+        let (_, _, s10_rgb) = png_rgb(&ser10);
+        let (_, _, s25_rgb) = png_rgb(&ser25);
+        let accents = [
+            FALLBACK_ACCENTS[0],
+            FALLBACK_ACCENTS[1],
+            FALLBACK_ACCENTS[2],
+            FALLBACK_ACCENTS[3],
+        ];
+        let ctrl_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&ctrl_rgb, w, h, *c, 2).expect("ctrl slice"))
+            .collect();
+        let s10_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&s10_rgb, w, h, *c, 2).expect("ser10 slice"))
+            .collect();
+        let s25_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&s25_rgb, w, h, *c, 2).expect("ser25 slice"))
+            .collect();
+        let cx: f64 = ctrl_c.iter().map(|c| c.0).sum::<f64>() / 4.0;
+        let cy: f64 = ctrl_c.iter().map(|c| c.1).sum::<f64>() / 4.0;
+        for i in 0..4 {
+            let r0 = ((ctrl_c[i].0 - cx).hypot(ctrl_c[i].1 - cy)).max(1.0);
+            let r10 = (s10_c[i].0 - cx).hypot(s10_c[i].1 - cy);
+            let r25 = (s25_c[i].0 - cx).hypot(s25_c[i].1 - cy);
+            assert!(
+                r10 > r0 && r25 > r10,
+                "series explosion should move slice {i} outward; r0={r0:.2} r10={r10:.2} r25={r25:.2}"
+            );
+            assert!(
+                s10_c[i].2 < ctrl_c[i].2 && s25_c[i].2 < s10_c[i].2,
+                "series explosion should shrink slice {i} area; n0={} n10={} n25={}",
+                ctrl_c[i].2,
+                s10_c[i].2,
+                s25_c[i].2
+            );
+        }
+
+        let pt_a = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/><c:explosion val="20"/></c:dPt>"#,
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        let pt_b = render_pie(&standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:dPt><c:idx val="1"/><c:bubble3D val="0"/><c:explosion val="20"/></c:dPt>"#,
+            ),
+            "",
+            "",
+        ))
+        .unwrap();
+        assert_ne!(pt_a, ctrl);
+        assert_ne!(pt_b, ctrl);
+        assert_ne!(pt_a, pt_b);
+        let (_, _, a_rgb) = png_rgb(&pt_a);
+        let (_, _, b_rgb) = png_rgb(&pt_b);
+        let a_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&a_rgb, w, h, *c, 2).expect("ptA slice"))
+            .collect();
+        let b_c: Vec<_> = accents
+            .iter()
+            .map(|c| color_centroid(&b_rgb, w, h, *c, 2).expect("ptB slice"))
+            .collect();
+        let dx_a = a_c[0].0 - ctrl_c[0].0;
+        let dy_a = a_c[0].1 - ctrl_c[0].1;
+        let ang_a = dx_a.atan2(-dy_a).to_degrees();
+        assert!(
+            dy_a < -8.0 && ang_a > 10.0 && ang_a < 26.0,
+            "point A explosion should move the first slice up along its ~18 deg bisector; d=({dx_a:.2},{dy_a:.2}) ang={ang_a:.1}"
+        );
+        for i in 1..4 {
+            let d = (a_c[i].0 - ctrl_c[i].0).hypot(a_c[i].1 - ctrl_c[i].1);
+            assert!(
+                d < 2.0,
+                "unexploded slices should stay put on a point-A explosion; slice {i} moved {d:.2}"
+            );
+        }
+        let dx_b = b_c[1].0 - ctrl_c[1].0;
+        let dy_b = b_c[1].1 - ctrl_c[1].1;
+        let ang_b = dx_b.atan2(-dy_b).to_degrees();
+        assert!(
+            dx_b > 8.0 && ang_b > 64.0 && ang_b < 80.0,
+            "point B explosion should move the second slice along its ~72 deg bisector; d=({dx_b:.2},{dy_b:.2}) ang={ang_b:.1}"
+        );
+        for i in [0, 2, 3] {
+            let d = (b_c[i].0 - ctrl_c[i].0).hypot(b_c[i].1 - ctrl_c[i].1);
+            assert!(
+                d < 2.0,
+                "unexploded slices should stay put on a point-B explosion; slice {i} moved {d:.2}"
+            );
+        }
+    }
+
+    #[test]
+    fn pie_slice_fills_reuse_locked_solid_alpha_and_nofill() {
+        let vals = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let with_plot = |xml: String| {
+            xml.replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='FFFFCC'/></a:solidFill></c:spPr>",
+            )
+        };
+        let src_over = |src: [u8; 3], dst: [u8; 3], cov: u8| -> [u8; 3] {
+            let src_a = u16::from(cov);
+            std::array::from_fn(|k| {
+                ((u16::from(src[k]) * src_a + u16::from(dst[k]) * (255 - src_a) + 127) / 255) as u8
+            })
+        };
+        let exact = |rgb: &[u8], w: u32, h: u32, color: [u8; 3]| {
+            let mut n = 0usize;
+            for i in 0..(w * h) as usize {
+                if rgb[i * 3..i * 3 + 3] == color {
+                    n += 1;
+                }
+            }
+            n
+        };
+
+        let ser_solid = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_solid);
+        assert!(
+            exact(&rgb, w, h, [255, 0, 0]) >= 200,
+            "series solidFill should paint every slice even when varyColors=1"
+        );
+        for accent in &FALLBACK_ACCENTS[..4] {
+            assert!(
+                exact(&rgb, w, h, *accent) < 40,
+                "varyColors must not keep accent slices once the series has an explicit solid"
+            );
+        }
+
+        let cov = ooxml_alpha_to_u8(50_000);
+        assert_eq!(cov, 128);
+        let plot = [255, 255, 204];
+        let red_over_plot = src_over([255, 0, 0], plot, cov);
+        assert_eq!(red_over_plot, [255, 127, 102]);
+        let ser_alpha = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_alpha);
+        assert!(
+            exact(&rgb, w, h, red_over_plot) >= 200,
+            "series alpha 50000 should use locked straight alpha over the plot fill"
+        );
+        assert_eq!(exact(&rgb, w, h, [255, 0, 0]), 0);
+
+        let hidden = r#"<c:spPr><a:noFill/><a:extLst><a:ext uri="{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}"><a14:hiddenFill xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>"#;
+        let ser_nofill = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(0, "S1", &vals, hidden),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&ser_nofill);
+        assert!(exact(&rgb, w, h, plot) >= 200, "series noFill shows the plot");
+        assert_eq!(exact(&rgb, w, h, [255, 0, 0]), 0);
+        assert_eq!(exact(&rgb, w, h, [0x15, 0x60, 0x82]), 0);
+        for accent in &FALLBACK_ACCENTS[..4] {
+            assert_eq!(
+                exact(&rgb, w, h, *accent),
+                0,
+                "series noFill should not paint accent wedges or keys"
+            );
+        }
+
+        let pt_nofill = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                &format!(r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/>{hidden}</c:dPt>"#),
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&pt_nofill);
+        assert_eq!(
+            exact(&rgb, w, h, FALLBACK_ACCENTS[0]),
+            0,
+            "dPt noFill removes that slice and its legend key"
+        );
+        for accent in &FALLBACK_ACCENTS[1..4] {
+            assert!(
+                exact(&rgb, w, h, *accent) >= 80,
+                "other slices stay on the default accent"
+            );
+        }
+
+        let lime_over_plot = src_over([0, 255, 0], plot, cov);
+        assert_eq!(lime_over_plot, [127, 255, 102]);
+        let mixed = render_pie(&with_plot(standard_pie_xml(
+            &line_ser(
+                0,
+                "S1",
+                &vals,
+                r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>
+          <c:dPt><c:idx val="1"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="0000FF"/></a:solidFill></c:spPr></c:dPt>
+          <c:dPt><c:idx val="2"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="00FF00"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr></c:dPt>"#,
+            ),
+            "",
+            "",
+        )))
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&mixed);
+        assert!(exact(&rgb, w, h, [255, 0, 0]) >= 80, "unoverridden slices use the series solid");
+        assert!(exact(&rgb, w, h, [0, 0, 255]) >= 80, "dPt solid overrides that slice");
+        assert!(
+            exact(&rgb, w, h, lime_over_plot) >= 80,
+            "dPt alpha overrides that slice with locked straight alpha"
+        );
+    }
+
+    #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
@@ -8376,9 +15063,16 @@ mod tests {
             line_ser(1, "S2", &[Some(1.0), Some(2.0), Some(3.0)], "")
         );
         let cases = [
+            // Leftover: a val cache ptCount with no val pts and no category
+            // pts is not sized from untrusted ptCount.
             standard_pie_xml(
-                &line_ser(0, "S1", &[Some(1.0), Some(-2.0), Some(3.0)], ""),
-                "",
+                r#"<c:ser>
+          <c:idx val="0"/>
+          <c:order val="0"/>
+          <c:tx><c:v>S1</c:v></c:tx>
+          <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
+        </c:ser>"#,
+                r#"<c:dispBlanksAs val="gap"/>"#,
                 "",
             ),
             pie_space(
@@ -8396,12 +15090,13 @@ mod tests {
                 "",
             ),
             standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),
+            // Leftover: series explosion plus a dPt explosion is not uniquely locked.
             standard_pie_xml(
                 &line_ser(
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:explosion val="10"/>"#,
+                    r#"<c:explosion val="10"/><c:dPt><c:idx val="0"/><c:explosion val="20"/></c:dPt>"#,
                 ),
                 "",
                 "",
@@ -8411,7 +15106,7 @@ mod tests {
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:dPt><c:idx val="0"/><c:explosion val="8"/></c:dPt>"#,
+                    r#"<c:dPt><c:idx val="0"/><c:bubble3D val="1"/><c:explosion val="20"/></c:dPt>"#,
                 ),
                 "",
                 "",
@@ -8421,7 +15116,7 @@ mod tests {
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                    r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
                 ),
                 "",
                 "",
@@ -8466,5 +15161,2264 @@ mod tests {
             "",
         ))
         .unwrap();
+    }
+
+    fn inject_explicit_log10(xml: &str) -> String {
+        let scale =
+            r#"<c:scaling><c:logBase val="10"/><c:min val="1"/><c:max val="1000"/></c:scaling>"#;
+        if xml.contains(r#"<c:min val="-3"/>"#) {
+            return xml.replace(
+                "<c:scaling>\n          <c:min val=\"-3\"/>\n          <c:max val=\"5\"/>\n        </c:scaling>\n        <c:majorUnit val=\"1\"/>",
+                scale,
+            );
+        }
+        if xml.contains(
+            r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling>"#,
+        ) {
+            return xml.replace(
+                r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling>"#,
+                &format!(r#"<c:valAx><c:axId val="2"/>{scale}"#),
+            );
+        }
+        xml.replace(
+            r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>"#,
+            &format!(
+                r#"<c:valAx>{scale}<c:majorGridlines/><c:crossBetween val="between"/></c:valAx>"#
+            ),
+        )
+    }
+
+    #[test]
+    fn explicit_log_base_maps_equal_decades_for_column_and_line() {
+        let plot = Rect {
+            x: 0.0,
+            y: 10.0,
+            w: 100.0,
+            h: 300.0,
+        };
+        let ticks = super::tick_values_log(1.0, 1000.0, 10.0);
+        assert_eq!(ticks, vec![1.0, 10.0, 100.0, 1000.0]);
+        let ys: Vec<i32> = ticks
+            .iter()
+            .map(|v| super::y_map(*v, 1.0, 1000.0, &plot, Some(10.0), false).round() as i32)
+            .collect();
+        assert_eq!(ys, vec![310, 210, 110, 10]);
+        assert_eq!(
+            super::tick_values_log(1.0, 32.0, 2.0),
+            vec![1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
+        );
+
+        let values = [1.0, 10.0, 100.0, 1000.0];
+        let col = inject_explicit_log10(&mixed_column_xml(&values));
+        let doc = crate::xml::parse(col.as_bytes()).unwrap();
+        render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mut canvas = Canvas::new(300, 220);
+        let bar_plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        draw_bars(
+            &mut canvas,
+            &chart,
+            &bar_plot,
+            1.0,
+            1000.0,
+            10.0,
+            Some(10.0),
+            1.0,
+            false,
+            None,
+        );
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let mut counts = [0u32; 4];
+        let slot = bar_plot.w / 4.0;
+        for y in 0..canvas.h {
+            for x in 0..canvas.w {
+                let i = (y as usize * canvas.w as usize + x as usize) * 3;
+                if !near(&canvas.px[i..i + 3]) {
+                    continue;
+                }
+                let ci = ((f64::from(x) - bar_plot.x) / slot).floor();
+                if (0.0..4.0).contains(&ci) {
+                    counts[ci as usize] += 1;
+                }
+            }
+        }
+        assert_eq!(counts[0], 0, "value==min must paint a zero-height bar");
+        assert!(counts[1] > 0 && counts[2] > counts[1] && counts[3] > counts[2]);
+
+        let line = inject_explicit_log10(&standard_line_xml(
+            &line_ser(
+                0,
+                "S",
+                &[Some(1.0), Some(10.0), Some(100.0), Some(1000.0)],
+                "",
+            ),
+            "",
+        ));
+        render_line(&line).unwrap();
+
+        let auto = col.replace(r#"<c:min val="1"/><c:max val="1000"/>"#, "");
+        let auto_doc = crate::xml::parse(auto.as_bytes()).unwrap();
+        assert!(
+            read_chart(
+                &auto_doc.root,
+                FALLBACK_ACCENTS,
+                None,
+                "",
+                RenderDpi::DEFAULT
+            )
+            .is_err(),
+            "omitted log min/max must stay NI"
+        );
+
+        let below = inject_explicit_log10(&mixed_column_xml(&[0.5, 10.0, 100.0, 1000.0]));
+        let below_doc = crate::xml::parse(below.as_bytes()).unwrap();
+        assert!(
+            render_rgb_chart(
+                &below_doc.root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .is_err(),
+            "values below the explicit log min must stay NI"
+        );
+
+        let area = inject_explicit_log10(&standard_area_xml(
+            &line_ser(
+                0,
+                "S",
+                &[Some(1.0), Some(10.0), Some(100.0), Some(1000.0)],
+                "",
+            ),
+            "",
+        ));
+        let err = render_area(&area).expect_err("area log scale stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+
+        let bar = inject_explicit_log10(&bar_xml(
+            &line_ser(
+                0,
+                "S",
+                &[Some(1.0), Some(10.0), Some(100.0), Some(1000.0)],
+                "",
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        ));
+        let err = render_bar(&bar).expect_err("bar log scale stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_cat_crosses_at(xml: &str, value: &str) -> String {
+        let xml = xml.replace(
+            r#"<c:crosses val="autoZero"/>
+      </c:catAx>"#,
+            &format!(
+                r#"<c:crossesAt val="{value}"/>
+      </c:catAx>"#
+            ),
+        );
+        let xml = if xml.contains(r#"<c:catAx/>"#) {
+            xml.replace(
+                r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>"#,
+                &format!(
+                    r#"<c:valAx><c:scaling><c:min val="-8"/><c:max val="8"/></c:scaling><c:majorUnit val="2"/><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:crossesAt val="{value}"/></c:catAx>"#
+                ),
+            )
+        } else {
+            xml
+        };
+        // Compact bar fixtures keep autoZero on the same line as </c:catAx>.
+        xml.replace(
+            r#"<c:crosses val="autoZero"/></c:catAx>"#,
+            &format!(r#"<c:crossesAt val="{value}"/></c:catAx>"#),
+        )
+    }
+
+    fn mixed_column_explicit_pm8(values: &[f64]) -> String {
+        mixed_column_xml(values)
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-8"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="8"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#)
+    }
+
+    #[test]
+    fn cat_axis_crosses_at_grows_columns_and_areas_from_the_crossing() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let xml = with_cat_crosses_at(&mixed_column_explicit_pm8(&values), "2");
+        assert!(
+            xml.contains(r#"<c:crossesAt val="2"/>"#),
+            "fixture must carry catAx crossesAt"
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(chart.axis.crosses_at, Some(2.0));
+        let mut canvas = Canvas::new(300, 220);
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        draw_bars(&mut canvas, &chart, &plot, -8.0, 8.0, 2.0, None, 2.0, false, None);
+        let origin_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 2.0);
+        let zero_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 0.0);
+        assert_ne!(origin_y, zero_y);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let mut above_origin = 0u32;
+        let mut between_origin_and_zero = 0u32;
+        for y in 0..canvas.h {
+            for x in 0..canvas.w {
+                let i = (y as usize * canvas.w as usize + x as usize) * 3;
+                if !near(&canvas.px[i..i + 3]) {
+                    continue;
+                }
+                if (y as i32) < origin_y {
+                    above_origin += 1;
+                }
+                if origin_y < y as i32 && (y as i32) < zero_y {
+                    between_origin_and_zero += 1;
+                }
+            }
+        }
+        assert!(
+            above_origin > 0,
+            "values above the crossing must fill toward it"
+        );
+        assert_eq!(
+            between_origin_and_zero, 0,
+            "columns must not keep growing to zero once crossesAt is set"
+        );
+
+        render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_line(&with_cat_crosses_at(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "2",
+        ))
+        .unwrap();
+        render_area(&with_cat_crosses_at(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "2",
+        ))
+        .unwrap();
+        let bar = with_cat_crosses_at(
+            &bar_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+                "maxMin",
+                Some("bar"),
+            ),
+            "2",
+        );
+        assert!(
+            bar.contains(r#"<c:crossesAt val="2"/>"#),
+            "bar fixture must carry catAx crossesAt"
+        );
+        let err = render_bar(&bar).expect_err("bar crossesAt stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_cat_crosses(xml: &str, mode: &str) -> String {
+        let xml = xml.replace(
+            r#"<c:crosses val="autoZero"/>
+      </c:catAx>"#,
+            &format!(
+                r#"<c:crosses val="{mode}"/>
+      </c:catAx>"#
+            ),
+        );
+        let xml = if xml.contains(r#"<c:catAx/>"#) {
+            xml.replace(
+                r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx/>"#,
+                &format!(
+                    r#"<c:valAx><c:scaling><c:min val="-8"/><c:max val="8"/></c:scaling><c:majorUnit val="2"/><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:crosses val="{mode}"/></c:catAx>"#
+                ),
+            )
+        } else {
+            xml
+        };
+        xml.replace(
+            r#"<c:crosses val="autoZero"/></c:catAx>"#,
+            &format!(r#"<c:crosses val="{mode}"/></c:catAx>"#),
+        )
+    }
+
+    fn first_accent_row(png: &[u8]) -> i32 {
+        let (w, h, rgb) = png_rgb(png);
+        let accent = FALLBACK_ACCENTS[0];
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 3;
+                if (rgb[i] as i16 - accent[0] as i16).abs() < 8
+                    && (rgb[i + 1] as i16 - accent[1] as i16).abs() < 8
+                    && (rgb[i + 2] as i16 - accent[2] as i16).abs() < 8
+                {
+                    return y as i32;
+                }
+            }
+        }
+        panic!("expected accent fill");
+    }
+
+    #[test]
+    fn cat_axis_crosses_min_max_grows_from_the_bounds() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let min_xml = with_cat_crosses(&mixed_column_explicit_pm8(&values), "min");
+        let max_xml = with_cat_crosses(&mixed_column_explicit_pm8(&values), "max");
+        assert!(min_xml.contains(r#"<c:crosses val="min"/>"#));
+        assert!(max_xml.contains(r#"<c:crosses val="max"/>"#));
+        let min_doc = crate::xml::parse(min_xml.as_bytes()).unwrap();
+        let max_doc = crate::xml::parse(max_xml.as_bytes()).unwrap();
+        let min_chart = read_chart(
+            &min_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let max_chart = read_chart(
+            &max_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(min_chart.axis.cat_crosses, super::axis::CatCrosses::Min);
+        assert_eq!(max_chart.axis.cat_crosses, super::axis::CatCrosses::Max);
+
+        let plot = Rect {
+            x: 35.0,
+            y: 16.0,
+            w: 220.0,
+            h: 188.0,
+        };
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let min_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, -8.0);
+        let max_y = crossing_axis_y(&plot, -8.0, 8.0, 2.0, 8.0);
+        let mut min_canvas = Canvas::new(300, 220);
+        draw_bars(
+            &mut min_canvas,
+            &min_chart,
+            &plot,
+            -8.0,
+            8.0,
+            2.0,
+            None,
+            -8.0,
+            false,
+            None,
+        );
+        let mut below_min = 0u32;
+        let mut min_fill = 0u32;
+        for y in 0..min_canvas.h {
+            for x in 0..min_canvas.w {
+                let i = (y as usize * min_canvas.w as usize + x as usize) * 3;
+                if !near(&min_canvas.px[i..i + 3]) {
+                    continue;
+                }
+                min_fill += 1;
+                if (y as i32) > min_y {
+                    below_min += 1;
+                }
+            }
+        }
+        assert!(min_fill > 0, "crosses=min columns must fill from the min");
+        assert_eq!(below_min, 0, "crosses=min columns must not grow past min");
+
+        let mut max_canvas = Canvas::new(300, 220);
+        draw_bars(
+            &mut max_canvas,
+            &max_chart,
+            &plot,
+            -8.0,
+            8.0,
+            2.0,
+            None,
+            8.0,
+            false,
+            None,
+        );
+        let mut above_max = 0u32;
+        let mut max_fill = 0u32;
+        for y in 0..max_canvas.h {
+            for x in 0..max_canvas.w {
+                let i = (y as usize * max_canvas.w as usize + x as usize) * 3;
+                if !near(&max_canvas.px[i..i + 3]) {
+                    continue;
+                }
+                max_fill += 1;
+                if (y as i32) < max_y {
+                    above_max += 1;
+                }
+            }
+        }
+        assert!(max_fill > 0, "crosses=max columns must fill from the max");
+        assert_eq!(above_max, 0, "crosses=max columns must not grow past max");
+
+        let min_png = render_rgb_chart(
+            &min_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let max_png = render_rgb_chart(
+            &max_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let at_max = with_cat_crosses_at(&mixed_column_explicit_pm8(&values), "8");
+        let at_doc = crate::xml::parse(at_max.as_bytes()).unwrap();
+        let at_png = render_rgb_chart(
+            &at_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let max_top = first_accent_row(&max_png);
+        let at_top = first_accent_row(&at_png);
+        assert!(
+            max_top > at_top + 8,
+            "official crosses=max keeps a top category-label gutter, unlike crossesAt=max; max={max_top} at={at_top}"
+        );
+        let _ = min_png;
+
+        render_line(&with_cat_crosses(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        ))
+        .unwrap();
+        render_line(&with_cat_crosses(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "max",
+        ))
+        .unwrap();
+        render_area(&with_cat_crosses(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        ))
+        .unwrap();
+        let bar = with_cat_crosses(
+            &bar_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+                "maxMin",
+                Some("bar"),
+            ),
+            "min",
+        );
+        assert!(bar.contains(r#"<c:crosses val="min"/>"#));
+        let err = render_bar(&bar).expect_err("bar crosses=min stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_num_fmt(xml: &str, code: &str) -> String {
+        let inject = format!(r#"<c:numFmt formatCode="{code}" sourceLinked="0"/>"#);
+        let replaced = xml.replacen("</c:valAx>", &format!("{inject}</c:valAx>"), 1);
+        assert!(
+            replaced.contains(&inject),
+            "fixture must carry valAx numFmt {code}"
+        );
+        replaced
+    }
+
+    fn mixed_column_thousands(values: &[f64]) -> String {
+        mixed_column_xml(values)
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-8000"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="8000"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2000"/>"#)
+    }
+
+    fn first_axis_x(png: &[u8]) -> u32 {
+        let (w, h, rgb) = png_rgb(png);
+        let y0 = h / 4;
+        let y1 = (h * 3) / 4;
+        let mut best_x = 0u32;
+        let mut best_n = 0u32;
+        for x in 0..w / 2 {
+            let mut n = 0u32;
+            for y in y0..y1 {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                    n += 1;
+                }
+            }
+            if n > best_n {
+                best_n = n;
+                best_x = x;
+            }
+        }
+        assert!(
+            best_n > (y1 - y0) / 2,
+            "expected a dark vertical value axis in the left half"
+        );
+        best_x
+    }
+
+    #[test]
+    fn val_axis_locked_format_codes_match_official_tick_text() {
+        use super::axis::TickFormat;
+        let ticks = [-8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0];
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::General)),
+            ["-8", "-6", "-4", "-2", "0", "2", "4", "6", "8"]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Integer)),
+            ["-8", "-6", "-4", "-2", "0", "2", "4", "6", "8"]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Fixed2)),
+            [
+                "-8.00", "-6.00", "-4.00", "-2.00", "0.00", "2.00", "4.00", "6.00",
+                "8.00"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Percent)),
+            [
+                "-800%", "-600%", "-400%", "-200%", "0%", "200%", "400%", "600%",
+                "800%"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::PercentFixed2)),
+            [
+                "-800.00%",
+                "-600.00%",
+                "-400.00%",
+                "-200.00%",
+                "0.00%",
+                "200.00%",
+                "400.00%",
+                "600.00%",
+                "800.00%"
+            ]
+        );
+        assert_eq!(
+            ticks.map(|v| fmt_tick_with(v, TickFormat::Scientific2)),
+            [
+                "-8.00E+00",
+                "-6.00E+00",
+                "-4.00E+00",
+                "-2.00E+00",
+                "0.00E+00",
+                "2.00E+00",
+                "4.00E+00",
+                "6.00E+00",
+                "8.00E+00"
+            ]
+        );
+        let thousands = [-8000.0, -6000.0, -2000.0, 0.0, 2000.0, 8000.0];
+        assert_eq!(
+            thousands.map(|v| fmt_tick_with(v, TickFormat::Thousands)),
+            ["-8,000", "-6,000", "-2,000", "0", "2,000", "8,000"]
+        );
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Fixed2), "0.00");
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Percent), "0%");
+        assert_eq!(fmt_tick_with(-0.0, TickFormat::Scientific2), "0.00E+00");
+    }
+
+    #[test]
+    fn val_axis_non_general_format_codes_widen_labels_and_keep_unlocked_ni() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let general = mixed_column_explicit_pm8(&values);
+        let general_doc = crate::xml::parse(general.as_bytes()).unwrap();
+        let general_chart = read_chart(
+            &general_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(general_chart.axis.tick_format, super::axis::TickFormat::General);
+
+        let fixed = with_val_num_fmt(&general, "0.00");
+        let fixed_doc = crate::xml::parse(fixed.as_bytes()).unwrap();
+        let fixed_chart = read_chart(
+            &fixed_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert_eq!(fixed_chart.axis.tick_format, super::axis::TickFormat::Fixed2);
+
+        let general_png = render_rgb_chart(
+            &general_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let fixed_png = render_rgb_chart(
+            &fixed_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let general_x = first_axis_x(&general_png);
+        let fixed_x = first_axis_x(&fixed_png);
+        assert!(
+            fixed_x > general_x + 8,
+            "0.00 tick labels must widen the left gutter; general={general_x} fixed={fixed_x}"
+        );
+
+        let integer = with_val_num_fmt(&general, "0");
+        let integer_doc = crate::xml::parse(integer.as_bytes()).unwrap();
+        let integer_png = render_rgb_chart(
+            &integer_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let integer_x = first_axis_x(&integer_png);
+        assert!(
+            (integer_x as i32 - general_x as i32).abs() <= 1,
+            "format 0 on integer ticks matches General gutter; general={general_x} integer={integer_x}"
+        );
+
+        for code in ["0%", "0.00%", "0.00E+00"] {
+            render_rgb_chart(
+                &crate::xml::parse(with_val_num_fmt(&general, code).as_bytes())
+                    .unwrap()
+                    .root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap();
+        }
+        let thousands = with_val_num_fmt(
+            &mixed_column_thousands(&[-4000.0, -1000.0, 3000.0, 6000.0]),
+            "#,##0",
+        );
+        render_rgb_chart(
+            &crate::xml::parse(thousands.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_line(&with_val_num_fmt(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "0.00",
+        ))
+        .unwrap();
+
+        let currency = with_val_num_fmt(&general, "$#,##0.00");
+        let err = render_rgb_chart(
+            &crate::xml::parse(currency.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect_err("currency formatCode stays NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_orientation(xml: &str, mode: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let inject = format!(r#"<c:orientation val="{mode}"/>"#);
+        let new_val = if let Some((head, tail)) = val.split_once("<c:orientation val=\"") {
+            let close = tail.find('"').expect("orientation close");
+            format!("{}<c:orientation val=\"{}{}", head, mode, &tail[close..])
+        } else if val.contains("<c:scaling>") {
+            val.replacen("<c:scaling>", &format!("<c:scaling>{inject}"), 1)
+        } else {
+            let gt = val.find('>').expect("valAx open tag");
+            format!(
+                "{}<c:scaling>{inject}</c:scaling>{}",
+                &val[..=gt],
+                &val[gt + 1..]
+            )
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..].contains(&inject),
+            "fixture must carry valAx orientation {mode}"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_orientation_max_min_flips_columns_lines_and_bars() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let xml = with_val_orientation(&mixed, "maxMin");
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(
+            &doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(chart.axis.reversed);
+        let mixed_scale = super::axis::scale(&chart.series, chart.axis, 10).unwrap();
+        assert!(!mixed_scale.category_labels_above());
+        assert!(!mixed_scale.category_labels_below());
+
+        let png = render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let minmax_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let minmax_png = render_rgb_chart(
+            &minmax_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let (_, _, minmax_rgb) = png_rgb(&minmax_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let centroid_y = |rgb: &[u8], x0: u32, x1: u32| {
+            let mut sum = 0u64;
+            let mut n = 0u64;
+            for y in 0..h {
+                for x in x0..x1 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        sum += u64::from(y);
+                        n += 1;
+                    }
+                }
+            }
+            assert!(n > 0, "expected accent fill in x={x0}..{x1}");
+            sum as f64 / n as f64
+        };
+        // Official F19-2: negative A/B grow upward (toward -8 at the top).
+        // The first category (A=-4) occupies the left of the plot. Do not use
+        // the longest dark row as the crossing: major grids are the same length
+        // as the category axis and the top grid wins first.
+        let mid = w / 2;
+        let left_maxmin = centroid_y(&rgb, 0, mid);
+        let right_maxmin = centroid_y(&rgb, mid, w);
+        assert!(
+            left_maxmin + 8.0 < right_maxmin,
+            "official maxMin grows negative columns toward the top; left={left_maxmin} right={right_maxmin}"
+        );
+        let left_minmax = centroid_y(&minmax_rgb, 0, mid);
+        let right_minmax = centroid_y(&minmax_rgb, mid, w);
+        assert!(
+            left_minmax > right_minmax + 8.0,
+            "minMax control grows negative columns downward; left={left_minmax} right={right_minmax}"
+        );
+
+        let pos = with_val_orientation(
+            &mixed_column_xml(&[2.0, 4.0, 6.0, 8.0])
+                .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="0"/>"#)
+                .replace(r#"<c:max val="5"/>"#, r#"<c:max val="10"/>"#)
+                .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#),
+            "maxMin",
+        );
+        let pos_doc = crate::xml::parse(pos.as_bytes()).unwrap();
+        let pos_chart = read_chart(
+            &pos_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(pos_chart.axis.reversed);
+        let pos_scale = super::axis::scale(&pos_chart.series, pos_chart.axis, 10).unwrap();
+        assert!(pos_scale.category_labels_above());
+        assert!(!pos_scale.category_labels_below());
+        let pos_png = render_rgb_chart(
+            &pos_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let pos_minmax_xml = mixed_column_xml(&[2.0, 4.0, 6.0, 8.0])
+            .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="0"/>"#)
+            .replace(r#"<c:max val="5"/>"#, r#"<c:max val="10"/>"#)
+            .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#);
+        let pos_minmax_png = render_rgb_chart(
+            &crate::xml::parse(pos_minmax_xml.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let dark_band = |png: &[u8], y0: u32, y1: u32| {
+            let (w, _, rgb) = png_rgb(png);
+            let mut n = 0u32;
+            for y in y0..y1 {
+                for x in 0..w {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let (_, ph, _) = png_rgb(&pos_png);
+        let top = dark_band(&pos_png, 0, ph / 6);
+        let bottom = dark_band(&pos_png, (ph * 5) / 6, ph);
+        let top_ctrl = dark_band(&pos_minmax_png, 0, ph / 6);
+        let bottom_ctrl = dark_band(&pos_minmax_png, (ph * 5) / 6, ph);
+        assert!(
+            top > bottom && top > top_ctrl,
+            "positive maxMin keeps category labels in the top gutter; top={top} bottom={bottom} ctrl_top={top_ctrl} ctrl_bottom={bottom_ctrl}"
+        );
+        assert!(
+            bottom_ctrl > bottom,
+            "positive minMax keeps category labels in the bottom gutter; bottom={bottom} ctrl_bottom={bottom_ctrl}"
+        );
+
+        let neg = with_val_orientation(
+            &mixed_column_xml(&[-8.0, -5.0, -3.0, -1.0])
+                .replace(r#"<c:min val="-3"/>"#, r#"<c:min val="-10"/>"#)
+                .replace(r#"<c:max val="5"/>"#, r#"<c:max val="0"/>"#)
+                .replace(r#"<c:majorUnit val="1"/>"#, r#"<c:majorUnit val="2"/>"#),
+            "maxMin",
+        );
+        let neg_doc = crate::xml::parse(neg.as_bytes()).unwrap();
+        let neg_chart = read_chart(
+            &neg_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let neg_scale = super::axis::scale(&neg_chart.series, neg_chart.axis, 10).unwrap();
+        assert!(neg_scale.category_labels_below());
+        assert!(!neg_scale.category_labels_above());
+        render_rgb_chart(
+            &neg_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+
+        render_line(&with_val_orientation(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "maxMin",
+        ))
+        .unwrap();
+
+        let bar_vals = [Some(2.0), Some(4.0), Some(6.0), Some(8.0)];
+        let bar_base = bar_xml(&line_ser(0, "S", &bar_vals, ""), "", "minMax", Some("bar"));
+        let bar_png = render_bar(&with_val_orientation(&bar_base, "maxMin")).unwrap();
+        let minmax_bar = render_bar(&bar_base).unwrap();
+        let (bw, bh, brgb) = png_rgb(&bar_png);
+        let (_, _, mrgb) = png_rgb(&minmax_bar);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let centroid_x = |rgb: &[u8]| {
+            let mut sum = 0u64;
+            let mut n = 0u64;
+            for y in 0..bh {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        sum += u64::from(x);
+                        n += 1;
+                    }
+                }
+            }
+            assert!(n > 0, "expected horizontal-bar accent fill");
+            sum as f64 / n as f64
+        };
+        let maxmin_x = centroid_x(&brgb);
+        let minmax_x = centroid_x(&mrgb);
+        // Positive bars grow from the visual zero. Official F19-7 puts max
+        // on the left, so autoZero sits on the right and the fill centroid
+        // stays right of a minMax control (whose zero is on the left).
+        assert!(
+            maxmin_x > minmax_x + 8.0,
+            "official bar maxMin places max on the left so positives grow left from a right-hand zero; maxmin={maxmin_x} minmax={minmax_x}"
+        );
+        // Official F19-7 writes catAx axPos=r with valAx orientation=maxMin.
+        render_bar(&with_val_orientation(
+            &bar_base.replace(r#"<c:axPos val="l"/>"#, r#"<c:axPos val="r"/>"#),
+            "maxMin",
+        ))
+        .unwrap();
+
+        let log = with_val_orientation(
+            &inject_explicit_log10(&mixed_column_xml(&[1.0, 10.0, 100.0, 1000.0])),
+            "maxMin",
+        );
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus orientation=maxMin stays NI"
+        );
+
+        let labeled = xml.replacen(
+            "</c:ser>",
+            r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:ser>"#,
+            1,
+        );
+        let labeled_doc = crate::xml::parse(labeled.as_bytes()).unwrap();
+        let err = render_rgb_chart(
+            &labeled_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect_err("visible value labels plus orientation=maxMin stay NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
+    fn with_val_delete(xml: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let new_val = if let Some((head, tail)) = val.split_once(r#"<c:delete val=""#) {
+            let close = tail.find('"').expect("delete close");
+            format!(r#"{}<c:delete val="1{}"#, head, &tail[close..])
+        } else {
+            let gt = val.find('>').expect("valAx open tag");
+            format!(r#"{}<c:delete val="1"/>{}"#, &val[..=gt], &val[gt + 1..])
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..].contains(r#"<c:delete val="1"/>"#),
+            "fixture must carry valAx delete=true"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_delete_hides_axis_line_and_releases_gutter() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let control_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let delete_doc = crate::xml::parse(with_val_delete(&mixed).as_bytes()).unwrap();
+        let control_chart = read_chart(
+            &control_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let delete_chart = read_chart(
+            &delete_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(!control_chart.axis.deleted);
+        assert!(delete_chart.axis.deleted);
+
+        let render = |root: &crate::xml::Element| {
+            render_rgb_chart(
+                root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap()
+        };
+        let control_png = render(&control_doc.root);
+        let delete_png = render(&delete_doc.root);
+        let (w, h, crgb) = png_rgb(&control_png);
+        let (_, _, drgb) = png_rgb(&delete_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let first_accent_x = |rgb: &[u8]| {
+            for x in 0..w {
+                for y in 0..h {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        return x;
+                    }
+                }
+            }
+            panic!("expected accent fill");
+        };
+        let left_x = first_accent_x(&crgb);
+        let del_x = first_accent_x(&drgb);
+        assert!(
+            del_x + 8 < left_x,
+            "official delete=true releases the value-label gutter; delete={del_x} control={left_x}"
+        );
+        let dark_left = |rgb: &[u8]| {
+            let mut n = 0u32;
+            for y in h / 6..(h * 5) / 6 {
+                for x in 0..w / 8 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let control_left = dark_left(&crgb);
+        let delete_left = dark_left(&drgb);
+        assert!(
+            control_left > 20 && delete_left + 10 < control_left,
+            "official delete=true omits value tick labels; control_left={control_left} delete_left={delete_left}"
+        );
+
+        render_line(&with_val_delete(&standard_line_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+        )))
+        .unwrap();
+
+        let bar_base = bar_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+            "minMax",
+            Some("bar"),
+        );
+        let bar_ctrl = render_bar(&bar_base).unwrap();
+        let bar_del = render_bar(&with_val_delete(&bar_base)).unwrap();
+        let (bw, bh, brgb) = png_rgb(&bar_ctrl);
+        let (_, _, bdrgb) = png_rgb(&bar_del);
+        let bottom_dark = |rgb: &[u8]| {
+            let mut n = 0u32;
+            for y in (bh * 5) / 6..bh {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let bar_bottom = bottom_dark(&brgb);
+        let bar_del_bottom = bottom_dark(&bdrgb);
+        assert!(
+            bar_bottom > bar_del_bottom + 10,
+            "official bar delete=true releases the bottom value-label gutter; control={bar_bottom} delete={bar_del_bottom}"
+        );
+
+        let log = with_val_delete(&inject_explicit_log10(&mixed_column_xml(&[
+            1.0, 10.0, 100.0, 1000.0,
+        ])));
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus valAx delete=true stays NI"
+        );
+    }
+
+    fn secondary_pair_xml(kind: &str, s1: &[f64], s2: &[f64], auto: bool) -> String {
+        let n = s1.len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let nums = |vals: &[f64]| {
+            vals.iter()
+                .enumerate()
+                .map(|(i, v)| format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#))
+                .collect::<String>()
+        };
+        let scale_p = if auto {
+            String::new()
+        } else if s1.iter().any(|v| *v < 0.0) {
+            r#"<c:min val="-8"/><c:max val="8"/>"#.into()
+        } else {
+            r#"<c:min val="0"/><c:max val="10"/>"#.into()
+        };
+        let major_p = if auto {
+            String::new()
+        } else if s1.iter().any(|v| *v < 0.0) {
+            r#"<c:majorUnit val="2"/>"#.into()
+        } else {
+            r#"<c:majorUnit val="2"/>"#.into()
+        };
+        let scale_s = if auto {
+            String::new()
+        } else {
+            r#"<c:min val="0"/><c:max val="100"/>"#.into()
+        };
+        let major_s = if auto {
+            String::new()
+        } else {
+            r#"<c:majorUnit val="20"/>"#.into()
+        };
+        let (w1, w2) = match kind {
+            "line" => (
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            "bar" => (
+                format!(
+                    r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="3"/><c:axId val="4"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            "combo" => (
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:lineChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+            _ => (
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="3"/><c:axId val="4"/></c:barChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      {w1}{w2}
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn two_series_primary_xml(s1: &[f64], s2: &[f64]) -> String {
+        let n = s1.len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let nums = |vals: &[f64]| {
+            vals.iter()
+                .enumerate()
+                .map(|(i, v)| format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#))
+                .collect::<String>()
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/>
+        <c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser>
+        <c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser>
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:min val="0"/><c:max val="100"/></c:scaling><c:majorUnit val="20"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            n = n,
+            cats = cats,
+            n1 = nums(s1),
+            n2 = nums(s2),
+        )
+    }
+
+    fn accent_x_runs(rgb: &[u8], w: u32, h: u32, accent: [u8; 3]) -> Vec<(u32, u32)> {
+        let mut xs = Vec::new();
+        for x in 0..w {
+            let mut n = 0u32;
+            for y in 0..h {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16) {
+                    n += 1;
+                }
+            }
+            if n >= 3 {
+                xs.push(x);
+            }
+        }
+        let mut runs = Vec::new();
+        if xs.is_empty() {
+            return runs;
+        }
+        let mut start = xs[0];
+        let mut prev = xs[0];
+        for x in xs.into_iter().skip(1) {
+            if x <= prev + 2 {
+                prev = x;
+            } else {
+                // drop slim legend swatches
+                if prev - start >= 8 {
+                    runs.push((start, prev));
+                }
+                start = x;
+                prev = x;
+            }
+        }
+        if prev - start >= 8 {
+            runs.push((start, prev));
+        }
+        runs
+    }
+
+    #[test]
+    fn secondary_val_axis_maps_own_scale_and_overlaps_same_type_columns() {
+        let s1 = [2.0, 4.0, 6.0, 8.0];
+        let s2 = [20.0, 40.0, 80.0, 60.0];
+        let xml = secondary_pair_xml("col", &s1, &s2, false);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert!(chart.axis_secondary.is_some());
+        assert_eq!(chart.axis.min, Some(0.0));
+        assert_eq!(chart.axis.max, Some(10.0));
+        let sec = chart.axis_secondary.unwrap();
+        assert_eq!(sec.min, Some(0.0));
+        assert_eq!(sec.max, Some(100.0));
+        assert!(!chart.series[0].on_secondary);
+        assert!(chart.series[1].on_secondary);
+
+        let png = render_rgb_chart(
+            &doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let r0 = accent_x_runs(&rgb, w, h, a0);
+        let r1 = accent_x_runs(&rgb, w, h, a1);
+        // Official same-type secondary columns overlap in the same slots.
+        // Secondary is painted on top, so S1 is only visible in D (8/10 vs 60/100).
+        assert_eq!(r1.len(), 4, "secondary series must occupy four category slots, got {r1:?}");
+        assert_eq!(
+            r0.len(),
+            1,
+            "primary S1 should only stick out above S2 in category D, got {r0:?}"
+        );
+        assert!(
+            r1.iter().any(|(s, e)| r0[0].0 <= *e && r0[0].1 >= *s),
+            "official secondary columns overlap the primary slot; primary={r0:?} secondary={r1:?}"
+        );
+        let ctrl_doc = crate::xml::parse(two_series_primary_xml(&s1, &s2).as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert!(ctrl.axis_secondary.is_none());
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (cw, ch, crgb) = png_rgb(&ctrl_png);
+        let c0 = accent_x_runs(&crgb, cw, ch, a0);
+        let c1 = accent_x_runs(&crgb, cw, ch, a1);
+        assert_eq!(c0.len(), 4);
+        assert_eq!(c1.len(), 4);
+        // Control clusters sit side by side, so matching-index runs should not fully coincide.
+        for ((a0s, a0e), (a1s, a1e)) in c0.iter().zip(&c1) {
+            assert!(
+                *a0e < *a1s || *a1e < *a0s,
+                "one-axis two-series columns stay clustered side by side; {c0:?} {c1:?}"
+            );
+        }
+        let secondary_w: i32 = r1.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        let cluster_w: i32 = c0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        assert!(
+            secondary_w > cluster_w,
+            "each secondary-axis wrapper is a one-series cluster, so bars are wider than a two-series cluster; secondary_w={secondary_w} control_w={cluster_w}"
+        );
+        // Right-side tick labels: more ink in the right gutter than the one-axis control.
+        let ink = |rgb: &[u8], w: u32, h: u32| {
+            let mut n = 0u32;
+            for y in h / 6..(h * 5) / 6 {
+                for x in (w * 5) / 8..(w * 7) / 8 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let right = ink(&rgb, w, h);
+        let ctrl_right = ink(&crgb, cw, ch);
+        assert!(
+            right > ctrl_right + 10,
+            "official secondary valAx places tick labels on the right; secondary={right} control={ctrl_right}"
+        );
+
+        render_line(&secondary_pair_xml(
+            "line",
+            &s1,
+            &s2,
+            false,
+        ))
+        .unwrap();
+
+        let bar = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        assert!(
+            read_chart(&bar.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "clustered bar secondary valAx stays NI"
+        );
+        let combo = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        assert!(
+            read_chart(&combo.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "combo (different wrappers) stays NI for F26"
+        );
+        let auto = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on a secondary pair stays NI"
+        );
+    }
+
+    fn stacked_xml(
+        dir: &str,
+        grouping: &str,
+        series: &[&[Option<f64>]],
+        auto: bool,
+        invert: bool,
+        labels: bool,
+    ) -> String {
+        let n = series[0].len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let mut sers = String::new();
+        for (si, vals) in series.iter().enumerate() {
+            let pts = vals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    v.map(|x| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#))
+                })
+                .collect::<String>();
+            let present = vals.iter().filter(|v| v.is_some()).count();
+            let inv = if invert { "1" } else { "0" };
+            let d_lbls = if labels {
+                r#"<c:dLbls><c:dLblPos val="outEnd"/><c:showVal val="1"/></c:dLbls>"#
+            } else {
+                ""
+            };
+            sers.push_str(&format!(
+                r#"<c:ser><c:idx val="{si}"/><c:order val="{si}"/><c:tx><c:v>S{si}</c:v></c:tx><c:invertIfNegative val="{inv}"/><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{present}"/>{pts}</c:numLit></c:val>{d_lbls}</c:ser>"#
+            ));
+        }
+        let (vmin, vmax, major, numfmt) = if grouping == "percentStacked" {
+            (
+                "0",
+                "1",
+                "0.2",
+                r#"<c:numFmt formatCode="0%" sourceLinked="1"/>"#,
+            )
+        } else {
+            ("0", "80", "20", "")
+        };
+        let scaling = if auto {
+            r#"<c:scaling><c:orientation val="minMax"/></c:scaling>"#.to_string()
+        } else {
+            format!(
+                r#"<c:scaling><c:orientation val="minMax"/><c:min val="{vmin}"/><c:max val="{vmax}"/></c:scaling>"#
+            )
+        };
+        let (cat_pos, val_pos) = if dir == "bar" { ("l", "b") } else { ("b", "l") };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:barChart>
+        <c:barDir val="{dir}"/><c:grouping val="{grouping}"/><c:varyColors val="0"/>
+        {sers}
+        <c:gapWidth val="150"/><c:overlap val="100"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn clustered_three_xml(series: &[&[Option<f64>]]) -> String {
+        stacked_xml("col", "stacked", series, false, false, false).replacen(
+            r#"grouping val="stacked""#,
+            r#"grouping val="clustered""#,
+            1,
+        ).replacen(r#"<c:overlap val="100"/>"#, "", 1)
+    }
+
+    #[test]
+    fn stacked_and_percent_stacked_bars_accumulate_in_series_order() {
+        let s1 = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let s2 = [Some(20.0), Some(10.0), Some(20.0), Some(10.0)];
+        let s3 = [Some(20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let series: [&[Option<f64>]; 3] = [&s1, &s2, &s3];
+        let xml = stacked_xml("col", "stacked", &series, false, false, false);
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(chart.stacking, Stacking::Stacked);
+        assert_eq!(chart.overlap, 100.0);
+
+        let png = render_rgb_chart(
+            &doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (w, h, rgb) = png_rgb(&png);
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let a2 = FALLBACK_ACCENTS[2];
+        let r0 = accent_x_runs(&rgb, w, h, a0);
+        let r1 = accent_x_runs(&rgb, w, h, a1);
+        let r2 = accent_x_runs(&rgb, w, h, a2);
+        assert_eq!(r0.len(), 4, "S1 four stacked slots, got {r0:?}");
+        assert_eq!(r1.len(), 4, "S2 four stacked slots, got {r1:?}");
+        assert_eq!(r2.len(), 4, "S3 four stacked slots, got {r2:?}");
+        for i in 0..4 {
+            let overlap01 = r0[i].0 <= r1[i].1 && r1[i].0 <= r0[i].1;
+            let overlap12 = r1[i].0 <= r2[i].1 && r2[i].0 <= r1[i].1;
+            assert!(
+                overlap01 && overlap12,
+                "official stacked columns share category slots; {r0:?} {r1:?} {r2:?}"
+            );
+        }
+
+        let ctrl_doc = crate::xml::parse(clustered_three_xml(&series).as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(ctrl.stacking, Stacking::Clustered);
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (cw, ch, crgb) = png_rgb(&ctrl_png);
+        let c0 = accent_x_runs(&crgb, cw, ch, a0);
+        assert_eq!(c0.len(), 4);
+        let stacked_w: i32 = r0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        let cluster_w: i32 = c0.iter().map(|(s, e)| (*e - *s) as i32 + 1).sum();
+        assert!(
+            stacked_w > cluster_w,
+            "overlap=100 stacked bars are one-series wide; stacked={stacked_w} clustered={cluster_w}"
+        );
+
+        // S1 sits on the zero baseline; S3 is farther from it (on top of the stack).
+        let mid_x = (r0[0].0 + r0[0].1) / 2;
+        let ys = |accent: [u8; 3]| {
+            (0..h)
+                .filter(|&y| {
+                    let i = (y as usize * w as usize + mid_x as usize) * 3;
+                    near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16)
+                })
+                .collect::<Vec<_>>()
+        };
+        let y1 = ys(a0);
+        let y3 = ys(a2);
+        assert!(!y1.is_empty() && !y3.is_empty());
+        let mean = |v: &Vec<u32>| v.iter().sum::<u32>() as f64 / v.len() as f64;
+        assert!(
+            mean(&y1) > mean(&y3),
+            "S1 is at the base (higher y), S3 on top; S1={:?} S3={:?}",
+            y1,
+            y3
+        );
+
+        let pct_xml = stacked_xml("col", "percentStacked", &series, false, false, false);
+        let pct_doc = crate::xml::parse(pct_xml.as_bytes()).unwrap();
+        let pct = read_chart(&pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(pct.stacking, Stacking::PercentStacked);
+        assert_eq!(pct.axis.min, Some(0.0));
+        assert_eq!(pct.axis.max, Some(1.0));
+        assert_eq!(pct.axis.tick_format, super::axis::TickFormat::Percent);
+        let pct_png = render_rgb_chart(
+            &pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (pw, ph, prgb) = png_rgb(&pct_png);
+        let tops: Vec<u32> = (0..4)
+            .map(|i| {
+                let pr = accent_x_runs(&prgb, pw, ph, a0);
+                let mid = (pr[i].0 + pr[i].1) / 2;
+                (0..ph)
+                    .filter(|&y| {
+                        let idx = (y as usize * pw as usize + mid as usize) * 3;
+                        near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a0, 16)
+                            || near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a1, 16)
+                            || near([prgb[idx], prgb[idx + 1], prgb[idx + 2]], a2, 16)
+                    })
+                    .min()
+                    .unwrap()
+            })
+            .collect();
+        let span = tops.iter().max().unwrap() - tops.iter().min().unwrap();
+        assert!(
+            span <= 3,
+            "percentStacked all-positive stacks reach the same 100% top; tops={tops:?}"
+        );
+
+        render_rgb_chart(
+            &crate::xml::parse(stacked_xml("bar", "stacked", &series, false, false, false).as_bytes())
+                .unwrap()
+                .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        render_rgb_chart(
+            &crate::xml::parse(
+                stacked_xml("bar", "percentStacked", &series, false, false, false).as_bytes(),
+            )
+            .unwrap()
+            .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+
+        // Mixed signs: positives stack up from zero, negatives down, independently.
+        let m1 = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let m2 = [Some(20.0), Some(-10.0), Some(20.0), Some(-10.0)];
+        let m3 = [Some(-20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let mixed: [&[Option<f64>]; 3] = [&m1, &m2, &m3];
+        let mix_xml = stacked_xml("col", "stacked", &mixed, false, false, false)
+            .replace(r#"min val="0""#, r#"min val="-40""#);
+        let mix_doc = crate::xml::parse(mix_xml.as_bytes()).unwrap();
+        read_chart(&mix_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mix_png = render_rgb_chart(
+            &mix_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (mw, mh, mrgb) = png_rgb(&mix_png);
+        let mr0 = accent_x_runs(&mrgb, mw, mh, a0);
+        assert_eq!(mr0.len(), 4, "mixed S1 still occupies four categories, {mr0:?}");
+
+        // Blank S2 in category B: S3 packs onto S1 (no reserved hole).
+        let b2 = [Some(20.0), None, Some(20.0), Some(10.0)];
+        let blank: [&[Option<f64>]; 3] = [&s1, &b2, &s3];
+        let blank_png = render_rgb_chart(
+            &crate::xml::parse(stacked_xml("col", "stacked", &blank, false, false, false).as_bytes())
+                .unwrap()
+                .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (bw, bh, brgb) = png_rgb(&blank_png);
+        let br1 = accent_x_runs(&brgb, bw, bh, a1);
+        assert_eq!(br1.len(), 3, "missing S2 in B is not drawn, got {br1:?}");
+
+        let auto = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on stacked stays NI"
+        );
+        let inv = crate::xml::parse(stacked_xml("col", "stacked", &series, false, true, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&inv.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "invertIfNegative=1 on stacked stays NI"
+        );
+        let labs = crate::xml::parse(stacked_xml("col", "stacked", &series, false, false, true).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&labs.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "value labels plus stacked stay NI"
+        );
+        let pct_mixed = crate::xml::parse(stacked_xml("col", "percentStacked", &mixed, false, false, false).as_bytes())
+            .unwrap();
+        assert!(
+            read_chart(&pct_mixed.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "percentStacked mixed signs stay NI"
+        );
+        let no_overlap = stacked_xml("col", "stacked", &series, false, false, false)
+            .replacen(r#"<c:overlap val="100"/>"#, "", 1);
+        let no_over_doc = crate::xml::parse(no_overlap.as_bytes()).unwrap();
+        assert!(
+            read_chart(&no_over_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked without official overlap=100 stays NI"
+        );
+    }
+
+    fn line_area_stacked_xml(
+        kind: &str,
+        grouping: &str,
+        series: &[&[Option<f64>]],
+        auto: bool,
+        min: &str,
+        max: &str,
+        midcat: bool,
+        marker_none: bool,
+    ) -> String {
+        let n = series[0].len();
+        let cats = (0..n)
+            .map(|i| format!(r#"<c:pt idx="{i}"><c:v>{}</c:v></c:pt>"#, (b'A' + i as u8) as char))
+            .collect::<String>();
+        let mut sers = String::new();
+        for (si, vals) in series.iter().enumerate() {
+            let pts = vals
+                .iter()
+                .enumerate()
+                .filter_map(|(i, v)| {
+                    v.map(|x| format!(r#"<c:pt idx="{i}"><c:v>{x}</c:v></c:pt>"#))
+                })
+                .collect::<String>();
+            let present = vals.iter().filter(|v| v.is_some()).count();
+            let marker = if kind == "lineChart" && marker_none {
+                r#"<c:marker><c:symbol val="none"/></c:marker>"#
+            } else {
+                ""
+            };
+            let smooth = if kind == "lineChart" {
+                r#"<c:smooth val="0"/>"#
+            } else {
+                ""
+            };
+            sers.push_str(&format!(
+                r#"<c:ser><c:idx val="{si}"/><c:order val="{si}"/><c:tx><c:v>S{si}</c:v></c:tx>{marker}{smooth}<c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{present}"/>{pts}</c:numLit></c:val></c:ser>"#
+            ));
+        }
+        let (major, numfmt) = if grouping == "percentStacked" {
+            ("0.2", r#"<c:numFmt formatCode="0%" sourceLinked="1"/>"#)
+        } else {
+            ("20", "")
+        };
+        let scaling = if auto {
+            r#"<c:scaling><c:orientation val="minMax"/></c:scaling>"#.to_string()
+        } else {
+            format!(
+                r#"<c:scaling><c:orientation val="minMax"/><c:min val="{min}"/><c:max val="{max}"/></c:scaling>"#
+            )
+        };
+        let cross = if midcat { "midCat" } else { "between" };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
+  <c:chart>
+    <c:plotArea>
+      <c:{kind}>
+        <c:grouping val="{grouping}"/><c:varyColors val="0"/>
+        {sers}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:{kind}>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn accent_pixels(rgb: &[u8], w: u32, h: u32, accent: [u8; 3]) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 20) {
+                    out.push((x, y));
+                }
+            }
+        }
+        out
+    }
+
+    fn polylines_match(a: &[(u32, u32)], b: &[(u32, u32)]) -> bool {
+        if a.len() < 40 || b.len() < 40 {
+            return false;
+        }
+        let close = |pts: &[(u32, u32)], other: &[(u32, u32)]| {
+            let mut hit = 0usize;
+            for &(x, y) in pts {
+                if other.iter().any(|&(ox, oy)| x.abs_diff(ox) <= 2 && y.abs_diff(oy) <= 2) {
+                    hit += 1;
+                }
+            }
+            hit * 100 / pts.len() >= 80
+        };
+        close(a, b) && close(b, a)
+    }
+
+    fn area_column_bands(rgb: &[u8], w: u32, h: u32, x: u32, accents: [[u8; 3]; 3]) -> Vec<(usize, u32, u32)> {
+        let mut bands = Vec::new();
+        let mut cur: Option<usize> = None;
+        let mut y0 = 0u32;
+        for y in 0..h {
+            let i = (y as usize * w as usize + x as usize) * 3;
+            let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+            let hit = accents.iter().position(|a| near(px, *a, 24));
+            if hit != cur {
+                if let Some(idx) = cur {
+                    bands.push((idx, y0, y.saturating_sub(1)));
+                }
+                cur = hit;
+                y0 = y;
+            }
+        }
+        if let Some(idx) = cur {
+            bands.push((idx, y0, h.saturating_sub(1)));
+        }
+        bands
+    }
+
+    fn leftmost_area_column(rgb: &[u8], w: u32, h: u32, accents: [[u8; 3]; 3]) -> u32 {
+        for x in 0..w {
+            let mut seen = [false; 3];
+            for y in 0..h {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if let Some(idx) = accents.iter().position(|a| near(px, *a, 24)) {
+                    seen[idx] = true;
+                }
+            }
+            if seen.iter().filter(|v| **v).count() >= 2 {
+                return x;
+            }
+        }
+        panic!("no stacked area column with at least two series");
+    }
+
+    #[test]
+    fn stacked_and_percent_stacked_lines_and_areas_use_algebraic_cumulative() {
+        let s1 = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let s2 = [Some(20.0), Some(10.0), Some(20.0), Some(10.0)];
+        let s3 = [Some(20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let series: [&[Option<f64>]; 3] = [&s1, &s2, &s3];
+        let a0 = FALLBACK_ACCENTS[0];
+        let a1 = FALLBACK_ACCENTS[1];
+        let a2 = FALLBACK_ACCENTS[2];
+
+        let dummy = Series {
+            values: s1.to_vec(),
+            ..Series::default()
+        };
+        let dummy2 = Series {
+            values: s2.to_vec(),
+            ..Series::default()
+        };
+        let dummy3 = Series {
+            values: s3.to_vec(),
+            ..Series::default()
+        };
+        let group = [&dummy, &dummy2, &dummy3];
+        assert_eq!(stack_cumulative(&group, 0, 0, false), Some((0.0, 10.0)));
+        assert_eq!(stack_cumulative(&group, 0, 1, false), Some((10.0, 30.0)));
+        assert_eq!(stack_cumulative(&group, 0, 2, false), Some((30.0, 50.0)));
+        assert_eq!(stack_cumulative(&group, 3, 2, false), Some((50.0, 70.0)));
+        let p0 = stack_cumulative(&group, 0, 0, true).unwrap();
+        let p2 = stack_cumulative(&group, 0, 2, true).unwrap();
+        assert!((p0.0 - 0.0).abs() < 1e-12 && (p0.1 - 0.2).abs() < 1e-12);
+        assert!((p2.0 - 0.6).abs() < 1e-12 && (p2.1 - 1.0).abs() < 1e-12);
+
+        let m1v = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let m2v = [Some(20.0), Some(-10.0), Some(20.0), Some(-10.0)];
+        let m3v = [Some(-20.0), Some(30.0), Some(10.0), Some(20.0)];
+        let mix1 = Series {
+            values: m1v.to_vec(),
+            ..Series::default()
+        };
+        let mix2 = Series {
+            values: m2v.to_vec(),
+            ..Series::default()
+        };
+        let mix3 = Series {
+            values: m3v.to_vec(),
+            ..Series::default()
+        };
+        let mixed_group = [&mix1, &mix2, &mix3];
+        // Algebraic, not F22 pos/neg packing: cat A S3 ends at 10, not -20.
+        assert_eq!(stack_cumulative(&mixed_group, 0, 2, false), Some((30.0, 10.0)));
+        assert_eq!(stack_cumulative(&mixed_group, 2, 2, false), Some((-10.0, 0.0)));
+        assert_eq!(stack_cumulative(&mixed_group, 3, 2, false), Some((30.0, 50.0)));
+
+        let line_xml = line_area_stacked_xml("lineChart", "stacked", &series, false, "0", "80", false, true);
+        let line_doc = crate::xml::parse(line_xml.as_bytes()).unwrap();
+        let line = read_chart(&line_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(line.stacking, Stacking::Stacked);
+        assert!(matches!(line.kind, PlotKind::StandardLine));
+        let line_png = render_rgb_chart(
+            &line_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (lw, lh, lrgb) = png_rgb(&line_png);
+
+        let s2_end = [Some(30.0), Some(30.0), Some(50.0), Some(50.0)];
+        let s3_end = [Some(50.0), Some(60.0), Some(60.0), Some(70.0)];
+        let ends: [&[Option<f64>]; 3] = [&s1, &s2_end, &s3_end];
+        let ctrl_xml = line_area_stacked_xml("lineChart", "standard", &ends, false, "0", "80", false, true);
+        let ctrl_doc = crate::xml::parse(ctrl_xml.as_bytes()).unwrap();
+        let ctrl = read_chart(&ctrl_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(ctrl.stacking, Stacking::Clustered);
+        let ctrl_png = render_rgb_chart(
+            &ctrl_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (_, _, crgb) = png_rgb(&ctrl_png);
+        for (i, accent) in [a0, a1, a2].into_iter().enumerate() {
+            let got = accent_pixels(&lrgb, lw, lh, accent);
+            let exp = accent_pixels(&crgb, lw, lh, accent);
+            assert!(
+                polylines_match(&got, &exp),
+                "stacked line S{i} should match a standard line of algebraic ends; stacked={} control={}",
+                got.len(),
+                exp.len()
+            );
+        }
+
+        let pct_xml = line_area_stacked_xml(
+            "lineChart",
+            "percentStacked",
+            &series,
+            false,
+            "0",
+            "1",
+            false,
+            true,
+        );
+        let pct_doc = crate::xml::parse(pct_xml.as_bytes()).unwrap();
+        let pct = read_chart(&pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(pct.stacking, Stacking::PercentStacked);
+        assert_eq!(pct.axis.tick_format, super::axis::TickFormat::Percent);
+        let pct_png = render_rgb_chart(
+            &pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (pw, ph, prgb) = png_rgb(&pct_png);
+        let p1 = [Some(0.2), Some(20.0 / 60.0), Some(0.5), Some(40.0 / 70.0)];
+        let p2 = [Some(0.6), Some(0.5), Some(50.0 / 60.0), Some(50.0 / 70.0)];
+        let p3 = [Some(1.0), Some(1.0), Some(1.0), Some(1.0)];
+        let pct_ends: [&[Option<f64>]; 3] = [&p1, &p2, &p3];
+        let pct_ctrl_xml = line_area_stacked_xml(
+            "lineChart",
+            "standard",
+            &pct_ends,
+            false,
+            "0",
+            "1",
+            false,
+            true,
+        );
+        let pct_ctrl_png = render_rgb_chart(
+            &crate::xml::parse(pct_ctrl_xml.as_bytes()).unwrap().root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (_, _, pcrgb) = png_rgb(&pct_ctrl_png);
+        let got3 = accent_pixels(&prgb, pw, ph, a2);
+        let exp3 = accent_pixels(&pcrgb, pw, ph, a2);
+        assert!(
+            polylines_match(&got3, &exp3),
+            "percentStacked line S3 should sit on the 100% cumulative, stacked={} control={}",
+            got3.len(),
+            exp3.len()
+        );
+
+        let area_xml = line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", true, false);
+        let area_doc = crate::xml::parse(area_xml.as_bytes()).unwrap();
+        let area = read_chart(&area_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(area.stacking, Stacking::Stacked);
+        assert!(matches!(area.kind, PlotKind::StandardArea));
+        let area_png = render_rgb_chart(
+            &area_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (aw, ah, argb) = png_rgb(&area_png);
+        let x0 = leftmost_area_column(&argb, aw, ah, [a0, a1, a2]);
+        let bands = area_column_bands(&argb, aw, ah, x0, [a0, a1, a2]);
+        let stacked_bands: Vec<_> = bands.into_iter().filter(|(_idx, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(
+            stacked_bands.len() >= 3,
+            "stacked area cat A should show S3/S2/S1 bands, got {stacked_bands:?} x={x0}"
+        );
+        assert_eq!(stacked_bands[0].0, 2, "top band is S3, {stacked_bands:?}");
+        assert_eq!(stacked_bands[1].0, 1, "middle band is S2, {stacked_bands:?}");
+        assert_eq!(stacked_bands[2].0, 0, "bottom band is S1, {stacked_bands:?}");
+        let h1 = stacked_bands[2].2 - stacked_bands[2].1 + 1;
+        let h2 = stacked_bands[1].2 - stacked_bands[1].1 + 1;
+        let h3 = stacked_bands[0].2 - stacked_bands[0].1 + 1;
+        assert!(
+            (h2 as i32 - h3 as i32).abs() <= 3 && (h1 * 2 + 3) >= h2 && h1 + 3 >= h2 / 2,
+            "area cat A heights should be ~10/20/20, got {h1},{h2},{h3}"
+        );
+
+        let area_pct_xml = line_area_stacked_xml(
+            "areaChart",
+            "percentStacked",
+            &series,
+            false,
+            "0",
+            "1",
+            true,
+            false,
+        );
+        let area_pct_doc = crate::xml::parse(area_pct_xml.as_bytes()).unwrap();
+        let area_pct =
+            read_chart(&area_pct_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(area_pct.stacking, Stacking::PercentStacked);
+        let area_pct_png = render_rgb_chart(
+            &area_pct_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (apw, aph, aprgb) = png_rgb(&area_pct_png);
+        let apx = leftmost_area_column(&aprgb, apw, aph, [a0, a1, a2]);
+        let ap_bands = area_column_bands(&aprgb, apw, aph, apx, [a0, a1, a2]);
+        let ap_stack: Vec<_> = ap_bands.into_iter().filter(|(_, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(ap_stack.len() >= 3, "percent area bands {ap_stack:?}");
+        assert_eq!(ap_stack[0].0, 2);
+        assert_eq!(ap_stack[ap_stack.len() - 1].0, 0);
+
+        let mixed: [&[Option<f64>]; 3] = [&m1v, &m2v, &m3v];
+        let mix_xml = line_area_stacked_xml("lineChart", "stacked", &mixed, false, "-40", "80", false, true);
+        let mix_doc = crate::xml::parse(mix_xml.as_bytes()).unwrap();
+        read_chart(&mix_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        let mix_png = render_rgb_chart(
+            &mix_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (mw, mh, mrgb) = png_rgb(&mix_png);
+        let mix_s1 = [Some(10.0), Some(20.0), Some(-30.0), Some(40.0)];
+        let mix_s2 = [Some(30.0), Some(10.0), Some(-10.0), Some(30.0)];
+        let mix_s3 = [Some(10.0), Some(40.0), Some(0.0), Some(50.0)];
+        let mix_ends: [&[Option<f64>]; 3] = [&mix_s1, &mix_s2, &mix_s3];
+        let mix_ctrl_png = render_rgb_chart(
+            &crate::xml::parse(
+                line_area_stacked_xml("lineChart", "standard", &mix_ends, false, "-40", "80", false, true)
+                    .as_bytes(),
+            )
+            .unwrap()
+            .root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (_, _, mcrgb) = png_rgb(&mix_ctrl_png);
+        let got_m3 = accent_pixels(&mrgb, mw, mh, a2);
+        let exp_m3 = accent_pixels(&mcrgb, mw, mh, a2);
+        assert!(
+            polylines_match(&got_m3, &exp_m3),
+            "mixed stacked line is algebraic (not F22 pos/neg pack); stacked={} control={}",
+            got_m3.len(),
+            exp_m3.len()
+        );
+
+        let mix_area_xml =
+            line_area_stacked_xml("areaChart", "stacked", &mixed, false, "-40", "80", true, false);
+        let mix_area_doc = crate::xml::parse(mix_area_xml.as_bytes()).unwrap();
+        read_chart(
+            &mix_area_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let mix_area_png = render_rgb_chart(
+            &mix_area_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "",
+        )
+        .unwrap();
+        let (maw, mah, margb) = png_rgb(&mix_area_png);
+        let xa = leftmost_area_column(&margb, maw, mah, [a0, a1, a2]);
+        let mix_bands = area_column_bands(&margb, maw, mah, xa, [a0, a1, a2]);
+        let mix_stack: Vec<_> = mix_bands.into_iter().filter(|(_, y0, y1)| *y1 > *y0 + 1).collect();
+        assert!(
+            mix_stack.iter().any(|(idx, _, _)| *idx == 0)
+                && mix_stack.iter().any(|(idx, _, _)| *idx == 2),
+            "mixed area cat A shows S1 and S3, got {mix_stack:?}"
+        );
+        assert!(
+            !mix_stack.iter().any(|(idx, _, _)| *idx == 1),
+            "mixed area cat A S3 covers the S2 band, got {mix_stack:?}"
+        );
+
+        let auto = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &series, true, "0", "80", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "omitted min/max on stacked line stays NI"
+        );
+        let between_area = crate::xml::parse(
+            line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", false, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&between_area.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked area with crossBetween=between stays NI"
+        );
+        let marked = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &series, false, "0", "80", false, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&marked.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked line without official marker=none stays NI"
+        );
+        let blank_s2 = [Some(20.0), None, Some(20.0), Some(10.0)];
+        let blank: [&[Option<f64>]; 3] = [&s1, &blank_s2, &s3];
+        let blank_doc = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "stacked", &blank, false, "0", "80", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&blank_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "stacked line with a missing cache point stays NI"
+        );
+        let pct_mixed = crate::xml::parse(
+            line_area_stacked_xml("lineChart", "percentStacked", &mixed, false, "0", "1", false, true)
+                .as_bytes(),
+        )
+        .unwrap();
+        assert!(
+            read_chart(&pct_mixed.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "percentStacked mixed signs on a line stay NI"
+        );
     }
 }

@@ -202,3 +202,204 @@ fn all_five_excel_positions_distinguish_reserved_from_overlay_but_not_omitted_tr
         );
     }
 }
+
+// Controlled packages below are library-generated regressions, not Office gold.
+fn entry_style(idx: usize, props: &str) -> String {
+    format!("<c:legendEntry><c:idx val='{idx}'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr {props}</a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry>")
+}
+#[test]
+fn entry_color_inherits_metrics_and_recolors_only_its_own_text() {
+    let tx = |color| {
+        entry_style(
+            0,
+            &format!("><a:solidFill><a:srgbClr val='{color}'/></a:solidFill>"),
+        )
+    };
+    let legend = |color| {
+        format!(
+            "<c:legend><c:legendPos val='r'/><c:overlay val='0'/>{}</c:legend>",
+            tx(color)
+        )
+    };
+    let (w, h, a) = pixels(&legend("000000"));
+    let (ww, hh, b) = pixels(&legend("FF0000"));
+    assert_eq!((w, h), (ww, hh));
+    let changed: Vec<_> = a
+        .iter()
+        .zip(&b)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .collect();
+    assert!(!changed.is_empty());
+    assert!(changed.iter().all(|(idx, _)| idx % w > w / 2));
+    assert!(b.iter().any(|p| p[0] > 180 && p[1] < 70 && p[2] < 70));
+    // Series keys remain their series colors, not the text override.
+    for c in [[21, 96, 130], [233, 113, 50]] {
+        let pa: Vec<_> = a
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| **p == c)
+            .map(|(i, _)| i)
+            .collect();
+        let pb: Vec<_> = b
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| **p == c)
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(pa, pb);
+    }
+}
+#[test]
+fn entry_font_size_bold_and_family_have_real_ink_and_pack_together() {
+    let legend = |props: &str| {
+        format!(
+            "<c:legend><c:legendPos val='r'/><c:overlay val='0'/>{}</c:legend>",
+            entry_style(0, props)
+        )
+    };
+    let ordinary = bytes(&legend("> ")).unwrap();
+    for props in ["sz='1800'>", "b='1'>", "><a:latin typeface='Arial'/><a:ea typeface='Arial'/><a:cs typeface='Arial'/>", "sz='1800' b='1'><a:latin typeface='Arial'/><a:ea typeface='Arial'/><a:cs typeface='Arial'/>"] {
+        assert_ne!(ordinary,bytes(&legend(props)).unwrap(),"{props}");
+    }
+    let (w, _, small) = pixels(&legend(">"));
+    let (_, _, large) = pixels(&legend("sz='1800'>"));
+    let key_count = |p: &Vec<[u8; 3]>| {
+        p.iter()
+            .enumerate()
+            .filter(|(i, c)| i % w > w - 100 && **c == [21, 96, 130])
+            .count()
+    };
+    assert!(key_count(&large) > key_count(&small));
+    assert!(bytes(&legend(
+        "><a:latin typeface='Arial'/><a:cs typeface='Courier New'/> "
+    ))
+    .is_err());
+    assert!(bytes(&legend("u='sng'>")).is_err());
+}
+
+#[test]
+fn legend_solid_alpha_and_explicit_rectangular_border_paint_in_all_positions() {
+    for pos in ["l", "r", "t", "b", "tr"] {
+        let legend = |sp: &str| {
+            format!("<c:legend><c:legendPos val='{pos}'/><c:spPr>{sp}</c:spPr></c:legend>")
+        };
+        let (_, _, solid) = pixels(&legend(
+            "<a:solidFill><a:srgbClr val='FFFF00'/></a:solidFill>",
+        ));
+        assert!(
+            solid.iter().filter(|c| **c == [255, 255, 0]).count() > 30,
+            "{pos}"
+        );
+        let (_, _, alpha) = pixels(&legend(
+            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
+        ));
+        assert!(
+            alpha
+                .iter()
+                .any(|c| c[0] == 255 && c[1] == 255 && (120..=135).contains(&c[2])),
+            "{pos}"
+        );
+        let (_, _, border) = pixels(&legend(
+            "<a:ln w='25400'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>",
+        ));
+        assert!(
+            border.iter().filter(|c| **c == [255, 0, 0]).count() > 20,
+            "{pos}"
+        );
+    }
+    let normal = bytes("<c:legend><c:legendPos val='r'/></c:legend>").unwrap();
+    assert_eq!(
+        normal,
+        bytes("<c:legend><c:legendPos val='r'/><c:spPr><a:noFill/></c:spPr></c:legend>").unwrap()
+    );
+}
+#[test]
+fn unimplemented_legend_effects_gradients_and_complex_lines_remain_explicit_ni() {
+    for sp in ["<a:gradFill/>","<a:effectLst><a:outerShdw/></a:effectLst>","<a:ln w='25400'><a:prstDash val='dash'/><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln>","<a:solidFill><a:schemeClr val='accent1'/></a:solidFill>"] {
+        assert!(bytes(&format!("<c:legend><c:legendPos val='r'/><c:spPr>{sp}</c:spPr></c:legend>")).is_err(),"{sp}");
+    }
+}
+
+#[test]
+fn entry_only_color_preserves_unstyled_default_geometry_and_other_ink() {
+    for title in ["", "<!--title-->"] {
+        for overlay in ["0", "1"] {
+            let make = |entry: &str| {
+                format!("{title}<c:legend><c:legendPos val='r'/><c:overlay val='{overlay}'/>{entry}</c:legend>")
+            };
+            let base = make("");
+            let (w, h, before) = pixels(&base);
+            for index in 0..2 {
+                let entry = |color| {
+                    format!("<c:legendEntry><c:idx val='{index}'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr><a:solidFill><a:srgbClr val='{color}'/></a:solidFill></a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry>")
+                };
+                assert_eq!(
+                    bytes(&base).unwrap(),
+                    bytes(&make(&entry("000000"))).unwrap()
+                );
+                let (ww, hh, after) = pixels(&make(&entry("FF0000")));
+                assert_eq!((w, h), (ww, hh));
+                let mut changed = 0;
+                for (i, (a, b)) in before.iter().zip(&after).enumerate() {
+                    if a != b {
+                        changed += 1;
+                        assert!(i % w > w * 4 / 5, "color moved non-legend ink");
+                        assert!(a[0] == a[1] && a[1] == a[2], "color changed a series key");
+                        assert!(b[0] > b[1] && b[1] == b[2], "not just red glyph coverage");
+                    }
+                }
+                assert!(changed > 10);
+            }
+        }
+    }
+}
+
+#[test]
+fn mixed_entry_font_widths_keep_a_shared_vertical_key_column() {
+    for properties in ["sz='1800'", "sz='1800' b='1'"] {
+        let legend = format!("<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:legendEntry><c:idx val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr {properties}><a:latin typeface='Arial'/></a:defRPr></a:pPr></a:p></c:txPr></c:legendEntry></c:legend>");
+        let (w, _, p) = pixels(&legend);
+        let right = |color| {
+            p.iter()
+                .enumerate()
+                .filter(|(_, c)| **c == color)
+                .map(|(i, _)| i % w)
+                .max()
+                .unwrap()
+        };
+        assert_eq!(right([21, 96, 130]), right([233, 113, 50]));
+    }
+}
+
+#[test]
+fn legend_key_and_pitch_follow_family_cells_not_only_point_size() {
+    let measure = |family, size| {
+        let legend = format!("<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz='{size}'><a:latin typeface='{family}'/></a:defRPr></a:pPr></a:p></c:txPr></c:legend>");
+        let (w, _, pixels) = pixels(&legend);
+        let key = |color| {
+            let x = pixels
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| **c == color)
+                .map(|(i, _)| i % w)
+                .max()
+                .unwrap();
+            let ys: Vec<_> = pixels
+                .iter()
+                .enumerate()
+                .filter(|(i, c)| **c == color && i % w == x)
+                .map(|(i, _)| i / w)
+                .collect();
+            (*ys.iter().min().unwrap(), *ys.iter().max().unwrap())
+        };
+        let a = key([21, 96, 130]);
+        let b = key([233, 113, 50]);
+        (a.1 - a.0 + 1, b.0 - a.0)
+    };
+    let arial = measure("Arial", 1800);
+    let segoe = measure("Segoe UI", 1800);
+    let large = measure("Arial", 2400);
+    assert!(segoe.0 > arial.0 && segoe.1 > arial.1);
+    assert!(large.0 > arial.0 && large.1 > arial.1);
+}

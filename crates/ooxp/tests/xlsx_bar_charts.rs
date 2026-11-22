@@ -353,6 +353,22 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
     assert_eq!((w, h), (576, 336));
     assert!(count_color(&rgb, ACCENT1, 18) >= 20);
 
+    // F10: plain General integer outside-end labels now export without
+    // mutating their source. Other label positions remain explicit NI below.
+    let labeled = tmp("read-labels");
+    rewrite_part(
+        &book,
+        &labeled,
+        &part,
+        &xml.replace(r#"<c:showVal val="0"/>"#, r#"<c:showVal val="1"/>"#),
+    );
+    let label_source = std::fs::read(&labeled).unwrap();
+    let label_png = export_chart_png(&labeled, "sheet:Sheet1/chart:1", "read-labels-png").unwrap();
+    assert_eq!(std::fs::read(&labeled).unwrap(), label_source);
+    let (lw, lh, label_rgb) = decode_rgb(&std::fs::read(label_png).unwrap());
+    assert_eq!((lw, lh), (w, h));
+    assert_ne!(label_rgb, rgb, "success must paint real label pixels");
+
     let cases: [(&str, String); 6] = [
         (
             "stacked",
@@ -366,8 +382,11 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
             ),
         ),
         (
-            "labels",
-            xml.replace(r#"<c:showVal val="0"/>"#, r#"<c:showVal val="1"/>"#),
+            "labels-inEnd",
+            xml.replace(
+                r#"<c:showVal val="0"/>"#,
+                r#"<c:dLblPos val="inEnd"/><c:showVal val="1"/>"#,
+            ),
         ),
         (
             "blanks-zero",

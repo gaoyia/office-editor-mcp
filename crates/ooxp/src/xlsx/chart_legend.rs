@@ -39,6 +39,9 @@ pub(super) struct Spec {
     overlay: bool,
     manual: Option<Manual>,
     deleted: Vec<usize>,
+    entries: Vec<(usize, TextStyle)>,
+    background: FrameFill,
+    border: Option<([u8; 3], f64)>,
 }
 pub(super) fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
@@ -77,6 +80,32 @@ impl Spec {
             && self.style == TextStyle::default()
             && self.manual.is_none()
             && self.deleted.is_empty()
+            && self.entries.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
+    }
+    // Entry-only paint changes do not change the inherited font metrics.
+    // Controlled Excel exports confirm that the existing default-right geometry
+    // stays fixed. Keep default_right_ink strict for the separate pie boundary.
+    pub(super) fn default_right_geometry(&self) -> bool {
+        self.pos == Some(LegendPos::Right)
+            && self.style == TextStyle::default()
+            && self.manual.is_none()
+            && self.deleted.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
+            && self.entries.iter().all(|(_, style)| {
+                let mut metrics = style.clone();
+                metrics.color = self.style.color;
+                metrics == self.style
+            })
+    }
+    pub(super) fn entry_text_color(&self, index: usize) -> [u8; 3] {
+        self.entries
+            .iter()
+            .find(|(i, _)| *i == index)
+            .map(|(_, style)| style.color)
+            .unwrap_or(self.style.color)
     }
     pub(super) fn read(root: &Element, accents: [[u8; 3]; 6]) -> Result<Self, Error> {
         let chart = root.child_by_local("chart").ok_or_else(unsupported)?;
@@ -88,6 +117,9 @@ impl Spec {
             overlay: true,
             manual: None,
             deleted: Vec::new(),
+            entries: Vec::new(),
+            background: FrameFill::NoFill,
+            border: None,
         };
         let Some(legend) = chart.child_by_local("legend").filter(|_| pos.is_some()) else {
             return Ok(result);
@@ -150,24 +182,84 @@ impl Spec {
                 .is_some_and(|n| bool_attr(n.attr_local("val"), false))
             {
                 result.deleted.push(index);
-            } else if entry.child_by_local("txPr").is_some() {
-                return Err(unsupported());
+            } else if let Some(tx) = entry.child_by_local("txPr") {
+                if result.entries.iter().any(|(idx, _)| *idx == index) {
+                    return Err(unsupported());
+                }
+                let mut style = result.style.clone();
+                style.read(tx, accents)?;
+                result.entries.push((index, style));
             }
         }
         if let Some(sp) = legend.child_by_local("spPr") {
+            let mut saw_fill = false;
+            let mut saw_line = false;
             for child in sp.element_children() {
                 match child.local_name() {
-                    "noFill" | "extLst" => (),
+                    "noFill" | "solidFill" if !saw_fill => {
+                        saw_fill = true;
+                        result.background = if child.local_name() == "noFill" {
+                            FrameFill::NoFill
+                        } else {
+                            legend_solid(child, accents)?
+                        };
+                    }
+                    "extLst" => (),
                     "effectLst" | "effectDag" if child.element_children().next().is_none() => (),
-                    "ln" if child.child_by_local("noFill").is_some() => (),
+                    "ln" if !saw_line => {
+                        saw_line = true;
+                        if child.child_by_local("noFill").is_some() {
+                            continue;
+                        }
+                        if unhandled_attrs(child, &["w"]) {
+                            return Err(unsupported());
+                        }
+                        let width = child
+                            .attr_local("w")
+                            .and_then(|v| v.parse::<u64>().ok())
+                            .filter(|v| *v > 0)
+                            .ok_or_else(unsupported)?;
+                        let mut color = None;
+                        for part in child.element_children() {
+                            match part.local_name() {
+                                "solidFill" if color.is_none() => {
+                                    let FrameFill::Solid(rgb) = legend_solid(part, accents)? else {
+                                        return Err(unsupported());
+                                    };
+                                    color = Some(rgb);
+                                }
+                                "prstDash" if part.attr_local("val") == Some("solid") => (),
+                                _ => return Err(unsupported()),
+                            }
+                        }
+                        result.border =
+                            Some((color.ok_or_else(unsupported)?, width as f64 / 12_700.0));
+                    }
                     _ => return Err(unsupported()),
                 }
             }
         }
-        result.legacy = result.default_right_ink() && !result.overlay;
+        result.legacy = result.default_right_geometry() && !result.overlay;
         Ok(result)
     }
 }
+// Reuse the already tested sRGB/straight-alpha conversion, but keep the
+// initial legend frame subset explicit. Gradients/effects remain NI.
+fn legend_solid(solid: &Element, accents: [[u8; 3]; 6]) -> Result<FrameFill, Error> {
+    let colors: Vec<_> = solid.element_children().collect();
+    if colors.len() != 1 {
+        return Err(unsupported());
+    }
+    let color = colors[0];
+    if color.local_name() != "srgbClr"
+        || unhandled_attrs(color, &["val"])
+        || color.element_children().any(|n| n.local_name() != "alpha")
+    {
+        return Err(unsupported());
+    }
+    resolve_frame_solid(color, &theme_scheme(None, accents))
+}
+
 impl TextStyle {
     fn read(&mut self, tx: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
         if let Some(body) = tx.child_by_local("bodyPr") {
@@ -353,6 +445,13 @@ impl TextStyle {
                         return Err(unsupported());
                     }
                 }
+                "cs" if fill
+                    .attr_local("typeface")
+                    .is_some_and(|name| Some(name) == latin.or(ea))
+                    && !unhandled_attrs(fill, &["typeface"]) =>
+                {
+                    ()
+                }
                 "latin" | "ea" | "extLst" => (),
                 "effectLst" | "effectDag" if fill.element_children().next().is_none() => (),
                 _ => return Err(unsupported()),
@@ -361,15 +460,65 @@ impl TextStyle {
         Ok(())
     }
 }
+fn style_face(
+    style: &TextStyle,
+    px: f32,
+    dpi: RenderDpi,
+) -> Result<Option<super::super::chart_gdi::Face>, Error> {
+    #[cfg(not(windows))]
+    if style.bold || style.italic || !style.name.is_empty() {
+        return Err(unsupported());
+    }
+    let face = if style.name.is_empty() {
+        let face = super::super::chart_gdi::Face::open_dpi(px, style.bold, dpi.get());
+        #[cfg(windows)]
+        let face = if style.italic {
+            face.and_then(|f| {
+                super::super::chart_gdi::Face::open_cell_dpi(
+                    px,
+                    style.bold,
+                    true,
+                    f.family_name(),
+                    dpi.get(),
+                )
+            })
+        } else {
+            face
+        };
+        face
+    } else {
+        let face = super::super::chart_gdi::Face::open_cell_dpi(
+            px,
+            style.bold,
+            style.italic,
+            &style.name,
+            dpi.get(),
+        );
+        #[cfg(windows)]
+        if face
+            .as_ref()
+            .is_none_or(|f| !same_name(f.family_name(), &style.name))
+        {
+            return Err(unsupported());
+        }
+        face
+    };
+    Ok(face)
+}
+
 struct Item<'a> {
     series: &'a Series,
     width: f64,
+    style: TextStyle,
+    face: Option<super::super::chart_gdi::Face>,
+    px: f32,
+    line: f64,
+    space: f64,
+    cell: f64,
 }
 pub(super) struct Layout<'a> {
     spec: &'a Spec,
     items: Vec<Item<'a>>,
-    face: Option<super::super::chart_gdi::Face>,
-    px: f32,
     key: f64,
     space: f64,
     line: f64,
@@ -389,46 +538,14 @@ impl<'a> Layout<'a> {
     ) -> Result<Self, Error> {
         let spec = &chart.legend_spec;
         let px = canvas.dpi.pt_to_px_font(spec.style.pt) as f32;
-        #[cfg(not(windows))]
-        if spec.style.bold || spec.style.italic || !spec.style.name.is_empty() {
+        if spec
+            .entries
+            .iter()
+            .any(|(idx, _)| *idx >= chart.series.len())
+        {
             return Err(unsupported());
         }
-        let face = if spec.style.name.is_empty() {
-            let face =
-                super::super::chart_gdi::Face::open_dpi(px, spec.style.bold, canvas.dpi.get());
-            #[cfg(windows)]
-            let face = if spec.style.italic {
-                face.and_then(|f| {
-                    super::super::chart_gdi::Face::open_cell_dpi(
-                        px,
-                        spec.style.bold,
-                        true,
-                        f.family_name(),
-                        canvas.dpi.get(),
-                    )
-                })
-            } else {
-                face
-            };
-            face
-        } else {
-            let face = super::super::chart_gdi::Face::open_cell_dpi(
-                px,
-                spec.style.bold,
-                spec.style.italic,
-                &spec.style.name,
-                canvas.dpi.get(),
-            );
-            #[cfg(windows)]
-            if face
-                .as_ref()
-                .is_none_or(|f| !same_name(f.family_name(), &spec.style.name))
-            {
-                return Err(unsupported());
-            }
-            face
-        };
-        let key = (f64::from(px) * 0.5).ceil().max(1.0);
+        let face = style_face(&spec.style, px, canvas.dpi)?;
         let space = text_width(font, face.as_ref(), " ", px).ceil().max(1.0);
         let line = face
             .as_ref()
@@ -436,28 +553,82 @@ impl<'a> Layout<'a> {
             .filter(|v| *v > 0.0)
             .unwrap_or_else(|| text_height(font, px))
             .max(f64::from(px));
-        // Native legend rows use the font size plus an 8pt entry gutter,
-        // not the GDI em-box plus two measured spaces (which grows too much
-        // for large/bold fonts and is too small for the default 10pt face).
-        let pitch = f64::from(px) + canvas.dpi.pt_to_px_font(8.0);
         let mut items = Vec::new();
         if spec.pos.is_some() {
             for (idx, series) in chart.series.iter().enumerate() {
                 if spec.deleted.contains(&idx) {
                     continue;
                 }
-                let width = face
+                let style = spec
+                    .entries
+                    .iter()
+                    .find(|(i, _)| *i == idx)
+                    .map(|(_, style)| style)
+                    .unwrap_or(&spec.style)
+                    .clone();
+                let item_px = canvas.dpi.pt_to_px_font(style.pt) as f32;
+                let item_face = style_face(&style, item_px, canvas.dpi)?;
+                let item_space = text_width(font, item_face.as_ref(), " ", item_px)
+                    .ceil()
+                    .max(1.0);
+                let item_line = item_face
+                    .as_ref()
+                    .map(|f| f.em_box())
+                    .filter(|v| *v > 0.0)
+                    .unwrap_or_else(|| text_height(font, item_px))
+                    .max(f64::from(item_px));
+                let width = item_face
                     .as_ref()
                     .map(|f| f.typo_width(&series.name))
-                    .unwrap_or_else(|| text_width(font, None, &series.name, px));
+                    .unwrap_or_else(|| text_width(font, None, &series.name, item_px));
+                let item_face_cell = item_face
+                    .as_ref()
+                    .and_then(|f| f.cell_height())
+                    .filter(|v| v.is_finite() && *v > 0.0)
+                    .unwrap_or(item_line);
                 items.push(Item {
                     series,
-                    width: super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi)
-                        as f64
-                        + width,
+                    width,
+                    style,
+                    face: item_face,
+                    px: item_px,
+                    line: item_line,
+                    space: item_space,
+                    cell: item_face_cell,
                 });
             }
         }
+        // Controlled family/point matrices: key size follows 45% of the
+        // design cell, and rows add a 6pt gutter to that cell. Do not use a
+        // family lookup, COM bounds, or a fitted device-coordinate correction.
+        let base_cell = face
+            .as_ref()
+            .and_then(|f| f.cell_height())
+            .filter(|v| v.is_finite() && *v > 0.0)
+            .unwrap_or(line);
+        let cell = items.iter().map(|i| i.cell).fold(base_cell, f64::max);
+        // An omitted family still depends on unresolved chart/theme defaults;
+        // preserve its established point-based model rather than silently
+        // substituting the locally selected fallback face for native Excel.
+        let (key, pitch) = if !spec.style.name.is_empty() {
+            ((cell * 0.45).max(1.0), cell + canvas.dpi.pt_to_px_font(6.0))
+        } else {
+            let max_pt = items
+                .iter()
+                .map(|i| i.style.pt)
+                .fold(spec.style.pt, f64::max);
+            let row_px = canvas.dpi.pt_to_px_font(max_pt);
+            (
+                (row_px * 0.5).ceil().max(1.0),
+                row_px + canvas.dpi.pt_to_px_font(8.0),
+            )
+        };
+        for item in &mut items {
+            item.width +=
+                super::legend_key_width(chart.kind, key.round() as i32, canvas.dpi) as f64;
+        }
+        let line = items.iter().map(|i| i.line).fold(line, f64::max);
+        let space = items.iter().map(|i| i.space).fold(space, f64::max);
         if !spec.legacy && !items.is_empty() && face.is_none() && font.is_none() {
             return Err(unsupported());
         }
@@ -479,15 +650,13 @@ impl<'a> Layout<'a> {
         // Plot reservation uses the padded font layout box. Ink packing above
         // uses typographic advances; conflating the two shrinks a left legend's
         // reserved band when its text has GDI overhang padding.
-        let reservation_width = chart
-            .series
+        let reservation_width = items
             .iter()
-            .enumerate()
-            .filter(|(idx, _)| !spec.deleted.contains(idx))
-            .map(|(_, ser)| {
-                face.as_ref()
-                    .map(|f| f.layout_width(&ser.name))
-                    .unwrap_or_else(|| text_width(font, None, &ser.name, px))
+            .map(|item| {
+                item.face
+                    .as_ref()
+                    .map(|f| f.layout_width(&item.series.name))
+                    .unwrap_or_else(|| text_width(font, None, &item.series.name, item.px))
             })
             .fold(0.0, f64::max)
             + key
@@ -555,8 +724,6 @@ impl<'a> Layout<'a> {
         let mut result = Self {
             spec,
             items,
-            face,
-            px,
             key,
             space,
             line,
@@ -653,7 +820,37 @@ impl<'a> Layout<'a> {
         }
         r
     }
-    pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) {
+    pub(super) fn draw(&self, canvas: &mut Canvas, chart: &ColumnChart, font: Option<&Font>) -> Result<(),Error> {
+        if self.items.is_empty() {
+            return Ok(());
+        }
+        // The existing layout frame is the semantic frame, independent of glyph
+        // ink bounds. Paint before keys/text, with no COM-origin compensation.
+        let (x0, y0, x1, y1) = (
+            self.frame.x.round() as i32,
+            self.frame.y.round() as i32,
+            (self.frame.x + self.frame.w).round() as i32,
+            (self.frame.y + self.frame.h).round() as i32,
+        );
+        match self.spec.background {
+            FrameFill::Solid(rgb) => canvas.fill_rect(x0, y0, x1, y1, rgb),
+            FrameFill::Translucent(rgb, alpha) => {
+                canvas.fill_rect_cov(x0, y0, x1, y1, rgb, ooxml_alpha_to_u8(alpha))
+            }
+            _ => (),
+        }
+        if let Some((rgb, pt)) = self.spec.border {
+            let width = canvas.dpi.pt_to_px_font(pt);
+            let (x, y, r, b) = (
+                self.frame.x,
+                self.frame.y,
+                self.frame.x + self.frame.w,
+                self.frame.y + self.frame.h,
+            );
+            for (xa, ya, xb, yb) in [(x, y, r, y), (r, y, r, b), (r, b, x, b), (x, b, x, y)] {
+                canvas.stroke_segment(xa, ya, xb, yb, width, rgb);
+            }
+        }
         let height = self.rows.len() as f64 * self.line
             + self.rows.len().saturating_sub(1) as f64 * (self.pitch - self.line).max(0.0);
         let mut y = self.frame.y + (self.frame.h - height) / 2.0;
@@ -668,12 +865,16 @@ impl<'a> Layout<'a> {
                 self.space * 2.0
             };
             let width = items_width + row.len().saturating_sub(1) as f64 * gap;
-            let mut x = self.frame.x + (self.frame.w - width) / 2.0;
+            // A vertical legend is one shared key/text column, not separately
+            // centred rows. Mixed font widths must not stagger its keys.
+            let column_width = self.items.iter().map(|item| item.width).fold(0.0, f64::max);
+            let packed_width = if self.horizontal { width } else { column_width };
+            let mut x = self.frame.x + (self.frame.w - packed_width) / 2.0;
             for idx in row {
                 let item = &self.items[*idx];
                 let ser = item.series;
                 let ky = y + (self.line - self.key) / 2.0;
-                draw_plot_key(
+                super::draw_plot_key_styled(
                     canvas,
                     chart.kind,
                     x.round() as i32,
@@ -683,25 +884,32 @@ impl<'a> Layout<'a> {
                     (ky + self.key).round() as i32,
                     ser.color.unwrap_or(chart.accents[ser.slot % 6]),
                     ser.marker,
-                );
+                    if ser.line_visible { super::stroke::Style::new(ser.line_width,ser.line_cap) } else { None },
+                    ser.line_dash.as_deref(),
+                )?;
                 draw_text(
                     canvas,
                     font,
-                    self.face.as_ref(),
+                    item.face.as_ref(),
                     &ser.name,
                     x + f64::from(super::legend_key_width(
                         chart.kind,
                         self.key.round() as i32,
                         canvas.dpi,
-                    )) + self.space,
-                    y,
-                    self.px,
-                    self.spec.style.color,
+                    )) + if self.horizontal {
+                        item.space
+                    } else {
+                        self.space
+                    },
+                    y + (self.line - item.line) / 2.0,
+                    item.px,
+                    item.style.color,
                 );
                 x += item.width + gap;
             }
             y += self.pitch;
         }
+        Ok(())
     }
 }
 fn position(
@@ -853,6 +1061,9 @@ mod overlay_ink_tests {
             overlay: false,
             manual: None,
             deleted: Vec::new(),
+            entries: Vec::new(),
+            background: FrameFill::NoFill,
+            border: None,
         };
         assert!(spec.default_right_ink());
         spec.overlay = true;

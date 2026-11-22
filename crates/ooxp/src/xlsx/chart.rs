@@ -2104,9 +2104,10 @@ pub(crate) fn export_chart_image_at(
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let chart_part = crate::opc::resolve_id(&pkg, &drawing_part, &rid)?;
     let space = super::list_pin::parse_part(&pkg, &chart_part)?;
-    let accents = super::chart_paint::theme_accents(pkg.get("/xl/theme/theme1.xml").ok());
+    let theme_xml = pkg.get("/xl/theme/theme1.xml").ok();
+    let accents = super::chart_paint::theme_accents(theme_xml);
     let cells = chart_cell_cache(&pkg)?;
-    let png = super::chart_paint::render_chart_at(
+    let png = super::chart_paint::render_chart_with_theme(
         &space.root,
         width,
         height,
@@ -2116,6 +2117,7 @@ pub(crate) fn export_chart_image_at(
         Some(&cells),
         &target.sheet,
         dpi,
+        theme_xml,
     )?;
     Ok(super::ExportedMedia {
         bytes: png,
