@@ -370,32 +370,29 @@ pub(super) struct SecondaryAxes {
 }
 
 fn ax_id(axis: &Element) -> Option<&str> {
-    axis.child_by_local("axId").and_then(|e| e.attr_local("val"))
+    axis.child_by_local("axId")
+        .and_then(|e| e.attr_local("val"))
 }
 
 fn ax_pos(axis: &Element) -> &str {
-    axis
-        .child_by_local("axPos")
+    axis.child_by_local("axPos")
         .and_then(|e| e.attr_local("val"))
         .unwrap_or("")
 }
 
 fn axis_deleted(axis: &Element) -> bool {
-    axis
-        .child_by_local("delete")
+    axis.child_by_local("delete")
         .and_then(|e| e.attr_local("val"))
         .is_some_and(|v| !matches!(v, "0" | "false" | "off"))
 }
 
 fn axis_crosses(axis: &Element) -> Option<&str> {
-    axis
-        .child_by_local("crosses")
+    axis.child_by_local("crosses")
         .and_then(|e| e.attr_local("val"))
 }
 
 fn axis_orient(axis: &Element) -> &str {
-    axis
-        .child_by_local("scaling")
+    axis.child_by_local("scaling")
         .and_then(|s| s.child_by_local("orientation"))
         .and_then(|e| e.attr_local("val"))
         .unwrap_or("minMax")
@@ -575,7 +572,6 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
 }
 
 pub(super) fn scatter_axes(plot: &Element) -> Result<(Spec, Spec), Error> {
-
     if plot
         .element_children()
         .any(|e| matches!(e.local_name(), "catAx" | "dateAx" | "serAx"))
@@ -664,9 +660,7 @@ fn bar_axes_kind(plot: &Element, percent_stacked: bool) -> Result<(Spec, bool), 
     // the category labels still follow the autoZero crossing (mid-plot), not
     // the right edge. axPos is not a reliable layout signal here; accept r
     // only in that locked combination. Other positions stay NI.
-    if val_pos != "b"
-        || (cat_pos != "l" && !(cat_pos == "r" && val_orient == "maxMin"))
-    {
+    if val_pos != "b" || (cat_pos != "l" && !(cat_pos == "r" && val_orient == "maxMin")) {
         return Err(unsupported());
     }
     if cat
@@ -705,6 +699,57 @@ fn bar_axes_kind(plot: &Element, percent_stacked: bool) -> Result<(Spec, bool), 
         _ => return Err(unsupported()),
     };
     Ok((Spec::read_axis_kind(val, percent_stacked)?, from_bottom))
+}
+
+/// One 1-2-5 automatic-scale candidate after the already-locked 0.95 extra-major
+/// padding. t194u (user-authorized approximation, not a unique Office lock for
+/// every chart size): prefer 5..=9 intervals, or 10 only when padding fired at
+/// both ends (official signed +/-8 is -10..10/2; signed +/-9 is -10..10/5).
+/// If that set is empty, drop 10-interval candidates that were not both-ends
+/// padded and again minimize padded range, then step. Last resort is the
+/// previous min-range-then-min-step search over every budget-valid candidate.
+#[derive(Clone, Copy)]
+struct AutoCand {
+    min: f64,
+    max: f64,
+    step: f64,
+    intervals: i32,
+    pad_lo: bool,
+    pad_hi: bool,
+}
+
+impl AutoCand {
+    fn preferred(self) -> bool {
+        (5..=9).contains(&self.intervals) || (self.intervals == 10 && self.pad_lo && self.pad_hi)
+    }
+}
+
+fn min_range_then_min_step(pool: &[AutoCand]) -> Option<AutoCand> {
+    pool.iter().copied().min_by(|x, y| {
+        (x.max - x.min)
+            .total_cmp(&(y.max - y.min))
+            .then_with(|| x.step.total_cmp(&y.step))
+    })
+}
+
+fn pick_auto_major(cands: &[AutoCand]) -> Option<(f64, f64, f64)> {
+    if cands.is_empty() {
+        return None;
+    }
+    let preferred: Vec<AutoCand> = cands.iter().copied().filter(|c| c.preferred()).collect();
+    let fallback: Vec<AutoCand> = cands
+        .iter()
+        .copied()
+        .filter(|c| c.intervals != 10 || (c.pad_lo && c.pad_hi))
+        .collect();
+    let best = if !preferred.is_empty() {
+        min_range_then_min_step(&preferred)
+    } else if !fallback.is_empty() {
+        min_range_then_min_step(&fallback)
+    } else {
+        min_range_then_min_step(cands)
+    };
+    best.map(|c| (c.min, c.max, c.step))
 }
 
 pub(super) fn scale(series: &[Series], spec: Spec, budget: i32) -> Result<Scale, Error> {
@@ -772,16 +817,18 @@ pub(super) fn scale_values(
     let ends = |step: f64| {
         let mut a = spec.min.unwrap_or_else(|| (lo / step).floor() * step);
         let mut b = spec.max.unwrap_or_else(|| (hi / step).ceil() * step);
-        if spec.max.is_none() && hi > 1e-12 && hi > b * 0.95 + b.abs() * 1e-9 {
+        let pad_hi = spec.max.is_none() && hi > 1e-12 && hi > b * 0.95 + b.abs() * 1e-9;
+        let pad_lo = spec.min.is_none() && lo < -1e-12 && lo < a * 0.95 - a.abs() * 1e-9;
+        if pad_hi {
             b += step;
         }
-        if spec.min.is_none() && lo < -1e-12 && lo < a * 0.95 - a.abs() * 1e-9 {
+        if pad_lo {
             a -= step;
         }
-        (a, b)
+        (a, b, pad_lo, pad_hi)
     };
     let result = if let Some(step) = spec.major {
-        let (a, b) = ends(step);
+        let (a, b, _, _) = ends(step);
         (a, b, step)
     } else if raw_min.abs() < 1e-12
         && raw_max.abs() < 1e-12
@@ -794,23 +841,26 @@ pub(super) fn scale_values(
             .abs()
             .max(1e-9);
         let exp = span.log10().floor() as i32;
-        let mut best: Option<(f64, f64, f64)> = None;
+        let mut cands: Vec<AutoCand> = Vec::new();
         for mag in (exp - 2)..=(exp + 1) {
             for nice in [1.0, 2.0, 5.0] {
                 let step = nice * 10f64.powi(mag);
-                let (a, b) = ends(step);
+                let (a, b, pad_lo, pad_hi) = ends(step);
                 let intervals = ((b - a) / step - 1e-9).ceil();
                 if b <= a || !(1.0..=f64::from(budget)).contains(&intervals) {
                     continue;
                 }
-                if best.is_none_or(|(oa, ob, os)| {
-                    b - a < ob - oa - 1e-9 || ((b - a - (ob - oa)).abs() < 1e-9 && step < os)
-                }) {
-                    best = Some((a, b, step));
-                }
+                cands.push(AutoCand {
+                    min: a,
+                    max: b,
+                    step,
+                    intervals: intervals as i32,
+                    pad_lo,
+                    pad_hi,
+                });
             }
         }
-        best.ok_or_else(unsupported)?
+        pick_auto_major(&cands).ok_or_else(unsupported)?
     };
     let (min, max, major) = result;
     let minor = spec.minor.unwrap_or(major / 5.0);
@@ -843,7 +893,8 @@ mod tests {
     use super::*;
     fn check(label_em: f64, emit: bool) {
         let rows: serde_json::Value =
-            serde_json::from_str(include_str!("../../../tests/data/chart_axis_oracle.json")).unwrap();
+            serde_json::from_str(include_str!("../../../tests/data/chart_axis_oracle.json"))
+                .unwrap();
         for row in rows.as_array().unwrap() {
             let series = Series {
                 name: "S".into(),
@@ -941,6 +992,41 @@ mod tests {
             (-10.0, 10.0, 2.0),
             "budget 10 must accept Office's 10-interval major=2"
         );
+    }
+
+    #[test]
+    fn auto_scale_t191_official_gold_discriminants_budget_ten() {
+        // t194u approximation vs t191 official Chart.Export gold (uniform
+        // 288x180, explicit title sz=1100). Budget 10 matches that canvas.
+        // Not a unique lock for every chart height; do not auto-pass review.
+        let cases: &[(&str, &[f64], (f64, f64, f64))] = &[
+            ("max8-keep", &[0.0, 8.0], (0.0, 9.0, 1.0)),
+            (
+                "max9-t166",
+                &[4.0, 6.0, 9.0, 7.0, 5.0, 8.0],
+                (0.0, 10.0, 2.0),
+            ),
+            ("max14", &[0.0, 14.0], (0.0, 16.0, 2.0)),
+            ("max16-keep", &[0.0, 16.0], (0.0, 18.0, 2.0)),
+            ("max18", &[0.0, 18.0], (0.0, 20.0, 5.0)),
+            (
+                "max40-t171-sz1100",
+                &[10.0, 20.0, 30.0, 40.0, 15.0, 25.0],
+                (0.0, 45.0, 5.0),
+            ),
+            ("max45", &[0.0, 45.0], (0.0, 50.0, 10.0)),
+            ("max90", &[0.0, 90.0], (0.0, 100.0, 20.0)),
+            ("signed-m8-p8-keep", &[-8.0, 8.0], (-10.0, 10.0, 2.0)),
+            ("signed-m9-p9", &[-9.0, 9.0], (-10.0, 10.0, 5.0)),
+        ];
+        for (name, values, want) in cases {
+            let got = scale_values(values.iter().copied().map(Some), Spec::default(), 10).unwrap();
+            assert_eq!(
+                (got.min, got.max, got.major),
+                *want,
+                "{name} values={values:?}"
+            );
+        }
     }
 
     #[test]

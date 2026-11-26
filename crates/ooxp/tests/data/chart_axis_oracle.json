@@ -334,8 +334,8 @@
     "expected": {
       "min": 0.0,
       "max": 100.0,
-      "major": 10.0,
-      "minor": 2.0,
+      "major": 20.0,
+      "minor": 4.0,
       "crossing": 0.0
     },
     "sourceSha256": "c7d1594b4653b0b0f3c54404ef4ec5b30bafecbd7679360feb9083041d9253d1",

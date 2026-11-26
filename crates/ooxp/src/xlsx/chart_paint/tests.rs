@@ -3830,10 +3830,13 @@
 
     #[test]
     fn axis_headroom_matches_excel_samples() {
+        // 95 -> 0..100/20 follows the t194 general auto-scale rule (same
+        // padded range as official t191 auto-max90, which is 0..100/20, not
+        // a 10-interval 0..100/10). 95 itself was not in that gold matrix.
         let cases = [
             (4.0, 4.5, 0.5),
             (3.9, 4.5, 0.5),
-            (95.0, 100.0, 10.0),
+            (95.0, 100.0, 20.0),
             (96.0, 120.0, 20.0),
             (1100.0, 1200.0, 200.0),
             (1150.0, 1400.0, 200.0),
