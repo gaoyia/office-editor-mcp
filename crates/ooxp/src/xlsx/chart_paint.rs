@@ -557,7 +557,35 @@ pub(crate) fn theme_accents(theme_xml: Option<&[u8]>) -> [[u8; 3]; 6] {
     accents
 }
 
-#[derive(Clone, Copy)]
+/// Caller-supplied live system colors, keyed by DrawingML `sysClr/@val`.
+/// Official Chart.Export paints the live named system color and ignores
+/// `lastClr`. The library never queries ambient OS colors and never uses
+/// `lastClr` as the current frame/plot fill.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SystemColorPalette {
+    entries: Vec<(String, [u8; 3])>,
+}
+
+impl SystemColorPalette {
+    pub(crate) fn insert(&mut self, val: impl Into<String>, rgb: [u8; 3]) -> &mut Self {
+        let val = val.into();
+        if let Some((_, color)) = self.entries.iter_mut().find(|(name, _)| *name == val) {
+            *color = rgb;
+        } else {
+            self.entries.push((val, rgb));
+        }
+        self
+    }
+
+    pub(crate) fn get(&self, val: &str) -> Option<[u8; 3]> {
+        self.entries
+            .iter()
+            .find(|(name, _)| name == val)
+            .map(|(_, color)| *color)
+    }
+}
+
+#[derive(Clone)]
 struct ThemeScheme {
     accents: [[u8; 3]; 6],
     dk1: Option<[u8; 3]>,
@@ -566,13 +594,15 @@ struct ThemeScheme {
     lt2: Option<[u8; 3]>,
     hlink: Option<[u8; 3]>,
     fol_hlink: Option<[u8; 3]>,
+    sys: SystemColorPalette,
 }
 
 fn theme_slot_rgb(slot: &Element, accents: &[[u8; 3]; 6]) -> Option<[u8; 3]> {
     if let Some(sys) = slot.child_by_local("sysClr") {
-        // Theme clrScheme records the slot in lastClr. Chart-frame sysClr
-        // fills are a different path: Excel paints the live system color
-        // and ignores lastClr, so those fills stay NI.
+        // Theme clrScheme records the slot in lastClr. Chart-frame/plot
+        // sysClr fills are a different path: Excel paints the live system
+        // color named by @val and ignores lastClr. Those fills resolve
+        // only from an explicit caller palette; otherwise they stay NI.
         return parse_hex(sys.attr_local("lastClr")?);
     }
     color_of_slot(slot, accents)
@@ -587,6 +617,7 @@ fn theme_scheme(theme_xml: Option<&[u8]>, accents: [[u8; 3]; 6]) -> ThemeScheme 
         lt2: None,
         hlink: None,
         fol_hlink: None,
+        sys: SystemColorPalette::default(),
     };
     let Some(bytes) = theme_xml else {
         return scheme;
@@ -1268,6 +1299,17 @@ fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Result<FrameFil
             let name = color.attr_local("val").ok_or_else(unsupported)?;
             scheme_slot(name, scheme).ok_or_else(unsupported)?
         }
+        "sysClr" => {
+            // Official window lastClr=00FF00 exported white; windowText
+            // lastClr=FF0000 exported black. lastClr is not current.
+            // Transforms on sysClr were not in the official matrix.
+            let name = color.attr_local("val").ok_or_else(unsupported)?;
+            let rgb = scheme.sys.get(name).ok_or_else(unsupported)?;
+            if color.element_children().next().is_some() {
+                return Err(unsupported());
+            }
+            return Ok(FrameFill::Solid(rgb));
+        }
         _ => return Err(unsupported()),
     };
     let kids: Vec<&Element> = color.element_children().collect();
@@ -1430,10 +1472,41 @@ pub(crate) fn render_chart_with_theme(
     dpi: RenderDpi,
     theme_xml: Option<&[u8]>,
 ) -> Result<Vec<u8>, Error> {
+    render_chart_with_sys_palette(
+        root,
+        width,
+        height,
+        accents,
+        font_bytes,
+        host,
+        cells,
+        sheet,
+        dpi,
+        theme_xml,
+        None,
+    )
+}
+
+pub(crate) fn render_chart_with_sys_palette(
+    root: &Element,
+    width: u32,
+    height: u32,
+    accents: [[u8; 3]; 6],
+    font_bytes: Option<&[u8]>,
+    host: ChartHost,
+    cells: Option<&super::sparkline::CellCache>,
+    sheet: &str,
+    dpi: RenderDpi,
+    theme_xml: Option<&[u8]>,
+    sys: Option<&SystemColorPalette>,
+) -> Result<Vec<u8>, Error> {
     if width == 0 || height == 0 || width > MAX_PX || height > MAX_PX {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
-    let scheme = theme_scheme(theme_xml, accents);
+    let mut scheme = theme_scheme(theme_xml, accents);
+    if let Some(palette) = sys {
+        scheme.sys = palette.clone();
+    }
     let frame = if matches!(host, ChartHost::Excel) {
         Some(read_frame_with(root, &scheme)?)
     } else {
@@ -17728,5 +17801,181 @@ mod tests {
         .unwrap();
         assert_ne!(small, large, "10pt and 18pt titles must not share a raster");
         assert!(large.len() >= 8 && small.len() >= 8);
+    }
+
+    fn scheme_with_sys(pairs: &[(&str, [u8; 3])]) -> ThemeScheme {
+        let mut scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        for (name, rgb) in pairs {
+            scheme.sys.insert(*name, *rgb);
+        }
+        scheme
+    }
+
+    #[test]
+    fn chart_frame_sysclr_uses_caller_palette_and_ignores_last_clr() {
+        let scheme = scheme_with_sys(&[
+            ("window", [255, 255, 255]),
+            ("windowText", [0, 0, 0]),
+        ]);
+        let window = crate::xml::parse(b"<sysClr val='window' lastClr='00FF00'/>").unwrap();
+        assert_eq!(
+            resolve_frame_solid(&window.root, &scheme).unwrap(),
+            FrameFill::Solid([255, 255, 255]),
+            "live window is white; lastClr green is not current"
+        );
+        let text = crate::xml::parse(b"<sysClr val='windowText' lastClr='FF0000'/>").unwrap();
+        assert_eq!(
+            resolve_frame_solid(&text.root, &scheme).unwrap(),
+            FrameFill::Solid([0, 0, 0]),
+            "live windowText is black; lastClr red is not current"
+        );
+        // lastClr may coincide with the live color; the palette still wins.
+        let coinc = crate::xml::parse(b"<sysClr val='windowText' lastClr='000000'/>").unwrap();
+        assert_eq!(
+            resolve_frame_solid(&coinc.root, &scheme).unwrap(),
+            FrameFill::Solid([0, 0, 0])
+        );
+        let empty = theme_scheme(None, FALLBACK_ACCENTS);
+        assert!(
+            resolve_frame_solid(&window.root, &empty).is_err(),
+            "without a palette, lastClr must not become a silent current color"
+        );
+        assert!(resolve_frame_solid(&text.root, &empty).is_err());
+        let mismatch = crate::xml::parse(b"<sysClr val='Window' lastClr='FFFFFF'/>").unwrap();
+        assert!(
+            resolve_frame_solid(&mismatch.root, &scheme).is_err(),
+            "val matching is exact; do not fold case or invent aliases"
+        );
+        let missing = crate::xml::parse(b"<sysClr lastClr='FFFFFF'/>").unwrap();
+        assert!(resolve_frame_solid(&missing.root, &scheme).is_err());
+        let unknown = crate::xml::parse(b"<sysClr val='captionText' lastClr='000000'/>").unwrap();
+        assert!(
+            resolve_frame_solid(&unknown.root, &scheme).is_err(),
+            "unmapped names stay NI even when lastClr looks usable"
+        );
+        for xml in [
+            "<sysClr val='window' lastClr='FFFFFF'><alpha val='50000'/></sysClr>",
+            "<sysClr val='window' lastClr='FFFFFF'><tint val='50000'/></sysClr>",
+            "<sysClr val='windowText' lastClr='FF0000'><red val='50000'/></sysClr>",
+        ] {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(
+                resolve_frame_solid(&doc.root, &scheme).is_err(),
+                "sysClr transforms were not in the official matrix: {xml}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_and_plot_sysclr_rasters_match_palette_srgb_not_last_clr() {
+        let mut palette = SystemColorPalette::default();
+        palette
+            .insert("window", [255, 255, 255])
+            .insert("windowText", [0, 0, 0]);
+        let dpi =
+            RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        let render = |fill: &str, sys: Option<&SystemColorPalette>, host| {
+            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            render_chart_with_sys_palette(
+                &doc.root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                host,
+                None,
+                "",
+                dpi,
+                None,
+                sys,
+            )
+        };
+        let window_sys = "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>";
+        let window_srgb = "<c:spPr><a:solidFill><a:srgbClr val='FFFFFF'/></a:solidFill></c:spPr>";
+        let text_sys = "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>";
+        let text_srgb = "<c:spPr><a:solidFill><a:srgbClr val='000000'/></a:solidFill></c:spPr>";
+        let green_srgb = "<c:spPr><a:solidFill><a:srgbClr val='00FF00'/></a:solidFill></c:spPr>";
+        let red_srgb = "<c:spPr><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></c:spPr>";
+        assert!(
+            render(window_sys, None, ChartHost::Excel).is_err(),
+            "export without a palette must stay NI"
+        );
+        assert_eq!(
+            render(window_sys, Some(&palette), ChartHost::Excel).unwrap(),
+            render(window_srgb, None, ChartHost::Excel).unwrap(),
+            "window lastClr green must paint palette white"
+        );
+        assert_eq!(
+            render(text_sys, Some(&palette), ChartHost::Excel).unwrap(),
+            render(text_srgb, None, ChartHost::Excel).unwrap(),
+            "windowText lastClr red must paint palette black"
+        );
+        assert_ne!(
+            render(window_sys, Some(&palette), ChartHost::Excel).unwrap(),
+            render(green_srgb, None, ChartHost::Excel).unwrap()
+        );
+        assert_ne!(
+            render(text_sys, Some(&palette), ChartHost::Excel).unwrap(),
+            render(red_srgb, None, ChartHost::Excel).unwrap()
+        );
+        // Plot-area sysClr uses the same palette policy.
+        let plot_sys = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
+            );
+        let plot_srgb = LONG_LEGEND
+            .replace(
+                "<c:chart>",
+                "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill></c:spPr><c:chart>",
+            )
+            .replace(
+                "<c:plotArea>",
+                "<c:plotArea><c:spPr><a:solidFill><a:srgbClr val='000000'/></a:solidFill></c:spPr>",
+            );
+        let plot_doc = crate::xml::parse(plot_sys.as_bytes()).unwrap();
+        let plot_ref = crate::xml::parse(plot_srgb.as_bytes()).unwrap();
+        let plot_png = |root: &Element, sys: Option<&SystemColorPalette>| {
+            render_chart_with_sys_palette(
+                root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                dpi,
+                None,
+                sys,
+            )
+        };
+        assert!(plot_png(&plot_doc.root, None).is_err());
+        assert_eq!(
+            plot_png(&plot_doc.root, Some(&palette)).unwrap(),
+            plot_png(&plot_ref.root, None).unwrap()
+        );
+        // Slide host still has no chart-area frame, even with a palette.
+        assert_eq!(
+            render(window_sys, Some(&palette), ChartHost::Slide).unwrap(),
+            render("", None, ChartHost::Slide).unwrap()
+        );
+    }
+
+    #[test]
+    fn theme_clrscheme_sysclr_lastclr_snapshot_is_unchanged() {
+        // dk1/lt1 in the theme still use serialized lastClr, which is a
+        // different path from live chart-frame sysClr.
+        let theme = br#"<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:themeElements><a:clrScheme name="x"><a:dk1><a:sysClr val="windowText" lastClr="112233"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="AABBCC"/></a:lt1></a:clrScheme></a:themeElements></a:theme>"#;
+        let scheme = theme_scheme(Some(theme), FALLBACK_ACCENTS);
+        assert_eq!(scheme.dk1, Some([0x11, 0x22, 0x33]));
+        assert_eq!(scheme.lt1, Some([0xAA, 0xBB, 0xCC]));
+        assert!(scheme.sys.get("windowText").is_none());
+        assert!(scheme.sys.get("window").is_none());
     }
 }
