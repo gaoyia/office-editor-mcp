@@ -337,6 +337,10 @@ struct ColumnChart {
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     cats_from_bottom: bool,
     title: Option<String>,
+    /// Explicit title typography (sz in points plus optional bold/italic/typeface).
+    /// None means omitted defRPr/rPr, which stays on the legacy 10pt Face::open path
+    /// because Excel Font.Size for that pattern is not a unique constant (10 vs 18).
+    title_typo: Option<TitleTypo>,
     accents: [[u8; 3]; 6],
     kind: PlotKind,
     /// Pie first slice angle in degrees, clockwise from up. Unused for other kinds.
@@ -2626,6 +2630,7 @@ fn read_chart(
         axis_secondary,
         cats_from_bottom,
         title: title_text(chart),
+        title_typo: title_typography(chart)?,
         accents,
         kind,
         first_slice_ang,
@@ -2676,10 +2681,11 @@ fn paint_scatter(
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_px = title_face_px(chart.title_typo.as_ref(), canvas.dpi, label_px);
     let title_face = chart
         .title
         .as_ref()
-        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+        .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let y_scale = axis::scale(
         &chart.series,
@@ -2927,7 +2933,7 @@ fn paint_scatter(
     }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, label_px);
+        let width = text_width(font, face, title, title_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
         draw_text(
             canvas,
@@ -2936,7 +2942,7 @@ fn paint_scatter(
             title,
             x,
             title_top + canvas.dpi.scale_f(TITLE_DROP),
-            label_px,
+            title_px,
             INK,
         );
     }
@@ -3028,10 +3034,11 @@ fn paint_bar(
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_px = title_face_px(chart.title_typo.as_ref(), canvas.dpi, label_px);
     let title_face = chart
         .title
         .as_ref()
-        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+        .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let widest_cat = chart
         .categories
@@ -3219,7 +3226,7 @@ fn paint_bar(
     }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, label_px);
+        let width = text_width(font, face, title, title_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
         draw_text(
             canvas,
@@ -3228,7 +3235,7 @@ fn paint_bar(
             title,
             x,
             title_top + canvas.dpi.scale_f(TITLE_DROP),
-            label_px,
+            title_px,
             INK,
         );
     }
@@ -3261,10 +3268,11 @@ fn paint_pie(
     }
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_px = title_face_px(chart.title_typo.as_ref(), canvas.dpi, label_px);
     let title_face = chart
         .title
         .as_ref()
-        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+        .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
     let title_top = canvas.dpi.scale_f(4.0);
     // Public Office PlotArea probes: the pie is not an inscribed circle of
     // the whole host. Title and right legend bands are removed first; Office
@@ -3320,7 +3328,7 @@ fn paint_pie(
     draw_pie_slices(canvas, chart, &plot);
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, label_px);
+        let width = text_width(font, face, title, title_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
         draw_text(
             canvas,
@@ -3329,7 +3337,7 @@ fn paint_pie(
             title,
             x,
             title_top + canvas.dpi.scale_f(TITLE_DROP),
-            label_px,
+            title_px,
             INK,
         );
     }
@@ -3568,10 +3576,11 @@ fn paint(
     let legend_layout = legend::Layout::new(canvas, chart, font)?;
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
     let gdi = super::chart_gdi::Face::open(label_px, false);
+    let title_px = title_face_px(chart.title_typo.as_ref(), canvas.dpi, label_px);
     let title_face = chart
         .title
         .as_ref()
-        .and_then(|_| super::chart_gdi::Face::open(label_px, true));
+        .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
     // Use the full supplied font line box, not just the GDI raster ascent.
     // Glyph drawing can use the existing GDI fallback; label packing must reserve
     // the larger declared line box so the two paths cannot over-pack the axis.
@@ -3935,7 +3944,7 @@ fn paint(
     }
     if let Some(title) = &chart.title {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, label_px);
+        let width = text_width(font, face, title, title_px);
         let x = (f64::from(canvas.w) - width) / 2.0;
         draw_text(
             canvas,
@@ -3944,7 +3953,7 @@ fn paint(
             title,
             x,
             title_top + canvas.dpi.scale_f(TITLE_DROP),
-            label_px,
+            title_px,
             INK,
         );
     }
@@ -5643,6 +5652,215 @@ fn title_text(chart: &Element) -> Option<String> {
     }
     None
 }
+
+/// Locked only from explicit DrawingML `sz` (hundredths of a point). Omitted
+/// typography is not filled in with a guessed default; Excel Font.Size on
+/// empty defRPr / style 2 was 10pt on Chinese titles and 18pt on English ones.
+#[derive(Clone, Debug, PartialEq)]
+struct TitleTypo {
+    pt: f64,
+    bold: bool,
+    italic: bool,
+    name: Option<String>,
+}
+
+fn title_typography(chart: &Element) -> Result<Option<TitleTypo>, Error> {
+    if title_text(chart).is_none() {
+        return Ok(None);
+    }
+    let Some(title) = chart.child_by_local("title") else {
+        return Ok(None);
+    };
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut props: Vec<&Element> = Vec::new();
+    if let Some(txpr) = title.child_by_local("txPr") {
+        collect_title_props(txpr, &mut props)?;
+    }
+    if let Some(tx) = title.child_by_local("tx") {
+        if let Some(rich) = find_deep(tx, "rich") {
+            collect_title_props(rich, &mut props)?;
+        }
+    }
+    let mut typo: Option<TitleTypo> = None;
+    for prop in props {
+        if let Some(parsed) = parse_title_rpr(prop)? {
+            if let Some(existing) = typo.as_ref() {
+                if existing != &parsed {
+                    return Err(unsupported());
+                }
+            } else {
+                typo = Some(parsed);
+            }
+        }
+    }
+    Ok(typo)
+}
+
+fn collect_title_props<'a>(root: &'a Element, out: &mut Vec<&'a Element>) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if root
+        .child_by_local("lstStyle")
+        .is_some_and(|n| n.element_children().next().is_some())
+    {
+        return Err(unsupported());
+    }
+    let paragraphs: Vec<&Element> = if root.local_name() == "p" {
+        vec![root]
+    } else {
+        root.children_by_local("p")
+    };
+    if paragraphs.len() > 1 {
+        return Err(unsupported());
+    }
+    for p in paragraphs {
+        if let Some(def) = p
+            .child_by_local("pPr")
+            .and_then(|n| n.child_by_local("defRPr"))
+        {
+            out.push(def);
+        }
+        for r in p.children_by_local("r") {
+            if let Some(rpr) = r.child_by_local("rPr") {
+                out.push(rpr);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn parse_title_rpr(p: &Element) -> Result<Option<TitleTypo>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let allowed = [
+        "sz", "b", "i", "u", "strike", "baseline", "spc", "cap", "normalizeH",
+        "kumimoji", "lang", "altLang", "dirty", "err", "smtClean", "smtId",
+        "noProof", "bmk",
+    ];
+    for (name, _) in p.attrs.iter() {
+        if name.starts_with("xmlns") {
+            continue;
+        }
+        let local = name.rsplit(':').next().unwrap_or(name.as_str());
+        if !allowed.contains(&local) {
+            return Err(unsupported());
+        }
+    }
+    if p.attr_local("cap").is_some_and(|v| v != "none")
+        || p.attr_local("spc")
+            .and_then(|v| v.parse::<i32>().ok())
+            .is_some_and(|v| v != 0)
+        || matches!(p.attr_local("normalizeH"), Some("1" | "true" | "on"))
+        || matches!(p.attr_local("kumimoji"), Some("1" | "true" | "on"))
+        || p.attr_local("u").is_some_and(|v| v != "none")
+        || p.attr_local("strike").is_some_and(|v| v != "noStrike")
+        || p.attr_local("baseline")
+            .and_then(|v| v.parse::<i32>().ok())
+            .is_some_and(|v| v != 0)
+    {
+        return Err(unsupported());
+    }
+    let Some(sz_raw) = p.attr_local("sz") else {
+        // lang-only / empty defRPr: not an explicit typography contract.
+        if p.attr_local("b").is_some() || p.attr_local("i").is_some() {
+            // Bold/italic without sz is not uniquely sized; do not invent 10pt.
+            // Also do not silently drop the explicit attribute.
+            return Err(unsupported());
+        }
+        if p.child_by_local("latin").is_some() || p.child_by_local("ea").is_some() {
+            return Err(unsupported());
+        }
+        return Ok(None);
+    };
+    let sz = sz_raw.parse::<f64>().map_err(|_| unsupported())?;
+    if !sz.is_finite() || !(100.0..=400000.0).contains(&sz) || sz > 40900.0 {
+        return Err(unsupported());
+    }
+    let bold = match p.attr_local("b") {
+        None => false,
+        Some("1" | "true" | "on") => true,
+        Some("0" | "false" | "off") => false,
+        Some(_) => return Err(unsupported()),
+    };
+    let italic = match p.attr_local("i") {
+        None => false,
+        Some("1" | "true" | "on") => true,
+        Some("0" | "false" | "off") => false,
+        Some(_) => return Err(unsupported()),
+    };
+    let latin = p
+        .child_by_local("latin")
+        .and_then(|n| n.attr_local("typeface"))
+        .filter(|n| !n.trim().is_empty());
+    let ea = p
+        .child_by_local("ea")
+        .and_then(|n| n.attr_local("typeface"))
+        .filter(|n| !n.trim().is_empty());
+    if matches!((latin, ea), (Some(a), Some(b)) if a != b) {
+        return Err(unsupported());
+    }
+    if let Some(name) = latin.or(ea) {
+        if name.starts_with('+') {
+            return Err(unsupported());
+        }
+    }
+    for child in p.element_children() {
+        match child.local_name() {
+            "latin" | "ea" | "extLst" => {}
+            "cs" => {
+                let cs = child.attr_local("typeface").filter(|n| !n.trim().is_empty());
+                if cs.is_some() && cs != latin.or(ea) {
+                    return Err(unsupported());
+                }
+            }
+            "effectLst" | "effectDag" if child.element_children().next().is_none() => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(Some(TitleTypo {
+        pt: sz / 100.0,
+        bold,
+        italic,
+        name: latin.or(ea).map(|s| s.to_string()),
+    }))
+}
+
+fn title_face_px(typo: Option<&TitleTypo>, dpi: RenderDpi, label_px: f32) -> f32 {
+    typo.map(|t| dpi.pt_to_px_font(t.pt) as f32).unwrap_or(label_px)
+}
+
+fn open_title_face(
+    typo: Option<&TitleTypo>,
+    px: f32,
+    dpi: RenderDpi,
+) -> Option<super::chart_gdi::Face> {
+    let Some(typo) = typo else {
+        return super::chart_gdi::Face::open(px, true);
+    };
+    if let Some(name) = typo.name.as_deref() {
+        return super::chart_gdi::Face::open_cell_dpi(px, typo.bold, typo.italic, name, dpi.get());
+    }
+    let face = super::chart_gdi::Face::open_dpi(px, typo.bold, dpi.get());
+    if typo.italic {
+        #[cfg(windows)]
+        {
+            face.and_then(|f| {
+                super::chart_gdi::Face::open_cell_dpi(
+                    px,
+                    typo.bold,
+                    true,
+                    f.family_name(),
+                    dpi.get(),
+                )
+            })
+        }
+        #[cfg(not(windows))]
+        {
+            face
+        }
+    } else {
+        face
+    }
+}
+
 
 fn series_numbers(
     parent: Option<&Element>,
@@ -17420,5 +17638,95 @@ mod tests {
             read_chart(&pct_mixed.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
             "percentStacked mixed signs on a line stay NI"
         );
+    }
+
+    fn titled_legend_xml(def_rpr: &str) -> String {
+        let title = format!(
+            "<c:title><c:tx><c:rich xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:bodyPr/><a:lstStyle/><a:p><a:pPr>{def}</a:pPr><a:r><a:rPr lang=\"en-US\"/><a:t>Legend foundation</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title>",
+            def = def_rpr
+        );
+        LONG_LEGEND.replace("<c:chart>", &format!("<c:chart>{title}"))
+    }
+
+    fn read_titled(def_rpr: &str) -> Result<ColumnChart, Error> {
+        let doc = crate::xml::parse(titled_legend_xml(def_rpr).as_bytes()).unwrap();
+        read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+    }
+
+    #[test]
+    fn omitted_title_typography_stays_legacy_and_does_not_invent_a_point_size() {
+        let chart = read_titled("<a:defRPr/>").expect("empty defRPr remains renderable");
+        assert_eq!(chart.title.as_deref(), Some("Legend foundation"));
+        assert_eq!(chart.title_typo, None, "do not invent 10pt or 18pt when sz is omitted");
+        // Language-only run properties are not typography either.
+        let chart = read_titled("<a:defRPr></a:defRPr>").expect("empty defRPr element");
+        assert_eq!(chart.title_typo, None);
+    }
+
+    #[test]
+    fn explicit_title_sz_is_hundredths_of_a_point() {
+        let typo = read_titled("<a:defRPr sz='1800' b='1'/>")
+            .expect("explicit sz is supported")
+            .title_typo
+            .expect("sz must lock typography");
+        assert_eq!(typo.pt, 18.0);
+        assert!(typo.bold);
+        assert!(!typo.italic);
+        assert_eq!(typo.name, None);
+        let ten = read_titled("<a:defRPr sz='1000'/>")
+            .unwrap()
+            .title_typo
+            .unwrap();
+        assert_eq!(ten.pt, 10.0);
+        assert!(!ten.bold, "omitted b on an explicit sz is not assumed bold");
+    }
+
+    #[test]
+    fn explicit_title_typeface_parses_with_size() {
+        let typo = read_titled("<a:defRPr sz='1400' i='1'><a:latin typeface='Arial'/></a:defRPr>")
+            .expect("named typeface with sz")
+            .title_typo
+            .unwrap();
+        assert_eq!(typo.pt, 14.0);
+        assert!(typo.italic);
+        assert!(!typo.bold);
+        assert_eq!(typo.name.as_deref(), Some("Arial"));
+    }
+
+    #[test]
+    fn unsupported_or_incomplete_title_typography_stays_ni() {
+        for def in [
+            "<a:defRPr sz='1800' u='sng'/>",
+            "<a:defRPr sz='NaN'/>",
+            "<a:defRPr sz='0'/>",
+            "<a:defRPr sz='50000'/>",
+            "<a:defRPr b='1'/>",
+            "<a:defRPr><a:latin typeface='Arial'/></a:defRPr>",
+            "<a:defRPr sz='1800'><a:latin typeface='+mj-lt'/></a:defRPr>",
+        ] {
+            assert!(
+                read_titled(def).is_err(),
+                "must not silently drop typography semantics: {def}"
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_title_sz_changes_rendered_title_metrics_at_export_dpi() {
+        let small_xml = titled_legend_xml("<a:defRPr sz='1000' b='1'/>");
+        let large_xml = titled_legend_xml("<a:defRPr sz='1800' b='1'/>");
+        let small_doc = crate::xml::parse(small_xml.as_bytes()).unwrap();
+        let large_doc = crate::xml::parse(large_xml.as_bytes()).unwrap();
+        let dpi = RenderDpi::from_request(serde_json::json!({"dpi":106}).as_object().unwrap()).unwrap();
+        let small = render_chart_at(
+            &small_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi,
+        )
+        .unwrap();
+        let large = render_chart_at(
+            &large_doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", dpi,
+        )
+        .unwrap();
+        assert_ne!(small, large, "10pt and 18pt titles must not share a raster");
+        assert!(large.len() >= 8 && small.len() >= 8);
     }
 }
