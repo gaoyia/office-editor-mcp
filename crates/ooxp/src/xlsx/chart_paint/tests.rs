@@ -3533,6 +3533,42 @@
         )
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn legend_filled_label_sits_on_swatch_bottom() {
+        // t201u: typographic baseline sits on the last swatch pixel. This
+        // raises 106 dpi year ink by 2 px vs the old y-2 fudge, matching
+        // official Chart.Export 2025 bottoms. The same ascent rule applies
+        // at 96 dpi (y-4 vs the old y-2). Not a typography rewrite.
+        let face96 = super::super::chart_gdi::Face::open(
+            RenderDpi::DEFAULT.pt_to_px_font(LABEL_PT) as f32,
+            false,
+        )
+        .expect("face 96");
+        let sw96 = RenderDpi::DEFAULT.scale_px(LEGEND_SWATCH);
+        let top96 = legend_filled_label_top(100, sw96, Some(&face96), None, 0.0);
+        assert_eq!(top96, f64::from(100 + sw96 - 1) - face96.line_height());
+        assert_eq!(face96.line_height(), 11.0);
+        assert_eq!(top96, 96.0); // 100+8-1-11
+
+        let dpi106 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        let face106 = super::super::chart_gdi::Face::open(
+            dpi106.pt_to_px_font(LABEL_PT) as f32,
+            false,
+        )
+        .expect("face 106");
+        let sw106 = dpi106.scale_px(LEGEND_SWATCH);
+        let top106 = legend_filled_label_top(100, sw106, Some(&face106), None, 0.0);
+        assert_eq!(top106, f64::from(100 + sw106 - 1) - face106.line_height());
+        assert_eq!(sw106, 9);
+        assert_eq!(face106.line_height(), 12.0);
+        assert_eq!(top106, 96.0); // 100+9-1-12
+        // 2 px higher typographic top than the previous y - scale_px(2) fudge.
+        assert_eq!(top106, 100.0 - 4.0);
+        assert!(top106 < f64::from(100 - dpi106.scale_px(2)));
+    }
+
     #[test]
     fn legend_filled_key_gap_keeps_96_dpi_and_tightens_at_106() {
         // t200u approximation: 96 dpi oracles stay on LEGEND_GAP=6; 106 dpi

@@ -884,6 +884,34 @@ pub(super) fn pie_legend_right_inset(
     need.max(dpi.scale_px(INSET_RIGHT))
 }
 
+
+/// Typographic top for a legend label that shares a bottom edge with the
+/// filled key. `draw_text` takes typographic top; the GDI baseline is
+/// `top + line_height()` (TEXTMETRIC ascent). Official 106 dpi Chart.Export
+/// year ink for lining figures sits on that baseline, and the baseline
+/// should sit on the last swatch pixel (`y + swatch_h - 1`). Not a unique
+/// Office lock and not a typography rewrite: this only changes where the
+/// already-drawn cell is placed. Fontdue fallback uses the same ascent rule.
+pub(super) fn legend_filled_label_top(
+    swatch_y: i32,
+    swatch_h: i32,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    font: Option<&Font>,
+    px: f32,
+) -> f64 {
+    let baseline = f64::from(swatch_y + swatch_h - 1);
+    let ascent = if let Some(face) = gdi {
+        face.line_height()
+    } else if let Some(font) = font {
+        font.horizontal_line_metrics(px)
+            .map(|item| f64::from(item.ascent))
+            .unwrap_or(f64::from(px))
+    } else {
+        return f64::from(swatch_y);
+    };
+    baseline - ascent
+}
+
 pub(super) fn draw_pie_legend(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -917,13 +945,14 @@ pub(super) fn draw_pie_legend(
                 fill.alpha,
             );
         }
+        let swatch_h = canvas.dpi.scale_px(LEGEND_SWATCH);
         draw_text(
             canvas,
             font,
             gdi,
             &name,
-            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + legend_filled_key_gap(canvas.dpi)),
-            f64::from(y - canvas.dpi.scale_px(2)),
+            f64::from(x + swatch_h + legend_filled_key_gap(canvas.dpi)),
+            legend_filled_label_top(y, swatch_h, gdi, font, px),
             px,
             INK,
         );
@@ -2838,7 +2867,7 @@ pub(super) fn draw_legend(
             gdi,
             &ser.name,
             f64::from(x + key_width + key_gap),
-            f64::from(y - canvas.dpi.scale_px(2)),
+            legend_filled_label_top(y, canvas.dpi.scale_px(LEGEND_SWATCH), gdi, font, px),
             px,
             chart.legend_spec.entry_text_color(index),
         );
