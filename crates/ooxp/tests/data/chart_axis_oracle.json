@@ -276,9 +276,9 @@
     "explicit": {},
     "expected": {
       "min": 0.0,
-      "max": 4.5,
-      "major": 0.5,
-      "minor": 0.1,
+      "max": 5.0,
+      "major": 1.0,
+      "minor": 0.2,
       "crossing": 0.0
     },
     "sourceSha256": "761539f380a25a4f75ae0032280699c79d00f67a17ae19685f07964ee9faed85",
@@ -295,9 +295,9 @@
     "explicit": {},
     "expected": {
       "min": 0.0,
-      "max": 4.5,
-      "major": 0.5,
-      "minor": 0.1,
+      "max": 5.0,
+      "major": 1.0,
+      "minor": 0.2,
       "crossing": 0.0
     },
     "sourceSha256": "b5cb433d6f88c06fb52fd4cec184f48db640bf901ba567b6a8be782811eb140b",
@@ -314,9 +314,9 @@
     "explicit": {},
     "expected": {
       "min": 0.0,
-      "max": 4.5,
-      "major": 0.5,
-      "minor": 0.1,
+      "max": 5.0,
+      "major": 1.0,
+      "minor": 0.2,
       "crossing": 0.0
     },
     "sourceSha256": "8fc27699c7d47b035d144aa72bbfdf79b90e6d197899daf9b8df2fa2d8a50aea",
@@ -334,8 +334,8 @@
     "expected": {
       "min": 0.0,
       "max": 100.0,
-      "major": 10.0,
-      "minor": 2.0,
+      "major": 20.0,
+      "minor": 4.0,
       "crossing": 0.0
     },
     "sourceSha256": "c7d1594b4653b0b0f3c54404ef4ec5b30bafecbd7679360feb9083041d9253d1",
