@@ -878,7 +878,7 @@ pub(super) fn pie_legend_right_inset(
     };
     let need = dpi.scale_px(LEGEND_PLOT_GAP)
         + dpi.scale_px(LEGEND_SWATCH)
-        + dpi.scale_px(LEGEND_GAP)
+        + legend_filled_key_reserve_gap(dpi)
         + name_px
         + dpi.scale_px(LEGEND_PAD);
     need.max(dpi.scale_px(INSET_RIGHT))
@@ -922,7 +922,7 @@ pub(super) fn draw_pie_legend(
             font,
             gdi,
             &name,
-            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + canvas.dpi.scale_px(LEGEND_GAP)),
+            f64::from(x + canvas.dpi.scale_px(LEGEND_SWATCH) + legend_filled_key_gap(canvas.dpi)),
             f64::from(y - canvas.dpi.scale_px(2)),
             px,
             INK,
@@ -1921,11 +1921,32 @@ pub(super) fn legend_key_width(kind: PlotKind, square: i32, dpi: RenderDpi) -> i
     }
 }
 
+/// Drawn swatch-to-series-name gap for filled square keys (column, bar, area,
+/// pie). 96 dpi keeps the locked `LEGEND_GAP` (6). At other export DPIs,
+/// `scale_px(LEGEND_GAP)` places official-export year labels too far from the
+/// key. t200u authorized a close-enough move: draw with `LEGEND_GAP_SCALED_DPI`
+/// (2 device px) so first ink sits near the measured official columns, while
+/// plot reservation still uses `scale_px(LEGEND_GAP)` so the swatch does not
+/// shift. Not a unique Office lock. Line/scatter keys keep 1.5pt.
+pub(super) fn legend_filled_key_gap(dpi: RenderDpi) -> i32 {
+    if dpi.is_default() {
+        LEGEND_GAP
+    } else {
+        LEGEND_GAP_SCALED_DPI
+    }
+}
+
+/// Plot-area reservation for a filled-key gap. Always the 96-dpi-scaled
+/// LEGEND_GAP so 106 dpi swatches stay at the already-aligned left edge.
+pub(super) fn legend_filled_key_reserve_gap(dpi: RenderDpi) -> i32 {
+    dpi.scale_px(LEGEND_GAP)
+}
+
 pub(super) fn legend_key_gap(kind: PlotKind, dpi: RenderDpi) -> i32 {
     if matches!(kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
         dpi.pt_to_px_font(1.5).round() as i32
     } else {
-        dpi.scale_px(LEGEND_GAP)
+        legend_filled_key_gap(dpi)
     }
 }
 
@@ -2856,9 +2877,17 @@ pub(super) fn legend_right_inset(
     };
     let square = dpi.scale_px(LEGEND_SWATCH);
     let key_width = legend_key_width(chart.kind, square, dpi);
+    // Reservation keeps the 96-dpi-scaled filled-key gap so the plot edge
+    // (and therefore the swatch) does not shift at 106 dpi. Drawn text uses
+    // the tighter t200u `legend_key_gap` and sits closer to the swatch.
+    let reserved_gap = if matches!(chart.kind, PlotKind::StandardLine | PlotKind::Scatter { .. }) {
+        legend_key_gap(chart.kind, dpi)
+    } else {
+        legend_filled_key_reserve_gap(dpi)
+    };
     let need = dpi.scale_px(LEGEND_PLOT_GAP)
         + key_width
-        + legend_key_gap(chart.kind, dpi)
+        + reserved_gap
         + name_px
         + dpi.scale_px(LEGEND_PAD);
     let reference = gdi

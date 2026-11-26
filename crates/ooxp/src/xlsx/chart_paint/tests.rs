@@ -3533,6 +3533,42 @@
         )
     }
 
+    #[test]
+    fn legend_filled_key_gap_keeps_96_dpi_and_tightens_at_106() {
+        // t200u approximation: 96 dpi oracles stay on LEGEND_GAP=6; 106 dpi
+        // official-export years move closer with a 2px device gap.
+        assert_eq!(legend_filled_key_gap(RenderDpi::DEFAULT), LEGEND_GAP);
+        assert_eq!(
+            legend_key_gap(PlotKind::ClusteredColumn, RenderDpi::DEFAULT),
+            LEGEND_GAP
+        );
+        let dpi106 =
+            RenderDpi::from_request(serde_json::json!({"dpi": 106}).as_object().unwrap()).unwrap();
+        assert_eq!(legend_filled_key_gap(dpi106), LEGEND_GAP_SCALED_DPI);
+        assert_eq!(
+            legend_key_gap(PlotKind::ClusteredColumn, dpi106),
+            LEGEND_GAP_SCALED_DPI
+        );
+        // Line keys stay on the existing 1.5pt rule at both DPIs.
+        assert_eq!(
+            legend_key_gap(PlotKind::StandardLine, RenderDpi::DEFAULT),
+            RenderDpi::DEFAULT.pt_to_px_font(1.5).round() as i32
+        );
+        assert_eq!(
+            legend_key_gap(PlotKind::StandardLine, dpi106),
+            dpi106.pt_to_px_font(1.5).round() as i32
+        );
+        // Plot reservation stays on the scaled 96-dpi gap so the swatch does
+        // not shift (identity at 96; 7 px at 106).
+        assert_eq!(
+            legend_filled_key_reserve_gap(RenderDpi::DEFAULT),
+            LEGEND_GAP
+        );
+        assert_eq!(legend_filled_key_reserve_gap(dpi106), dpi106.scale_px(LEGEND_GAP));
+        assert_eq!(dpi106.scale_px(LEGEND_GAP), 7);
+        assert_ne!(legend_filled_key_gap(dpi106), legend_filled_key_reserve_gap(dpi106));
+    }
+
     #[cfg(windows)]
     #[test]
     fn long_legend_uses_layout_width_and_short_names_keep_the_inset() {

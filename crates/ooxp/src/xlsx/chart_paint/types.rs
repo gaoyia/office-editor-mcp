@@ -37,6 +37,13 @@ pub(super) const LEGEND_SWATCH: i32 = 8;
 
 pub(super) const LEGEND_GAP: i32 = 6;
 
+/// t200u approximation (not a unique Office lock): filled-key series-name gap
+/// at non-96 export DPI, in device pixels. Official 106 dpi Chart.Export keeps
+/// a tighter swatch-to-year gap than `scale_px(LEGEND_GAP)` (F04 first ink
+/// ~379 vs library 385). 96 dpi still uses `LEGEND_GAP` and keeps existing
+/// inset/oracle tests.
+pub(super) const LEGEND_GAP_SCALED_DPI: i32 = 2;
+
 pub(super) const LEGEND_PLOT_GAP: i32 = 22;
 
 pub(super) const LEGEND_PAD: i32 = 4;
