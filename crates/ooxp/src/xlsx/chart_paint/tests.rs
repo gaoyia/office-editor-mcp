@@ -10137,7 +10137,10 @@
         ok("<srgbClr val='C0C0C0'><invGamma/></srgbClr>", [134, 134, 134]);
         ok("<srgbClr val='FF0000'><gray/></srgbClr>", [54, 54, 54]);
         ok("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='00FF00'><a:gray/></a:srgbClr>", [182, 182, 182]);
-        // Other bases and non-empty leaves stay NI; no silent lastClr / scheme widening.
+        ok("<srgbClr val='C04020'><inv/><comp/></srgbClr>", [253, 187, 183]);
+        ok("<srgbClr val='C04020'><comp/><inv/></srgbClr>", [253, 211, 183]);
+        // Other bases, non-empty leaves, length-3 chains, and schemeClr stay NI.
+        // No silent lastClr / scheme widening.
         for xml in [
             "<schemeClr val='accent1'><comp/></schemeClr>",
             "<sysClr val='window' lastClr='FFFFFF'><inv/></sysClr>",
@@ -10147,7 +10150,8 @@
             "<srgbClr val='808080'><comp val='1'/></srgbClr>",
             "<srgbClr val='808080'><inv><alpha val='50000'/></inv></srgbClr>",
             "<srgbClr val='808080'><gamma/><alpha val='100000'/></srgbClr>",
-            "<srgbClr val='808080'><invGamma/><gray/></srgbClr>",
+            "<srgbClr val='808080'><inv/><gamma/><gray/></srgbClr>",
+            "<schemeClr val='accent1'><inv/><gamma/></schemeClr>",
         ] {
             ni(xml);
         }
@@ -10180,5 +10184,152 @@
             let with = render_chart(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Slide, None, "").unwrap();
             let without = render_chart(&slide.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Slide, None, "").unwrap();
             assert_eq!(with, without, "slide host must not grow a chart-area frame for {transform}");
+        }
+    }
+    #[test]
+    fn srgb_transform_pairs_match_official_t189_xml_order() {
+        // Official Chart.Export t189-srgb-transform-chains-20261126, 50 cases,
+        // CLEAN_PUBLIC_OFFICE_EXPORT, probe (5,5). Competing models (XML order
+        // of the already-locked helpers, reverse order, identity) were frozen
+        // before the session. Reverse lost 17 order-discriminating pixels.
+        // Five C04020 pairs are recorded as integer-roundtrip residuals below;
+        // they are not a reason to pick reverse order or invent a fudge.
+        let exact: [(&str, [&str; 2], [u8; 3]); 35] = [
+            ("808080", ["inv", "gamma"], [243, 243, 243]),
+            ("808080", ["gamma", "inv"], [187, 187, 187]),
+            ("808080", ["gamma", "invGamma"], [128, 128, 128]),
+            ("808080", ["invGamma", "gamma"], [128, 128, 128]),
+            ("808080", ["inv", "comp"], [229, 229, 229]),
+            ("808080", ["comp", "inv"], [229, 229, 229]),
+            ("808080", ["inv", "gray"], [229, 229, 229]),
+            ("808080", ["gray", "inv"], [229, 229, 229]),
+            ("808080", ["comp", "gray"], [128, 128, 128]),
+            ("808080", ["gray", "comp"], [128, 128, 128]),
+            ("808080", ["gamma", "gray"], [188, 188, 188]),
+            ("808080", ["gray", "gamma"], [188, 188, 188]),
+            ("808080", ["inv", "inv"], [128, 128, 128]),
+            ("808080", ["gamma", "gamma"], [223, 223, 223]),
+            ("808080", ["comp", "comp"], [128, 128, 128]),
+            ("808080", ["gray", "gray"], [128, 128, 128]),
+            ("808080", ["invGamma", "inv"], [251, 251, 251]),
+            ("808080", ["inv", "invGamma"], [200, 200, 200]),
+            ("808080", ["comp", "gamma"], [188, 188, 188]),
+            ("808080", ["gamma", "comp"], [188, 188, 188]),
+            ("C04020", ["inv", "gamma"], [220, 252, 254]),
+            ("C04020", ["gamma", "invGamma"], [192, 64, 32]),
+            ("C04020", ["inv", "comp"], [253, 187, 183]),
+            ("C04020", ["comp", "inv"], [253, 211, 183]),
+            ("C04020", ["inv", "gray"], [235, 235, 235]),
+            ("C04020", ["gray", "inv"], [243, 243, 243]),
+            ("C04020", ["comp", "gray"], [135, 135, 135]),
+            ("C04020", ["gray", "comp"], [89, 89, 89]),
+            ("C04020", ["gamma", "gray"], [153, 153, 153]),
+            ("C04020", ["gray", "gamma"], [159, 159, 159]),
+            ("C04020", ["comp", "comp"], [192, 64, 32]),
+            ("C04020", ["gray", "gray"], [89, 89, 89]),
+            ("C04020", ["invGamma", "inv"], [226, 255, 255]),
+            ("C04020", ["comp", "gamma"], [99, 208, 225]),
+            ("C04020", ["gamma", "comp"], [99, 187, 225]),
+        ];
+        let scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        for (base, ops, official) in exact {
+            let rgb = [
+                u8::from_str_radix(&base[0..2], 16).unwrap(),
+                u8::from_str_radix(&base[2..4], 16).unwrap(),
+                u8::from_str_radix(&base[4..6], 16).unwrap(),
+            ];
+            let composed = apply_locked_srgb_transforms(rgb, &ops).unwrap();
+            assert_eq!(composed, official, "xml-order {base} {ops:?}");
+            let xml = format!(
+                "<srgbClr val='{base}'><{a}/><{b}/></srgbClr>",
+                a = ops[0],
+                b = ops[1]
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(
+                resolve_frame_solid(&doc.root, &scheme).unwrap(),
+                FrameFill::Solid(official),
+                "{xml}"
+            );
+            let reversed = apply_locked_srgb_transforms(rgb, &[ops[1], ops[0]]).unwrap();
+            if reversed != composed {
+                assert_ne!(reversed, official, "reverse must not win when order differs: {base} {ops:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn srgb_transform_pairs_record_t189_integer_roundtrip_residuals() {
+        // These five official (5,5) pixels are closer to XML-order than to
+        // reverse (or equal on commuting pairs), but they differ from
+        // per-step rounded locked helpers by 1..4. Do not fudge, do not pick
+        // reverse, and do not lower the exact official standard on the 35
+        // exact cases. Library output is the composed locked helpers.
+        let residuals: [(&str, [&str; 2], [u8; 3], [u8; 3], [u8; 3], u8); 5] = [
+            ("C04020", ["gamma", "inv"], [136, 224, 240], [136, 225, 240], [220, 252, 254], 1),
+            ("C04020", ["invGamma", "gamma"], [192, 64, 32], [192, 64, 34], [192, 64, 32], 2),
+            ("C04020", ["inv", "inv"], [192, 64, 32], [192, 65, 36], [192, 65, 36], 4),
+            ("C04020", ["gamma", "gamma"], [241, 194, 168], [241, 194, 167], [241, 194, 167], 1),
+            ("C04020", ["inv", "invGamma"], [121, 242, 251], [121, 242, 250], [226, 255, 255], 1),
+        ];
+        let scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        for (base, ops, official, library, reverse, delta) in residuals {
+            let rgb = [0xC0, 0x40, 0x20];
+            let composed = apply_locked_srgb_transforms(rgb, &ops).unwrap();
+            assert_eq!(composed, library, "library composition {ops:?}");
+            let xml = format!(
+                "<srgbClr val='{base}'><{a}/><{b}/></srgbClr>",
+                a = ops[0],
+                b = ops[1]
+            );
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(
+                resolve_frame_solid(&doc.root, &scheme).unwrap(),
+                FrameFill::Solid(library),
+                "{xml}"
+            );
+            let d = official
+                .iter()
+                .zip(library.iter())
+                .map(|(a, b)| a.abs_diff(*b))
+                .max()
+                .unwrap();
+            assert_eq!(d, delta, "recorded residual {ops:?}");
+            assert_ne!(library, official, "do not silently treat residual as exact {ops:?}");
+            if reverse != library && official != reverse {
+                let d_rev = official
+                    .iter()
+                    .zip(reverse.iter())
+                    .map(|(a, b)| a.abs_diff(*b))
+                    .max()
+                    .unwrap();
+                assert!(d < d_rev, "xml-order remains closer than reverse for {ops:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn srgb_transform_pairs_chart_frame_matches_official_rgb_reference() {
+        // Exact official pairs only. Residual cases are not used as a
+        // reference color. Do not sample official 425 by 266 coordinates on
+        // the library 424 by 265 raster.
+        let cases: [(&str, &str, &str, &str); 6] = [
+            ("808080", "inv", "gamma", "F3F3F3"),
+            ("808080", "gamma", "inv", "BBBBBB"),
+            ("C04020", "inv", "comp", "FDBBB7"),
+            ("C04020", "comp", "inv", "FDD3B7"),
+            ("C04020", "comp", "gray", "878787"),
+            ("C04020", "gray", "comp", "595959"),
+        ];
+        for (base, first, second, official) in cases {
+            let fill = format!(
+                "<c:spPr><a:solidFill><a:srgbClr val='{base}'><a:{first}/><a:{second}/></a:srgbClr></a:solidFill></c:spPr>"
+            );
+            let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{official}'/></a:solidFill></c:spPr>");
+            let make = |sp: &str| LONG_LEGEND.replace("<c:chart>", &format!("{sp}<c:chart>"));
+            let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+            let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+            let render = |root: &Element| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "").unwrap();
+            assert_eq!(render(&doc.root), render(&reference.root), "{first}+{second} {base}");
         }
     }

@@ -205,6 +205,44 @@ fn standalone_empty_transform(node: &Element, name: &str) -> bool {
         && node.text_content().trim().is_empty()
 }
 
+
+/// Official t189 pair matrix: apply already-locked empty srgbClr
+/// transforms in XML document order. Reverse order was rejected by 17
+/// order-discriminating official (5,5) pixels. schemeClr / sysClr stay
+/// unsupported. Length 3+ was not in that matrix and stays unsupported.
+pub(super) fn apply_locked_srgb_transforms(mut rgb: [u8; 3], names: &[&str]) -> Option<[u8; 3]> {
+    if names.is_empty()
+        || !names
+            .iter()
+            .all(|name| matches!(*name, "comp" | "inv" | "gamma" | "invGamma" | "gray"))
+    {
+        return None;
+    }
+    for name in names {
+        rgb = match *name {
+            "comp" => frame_comp(rgb),
+            "inv" => frame_inv(rgb),
+            "gamma" => frame_gamma(rgb),
+            "invGamma" => frame_inv_gamma(rgb),
+            "gray" => frame_gray(rgb),
+            _ => return None,
+        };
+    }
+    Some(rgb)
+}
+
+fn locked_srgb_transform_pair(color: &Element, kids: &[&Element], names: &[&str]) -> bool {
+    color.local_name() == "srgbClr"
+        && names.len() == 2
+        && names
+            .iter()
+            .all(|name| matches!(*name, "comp" | "inv" | "gamma" | "invGamma" | "gray"))
+        && kids
+            .iter()
+            .zip(names.iter())
+            .all(|(kid, name)| standalone_empty_transform(kid, name))
+}
+
 pub(super) fn frame_tint(rgb: [u8; 3], val: u32) -> [u8; 3] {
     let share = f64::from(val) / 100_000.0;
     rgb.map(|channel| {
@@ -929,8 +967,10 @@ pub(super) fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Resu
             kids[2],
         ),
         ["comp"] | ["inv"] | ["gamma"] | ["invGamma"] | ["gray"] => {
-            // Official t187 matrix locked these only on bare srgbClr + one empty
-            // transform element. schemeClr / sysClr / chains stay unsupported.
+            // Official t187 matrix locked these on bare srgbClr + one empty
+            // transform element. t189 unlocked length-2 chains of the same
+            // empty leaves, applied in document order. schemeClr / sysClr stay
+            // unsupported.
             if color.local_name() != "srgbClr" || !standalone_empty_transform(kids[0], names[0]) {
                 return Err(unsupported());
             }
@@ -942,6 +982,11 @@ pub(super) fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Resu
                 "gray" => frame_gray(rgb),
                 _ => return Err(unsupported()),
             }))
+        }
+        other if locked_srgb_transform_pair(color, kids.as_slice(), other) => {
+            Ok(FrameFill::Solid(
+                apply_locked_srgb_transforms(rgb, other).ok_or_else(unsupported)?,
+            ))
         }
         _ => Err(unsupported()),
     }
