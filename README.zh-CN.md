@@ -149,7 +149,7 @@ PowerShell 里如果中文显示乱码，先把输出解码设成 UTF-8：
 
 ## 浏览器演示
 
-临时页面在 `demo/web`。已发布的示例在 <https://gaoyia.github.io/office-editor-mcp/>。标题是 Office Open XML Patch。它把库编成 wasm，用中文或 English 介绍格式、MCP 接入和最新版本的下载地址，再按工作簿、文档、演示文稿列出创建和修改示例。必须先授权一个本地目录，结果只写入该目录，并标出新增和改过的文件。页面不另存示例文件。浏览器不支持目录授权时，页面会提示更换。说明见 `docs/wasm-demo.md`。
+临时页面在 `demo/web`。已发布的示例在 <https://gaoyia.github.io/office-editor-mcp/>。标题是 Office Open XML Patch。它把库编成 wasm，用中文或 English 介绍格式、MCP 接入和最新版本的下载地址，再按工作簿、文档、演示文稿列出创建和修改示例。每种格式都可以导出 PNG，并立刻在页面上预览；可以用来自会话里的包，也可以选择本地文件，不必先授权目录。要把示例 Office 文件写到本地，仍须先授权一个目录。这些写入只进入该目录，并标出新增和改过的文件。页面不另存示例文件。浏览器不支持目录授权时，页面会提示更换。说明见 `docs/wasm-demo.md`。
 
 ## 在 Rust 里调用
 
