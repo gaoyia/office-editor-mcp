@@ -61,3 +61,7 @@ controls) are byte-identical to the previous library baseline. Tick labels and
 major-gridline counts on those eight now match official min/max/majorUnit;
 pairwise |dy| on matched mid-gridlines is 0 or 1 px (existing 424x265 vs
 425x266 canvas). No new official Excel session.
+
+## Later density loosening (t196u)
+
+See valax-autoscale-t196-density.md. The preferred interval window was changed from 5..=9 to 4..=8; 10 both-ends-padded intervals remain allowed. Official 9-interval leftovers were loosened; the eight t194 official alignments were kept.

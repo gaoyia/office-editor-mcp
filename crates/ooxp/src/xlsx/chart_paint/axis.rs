@@ -702,12 +702,15 @@ fn bar_axes_kind(plot: &Element, percent_stacked: bool) -> Result<(Spec, bool), 
 }
 
 /// One 1-2-5 automatic-scale candidate after the already-locked 0.95 extra-major
-/// padding. t194u (user-authorized approximation, not a unique Office lock for
-/// every chart size): prefer 5..=9 intervals, or 10 only when padding fired at
-/// both ends (official signed +/-8 is -10..10/2; signed +/-9 is -10..10/5).
-/// If that set is empty, drop 10-interval candidates that were not both-ends
-/// padded and again minimize padded range, then step. Last resort is the
-/// previous min-range-then-min-step search over every budget-valid candidate.
+/// padding. t194u/t196u (user-authorized approximation, not a unique Office lock
+/// for every chart size): prefer 4..=8 intervals, or 10 only when padding fired
+/// at both ends (official signed +/-8 stays -10..10/2; signed +/-9 is -10..10/5).
+/// The preferred window was tightened from 5..=9 so official 9-interval leftovers
+/// (max 8/16/40, etc.) use a coarser 1-2-5 step. 8-interval official scales
+/// including protected max 14 (0-16/2) stay in the window. If that set is empty,
+/// drop 10-interval candidates that were not both-ends padded and again minimize
+/// padded range, then step. Last resort is the previous min-range-then-min-step
+/// search over every budget-valid candidate.
 #[derive(Clone, Copy)]
 struct AutoCand {
     min: f64,
@@ -720,7 +723,7 @@ struct AutoCand {
 
 impl AutoCand {
     fn preferred(self) -> bool {
-        (5..=9).contains(&self.intervals) || (self.intervals == 10 && self.pad_lo && self.pad_hi)
+        (4..=8).contains(&self.intervals) || (self.intervals == 10 && self.pad_lo && self.pad_hi)
     }
 }
 
@@ -996,23 +999,25 @@ mod tests {
 
     #[test]
     fn auto_scale_t191_official_gold_discriminants_budget_ten() {
-        // t194u approximation vs t191 official Chart.Export gold (uniform
+        // t194u/t196u approximation vs t191 official Chart.Export gold (uniform
         // 288x180, explicit title sz=1100). Budget 10 matches that canvas.
-        // Not a unique lock for every chart height; do not auto-pass review.
+        // t196u loosens official 9-interval leftovers (max 8/16/40) toward
+        // fewer majors; protected official matches (max 9/14/18/45/90, +/-9)
+        // and both-ends-padded +/-8 stay. Not a unique lock; do not auto-pass.
         let cases: &[(&str, &[f64], (f64, f64, f64))] = &[
-            ("max8-keep", &[0.0, 8.0], (0.0, 9.0, 1.0)),
+            ("max8-loosen", &[0.0, 8.0], (0.0, 10.0, 2.0)),
             (
                 "max9-t166",
                 &[4.0, 6.0, 9.0, 7.0, 5.0, 8.0],
                 (0.0, 10.0, 2.0),
             ),
             ("max14", &[0.0, 14.0], (0.0, 16.0, 2.0)),
-            ("max16-keep", &[0.0, 16.0], (0.0, 18.0, 2.0)),
+            ("max16-loosen", &[0.0, 16.0], (0.0, 20.0, 5.0)),
             ("max18", &[0.0, 18.0], (0.0, 20.0, 5.0)),
             (
-                "max40-t171-sz1100",
+                "max40-t171-loosen",
                 &[10.0, 20.0, 30.0, 40.0, 15.0, 25.0],
-                (0.0, 45.0, 5.0),
+                (0.0, 50.0, 10.0),
             ),
             ("max45", &[0.0, 45.0], (0.0, 50.0, 10.0)),
             ("max90", &[0.0, 90.0], (0.0, 100.0, 20.0)),

@@ -3833,9 +3833,11 @@
         // 95 -> 0..100/20 follows the t194 general auto-scale rule (same
         // padded range as official t191 auto-max90, which is 0..100/20, not
         // a 10-interval 0..100/10). 95 itself was not in that gold matrix.
+        // 4 and 3.9 -> 0..5/1 follow the t196u looser 4..=8 interval preference
+        // (official t191 max4 was the denser 0..4.5/0.5 9-interval leftover).
         let cases = [
-            (4.0, 4.5, 0.5),
-            (3.9, 4.5, 0.5),
+            (4.0, 5.0, 1.0),
+            (3.9, 5.0, 1.0),
             (95.0, 100.0, 20.0),
             (96.0, 120.0, 20.0),
             (1100.0, 1200.0, 200.0),
@@ -3939,10 +3941,12 @@
                 rows.push(y as i32);
             }
         }
+        // t196u looser auto scale for data max 4 is 0-5/1 (6 majors) rather than
+        // official untitled 0-4.5/0.5 (10 rows). Plot edges 16 and 334 are unchanged.
         assert_eq!(
             rows,
-            vec![16, 51, 86, 122, 157, 192, 228, 263, 298, 334],
-            "106dpi 636x371 major grids must sit on official rows, got {rows:?}"
+            vec![16, 79, 143, 206, 270, 334],
+            "106dpi 636x371 majors follow 0-5/1; plot edges stay 16 and 334, got {rows:?}"
         );
     }
 
@@ -6220,14 +6224,15 @@
         assert_eq!((w, h), (576, 336));
         // Skip the top value-axis band and the bottom gutter; grids run through the plot.
         let grids = major_grid_xs(&rgb, w, 50, 300, 80);
-        assert!(
-            grids.len() >= 10,
-            "0..9 auto scale should expose the major grid; grids={grids:?}"
+        assert_eq!(
+            grids.len(),
+            6,
+            "t196u looser auto 0..10/2 should draw 6 vertical grids; grids={grids:?}"
         );
         let zero = *grids.first().expect("zero / min tick");
         let max_tick = *grids.last().expect("max tick");
-        // Auto 0..9, value 8 is 8/9 of the axis. Identify that tick from the grid list.
-        let expected = zero + ((max_tick - zero) * 8 + 4) / 9;
+        // Auto 0..10 step 2, value 8 is 8/10 of the axis and still a major tick.
+        let expected = zero + ((max_tick - zero) * 8 + 5) / 10;
         let tick8 = grids
             .iter()
             .copied()
