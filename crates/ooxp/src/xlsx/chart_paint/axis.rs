@@ -843,7 +843,7 @@ mod tests {
     use super::*;
     fn check(label_em: f64, emit: bool) {
         let rows: serde_json::Value =
-            serde_json::from_str(include_str!("../../tests/data/chart_axis_oracle.json")).unwrap();
+            serde_json::from_str(include_str!("../../../tests/data/chart_axis_oracle.json")).unwrap();
         for row in rows.as_array().unwrap() {
             let series = Series {
                 name: "S".into(),
