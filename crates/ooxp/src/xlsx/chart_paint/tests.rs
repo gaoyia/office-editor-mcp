@@ -9979,6 +9979,78 @@
         assert!(large.len() >= 8 && small.len() >= 8);
     }
 
+    fn two_paragraph_title_xml() -> String {
+        let title = concat!(
+            "<c:title><c:tx><c:rich xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
+            "<a:bodyPr/><a:lstStyle/>",
+            "<a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang=\"en-US\"/><a:t>Line one</a:t></a:r></a:p>",
+            "<a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:rPr lang=\"en-US\"/><a:t>Line two</a:t></a:r></a:p>",
+            "</c:rich></c:tx><c:overlay val=\"0\"/></c:title>",
+        );
+        LONG_LEGEND.replace("<c:chart>", &format!("<c:chart>{title}"))
+    }
+
+    #[test]
+    fn title_paragraphs_and_breaks_become_hard_newlines() {
+        let doc = crate::xml::parse(two_paragraph_title_xml().as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("multi-paragraph titles are renderable hard breaks");
+        assert_eq!(chart.title.as_deref(), Some("Line one\nLine two"));
+        assert_eq!(chart.title_typo, None);
+
+        let br = titled_legend_xml("<a:defRPr/>").replace(
+            "<a:t>Legend foundation</a:t>",
+            "<a:t>Legend</a:t></a:r><a:br/><a:r><a:rPr lang=\"en-US\"/><a:t>foundation</a:t>",
+        );
+        let doc = crate::xml::parse(br.as_bytes()).unwrap();
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("a:br is a hard title break");
+        assert_eq!(chart.title.as_deref(), Some("Legend\nfoundation"));
+    }
+
+    #[test]
+    fn title_wrap_keeps_short_lines_and_splits_when_wider_than_the_box() {
+        let short = wrap_title_lines("Legend foundation", None, None, 13.0, 400.0);
+        assert_eq!(short, vec!["Legend foundation".to_string()]);
+        let hard = wrap_title_lines("Alpha\nBeta", None, None, 13.0, 400.0);
+        assert_eq!(hard, vec!["Alpha".to_string(), "Beta".to_string()]);
+        let long = "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+        let wrapped = wrap_title_lines(long, None, None, 20.0, 80.0);
+        assert!(
+            wrapped.len() >= 2,
+            "a string wider than the title box must wrap: {wrapped:?}"
+        );
+        assert!(wrapped.iter().all(|line| !line.is_empty()));
+        assert_eq!(wrapped.join(""), long);
+
+        let y1 = titled_plot_y(
+            RenderDpi::DEFAULT,
+            ChartHost::Excel,
+            None,
+            None,
+            None,
+            13.0,
+            1,
+        );
+        let y2 = titled_plot_y(
+            RenderDpi::DEFAULT,
+            ChartHost::Excel,
+            None,
+            None,
+            None,
+            13.0,
+            2,
+        );
+        assert!(y2 > y1, "wrapped titles must reserve a taller plot offset");
+        let title_top = RenderDpi::DEFAULT.scale_f(4.0);
+        let band = text_height(None, 13.0).ceil() as i32;
+        assert_eq!(
+            y1,
+            title_top as i32 + 2 * band,
+            "one-line titles keep the previous plot offset"
+        );
+    }
+
     fn scheme_with_sys(pairs: &[(&str, [u8; 3])]) -> ThemeScheme {
         let mut scheme = theme_scheme(None, FALLBACK_ACCENTS);
         for (name, rgb) in pairs {

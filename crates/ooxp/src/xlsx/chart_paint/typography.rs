@@ -18,7 +18,7 @@ pub(super) fn title_text(chart: &Element) -> Option<String> {
         }
     }
     if let Some(rich) = find_deep(tx, "rich") {
-        let text = join_text(rich);
+        let text = join_title_rich(rich);
         if !text.is_empty() {
             return Some(text);
         }
@@ -71,9 +71,7 @@ pub(super) fn collect_title_props<'a>(root: &'a Element, out: &mut Vec<&'a Eleme
     } else {
         root.children_by_local("p")
     };
-    if paragraphs.len() > 1 {
-        return Err(unsupported());
-    }
+    // Multiple paragraphs are hard line breaks, not a typography rewrite.
     for p in paragraphs {
         if let Some(def) = p
             .child_by_local("pPr")
@@ -287,5 +285,208 @@ pub(super) fn draw_text(
             }
         }
         cursor += f64::from(glyph.advance_width);
+    }
+}
+
+
+pub(super) fn join_title_rich(rich: &Element) -> String {
+    let paras: Vec<&Element> = rich.children_by_local("p");
+    if paras.is_empty() {
+        return join_text(rich);
+    }
+    paras
+        .into_iter()
+        .map(join_title_paragraph)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn join_title_paragraph(p: &Element) -> String {
+    let mut text = String::new();
+    walk_title_text(p, &mut text);
+    text
+}
+
+fn walk_title_text(el: &Element, text: &mut String) {
+    if el.local_name() == "t" {
+        text.push_str(&el.text_content());
+        return;
+    }
+    if el.local_name() == "br" {
+        text.push('\n');
+        return;
+    }
+    for child in el.element_children() {
+        walk_title_text(child, text);
+    }
+}
+
+pub(super) fn title_max_width(canvas_w: u32, dpi: RenderDpi) -> f64 {
+    let inset = 2 * scale_plot_leading(dpi, INSET_TOP);
+    f64::from((canvas_w as i32 - inset).max(1))
+}
+
+pub(super) fn wrap_title_lines(
+    text: &str,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    max_width: f64,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for para in text.split('\n') {
+        lines.extend(wrap_title_paragraph(para, font, gdi, px, max_width));
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
+fn wrap_title_paragraph(
+    para: &str,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    max_width: f64,
+) -> Vec<String> {
+    if text_width(font, gdi, para, px) <= max_width + 1e-6 {
+        return vec![para.to_string()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for ch in para.chars() {
+        let mut trial = current.clone();
+        trial.push(ch);
+        if !current.is_empty() && text_width(font, gdi, &trial, px) > max_width {
+            if let Some(idx) = last_soft_break(&current) {
+                let (left, right) = current.split_at(idx);
+                if !left.is_empty() {
+                    lines.push(left.to_string());
+                }
+                current = right.trim_start().to_string();
+                current.push(ch);
+            } else {
+                lines.push(std::mem::take(&mut current));
+                current.push(ch);
+            }
+        } else {
+            current.push(ch);
+        }
+    }
+    if !current.is_empty() || lines.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
+fn last_soft_break(s: &str) -> Option<usize> {
+    let mut at = None;
+    for (idx, ch) in s.char_indices() {
+        if ch == ' ' {
+            at = Some(idx);
+        } else if ch == '-' && idx + ch.len_utf8() < s.len() {
+            at = Some(idx + ch.len_utf8());
+        }
+    }
+    at.filter(|&idx| idx > 0 && idx < s.len())
+}
+
+pub(super) fn title_lines_for(
+    title: Option<&str>,
+    font: Option<&Font>,
+    face: Option<&super::super::chart_gdi::Face>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    title_px: f32,
+    canvas_w: u32,
+    dpi: RenderDpi,
+) -> Vec<String> {
+    let Some(text) = title else {
+        return Vec::new();
+    };
+    wrap_title_lines(
+        text,
+        font,
+        face.or(gdi),
+        title_px,
+        title_max_width(canvas_w, dpi),
+    )
+}
+
+fn title_em_and_advance(
+    title_face: Option<&super::super::chart_gdi::Face>,
+    font: Option<&Font>,
+    label_px: f32,
+) -> (i32, i32) {
+    let band = title_face
+        .map(|face| face.em_box().ceil() as i32)
+        .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
+    let advance = title_face
+        .map(|face| face.line_height().ceil() as i32)
+        .unwrap_or(band);
+    (band, advance)
+}
+
+/// Single-line result is identical to the previous `title_top + 2 * (band + half)` rule.
+pub(super) fn titled_plot_y(
+    dpi: RenderDpi,
+    host: ChartHost,
+    title_face: Option<&super::super::chart_gdi::Face>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    font: Option<&Font>,
+    label_px: f32,
+    n_lines: usize,
+) -> i32 {
+    let title_top = dpi.scale_f(4.0);
+    let (band, advance) = title_em_and_advance(title_face, font, label_px);
+    let half = gdi
+        .map(|face| face.line_height().ceil() as i32 / 2)
+        .unwrap_or(0);
+    let n = n_lines.max(1) as i32;
+    let mut y = title_top as i32 + 2 * (band + half) + (n - 1) * advance;
+    if matches!(host, ChartHost::Slide) {
+        y += dpi.scale_px(TITLE_DROP as i32);
+    }
+    y
+}
+
+pub(super) fn pie_title_band(
+    dpi: RenderDpi,
+    title_face: Option<&super::super::chart_gdi::Face>,
+    font: Option<&Font>,
+    label_px: f32,
+    n_lines: usize,
+) -> f64 {
+    if n_lines == 0 {
+        return 0.0;
+    }
+    let em = title_face.map_or_else(|| text_height(font, label_px), |face| face.em_box());
+    let advance = title_face.map_or(em, |face| face.line_height());
+    em + dpi.pt_to_px_font(3.6 * 2.0 + 6.0) + (n_lines.saturating_sub(1) as f64) * advance
+}
+
+pub(super) fn draw_chart_title(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    face: Option<&super::super::chart_gdi::Face>,
+    lines: &[String],
+    title_px: f32,
+    title_top: f64,
+) {
+    let drop = title_top + canvas.dpi.scale_f(TITLE_DROP);
+    let advance = face.map_or_else(|| text_height(font, title_px), |f| f.line_height());
+    for (i, line) in lines.iter().enumerate() {
+        let width = text_width(font, face, line, title_px);
+        let x = (f64::from(canvas.w) - width) / 2.0;
+        draw_text(
+            canvas,
+            font,
+            face,
+            line,
+            x,
+            drop + i as f64 * advance,
+            title_px,
+            INK,
+        );
     }
 }

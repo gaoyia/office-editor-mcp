@@ -123,6 +123,15 @@ pub(super) fn paint_scatter(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let y_scale = axis::scale(
         &chart.series,
@@ -144,19 +153,15 @@ pub(super) fn paint_scatter(
     let mut plot_x = axis_x + 1;
     let title_top = canvas.dpi.scale_f(4.0);
     let mut plot_y = if chart.title.is_some() {
-        let band = title_face
-            .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += canvas.dpi.scale_px(TITLE_DROP as i32);
-        }
-        y
+        titled_plot_y(
+            canvas.dpi,
+            host,
+            title_face.as_ref(),
+            gdi.as_ref(),
+            font,
+            label_px,
+            title_lines.len(),
+        )
     } else {
         scale_plot_leading(canvas.dpi, INSET_TOP)
     };
@@ -368,20 +373,9 @@ pub(super) fn paint_scatter(
             INK,
         );
     }
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -476,6 +470,15 @@ pub(super) fn paint_bar(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let em = text_height(font, label_px).max(gdi.as_ref().map_or(0.0, |f| f.em_box()));
     let widest_cat = chart
         .categories
@@ -497,18 +500,15 @@ pub(super) fn paint_bar(
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
     let unused_bottom = scale_plot_trailing(canvas.dpi, INSET_TOP);
     let mut plot_y = if chart.title.is_some() {
-        let band = title_face
-            .as_ref()
-            .map(|face| face.em_box().ceil() as i32)
-            .unwrap_or_else(|| text_height(font, label_px).ceil() as i32);
-        let half = gdi
-            .as_ref()
-            .map(|face| face.line_height().ceil() as i32 / 2)
-            .unwrap_or(0);
-        let mut y = title_top as i32 + 2 * (band + half);
-        if matches!(host, ChartHost::Slide) {
-            y += canvas.dpi.scale_px(TITLE_DROP as i32);
-        }
+        let mut y = titled_plot_y(
+            canvas.dpi,
+            host,
+            title_face.as_ref(),
+            gdi.as_ref(),
+            font,
+            label_px,
+            title_lines.len(),
+        );
         if val_axis_at_top && !val_deleted {
             y += val_label_top;
         }
@@ -661,20 +661,9 @@ pub(super) fn paint_bar(
             );
         }
     }
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -710,6 +699,15 @@ pub(super) fn paint_pie(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     let title_top = canvas.dpi.scale_f(4.0);
     // Public Office PlotArea probes: the pie is not an inscribed circle of
     // the whole host. Title and right legend bands are removed first; Office
@@ -718,14 +716,13 @@ pub(super) fn paint_pie(
     // ChartTitle TextFrame2 has 3.6 pt top/bottom margins; reserve the
     // additional 6 pt title/plot separation. Font fallback can still differ
     // from the host theme and remains a separately reported layout residual.
-    let title_band = if chart.title.is_some() {
-        title_face
-            .as_ref()
-            .map_or_else(|| text_height(font, label_px), |face| face.em_box())
-            + canvas.dpi.pt_to_px_font(3.6 * 2.0 + 6.0)
-    } else {
-        0.0
-    };
+    let title_band = pie_title_band(
+        canvas.dpi,
+        title_face.as_ref(),
+        font,
+        label_px,
+        title_lines.len(),
+    );
     let legend_band = if chart.legend == Some(LegendPos::Right) {
         let line = gdi
             .as_ref()
@@ -763,20 +760,9 @@ pub(super) fn paint_pie(
         canvas.fill_fractional_rect(&plot, color);
     }
     draw_pie_slices(canvas, chart, &plot);
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend == Some(LegendPos::Right) {
         let legend_plot_r = canvas.w as i32 - inset_right;
@@ -1047,6 +1033,15 @@ pub(super) fn paint(
         .title
         .as_ref()
         .and_then(|_| open_title_face(chart.title_typo.as_ref(), title_px, canvas.dpi));
+    let title_lines = title_lines_for(
+        chart.title.as_deref(),
+        font,
+        title_face.as_ref(),
+        gdi.as_ref(),
+        title_px,
+        canvas.w,
+        canvas.dpi,
+    );
     // Use the full supplied font line box, not just the GDI raster ascent.
     // Glyph drawing can use the existing GDI fallback; label packing must reserve
     // the larger declared line box so the two paths cannot over-pack the axis.
@@ -1408,20 +1403,9 @@ pub(super) fn paint(
             sec.reversed,
         );
     }
-    if let Some(title) = &chart.title {
+    if !title_lines.is_empty() {
         let face = title_face.as_ref().or(gdi.as_ref());
-        let width = text_width(font, face, title, title_px);
-        let x = (f64::from(canvas.w) - width) / 2.0;
-        draw_text(
-            canvas,
-            font,
-            face,
-            title,
-            x,
-            title_top + canvas.dpi.scale_f(TITLE_DROP),
-            title_px,
-            INK,
-        );
+        draw_chart_title(canvas, font, face, &title_lines, title_px, title_top);
     }
     if chart.legend_spec.default_right_geometry() {
         // An overlay must release plot space without changing the default legend.
