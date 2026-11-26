@@ -155,6 +155,56 @@ pub(super) fn linear_to_srgb(value: f64) -> u8 {
     (s * 255.0).round().clamp(0.0, 255.0) as u8
 }
 
+
+/// Official Chart.Export t187 48-case srgbClr matrix, probe (5,5):
+/// a:comp is the encoded mix-to-gray complement (max+min)-channel.
+/// Grays stay put; FF0000 becomes 00FFFF; C04020 becomes 20A0C0.
+/// This is not linear IEC invert (a:inv) and not 255-c on mid-tones.
+pub(super) fn frame_comp(rgb: [u8; 3]) -> [u8; 3] {
+    let max = rgb[0].max(rgb[1]).max(rgb[2]);
+    let min = rgb[0].min(rgb[1]).min(rgb[2]);
+    let sum = u16::from(max) + u16::from(min);
+    rgb.map(|channel| (sum - u16::from(channel)) as u8)
+}
+
+/// Official: a:inv is IEC 61966-2-1 linear invert, then encode.
+/// linear_to_srgb(1 - srgb_to_linear(c)). Not encoded 255-c, not a pure 2.2 gamma.
+pub(super) fn frame_inv(rgb: [u8; 3]) -> [u8; 3] {
+    rgb.map(|channel| linear_to_srgb(1.0 - srgb_to_linear(channel)))
+}
+
+/// Official: a:gamma is the IEC sRGB encode, treating the stored byte as linear 0..1.
+/// linear_to_srgb(c/255). Not identity, not decode, not a pure 2.2 gamma.
+pub(super) fn frame_gamma(rgb: [u8; 3]) -> [u8; 3] {
+    rgb.map(|channel| linear_to_srgb(f64::from(channel) / 255.0))
+}
+
+/// Official: a:invGamma is the IEC sRGB decode scaled back to a byte.
+/// round(srgb_to_linear(c) * 255). Not encode, not identity, not a pure 2.2 gamma.
+pub(super) fn frame_inv_gamma(rgb: [u8; 3]) -> [u8; 3] {
+    rgb.map(|channel| (srgb_to_linear(channel) * 255.0).round().clamp(0.0, 255.0) as u8)
+}
+
+/// Official: a:gray is Rec.709 / sRGB luma on encoded bytes, then a gray triple.
+/// Y = round(0.2126 R + 0.7152 G + 0.0722 B). Not linear-IEC luma, not Rec.601,
+/// and not the 54/183/19 integer shift, which missed official FF0000 and C04020 by one.
+pub(super) fn frame_gray(rgb: [u8; 3]) -> [u8; 3] {
+    let y = (0.2126 * f64::from(rgb[0]) + 0.7152 * f64::from(rgb[1]) + 0.0722 * f64::from(rgb[2]))
+        .round()
+        .clamp(0.0, 255.0) as u8;
+    [y, y, y]
+}
+
+fn standalone_empty_transform(node: &Element, name: &str) -> bool {
+    node.local_name() == name
+        && node
+            .attrs
+            .iter()
+            .all(|(attr, _)| attr.as_str() == "xmlns" || attr.starts_with("xmlns:"))
+        && node.element_children().next().is_none()
+        && node.text_content().trim().is_empty()
+}
+
 pub(super) fn frame_tint(rgb: [u8; 3], val: u32) -> [u8; 3] {
     let share = f64::from(val) / 100_000.0;
     rgb.map(|channel| {
@@ -878,6 +928,21 @@ pub(super) fn resolve_frame_solid(color: &Element, scheme: &ThemeScheme) -> Resu
             frame_lum(rgb, Some(pct(kids[0])?), Some(parse_luminance_offset(kids[1]).ok_or_else(unsupported)?)),
             kids[2],
         ),
+        ["comp"] | ["inv"] | ["gamma"] | ["invGamma"] | ["gray"] => {
+            // Official t187 matrix locked these only on bare srgbClr + one empty
+            // transform element. schemeClr / sysClr / chains stay unsupported.
+            if color.local_name() != "srgbClr" || !standalone_empty_transform(kids[0], names[0]) {
+                return Err(unsupported());
+            }
+            Ok(FrameFill::Solid(match names[0] {
+                "comp" => frame_comp(rgb),
+                "inv" => frame_inv(rgb),
+                "gamma" => frame_gamma(rgb),
+                "invGamma" => frame_inv_gamma(rgb),
+                "gray" => frame_gray(rgb),
+                _ => return Err(unsupported()),
+            }))
+        }
         _ => Err(unsupported()),
     }
 }

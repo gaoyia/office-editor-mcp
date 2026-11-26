@@ -10074,3 +10074,111 @@
         assert!(scheme.sys.get("windowText").is_none());
         assert!(scheme.sys.get("window").is_none());
     }
+
+
+    #[test]
+    fn color_transform_working_space_matches_official_t187_probe_rgb() {
+        // Official Chart.Export t187-frame-color-transforms-20261126, 8 srgbClr
+        // bases, CLEAN_PUBLIC_OFFICE_EXPORT, probe (5,5). Competing models were
+        // frozen before the session. Pure 2.2, encoded 255-c, and linear-IEC
+        // gray were rejected by these pixels.
+        let cases: [(&str, [u8; 3], [u8; 3], [u8; 3], [u8; 3], [u8; 3], [u8; 3]); 8] = [
+            ("010101", [1, 1, 1], [1, 1, 1], [255, 255, 255], [13, 13, 13], [0, 0, 0], [1, 1, 1]),
+            ("0A0A0A", [10, 10, 10], [10, 10, 10], [255, 255, 255], [56, 56, 56], [1, 1, 1], [10, 10, 10]),
+            ("808080", [128, 128, 128], [128, 128, 128], [229, 229, 229], [188, 188, 188], [55, 55, 55], [128, 128, 128]),
+            ("A0A0A0", [160, 160, 160], [160, 160, 160], [211, 211, 211], [208, 208, 208], [90, 90, 90], [160, 160, 160]),
+            ("C0C0C0", [192, 192, 192], [192, 192, 192], [183, 183, 183], [225, 225, 225], [134, 134, 134], [192, 192, 192]),
+            ("FF0000", [255, 0, 0], [0, 255, 255], [0, 255, 255], [255, 0, 0], [255, 0, 0], [54, 54, 54]),
+            ("00FF00", [0, 255, 0], [255, 0, 255], [255, 0, 255], [0, 255, 0], [0, 255, 0], [182, 182, 182]),
+            ("C04020", [192, 64, 32], [32, 160, 192], [183, 249, 253], [225, 137, 99], [134, 13, 4], [89, 89, 89]),
+        ];
+        for (base, none, comp, inv, gamma, inv_gamma, gray) in cases {
+            let rgb = none;
+            assert_eq!(rgb, none, "{base} control");
+            assert_eq!(frame_comp(rgb), comp, "{base} comp");
+            assert_eq!(frame_inv(rgb), inv, "{base} inv");
+            assert_eq!(frame_gamma(rgb), gamma, "{base} gamma");
+            assert_eq!(frame_inv_gamma(rgb), inv_gamma, "{base} invGamma");
+            assert_eq!(frame_gray(rgb), gray, "{base} gray");
+            // Reject the models the official matrix uniquely ruled out.
+            if base == "808080" {
+                assert_ne!(frame_inv(rgb), [127, 127, 127], "inv is not encoded 255-c");
+                assert_ne!(frame_gamma(rgb), [186, 186, 186], "gamma is not pure 2.2");
+                assert_ne!(frame_inv_gamma(rgb), [56, 56, 56], "invGamma is not pure 2.2");
+            }
+            if base == "FF0000" {
+                assert_ne!(frame_gray(rgb), [76, 76, 76], "gray is not encoded Rec.601");
+                assert_ne!(frame_gray(rgb), [53, 53, 53], "gray is not 54/183/19 >> 8");
+                let lin = srgb_to_linear(255);
+                let linear_709 = linear_to_srgb(0.2126 * lin);
+                assert_ne!(frame_gray(rgb), [linear_709, linear_709, linear_709], "gray is not linear-IEC Rec.709");
+            }
+            if base == "C04020" {
+                assert_ne!(frame_comp(rgb), [63, 191, 223], "comp is not encoded 255-c");
+                assert_ne!(frame_comp(rgb), frame_inv(rgb), "comp is not inv");
+            }
+        }
+    }
+
+    #[test]
+    fn color_transform_working_space_resolve_and_gates() {
+        let scheme = theme_scheme(None, FALLBACK_ACCENTS);
+        let ok = |xml: &str, rgb: [u8; 3]| {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert_eq!(resolve_frame_solid(&d.root, &scheme).unwrap(), FrameFill::Solid(rgb), "{xml}");
+        };
+        let ni = |xml: &str| {
+            let d = crate::xml::parse(xml.as_bytes()).unwrap();
+            assert!(resolve_frame_solid(&d.root, &scheme).is_err(), "{xml}");
+        };
+        ok("<srgbClr val='C04020'><comp/></srgbClr>", [32, 160, 192]);
+        ok("<srgbClr val='808080'><inv/></srgbClr>", [229, 229, 229]);
+        ok("<srgbClr val='010101'><gamma/></srgbClr>", [13, 13, 13]);
+        ok("<srgbClr val='C0C0C0'><invGamma/></srgbClr>", [134, 134, 134]);
+        ok("<srgbClr val='FF0000'><gray/></srgbClr>", [54, 54, 54]);
+        ok("<a:srgbClr xmlns:a='http://schemas.openxmlformats.org/drawingml/2006/main' val='00FF00'><a:gray/></a:srgbClr>", [182, 182, 182]);
+        // Other bases and non-empty leaves stay NI; no silent lastClr / scheme widening.
+        for xml in [
+            "<schemeClr val='accent1'><comp/></schemeClr>",
+            "<sysClr val='window' lastClr='FFFFFF'><inv/></sysClr>",
+            "<prstClr val='red'><gamma/></prstClr>",
+            "<hslClr hue='0' sat='100000' lum='50000'><gray/></hslClr>",
+            "<scrgbClr r='50000' g='50000' b='50000'><invGamma/></scrgbClr>",
+            "<srgbClr val='808080'><comp val='1'/></srgbClr>",
+            "<srgbClr val='808080'><inv><alpha val='50000'/></inv></srgbClr>",
+            "<srgbClr val='808080'><gamma/><alpha val='100000'/></srgbClr>",
+            "<srgbClr val='808080'><invGamma/><gray/></srgbClr>",
+        ] {
+            ni(xml);
+        }
+    }
+
+    #[test]
+    fn color_transform_working_space_chart_frame_matches_official_rgb_reference() {
+        // Compare against a solid srgbClr of the official probe RGB. Do not
+        // use official 425 by 266 coordinates on the library 424 by 265 raster,
+        // and do not compensate that size residual.
+        let cases: [(&str, &str, &str); 8] = [
+            ("comp", "C04020", "20A0C0"),
+            ("inv", "808080", "E5E5E5"),
+            ("gamma", "010101", "0D0D0D"),
+            ("invGamma", "C0C0C0", "868686"),
+            ("gray", "FF0000", "363636"),
+            ("comp", "010101", "010101"),
+            ("gamma", "C04020", "E18963"),
+            ("gray", "C04020", "595959"),
+        ];
+        for (transform, base, official) in cases {
+            let fill = format!("<c:spPr><a:solidFill><a:srgbClr val='{base}'><a:{transform}/></a:srgbClr></a:solidFill></c:spPr>");
+            let reference = format!("<c:spPr><a:solidFill><a:srgbClr val='{official}'/></a:solidFill></c:spPr>");
+            let make = |sp: &str| LONG_LEGEND.replace("<c:chart>", &format!("{sp}<c:chart>"));
+            let doc = crate::xml::parse(make(&fill).as_bytes()).unwrap();
+            let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
+            let render = |root: &Element| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "").unwrap();
+            assert_eq!(render(&doc.root), render(&reference.root), "{transform} {base}");
+            let slide = crate::xml::parse(LONG_LEGEND.as_bytes()).unwrap();
+            let with = render_chart(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Slide, None, "").unwrap();
+            let without = render_chart(&slide.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Slide, None, "").unwrap();
+            assert_eq!(with, without, "slide host must not grow a chart-area frame for {transform}");
+        }
+    }
