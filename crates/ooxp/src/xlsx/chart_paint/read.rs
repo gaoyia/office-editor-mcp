@@ -1406,6 +1406,27 @@ pub(super) fn read_chart(
             None
         };
         let values_len = values.len();
+        let (point_markers, trendline, err_bars) = if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::StandardArea | PlotKind::Scatter { .. }
+        ) {
+            let decorations_ok = stacking == Stacking::Clustered
+                && wrappers.len() == 1
+                && chart3d.is_none()
+                && !on_secondary;
+            if decorations_ok {
+                read_official_like_series_decor(ser, accents, dpi, values_len, kind)?
+            } else {
+                for name in ["dPt", "trendline", "errBars"] {
+                    if ser.child_by_local(name).is_some() {
+                        return Err(unsupported());
+                    }
+                }
+                (vec![None; values_len], None, None)
+            }
+        } else {
+            (Vec::new(), None, None)
+        };
         series[order] = Series {
             name,
             values,
@@ -1455,6 +1476,9 @@ pub(super) fn read_chart(
                 Vec::new()
             },
             smooth: style.smooth,
+            point_markers,
+            trendline,
+            err_bars,
         };
     }
     }
@@ -2099,6 +2123,343 @@ fn official_like_up_down_bars(el: &Element) -> Option<f64> {
     }
 }
 
+/// Official-like inert metadata: an extLst that only carries uniqueId
+/// values. Other extensions stay NI.
+fn official_like_inert_unique_id_ext_lst(el: &Element) -> bool {
+    if el.local_name() != "extLst" {
+        return false;
+    }
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return false;
+    }
+    let mut saw = false;
+    for ext in el.element_children() {
+        if ext.local_name() != "ext" {
+            return false;
+        }
+        let mut id_count = 0;
+        for child in ext.element_children() {
+            if child.local_name() == "uniqueId" {
+                if child.element_children().next().is_some() {
+                    return false;
+                }
+                id_count += 1;
+            } else {
+                return false;
+            }
+        }
+        if id_count != 1 {
+            return false;
+        }
+        saw = true;
+    }
+    saw
+}
+
+fn official_like_flag_off(el: &Element, name: &str) -> bool {
+    !flag(el, name).unwrap_or(false)
+}
+
+/// Official-like line/scatter/area dPt, linear trendline, and y/fixedVal
+/// error bars. Styled, other types, or unknown children stay NI.
+fn read_official_like_series_decor(
+    ser: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+    n: usize,
+    kind: PlotKind,
+) -> Result<
+    (
+        Vec<Option<PointMarker>>,
+        Option<SeriesTrendline>,
+        Option<SeriesErrBars>,
+    ),
+    Error,
+> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let is_area = kind == PlotKind::StandardArea;
+    let mut point_markers = vec![None; n];
+    let mut area_used = vec![false; n];
+    let mut trendline = None;
+    let mut err_bars = None;
+    for child in ser.element_children() {
+        match child.local_name() {
+            "dPt" => {
+                let idx = number_val(child, "idx").ok_or_else(unsupported)?;
+                if !idx.is_finite() || idx < 0.0 || idx.fract() != 0.0 || idx as usize >= n
+                {
+                    return Err(unsupported());
+                }
+                let index = idx as usize;
+                if is_area {
+                    if area_used[index] {
+                        return Err(unsupported());
+                    }
+                    read_official_like_area_dpt(child, accents)?;
+                    area_used[index] = true;
+                    // Official Chart.Export of the F32 area dPt (explicit
+                    // srgb FF0000 at idx=3) shows no distinct point-region
+                    // fill. Do not invent a category-band paint rule.
+                } else {
+                    if point_markers[index].is_some() {
+                        return Err(unsupported());
+                    }
+                    point_markers[index] =
+                        Some(read_official_like_line_scatter_dpt(child, accents, dpi)?);
+                }
+            }
+            "trendline" => {
+                if trendline.is_some() {
+                    return Err(unsupported());
+                }
+                trendline = Some(read_official_like_trendline(child)?);
+            }
+            "errBars" => {
+                if err_bars.is_some() {
+                    return Err(unsupported());
+                }
+                err_bars = Some(read_official_like_err_bars(child)?);
+            }
+            _ => {}
+        }
+    }
+    Ok((point_markers, trendline, err_bars))
+}
+
+fn read_official_like_line_scatter_dpt(
+    dpt: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<PointMarker, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !official_like_flag_off(dpt, "bubble3D") {
+        return Err(unsupported());
+    }
+    let mut marker = None;
+    for child in dpt.element_children() {
+        match child.local_name() {
+            "idx" | "bubble3D" => {}
+            "marker" => {
+                if marker.is_some() {
+                    return Err(unsupported());
+                }
+                marker = Some(read_official_like_dpt_marker(child, accents, dpi)?);
+            }
+            "extLst" => {
+                if !official_like_inert_unique_id_ext_lst(child) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Require an explicit marker symbol and size. An omitted dPt marker
+    // would need an invented default color/symbol, which stays NI.
+    let (kind, color) = marker.ok_or_else(unsupported)?;
+    Ok(PointMarker {
+        marker: kind,
+        color,
+    })
+}
+
+fn read_official_like_dpt_marker(
+    marker: &Element,
+    accents: [[u8; 3]; 6],
+    dpi: RenderDpi,
+) -> Result<(MarkerKind, Option<[u8; 3]>), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let symbol = marker
+        .child_by_local("symbol")
+        .and_then(|el| el.attr_local("val"))
+        .ok_or_else(unsupported)?;
+    if symbol == "none" || symbol == "auto" {
+        return Err(unsupported());
+    }
+    let symbol = marker_symbol_from_name(symbol).ok_or_else(unsupported)?;
+    let size_pt = number_val(marker, "size").ok_or_else(unsupported)?;
+    if !size_pt.is_finite() || size_pt <= 0.0 {
+        return Err(unsupported());
+    }
+    let mut marker_color = None;
+    for child in marker.element_children() {
+        match child.local_name() {
+            "symbol" | "size" => {}
+            "spPr" => {
+                for sp in child.element_children() {
+                    match sp.local_name() {
+                        "solidFill" => {
+                            marker_color =
+                                Some(color_of_slot(sp, &accents).ok_or_else(unsupported)?);
+                        }
+                        "noFill" => return Err(unsupported()),
+                        "ln" => {
+                            let _ = read_solid_ln(sp, accents, 1.0, dpi)?;
+                        }
+                        "effectLst" => {
+                            if sp.element_children().next().is_some() {
+                                return Err(unsupported());
+                            }
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok((shaped_marker(symbol, size_pt, dpi), marker_color))
+}
+
+fn read_official_like_area_dpt(dpt: &Element, accents: [[u8; 3]; 6]) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !official_like_flag_off(dpt, "bubble3D") {
+        return Err(unsupported());
+    }
+    let mut saw_fill = false;
+    for child in dpt.element_children() {
+        match child.local_name() {
+            "idx" | "bubble3D" => {}
+            "spPr" => {
+                for sp in child.element_children() {
+                    match sp.local_name() {
+                        "solidFill" => {
+                            if color_has_non_opaque_alpha(sp) {
+                                return Err(unsupported());
+                            }
+                            let _ = color_of_slot(sp, &accents).ok_or_else(unsupported)?;
+                            saw_fill = true;
+                        }
+                        _ => return Err(unsupported()),
+                    }
+                }
+            }
+            "extLst" => {
+                if !official_like_inert_unique_id_ext_lst(child) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Accept the written opaque solidFill so the chart can export. The
+    // official F32 matrix does not discriminate a painted point region.
+    if !saw_fill {
+        return Err(unsupported());
+    }
+    Ok(())
+}
+
+fn read_official_like_trendline(el: &Element) -> Result<SeriesTrendline, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return Err(unsupported());
+    }
+    let mut saw_type = false;
+    for child in el.element_children() {
+        match child.local_name() {
+            "trendlineType" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+                if child.attr_local("val") != Some("linear") {
+                    return Err(unsupported());
+                }
+                saw_type = true;
+            }
+            "dispRSqr" | "dispEq" => {
+                if child.element_children().next().is_some() {
+                    return Err(unsupported());
+                }
+                if !matches!(child.attr_local("val"), Some("0" | "false" | "off")) {
+                    return Err(unsupported());
+                }
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if !saw_type {
+        return Err(unsupported());
+    }
+    Ok(SeriesTrendline {
+        kind: TrendlineKind::Linear,
+    })
+}
+
+fn read_official_like_err_bars(el: &Element) -> Result<SeriesErrBars, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return Err(unsupported());
+    }
+    let mut typ = None;
+    let mut val = None;
+    let mut saw_fixed = false;
+    let mut end_caps = true;
+    for child in el.element_children() {
+        if child.element_children().next().is_some() {
+            return Err(unsupported());
+        }
+        match child.local_name() {
+            "errDir" => {
+                if child.attr_local("val") != Some("y") {
+                    return Err(unsupported());
+                }
+            }
+            "errBarType" => {
+                typ = Some(match child.attr_local("val") {
+                    Some("both") => ErrBarType::Both,
+                    Some("plus") => ErrBarType::Plus,
+                    Some("minus") => ErrBarType::Minus,
+                    _ => return Err(unsupported()),
+                });
+            }
+            "errValType" => {
+                if child.attr_local("val") != Some("fixedVal") {
+                    return Err(unsupported());
+                }
+                saw_fixed = true;
+            }
+            "noEndCap" => {
+                end_caps =
+                    matches!(child.attr_local("val"), Some("0" | "false" | "off") | None);
+            }
+            "val" => {
+                let parsed = child
+                    .attr_local("val")
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .filter(|n| n.is_finite() && *n >= 0.0)
+                    .ok_or_else(unsupported)?;
+                val = Some(parsed);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    // Official gold writes errDir=y, errBarType=both, errValType=fixedVal,
+    // noEndCap=0, and val. Require the explicit type and a finite value;
+    // omitted errDir stays y as in OOXML. Other encodings stay NI.
+    if !saw_fixed {
+        return Err(unsupported());
+    }
+    let typ = typ.ok_or_else(unsupported)?;
+    let fixed_val = val.ok_or_else(unsupported)?;
+    Ok(SeriesErrBars {
+        typ,
+        fixed_val,
+        end_caps,
+    })
+}
+
 fn standard_line_combo_wrapper(wrap: &Element) -> bool {
     if wrap.local_name() != "lineChart" {
         return false;
@@ -2318,15 +2679,11 @@ pub(super) fn read_line_series(
     slot: usize,
     explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
-    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     // Official-like standard line series may set c:smooth=1. The
     // StandardLine arm still rejects combo / radar / stacked / 3D /
     // dashed cases. Scatter may override the flag after this returns.
-    for name in ["dPt", "trendline", "errBars"] {
-        if ser.child_by_local(name).is_some() {
-            return Err(unsupported());
-        }
-    }
+    // Official-like dPt / trendline / errBars are accepted later in
+    // the series constructor, not rejected here.
     let mut dash = None;
     let mut cap = stroke::Cap::Round;
     let mut join = stroke::Join::Round;
@@ -2951,11 +3308,8 @@ pub(super) fn read_area_series(
         return Err(unsupported());
     }
     data_labels_hidden(ser.child_by_local("dLbls"))?;
-    for name in ["dPt", "trendline", "errBars"] {
-        if ser.child_by_local(name).is_some() {
-            return Err(unsupported());
-        }
-    }
+    // Official-like dPt / trendline / errBars are accepted later in
+    // the series constructor, not rejected here.
     if let Some(marker) = ser.child_by_local("marker") {
         let symbol = marker
             .child_by_local("symbol")

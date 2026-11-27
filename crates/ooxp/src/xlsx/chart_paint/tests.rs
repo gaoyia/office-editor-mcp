@@ -6737,6 +6737,273 @@
         render_line(&official_like_f31_line_xml(&s1, "<c:dropLines/>")).unwrap();
     }
 
+    fn official_like_f32_values() -> [Option<f64>; 8] {
+        [
+            Some(20.0),
+            Some(40.0),
+            Some(60.0),
+            Some(40.0),
+            Some(20.0),
+            Some(50.0),
+            Some(30.0),
+            Some(70.0),
+        ]
+    }
+
+    fn official_like_f32_dpt_marker() -> &'static str {
+        r#"<c:dPt><c:idx val="3"/><c:marker><c:symbol val="diamond"/><c:size val="10"/></c:marker><c:bubble3D val="0"/></c:dPt>"#
+    }
+
+    fn official_like_f32_area_dpt() -> &'static str {
+        r#"<c:dPt><c:idx val="3"/><c:bubble3D val="0"/><c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr></c:dPt>"#
+    }
+
+    fn official_like_f32_trendline() -> &'static str {
+        r#"<c:trendline><c:trendlineType val="linear"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#
+    }
+
+    fn official_like_f32_err_bars() -> &'static str {
+        r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#
+    }
+
+    fn official_like_f32_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F32S1",
+                &official_like_f32_values(),
+                &format!(
+                    r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{extra}"#
+                ),
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f32_area_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(
+            &line_ser(0, "F32S1", &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        )
+    }
+
+    fn official_like_f32_scatter_xml(extra: &str) -> String {
+        let xs = [
+            Some(1.0),
+            Some(2.0),
+            Some(3.0),
+            Some(4.0),
+            Some(5.0),
+            Some(6.0),
+            Some(7.0),
+            Some(8.0),
+        ];
+        official_like_f28_axes(&scatter_xml(
+            "lineMarker",
+            &scatter_ser(0, "F32S1", &xs, &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"<c:orientation val="minMax"/>"#,
+            r#"<c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/>"#,
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:majorUnit val="20"/><c:crossBetween val="midCat"/></c:valAx>"#,
+        )
+    }
+
+    #[test]
+    fn official_like_f32_dpt_trendline_errbars_export_and_paint_ink() {
+        let line_control = official_like_f32_line_xml("");
+        let line_dpt = official_like_f32_line_xml(official_like_f32_dpt_marker());
+        let line_trend = official_like_f32_line_xml(official_like_f32_trendline());
+        let line_err = official_like_f32_line_xml(official_like_f32_err_bars());
+        let scatter_control = official_like_f32_scatter_xml(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
+        );
+        let scatter_dpt = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_dpt_marker()
+        ));
+        let scatter_trend = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_trendline()
+        ));
+        let scatter_err = official_like_f32_scatter_xml(&format!(
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>{}"#,
+            official_like_f32_err_bars()
+        ));
+        let area_control = official_like_f32_area_xml("");
+        let area_dpt = official_like_f32_area_xml(official_like_f32_area_dpt());
+        let area_trend = official_like_f32_area_xml(official_like_f32_trendline());
+        let area_err = official_like_f32_area_xml(official_like_f32_err_bars());
+        let a1 = FALLBACK_ACCENTS[0];
+        let black = [0, 0, 0];
+
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("lineControl", &line_control),
+            ("lineDpt", &line_dpt),
+            ("lineTrend", &line_trend),
+            ("lineErr", &line_err),
+            ("scatterControl", &scatter_control),
+            ("scatterDpt", &scatter_dpt),
+            ("scatterTrend", &scatter_trend),
+            ("scatterErr", &scatter_err),
+            ("areaControl", &area_control),
+            ("areaDpt", &area_dpt),
+            ("areaTrend", &area_trend),
+            ("areaErr", &area_err),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F32 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F32 {name} should paint the series"
+            );
+            pngs.push((
+                name,
+                png,
+                count_in(&rgb, w, 0, w, 0, h, a1, 18),
+                count_in(&rgb, w, 0, w, 0, h, black, 18),
+            ));
+        }
+
+        assert_ne!(pngs[1].1, pngs[0].1, "line dPt marker must add ink");
+        assert!(
+            pngs[1].2 > pngs[0].2,
+            "line dPt diamond should reuse the series color; dpt={} control={}",
+            pngs[1].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "line linear trendline must add ink");
+        assert!(
+            pngs[2].3 > pngs[0].3,
+            "line trendline should add close-enough black ink; trend={} control={}",
+            pngs[2].3,
+            pngs[0].3
+        );
+        assert_ne!(pngs[3].1, pngs[0].1, "line error bars must add ink");
+        assert!(
+            pngs[3].3 > pngs[0].3,
+            "line error bars should add close-enough black stems; err={} control={}",
+            pngs[3].3,
+            pngs[0].3
+        );
+
+        assert_ne!(pngs[5].1, pngs[4].1, "scatter dPt marker must add ink");
+        assert!(
+            pngs[5].2 > pngs[4].2,
+            "scatter dPt diamond should reuse the series color; dpt={} control={}",
+            pngs[5].2,
+            pngs[4].2
+        );
+        assert_ne!(pngs[6].1, pngs[4].1, "scatter linear trendline must add ink");
+        assert!(
+            pngs[6].3 > pngs[4].3,
+            "scatter trendline should add close-enough black ink; trend={} control={}",
+            pngs[6].3,
+            pngs[4].3
+        );
+        assert_ne!(pngs[7].1, pngs[4].1, "scatter error bars must add ink");
+        assert!(
+            pngs[7].3 > pngs[4].3,
+            "scatter error bars should add close-enough black stems; err={} control={}",
+            pngs[7].3,
+            pngs[4].3
+        );
+
+        // Official area dPt fill is accepted so the chart exports, but the
+        // official matrix shows no distinct point-region paint to lock.
+        let _ = pngs[9].1;
+        assert_ne!(pngs[10].1, pngs[8].1, "area linear trendline must add ink");
+        assert!(
+            pngs[10].3 > pngs[8].3,
+            "area trendline should add close-enough black ink; trend={} control={}",
+            pngs[10].3,
+            pngs[8].3
+        );
+        assert_ne!(pngs[11].1, pngs[8].1, "area error bars must add ink");
+        assert!(
+            pngs[11].3 > pngs[8].3,
+            "area error bars should add close-enough black stems; err={} control={}",
+            pngs[11].3,
+            pngs[8].3
+        );
+
+        // General noEndCap=1 and plus-only encodings still export (caps off /
+        // one-sided), without locking a unique official cap table.
+        render_line(&official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="plus"/><c:errValType val="fixedVal"/><c:noEndCap val="1"/><c:val val="10"/></c:errBars>"#,
+        ))
+        .expect("plus/noEndCap official-like error bars must export");
+    }
+
+    #[test]
+    fn leftover_f32_variants_without_official_gold_stay_not_implemented() {
+        let styled_trend = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:spPr><a:ln w="76200"/></c:spPr></c:trendline>"#,
+        );
+        let exp_trend = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="exp"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#,
+        );
+        let with_eq = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:dispRSqr val="0"/><c:dispEq val="1"/></c:trendline>"#,
+        );
+        let extended = official_like_f32_line_xml(
+            r#"<c:trendline><c:trendlineType val="linear"/><c:forward val="1"/><c:dispRSqr val="0"/><c:dispEq val="0"/></c:trendline>"#,
+        );
+        let styled_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/><c:spPr><a:ln w="76200"/></c:spPr></c:errBars>"#,
+        );
+        let pct_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="y"/><c:errBarType val="both"/><c:errValType val="percentage"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#,
+        );
+        let x_err = official_like_f32_line_xml(
+            r#"<c:errBars><c:errDir val="x"/><c:errBarType val="both"/><c:errValType val="fixedVal"/><c:noEndCap val="0"/><c:val val="10"/></c:errBars>"#,
+        );
+        let default_dpt = official_like_f32_line_xml(
+            r#"<c:dPt><c:idx val="3"/><c:bubble3D val="0"/></c:dPt>"#,
+        );
+        let bubble3d = official_like_f32_line_xml(
+            r#"<c:dPt><c:idx val="3"/><c:marker><c:symbol val="diamond"/><c:size val="10"/></c:marker><c:bubble3D val="1"/></c:dPt>"#,
+        );
+        let stacked = official_like_f32_line_xml(official_like_f32_trendline()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        for (i, xml) in [
+            styled_trend,
+            exp_trend,
+            with_eq,
+            extended,
+            styled_err,
+            pct_err,
+            x_err,
+            default_dpt,
+            bubble3d,
+            stacked,
+        ]
+        .iter()
+        .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F32 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F32 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f32_line_xml(official_like_f32_trendline())).unwrap();
+    }
+
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

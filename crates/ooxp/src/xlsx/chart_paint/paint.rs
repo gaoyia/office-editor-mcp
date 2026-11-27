@@ -500,12 +500,57 @@ pub(super) fn draw_scatter(
             let pts = stroke_points_for_smooth_run(&run, ser.smooth);
             stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
-        if !matches!(ser.marker, MarkerKind::None) {
-            let marker_color = ser.marker_color.unwrap_or(color);
-            for (px, py) in points {
-                paint_marker(canvas, ser.marker, px, py, marker_color);
+        if series_has_any_marker(ser) {
+            let n_pts = ser.values.len().max(ser.x_values.len());
+            let mut pi = 0;
+            for i in 0..n_pts {
+                let x = ser.x_values.get(i).and_then(|v| *v);
+                let y = ser.values.get(i).and_then(|v| *v);
+                match (x, y) {
+                    (Some(x), Some(y)) if x.is_finite() && y.is_finite() => {
+                        let (px, py) = points[pi];
+                        pi += 1;
+                        let (marker, marker_color) = series_point_marker(ser, i);
+                        if !matches!(marker, MarkerKind::None) {
+                            paint_marker(
+                                canvas,
+                                marker,
+                                px,
+                                py,
+                                marker_color.unwrap_or(color),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
+        let mut samples = Vec::new();
+        let n_pts = ser.values.len().max(ser.x_values.len());
+        for i in 0..n_pts {
+            let x = ser.x_values.get(i).and_then(|v| *v);
+            let y = ser.values.get(i).and_then(|v| *v);
+            if let (Some(x), Some(y)) = (x, y) {
+                if x.is_finite() && y.is_finite() {
+                    let px = x_of(
+                        x.clamp(x_scale.min, x_scale.max),
+                        x_scale.min,
+                        x_scale.max,
+                        plot,
+                    );
+                    samples.push((x, y, px));
+                }
+            }
+        }
+        let y_at = |v: f64| {
+            y_of(
+                v.clamp(y_scale.min, y_scale.max),
+                y_scale.min,
+                y_scale.max,
+                plot,
+            )
+        };
+        draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
     }
 }
 
@@ -1866,6 +1911,119 @@ pub(super) fn draw_value_minor_ticks(
 /// series with the existing single-column gapWidth formula. Empty elements
 /// reuse axis INK for strokes and a close-enough light/dark fill for bars;
 /// this is not a unique official-matrix color or width lock.
+/// Close-enough official-like linear trendline and y/fixedVal error bars.
+/// Ink is the existing axis INK; width is the same 1px stroke as F31 empty
+/// decorations. Cap half-width is a short close-enough tick, not a unique
+/// official cap-length lock. Domain is the finite data domain (no forward
+/// or backward extension).
+fn draw_official_like_trendline_err_bars(
+    canvas: &mut Canvas,
+    ser: &Series,
+    samples: &[(f64, f64, f64)],
+    y_at: impl Fn(f64) -> f64,
+) {
+    const STROKE_W: f64 = 1.0;
+    // Close-enough cap half-width in pixels, not a unique official lock.
+    const CAP_HALF: f64 = 2.0;
+    if let Some(trend) = ser.trendline {
+        if matches!(trend.kind, TrendlineKind::Linear) {
+            draw_official_like_linear_trendline(canvas, samples, &y_at, STROKE_W);
+        }
+    }
+    if let Some(bars) = ser.err_bars {
+        for &(_, y, cx) in samples {
+            let plus = y + bars.fixed_val;
+            let minus = y - bars.fixed_val;
+            let (y_hi, y_lo) = match bars.typ {
+                ErrBarType::Both => (plus, minus),
+                ErrBarType::Plus => (plus, y),
+                ErrBarType::Minus => (y, minus),
+            };
+            let cy1 = y_at(y_hi);
+            let cy2 = y_at(y_lo);
+            canvas.stroke_segment(cx, cy1, cx, cy2, STROKE_W, INK);
+            if bars.end_caps {
+                if !matches!(bars.typ, ErrBarType::Minus) {
+                    canvas.stroke_segment(cx - CAP_HALF, cy1, cx + CAP_HALF, cy1, STROKE_W, INK);
+                }
+                if !matches!(bars.typ, ErrBarType::Plus) {
+                    canvas.stroke_segment(cx - CAP_HALF, cy2, cx + CAP_HALF, cy2, STROKE_W, INK);
+                }
+            }
+        }
+    }
+}
+
+fn draw_official_like_linear_trendline(
+    canvas: &mut Canvas,
+    samples: &[(f64, f64, f64)],
+    y_at: &impl Fn(f64) -> f64,
+    stroke_w: f64,
+) {
+    let pts: Vec<(f64, f64)> = samples
+        .iter()
+        .filter(|(x, y, _)| x.is_finite() && y.is_finite())
+        .map(|(x, y, _)| (*x, *y))
+        .collect();
+    if pts.len() < 2 {
+        return;
+    }
+    let n = pts.len() as f64;
+    let sum_x: f64 = pts.iter().map(|p| p.0).sum();
+    let sum_y: f64 = pts.iter().map(|p| p.1).sum();
+    let sum_xx: f64 = pts.iter().map(|p| p.0 * p.0).sum();
+    let sum_xy: f64 = pts.iter().map(|p| p.0 * p.1).sum();
+    let denom = n * sum_xx - sum_x * sum_x;
+    if denom.abs() < 1e-12 {
+        return;
+    }
+    let slope = (n * sum_xy - sum_x * sum_y) / denom;
+    let intercept = (sum_y - slope * sum_x) / n;
+    let x0 = pts.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+    let x1 = pts.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+    if !x0.is_finite() || !x1.is_finite() || (x1 - x0).abs() < 1e-12 {
+        return;
+    }
+    let Some(left) = samples
+        .iter()
+        .filter(|(x, _, _)| x.is_finite())
+        .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+    else {
+        return;
+    };
+    let Some(right) = samples
+        .iter()
+        .filter(|(x, _, _)| x.is_finite())
+        .max_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal))
+    else {
+        return;
+    };
+    if (right.0 - left.0).abs() < 1e-12 {
+        return;
+    }
+    let cx = |x: f64| left.2 + (x - left.0) / (right.0 - left.0) * (right.2 - left.2);
+    let y0 = intercept + slope * x0;
+    let y1 = intercept + slope * x1;
+    canvas.stroke_segment(cx(x0), y_at(y0), cx(x1), y_at(y1), stroke_w, INK);
+}
+
+fn series_point_marker(ser: &Series, index: usize) -> (MarkerKind, Option<[u8; 3]>) {
+    if let Some(Some(point)) = ser.point_markers.get(index) {
+        (point.marker, point.color)
+    } else {
+        (ser.marker, ser.marker_color)
+    }
+}
+
+fn series_has_any_marker(ser: &Series) -> bool {
+    !matches!(ser.marker, MarkerKind::None)
+        || ser.point_markers.iter().any(|point| {
+            point
+                .as_ref()
+                .is_some_and(|m| !matches!(m.marker, MarkerKind::None))
+        })
+}
+
 fn draw_official_like_drop_hi_low_up_down(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -2176,8 +2334,7 @@ pub(super) fn draw_lines(
             let pts = stroke_points_for_smooth_run(&run, ser.smooth);
             stroke_run_pattern_join(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
         }
-        if !matches!(ser.marker, MarkerKind::None) {
-            let marker_color = ser.marker_color.unwrap_or(color);
+        if series_has_any_marker(ser) {
             for (ci, value) in ser.values.iter().enumerate() {
                 let plotted = if stacked {
                     stack_cumulative(&group, ci, si, percent).map(|(_, end)| end)
@@ -2187,9 +2344,34 @@ pub(super) fn draw_lines(
                 let Some(v) = plotted else {
                     continue;
                 };
+                let (marker, marker_color) = series_point_marker(ser, ci);
+                if matches!(marker, MarkerKind::None) {
+                    continue;
+                }
                 let (x, y) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
-                paint_marker(canvas, ser.marker, x, y, marker_color);
+                paint_marker(canvas, marker, x, y, marker_color.unwrap_or(color));
             }
+        }
+        if !stacked {
+            let mut samples = Vec::new();
+            for (ci, value) in ser.values.iter().enumerate() {
+                let Some(v) = value.filter(|n| n.is_finite()) else {
+                    continue;
+                };
+                let (x, _) = line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed);
+                samples.push((ci as f64, v, x));
+            }
+            let y_at = |v: f64| {
+                y_map(
+                    v.clamp(axis_min, axis_max),
+                    axis_min,
+                    axis_max,
+                    plot,
+                    log_base,
+                    reversed,
+                )
+            };
+            draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
         }
     }
     Ok(())
@@ -2384,6 +2566,27 @@ pub(super) fn draw_areas(
         if ser.line_visible && ser.line_width > 0.0 {
             stroke_run(canvas, &run, ser.line_width, stroke);
         }
+        let mut samples = Vec::new();
+        for (ci, value) in ser.values.iter().enumerate() {
+            let Some(v) = value.filter(|n| n.is_finite()) else {
+                continue;
+            };
+            let (x, _) = area_vertex(
+                v, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+            );
+            samples.push((ci as f64, v, x));
+        }
+        let y_at = |v: f64| {
+            y_map(
+                v.clamp(axis_min, axis_max),
+                axis_min,
+                axis_max,
+                plot,
+                None,
+                reversed,
+            )
+        };
+        draw_official_like_trendline_err_bars(canvas, ser, &samples, y_at);
     }
 }
 

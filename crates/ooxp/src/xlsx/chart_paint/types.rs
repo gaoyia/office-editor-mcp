@@ -215,6 +215,48 @@ pub(super) struct Series {
     /// Official-like series smoothing. Close-enough interpolating cubic,
     /// not a unique official-matrix or blank/endpoint lock.
     pub(super) smooth: bool,
+    /// Official-like line/scatter dPt marker overrides, indexed by point.
+    /// Missing slots keep the series marker. Not a unique default-color lock.
+    pub(super) point_markers: Vec<Option<PointMarker>>,
+    /// Official-like linear trendline (no extension, no equation). Close-enough
+    /// least-squares stroke; not a unique official fit/style lock.
+    pub(super) trendline: Option<SeriesTrendline>,
+    /// Official-like y / fixedVal error bars. Close-enough stems and caps;
+    /// not a unique official cap/style table.
+    pub(super) err_bars: Option<SeriesErrBars>,
+}
+
+/// Per-point marker from an official-like line/scatter dPt.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct PointMarker {
+    pub(super) marker: MarkerKind,
+    pub(super) color: Option<[u8; 3]>,
+}
+
+/// Official-like trendline kinds currently accepted for export.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TrendlineKind {
+    Linear,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct SeriesTrendline {
+    pub(super) kind: TrendlineKind,
+}
+
+/// Official-like error-bar direction from the data point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ErrBarType {
+    Both,
+    Plus,
+    Minus,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct SeriesErrBars {
+    pub(super) typ: ErrBarType,
+    pub(super) fixed_val: f64,
+    pub(super) end_caps: bool,
 }
 
 impl Default for Series {
@@ -245,6 +287,9 @@ impl Default for Series {
             plot_kind: PlotKind::ClusteredColumn,
             bubble_sizes: Vec::new(),
             smooth: false,
+            point_markers: Vec::new(),
+            trendline: None,
+            err_bars: None,
         }
     }
 }
