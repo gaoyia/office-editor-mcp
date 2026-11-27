@@ -506,6 +506,38 @@ impl Canvas {
     /// Opaque even-odd fill using pixel centers. Shared edges of split
     /// trapezoids are not double-counted, and later series overwrite earlier ones.
     pub(super) fn fill_polygon(&mut self, pts: &[(f64, f64)], color: [u8; 3]) {
+        self.fill_polygon_alpha(pts, color, 255);
+    }
+
+    /// Fill a polygon with straight-alpha coverage. alpha 0 is a no-op.
+    pub(super) fn fill_polygon_alpha(&mut self, pts: &[(f64, f64)], color: [u8; 3], alpha: u8) {
+        if alpha == 0 {
+            return;
+        }
+        self.for_each_polygon_pixel(pts, |canvas, x, y| {
+            canvas.blend(x, y, color, alpha);
+        });
+    }
+
+    /// Sample the existing general pattern RULE at canvas pixels inside the
+    /// area polygon. This is not a frame-rectangle fill.
+    pub(super) fn fill_polygon_pattern(
+        &mut self,
+        pts: &[(f64, f64)],
+        patt: &super::pattern::PatternFill,
+    ) {
+        let dpi = self.dpi.get();
+        self.for_each_polygon_pixel(pts, |canvas, x, y| {
+            let color = patt.color_at(x, y, dpi);
+            canvas.blend(x, y, color, 255);
+        });
+    }
+
+    fn for_each_polygon_pixel(
+        &mut self,
+        pts: &[(f64, f64)],
+        mut paint: impl FnMut(&mut Self, i32, i32),
+    ) {
         if pts.len() < 3 || pts.iter().any(|(x, y)| !x.is_finite() || !y.is_finite()) {
             return;
         }
@@ -534,7 +566,7 @@ impl Canvas {
                 let px = f64::from(x) + 0.5;
                 let py = f64::from(y) + 0.5;
                 if point_in_polygon(px, py, pts) {
-                    self.blend(x, y, color, 255);
+                    paint(self, x, y);
                 }
             }
         }

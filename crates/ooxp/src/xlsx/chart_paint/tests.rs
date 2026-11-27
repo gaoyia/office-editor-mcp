@@ -7004,6 +7004,120 @@
         render_line(&official_like_f32_line_xml(official_like_f32_trendline())).unwrap();
     }
 
+
+    fn official_like_f33_area_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(
+            &line_ser(0, "F33S1", &official_like_f32_values(), extra),
+            "",
+        ))
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        )
+    }
+
+    fn official_like_f33_nofill() -> &'static str {
+        r#"<c:spPr><a:noFill/><a:extLst><a:ext uri="{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}"><a14:hiddenFill xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main"><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a14:hiddenFill></a:ext></a:extLst></c:spPr>"#
+    }
+
+    fn official_like_f33_alpha() -> &'static str {
+        r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#
+    }
+
+    fn official_like_f33_pattern() -> &'static str {
+        r#"<c:spPr><a:pattFill prst="pct10"><a:fgClr><a:srgbClr val="156082"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill></c:spPr>"#
+    }
+
+    #[test]
+    fn official_like_f33_area_nofill_alpha_pattern_export_and_paint() {
+        let control = official_like_f33_area_xml("");
+        let marker_like = official_like_f33_area_xml("");
+        let no_fill = official_like_f33_area_xml(official_like_f33_nofill());
+        let alpha = official_like_f33_area_xml(official_like_f33_alpha());
+        let pattern = official_like_f33_area_xml(official_like_f33_pattern());
+        let a1 = [0x15, 0x60, 0x82];
+        let white = [255, 255, 255];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("areaControl", &control),
+            ("areaMarkerXml", &marker_like),
+            ("areaNoFill", &no_fill),
+            ("areaTransparent", &alpha),
+            ("areaPattern", &pattern),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F33 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            pngs.push((
+                name,
+                png,
+                count_in(&rgb, w, 0, w, 0, h, a1, 18),
+                count_in(&rgb, w, 0, w, 0, h, white, 2),
+            ));
+        }
+        assert!(
+            pngs[0].2 >= 80,
+            "standard midCat area control should paint the series fill"
+        );
+        // Official COM markers were not serialized; the XML matches the
+        // control encoding and already exports on the existing area path.
+        assert_eq!(
+            pngs[1].1, pngs[0].1,
+            "unserialized area marker XML is the existing midCat area path"
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "area noFill must change the image");
+        assert!(
+            pngs[2].2 < pngs[0].2,
+            "area noFill should not paint the hidden solid; nofill={} control={}",
+            pngs[2].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[3].1, pngs[0].1, "area straight alpha must change the image");
+        assert_ne!(pngs[4].1, pngs[0].1, "area pattFill must change the image");
+        assert!(
+            pngs[4].2 >= 20,
+            "area pct10 pattern should paint some foreground ink"
+        );
+        assert!(
+            pngs[4].3 >= 20,
+            "area pct10 pattern should paint some background white"
+        );
+    }
+
+    #[test]
+    fn leftover_f33_variants_without_official_gold_stay_not_implemented() {
+        let stacked_alpha = official_like_f33_area_xml(official_like_f33_alpha()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let stacked_nofill = official_like_f33_area_xml(official_like_f33_nofill()).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let marker = official_like_f33_area_xml(
+            r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
+        );
+        let grad = official_like_f33_area_xml(
+            r#"<c:spPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="156082"/></a:gs><a:gs pos="100000"><a:srgbClr val="FFFFFF"/></a:gs></a:gsLst></a:gradFill></c:spPr>"#,
+        );
+        let alpha_mod = official_like_f33_area_xml(
+            r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alphaMod val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+        );
+        for (i, xml) in [stacked_alpha, stacked_nofill, marker, grad, alpha_mod]
+            .iter()
+            .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F33 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F33 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f33_area_xml(official_like_f33_nofill())).unwrap();
+    }
+
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -8149,19 +8263,22 @@
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
+                    r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
                 ),
                 "",
             ),
+            // Stacked plus a translucent fill stays NI (official F33 gold is
+            // standard / midCat only).
             standard_area_xml(
                 &line_ser(
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0)],
-                    r#"<c:marker><c:symbol val="circle"/><c:size val="5"/></c:marker>"#,
+                    r#"<c:spPr><a:solidFill><a:srgbClr val="156082"><a:alpha val="50000"/></a:srgbClr></a:solidFill></c:spPr>"#,
                 ),
                 "",
-            ),
+            )
+            .replace(r#"grouping val="standard""#, r#"grouping val="stacked""#),
             area_space(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
           <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>

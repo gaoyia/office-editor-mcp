@@ -224,6 +224,12 @@ pub(super) struct Series {
     /// Official-like y / fixedVal error bars. Close-enough stems and caps;
     /// not a unique official cap/style table.
     pub(super) err_bars: Option<SeriesErrBars>,
+    /// Straight OOXML area fill alpha. 255 for opaque / non-area series.
+    pub(super) fill_alpha: u8,
+    /// Official-like area `a:noFill`.
+    pub(super) area_no_fill: bool,
+    /// Official-like area `a:pattFill`. None for other series.
+    pub(super) area_pattern: Option<super::pattern::PatternFill>,
 }
 
 /// Per-point marker from an official-like line/scatter dPt.
@@ -290,6 +296,9 @@ impl Default for Series {
             point_markers: Vec::new(),
             trendline: None,
             err_bars: None,
+            fill_alpha: 255,
+            area_no_fill: false,
+            area_pattern: None,
         }
     }
 }
@@ -568,6 +577,15 @@ pub(super) struct SliceFill {
 
 pub(super) struct AreaSeriesStyle {
     pub(super) fill: Option<[u8; 3]>,
+    /// Straight OOXML alpha (100000 = opaque). 255 when the fill is opaque
+    /// or omitted. Not a unique official-matrix alpha lock.
+    pub(super) fill_alpha: u8,
+    /// Official-like series `a:noFill` (optional hiddenFill memory). The
+    /// area is not painted; the remembered solid is not a visible fill.
+    pub(super) no_fill: bool,
+    /// Official-like series `a:pattFill`. Sampled with the existing general
+    /// 8x8 / DPI pattern RULE inside the area polygon, not as a frame rect.
+    pub(super) pattern: Option<super::pattern::PatternFill>,
     pub(super) line_visible: bool,
     pub(super) line_width: f64,
     pub(super) line_color: Option<[u8; 3]>,

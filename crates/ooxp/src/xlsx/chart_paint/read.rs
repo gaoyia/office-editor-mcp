@@ -1317,6 +1317,9 @@ pub(super) fn read_chart(
         }
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let mut line_color = None;
+        let mut fill_alpha = 255u8;
+        let mut area_no_fill = false;
+        let mut area_pattern = None;
         let style = match kind {
             PlotKind::ClusteredColumn | PlotKind::ClusteredBar => LineSeriesStyle {
         join: stroke::Join::Round,
@@ -1349,8 +1352,15 @@ pub(super) fn read_chart(
                 style
             }
             PlotKind::StandardArea => {
-                let area = read_area_series(ser, accents, dpi)?;
+                let allow_complex_fills = stacking == Stacking::Clustered
+                    && wrappers.len() == 1
+                    && chart3d.is_none()
+                    && !on_secondary;
+                let area = read_area_series(ser, accents, dpi, allow_complex_fills)?;
                 line_color = area.line_color;
+                fill_alpha = area.fill_alpha;
+                area_no_fill = area.no_fill;
+                area_pattern = area.pattern;
                 LineSeriesStyle {
         join: stroke::Join::Round,
         dash: None,
@@ -1479,6 +1489,9 @@ pub(super) fn read_chart(
             point_markers,
             trendline,
             err_bars,
+            fill_alpha,
+            area_no_fill,
+            area_pattern,
         };
     }
     }
@@ -3302,6 +3315,7 @@ pub(super) fn read_area_series(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_complex_fills: bool,
 ) -> Result<AreaSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     if flag(ser, "smooth").unwrap_or(false) {
@@ -3320,19 +3334,41 @@ pub(super) fn read_area_series(
         }
     }
     let mut fill = None;
+    let mut fill_alpha = 255u8;
+    let mut no_fill = false;
+    let mut pattern = None;
     let mut line_visible = false;
     let mut line_width = dpi.pt_to_px_font(2.25);
     let mut line_color = None;
+    let mut saw_fill = false;
+    let mut saw_hidden_ext = false;
     if let Some(sp) = ser.child_by_local("spPr") {
         for child in sp.element_children() {
             match child.local_name() {
                 "solidFill" => {
-                    if color_has_non_opaque_alpha(child) {
+                    if saw_fill {
                         return Err(unsupported());
                     }
-                    fill = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+                    saw_fill = true;
+                    let (color, alpha) = read_official_like_area_solid(child, accents, allow_complex_fills)?;
+                    fill = Some(color);
+                    fill_alpha = alpha;
                 }
-                "noFill" => return Err(unsupported()),
+                "noFill" => {
+                    if !allow_complex_fills || saw_fill {
+                        return Err(unsupported());
+                    }
+                    saw_fill = true;
+                    no_fill = true;
+                }
+                "pattFill" => {
+                    if !allow_complex_fills || saw_fill {
+                        return Err(unsupported());
+                    }
+                    saw_fill = true;
+                    pattern = Some(read_official_like_area_pattern(child, accents)?);
+                    fill = Some(pattern.as_ref().unwrap().fg);
+                }
                 "ln" => {
                     if let Some(solid) = child.child_by_local("solidFill") {
                         if color_has_non_opaque_alpha(solid) {
@@ -3349,15 +3385,97 @@ pub(super) fn read_area_series(
                         return Err(unsupported());
                     }
                 }
+                "extLst" if is_office_hidden_fill_ext(child) => {
+                    saw_hidden_ext = true;
+                }
                 _ => return Err(unsupported()),
             }
         }
     }
+    if saw_hidden_ext && !no_fill {
+        return Err(unsupported());
+    }
     Ok(AreaSeriesStyle {
         fill,
+        fill_alpha,
+        no_fill,
+        pattern,
         line_visible,
         line_width,
         line_color,
+    })
+}
+
+/// Official-like area solid fill, including straight `a:alpha` on srgb/scheme
+/// colors. alphaMod/alphaOff stay NI. Close-enough compositing reuses the
+/// existing OOXML thousandths-of-a-percent mapping, not a unique table.
+fn read_official_like_area_solid(
+    slot: &Element,
+    accents: [[u8; 3]; 6],
+    allow_alpha: bool,
+) -> Result<([u8; 3], u8), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if color_has_non_opaque_alpha(slot) && !allow_alpha {
+        return Err(unsupported());
+    }
+    let color = color_of_slot(slot, &accents).ok_or_else(unsupported)?;
+    let Some(node) = slot
+        .child_by_local("srgbClr")
+        .or_else(|| slot.child_by_local("sysClr"))
+        .or_else(|| slot.child_by_local("schemeClr"))
+    else {
+        return Ok((color, 255));
+    };
+    let mut alpha = 255u8;
+    let mut saw_alpha = false;
+    for child in node.element_children() {
+        match child.local_name() {
+            "alpha" => {
+                if saw_alpha {
+                    return Err(unsupported());
+                }
+                saw_alpha = true;
+                let val = parse_ooxml_alpha(child.attr_local("val")).ok_or_else(unsupported)?;
+                alpha = ooxml_alpha_to_u8(val);
+            }
+            "alphaMod" | "alphaOff" => return Err(unsupported()),
+            "lumMod" | "lumOff" | "shade" | "tint" => {}
+            _ => {}
+        }
+    }
+    Ok((color, alpha))
+}
+
+fn read_official_like_area_pattern(
+    patt: &Element,
+    accents: [[u8; 3]; 6],
+) -> Result<super::pattern::PatternFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let prst = super::pattern::PatternPreset::parse(patt.attr_local("prst").ok_or_else(unsupported)?)
+        .ok_or_else(unsupported)?;
+    let mut fg = None;
+    let mut bg = None;
+    for child in patt.element_children() {
+        match child.local_name() {
+            "fgClr" if fg.is_none() => {
+                if color_has_non_opaque_alpha(child) {
+                    return Err(unsupported());
+                }
+                fg = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+            }
+            "bgClr" if bg.is_none() => {
+                if color_has_non_opaque_alpha(child) {
+                    return Err(unsupported());
+                }
+                bg = Some(color_of_slot(child, &accents).ok_or_else(unsupported)?);
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(super::pattern::PatternFill {
+        prst,
+        fg: fg.ok_or_else(unsupported)?,
+        bg: bg.ok_or_else(unsupported)?,
     })
 }
 

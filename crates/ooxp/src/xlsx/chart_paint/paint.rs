@@ -2540,6 +2540,7 @@ pub(super) fn draw_areas(
         }
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
+        let paint = area_band_paint(ser, fill);
         let mut run = Vec::new();
         for (ci, value) in ser.values.iter().enumerate() {
             match value {
@@ -2554,7 +2555,7 @@ pub(super) fn draw_areas(
                     ));
                 }
                 _ => {
-                    fill_area_run(canvas, &run, zero_y, fill);
+                    fill_area_run_paint(canvas, &run, zero_y, paint);
                     if ser.line_visible && ser.line_width > 0.0 {
                         stroke_run(canvas, &run, ser.line_width, stroke);
                     }
@@ -2562,7 +2563,7 @@ pub(super) fn draw_areas(
                 }
             }
         }
-        fill_area_run(canvas, &run, zero_y, fill);
+        fill_area_run_paint(canvas, &run, zero_y, paint);
         if ser.line_visible && ser.line_width > 0.0 {
             stroke_run(canvas, &run, ser.line_width, stroke);
         }
@@ -2655,20 +2656,25 @@ pub(super) fn category_x_midcat(plot: &Rect, ci: usize, cats: f64) -> f64 {
     }
 }
 
-pub(super) fn fill_area_run(canvas: &mut Canvas, run: &[(f64, f64)], zero_y: f64, color: [u8; 3]) {
+fn fill_area_run_paint(
+    canvas: &mut Canvas,
+    run: &[(f64, f64)],
+    zero_y: f64,
+    paint: AreaBandPaint<'_>,
+) {
     for pair in run.windows(2) {
-        fill_area_span(canvas, pair[0], pair[1], zero_y, color);
+        fill_area_span_paint(canvas, pair[0], pair[1], zero_y, paint);
     }
 }
 
-pub(super) fn fill_area_span(
+fn fill_area_span_paint(
     canvas: &mut Canvas,
     start: (f64, f64),
     end: (f64, f64),
     zero_y: f64,
-    color: [u8; 3],
+    paint: AreaBandPaint<'_>,
 ) {
-    fill_area_band(canvas, start, (start.0, zero_y), end, (end.0, zero_y), color);
+    fill_area_band_paint(canvas, start, (start.0, zero_y), end, (end.0, zero_y), paint);
 }
 
 pub(super) fn fill_area_bands(
@@ -2694,6 +2700,44 @@ pub(super) fn fill_area_band(
     base1: (f64, f64),
     color: [u8; 3],
 ) {
+    fill_area_band_paint(
+        canvas,
+        top0,
+        base0,
+        top1,
+        base1,
+        AreaBandPaint::Solid(color, 255),
+    );
+}
+
+#[derive(Clone, Copy)]
+enum AreaBandPaint<'a> {
+    Solid([u8; 3], u8),
+    Pattern(&'a super::pattern::PatternFill),
+    Skip,
+}
+
+fn area_band_paint(ser: &Series, fallback: [u8; 3]) -> AreaBandPaint<'_> {
+    if ser.area_no_fill {
+        AreaBandPaint::Skip
+    } else if let Some(pattern) = ser.area_pattern.as_ref() {
+        AreaBandPaint::Pattern(pattern)
+    } else {
+        AreaBandPaint::Solid(fallback, ser.fill_alpha)
+    }
+}
+
+fn fill_area_band_paint(
+    canvas: &mut Canvas,
+    top0: (f64, f64),
+    base0: (f64, f64),
+    top1: (f64, f64),
+    base1: (f64, f64),
+    paint: AreaBandPaint<'_>,
+) {
+    if matches!(paint, AreaBandPaint::Skip) {
+        return;
+    }
     let (x0, y0) = top0;
     let (_, b0) = base0;
     let (x1, y1) = top1;
@@ -2710,10 +2754,18 @@ pub(super) fn fill_area_band(
         let t = s0 / (s0 - s1);
         let xc = x0 + t * (x1 - x0);
         let yc = y0 + t * (y1 - y0);
-        canvas.fill_polygon(&[(x0, b0), (x0, y0), (xc, yc)], color);
-        canvas.fill_polygon(&[(xc, yc), (x1, y1), (x1, b1)], color);
+        fill_area_polygon(canvas, &[(x0, b0), (x0, y0), (xc, yc)], paint);
+        fill_area_polygon(canvas, &[(xc, yc), (x1, y1), (x1, b1)], paint);
     } else {
-        canvas.fill_polygon(&[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], color);
+        fill_area_polygon(canvas, &[(x0, b0), (x0, y0), (x1, y1), (x1, b1)], paint);
+    }
+}
+
+fn fill_area_polygon(canvas: &mut Canvas, pts: &[(f64, f64)], paint: AreaBandPaint<'_>) {
+    match paint {
+        AreaBandPaint::Skip => {}
+        AreaBandPaint::Solid(color, alpha) => canvas.fill_polygon_alpha(pts, color, alpha),
+        AreaBandPaint::Pattern(patt) => canvas.fill_polygon_pattern(pts, patt),
     }
 }
 
