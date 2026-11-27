@@ -703,8 +703,103 @@ pub(super) fn read_chart(
             }
             PlotKind::Pie
         }
+        "bar3DChart" => {
+            let dir = wrapper
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("col");
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            let shape = wrapper
+                .child_by_local("shape")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("box");
+            // Official F24 gold is col/clustered/shape=box. Other 3D bar
+            // directions, grouping, and prism shapes stay NI.
+            if dir != "col" || grouping != "clustered" || shape != "box" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::ClusteredColumn
+        }
+        "line3DChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::StandardLine
+        }
+        "area3DChart" => {
+            let grouping = wrapper
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks_el = chart.child_by_local("dispBlanksAs");
+            let blanks = blanks_el
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            area_missing_as_zero = blanks_el.is_none() || blanks == "zero" || blanks == "span";
+            if blanks != "gap" && !area_missing_as_zero {
+                return Err(unsupported());
+            }
+            PlotKind::StandardArea
+        }
+        "pie3DChart" => {
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            PlotKind::Pie
+        }
+        "surface3DChart" => {
+            if flag(wrapper, "wireframe").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            PlotKind::StandardArea
+        }
         _ => return Err(unsupported()),
     };
+    let chart3d = match wrapper.local_name() {
+        "bar3DChart" => Some(Chart3DKind::ColumnClustered),
+        "line3DChart" => Some(Chart3DKind::Line),
+        "area3DChart" => Some(Chart3DKind::Area),
+        "pie3DChart" => Some(Chart3DKind::Pie),
+        "surface3DChart" => Some(Chart3DKind::Surface),
+        _ => None,
+    };
+    let view3d = if chart3d.is_some() {
+        Some(read_view3d(chart))
+    } else {
+        None
+    };
+    if chart3d.is_some() && locked_secondary.is_some() {
+        return Err(unsupported());
+    }
     if let Some(sec) = &locked_secondary {
         // Official F21 still-NI gold: same-type clustered bar, standard area
         // (midCat already opened by F16), omitted min/max, and one official
@@ -1444,6 +1539,9 @@ pub(super) fn read_chart(
             return Err(unsupported());
         }
     }
+    if chart3d.is_some() && series.iter().any(|ser| ser.value_label.is_some()) {
+        return Err(unsupported());
+    }
     Ok(ColumnChart {
         categories,
         series,
@@ -1471,7 +1569,41 @@ pub(super) fn read_chart(
         point_explosions,
         area_missing_as_zero,
         area_midcat,
+        view3d,
+        chart3d,
     })
+}
+
+fn read_view3d(chart: &Element) -> View3D {
+    // ECMA-376 schema defaults, used only as close-enough fallbacks when
+    // a child is omitted. Not unique official render locks.
+    let mut view = View3D::default();
+    let Some(node) = chart.child_by_local("view3D") else {
+        return view;
+    };
+    if let Some(v) = number_val(node, "rotX") {
+        view.rot_x = v;
+    }
+    if let Some(v) = number_val(node, "rotY") {
+        view.rot_y = v;
+    }
+    if let Some(v) = number_val(node, "perspective") {
+        view.perspective = v;
+    }
+    if let Some(v) = number_val(node, "depthPercent") {
+        view.depth_percent = v;
+    }
+    if let Some(v) = number_val(node, "hPercent") {
+        view.h_percent = v;
+    }
+    if let Some(el) = node.child_by_local("rAngAx") {
+        let flag = el
+            .attr_local("val")
+            .map(|v| !matches!(v, "0" | "false" | "off"))
+            .unwrap_or(true);
+        view.right_angle_axes = flag;
+    }
+    view
 }
 
 pub(super) fn series_cat(bar: &Element) -> Option<&Element> {
@@ -2651,13 +2783,16 @@ pub(super) fn data_labels_hidden(dlbls: Option<&Element>) -> Result<(), Error> {
     {
         return Err(unsupported());
     }
+    // Official Excel 16 pie3D writes showLeaderLines=1 with every content
+    // flag off. With no visible labels there is nothing to lead, so the
+    // flag is inert and must not block Chart.Export. Visible label content
+    // (showVal / showCatName / …) still stays NI here.
     for name in [
         "showLegendKey",
         "showVal",
         "showCatName",
         "showSerName",
         "showPercent",
-        "showLeaderLines",
     ] {
         if flag(dlbls, name).unwrap_or(false) {
             return Err(unsupported());

@@ -1118,6 +1118,9 @@ pub(super) fn paint(
     font: Option<&Font>,
     host: ChartHost,
 ) -> Result<(), Error> {
+    if chart.chart3d.is_some() {
+        return paint_3d(canvas, chart, font, host);
+    }
     if matches!(chart.kind, PlotKind::Scatter { .. }) {
         return paint_scatter(canvas, chart, font, host);
     }

@@ -5787,12 +5787,6 @@
             ),
             standard_line_xml(&base, "").replace(r#"varyColors val="0""#, r#"varyColors val="1""#),
             line_space(
-                r#"<c:line3DChart><c:grouping val="standard"/><c:ser>
-          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
-        </c:ser></c:line3DChart>"#,
-                "",
-            ),
-            line_space(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
           <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
         </c:ser></c:barChart><c:lineChart><c:grouping val="standard"/><c:ser>
@@ -7287,8 +7281,6 @@
                 r#"grouping val="standard""#,
                 r#"grouping val="percentStacked""#,
             ),
-            base.replace("<c:areaChart>", "<c:area3DChart>")
-                .replace("</c:areaChart>", "</c:area3DChart>"),
             base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
             base.replacen(
                 r#"</c:areaChart>"#,
@@ -8117,8 +8109,6 @@
                 &format!(r#"<c:pieChart><c:varyColors val="1"/>{two}</c:pieChart>"#),
                 "",
             ),
-            base.replace("<c:pieChart>", "<c:pie3DChart>")
-                .replace("</c:pieChart>", "</c:pie3DChart>"),
             base.replace("<c:pieChart>", "<c:doughnutChart>")
                 .replace("</c:pieChart>", "</c:doughnutChart>"),
             pie_space(
@@ -11599,5 +11589,152 @@
             let reference = crate::xml::parse(make(&reference).as_bytes()).unwrap();
             let render = |root: &Element| render_chart(root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "").unwrap();
             assert_eq!(render(&doc.root), render(&reference.root), "{first}+{second} {base}");
+        }
+    }
+
+    fn official_like_3d_xml(kind: &str, extra_wrapper: &str, extra_chart: &str) -> String {
+        let rot_y = if kind == "pie3DChart" { "0" } else { "20" };
+        let series = if kind == "pie3DChart" {
+            r#"<c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>F24S1</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>10</c:v></c:pt><c:pt idx="1"><c:v>20</c:v></c:pt><c:pt idx="2"><c:v>30</c:v></c:pt><c:pt idx="3"><c:v>40</c:v></c:pt></c:numLit></c:val>
+        </c:ser>"#
+                .to_string()
+        } else {
+            let one = |order: usize, name: &str, a: i32, b: i32, c: i32, d: i32| {
+                format!(
+                    r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          <c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>
+          <c:val><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>{a}</c:v></c:pt><c:pt idx="1"><c:v>{b}</c:v></c:pt><c:pt idx="2"><c:v>{c}</c:v></c:pt><c:pt idx="3"><c:v>{d}</c:v></c:pt></c:numLit></c:val>
+        </c:ser>"#
+                )
+            };
+            format!(
+                "{}{}{}",
+                one(0, "F24S1", 10, 20, 30, 40),
+                one(1, "F24S2", 20, 10, 20, 10),
+                one(2, "F24S3", 20, 30, 10, 20)
+            )
+        };
+        let head = match kind {
+            "bar3DChart" => r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
+            "line3DChart" => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+            "area3DChart" => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+            "pie3DChart" => r#"<c:varyColors val="1"/>"#,
+            // Omitted wireframe is the official-like exportable case (same as val="0").
+            "surface3DChart" => "",
+            _ => "",
+        };
+        let axes = if kind == "pie3DChart" {
+            String::new()
+        } else {
+            let mid = if matches!(kind, "area3DChart" | "surface3DChart") {
+                "midCat"
+            } else {
+                "between"
+            };
+            format!(
+                r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{mid}"/><c:majorUnit val="20"/></c:valAx>
+      <c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/></c:serAx>"#
+            )
+        };
+        let ax_ids = if kind == "pie3DChart" {
+            ""
+        } else {
+            r#"<c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>"#
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    {extra_chart}
+    <c:view3D><c:rotX val="15"/><c:rotY val="{rot_y}"/><c:rAngAx val="0"/></c:view3D>
+    <c:plotArea>
+      <c:{kind}>
+        {head}
+        {series}
+        {extra_wrapper}
+        {ax_ids}
+      </c:{kind}>
+      {axes}
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn count_nonwhite_rgb(rgb: &[u8]) -> usize {
+        rgb.chunks_exact(3)
+            .filter(|p| *p != [255, 255, 255])
+            .count()
+    }
+
+    #[test]
+    fn official_like_3d_charts_export_and_paint_ink() {
+        // Official F24 Chart.Export gold exists for these five wrappers.
+        // Close-enough projection must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock and does not claim 0-diff.
+        for kind in [
+            "bar3DChart",
+            "line3DChart",
+            "area3DChart",
+            "pie3DChart",
+            "surface3DChart",
+        ] {
+            // Official pie3D gold writes hidden dLbls plus showLeaderLines=1.
+            let pie_dlbls = r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls>"#;
+            let extra = if kind == "pie3DChart" { pie_dlbls } else { "" };
+            let xml = official_like_3d_xml(kind, extra, "");
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_3d_variants_without_official_gold_stay_not_implemented() {
+        let cases = [
+            official_like_3d_xml("bar3DChart", "", "")
+                .replace(r#"barDir val="col""#, r#"barDir val="bar""#),
+            official_like_3d_xml("bar3DChart", "", "").replace(
+                r#"grouping val="clustered""#,
+                r#"grouping val="stacked""#,
+            ),
+            official_like_3d_xml("bar3DChart", r#"<c:shape val="cone"/>"#, ""),
+            official_like_3d_xml("line3DChart", "", "").replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="stacked""#,
+            ),
+            official_like_3d_xml("area3DChart", "", "").replace(
+                r#"grouping val="standard""#,
+                r#"grouping val="percentStacked""#,
+            ),
+            official_like_3d_xml("surface3DChart", r#"<c:wireframe val="1"/>"#, ""),
+            official_like_3d_xml(
+                "bar3DChart",
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+                "",
+            ),
+            official_like_3d_xml(
+                "pie3DChart",
+                r#"<c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+                "",
+            ),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover 3D case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover 3D case {i} should stay NotImplemented"
+            );
         }
     }

@@ -285,6 +285,45 @@ pub(super) struct ColumnChart {
     /// crossBetween=midCat: first and last categories sit on the plot edges.
     /// Unused for other kinds. The between path is unchanged.
     pub(super) area_midcat: bool,
+    /// Close-enough 3D view (F24). None for 2D charts.
+    pub(super) view3d: Option<View3D>,
+    /// Which official 3D wrapper is being drawn. None for 2D charts.
+    pub(super) chart3d: Option<Chart3DKind>,
+}
+
+/// Close-enough 3D view parameters. Explicit XML values win; omitted
+/// children use ECMA-376 schema defaults and are not unique official
+/// render locks.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct View3D {
+    pub(super) rot_x: f64,
+    pub(super) rot_y: f64,
+    pub(super) right_angle_axes: bool,
+    pub(super) perspective: f64,
+    pub(super) depth_percent: f64,
+    pub(super) h_percent: f64,
+}
+
+impl Default for View3D {
+    fn default() -> Self {
+        Self {
+            rot_x: 0.0,
+            rot_y: 0.0,
+            right_angle_axes: true,
+            perspective: 30.0,
+            depth_percent: 100.0,
+            h_percent: 100.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Chart3DKind {
+    ColumnClustered,
+    Line,
+    Area,
+    Pie,
+    Surface,
 }
 
 /// Two integer-thousandth opacity operands retain their exact product until
