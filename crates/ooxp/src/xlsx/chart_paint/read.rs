@@ -975,7 +975,15 @@ pub(super) fn read_chart(
                 kind,
                 PlotKind::ClusteredColumn | PlotKind::ClusteredBar | PlotKind::StandardLine
             ) {
-                read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?
+                let visibility =
+                    read_deleted_label_points(ser.child_by_local("dLbls"), values_len)?;
+                if value_label.is_none() && !visibility.shown.is_empty() {
+                    // Point showVal=1 cannot silently omit labels when the
+                    // series itself is hidden; that combination stays NI
+                    // until per-point show is painted.
+                    return Err(unsupported());
+                }
+                visibility.deleted
             } else {
                 Vec::new()
             },
@@ -2228,12 +2236,36 @@ pub(super) fn value_label_text(value: f64) -> Option<String> {
     Some(text)
 }
 
-/// Only deletion-only series point labels are locked. Known Excel editing
-/// identity extensions carry no paint semantics; unknown extensions stay NI.
-pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) -> Result<Vec<usize>, Error> {
+/// Series-level point visibility is a general rule, not a unique pixel lock.
+/// `delete=true` or `showVal=false` hides that label; `delete=false` or
+/// `showVal=true` keeps it. Known Excel editing identity extensions stay
+/// inert; unknown extensions, conflicting flags, and visible position/style
+/// or custom text remain NI.
+#[derive(Debug)]
+pub(super) struct PointLabelVisibility {
+    pub deleted: Vec<usize>,
+    pub shown: Vec<usize>,
+}
+
+fn parse_onoff_attr(e: &Element) -> Option<bool> {
+    match e.attr_local("val") {
+        None | Some("1") | Some("true") => Some(true),
+        Some("0") | Some("false") | Some("off") => Some(false),
+        _ => None,
+    }
+}
+
+pub(super) fn read_deleted_label_points(
+    labels: Option<&Element>,
+    len: usize,
+) -> Result<PointLabelVisibility, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let empty = || PointLabelVisibility {
+        deleted: Vec::new(),
+        shown: Vec::new(),
+    };
     let Some(labels) = labels else {
-        return Ok(Vec::new());
+        return Ok(empty());
     };
     let scalar = |e: &Element| {
         e.element_children().next().is_none()
@@ -2244,6 +2276,7 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             && e.attrs.iter().filter(|(k, _)| k == "val").count() <= 1
     };
     let mut deleted = Vec::new();
+    let mut shown = Vec::new();
     for point in labels
         .element_children()
         .filter(|e| e.local_name() == "dLbl")
@@ -2252,7 +2285,8 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             return Err(unsupported());
         }
         let mut idx = None;
-        let mut delete_seen = false;
+        let mut delete = None;
+        let mut show_val = None;
         let mut ext_seen = false;
         for child in point.element_children() {
             match child.local_name() {
@@ -2263,12 +2297,11 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
                     }
                     idx = Some(raw.parse::<usize>().map_err(|_| unsupported())?);
                 }
-                "delete"
-                    if !delete_seen
-                        && scalar(child)
-                        && matches!(child.attr_local("val"), None | Some("1" | "true")) =>
-                {
-                    delete_seen = true;
+                "delete" if delete.is_none() && scalar(child) => {
+                    delete = Some(parse_onoff_attr(child).ok_or_else(unsupported)?);
+                }
+                "showVal" if show_val.is_none() && scalar(child) => {
+                    show_val = Some(parse_onoff_attr(child).ok_or_else(unsupported)?);
                 }
                 "extLst" if !ext_seen => {
                     ext_seen = true;
@@ -2299,18 +2332,34 @@ pub(super) fn read_deleted_label_points(labels: Option<&Element>, len: usize) ->
             }
         }
         let idx = idx.ok_or_else(unsupported)?;
-        if !delete_seen || idx >= len {
+        if idx >= len {
             return Err(unsupported());
         }
-        deleted.push(idx);
+        let hide = match (delete, show_val) {
+            (Some(true), None | Some(false)) => true,
+            (Some(false), None | Some(true)) => false,
+            (None, Some(false)) => true,
+            (None, Some(true)) => false,
+            (None, None) | (Some(true), Some(true)) | (Some(false), Some(false)) => {
+                return Err(unsupported());
+            }
+        };
+        if hide {
+            deleted.push(idx);
+        } else {
+            shown.push(idx);
+        }
     }
     // Keep input-sized work O(n log n), including duplicate validation and
     // point lookup during painting; do not add a quadratic resource path.
     deleted.sort_unstable();
-    if deleted.windows(2).any(|pair| pair[0] == pair[1]) {
+    shown.sort_unstable();
+    if deleted.windows(2).any(|pair| pair[0] == pair[1])
+        || shown.windows(2).any(|pair| pair[0] == pair[1])
+    {
         return Err(unsupported());
     }
-    Ok(deleted)
+    Ok(PointLabelVisibility { deleted, shown })
 }
 
 /// Only these non-bubble chart kinds reach this parser. Excel writes

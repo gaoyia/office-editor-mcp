@@ -5145,13 +5145,32 @@
             let doc = crate::xml::parse(format!("<dLbls>{body}</dLbls>").as_bytes()).unwrap();
             read_deleted_label_points(Some(&doc.root), len)
         };
-        assert_eq!(read(valid, 3).unwrap(), vec![1]);
+        let deleted = |body: &str, len: usize| read(body, len).unwrap().deleted;
+        assert_eq!(deleted(valid, 3), vec![1]);
         assert_eq!(
-            read(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3).unwrap(),
+            deleted(&valid.replace("val='1'/></dLbl>", "/></dLbl>"), 3),
             vec![1]
         );
         let metadata = valid.replace("</dLbl>", "<extLst><ext uri='{CE6537A1-D6FC-4f65-9D91-7224C49458BB}'/><ext uri='{C3380CC4-5D6E-409C-BE32-E72D297353CC}'><uniqueId val='{00000001-2765-4173-A018-3A6CF43989F2}'/></ext></extLst></dLbl>");
-        assert_eq!(read(&metadata, 3).unwrap(), vec![1]);
+        assert_eq!(deleted(&metadata, 3), vec![1]);
+        assert_eq!(
+            deleted(&valid.replace("delete val='1'", "delete val='0'"), 3),
+            Vec::<usize>::new()
+        );
+        assert_eq!(
+            read(&valid.replace("delete val='1'", "delete val='0'"), 3)
+                .unwrap()
+                .shown,
+            vec![1]
+        );
+        assert_eq!(
+            deleted(&valid.replace("<delete val='1'/>", "<showVal val='0'/>"), 3),
+            vec![1]
+        );
+        assert_eq!(
+            deleted(&valid.replace("<delete val='1'/>", "<showVal val='1'/>"), 3),
+            Vec::<usize>::new()
+        );
         for bad in [
             valid.replace("idx val='1'", "idx val='-1'"),
             valid.replace("idx val='1'", "idx val='3'"),
@@ -5160,8 +5179,8 @@
             valid.replace("idx val='1'", "idx val='184467440737095516160'"),
             valid.replace("<idx val='1'/>", ""),
             valid.replace("<delete val='1'/>", ""),
-            valid.replace("delete val='1'", "delete val='0'"),
             valid.replace("</dLbl>", "<showVal val='1'/></dLbl>"),
+            valid.replace("delete val='1'", "delete val='0'").replace("</dLbl>", "<showVal val='0'/></dLbl>"),
             valid.replace("</dLbl>", "<spPr><solidFill/></spPr></dLbl>"),
             valid.replace("</dLbl>", "<dLblPos val='outEnd'/></dLbl>"),
             valid.replace("</dLbl>", "<tx><rich/></tx></dLbl>"),
@@ -5192,6 +5211,26 @@
         assert!(
             data_labels_hidden(Some(&other_kind.root)).is_err(),
             "other chart kinds remain NI"
+        );
+
+        let keep = "<c:dLbls><c:dLbl><c:idx val='1'/><c:delete val='0'/></c:dLbl><c:showVal val='1'/></c:dLbls>";
+        let hide = "<c:dLbls><c:dLbl><c:idx val='1'/><c:showVal val='0'/></c:dLbl><c:showVal val='1'/></c:dLbls>";
+        let reveal = "<c:dLbls><c:dLbl><c:idx val='1'/><c:showVal val='1'/></c:dLbl><c:showVal val='0'/></c:dLbls>";
+        for (labels, expect_deleted) in [(keep, Vec::<usize>::new()), (hide, vec![1])] {
+            let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], labels);
+            let xml = bar_xml(&ser, "", "minMax", Some("col"));
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart =
+                read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+            assert_eq!(chart.series[0].deleted_label_points, expect_deleted);
+            assert!(chart.series[0].value_label.is_some());
+        }
+        let ser = line_ser(0, "S1", &[Some(4.0), Some(6.0), Some(9.0)], reveal);
+        let xml = bar_xml(&ser, "", "minMax", Some("col"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(
+            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "point showVal=1 on a hidden series stays NI until those labels can be painted"
         );
     }
 
