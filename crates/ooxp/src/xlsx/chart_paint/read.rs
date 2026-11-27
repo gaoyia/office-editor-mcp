@@ -2323,10 +2323,22 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
     // guessed global default. Only explicit cap values are expanded here.
     let cap = match ln.attr_local("cap") { Some(v) => stroke::Cap::from_ooxml(v).ok_or_else(unsupported)?, None => stroke::Cap::Round };
     if !explicit_caps && cap != stroke::Cap::Round { return Err(unsupported()); }
-    for (attr, allowed) in [
-        ("cmpd", &["sng"][..]),
-        ("algn", &["ctr"][..]),
-    ] {
+    // Official-like standard line charts may write non-sng ST_CompoundLine
+    // and algn=in. Close-enough export keeps the existing single centered
+    // stroke of the resolved pen; stripe ratios and inset offsets are not
+    // uniquely locked from the official one-width horizontal matrix and
+    // are not invented here. Other hosts keep the legacy sng/ctr gate.
+    let cmpd_allowed: &[&str] = if explicit_caps {
+        &["sng", "dbl", "thinThick", "thickThin", "tri"]
+    } else {
+        &["sng"]
+    };
+    let algn_allowed: &[&str] = if explicit_caps {
+        &["ctr", "in"]
+    } else {
+        &["ctr"]
+    };
+    for (attr, allowed) in [("cmpd", cmpd_allowed), ("algn", algn_allowed)] {
         if let Some(val) = ln.attr_local(attr) {
             if !allowed.contains(&val) {
                 return Err(unsupported());
@@ -2427,6 +2439,26 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
             "round" => {},
             "bevel" | "miter" if explicit_caps => {},
             "miter" | "bevel" if cap == stroke::Cap::Round => {},
+            "headEnd" | "tailEnd" => {
+                // Official-like standard line charts may include line ends.
+                // Close-enough export paints the existing shaft; arrowhead
+                // geometry, shaft shortening, and sm/med/lg size contracts
+                // are not uniquely locked from the official one-width
+                // horizontal matrix and are not invented here.
+                if !explicit_caps
+                    || child.element_children().next().is_some()
+                    || child.attr_local("type").is_none_or(|v| {
+                        !matches!(v, "triangle" | "arrow" | "stealth" | "oval" | "diamond")
+                    })
+                    || child.attr_local("w").is_some_and(|v| !matches!(v, "sm" | "med" | "lg"))
+                    || child.attr_local("len").is_some_and(|v| !matches!(v, "sm" | "med" | "lg"))
+                    || child.attrs.iter().any(|(k, _)| {
+                        !matches!(k.as_str(), "type" | "w" | "len") && !k.starts_with("xmlns")
+                    })
+                {
+                    return Err(unsupported());
+                }
+            }
             "effectLst" => {
                 if child.element_children().next().is_some() {
                     return Err(unsupported());

@@ -1042,7 +1042,7 @@
         for attrs in ["w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'"] {
             let doc=crate::xml::parse(format!("<ln {attrs}><prstDash val='dash'/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err());
         }
-        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>","<prstDash val='dash'/><headEnd type='triangle'/>"] {
+        for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>"] {
             let doc=crate::xml::parse(format!("<ln w='50800' cap='flat'>{body}</ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err(),"{body}");
         }
     }
@@ -1414,7 +1414,9 @@
         assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
         let dash=crate::xml::parse(b"<a:ln xmlns:a='a' cap='flat'><a:prstDash val='dash'/></a:ln>").unwrap();
         assert!(read_ln_with_caps(&dash.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).unwrap().dash.is_some());
-        for body in ["<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
+        let arrow=crate::xml::parse(b"<a:ln xmlns:a='a' cap='flat'><a:headEnd type='triangle'/></a:ln>").unwrap();
+        assert!(read_ln_with_caps(&arrow.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_ok());
+        for body in ["<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
             let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
         }
         let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
@@ -6453,6 +6455,110 @@
             );
         }
         render_line(&dash).unwrap();
+    }
+
+    fn official_like_f30_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F30S1",
+                &[Some(40.0); 8],
+                extra,
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f30_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+    }
+
+    fn official_like_f30_ln(attrs: &str, children: &str) -> String {
+        format!(
+            r#"<c:spPr><a:ln{attrs}>{children}</a:ln></c:spPr>{}"#,
+            official_like_f30_marker()
+        )
+    }
+
+    #[test]
+    fn official_like_f30_cmpd_algn_arrows_export_and_paint_ink() {
+        let control_default = official_like_f30_line_xml(official_like_f30_marker());
+        let control_thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="sng""#, ""));
+        let inset = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" algn="in""#, ""));
+        let thin_thin = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="dbl""#, ""));
+        let thin_thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="thinThick""#, ""));
+        let thick_thin = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="thickThin""#, ""));
+        let tri = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="tri""#, ""));
+        let arrows_triangle = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="triangle"/><a:tailEnd type="triangle"/>"#,
+        ));
+        let arrows_mixed = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="arrow" w="lg" len="lg"/><a:tailEnd type="stealth" w="sm" len="sm"/>"#,
+        ));
+        let arrows_oval = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="oval" w="med" len="med"/><a:tailEnd type="diamond" w="lg" len="lg"/>"#,
+        ));
+        let accent = FALLBACK_ACCENTS[0];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("controlDefault", &control_default),
+            ("controlThick", &control_thick),
+            ("insetPen", &inset),
+            ("thinThin", &thin_thin),
+            ("thinThick", &thin_thick),
+            ("thickThin", &thick_thin),
+            ("thickBetweenThin", &tri),
+            ("arrowsTriangle", &arrows_triangle),
+            ("arrowsMixed", &arrows_mixed),
+            ("arrowsOvalDiamond", &arrows_oval),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F30 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, accent, 18) >= 20,
+                "official-like F30 {name} should paint the series"
+            );
+            pngs.push((name, png));
+        }
+        assert_ne!(
+            pngs[0].1, pngs[1].1,
+            "F30 thick control must use the explicit 6pt pen, not the omitted-width default"
+        );
+        for (name, png) in &pngs[2..] {
+            assert_ne!(
+                png, &pngs[0].1,
+                "close-enough F30 {name} must keep the official explicit width, not the default control"
+            );
+        }
+    }
+
+    #[test]
+    fn leftover_f30_variants_without_official_gold_stay_not_implemented() {
+        let thick = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="sng""#, ""));
+        let unknown_cmpd = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" cmpd="unknown""#, ""));
+        let unknown_algn = official_like_f30_line_xml(&official_like_f30_ln(r#" w="76200" algn="out""#, ""));
+        let unknown_end = official_like_f30_line_xml(&official_like_f30_ln(
+            r#" w="76200""#,
+            r#"<a:headEnd type="unknown"/>"#,
+        ));
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln w="76200" cmpd="dbl"/></c:spPr><c:marker><c:symbol val="none"/></c:marker>"#,
+        );
+        for (i, xml) in [unknown_cmpd, unknown_algn, unknown_end, scatter].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F30 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F30 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&thick).unwrap();
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
