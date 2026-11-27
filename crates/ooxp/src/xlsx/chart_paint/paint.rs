@@ -1160,11 +1160,15 @@ pub(super) fn paint(
             budget,
         )?
     } else if chart.stacking == Stacking::Stacked {
-        axis::scale_values(
-            stacked_extent_values(&chart.series).into_iter(),
-            chart.axis,
-            budget,
-        )?
+        let extents = if matches!(
+            chart.kind,
+            PlotKind::StandardLine | PlotKind::StandardArea
+        ) {
+            cumulative_extent_values(&chart.series)
+        } else {
+            stacked_extent_values(&chart.series)
+        };
+        axis::scale_values(extents.into_iter(), chart.axis, budget)?
     } else {
         axis::scale(&chart.series, chart.axis, budget)?
     };
@@ -2308,6 +2312,30 @@ pub(super) fn stacked_extent_values(series: &[Series]) -> Vec<Option<f64>> {
             if neg < 0.0 {
                 out.push(Some(neg));
             }
+        }
+    }
+    out
+}
+
+/// Algebraic running totals in series order, for line/area stacked auto
+/// scale. Official F23-7 omits min/max/major on a stacked line; feeding
+/// raw point values would clip the cumulative (max 40 vs 70). This is
+/// not the F22 bar pos/neg packing extent. Reuses scale_values, not a
+/// unique official lock.
+pub(super) fn cumulative_extent_values(series: &[Series]) -> Vec<Option<f64>> {
+    let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for ci in 0..n {
+        let mut run = 0.0;
+        for ser in series {
+            let Some(v) = ser.values.get(ci).copied().flatten() else {
+                continue;
+            };
+            if !v.is_finite() {
+                continue;
+            }
+            run += v;
+            out.push(Some(run));
         }
     }
     out

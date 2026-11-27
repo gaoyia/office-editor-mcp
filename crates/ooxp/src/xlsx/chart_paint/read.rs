@@ -1369,13 +1369,19 @@ pub(super) fn read_chart(
     if stacking != Stacking::Clustered {
         // Official F22 evidence is linear autoZero minMax, no value labels,
         // no inversion, no log / maxMin / delete / custom crosses. Official
-        // F22-6 omits min/max/major on stacked columns; that reuses
-        // scale_values on stacked extents (close-enough, not a unique
-        // official auto-scale lock). Line/area stacked auto and
-        // percentStacked auto stay NI (no official F22 gold).
+        // F22-6 / F23-7 omit min/max/major on stacked charts; that reuses
+        // scale_values on stacked or algebraic-cumulative extents
+        // (close-enough, not a unique official auto-scale lock).
+        // percentStacked auto stays NI (no official gold).
         if axis.min.is_none() || axis.max.is_none() {
-            if !matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
-                || stacking != Stacking::Stacked
+            if stacking != Stacking::Stacked
+                || !matches!(
+                    kind,
+                    PlotKind::ClusteredColumn
+                        | PlotKind::ClusteredBar
+                        | PlotKind::StandardLine
+                        | PlotKind::StandardArea
+                )
             {
                 return Err(unsupported());
             }

@@ -10532,6 +10532,11 @@
                 r#"<c:scaling><c:orientation val="minMax"/><c:min val="{min}"/><c:max val="{max}"/></c:scaling>"#
             )
         };
+        let major_el = if auto {
+            String::new()
+        } else {
+            format!(r#"<c:majorUnit val="{major}"/>"#)
+        };
         let cross = if midcat { "midCat" } else { "between" };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -10544,7 +10549,7 @@
         <c:axId val="1"/><c:axId val="2"/>
       </c:{kind}>
       <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
+      <c:valAx><c:axId val="2"/>{scaling}{major_el}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{cross}"/></c:valAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -10883,15 +10888,83 @@
             "mixed area cat A S3 covers the S2 band, got {mix_stack:?}"
         );
 
+        // Official F23-7 Chart.Export gold exists, so omitted min/max/major
+        // on a stacked line must produce an image. Auto bounds reuse
+        // scale_values on algebraic cumulative extents (official 0-80 / 10),
+        // not raw point values, and are close-enough rather than a unique
+        // lock. The same general rule is allowed on stacked area; official
+        // gold in this folder is the line case only.
         let auto = crate::xml::parse(
             line_area_stacked_xml("lineChart", "stacked", &series, true, "0", "80", false, true)
                 .as_bytes(),
         )
         .unwrap();
+        let auto_chart = read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on stacked line must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        let auto_png = render_rgb_chart(
+            &auto.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked line must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_pts = accent_pixels(&argb, aw, ah, a2);
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on stacked line stays NI"
+            !auto_pts.is_empty(),
+            "auto stacked line should draw S3 ink"
         );
+        let h_grids = {
+            let mut n = 0u32;
+            for y in 0..ah {
+                let mut ink = 0u32;
+                for x in aw / 8..(aw * 3) / 4 {
+                    let i = (y as usize * aw as usize + x as usize) * 3;
+                    if argb[i] < 40 && argb[i + 1] < 40 && argb[i + 2] < 40 {
+                        ink += 1;
+                    }
+                }
+                if ink >= aw / 5 {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // Official auto is 0-80 major 10 (8 intervals). Explicit 0-80 / 20
+        // has fewer grids. Raw point max 40 would not use an 80 range.
+        assert!(
+            h_grids >= 8,
+            "stacked line auto should use cumulative extents (0-80 / 10), grids={h_grids}"
+        );
+        let auto_area = crate::xml::parse(
+            line_area_stacked_xml("areaChart", "stacked", &series, true, "0", "80", true, false)
+                .as_bytes(),
+        )
+        .unwrap();
+        read_chart(
+            &auto_area.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("omitted min/max on stacked area must export");
+        render_rgb_chart(
+            &auto_area.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked area must produce an image");
         let between_area = crate::xml::parse(
             line_area_stacked_xml("areaChart", "stacked", &series, false, "0", "80", false, false)
                 .as_bytes(),
