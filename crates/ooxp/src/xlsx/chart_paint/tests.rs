@@ -5361,9 +5361,32 @@
         );
         let xml = bar_xml(&ser, "", "minMax", Some("col"));
         let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-        assert!(
-            read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "zero fallback placement is not silently approximated"
+        let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("column inEnd with a zero must parse so the 0 label can fall back outside");
+        assert_eq!(chart.series[0].value_label, Some(ValueLabel::InsideEnd));
+        let mixed = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(-4.0), Some(0.0), Some(9.0)],
+                "<c:dLbls><c:showVal val='1'/><c:dLblPos val='inEnd'/></c:dLbls>",
+            ),
+            "",
+            "minMax",
+            Some("col"),
+        );
+        let mixed_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let mixed_chart = read_chart(
+            &mixed_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("mixed inEnd with a zero must export rather than drop the 0 label");
+        assert_eq!(
+            mixed_chart.series[0].value_label,
+            Some(ValueLabel::InsideEnd)
         );
     }
 
@@ -5581,11 +5604,9 @@
             xml.replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
                 .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>")
         };
-        // inEnd with a zero still stays NI (no silent outside fallback).
-        assert!(
-            render_line(&axes(base.replace("val='outEnd'", "val='inEnd'"))).is_err(),
-            "bar inEnd with a zero value must remain NI"
-        );
+        // Official inEnd zero falls back outside; the chart must export.
+        render_line(&axes(base.replace("val='outEnd'", "val='inEnd'")))
+            .expect("bar inEnd with a zero value should export via outside fallback");
         // General decimals on the locked outEnd path now export.
         assert!(
             render_line(&axes(base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"))).is_ok(),

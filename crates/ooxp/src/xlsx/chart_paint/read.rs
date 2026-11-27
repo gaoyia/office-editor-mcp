@@ -830,10 +830,6 @@ pub(super) fn read_chart(
         if on_secondary && value_label.is_some() {
             return Err(unsupported());
         }
-        if value_label == Some(ValueLabel::InsideEnd) && values.iter().flatten().any(|v| *v == 0.0)
-        {
-            return Err(unsupported());
-        }
         if value_label.is_some()
             && values
                 .iter()

@@ -2262,9 +2262,11 @@ pub(super) fn draw_clustered_bars(
 
 /// OutsideEnd and InsideEnd on horizontal bars follow the same category/cluster
 /// order as the marks. InsideEnd sits inward from the bar end with the same
-/// 6pt (3pt gap + 3pt inset) pad as the locked outEnd path. Short or zero
-/// bars that cannot hold the box stay unsupported, like column inEnd. Overflow
-/// off the canvas is still rejected rather than silently clipped.
+/// 6pt (3pt gap + 3pt inset) pad as the locked outEnd path. A zero value
+/// falls back to the locked non-negative OutsideEnd geometry (close-enough,
+/// not a unique lock). Short or narrow bars that cannot hold the box stay
+/// unsupported. Overflow off the canvas is still rejected rather than
+/// silently clipped.
 pub(super) fn draw_horizontal_value_labels(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -2307,7 +2309,8 @@ pub(super) fn draw_horizontal_value_labels(
             let end = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let width = text_width(font, gdi, &text, px);
             let height = value_label_height(font, gdi, px);
-            if position == ValueLabel::InsideEnd {
+            let fallback_outside = position == ValueLabel::InsideEnd && *value == 0.0;
+            if position == ValueLabel::InsideEnd && !fallback_outside {
                 let zero = x_of_dir(
                     0.0_f64.clamp(axis_min, axis_max),
                     axis_min,
@@ -2315,11 +2318,16 @@ pub(super) fn draw_horizontal_value_labels(
                     plot,
                     reversed,
                 );
-                if *value == 0.0 || (end - zero).abs() < width + 2.0 * pad || bar_h < height {
+                if (end - zero).abs() < width + 2.0 * pad || bar_h < height {
                     return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
                 }
             }
-            let x = match (position, *value < 0.0) {
+            let place_as = if fallback_outside {
+                ValueLabel::OutsideEnd
+            } else {
+                position
+            };
+            let x = match (place_as, *value < 0.0) {
                 (ValueLabel::InsideEnd, false) | (ValueLabel::OutsideEnd, true) => {
                     end - pad - width
                 }
@@ -2426,14 +2434,18 @@ pub(super) fn draw_value_labels(
                         + side
                         + si as f64 * width * (1.0 - overlap)
                         + width / 2.0;
-                    let top = if position == ValueLabel::InsideEnd {
+                    // Official inEnd for 0 falls back outside the axis using the
+                    // locked non-negative OutsideEnd 6pt pad. Close-enough, not
+                    // a unique official-probe lock.
+                    let fallback_outside = position == ValueLabel::InsideEnd && value == 0.0;
+                    let top = if position == ValueLabel::InsideEnd && !fallback_outside {
                         // Public inEnd box is 3pt from the mark end; its text
                         // has the same 3pt inset as the locked outEnd labels.
                         let zero =
                             y_of(0.0_f64.clamp(axis_min, axis_max), axis_min, axis_max, plot);
-                        // Short/zero marks and box overflow are not auto-fitted
-                        // or silently clipped; their placement remains NI.
-                        if value == 0.0 || (zero - y).abs() < h + 2.0 * pad || width < w + pad {
+                        // Short/narrow marks that cannot hold the box stay NI
+                        // rather than auto-fit, clip, or stretch.
+                        if (zero - y).abs() < h + 2.0 * pad || width < w + pad {
                             return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
                         }
                         if value < 0.0 {
@@ -2460,6 +2472,7 @@ pub(super) fn draw_value_labels(
                 ),
             };
             if position == ValueLabel::InsideEnd
+                && value != 0.0
                 && (!x.is_finite()
                     || !top.is_finite()
                     || x < 0.0
