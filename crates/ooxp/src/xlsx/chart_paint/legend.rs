@@ -47,6 +47,7 @@ pub(super) struct Spec {
     entries: Vec<(usize, TextStyle)>,
     background: FrameFill,
     border: Option<([u8; 3], f64)>,
+    shadow: Option<OuterShadow>,
 }
 pub(super) fn unsupported() -> Error {
     Error::with_path(ErrorKind::ChartImageUnsupported, "id")
@@ -88,6 +89,7 @@ impl Spec {
             && self.entries.is_empty()
             && self.background == FrameFill::NoFill
             && self.border.is_none()
+            && self.shadow.is_none()
     }
 
     /// Official-like automatic pie legend: overlay 0, no manual layout, and
@@ -102,6 +104,7 @@ impl Spec {
             && self.entries.is_empty()
             && self.background == FrameFill::NoFill
             && self.border.is_none()
+            && self.shadow.is_none()
             && matches!(
                 self.pos,
                 Some(
@@ -123,6 +126,7 @@ impl Spec {
             && self.deleted.is_empty()
             && self.background == FrameFill::NoFill
             && self.border.is_none()
+            && self.shadow.is_none()
             && self.entries.iter().all(|(_, style)| {
                 let mut metrics = style.clone();
                 metrics.color = self.style.color;
@@ -149,6 +153,7 @@ impl Spec {
             entries: Vec::new(),
             background: FrameFill::NoFill,
             border: None,
+            shadow: None,
         };
         let Some(legend) = chart.child_by_local("legend").filter(|_| pos.is_some()) else {
             return Ok(result);
@@ -238,8 +243,31 @@ impl Spec {
                             legend_solid(child, accents)?
                         };
                     }
+                    "gradFill" if !saw_fill => {
+                        saw_fill = true;
+                        result.background =
+                            read_linear_frame_grad(child, &theme_scheme(None, accents))?;
+                    }
                     "extLst" => (),
-                    "effectLst" | "effectDag" if child.element_children().next().is_none() => (),
+                    "effectDag" if child.element_children().next().is_none() => (),
+                    "effectLst" => {
+                        let mut saw_shadow = false;
+                        for effect in child.element_children() {
+                            if effect.local_name() != "outerShdw" || saw_shadow {
+                                return Err(unsupported());
+                            }
+                            saw_shadow = true;
+                            let shadow = read_outer_shadow_effect(
+                                effect,
+                                &theme_scheme(None, accents),
+                            );
+                            // Zero dist and blur have no visible offset or
+                            // softness; keep the default-right ink path.
+                            if shadow.blur_emu > 0.0 || shadow.dist_emu > 0.0 {
+                                result.shadow = Some(shadow);
+                            }
+                        }
+                    }
                     "ln" if !saw_line => {
                         saw_line = true;
                         if child.child_by_local("noFill").is_some() {
@@ -277,8 +305,9 @@ impl Spec {
         Ok(result)
     }
 }
-// Reuse the already tested sRGB/straight-alpha conversion, but keep the
-// initial legend frame subset explicit. Gradients/effects remain NI.
+// Reuse the already tested sRGB/straight-alpha conversion for legend solid
+// fills. Official-like linear gradFill and outerShdw use the shared frame
+// helpers. Other fills and effects remain NI.
 fn legend_solid(solid: &Element, accents: [[u8; 3]; 6]) -> Result<FrameFill, Error> {
     let colors: Vec<_> = solid.element_children().collect();
     if colors.len() != 1 {
@@ -889,11 +918,15 @@ impl<'a> Layout<'a> {
             (self.frame.x + self.frame.w).round() as i32,
             (self.frame.y + self.frame.h).round() as i32,
         );
+        if let Some(shadow) = &self.spec.shadow {
+            canvas.fill_outer_shadow_rect(x0, y0, x1, y1, shadow);
+        }
         match self.spec.background {
             FrameFill::Solid(rgb) => canvas.fill_rect(x0, y0, x1, y1, rgb),
             FrameFill::Translucent(rgb, alpha) => {
                 canvas.fill_rect_cov(x0, y0, x1, y1, rgb, ooxml_alpha_to_u8(alpha))
             }
+            FrameFill::Linear(ref grad) => canvas.fill_linear_rect(x0, y0, x1, y1, grad),
             _ => (),
         }
         if let Some((rgb, pt)) = self.spec.border {
@@ -1117,6 +1150,27 @@ mod tests {
         )
         .is_err());
     }
+
+    #[test]
+    fn official_like_legend_grad_fill_and_outer_shadow_parse() {
+        let grad = spec(
+            "<legend><spPr><gradFill flip='none' rotWithShape='1'><gsLst><gs pos='0'><srgbClr val='FF0000'/></gs><gs pos='100000'><srgbClr val='FFFFFF'/></gs></gsLst><lin ang='5400000' scaled='1'/><tileRect/></gradFill></spPr></legend>",
+        )
+        .unwrap();
+        assert!(matches!(grad.background, FrameFill::Linear(ref g) if g.ang == 5_400_000));
+        assert!(grad.shadow.is_none());
+        let shadow = spec(
+            "<legend><spPr><effectLst><outerShdw blurRad='50800' dist='71842' dir='2700013' rotWithShape='0'><srgbClr val='000000'><alpha val='60000'/></srgbClr></outerShdw></effectLst></spPr></legend>",
+        )
+        .unwrap();
+        let sh = shadow.shadow.unwrap();
+        assert_eq!(sh.color, [0, 0, 0]);
+        assert_eq!(sh.blur_emu, 50_800.0);
+        assert_eq!(sh.dist_emu, 71_842.0);
+        assert_eq!(sh.dir, 2_700_013);
+        assert!(spec("<legend><spPr><effectLst><innerShdw/></effectLst></spPr></legend>").is_err());
+        assert!(spec("<legend><spPr><gradFill/></spPr></legend>").is_err());
+    }
 }
 
 #[cfg(test)]
@@ -1134,6 +1188,7 @@ mod overlay_ink_tests {
             entries: Vec::new(),
             background: FrameFill::NoFill,
             border: None,
+            shadow: None,
         };
         assert!(spec.default_right_ink());
         spec.overlay = true;

@@ -211,23 +211,10 @@ fn parse_emu_attr(node: &Element, name: &str) -> f64 {
         .unwrap_or(0.0)
 }
 
-/// Close-enough chart-area `a:outerShdw`. Missing color is opaque black;
-/// missing blur/dist/dir are zero. Other `effectLst` children are ignored
-/// so the chart still exports. Not a unique official lock.
-pub(super) fn read_outer_shadow(
-    node: &Element,
-    scheme: &ThemeScheme,
-) -> Result<Option<OuterShadow>, Error> {
-    let Some(shadow) = node
-        .child_by_local("spPr")
-        .and_then(|props| props.child_by_local("effectLst"))
-        .and_then(|list| {
-            list.element_children()
-                .find(|child| child.local_name() == "outerShdw")
-        })
-    else {
-        return Ok(None);
-    };
+/// Close-enough `a:outerShdw`. Missing color is opaque black; missing
+/// blur/dist/dir are zero. Used by chart-area and legend-frame shadows.
+/// Not a unique official lock.
+pub(super) fn read_outer_shadow_effect(shadow: &Element, scheme: &ThemeScheme) -> OuterShadow {
     let mut color = [0_u8, 0, 0];
     let mut alpha = 255_u8;
     for child in shadow.element_children() {
@@ -251,13 +238,32 @@ pub(super) fn read_outer_shadow(
         .attr_local("dir")
         .and_then(|value| value.parse::<i64>().ok())
         .unwrap_or(0);
-    Ok(Some(OuterShadow {
+    OuterShadow {
         color,
         alpha,
         blur_emu: parse_emu_attr(shadow, "blurRad"),
         dist_emu: parse_emu_attr(shadow, "dist"),
         dir,
-    }))
+    }
+}
+
+/// Close-enough chart-area `a:outerShdw`. Other `effectLst` children are
+/// ignored so the chart still exports. Not a unique official lock.
+pub(super) fn read_outer_shadow(
+    node: &Element,
+    scheme: &ThemeScheme,
+) -> Result<Option<OuterShadow>, Error> {
+    let Some(shadow) = node
+        .child_by_local("spPr")
+        .and_then(|props| props.child_by_local("effectLst"))
+        .and_then(|list| {
+            list.element_children()
+                .find(|child| child.local_name() == "outerShdw")
+        })
+    else {
+        return Ok(None);
+    };
+    Ok(Some(read_outer_shadow_effect(shadow, scheme)))
 }
 
 pub(super) fn is_office_hidden_fill_ext(ext_lst: &Element) -> bool {

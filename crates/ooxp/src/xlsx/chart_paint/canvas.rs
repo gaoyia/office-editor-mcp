@@ -1162,6 +1162,72 @@ impl Canvas {
         self.px = npx;
         self.alpha = Some(na);
     }
+
+    /// Close-enough legend-frame `a:outerShdw`. Uses the same EMU, dir, and
+    /// box-blur conversion as chart-area shadows, but paints only the legend
+    /// rectangle and never grows the canvas. Zero dist and blur are a no-op
+    /// so a bare `outerShdw` still exports. Not a unique official lock.
+    pub(super) fn fill_outer_shadow_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        shadow: &OuterShadow,
+    ) {
+        let blur_px = self.dpi.emu_to_px_f(shadow.blur_emu).max(0.0);
+        let dist_px = self.dpi.emu_to_px_f(shadow.dist_emu).max(0.0);
+        if blur_px <= 0.5 && dist_px <= 0.0 {
+            return;
+        }
+        if x1 <= x0 || y1 <= y0 {
+            return;
+        }
+        let theta = (shadow.dir as f64) / 60_000.0 * std::f64::consts::PI / 180.0;
+        let dx = dist_px * theta.cos();
+        let dy = dist_px * theta.sin();
+        let ox = dx.round() as i32;
+        let oy = dy.round() as i32;
+        let radius = if blur_px > 0.5 {
+            blur_px.round().max(1.0) as i32
+        } else {
+            0
+        };
+        let bx0 = x0 + ox - radius;
+        let by0 = y0 + oy - radius;
+        let bx1 = x1 + ox + radius;
+        let by1 = y1 + oy + radius;
+        let bw = bx1 - bx0;
+        let bh = by1 - by0;
+        if bw <= 0 || bh <= 0 {
+            return;
+        }
+        let mut shadow_a = vec![0.0_f32; (bw as usize) * (bh as usize)];
+        let scale = f32::from(shadow.alpha) / 255.0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let dx_ = x + ox - bx0;
+                let dy_ = y + oy - by0;
+                if dx_ >= 0 && dy_ >= 0 && dx_ < bw && dy_ < bh {
+                    let i = (dy_ * bw + dx_) as usize;
+                    shadow_a[i] = (shadow_a[i] + scale).min(1.0);
+                }
+            }
+        }
+        if radius > 0 {
+            shadow_a = box_blur_approx(bw as u32, bh as u32, &shadow_a, radius);
+        }
+        for y in 0..bh {
+            for x in 0..bw {
+                let cover = shadow_a[(y * bw + x) as usize];
+                let a8 = (cover.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+                if a8 == 0 {
+                    continue;
+                }
+                self.blend(bx0 + x, by0 + y, shadow.color, a8);
+            }
+        }
+    }
 }
 
 fn box_blur_approx(w: u32, h: u32, src: &[f32], radius: i32) -> Vec<f32> {
