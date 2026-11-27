@@ -1,6 +1,13 @@
 //! Legend semantics live separately from chart axes. Dimensions follow the export DPI; 96 is the historical default.
 use super::*;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum Underline {
+    #[default]
+    None,
+    Single,
+    Double,
+}
 #[derive(Clone, PartialEq)]
 struct TextStyle {
     name: String,
@@ -8,6 +15,11 @@ struct TextStyle {
     bold: bool,
     italic: bool,
     color: [u8; 3],
+    underline: Underline,
+    strike: bool,
+    /// DrawingML `baseline` in 100000ths of the font size. Positive moves
+    /// the run up; negative moves it down. Not an invented scale factor.
+    baseline: i32,
 }
 impl Default for TextStyle {
     fn default() -> Self {
@@ -17,6 +29,9 @@ impl Default for TextStyle {
             bold: false,
             italic: false,
             color: INK,
+            underline: Underline::None,
+            strike: false,
+            baseline: 0,
         }
     }
 }
@@ -431,13 +446,26 @@ impl TextStyle {
         }
         self.bold = bool_attr(p.attr_local("b"), self.bold);
         self.italic = bool_attr(p.attr_local("i"), self.italic);
-        if p.attr_local("u").is_some_and(|v| v != "none")
-            || p.attr_local("strike").is_some_and(|v| v != "noStrike")
-            || p.attr_local("baseline")
-                .and_then(|v| v.parse::<i32>().ok())
-                .is_some_and(|v| v != 0)
-        {
-            return Err(unsupported());
+        // Official-like legend decorations: u=sng/dbl, strike=sngStrike, and
+        // the XML baseline percentage. Other underline/strike values stay NI.
+        match p.attr_local("u") {
+            None | Some("none") => {}
+            Some("sng") => self.underline = Underline::Single,
+            Some("dbl") => self.underline = Underline::Double,
+            Some(_) => return Err(unsupported()),
+        }
+        match p.attr_local("strike") {
+            None | Some("noStrike") => {}
+            Some("sngStrike") => self.strike = true,
+            Some(_) => return Err(unsupported()),
+        }
+        if let Some(raw) = p.attr_local("baseline") {
+            let value = raw
+                .parse::<i32>()
+                .ok()
+                .filter(|v| (-100_000..=100_000).contains(v))
+                .ok_or_else(unsupported)?;
+            self.baseline = value;
         }
         let latin = p
             .child_by_local("latin")
@@ -579,6 +607,51 @@ struct Item<'a> {
     space: f64,
     cell: f64,
 }
+fn paint_legend_text_decorations(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    item: &Item<'_>,
+    x: f64,
+    top: f64,
+) {
+    if item.style.underline == Underline::None && !item.style.strike {
+        return;
+    }
+    let width = item
+        .face
+        .as_ref()
+        .map(|face| face.typo_width(&item.series.name))
+        .unwrap_or_else(|| text_width(font, None, &item.series.name, item.px));
+    if width <= 0.0 {
+        return;
+    }
+    let ascent = item
+        .face
+        .as_ref()
+        .map(|face| face.line_height())
+        .filter(|v| *v > 0.0)
+        .unwrap_or_else(|| text_height(font, item.px));
+    let descent = item
+        .face
+        .as_ref()
+        .map(|face| face.descent())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(1.0);
+    // Close-enough 1-device-pixel strokes from GDI TEXTMETRIC ascent/descent,
+    // not invented Office EMU or COM offsets. Residuals stay on the review page.
+    if item.style.underline != Underline::None {
+        let y = top + ascent + descent.max(1.0).min(2.0);
+        canvas.stroke_segment(x, y, x + width, y, 1.0, item.style.color);
+        if item.style.underline == Underline::Double {
+            canvas.stroke_segment(x, y + 2.0, x + width, y + 2.0, 1.0, item.style.color);
+        }
+    }
+    if item.style.strike {
+        let y = top + ascent * 0.5;
+        canvas.stroke_segment(x, y, x + width, y, 1.0, item.style.color);
+    }
+}
+
 pub(super) struct Layout<'a> {
     spec: &'a Spec,
     items: Vec<Item<'a>>,
@@ -977,24 +1050,30 @@ impl<'a> Layout<'a> {
                     if ser.line_visible { super::stroke::Style::new(ser.line_width,ser.line_cap) } else { None },
                     ser.line_dash.as_deref(),
                 )?;
+                let text_x = x
+                    + f64::from(super::legend_key_width(
+                        chart.kind,
+                        self.key.round() as i32,
+                        canvas.dpi,
+                    ))
+                    + if self.horizontal {
+                        item.space
+                    } else {
+                        self.space
+                    };
+                let text_top = y + (self.line - item.line) / 2.0
+                    - (f64::from(item.style.baseline) / 100_000.0) * f64::from(item.px);
                 draw_text(
                     canvas,
                     font,
                     item.face.as_ref(),
                     &ser.name,
-                    x + f64::from(super::legend_key_width(
-                        chart.kind,
-                        self.key.round() as i32,
-                        canvas.dpi,
-                    )) + if self.horizontal {
-                        item.space
-                    } else {
-                        self.space
-                    },
-                    y + (self.line - item.line) / 2.0,
+                    text_x,
+                    text_top,
                     item.px,
                     item.style.color,
                 );
+                paint_legend_text_decorations(canvas, font, item, text_x, text_top);
                 x += item.width + gap;
             }
             y += self.pitch;
@@ -1117,7 +1196,16 @@ mod tests {
         assert!(s.style.bold && s.style.italic);
         assert_eq!(s.style.color, [255, 0, 0]);
         assert_eq!(s.deleted, [0]);
-        assert!(spec("<legend><txPr><p><pPr><defRPr u='sng'/></pPr></p></txPr></legend>").is_err());
+        let underline = spec("<legend><txPr><p><pPr><defRPr u='sng'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(underline.style.underline, Underline::Single);
+        let double = spec("<legend><txPr><p><pPr><defRPr u='dbl'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(double.style.underline, Underline::Double);
+        let strike = spec("<legend><txPr><p><pPr><defRPr strike='sngStrike'/></pPr></p></txPr></legend>").unwrap();
+        assert!(strike.style.strike);
+        let sub = spec("<legend><txPr><p><pPr><defRPr baseline='-25000'/></pPr></p></txPr></legend>").unwrap();
+        assert_eq!(sub.style.baseline, -25_000);
+        assert!(spec("<legend><txPr><p><pPr><defRPr u='wavy'/></pPr></p></txPr></legend>").is_err());
+        assert!(spec("<legend><txPr><p><pPr><defRPr strike='dblStrike'/></pPr></p></txPr></legend>").is_err());
     }
     #[test]
     fn manual_modes_are_not_the_same_coordinate_system() {

@@ -147,7 +147,7 @@ fn valid_unimplemented_complex_text_is_not_silently_ignored() {
     ] { assert!(bytes(&format!("<c:legend><c:txPr>{content}</c:txPr></c:legend>")).is_err(), "{content}"); }
 
     assert!(bytes(
-        "<c:legend><c:txPr><a:p><a:pPr><a:defRPr u='sng'/></a:pPr></a:p></c:txPr></c:legend>"
+        "<c:legend><c:txPr><a:p><a:pPr><a:defRPr u='wavy'/></a:pPr></a:p></c:txPr></c:legend>"
     )
     .is_err());
     assert!(bytes("<c:legend><c:layout><c:manualLayout><c:wMode val='edge'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_ok());
@@ -276,7 +276,29 @@ fn entry_font_size_bold_and_family_have_real_ink_and_pack_together() {
         "><a:latin typeface='Arial'/><a:cs typeface='Courier New'/> "
     ))
     .is_err());
-    assert!(bytes(&legend("u='sng'>")).is_err());
+    assert!(bytes(&legend("u='wavy'>")).is_err());
+}
+
+#[test]
+fn official_like_legend_underline_strike_and_subscript_export() {
+    let ctrl = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/></c:legend>";
+    let underline = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr u='sng'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let strike = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr strike='sngStrike'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let sub = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr baseline='-25000'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let dbl = "<c:legend><c:legendPos val='r'/><c:overlay val='0'/><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr u='dbl'/></a:pPr><a:endParaRPr lang='zh-CN'/></a:p></c:txPr></c:legend>";
+    let (cw, ch, cp) = pixels(ctrl);
+    for (name, xml) in [
+        ("underline", underline),
+        ("strike", strike),
+        ("subscript", sub),
+        ("doubleunderline", dbl),
+    ] {
+        let (w, h, p) = pixels(xml);
+        assert_eq!((cw, ch), (w, h), "{name} must not grow the canvas");
+        assert_ne!(bytes(ctrl).unwrap(), bytes(xml).unwrap(), "{name}");
+        let changed = cp.iter().zip(&p).filter(|(a, b)| a != b).count();
+        assert!(changed > 10, "{name} changed={changed}");
+    }
 }
 
 #[test]
