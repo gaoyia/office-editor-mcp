@@ -9056,15 +9056,116 @@
         );
     }
 
+    fn official_like_f34_s1() -> String {
+        line_ser(
+            0,
+            "F34S1",
+            &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            r#"<c:idx val="0"/>"#,
+        )
+    }
+
+    fn official_like_f34_s2() -> String {
+        line_ser(
+            1,
+            "F34S2",
+            &[Some(25.0), Some(15.0), Some(40.0), Some(20.0)],
+            r#"<c:idx val="1"/>"#,
+        )
+    }
+
+    fn official_like_f34_s3() -> String {
+        line_ser(
+            2,
+            "F34S3",
+            &[Some(5.0), Some(35.0), Some(15.0), Some(45.0)],
+            r#"<c:idx val="2"/>"#,
+        )
+    }
+
+    fn official_like_f34_pie_xml(series: &str) -> String {
+        standard_pie_xml(
+            series,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="0"/>"#,
+        )
+    }
+
+    #[test]
+    fn official_like_f34_multi_series_pie_paints_lowest_order_series() {
+        let control = official_like_f34_pie_xml(&official_like_f34_s1());
+        let two = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2()
+        ));
+        let three = official_like_f34_pie_xml(&format!(
+            "{}{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2(),
+            official_like_f34_s3()
+        ));
+        // Second series written first in the wrapper, but c:order=0 is S1.
+        let swapped = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s2(),
+            official_like_f34_s1()
+        ));
+        let s2_only = official_like_f34_pie_xml(&official_like_f34_s2());
+        let s3_only = official_like_f34_pie_xml(&official_like_f34_s3());
+        let control_png = render_pie(&control).expect("official-like F34 pieControl must export");
+        let two_png = render_pie(&two).expect("official-like F34 two-series pie must export");
+        let three_png = render_pie(&three).expect("official-like F34 three-series pie must export");
+        let swapped_png =
+            render_pie(&swapped).expect("official-like F34 swapped-document-order pie must export");
+        let s2_png = render_pie(&s2_only).expect("single S2 pie must export");
+        let s3_png = render_pie(&s3_only).expect("single S3 pie must export");
+        assert_eq!(
+            two_png, control_png,
+            "two-series pie must paint the lowest-order series, not a later series"
+        );
+        assert_eq!(
+            three_png, control_png,
+            "three-series pie must paint the lowest-order series, not a later series"
+        );
+        assert_eq!(
+            swapped_png, control_png,
+            "document order must not override a lower c:order"
+        );
+        assert_ne!(s2_png, control_png, "S2 proportions must differ from S1");
+        assert_ne!(s3_png, control_png, "S3 proportions must differ from S1");
+    }
+
+    #[test]
+    fn leftover_f34_variants_without_official_gold_stay_not_implemented() {
+        let s1 = official_like_f34_s1();
+        // A second series with a visible value label is outside the official
+        // F34 matrix (chart-level labels stay hidden).
+        let labeled = official_like_f34_pie_xml(&format!(
+            "{}{}",
+            s1,
+            line_ser(
+                1,
+                "F34S2",
+                &[Some(25.0), Some(15.0), Some(40.0), Some(20.0)],
+                r#"<c:idx val="1"/><c:dLbls><c:showVal val="1"/></c:dLbls>"#,
+            )
+        ));
+        let err = render_pie(&labeled).expect_err("labeled extra pie series should stay NI");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        // ofPie / showVal / non-right legend remain covered by existing NI tests.
+        render_pie(&official_like_f34_pie_xml(&format!(
+            "{}{}",
+            official_like_f34_s1(),
+            official_like_f34_s2()
+        )))
+        .unwrap();
+    }
+
     #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
         let base = standard_pie_xml(&ser, "", "");
-        let two = format!(
-            "{}{}",
-            ser,
-            line_ser(1, "S2", &[Some(1.0), Some(2.0), Some(3.0)], "")
-        );
         let cases = [
             // Leftover: a val cache ptCount with no val pts and no category
             // pts is not sized from untrusted ptCount.
@@ -9076,10 +9177,6 @@
           <c:val><c:numLit><c:ptCount val="4"/></c:numLit></c:val>
         </c:ser>"#,
                 r#"<c:dispBlanksAs val="gap"/>"#,
-                "",
-            ),
-            pie_space(
-                &format!(r#"<c:pieChart><c:varyColors val="1"/>{two}</c:pieChart>"#),
                 "",
             ),
             standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),

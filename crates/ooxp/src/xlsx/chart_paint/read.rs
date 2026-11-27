@@ -735,11 +735,15 @@ pub(super) fn read_chart(
             PlotKind::StandardArea
         }
         "pieChart" => {
+            // Official F34 Chart.Export paints a standard pieChart with more
+            // than one official-like series as a single pie from the lowest
+            // c:order series. Reject only a missing series here; selection
+            // happens after every series is read.
             if wrapper
                 .element_children()
                 .filter(|el| el.local_name() == "ser")
                 .count()
-                != 1
+                == 0
             {
                 return Err(unsupported());
             }
@@ -1495,6 +1499,22 @@ pub(super) fn read_chart(
         };
     }
     }
+    // Official Excel 16 Chart.Export of a standard pieChart with more than
+    // one official-like series paints a single pie from the series with the
+    // lowest c:order (then the lowest c:idx). F34 gold slice proportions
+    // match that series (10/20/30/40), not a later series, and the layout is
+    // the existing single-pie layout. This is a selection RULE from that
+    // matrix, not an invented first-or-last layout.
+    if kind == PlotKind::Pie {
+        let (_painted_el, painted_order) =
+            pie_painted_series(wrapper).ok_or_else(unsupported)?;
+        if painted_order >= series.len() {
+            return Err(unsupported());
+        }
+        let painted = std::mem::take(&mut series[painted_order]);
+        series.clear();
+        series.push(painted);
+    }
     // Official all-empty pies keep category cache points but omit every val
     // pt. Do not drop that series before the category domain is applied.
     if kind != PlotKind::Pie {
@@ -1519,10 +1539,10 @@ pub(super) fn read_chart(
     let mut categories = if matches!(kind, PlotKind::Scatter { .. }) {
         Vec::new()
     } else {
-        cache_labels(series_cat(wrapper))
+        cache_labels(pie_or_first_series_cat(wrapper, kind))
     };
     if categories.is_empty() && !matches!(kind, PlotKind::Scatter { .. }) {
-        if let Some(text) = formula_text(series_cat(wrapper)) {
+        if let Some(text) = formula_text(pie_or_first_series_cat(wrapper, kind)) {
             if let Some(labels) = labels_from_cells(&text, sheet, cells) {
                 categories = labels;
             }
@@ -1748,13 +1768,7 @@ pub(super) fn read_chart(
     };
     let (point_colors, pie_explosion, point_explosions, series_fill, point_fills) =
         if kind == PlotKind::Pie {
-            if series.len() != 1 {
-                return Err(unsupported());
-            }
-            let ser = wrapper
-                .element_children()
-                .find(|el| el.local_name() == "ser")
-                .ok_or_else(unsupported)?;
+            let (ser, _) = pie_painted_series(wrapper).ok_or_else(unsupported)?;
             read_pie_point_colors(ser, accents, n, dpi)?
         } else {
             (Vec::new(), 0.0, Vec::new(), None, Vec::new())
@@ -1994,6 +2008,33 @@ pub(super) fn series_cat(bar: &Element) -> Option<&Element> {
     bar.element_children()
         .find(|el| el.local_name() == "ser")
         .and_then(|ser| ser.child_by_local("cat"))
+}
+
+fn pie_or_first_series_cat<'a>(wrapper: &'a Element, kind: PlotKind) -> Option<&'a Element> {
+    if kind == PlotKind::Pie {
+        pie_painted_series(wrapper).and_then(|(ser, _)| ser.child_by_local("cat"))
+    } else {
+        series_cat(wrapper)
+    }
+}
+
+/// Official-like multi-series pie: the painted series is the one with the
+/// lowest c:order, then the lowest c:idx, then document order. The returned
+/// usize is the c:order slot used when series were stored.
+fn pie_painted_series(wrapper: &Element) -> Option<(&Element, usize)> {
+    wrapper
+        .element_children()
+        .filter(|el| el.local_name() == "ser")
+        .enumerate()
+        .min_by_key(|(fallback, ser)| {
+            let order = number_val(ser, "order").map(|v| v as usize).unwrap_or(*fallback);
+            let idx = number_val(ser, "idx").map(|v| v as usize).unwrap_or(*fallback);
+            (order, idx)
+        })
+        .map(|(fallback, ser)| {
+            let order = number_val(ser, "order").map(|v| v as usize).unwrap_or(fallback);
+            (ser, order)
+        })
 }
 
 pub(super) fn is_chart_wrapper(name: &str) -> bool {
