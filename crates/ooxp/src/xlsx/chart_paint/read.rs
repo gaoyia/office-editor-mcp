@@ -18,16 +18,9 @@ pub(super) fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<Fr
         .child_by_local("spPr")
         .and_then(|p| p.child_by_local("ln"))
         .is_none();
-    // Only the rectangular no-line silhouette is locked. Rounded no-line
-    // needs fill clipping independent of the old rounded stroke coverage.
-    if (!border && rounded)
-        || plot
-            .and_then(|p| p.child_by_local("spPr"))
-            .and_then(|p| p.child_by_local("ln"))
-            .is_some()
-    {
-        return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
-    }
+    // Visible chart/plot lines, rounded no-line, and outerShdw are parsed
+    // here so Office-exportable frames produce an image. The locked default
+    // 1px gray border (no `a:ln`) and rectangular no-line path are unchanged.
     Ok(FrameStyle {
         rounded,
         border,
@@ -36,6 +29,12 @@ pub(super) fn read_frame_with(root: &Element, scheme: &ThemeScheme) -> Result<Fr
             .map(|node| read_frame_fill(node, scheme))
             .transpose()?
             .unwrap_or(FrameFill::Default),
+        chart_line: read_visible_frame_line(root, scheme)?,
+        plot_line: plot
+            .map(|node| read_visible_frame_line(node, scheme))
+            .transpose()?
+            .flatten(),
+        chart_shadow: read_outer_shadow(root, scheme)?,
     })
 }
 
@@ -91,8 +90,8 @@ pub(super) fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<Fr
                 }
                 fill = resolve_frame_solid(color, scheme)?;
             }
-            "ln" if !saw_line && is_invisible_frame_line(prop) => saw_line = true,
-            "effectLst" if prop.element_children().next().is_none() => (),
+            "ln" => saw_line = true,
+            "effectLst" => (),
             // Excel 16 writes a:noFill plus an Office 2010 hiddenFill ext that
             // only remembers the previous fill; it is not a visible fill.
             "extLst" if is_office_hidden_fill_ext(prop) => saw_hidden_ext = true,
@@ -148,6 +147,117 @@ pub(super) fn is_invisible_frame_line(line: &Element) -> bool {
         }
     }
     no_fill
+}
+
+/// Close-enough visible `a:ln` on a chart or plot frame. `a:noFill` stays
+/// invisible (the locked rectangular no-line path). Omitted `w` uses 1pt
+/// (12700 EMU). Omitted fill uses opaque black so a bare `<a:ln w="..."/>`
+/// still exports. Unresolved or non-solid fills also fall back to black.
+/// This is not a unique official-matrix lock.
+pub(super) fn read_visible_frame_line(
+    node: &Element,
+    scheme: &ThemeScheme,
+) -> Result<Option<FrameLine>, Error> {
+    let Some(line) = node
+        .child_by_local("spPr")
+        .and_then(|props| props.child_by_local("ln"))
+    else {
+        return Ok(None);
+    };
+    if is_invisible_frame_line(line)
+        || line
+            .element_children()
+            .any(|child| child.local_name() == "noFill")
+    {
+        return Ok(None);
+    }
+    let width_emu = line
+        .attr_local("w")
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .unwrap_or(12_700.0);
+    let mut color = [0_u8, 0, 0];
+    let mut alpha = 255_u8;
+    for child in line.element_children() {
+        if child.local_name() == "solidFill" {
+            let (rgb, a) = frame_line_color(child, scheme);
+            color = rgb;
+            alpha = a;
+        }
+    }
+    Ok(Some(FrameLine {
+        color,
+        alpha,
+        width_emu,
+    }))
+}
+
+fn frame_line_color(fill: &Element, scheme: &ThemeScheme) -> ([u8; 3], u8) {
+    let Some(color) = fill.element_children().next() else {
+        return ([0, 0, 0], 255);
+    };
+    match resolve_frame_solid(color, scheme) {
+        Ok(FrameFill::Solid(rgb)) => (rgb, 255),
+        Ok(FrameFill::Translucent(rgb, a)) => (rgb, ooxml_alpha_to_u8(a)),
+        Ok(FrameFill::AlphaProduct(rgb, product)) => (rgb, alpha_product_to_u8(product)),
+        _ => ([0, 0, 0], 255),
+    }
+}
+
+fn parse_emu_attr(node: &Element, name: &str) -> f64 {
+    node.attr_local(name)
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .unwrap_or(0.0)
+}
+
+/// Close-enough chart-area `a:outerShdw`. Missing color is opaque black;
+/// missing blur/dist/dir are zero. Other `effectLst` children are ignored
+/// so the chart still exports. Not a unique official lock.
+pub(super) fn read_outer_shadow(
+    node: &Element,
+    scheme: &ThemeScheme,
+) -> Result<Option<OuterShadow>, Error> {
+    let Some(shadow) = node
+        .child_by_local("spPr")
+        .and_then(|props| props.child_by_local("effectLst"))
+        .and_then(|list| {
+            list.element_children()
+                .find(|child| child.local_name() == "outerShdw")
+        })
+    else {
+        return Ok(None);
+    };
+    let mut color = [0_u8, 0, 0];
+    let mut alpha = 255_u8;
+    for child in shadow.element_children() {
+        match resolve_frame_solid(child, scheme) {
+            Ok(FrameFill::Solid(rgb)) => {
+                color = rgb;
+                alpha = 255;
+            }
+            Ok(FrameFill::Translucent(rgb, a)) => {
+                color = rgb;
+                alpha = ooxml_alpha_to_u8(a);
+            }
+            Ok(FrameFill::AlphaProduct(rgb, product)) => {
+                color = rgb;
+                alpha = alpha_product_to_u8(product);
+            }
+            _ => {}
+        }
+    }
+    let dir = shadow
+        .attr_local("dir")
+        .and_then(|value| value.parse::<i64>().ok())
+        .unwrap_or(0);
+    Ok(Some(OuterShadow {
+        color,
+        alpha,
+        blur_emu: parse_emu_attr(shadow, "blurRad"),
+        dist_emu: parse_emu_attr(shadow, "dist"),
+        dir,
+    }))
 }
 
 pub(super) fn is_office_hidden_fill_ext(ext_lst: &Element) -> bool {

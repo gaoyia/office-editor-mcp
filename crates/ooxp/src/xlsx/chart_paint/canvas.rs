@@ -21,6 +21,9 @@ pub(super) struct Canvas {
     pub(super) alpha: Option<Vec<u8>>,
     pub(super) rounded_frame: bool,
     pub(super) chart_border: bool,
+    pub(super) chart_line: Option<FrameLine>,
+    pub(super) plot_line: Option<FrameLine>,
+    pub(super) chart_shadow: Option<OuterShadow>,
     pub(super) custom_dash_budget: usize,
     pub(super) plot_fill: Option<PlotPaint>,
     pub(super) dpi: RenderDpi,
@@ -97,6 +100,9 @@ impl Canvas {
             alpha: None,
             rounded_frame: true,
             chart_border: true,
+            chart_line: None,
+            plot_line: None,
+            chart_shadow: None,
             custom_dash_budget: MAX_CUSTOM_DASH_PIECES,
             plot_fill: None,
             dpi,
@@ -748,6 +754,246 @@ impl Canvas {
         }
     }
 
+
+    pub(super) fn finish_excel_frame(&mut self, plot: Option<&Rect>) {
+        if self.chart_border {
+            self.stroke_border(BORDER);
+        } else if self.rounded_frame {
+            self.clip_rounded_silhouette();
+        }
+        if let Some(line) = self.chart_line.clone() {
+            self.stroke_frame_rect(0.0, 0.0, f64::from(self.w), f64::from(self.h), &line);
+        }
+        if let (Some(line), Some(plot)) = (self.plot_line.clone(), plot) {
+            self.stroke_frame_rect(plot.x, plot.y, plot.x + plot.w, plot.y + plot.h, &line);
+        }
+    }
+
+    /// Punch the locked rounded-frame outside corners without painting the
+    /// default gray border. Same `CORNER_R` / `rad = CORNER_R - 0.5` geometry
+    /// as `stroke_quarter`, so rounded + `a:ln`/`a:noFill` can export.
+    pub(super) fn clip_rounded_silhouette(&mut self) {
+        let w = self.w as i32;
+        let h = self.h as i32;
+        let r = CORNER_R.min(w / 2).min(h / 2);
+        if r < 2 {
+            return;
+        }
+        if self.alpha.is_none() {
+            self.alpha = Some(vec![255; (self.w as usize) * (self.h as usize)]);
+        }
+        self.clip_rounded_quarter(r, r, 0, r, 0, r);
+        self.clip_rounded_quarter(w - r, r, w - r, w - 1, 0, r);
+        self.clip_rounded_quarter(r, h - r, 0, r, h - r, h - 1);
+        self.clip_rounded_quarter(w - r, h - r, w - r, w - 1, h - r, h - 1);
+    }
+
+    fn clip_rounded_quarter(&mut self, cx: i32, cy: i32, x0: i32, x1: i32, y0: i32, y1: i32) {
+        let rad = f64::from(cx.min(cy).min(CORNER_R)) - 0.5;
+        let cx = f64::from(cx);
+        let cy = f64::from(cy);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let dx = f64::from(x) + 0.5 - cx;
+                let dy = f64::from(y) + 0.5 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist < rad {
+                    continue;
+                }
+                let coverage = ((1.0 - (dist - rad)).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let i = y as usize * self.w as usize + x as usize;
+                if let Some(alpha) = &mut self.alpha {
+                    alpha[i] = ((u16::from(alpha[i]) * u16::from(coverage) + 127) / 255) as u8;
+                }
+                if coverage == 0 {
+                    self.px[i * 3..i * 3 + 3].copy_from_slice(&[0; 3]);
+                }
+            }
+        }
+    }
+
+    /// Center-aligned solid stroke on a rectangle, converted with
+    /// `emu_to_px_f` (not the series-pen snap). Half the stroke may clip at
+    /// the canvas edge; official Chart.Export sometimes grows the bitmap.
+    /// Size residuals stay on the review page. Not a unique lock.
+    pub(super) fn stroke_frame_rect(
+        &mut self,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        line: &FrameLine,
+    ) {
+        let width = self.dpi.emu_to_px_f(line.width_emu);
+        if !width.is_finite() || width <= 0.0 {
+            return;
+        }
+        let inset = 0.5;
+        let ax = x0 + inset;
+        let ay = y0 + inset;
+        let bx = x1 - inset;
+        let by = y1 - inset;
+        if bx <= ax || by <= ay {
+            return;
+        }
+        // Official F08 strokes are opaque. Non-255 line alpha is multiplied
+        // as a close-enough coverage scale, not a unique compositing lock.
+        if line.alpha == 0 {
+            return;
+        }
+        self.stroke_segment(ax, ay, bx, ay, width, line.color);
+        self.stroke_segment(bx, ay, bx, by, width, line.color);
+        self.stroke_segment(bx, by, ax, by, width, line.color);
+        self.stroke_segment(ax, by, ax, ay, width, line.color);
+        let _ = line.alpha;
+    }
+
+    /// Offset + two-pass box blur behind the already-painted chart, with a
+    /// close-enough canvas expand of `ceil(blur ± offset)` on each side.
+    /// DrawingML `dir` is 1/60000 degree; 0 is +x, and +dir goes clockwise
+    /// in this y-down buffer (`dx = dist*cos`, `dy = dist*sin`) so official
+    /// 45° (2_700_000) is down-right. Default color is opaque black when
+    /// unspecified. Not a unique size or alpha lock; residuals stay on the
+    /// review page.
+    pub(super) fn apply_outer_shadow(&mut self, shadow: &OuterShadow) {
+        let blur_px = self.dpi.emu_to_px_f(shadow.blur_emu).max(0.0);
+        let dist_px = self.dpi.emu_to_px_f(shadow.dist_emu).max(0.0);
+        let theta = (shadow.dir as f64) / 60_000.0 * std::f64::consts::PI / 180.0;
+        let dx = dist_px * theta.cos();
+        let dy = dist_px * theta.sin();
+        let pad_l = ((blur_px - dx.min(0.0)).ceil() as i32).max(0);
+        let pad_t = ((blur_px - dy.min(0.0)).ceil() as i32).max(0);
+        let pad_r = ((blur_px + dx.max(0.0)).ceil() as i32).max(0);
+        let pad_b = ((blur_px + dy.max(0.0)).ceil() as i32).max(0);
+        if pad_l == 0 && pad_t == 0 && pad_r == 0 && pad_b == 0 {
+            return;
+        }
+        let src_w = self.w;
+        let src_h = self.h;
+        let src_n = (src_w as usize) * (src_h as usize);
+        let src_a = self
+            .alpha
+            .clone()
+            .unwrap_or_else(|| vec![255; src_n]);
+        let nw = (src_w as i32 + pad_l + pad_r) as u32;
+        let nh = (src_h as i32 + pad_t + pad_b) as u32;
+        let dest_n = (nw as usize) * (nh as usize);
+        let mut shadow_a = vec![0.0_f32; dest_n];
+        let ox = dx.round() as i32;
+        let oy = dy.round() as i32;
+        let scale = f32::from(shadow.alpha) / 255.0;
+        for y in 0..src_h as i32 {
+            for x in 0..src_w as i32 {
+                let a = f32::from(src_a[(y as u32 * src_w + x as u32) as usize]) / 255.0 * scale;
+                if a <= 0.0 {
+                    continue;
+                }
+                let dx_ = x + pad_l + ox;
+                let dy_ = y + pad_t + oy;
+                if dx_ >= 0 && dy_ >= 0 && dx_ < nw as i32 && dy_ < nh as i32 {
+                    let i = (dy_ as u32 * nw + dx_ as u32) as usize;
+                    shadow_a[i] = (shadow_a[i] + a).min(1.0);
+                }
+            }
+        }
+        if blur_px > 0.5 {
+            let radius = blur_px.round().max(1.0) as i32;
+            shadow_a = box_blur_approx(nw, nh, &shadow_a, radius);
+        }
+        let mut npx = vec![0_u8; dest_n * 3];
+        let mut na = vec![0_u8; dest_n];
+        for (i, &cover) in shadow_a.iter().enumerate() {
+            let a8 = (cover.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+            if a8 > 0 {
+                npx[i * 3..i * 3 + 3].copy_from_slice(&shadow.color);
+                na[i] = a8;
+            }
+        }
+        for y in 0..src_h {
+            for x in 0..src_w {
+                let si = (y * src_w + x) as usize;
+                let sa = src_a[si];
+                if sa == 0 {
+                    continue;
+                }
+                let di = ((y as i32 + pad_t) as u32 * nw + (x as i32 + pad_l) as u32) as usize;
+                let sr = self.px[si * 3];
+                let sg = self.px[si * 3 + 1];
+                let sb = self.px[si * 3 + 2];
+                if sa == 255 {
+                    npx[di * 3] = sr;
+                    npx[di * 3 + 1] = sg;
+                    npx[di * 3 + 2] = sb;
+                    na[di] = 255;
+                    continue;
+                }
+                let src_af = f32::from(sa) / 255.0;
+                let dst_af = f32::from(na[di]) / 255.0;
+                let out_a = src_af + dst_af * (1.0 - src_af);
+                if out_a <= 0.0 {
+                    continue;
+                }
+                let dst_w = dst_af * (1.0 - src_af);
+                let inv = 1.0 / out_a;
+                npx[di * 3] = ((f32::from(sr) * src_af + f32::from(npx[di * 3]) * dst_w) * inv + 0.5) as u8;
+                npx[di * 3 + 1] =
+                    ((f32::from(sg) * src_af + f32::from(npx[di * 3 + 1]) * dst_w) * inv + 0.5) as u8;
+                npx[di * 3 + 2] =
+                    ((f32::from(sb) * src_af + f32::from(npx[di * 3 + 2]) * dst_w) * inv + 0.5) as u8;
+                na[di] = (out_a * 255.0 + 0.5) as u8;
+            }
+        }
+        self.w = nw;
+        self.h = nh;
+        self.px = npx;
+        self.alpha = Some(na);
+    }
+}
+
+fn box_blur_approx(w: u32, h: u32, src: &[f32], radius: i32) -> Vec<f32> {
+    // Two successive box blurs stand in for a Gaussian. Close-enough, not a
+    // unique official blur-kernel lock.
+    let once = box_blur_pass(w, h, src, radius);
+    box_blur_pass(w, h, &once, radius)
+}
+
+fn box_blur_pass(w: u32, h: u32, src: &[f32], radius: i32) -> Vec<f32> {
+    let (wi, hi) = (w as i32, h as i32);
+    let clamp = |x: i32, y: i32| {
+        let x = x.clamp(0, wi - 1) as u32;
+        let y = y.clamp(0, hi - 1) as u32;
+        src[(y * w + x) as usize]
+    };
+    let denom = (2 * radius + 1) as f32;
+    let mut tmp = vec![0.0_f32; src.len()];
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut s = 0.0;
+            for k in -radius..=radius {
+                s += clamp(x + k, y);
+            }
+            tmp[(y as u32 * w + x as u32) as usize] = s / denom;
+        }
+    }
+    let mut out = vec![0.0_f32; src.len()];
+    let clamp_t = |x: i32, y: i32| {
+        let x = x.clamp(0, wi - 1) as u32;
+        let y = y.clamp(0, hi - 1) as u32;
+        tmp[(y * w + x) as usize]
+    };
+    for y in 0..hi {
+        for x in 0..wi {
+            let mut s = 0.0;
+            for k in -radius..=radius {
+                s += clamp_t(x, y + k);
+            }
+            out[(y as u32 * w + x as u32) as usize] = s / denom;
+        }
+    }
+    out
+}
+
+impl Canvas {
     pub(super) fn stroke_border(&mut self, color: [u8; 3]) {
         let w = self.w as i32;
         let h = self.h as i32;

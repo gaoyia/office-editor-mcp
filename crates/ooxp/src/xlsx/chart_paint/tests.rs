@@ -635,25 +635,8 @@
 
     #[test]
     fn valid_unsupported_backgrounds_are_not_silently_defaulted() {
-        for config in ["<c:spPr><a:ln w='25400'/></c:spPr>"] {
-            let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
-            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
-            assert!(
-                super::render_chart(
-                    &doc.root,
-                    576,
-                    336,
-                    FALLBACK_ACCENTS,
-                    None,
-                    ChartHost::Excel,
-                    None,
-                    ""
-                )
-                .is_err(),
-                "unsupported valid config: {config}"
-            );
-        }
         for config in [
+            "<c:spPr><a:ln w='25400'/></c:spPr>",
             "<c:roundedCorners val='0'/>",
             "<c:spPr><a:solidFill><a:srgbClr val='123456'/></a:solidFill></c:spPr>",
             "<c:roundedCorners val='1'/>",
@@ -3321,14 +3304,183 @@
                 }
             }
         }
-        for config in [
-            "<c:roundedCorners val='1'/><c:spPr><a:ln><a:noFill/></a:ln></c:spPr>",
-            "<c:roundedCorners val='0'/><c:spPr><a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>",
-            "<c:roundedCorners val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr>",
-        ] {
-            let xml=LONG_LEGEND.replace("<c:chart>",&format!("{config}<c:chart>"));
-            assert!(read_frame(&crate::xml::parse(xml.as_bytes()).unwrap().root).is_err());
+    }
+
+    #[test]
+    fn visible_frame_lines_effects_and_rounded_noline_export() {
+        // Rounded no-line: fill is clipped with the locked corner geometry,
+        // without the default gray border.
+        let rounded = "<c:roundedCorners val='1'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{rounded}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.rounded);
+        assert!(!frame.border);
+        assert!(frame.chart_line.is_none());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+        let corner = (0usize * w + 0) * stride;
+        assert!(
+            stride == 4 && buf[corner + 3] < 32,
+            "rounded no-line outside corner should be clipped, alpha={}",
+            buf[corner + 3]
+        );
+        let inner = (0usize * w + w / 2) * stride;
+        assert_eq!(&buf[inner..inner + 3], &[234, 247, 247]);
+        if stride == 4 {
+            assert_eq!(buf[inner + 3], 255);
         }
+
+        // Visible red chart line, omitted width (close-enough 1pt default).
+        let red_ln = "<c:roundedCorners val='0'/><c:spPr><a:ln><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{red_ln}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(!frame.border);
+        assert_eq!(frame.chart_line.as_ref().map(|l| l.color), Some([255, 0, 0]));
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+        let mid_top = (0usize * w + (w / 2)) * stride;
+        assert_eq!(buf[mid_top], 255);
+        assert!(buf[mid_top + 1] < 40 && buf[mid_top + 2] < 40, "top edge should be red");
+
+        // Bare `<a:ln w='25400'/>` (no fill) exports with close-enough black.
+        let bare = "<c:spPr><a:ln w='25400'/></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{bare}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        assert!(read_frame(&doc.root).is_ok());
+        assert!(super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .is_ok());
+
+        // Plot-area line exports (chart default gray border stays).
+        let plot_ln = "<c:roundedCorners val='0'/><c:chart><c:plotArea><c:spPr><a:ln w='12700'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>";
+        // LONG_LEGEND already has <c:chart>; inject plot spPr more carefully below.
+        let xml = LONG_LEGEND.replace(
+            "<c:plotArea>",
+            "<c:plotArea><c:spPr><a:ln w='12700'><a:solidFill><a:srgbClr val='FF0000'/></a:solidFill></a:ln></c:spPr>",
+        );
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.border);
+        assert_eq!(frame.plot_line.as_ref().map(|l| l.color), Some([255, 0, 0]));
+        assert!(super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .is_ok());
+        let _ = plot_ln;
+
+        // Empty outerShdw still exports and does not grow the canvas.
+        let empty_sh = "<c:roundedCorners val='0'/><c:spPr><a:effectLst><a:outerShdw/></a:effectLst></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{empty_sh}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.chart_shadow.is_some());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, _, _) = decode_rgba(&png);
+        assert_eq!((w, h), (80, 40));
+
+        // Official-like 45° outerShdw grows the canvas and keeps the chart fill.
+        let sh = "<c:roundedCorners val='0'/><c:spPr><a:solidFill><a:srgbClr val='EAF7F7'/></a:solidFill><a:effectLst><a:outerShdw blurRad='63500' dist='53881' dir='2700000' rotWithShape='0'><a:scrgbClr r='0' g='0' b='0'/></a:outerShdw></a:effectLst></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{sh}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        assert!(frame.chart_shadow.is_some());
+        let png = super::render_chart(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .unwrap();
+        let (w, h, stride, buf) = decode_rgba(&png);
+        assert!(w > 80 && h > 40, "outerShdw should expand the canvas, got {w}x{h}");
+        // Blur padding sits on every side, so (0,0) is not the original
+        // chart origin. The fill must still appear somewhere, and a
+        // non-zero alpha dark pixel should appear in the expanded margin.
+        let mut saw_fill = false;
+        let mut saw_shadow = false;
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) * stride;
+                let rgb = &buf[i..i + 3];
+                let a = if stride == 4 { buf[i + 3] } else { 255 };
+                if rgb == [234, 247, 247] && a == 255 {
+                    saw_fill = true;
+                }
+                let in_src = x < 80 && y < 40;
+                if !in_src && a > 8 && rgb[0] < 40 && rgb[1] < 40 && rgb[2] < 40 {
+                    saw_shadow = true;
+                }
+            }
+        }
+        assert!(saw_fill, "outerShdw composite should keep the chart fill");
+        assert!(saw_shadow, "outerShdw should paint a dark margin");
+    }
+
+    fn decode_rgba(png: &[u8]) -> (usize, usize, usize, Vec<u8>) {
+        let mut decoder = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let mut buf = vec![0; decoder.output_buffer_size()];
+        let info = decoder.next_frame(&mut buf).unwrap();
+        let stride = if info.color_type == png::ColorType::Rgba {
+            4
+        } else {
+            3
+        };
+        (info.width as usize, info.height as usize, stride, buf)
     }
 
     #[test]
@@ -3343,7 +3495,6 @@
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:hueMod val='50000'/><a:lumOff val='10000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:lumOff val='40000'/><a:lumMod val='60000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='156082'><a:tint val='60000'/><a:shade val='75000'/></a:srgbClr></a:solidFill></c:spPr>",
-            "<c:spPr><a:ln w='25400'/></c:spPr>",
         ] {
             let xml = LONG_LEGEND.replace("<c:chart>", &format!("{config}<c:chart>"));
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();

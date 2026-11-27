@@ -135,6 +135,9 @@ pub(crate) fn render_chart_with_media(
         // plot is white, not the explicitly coloured chart-area background.
         canvas.rounded_frame = frame.rounded;
         canvas.chart_border = frame.border;
+        canvas.chart_line = frame.chart_line;
+        canvas.plot_line = frame.plot_line;
+        canvas.chart_shadow = frame.chart_shadow;
         match frame.fill {
             FrameFill::NoFill => canvas.clear_to_transparent(),
             FrameFill::Default => canvas.fill_rect(0, 0, width as i32, height as i32, [255; 3]),
@@ -176,6 +179,9 @@ pub(crate) fn render_chart_with_media(
         };
     }
     paint(&mut canvas, &chart, font.as_ref(), host)?;
+    if let Some(shadow) = canvas.chart_shadow.clone() {
+        canvas.apply_outer_shadow(&shadow);
+    }
     canvas.encode_png()
 }
 

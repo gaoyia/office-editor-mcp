@@ -384,9 +384,7 @@ pub(super) fn paint_scatter(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -672,9 +670,7 @@ pub(super) fn paint_bar(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -769,9 +765,7 @@ pub(super) fn paint_pie(
         draw_pie_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }
@@ -1416,9 +1410,7 @@ pub(super) fn paint(
         legend_layout.draw(canvas, chart, font)?;
     }
     if matches!(host, ChartHost::Excel) {
-        if canvas.chart_border {
-            canvas.stroke_border(BORDER);
-        }
+        canvas.finish_excel_frame(Some(&plot));
     }
     Ok(())
 }

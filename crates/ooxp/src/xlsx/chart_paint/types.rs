@@ -350,11 +350,34 @@ pub(super) const LINEAR_ANG_HORIZONTAL: i64 = 0;
 pub(super) const LINEAR_ANG_VERTICAL: i64 = 5_400_000;
 
 
+/// Visible chart or plot `a:ln`. Width stays in EMU and is converted at paint
+/// time. This is a close-enough export path, not a unique official lock.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct FrameLine {
+    pub(super) color: [u8; 3],
+    pub(super) alpha: u8,
+    pub(super) width_emu: f64,
+}
+
+/// Chart-area `a:outerShdw`. Dist/blur stay in EMU; `dir` is DrawingML
+/// 1/60000 degree. Close-enough export, not a unique official lock.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct OuterShadow {
+    pub(super) color: [u8; 3],
+    pub(super) alpha: u8,
+    pub(super) blur_emu: f64,
+    pub(super) dist_emu: f64,
+    pub(super) dir: i64,
+}
+
 pub(super) struct FrameStyle {
     pub(super) rounded: bool,
     pub(super) border: bool,
     pub(super) fill: FrameFill,
     pub(super) plot_fill: FrameFill,
+    pub(super) chart_line: Option<FrameLine>,
+    pub(super) plot_line: Option<FrameLine>,
+    pub(super) chart_shadow: Option<OuterShadow>,
 }
 
 pub(super) const OFFICE_GRAD_WEIGHT: [f64; 17] = [
