@@ -24,6 +24,10 @@ pub(super) struct Spec {
     /// Official Excel 16 valAx/delete=true (HasAxis(xlValue)=false or Axes.Delete).
     /// Distinct from tickLblPos=none, which keeps the axis line.
     pub deleted: bool,
+    /// Official Excel 16 valAx tickLblPos=none (TickLabels.Delete / none).
+    /// Releases the value-label gutter and omits tick labels, but keeps the
+    /// axis line and major tick marks. Not the same as delete=true.
+    pub hide_tick_labels: bool,
 }
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) enum CatCrosses {
@@ -43,6 +47,7 @@ pub(super) struct Scale {
     pub tick_format: TickFormat,
     pub reversed: bool,
     pub deleted: bool,
+    pub hide_tick_labels: bool,
 }
 /// Official Excel 16 valAx formatCode values locked from Chart.Export at
 /// window DPI 106 (decimal `.`, thousands `,`). Any other code stays NI.
@@ -77,6 +82,11 @@ impl Scale {
         } else {
             matches!(self.cat_crosses, CatCrosses::Max)
         }
+    }
+    /// Value tick labels (and their gutter) are omitted for delete=true or
+    /// tickLblPos=none. The axis line is independent: only delete=true drops it.
+    pub fn value_labels_visible(&self) -> bool {
+        !self.deleted && !self.hide_tick_labels
     }
     /// Category labels occupy the bottom gutter when the crossing sits on
     /// the visual bottom edge (minMax at min, or maxMin at max).
@@ -298,6 +308,14 @@ impl Spec {
             return Err(unsupported());
         }
         let tick_format = read_tick_format_kind(axis, percent_stacked)?;
+        // Official F20-5: valAx tickLblPos=none hides labels and releases the
+        // gutter but keeps the axis line. nextTo/omitted keep current labels.
+        // Other positions are left unread (same as before this lock).
+        let hide_tick_labels = matches!(
+            axis.child_by_local("tickLblPos")
+                .and_then(|e| e.attr_local("val")),
+            Some("none")
+        );
         let read = |node: Option<&Element>, name: &str| -> Result<Option<f64>, Error> {
             let Some(el) = node.and_then(|n| n.child_by_local(name)) else {
                 return Ok(None);
@@ -320,6 +338,7 @@ impl Spec {
             tick_format,
             reversed,
             deleted,
+            hide_tick_labels,
         };
         if spec.major.is_some_and(|v| v <= 0.0)
             || spec.minor.is_some_and(|v| v <= 0.0)
@@ -363,6 +382,16 @@ impl Spec {
         }
         // Official F20 evidence is linear autoZero minMax only.
         if spec.deleted
+            && (spec.log_base.is_some()
+                || spec.reversed
+                || spec.crosses_at.is_some()
+                || !matches!(spec.cat_crosses, CatCrosses::AutoZero))
+        {
+            return Err(unsupported());
+        }
+        // Official F20-5 tickLblPos=none evidence is the same linear autoZero
+        // minMax subset. log/maxMin/custom crosses stay NI.
+        if spec.hide_tick_labels
             && (spec.log_base.is_some()
                 || spec.reversed
                 || spec.crosses_at.is_some()
@@ -505,6 +534,7 @@ fn read_secondary_placement_fields(axis: &Element) -> Result<Spec, Error> {
         tick_format,
         reversed,
         deleted,
+        hide_tick_labels: false,
     };
     if spec.major.is_some_and(|v| v <= 0.0)
         || spec.minor.is_some_and(|v| v <= 0.0)
@@ -828,6 +858,7 @@ pub(super) fn scale_values(
             || spec.tick_format != TickFormat::General
             || spec.reversed
             || spec.deleted
+            || spec.hide_tick_labels
         {
             return Err(unsupported());
         }
@@ -847,6 +878,7 @@ pub(super) fn scale_values(
             tick_format: TickFormat::General,
             reversed: false,
             deleted: false,
+            hide_tick_labels: false,
         });
     }
     // Excel may choose a nonzero minimum for tightly clustered one-sided data.
@@ -930,6 +962,7 @@ pub(super) fn scale_values(
         tick_format: spec.tick_format,
         reversed: spec.reversed,
         deleted: spec.deleted,
+        hide_tick_labels: spec.hide_tick_labels,
     })
 }
 
@@ -965,6 +998,7 @@ mod tests {
                 tick_format: TickFormat::General,
                 reversed: false,
                 deleted: false,
+                hide_tick_labels: false,
             };
             let budget = interval_budget(row["height96"].as_u64().unwrap() as u32, label_em);
             let result = scale(&[series], spec, budget);
@@ -1136,6 +1170,36 @@ mod tests {
         .unwrap();
         let s = Spec::read(&deleted.root).unwrap();
         assert!(s.deleted);
+        assert!(!s.hide_tick_labels);
+        let none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&none.root).unwrap();
+        assert!(s.hide_tick_labels);
+        assert!(!s.deleted);
+        let next_to = crate::xml::parse(
+            b"<plotArea><valAx><scaling><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/><tickLblPos val='nextTo'/></valAx></plotArea>",
+        )
+        .unwrap();
+        let s = Spec::read(&next_to.root).unwrap();
+        assert!(!s.hide_tick_labels);
+        let log_none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&log_none.root).is_err(),
+            "log plus tickLblPos=none stays NI"
+        );
+        let rev_none = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><tickLblPos val='none'/></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(
+            Spec::read(&rev_none.root).is_err(),
+            "orientation=maxMin plus tickLblPos=none stays NI"
+        );
         let log_del = crate::xml::parse(
             b"<plotArea><valAx><scaling><logBase val='10'/><min val='1'/><max val='1000'/></scaling><delete val='1'/></valAx></plotArea>",
         )
@@ -1184,6 +1248,7 @@ mod tests {
             tick_format: TickFormat::General,
             reversed: false,
             deleted: false,
+            hide_tick_labels: false,
         };
         let ok = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
@@ -1213,6 +1278,7 @@ mod tests {
             tick_format: TickFormat::General,
             reversed: false,
             deleted: false,
+            hide_tick_labels: false,
         };
         let auto10 = scale_values(
             [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),

@@ -9525,6 +9525,189 @@
         );
     }
 
+    fn with_val_tick_lbl_pos(xml: &str, pos: &str) -> String {
+        let start = xml.find("<c:valAx").expect("fixture must have valAx");
+        let rel_end = xml[start..]
+            .find("</c:valAx>")
+            .expect("fixture must close valAx");
+        let end = start + rel_end;
+        let val = &xml[start..end];
+        let new_val = if let Some((head, tail)) = val.split_once(r#"<c:tickLblPos val=""#) {
+            let close = tail.find('"').expect("tickLblPos close");
+            format!(r#"{}<c:tickLblPos val="{}{}"#, head, pos, &tail[close..])
+        } else {
+            format!(r#"{}<c:tickLblPos val="{}"/>"#, val, pos)
+        };
+        let out = format!("{}{}{}", &xml[..start], new_val, &xml[end..]);
+        assert!(
+            out[start..end + new_val.len() - val.len()].contains(&format!(
+                r#"<c:tickLblPos val="{pos}"/>"#
+            )),
+            "fixture must carry valAx tickLblPos={pos}"
+        );
+        out
+    }
+
+    #[test]
+    fn val_axis_tick_lbl_pos_none_keeps_axis_line_and_releases_gutter() {
+        let values = [-4.0, -1.0, 3.0, 6.0];
+        let mixed = mixed_column_explicit_pm8(&values).replacen(
+            "<c:ser>",
+            r#"<c:ser><c:invertIfNegative val="0"/>"#,
+            1,
+        );
+        let control_doc = crate::xml::parse(mixed.as_bytes()).unwrap();
+        let none_xml = with_val_tick_lbl_pos(&mixed, "none");
+        let none_doc = crate::xml::parse(none_xml.as_bytes()).unwrap();
+        let delete_doc = crate::xml::parse(with_val_delete(&mixed).as_bytes()).unwrap();
+        let none_chart = read_chart(
+            &none_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(none_chart.axis.hide_tick_labels);
+        assert!(!none_chart.axis.deleted);
+
+        let render = |root: &crate::xml::Element| {
+            render_rgb_chart(
+                root,
+                424,
+                265,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+            )
+            .unwrap()
+        };
+        let control_png = render(&control_doc.root);
+        let none_png = render(&none_doc.root);
+        let delete_png = render(&delete_doc.root);
+        let (w, h, crgb) = png_rgb(&control_png);
+        let (_, _, nrgb) = png_rgb(&none_png);
+        let (_, _, drgb) = png_rgb(&delete_png);
+        let accent = FALLBACK_ACCENTS[0];
+        let near = |px: &[u8]| {
+            (px[0] as i16 - accent[0] as i16).abs() < 8
+                && (px[1] as i16 - accent[1] as i16).abs() < 8
+                && (px[2] as i16 - accent[2] as i16).abs() < 8
+        };
+        let first_accent_x = |rgb: &[u8]| {
+            for x in 0..w {
+                for y in 0..h {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if near(&rgb[i..i + 3]) {
+                        return x;
+                    }
+                }
+            }
+            panic!("expected accent fill");
+        };
+        let left_x = first_accent_x(&crgb);
+        let none_x = first_accent_x(&nrgb);
+        let del_x = first_accent_x(&drgb);
+        assert!(
+            none_x + 8 < left_x,
+            "official tickLblPos=none releases the value-label gutter; none={none_x} control={left_x}"
+        );
+        assert!(
+            (none_x as i32 - del_x as i32).abs() <= 2,
+            "tickLblPos=none and delete=true release the same gutter; none={none_x} delete={del_x}"
+        );
+        // The leftover value axis is the tallest vertical ink in the left
+        // quarter (first_accent_x is the first column, not the axis).
+        // Labels would sit left of that axis, beyond TICK_OUT=3.
+        let y0 = h / 6;
+        let y1 = (h * 5) / 6;
+        let tallest_vline = |rgb: &[u8]| {
+            let mut best_x = 0u32;
+            let mut best = 0u32;
+            for x in 0..w / 4 {
+                let mut n = 0u32;
+                for y in y0..y1 {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+                if n > best {
+                    best = n;
+                    best_x = x;
+                }
+            }
+            (best_x, best)
+        };
+        let (none_axis_x, none_axis) = tallest_vline(&nrgb);
+        let (_, delete_axis) = tallest_vline(&drgb);
+        assert!(
+            none_axis > delete_axis + 20,
+            "official tickLblPos=none keeps the value axis line; none={none_axis}@{none_axis_x} delete={delete_axis}"
+        );
+        let left_of_ticks = |rgb: &[u8], axis_x: u32| {
+            let mut n = 0u32;
+            let lim = axis_x.saturating_sub(4);
+            for y in y0..y1 {
+                for x in 0..lim {
+                    let i = (y as usize * w as usize + x as usize) * 3;
+                    if rgb[i] < 40 && rgb[i + 1] < 40 && rgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
+        let none_outside = left_of_ticks(&nrgb, none_axis_x);
+        let control_axis_x = tallest_vline(&crgb).0;
+        let control_outside = left_of_ticks(&crgb, control_axis_x);
+        assert!(
+            control_outside > 20 && none_outside < 5,
+            "official tickLblPos=none omits value tick labels left of the axis; control_outside={control_outside} none_outside={none_outside} axis={none_axis_x}"
+        );
+
+        render_line(&with_val_tick_lbl_pos(
+            &standard_line_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "none",
+        ))
+        .unwrap();
+
+        let bar_base = bar_xml(
+            &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+            "",
+            "minMax",
+            Some("bar"),
+        );
+        let bar_none_xml = with_val_tick_lbl_pos(&bar_base, "none");
+        let bar_none_doc = crate::xml::parse(bar_none_xml.as_bytes()).unwrap();
+        let bar_none_chart = read_chart(
+            &bar_none_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        assert!(bar_none_chart.axis.hide_tick_labels);
+        assert!(!bar_none_chart.axis.deleted);
+        render_bar(&bar_none_xml).unwrap();
+
+        let log = with_val_tick_lbl_pos(
+            &inject_explicit_log10(&mixed_column_xml(&[1.0, 10.0, 100.0, 1000.0])),
+            "none",
+        );
+        let log_doc = crate::xml::parse(log.as_bytes()).unwrap();
+        assert!(
+            read_chart(&log_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
+            "log plus tickLblPos=none stays NI"
+        );
+    }
+
     fn secondary_pair_xml(kind: &str, s1: &[f64], s2: &[f64], auto: bool) -> String {
         let n = s1.len();
         let cats = (0..n)

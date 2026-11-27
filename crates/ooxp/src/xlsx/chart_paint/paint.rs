@@ -492,7 +492,9 @@ pub(super) fn paint_bar(
     // axPos is still `b`. Unused gutters reuse INSET_TOP; the label side reuses
     // INSET_BOTTOM. This is not a guessed 1px shift.
     let val_axis_at_top = !chart.cats_from_bottom;
-    let val_deleted = chart.axis.deleted;
+    // tickLblPos=none releases the value-label gutter like delete=true, but
+    // the axis line is still drawn (official F20-5).
+    let val_labels = !chart.axis.deleted && !chart.axis.hide_tick_labels;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
     let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
@@ -507,11 +509,11 @@ pub(super) fn paint_bar(
             label_px,
             title_lines.len(),
         );
-        if val_axis_at_top && !val_deleted {
+        if val_axis_at_top && val_labels {
             y += val_label_top;
         }
         y
-    } else if val_axis_at_top && !val_deleted {
+    } else if val_axis_at_top && val_labels {
         val_label_top
     } else {
         unused_top
@@ -519,7 +521,7 @@ pub(super) fn paint_bar(
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
-        - if val_axis_at_top || val_deleted {
+        - if val_axis_at_top || !val_labels {
             unused_bottom
         } else {
             val_label_bottom
@@ -637,7 +639,7 @@ pub(super) fn paint_bar(
             INK,
         );
     }
-    if !scale.deleted {
+    if scale.value_labels_visible() {
         let tick_h = text_height(font, label_px);
         let label_top = if val_axis_at_top {
             f64::from(axis_y) - canvas.dpi.scale_f(10.0) - tick_h
@@ -1076,9 +1078,10 @@ pub(super) fn paint(
     };
     let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let intervals = ticks.len().saturating_sub(1).max(1) as i32;
-    let widest_tick = if scale.deleted {
-        // Official valAx delete=true releases the value-label gutter; the
-        // axis line and tick labels are omitted. This is not a 1px fudge.
+    let widest_tick = if !scale.value_labels_visible() {
+        // Official valAx delete=true and tickLblPos=none both release the
+        // value-label gutter. delete=true also omits the axis line;
+        // tickLblPos=none keeps it. This is not a 1px fudge.
         0
     } else {
         tick_labels
@@ -1378,7 +1381,7 @@ pub(super) fn paint(
         log_base,
         scale.category_labels_above(),
         scale.reversed,
-        !scale.deleted,
+        scale.value_labels_visible(),
     );
     if let Some(sec) = secondary_scale.as_ref() {
         canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
