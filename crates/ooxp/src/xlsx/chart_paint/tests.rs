@@ -9772,6 +9772,20 @@
                     n2 = nums(s2),
                 ),
             ),
+            "area" => (
+                format!(
+                    r#"<c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:areaChart>"#,
+                    n = n,
+                    cats = cats,
+                    n1 = nums(s1),
+                ),
+                format!(
+                    r#"<c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/><c:ser><c:order val="1"/><c:tx><c:v>S2</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n2}</c:numLit></c:val></c:ser><c:axId val="3"/><c:axId val="4"/></c:areaChart>"#,
+                    n = n,
+                    cats = cats,
+                    n2 = nums(s2),
+                ),
+            ),
             "combo" => (
                 format!(
                     r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx><c:cat><c:strLit><c:ptCount val="{n}"/>{cats}</c:strLit></c:cat><c:val><c:numLit><c:ptCount val="{n}"/>{n1}</c:numLit></c:val></c:ser><c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>"#,
@@ -9801,16 +9815,23 @@
                 ),
             ),
         };
+        let (cat_pos, val_p, val_s, between) = if kind == "bar" {
+            ("l", "b", "t", "between")
+        } else if kind == "area" {
+            ("b", "l", "r", "midCat")
+        } else {
+            ("b", "l", "r", "between")
+        };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart">
   <c:chart>
     <c:plotArea>
       {w1}{w2}
-      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
-      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
-      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/>{scale_p}</c:scaling>{major_p}<c:delete val="0"/><c:axPos val="{val_p}"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="{between}"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/>{scale_s}</c:scaling>{major_s}<c:delete val="0"/><c:axPos val="{val_s}"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="{between}"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="{cat_pos}"/><c:crossAx val="4"/></c:catAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -9995,20 +10016,139 @@
         ))
         .unwrap();
 
-        let bar = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        // Official F21-5 / F21-6 / F21-7 / F21-8 Chart.Export gold exists, so
+        // these must produce an image (t215u). Close-enough composition of
+        // the already-locked pairing; residuals stay on the review page.
+        let bar_doc = crate::xml::parse(secondary_pair_xml("bar", &s1, &s2, false).as_bytes()).unwrap();
+        let bar_chart = read_chart(&bar_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("clustered bar secondary valAx must export");
+        assert!(bar_chart.axis_secondary.is_some());
+        assert!(!bar_chart.series[0].on_secondary);
+        assert!(bar_chart.series[1].on_secondary);
+        let bar_png = render_rgb_chart(
+            &bar_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("clustered bar secondary valAx must produce an image");
+        let (bw, bh, brgb) = png_rgb(&bar_png);
+        let accent_count = |rgb: &[u8], w: u32, h: u32, accent: [u8; 3]| {
+            let mut n = 0u32;
+            for i in (0..(w * h) as usize).map(|i| i * 3) {
+                if near([rgb[i], rgb[i + 1], rgb[i + 2]], accent, 16) {
+                    n += 1;
+                }
+            }
+            n
+        };
         assert!(
-            read_chart(&bar.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "clustered bar secondary valAx stays NI"
+            accent_count(&brgb, bw, bh, a0) > 50 && accent_count(&brgb, bw, bh, a1) > 50,
+            "bar secondary must paint both series"
         );
-        let combo = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        let top_ink = {
+            let mut n = 0u32;
+            for y in 0..bh / 8 {
+                for x in 0..bw {
+                    let i = (y as usize * bw as usize + x as usize) * 3;
+                    if brgb[i] < 40 && brgb[i + 1] < 40 && brgb[i + 2] < 40 {
+                        n += 1;
+                    }
+                }
+            }
+            n
+        };
         assert!(
-            read_chart(&combo.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "combo (different wrappers) stays NI for F26"
+            top_ink > 20,
+            "official bar secondary valAx places tick labels on the top; top_ink={top_ink}"
         );
-        let auto = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+
+        let auto_doc = crate::xml::parse(secondary_pair_xml("col", &s1, &s2, true).as_bytes()).unwrap();
+        let auto_chart = read_chart(&auto_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on a secondary pair must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        assert!(auto_chart
+            .axis_secondary
+            .as_ref()
+            .is_some_and(|spec| spec.min.is_none() && spec.max.is_none()));
+        let auto_png = render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max secondary pair must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_r1 = accent_x_runs(&argb, aw, ah, a1);
+        assert_eq!(
+            auto_r1.len(),
+            4,
+            "auto secondary columns should occupy four category slots, got {auto_r1:?}"
+        );
+
+        let area_doc = crate::xml::parse(secondary_pair_xml("area", &s1, &s2, false).as_bytes()).unwrap();
+        let area_chart = read_chart(&area_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("standard area secondary valAx must export");
+        assert!(area_chart.area_midcat);
+        assert!(area_chart.axis_secondary.is_some());
+        render_rgb_chart(
+            &area_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("standard area secondary valAx must produce an image");
+
+        let combo_doc = crate::xml::parse(secondary_pair_xml("combo", &s1, &s2, false).as_bytes()).unwrap();
+        let combo_chart = read_chart(&combo_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("official column+line secondary combo must export");
+        assert!(matches!(combo_chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+        assert!(matches!(combo_chart.series[1].plot_kind, PlotKind::StandardLine));
+        assert!(!combo_chart.series[0].on_secondary);
+        assert!(combo_chart.series[1].on_secondary);
+        let combo_png = render_rgb_chart(
+            &combo_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("official column+line secondary combo must produce an image");
+        let (cow, coh, corgb) = png_rgb(&combo_png);
+        let combo_r0 = accent_x_runs(&corgb, cow, coh, a0);
+        assert_eq!(
+            combo_r0.len(),
+            4,
+            "combo primary must still be four columns, got {combo_r0:?}"
+        );
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on a secondary pair stays NI"
+            accent_count(&corgb, cow, coh, a1) > 20,
+            "combo secondary line must be painted, not omitted"
+        );
+        assert!(
+            combo_chart.series[1].line_visible
+                || !matches!(combo_chart.series[1].marker, MarkerKind::None),
+            "combo secondary must keep the line series style rather than a column fill"
+        );
+        let combo_right = ink(&corgb, cow, coh);
+        assert!(
+            combo_right > 10,
+            "combo secondary valAx still places tick labels on the right; ink={combo_right}"
         );
     }
 

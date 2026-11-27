@@ -434,6 +434,8 @@ pub(super) struct SecondaryAxes {
     pub secondary: Spec,
     pub primary_val_id: String,
     pub secondary_val_id: String,
+    /// Official bar secondary keeps catAx minMax, so the first category is at the bottom.
+    pub cats_from_bottom: bool,
 }
 
 fn ax_id(axis: &Element) -> Option<&str> {
@@ -465,9 +467,9 @@ fn axis_orient(axis: &Element) -> &str {
         .unwrap_or("minMax")
 }
 
-fn locked_hidden_secondary_cat(cat: &Element, val_id: &str) -> bool {
+fn locked_hidden_secondary_cat(cat: &Element, val_id: &str, pos: &str) -> bool {
     axis_deleted(cat)
-        && ax_pos(cat) == "b"
+        && ax_pos(cat) == pos
         && axis_orient(cat) == "minMax"
         && cat.child_by_local("majorGridlines").is_none()
         && cat
@@ -481,9 +483,9 @@ fn locked_hidden_secondary_cat(cat: &Element, val_id: &str) -> bool {
             == Some(val_id)
 }
 
-fn locked_primary_cat(cat: &Element, val_id: &str) -> bool {
+fn locked_primary_cat(cat: &Element, val_id: &str, pos: &str) -> bool {
     !axis_deleted(cat)
-        && ax_pos(cat) == "b"
+        && ax_pos(cat) == pos
         && axis_orient(cat) == "minMax"
         && cat.child_by_local("majorGridlines").is_none()
         && cat
@@ -541,16 +543,14 @@ fn read_secondary_placement_fields(axis: &Element) -> Result<Spec, Error> {
         || matches!((spec.min, spec.max), (Some(a), Some(b)) if a >= b)
         || spec.deleted
         || spec.reversed
-        || spec.min.is_none()
-        || spec.max.is_none()
     {
         return Err(unsupported());
     }
     Ok(spec)
 }
 
-fn read_secondary_val_axis(axis: &Element) -> Result<Spec, Error> {
-    if ax_pos(axis) != "r" {
+fn read_secondary_val_axis(axis: &Element, pos: &str) -> Result<Spec, Error> {
+    if ax_pos(axis) != pos {
         return Err(unsupported());
     }
     if axis_crosses(axis) != Some("max") || axis.child_by_local("crossesAt").is_some() {
@@ -580,28 +580,40 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
     if vals.len() != 2 || cats.len() != 2 {
         return Err(unsupported());
     }
-    if vals.iter().filter(|ax| ax_pos(ax) == "l").count() != 1
-        || vals.iter().filter(|ax| ax_pos(ax) == "r").count() != 1
-    {
+    // Column / line / area: primary valAx l, secondary valAx r, both catAx b.
+    // Clustered bar: value axis is horizontal, so primary valAx b, secondary
+    // valAx t (crosses=max still means the opposite edge), both catAx l.
+    // This is the already-locked pairing composed with bar geometry, not a
+    // new unique official-matrix lock.
+    let col_layout = vals.iter().filter(|ax| ax_pos(ax) == "l").count() == 1
+        && vals.iter().filter(|ax| ax_pos(ax) == "r").count() == 1;
+    let bar_layout = vals.iter().filter(|ax| ax_pos(ax) == "b").count() == 1
+        && vals.iter().filter(|ax| ax_pos(ax) == "t").count() == 1;
+    if !col_layout && !bar_layout {
         return Err(unsupported());
     }
+    let (primary_pos, secondary_pos, cat_pos) = if bar_layout {
+        ("b", "t", "l")
+    } else {
+        ("l", "r", "b")
+    };
     let primary_val = vals
         .iter()
-        .find(|ax| ax_pos(ax) == "l")
+        .find(|ax| ax_pos(ax) == primary_pos)
         .ok_or_else(unsupported)?;
     let secondary_val = vals
         .iter()
-        .find(|ax| ax_pos(ax) == "r")
+        .find(|ax| ax_pos(ax) == secondary_pos)
         .ok_or_else(unsupported)?;
     let primary_val_id = ax_id(primary_val).ok_or_else(unsupported)?.to_string();
     let secondary_val_id = ax_id(secondary_val).ok_or_else(unsupported)?.to_string();
     let primary_cat = cats
         .iter()
-        .find(|cat| locked_primary_cat(cat, &primary_val_id))
+        .find(|cat| locked_primary_cat(cat, &primary_val_id, cat_pos))
         .ok_or_else(unsupported)?;
     let secondary_cat = cats
         .iter()
-        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id))
+        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id, cat_pos))
         .ok_or_else(unsupported)?;
     if std::ptr::eq(*primary_cat, *secondary_cat) {
         return Err(unsupported());
@@ -620,9 +632,10 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
         return Err(unsupported());
     }
     let primary = Spec::read_axis(primary_val)?;
-    if primary.min.is_none()
-        || primary.max.is_none()
-        || primary.deleted
+    // Omitted min/max/major reuse existing scale_values auto bounds
+    // (close-enough; official F21-6 is visually near explicit 0-10 / 0-100).
+    // Do not claim a unique official auto-scale lock.
+    if primary.deleted
         || primary.reversed
         || primary.log_base.is_some()
         || primary.crosses_at.is_some()
@@ -630,12 +643,13 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
     {
         return Err(unsupported());
     }
-    let secondary = read_secondary_val_axis(secondary_val)?;
+    let secondary = read_secondary_val_axis(secondary_val, secondary_pos)?;
     Ok(SecondaryAxes {
         primary,
         secondary,
         primary_val_id,
         secondary_val_id,
+        cats_from_bottom: true,
     })
 }
 

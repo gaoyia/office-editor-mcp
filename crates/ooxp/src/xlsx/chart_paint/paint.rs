@@ -495,6 +495,15 @@ pub(super) fn paint_bar(
     // tickLblPos=none releases the value-label gutter like delete=true, but
     // the axis line is still drawn (official F20-5).
     let val_labels = !chart.axis.deleted && !chart.axis.hide_tick_labels;
+    // Official F21-5 secondary valAx is at the top (axPos=t, crosses=max)
+    // while the primary stays at the bottom. Reserve both value-label gutters.
+    // Close-enough composition, not a unique official-matrix lock.
+    let sec_labels = chart
+        .axis_secondary
+        .as_ref()
+        .is_some_and(|spec| !spec.deleted && !spec.hide_tick_labels);
+    let need_top_val = (val_axis_at_top && val_labels) || sec_labels;
+    let need_bottom_val = !val_axis_at_top && val_labels;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
     let val_label_bottom = scale_plot_trailing(canvas.dpi, INSET_BOTTOM);
     let unused_top = scale_plot_leading(canvas.dpi, INSET_TOP);
@@ -509,11 +518,11 @@ pub(super) fn paint_bar(
             label_px,
             title_lines.len(),
         );
-        if val_axis_at_top && val_labels {
+        if need_top_val {
             y += val_label_top;
         }
         y
-    } else if val_axis_at_top && val_labels {
+    } else if need_top_val {
         val_label_top
     } else {
         unused_top
@@ -521,10 +530,10 @@ pub(super) fn paint_bar(
     let inset_right = legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi);
     let mut plot_r = canvas.w as i32 - inset_right;
     let mut plot_b = canvas.h as i32
-        - if val_axis_at_top || !val_labels {
-            unused_bottom
-        } else {
+        - if need_bottom_val {
             val_label_bottom
+        } else {
+            unused_bottom
         };
     if !chart.legend_spec.legacy {
         let reserve = legend_layout.reserve();
@@ -556,15 +565,48 @@ pub(super) fn paint_bar(
     // 行盒口径，上限仍是 10。occupancy=3 是散点 X 轴为较长标签留的余量，在典型
     // 条形宽度下会把预算压到 9，从而把 Office 对 -8..8 的自动主间隔 2（-10..10
     // 共 10 格）拒掉，改成间隔 5。短数字标签在 10 格下仍放得下。
-    let scale = axis::scale(
-        &chart.series,
-        chart.axis,
-        axis::interval_budget_span(plot.w, em, 1.0),
-    )?;
+    let budget = axis::interval_budget_span(plot.w, em, 1.0);
+    let scale = if chart.axis_secondary.is_some() {
+        axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| !ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            chart.axis,
+            budget,
+        )?
+    } else {
+        axis::scale(&chart.series, chart.axis, budget)?
+    };
+    let secondary_scale = if let Some(spec) = chart.axis_secondary {
+        Some(axis::scale_values(
+            chart
+                .series
+                .iter()
+                .filter(|ser| ser.on_secondary)
+                .flat_map(|ser| ser.values.iter().copied()),
+            spec,
+            budget,
+        )?)
+    } else {
+        None
+    };
     let (axis_min, axis_max, step) = (scale.min, scale.max, scale.major);
     let ticks = tick_values(axis_min, axis_max, step);
     let tick_labels: Vec<String> = ticks.iter().copied().map(|v| fmt_tick_with(v, scale.tick_format)).collect();
     let axis_y = if val_axis_at_top { plot_y } else { plot_b };
+    let (secondary_ticks, secondary_tick_labels) = if let Some(sec) = secondary_scale.as_ref() {
+        let ticks = tick_values(sec.min, sec.max, sec.major);
+        let labels: Vec<String> = ticks
+            .iter()
+            .copied()
+            .map(|v| fmt_tick_with(v, sec.tick_format))
+            .collect();
+        (ticks, labels)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     // 主刻度、网格与条右缘共用 x_of 四舍五入，避免整数 ceil 网格与条端错开 1px。
     if chart.grid {
         for value in &ticks {
@@ -590,7 +632,30 @@ pub(super) fn paint_bar(
     if scale.reversed && chart.series.iter().any(|s| s.value_label.is_some()) {
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
-    draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed);
+    if let Some(sec) = secondary_scale.as_ref() {
+        // Official same-type secondary bars overlap in the same category
+        // slots: each wrapper is a one-series cluster. Paint primary first.
+        draw_clustered_bars(
+            canvas,
+            chart,
+            &plot,
+            axis_min,
+            axis_max,
+            scale.reversed,
+            Some(false),
+        );
+        draw_clustered_bars(
+            canvas,
+            chart,
+            &plot,
+            sec.min,
+            sec.max,
+            sec.reversed,
+            Some(true),
+        );
+    } else {
+        draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed, None);
+    }
     draw_horizontal_value_labels(
         canvas,
         chart,
@@ -659,6 +724,41 @@ pub(super) fn paint_bar(
                 label_px,
                 INK,
             );
+        }
+    }
+    if let Some(sec) = secondary_scale.as_ref() {
+        let top_y = plot_y;
+        canvas.hline_i(plot_x, plot_r, top_y, INK);
+        for value in tick_values(sec.min + sec.minor, sec.max, sec.minor) {
+            let at_major = (value - sec.min) / sec.major;
+            if (at_major - at_major.round()).abs() < 1e-8 {
+                continue;
+            }
+            let x = x_of_dir(value, sec.min, sec.max, &plot, sec.reversed).round() as i32;
+            canvas.vline_i(
+                x,
+                top_y - canvas.dpi.scale_px(VAL_MINOR_ARM),
+                top_y + canvas.dpi.scale_px(VAL_MINOR_ARM),
+                INK,
+            );
+        }
+        if sec.value_labels_visible() {
+            let tick_h = text_height(font, label_px);
+            let label_top = f64::from(top_y) - canvas.dpi.scale_f(10.0) - tick_h;
+            for (tick, label) in secondary_ticks.iter().zip(&secondary_tick_labels) {
+                let w = text_width(font, gdi.as_ref(), label, label_px);
+                let x = x_of_dir(*tick, sec.min, sec.max, &plot, sec.reversed) - w / 2.0;
+                draw_text(
+                    canvas,
+                    font,
+                    gdi.as_ref(),
+                    label,
+                    x,
+                    label_top,
+                    label_px,
+                    INK,
+                );
+            }
         }
     }
     if !title_lines.is_empty() {
@@ -1272,18 +1372,40 @@ pub(super) fn paint(
                     Some(false),
                 );
                 let sec = secondary_scale.as_ref().unwrap();
-                draw_bars(
-                    canvas,
-                    chart,
-                    &plot,
-                    sec.min,
-                    sec.max,
-                    sec.major,
-                    sec.log_base,
-                    sec.crossing(),
-                    sec.reversed,
-                    Some(true),
-                );
+                let sec_kind = chart
+                    .series
+                    .iter()
+                    .find(|ser| ser.on_secondary)
+                    .map(|ser| ser.plot_kind)
+                    .unwrap_or(PlotKind::ClusteredColumn);
+                // Official F21-8 paints the column on the primary scale and
+                // the line on the secondary scale. Close-enough; not a general
+                // F26 combo lock. Do not paint only one series.
+                if sec_kind == PlotKind::StandardLine {
+                    draw_lines(
+                        canvas,
+                        chart,
+                        &plot,
+                        sec.min,
+                        sec.max,
+                        sec.log_base,
+                        sec.reversed,
+                        Some(true),
+                    )?;
+                } else {
+                    draw_bars(
+                        canvas,
+                        chart,
+                        &plot,
+                        sec.min,
+                        sec.max,
+                        sec.major,
+                        sec.log_base,
+                        sec.crossing(),
+                        sec.reversed,
+                        Some(true),
+                    );
+                }
             } else {
                 draw_bars(
                     canvas,
@@ -1325,15 +1447,41 @@ pub(super) fn paint(
                 draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)?;
             }
         }
-        PlotKind::StandardArea => draw_areas(
-            canvas,
-            chart,
-            &plot,
-            axis_min,
-            axis_max,
-            scale.crossing(),
-            scale.reversed,
-        ),
+        PlotKind::StandardArea => {
+            if let Some(sec) = secondary_scale.as_ref() {
+                draw_areas(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
+                draw_areas(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
+            } else {
+                draw_areas(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                );
+            }
+        }
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
             unreachable!("bar/pie/scatter charts use dedicated paint")
         }
@@ -1708,6 +1856,7 @@ pub(super) fn draw_areas(
     axis_max: f64,
     origin: f64,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
     let cats = chart.categories.len().max(1) as f64;
     let slot = (plot.w + 1.0) / cats;
@@ -1720,6 +1869,12 @@ pub(super) fn draw_areas(
         return;
     }
     for ser in &chart.series {
+        if !group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+        {
+            continue;
+        }
         let fill = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         let stroke = ser.line_color.unwrap_or(fill);
         let mut run = Vec::new();
@@ -2234,10 +2389,19 @@ pub(super) fn draw_clustered_bars(
     axis_min: f64,
     axis_max: f64,
     reversed: bool,
+    group_secondary: Option<bool>,
 ) {
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .collect();
+    if group.is_empty() {
+        return;
+    }
     let cats = chart.categories.len().max(1) as f64;
     let stacked = !matches!(chart.stacking, Stacking::Clustered);
-    let n = if stacked { 1.0 } else { chart.series.len().max(1) as f64 };
+    let n = if stacked { 1.0 } else { group.len().max(1) as f64 };
     let overlap = if stacked { 0.0 } else { chart.overlap / 100.0 };
     let gap = chart.gap_width / 100.0;
     let slot = (plot.h + 1.0) / cats;
@@ -2253,11 +2417,11 @@ pub(super) fn draw_clustered_bars(
         draw_stacked_horizontal_bars(canvas, chart, plot, axis_min, axis_max, reversed, side, slot);
         return;
     }
-    let n_ser = chart.series.len();
+    let n_ser = group.len();
     for (ci, _) in chart.categories.iter().enumerate() {
         let origin =
             category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom) + side;
-        for (si, ser) in chart.series.iter().enumerate() {
+        for (si, ser) in group.iter().enumerate() {
             let Some(value) = ser.values[ci] else {
                 continue;
             };

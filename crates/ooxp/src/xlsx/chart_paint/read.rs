@@ -706,13 +706,31 @@ pub(super) fn read_chart(
         _ => return Err(unsupported()),
     };
     if let Some(sec) = &locked_secondary {
-        if !matches!(kind, PlotKind::ClusteredColumn | PlotKind::StandardLine) {
+        // Official F21 still-NI gold: same-type clustered bar, standard area
+        // (midCat already opened by F16), omitted min/max, and one official
+        // clustered-column + standard-line combo. Close-enough composition
+        // of already-locked pairing and paint paths; not a unique official
+        // matrix lock, and not a general F26 heterogeneous-combo lock.
+        let same_wrapper = wrappers[1].local_name() == wrapper.local_name();
+        let official_col_line_combo =
+            kind == PlotKind::ClusteredColumn && wrappers[1].local_name() == "lineChart";
+        if same_wrapper {
+            if !matches!(
+                kind,
+                PlotKind::ClusteredColumn
+                    | PlotKind::ClusteredBar
+                    | PlotKind::StandardLine
+                    | PlotKind::StandardArea
+            ) {
+                return Err(unsupported());
+            }
+        } else if !official_col_line_combo {
             return Err(unsupported());
         }
-        if wrappers[1].local_name() != wrapper.local_name() {
+        if stacking != Stacking::Clustered {
             return Err(unsupported());
         }
-        if kind == PlotKind::ClusteredColumn {
+        if kind == PlotKind::ClusteredColumn && same_wrapper {
             let dir = wrappers[1]
                 .child_by_local("barDir")
                 .and_then(|el| el.attr_local("val"))
@@ -725,7 +743,20 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        if kind == PlotKind::StandardLine {
+        if kind == PlotKind::ClusteredBar {
+            let dir = wrappers[1]
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("col");
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("clustered");
+            if dir != "bar" || grouping != "clustered" {
+                return Err(unsupported());
+            }
+        }
+        if kind == PlotKind::StandardLine || official_col_line_combo {
             let grouping = wrappers[1]
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
@@ -737,12 +768,29 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
-        let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
-        if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
-            || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
-        {
-            return Err(unsupported());
+        if kind == PlotKind::StandardArea {
+            let grouping = wrappers[1]
+                .child_by_local("grouping")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            if grouping != "standard" || flag(wrappers[1], "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for child in wrappers[1].element_children() {
+                if matches!(child.local_name(), "dropLines") {
+                    return Err(unsupported());
+                }
+            }
+            data_labels_hidden(wrappers[1].child_by_local("dLbls"))?;
+        }
+        if same_wrapper {
+            let gap1 = number_val(wrappers[1], "gapWidth").unwrap_or(150.0);
+            let over1 = number_val(wrappers[1], "overlap").unwrap_or(0.0);
+            if (gap1 - number_val(wrapper, "gapWidth").unwrap_or(150.0)).abs() > 1e-9
+                || (over1 - number_val(wrapper, "overlap").unwrap_or(0.0)).abs() > 1e-9
+            {
+                return Err(unsupported());
+            }
         }
         for wrap in &wrappers {
             let nser = wrap
@@ -789,6 +837,22 @@ pub(super) fn read_chart(
         vec![wrapper]
     };
     for wrap in &ser_wrappers {
+    let kind = match wrap.local_name() {
+        "barChart" => {
+            let dir = wrap
+                .child_by_local("barDir")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("bar");
+            match dir {
+                "col" => PlotKind::ClusteredColumn,
+                "bar" => PlotKind::ClusteredBar,
+                _ => return Err(unsupported()),
+            }
+        }
+        "lineChart" => PlotKind::StandardLine,
+        "areaChart" => PlotKind::StandardArea,
+        _ => kind,
+    };
     let on_secondary = locked_secondary.as_ref().is_some_and(|sec| {
         wrap
             .element_children()
@@ -1002,6 +1066,7 @@ pub(super) fn read_chart(
                     .and_then(|el| el.attr_local("val"))
                     == Some("span"),
             on_secondary,
+            plot_kind: kind,
         };
     }
     }
@@ -1248,7 +1313,9 @@ pub(super) fn read_chart(
         });
         (y, Some(x), grid_x, true)
     } else if kind == PlotKind::ClusteredBar {
-        let (spec, from_bottom) = if stacking == Stacking::PercentStacked {
+        let (spec, from_bottom) = if let Some(sec) = locked_secondary.as_ref() {
+            (sec.primary, sec.cats_from_bottom)
+        } else if stacking == Stacking::PercentStacked {
             axis::bar_axes_percent_stacked(plot)?
         } else {
             axis::bar_axes(plot)?

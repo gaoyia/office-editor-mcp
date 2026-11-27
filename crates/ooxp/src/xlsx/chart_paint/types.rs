@@ -199,9 +199,13 @@ pub(super) struct Series {
     pub(super) error_points: Vec<bool>,
     pub(super) unavailable_points: Vec<bool>,
     pub(super) span_blanks: bool,
-    /// Official F21 secondary valAx: this series is in the second same-type
-    /// wrapper and is mapped with the secondary scale.
+    /// Official F21 secondary valAx: this series is in the second wrapper
+    /// and is mapped with the secondary scale.
     pub(super) on_secondary: bool,
+    /// Wrapper kind for this series. Same as the chart kind except the official
+    /// F21-8 column+line secondary combo, which paints each wrapper with its
+    /// own existing path. Not a general F26 combo lock.
+    pub(super) plot_kind: PlotKind,
 }
 
 impl Default for Series {
@@ -229,6 +233,7 @@ impl Default for Series {
             unavailable_points: Vec::new(),
             span_blanks: false,
             on_secondary: false,
+            plot_kind: PlotKind::ClusteredColumn,
         }
     }
 }
@@ -245,7 +250,8 @@ pub(super) struct ColumnChart {
     pub(super) legend_spec: legend::Spec,
     pub(super) axis: axis::Spec,
     pub(super) axis_x: Option<axis::Spec>,
-    /// Official F21 secondary valAx (axPos=r, crosses=max). None for one axis.
+    /// Official F21 secondary valAx (column/line/area axPos=r, bar axPos=t,
+    /// crosses=max). None for one axis.
     pub(super) axis_secondary: Option<axis::Spec>,
     pub(super) grid_x: bool,
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
