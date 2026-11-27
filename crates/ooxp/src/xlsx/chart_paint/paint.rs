@@ -1607,6 +1607,17 @@ pub(super) fn paint(
         }
         PlotKind::StandardLine => {
             if let Some(sec) = secondary_scale.as_ref() {
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    Some(false),
+                );
                 draw_lines(
                     canvas,
                     chart,
@@ -1617,6 +1628,17 @@ pub(super) fn paint(
                     scale.reversed,
                     Some(false),
                 )?;
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.crossing(),
+                    sec.reversed,
+                    Some(true),
+                );
                 draw_lines(
                     canvas,
                     chart,
@@ -1628,6 +1650,17 @@ pub(super) fn paint(
                     Some(true),
                 )?;
             } else {
+                draw_official_like_drop_hi_low_up_down(
+                    canvas,
+                    chart,
+                    &plot,
+                    axis_min,
+                    axis_max,
+                    log_base,
+                    scale.crossing(),
+                    scale.reversed,
+                    None,
+                );
                 draw_lines(canvas, chart, &plot, axis_min, axis_max, log_base, scale.reversed, None)?;
             }
         }
@@ -1827,6 +1860,178 @@ pub(super) fn draw_value_minor_ticks(
     }
 }
 
+/// Close-enough official-like empty dropLines, hiLowLines, and upDownBars.
+/// Geometry follows the OOXML meanings: drop to the axis crossing, high-low
+/// between the category min and max, up/down bars between the first and last
+/// series with the existing single-column gapWidth formula. Empty elements
+/// reuse axis INK for strokes and a close-enough light/dark fill for bars;
+/// this is not a unique official-matrix color or width lock.
+fn draw_official_like_drop_hi_low_up_down(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    log_base: Option<f64>,
+    origin: f64,
+    reversed: bool,
+    group_secondary: Option<bool>,
+) {
+    if !chart.drop_lines && !chart.hi_low_lines && !chart.up_down_bars {
+        return;
+    }
+    let group: Vec<&Series> = chart
+        .series
+        .iter()
+        .filter(|ser| {
+            matches!(
+                ser.plot_kind,
+                PlotKind::StandardLine | PlotKind::StandardArea
+            ) && !ser.values.is_empty()
+                && group_secondary
+                    .map(|flag| ser.on_secondary == flag)
+                    .unwrap_or(true)
+        })
+        .collect();
+    if group.is_empty() {
+        return;
+    }
+    let cats = chart
+        .categories
+        .len()
+        .max(
+            group
+                .iter()
+                .map(|ser| ser.values.len())
+                .max()
+                .unwrap_or(0),
+        )
+        .max(1);
+    let cats_f = cats as f64;
+    let slot = (plot.w + 1.0) / cats_f;
+    if slot <= 0.0 {
+        return;
+    }
+    let midcat = chart.area_midcat
+        && group
+            .iter()
+            .any(|ser| ser.plot_kind == PlotKind::StandardArea)
+        && group
+            .iter()
+            .all(|ser| ser.plot_kind != PlotKind::StandardLine);
+    let x_at = |ci: usize| -> f64 {
+        if midcat {
+            category_x_midcat(plot, ci, cats_f)
+        } else {
+            plot.x + slot * (ci as f64 + 0.5)
+        }
+    };
+    let y_at = |v: f64| {
+        y_map(
+            v.clamp(axis_min, axis_max),
+            axis_min,
+            axis_max,
+            plot,
+            log_base,
+            reversed,
+        )
+    };
+    let y_axis = y_map(
+        origin.clamp(axis_min, axis_max),
+        axis_min,
+        axis_max,
+        plot,
+        log_base,
+        reversed,
+    );
+    let stroke_w = 1.0;
+    // Close-enough default fills for empty upBars/downBars, not a unique RGB lock.
+    const UP_BAR_FILL: [u8; 3] = [255, 255, 255];
+    const DOWN_BAR_FILL: [u8; 3] = [0, 0, 0];
+    if chart.up_down_bars && group.len() >= 2 {
+        let first = group[0];
+        let last = group[group.len() - 1];
+        let bar_w = slot / (1.0 + chart.gap_width / 100.0);
+        for ci in 0..cats {
+            let Some(va) = first
+                .values
+                .get(ci)
+                .copied()
+                .flatten()
+                .filter(|n| n.is_finite())
+            else {
+                continue;
+            };
+            let Some(vb) = last
+                .values
+                .get(ci)
+                .copied()
+                .flatten()
+                .filter(|n| n.is_finite())
+            else {
+                continue;
+            };
+            if (va - vb).abs() <= 1e-12 {
+                continue;
+            }
+            let x = x_at(ci);
+            let y1 = y_at(va);
+            let y2 = y_at(vb);
+            let top = y1.min(y2);
+            let bot = y1.max(y2);
+            let left = x - bar_w / 2.0;
+            let right = left + bar_w;
+            let fill = if vb > va { UP_BAR_FILL } else { DOWN_BAR_FILL };
+            canvas.fill_rect(
+                left.round() as i32,
+                top.round() as i32,
+                right.round() as i32,
+                bot.round() as i32,
+                fill,
+            );
+            canvas.stroke_segment(left, top, right, top, stroke_w, INK);
+            canvas.stroke_segment(right, top, right, bot, stroke_w, INK);
+            canvas.stroke_segment(right, bot, left, bot, stroke_w, INK);
+            canvas.stroke_segment(left, bot, left, top, stroke_w, INK);
+        }
+    }
+    if chart.hi_low_lines {
+        for ci in 0..cats {
+            let mut lo = None;
+            let mut hi = None;
+            for ser in &group {
+                if let Some(v) = ser
+                    .values
+                    .get(ci)
+                    .copied()
+                    .flatten()
+                    .filter(|n| n.is_finite())
+                {
+                    lo = Some(lo.map_or(v, |m: f64| m.min(v)));
+                    hi = Some(hi.map_or(v, |m: f64| m.max(v)));
+                }
+            }
+            if let (Some(lo), Some(hi)) = (lo, hi) {
+                if (hi - lo).abs() > 1e-12 {
+                    let x = x_at(ci);
+                    canvas.stroke_segment(x, y_at(hi), x, y_at(lo), stroke_w, INK);
+                }
+            }
+        }
+    }
+    if chart.drop_lines {
+        for ser in &group {
+            for (ci, value) in ser.values.iter().enumerate() {
+                let Some(v) = value.filter(|n| n.is_finite()) else {
+                    continue;
+                };
+                let x = x_at(ci);
+                canvas.stroke_segment(x, y_at(v), x, y_axis, stroke_w, INK);
+            }
+        }
+    }
+}
+
 /// Official-like F26 shared-primary combos paint already-locked paths in
 /// official back-to-front order: area, then columns, then lines. Cluster
 /// width follows only the column series. Close-enough; not a general
@@ -1882,6 +2087,17 @@ fn paint_combo_layers(
             group_secondary,
         );
     }
+    draw_official_like_drop_hi_low_up_down(
+        canvas,
+        chart,
+        plot,
+        axis_min,
+        axis_max,
+        log_base,
+        origin,
+        reversed,
+        group_secondary,
+    );
     if chart
         .series
         .iter()

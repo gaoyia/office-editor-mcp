@@ -6561,6 +6561,182 @@
         render_line(&thick).unwrap();
     }
 
+    fn official_like_f31_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+    }
+
+    fn official_like_f31_s1() -> String {
+        line_ser(
+            0,
+            "F31S1",
+            &[
+                Some(20.0),
+                Some(40.0),
+                Some(60.0),
+                Some(40.0),
+                Some(20.0),
+                Some(50.0),
+                Some(30.0),
+                Some(70.0),
+            ],
+            official_like_f31_marker(),
+        )
+    }
+
+    fn official_like_f31_s2() -> String {
+        line_ser(
+            1,
+            "F31S2",
+            &[
+                Some(50.0),
+                Some(20.0),
+                Some(40.0),
+                Some(55.0),
+                Some(30.0),
+                Some(50.0),
+                Some(20.0),
+                Some(50.0),
+            ],
+            official_like_f31_marker(),
+        )
+    }
+
+    fn official_like_f31_line_xml(series: &str, wrapper_extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(series, "").replacen(
+            r#"<c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>"#,
+            &format!(
+                "{wrapper_extra}<c:axId val=\"1\"/><c:axId val=\"2\"/>\n      </c:lineChart>"
+            ),
+            1,
+        ))
+    }
+
+    fn official_like_f31_area_xml(wrapper_extra: &str) -> String {
+        official_like_f28_axes(&standard_area_xml(&official_like_f31_s1(), ""))
+            .replacen(
+                r#"<c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>"#,
+                &format!(
+                    "{wrapper_extra}<c:axId val=\"1\"/><c:axId val=\"2\"/>\n      </c:areaChart>"
+                ),
+                1,
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            )
+    }
+
+    #[test]
+    fn official_like_f31_drop_hilow_updown_export_and_paint_ink() {
+        let control = official_like_f31_line_xml(&official_like_f31_s1(), "");
+        let drop = official_like_f31_line_xml(&official_like_f31_s1(), "<c:dropLines/>");
+        let two = format!("{}{}", official_like_f31_s1(), official_like_f31_s2());
+        let hi_low = official_like_f31_line_xml(&two, "<c:hiLowLines/>");
+        let up_down = official_like_f31_line_xml(
+            &two,
+            r#"<c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#,
+        );
+        let all = official_like_f31_line_xml(
+            &two,
+            r#"<c:dropLines/><c:hiLowLines/><c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#,
+        );
+        let area_control = official_like_f31_area_xml("");
+        let area_drop = official_like_f31_area_xml("<c:dropLines/>");
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        let black = [0, 0, 0];
+        let mut pngs = Vec::new();
+        for (name, xml, second) in [
+            ("lineControl", &control, false),
+            ("lineDrop", &drop, false),
+            ("lineHiLow", &hi_low, true),
+            ("lineUpDown", &up_down, true),
+            ("lineAll", &all, true),
+            ("areaControl", &area_control, false),
+            ("areaDrop", &area_drop, false),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F31 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F31 {name} should paint the first series"
+            );
+            if second {
+                assert!(
+                    count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                    "official-like F31 {name} should paint the second series"
+                );
+            }
+            pngs.push((name, png, count_in(&rgb, w, 0, w, 0, h, black, 18)));
+        }
+        assert_ne!(pngs[1].1, pngs[0].1, "line dropLines must add ink");
+        assert!(
+            pngs[1].2 > pngs[0].2,
+            "line dropLines should add close-enough black stems; drop={} control={}",
+            pngs[1].2,
+            pngs[0].2
+        );
+        assert_ne!(pngs[2].1, pngs[0].1, "hiLowLines must add ink");
+        assert_ne!(pngs[3].1, pngs[0].1, "upDownBars must add ink");
+        assert_ne!(pngs[4].1, pngs[0].1, "combined decorations must add ink");
+        assert_ne!(pngs[6].1, pngs[5].1, "area dropLines must add ink");
+        assert!(
+            pngs[6].2 > pngs[5].2,
+            "area dropLines should add close-enough black stems; drop={} control={}",
+            pngs[6].2,
+            pngs[5].2
+        );
+    }
+
+    #[test]
+    fn leftover_f31_variants_without_official_gold_stay_not_implemented() {
+        let s1 = official_like_f31_s1();
+        let styled_drop = official_like_f31_line_xml(
+            &s1,
+            r#"<c:dropLines><c:spPr><a:ln w="76200"/></c:spPr></c:dropLines>"#,
+        );
+        let styled_hi = official_like_f31_line_xml(
+            &s1,
+            r#"<c:hiLowLines><c:spPr><a:ln w="76200"/></c:spPr></c:hiLowLines>"#,
+        );
+        let missing_bars = official_like_f31_line_xml(
+            &s1,
+            r#"<c:upDownBars><c:gapWidth val="150"/></c:upDownBars>"#,
+        );
+        let styled_up = official_like_f31_line_xml(
+            &format!("{}{}", official_like_f31_s1(), official_like_f31_s2()),
+            r#"<c:upDownBars><c:gapWidth val="150"/><c:upBars><c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr></c:upBars><c:downBars/></c:upDownBars>"#,
+        );
+        let stacked = official_like_f31_line_xml(&s1, "<c:dropLines/>").replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+        ).replacen(
+            "</c:scatterChart>",
+            "<c:dropLines/></c:scatterChart>",
+            1,
+        );
+        for (i, xml) in [styled_drop, styled_hi, missing_bars, styled_up, stacked, scatter]
+            .iter()
+            .enumerate()
+        {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F31 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F31 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&official_like_f31_line_xml(&s1, "<c:dropLines/>")).unwrap();
+    }
+
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -7701,7 +7877,6 @@
                 r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:areaChart>"#,
                 1,
             ),
-            base.replacen(r#"</c:areaChart>"#, r#"<c:dropLines/></c:areaChart>"#, 1),
             standard_area_xml(
                 &line_ser(
                     0,

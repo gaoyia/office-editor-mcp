@@ -551,6 +551,10 @@ pub(super) fn read_chart(
     let mut other: Option<OtherSpec> = None;
     let mut hole_size: Option<f64> = None;
     let mut scatter_wrapper_smooth = false;
+    let mut drop_lines = false;
+    let mut hi_low_lines = false;
+    let mut up_down_bars = false;
+    let mut up_down_gap: Option<f64> = None;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -615,11 +619,29 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
             for child in wrapper.element_children() {
-                if matches!(
-                    child.local_name(),
-                    "dropLines" | "hiLowLines" | "upDownBars"
-                ) {
-                    return Err(unsupported());
+                match child.local_name() {
+                    "dropLines" if stacking == Stacking::Clustered
+                        && official_like_empty_chart_decor(child) =>
+                    {
+                        drop_lines = true;
+                    }
+                    "hiLowLines" if stacking == Stacking::Clustered
+                        && official_like_empty_chart_decor(child) =>
+                    {
+                        hi_low_lines = true;
+                    }
+                    "upDownBars" if stacking == Stacking::Clustered => {
+                        if let Some(gap) = official_like_up_down_bars(child) {
+                            up_down_bars = true;
+                            up_down_gap = Some(gap);
+                        } else {
+                            return Err(unsupported());
+                        }
+                    }
+                    "dropLines" | "hiLowLines" | "upDownBars" => {
+                        return Err(unsupported());
+                    }
+                    _ => {}
                 }
             }
             let blanks = chart
@@ -687,8 +709,12 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
             for child in wrapper.element_children() {
-                if matches!(child.local_name(), "dropLines") {
-                    return Err(unsupported());
+                if child.local_name() == "dropLines" {
+                    if stacking == Stacking::Clustered && official_like_empty_chart_decor(child) {
+                        drop_lines = true;
+                    } else {
+                        return Err(unsupported());
+                    }
                 }
             }
             data_labels_hidden(wrapper.child_by_local("dLbls"))?;
@@ -977,6 +1003,11 @@ pub(super) fn read_chart(
         }
         _ => return Err(unsupported()),
     };
+    // Official F31 gold is a single standard line or area wrapper. Combo
+    // and secondary encodings with drop/hiLow/upDown stay NI (no gold).
+    if wrappers.len() > 1 && (drop_lines || hi_low_lines || up_down_bars) {
+        return Err(unsupported());
+    }
     let chart3d = match wrapper.local_name() {
         "bar3DChart" => Some(Chart3DKind::ColumnClustered),
         "line3DChart" => Some(Chart3DKind::Line),
@@ -1127,7 +1158,10 @@ pub(super) fn read_chart(
     } else {
         flag(wrapper, "varyColors").unwrap_or(false)
     };
-    let gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+    let mut gap_width = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+    if let Some(gap) = up_down_gap {
+        gap_width = gap;
+    }
     let overlap = number_val(wrapper, "overlap").unwrap_or(0.0);
     // Official Excel 16 stacked / percentStacked barChart writes overlap=100.
     // lineChart / areaChart have no overlap element.
@@ -1881,6 +1915,9 @@ pub(super) fn read_chart(
         chart3d,
         hole_size,
         other,
+        drop_lines,
+        hi_low_lines,
+        up_down_bars,
     })
 }
 
@@ -1993,6 +2030,73 @@ fn clustered_bar_wrapper(wrap: &Element) -> bool {
         && !flag(wrap, "varyColors").unwrap_or(false)
         && (number_val(wrap, "gapWidth").unwrap_or(150.0) - 150.0).abs() <= 1e-9
         && number_val(wrap, "overlap").unwrap_or(0.0).abs() <= 1e-9
+}
+
+/// Official F31 empty decoration: no children and no non-xmlns attributes.
+fn official_like_empty_chart_decor(el: &Element) -> bool {
+    el.element_children().next().is_none()
+        && el
+            .attrs
+            .iter()
+            .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+}
+
+/// Official-like c:upDownBars: gapWidth (default 150) plus empty upBars and
+/// downBars. Styled spPr, missing bars, or unknown children stay NI.
+fn official_like_up_down_bars(el: &Element) -> Option<f64> {
+    if !el
+        .attrs
+        .iter()
+        .all(|(k, _)| k == "xmlns" || k.starts_with("xmlns:"))
+    {
+        return None;
+    }
+    let mut gap = 150.0;
+    let mut saw_up = false;
+    let mut saw_down = false;
+    for child in el.element_children() {
+        match child.local_name() {
+            "gapWidth" => {
+                if !official_like_empty_chart_decor(child) && child.element_children().next().is_some()
+                {
+                    return None;
+                }
+                let Some(raw) = child.attr_local("val") else {
+                    return None;
+                };
+                let Ok(v) = raw.parse::<f64>() else {
+                    return None;
+                };
+                if !v.is_finite() || v < 0.0 {
+                    return None;
+                }
+                // gapWidth may only carry val (plus xmlns).
+                if child
+                    .attrs
+                    .iter()
+                    .any(|(k, _)| k != "val" && k.rsplit(':').next() != Some("val") && k != "xmlns" && !k.starts_with("xmlns:"))
+                {
+                    return None;
+                }
+                if child.element_children().next().is_some() {
+                    return None;
+                }
+                gap = v;
+            }
+            "upBars" if official_like_empty_chart_decor(child) && !saw_up => {
+                saw_up = true;
+            }
+            "downBars" if official_like_empty_chart_decor(child) && !saw_down => {
+                saw_down = true;
+            }
+            _ => return None,
+        }
+    }
+    if saw_up && saw_down {
+        Some(gap)
+    } else {
+        None
+    }
 }
 
 fn standard_line_combo_wrapper(wrap: &Element) -> bool {

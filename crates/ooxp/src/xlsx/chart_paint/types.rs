@@ -309,6 +309,14 @@ pub(super) struct ColumnChart {
     pub(super) hole_size: Option<f64>,
     /// Close-enough F25 other-type paint path. None for ordinary 2D/3D kinds.
     pub(super) other: Option<OtherSpec>,
+    /// Official-like empty c:dropLines on a standard line or area chart.
+    /// Close-enough verticals to the axis crossing; not a unique style lock.
+    pub(super) drop_lines: bool,
+    /// Official-like empty c:hiLowLines on a standard line chart.
+    /// Close-enough min-to-max stems per category; not a unique style lock.
+    pub(super) hi_low_lines: bool,
+    /// Official-like empty c:upDownBars on a standard line chart.
+    pub(super) up_down_bars: bool,
 }
 
 /// Close-enough official-like F25 encodings. Not unique official-matrix locks.
