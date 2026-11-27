@@ -1479,6 +1479,7 @@
             FrameFill::Linear(LinearFrameGrad {
                 stops: gradient::StopTable::new(vec![(0, [234, 247, 247]), (100_000, [15, 96, 130])]).unwrap(),
                 ang: LINEAR_ANG_HORIZONTAL,
+                path: None,
             })
         );
         let png = super::render_chart(
@@ -1526,6 +1527,7 @@
             FrameFill::Linear(LinearFrameGrad {
                 stops: gradient::StopTable::new(vec![(0, [15, 96, 130]), (100_000, [234, 247, 247])]).unwrap(),
                 ang: LINEAR_ANG_VERTICAL,
+                path: None,
             })
         );
         assert!(super::render_chart(
@@ -1568,7 +1570,7 @@
             for ang in [LINEAR_ANG_HORIZONTAL, LINEAR_ANG_VERTICAL] {
                 for clip in [false, true] {
                     let (x0, y0, x1, y1) = if clip { (-5, -2, width + 7, height + 3) } else { (0, 0, width, height) };
-                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang };
+                    let grad = LinearFrameGrad { stops: gradient::StopTable::new(vec![(0, start), (100_000, end)]).unwrap(), ang, path: None };
                     let mut canvas = Canvas::new(width as u32, height as u32);
                     canvas.fill_linear_rect(x0, y0, x1, y1, &grad);
                     for y in 0..height {
@@ -1612,7 +1614,8 @@
         ] {
             let fill = format!("<c:spPr><a:gradFill><a:gsLst>{stops}</a:gsLst><a:lin ang='0'/></a:gradFill></c:spPr>");
             let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>")).as_bytes()).unwrap();
-            assert!(read_frame(&doc.root).is_err());
+            assert!(read_frame(&doc.root).is_ok(), "close-enough stop tables must parse: {stops}");
+            assert!(render_chart_at(&doc.root, 424, 265, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
         }
     }
 
@@ -3332,9 +3335,6 @@
     fn unsupported_frame_semantics_do_not_fall_back_to_white() {
         for config in [
             "<c:spPr><a:gradFill/></c:spPr>",
-            "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
-            "<c:spPr><a:pattFill prst='pct10'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
-            "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:tile/></a:blipFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
@@ -3462,6 +3462,72 @@
         let left = sample_rgb(&rgb, w, 2, 2);
         let right = sample_rgb(&rgb, w, 77, 2);
         assert!(left[0] > right[0] && left[2] < right[2], "left={left:?} right={right:?}");
+    }
+
+    #[test]
+    fn close_enough_frame_fills_export_instead_of_rejecting() {
+        // Diagonal linear, extra pattern presets, path shade, alpha/missing/duplicate
+        // stops, and a tiled blip must produce an image. This is a close-enough
+        // export path, not a unique official-matrix lock.
+        let diag = "<c:roundedCorners val='0'/><c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{diag}<c:chart>")).as_bytes()).unwrap();
+        assert!(matches!(read_frame(&doc.root).unwrap().fill, FrameFill::Linear(_)));
+        assert!(render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
+
+        let patt = "<c:roundedCorners val='0'/><c:spPr><a:pattFill prst='pct10'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{patt}<c:chart>")).as_bytes()).unwrap();
+        assert!(matches!(read_frame(&doc.root).unwrap().fill, FrameFill::Pattern(_)));
+        let png = render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).unwrap();
+        let (w, _, rgb) = decode_rgb(&png);
+        let mut fg = 0u32;
+        let mut bg = 0u32;
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                let c = sample_rgb(&rgb, w, x, y);
+                if c == [15, 96, 130] { fg += 1; }
+                if c == [234, 247, 247] { bg += 1; }
+            }
+        }
+        assert!(fg > 0 && bg > fg, "pct10 should be a sparse fg dither, fg={fg} bg={bg}");
+
+        let path = "<c:roundedCorners val='0'/><c:spPr><a:gradFill rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFFFF'/></a:gs><a:gs pos='100000'><a:srgbClr val='000000'/></a:gs></a:gsLst><a:path path='circle'/></a:gradFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{path}<c:chart>")).as_bytes()).unwrap();
+        match read_frame(&doc.root).unwrap().fill {
+            FrameFill::Linear(grad) => assert_eq!(grad.path, Some(PathShade::Circle)),
+            other => panic!("expected path gradient, got {other:?}"),
+        }
+        assert!(render_chart_at(&doc.root, 80, 40, FALLBACK_ACCENTS, None, ChartHost::Excel, None, "", RenderDpi::DEFAULT).is_ok());
+
+        let mut tile = Vec::new();
+        for y in 0..8u32 {
+            for x in 0..8u32 {
+                tile.push(if (x + y) % 2 == 0 { [200, 0, 0] } else { [0, 0, 200] });
+            }
+        }
+        let bytes = tiny_png(8, 8, &tile);
+        let mut blips = std::collections::BTreeMap::new();
+        blips.insert("rId1".to_string(), bytes);
+        let tiled = "<c:roundedCorners val='0'/><c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:tile sx='100000' sy='100000' tx='0' ty='0' flip='none' algn='tl'/></a:blipFill></c:spPr>";
+        let doc = crate::xml::parse(LONG_LEGEND.replace("<c:chart>", &format!("{tiled}<c:chart>")).as_bytes()).unwrap();
+        match read_frame(&doc.root).unwrap().fill {
+            FrameFill::Blip(blip) => assert!(blip.tile.is_some()),
+            other => panic!("expected tiled blip, got {other:?}"),
+        }
+        render_chart_with_media(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+            None,
+            None,
+            Some(&blips),
+        )
+        .expect("tiled blip with media must export");
     }
 
     #[test]
@@ -7055,7 +7121,8 @@
             }
         }
         // Translucent and linear plot fills are painted on the same fractional
-        // square as the opaque solid case; diagonal/path fills stay NI.
+        // square as the opaque solid case. Diagonal/path fills use close-enough
+        // geometry so they export; residuals stay on the review page.
         let grad = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill>";
         let xml = standard_pie_xml(&ser, "", "").replace(
             r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
@@ -7085,9 +7152,9 @@
             corner[0] > 200 && corner[1] > 200 && corner[2] < 160,
             "translucent yellow plot corner, got {corner:?}"
         );
-        let bad = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill>";
-        let xml = standard_pie_xml(&ser, "", "").replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{bad}</c:spPr>"));
-        assert!(render_pie(&xml).is_err(), "diagonal pie plot fill must remain NI");
+        let diag = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{diag}</c:spPr>"));
+        render_pie(&xml).expect("close-enough diagonal pie plot fill must export");
     }
 
     #[test]

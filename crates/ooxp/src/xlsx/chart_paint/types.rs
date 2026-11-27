@@ -284,13 +284,16 @@ pub(super) const ALPHA_PRODUCT_DENOM: u64 = 100_000 * 100_000;
 
 
 /// Supported frame styles are semantic fills and a round/rectangle switch.
-/// Path/non-axis-aligned gradients, unmeasured pattern presets, blip tile/crop,
-/// theme/system colors, transforms and custom strokes remain NI.
 /// Default (missing spPr) is white; explicit noFill is transparent; a solid
 /// srgbClr with alpha other than 100000 is straight translucency, not a
 /// flatten onto white.
-/// `Linear` uses an opaque sRGB stop table at the existing 0/90 degree geometry.
-/// `Pattern` is the locked `ltHorz` 8x8 hatch; `Blip` is stretch-to-shape PNG.
+/// `Linear` uses a stop table at the locked 0/90 geometry when that is what
+/// the XML asks for. Other angles, path shades, alpha/missing/duplicate
+/// stops, additional pattern presets, and blip tile/crop use documented
+/// close-enough rules so Office-exportable fills produce an image. Residuals
+/// stay on the review page; those rules are not unique official-matrix locks.
+/// Theme/system solid colors, unmeasured solid transforms and custom strokes
+/// still follow their existing parsers.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FrameFill {
     Default,
@@ -307,12 +310,31 @@ pub(super) enum FrameFill {
     NoFill,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum PathShade {
+    Circle,
+    Rect,
+    Shape,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct LinearFrameGrad {
     pub(super) stops: gradient::StopTable,
-    /// DrawingML `a:lin/@ang` in 60000ths of a degree. Only 0 (left to right)
-    /// and 5_400_000 (top to bottom in y-down space) are locked.
+    /// DrawingML `a:lin/@ang` in 60000ths of a degree. 0 (left to right)
+    /// and 5_400_000 (top to bottom in y-down space) are the locked axis
+    /// cases. Other angles use a close-enough bbox-scaled projection.
     pub(super) ang: i64,
+    /// When set, `a:path` shade replaces the linear angle. Close-enough:
+    /// circle is a normalized ellipse from the center; rect/shape use a
+    /// Chebyshev (max-axis) radius. Not a unique official lock.
+    pub(super) path: Option<PathShade>,
+}
+
+impl LinearFrameGrad {
+    pub(super) fn is_axis_locked(&self) -> bool {
+        self.path.is_none()
+            && (self.ang == LINEAR_ANG_HORIZONTAL || self.ang == LINEAR_ANG_VERTICAL)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

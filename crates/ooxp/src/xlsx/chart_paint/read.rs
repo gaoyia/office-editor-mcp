@@ -63,7 +63,7 @@ pub(super) fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<Fr
                     return Err(unsupported());
                 }
                 saw_fill = true;
-                fill = read_linear_frame_grad(prop)?;
+                fill = read_linear_frame_grad(prop, scheme)?;
             }
             "pattFill" => {
                 if saw_fill {
@@ -189,19 +189,15 @@ pub(super) fn ooxml_alpha_to_u8(alpha: u32) -> u8 {
     ((u64::from(alpha) * 255 + 50_000) / 100_000) as u8
 }
 
-/// Opaque sRGB stop-table linear gradFill at the existing 0/90 geometry. Path fills,
-/// other angles, and color transforms stay NI.
+/// Pattern, blip, and gradient frame fills. Locked 0/90 opaque sRGB tables
+/// and `ltHorz` / stretch-blip foundations are unchanged. Other Office-exportable
+/// variants use close-enough rules so they produce an image instead of rejecting.
 
 pub(super) fn read_pattern_fill(
     patt: &Element,
     scheme: &ThemeScheme,
 ) -> Result<pattern::PatternFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    for (name, _) in &patt.attrs {
-        if name != "prst" {
-            return Err(unsupported());
-        }
-    }
     let prst = pattern::PatternPreset::parse(patt.attr_local("prst").ok_or_else(unsupported)?)
         .ok_or_else(unsupported)?;
     let mut fg = None;
@@ -227,135 +223,128 @@ fn read_pattern_color(slot: &Element, scheme: &ThemeScheme) -> Result<[u8; 3], E
     if colors.next().is_some() {
         return Err(unsupported());
     }
-    match resolve_frame_solid(color, scheme)? {
-        FrameFill::Solid(rgb) => Ok(rgb),
-        _ => Err(unsupported()),
+    match resolve_frame_solid(color, scheme) {
+        Ok(FrameFill::Solid(rgb)) => Ok(rgb),
+        Ok(FrameFill::Translucent(rgb, _)) | Ok(FrameFill::AlphaProduct(rgb, _)) => Ok(rgb),
+        _ => Ok(resolve_stop_color(color, scheme).0),
     }
 }
 
-/// Locked stretch-to-shape PNG: empty or zero `srcRect`, empty `fillRect`,
-/// `rotWithShape` omitted or 1, `dpi` omitted or 0, empty `a:alphaModFix`.
-/// Tile, crop, non-zero fillRect, and blip effects stay NI.
+/// Picture fills. Stretch with empty/zero srcRect/fillRect and a no-op effect
+/// list keeps the locked foundation. Tile, crop, non-zero fillRect, a non-zero
+/// `dpi`, and remaining blip effects are stored and painted close-enough so
+/// the chart exports when media is present.
 pub(super) fn read_blip_fill(fill: &Element) -> Result<pattern::BlipFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut dpi = 0u32;
     for (name, value) in &fill.attrs {
         match name.as_str() {
-            "rotWithShape" if value == "1" => {}
-            "dpi" if value == "0" => {}
-            _ => return Err(unsupported()),
+            "rotWithShape" => {}
+            "dpi" => {
+                dpi = value.parse().unwrap_or(0);
+            }
+            _ => {}
         }
     }
-    let mut blip = None;
-    let mut saw_src = false;
+    let mut embed = None;
+    let mut src_rect = None;
+    let mut fill_rect = None;
+    let mut tile = None;
     let mut saw_stretch = false;
     for child in fill.element_children() {
         match child.local_name() {
-            "blip" if blip.is_none() => {
-                if !blip_effects_are_noop(child) {
-                    return Err(unsupported());
-                }
-                let embed = child
+            "blip" if embed.is_none() => {
+                let id = child
                     .attr_local("embed")
                     .filter(|s| !s.is_empty())
                     .ok_or_else(unsupported)?;
-                blip = Some(embed.to_string());
+                embed = Some(id.to_string());
             }
-            "srcRect" if !saw_src => {
-                if child.element_children().next().is_some()
-                    || ["l", "t", "r", "b"].iter().any(|name| {
-                        child
-                            .attr(name)
-                            .is_some_and(|raw| raw.parse::<i64>().ok() != Some(0))
-                    })
-                {
-                    return Err(unsupported());
-                }
-                saw_src = true;
+            "srcRect" if src_rect.is_none() => {
+                src_rect = Some(read_percent_rect(child));
             }
-            "stretch" if !saw_stretch => {
-                let mut rects = child.element_children();
-                let rect = rects.next().ok_or_else(unsupported)?;
-                if rects.next().is_some()
-                    || rect.local_name() != "fillRect"
-                    || rect.element_children().next().is_some()
-                    || ["l", "t", "r", "b"].iter().any(|name| {
-                        rect.attr(name)
-                            .is_some_and(|raw| raw.parse::<i64>().ok() != Some(0))
-                    })
-                {
-                    return Err(unsupported());
-                }
+            "stretch" if !saw_stretch && tile.is_none() => {
                 saw_stretch = true;
+                if let Some(rect) = child.element_children().find(|el| el.local_name() == "fillRect")
+                {
+                    fill_rect = Some(read_percent_rect(rect));
+                }
             }
-            _ => return Err(unsupported()),
+            "tile" if tile.is_none() && !saw_stretch => {
+                tile = Some(read_blip_tile(child));
+            }
+            _ => {}
         }
     }
-    if !saw_stretch {
-        return Err(unsupported());
-    }
     Ok(pattern::BlipFill {
-        embed: blip.ok_or_else(unsupported)?,
+        embed: embed.ok_or_else(unsupported)?,
+        src_rect: src_rect.filter(|r| *r != [0, 0, 0, 0]),
+        fill_rect: fill_rect.filter(|r| *r != [0, 0, 0, 0]),
+        tile,
+        dpi,
     })
 }
 
-fn blip_effects_are_noop(blip: &Element) -> bool {
-    for child in blip.element_children() {
-        match child.local_name() {
-            "extLst" => {}
-            "alphaModFix"
-                if child.attrs.is_empty() && child.element_children().next().is_none() => {}
-            _ => return false,
-        }
-    }
-    true
+fn read_percent_rect(node: &Element) -> [i64; 4] {
+    let one = |name: &str| {
+        node.attr_local(name)
+            .or_else(|| node.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(0)
+    };
+    [one("l"), one("t"), one("r"), one("b")]
 }
 
-pub(super) fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
+fn read_blip_tile(node: &Element) -> pattern::BlipTile {
+    let num = |name: &str, default: i64| {
+        node.attr_local(name)
+            .or_else(|| node.attr(name))
+            .and_then(|raw| raw.parse().ok())
+            .unwrap_or(default)
+    };
+    pattern::BlipTile {
+        tx: num("tx", 0),
+        ty: num("ty", 0),
+        sx: num("sx", 100_000),
+        sy: num("sy", 100_000),
+        flip: pattern::BlipFlip::parse(node.attr_local("flip").or_else(|| node.attr("flip"))),
+        algn: pattern::BlipAlign::parse(node.attr_local("algn").or_else(|| node.attr("algn"))),
+    }
+}
+
+pub(super) fn read_linear_frame_grad(
+    grad: &Element,
+    scheme: &ThemeScheme,
+) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    let flip = grad.attr_local("flip").unwrap_or("none");
-    if flip != "none" {
-        return Err(unsupported());
-    }
-    match grad.attr_local("rotWithShape") {
-        None | Some("1") => {}
-        _ => return Err(unsupported()),
-    }
     let mut gs_lst = None;
     let mut lin = None;
-    let mut saw_tile = false;
+    let mut path = None;
     for child in grad.element_children() {
         match child.local_name() {
             "gsLst" if gs_lst.is_none() => gs_lst = Some(child),
             "lin" if lin.is_none() => lin = Some(child),
-            "tileRect" if !saw_tile => {
-                if child.element_children().next().is_some()
-                    || child.attrs.iter().any(|(_, v)| !v.is_empty() && v != "0")
-                {
-                    return Err(unsupported());
-                }
-                saw_tile = true;
+            "path" if path.is_none() => {
+                path = Some(match child.attr_local("path").unwrap_or("rect") {
+                    "circle" => PathShade::Circle,
+                    "shape" => PathShade::Shape,
+                    _ => PathShade::Rect,
+                });
             }
+            "tileRect" => {}
             _ => return Err(unsupported()),
         }
     }
     let gs_lst = gs_lst.ok_or_else(unsupported)?;
-    let lin = lin.ok_or_else(unsupported)?;
-    let scaled = lin.attr_local("scaled").unwrap_or("1");
-    if scaled != "0" && scaled != "1" {
-        return Err(unsupported());
+    let mut ang = LINEAR_ANG_HORIZONTAL;
+    if let Some(lin) = lin {
+        if let Some(raw) = lin.attr_local("ang") {
+            ang = raw.parse().map_err(|_| unsupported())?;
+        }
     }
-    let ang: i64 = lin
-        .attr_local("ang")
-        .ok_or_else(unsupported)?
-        .parse()
-        .map_err(|_| unsupported())?;
-    if ang != LINEAR_ANG_HORIZONTAL && ang != LINEAR_ANG_VERTICAL {
-        return Err(unsupported());
-    }
-    if lin.element_children().next().is_some() {
-        return Err(unsupported());
-    }
-    let mut stops = Vec::new();
+    let mut raw_stops = Vec::new();
+    let mut any_alpha = false;
+    let mut any_non_srgb = false;
     for gs in gs_lst.element_children() {
         if gs.local_name() != "gs" {
             return Err(unsupported());
@@ -367,20 +356,39 @@ pub(super) fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error>
             .map_err(|_| unsupported())?;
         let mut colors = gs.element_children();
         let color = colors.next().ok_or_else(unsupported)?;
-        if colors.next().is_some() || color.local_name() != "srgbClr" {
+        if colors.next().is_some() {
             return Err(unsupported());
         }
-        if color.element_children().next().is_some() {
-            return Err(unsupported());
+        if color.local_name() != "srgbClr" || color.element_children().next().is_some() {
+            any_non_srgb = true;
         }
-        let rgb = color
-            .attr_local("val")
-            .and_then(parse_hex)
-            .ok_or_else(unsupported)?;
-        stops.push((pos, rgb));
+        let (rgb, alpha) = resolve_stop_color(color, scheme);
+        if alpha != 255 {
+            any_alpha = true;
+        }
+        raw_stops.push((pos, rgb, alpha));
     }
-    let stops = gradient::StopTable::new(stops).ok_or_else(unsupported)?;
-    Ok(FrameFill::Linear(LinearFrameGrad { stops, ang }))
+    let use_close = any_alpha
+        || any_non_srgb
+        || raw_stops.len() < 2
+        || raw_stops.first().is_some_and(|s| s.0 != 0)
+        || raw_stops.last().is_some_and(|s| s.0 != 100_000)
+        || {
+            let mut ordered = raw_stops.clone();
+            ordered.sort_by_key(|s| s.0);
+            ordered.windows(2).any(|pair| pair[0].0 == pair[1].0)
+        };
+    let stops = if use_close {
+        gradient::StopTable::close_enough(raw_stops).ok_or_else(unsupported)?
+    } else {
+        gradient::StopTable::new(raw_stops.into_iter().map(|(p, c, _)| (p, c)).collect())
+            .ok_or_else(unsupported)?
+    };
+    Ok(FrameFill::Linear(LinearFrameGrad {
+        stops,
+        ang,
+        path,
+    }))
 }
 
 pub(super) fn read_chart(

@@ -221,7 +221,8 @@ impl Canvas {
         }
         let right = rect.x + rect.w;
         let bottom = rect.y + rect.h;
-        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+        let axis = grad.is_axis_locked();
+        let opaque = grad.stops.is_opaque();
         for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
             let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
             for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
@@ -230,12 +231,30 @@ impl Canvas {
                 if cov == 0 {
                     continue;
                 }
-                let t = if vertical {
-                    (f64::from(y) + 0.5 - rect.y) / rect.h
+                let t = if axis {
+                    if grad.ang == LINEAR_ANG_VERTICAL {
+                        (f64::from(y) + 0.5 - rect.y) / rect.h
+                    } else {
+                        (f64::from(x) + 0.5 - rect.x) / rect.w
+                    }
                 } else {
-                    (f64::from(x) + 0.5 - rect.x) / rect.w
+                    gradient_t(
+                        f64::from(x) + 0.5,
+                        f64::from(y) + 0.5,
+                        rect.x,
+                        rect.y,
+                        rect.w,
+                        rect.h,
+                        grad,
+                    )
                 };
-                self.blend(x, y, grad.sample(t), cov);
+                if opaque {
+                    self.blend(x, y, grad.sample(t), cov);
+                } else {
+                    let (rgb, a) = grad.sample_rgba(t);
+                    let cov = ((u16::from(cov) * u16::from(a) + 127) / 255) as u8;
+                    self.blend(x, y, rgb, cov);
+                }
             }
         }
     }
@@ -322,29 +341,31 @@ impl Canvas {
         let dest_h = dest_h as u32;
         let bytes = self.blips.get(&blip.embed).ok_or_else(unsupported)?;
         let image = decode_blip_png(bytes)?;
-        if dest_w < image.w || dest_h < image.h {
-            return Err(unsupported());
+        let (crop, crop_w, crop_h) = crop_blip(&image, blip.src_rect);
+        let (fx0, fy0, fw, fh) = fill_rect_window(dest_w, dest_h, blip.fill_rect);
+        if fw == 0 || fh == 0 {
+            return Ok(());
         }
-        let scaled = if dest_w == image.w && dest_h == image.h {
-            image.px
-        } else if let Some(px) =
-            super::super::chart_gdi::scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h)
-        {
-            px
-        } else {
-            nearest_upscale(&image.px, image.w, image.h, dest_w, dest_h)
-        };
-        for dy in 0..dest_h as i32 {
-            let y = y0 + dy;
+        if let Some(tile) = blip.tile.as_ref() {
+            self.paint_blip_tiled(
+                x0, y0, dest_w, dest_h, fx0, fy0, fw, fh, &crop, crop_w, crop_h, tile, blip.dpi,
+            );
+            return Ok(());
+        }
+        // Locked stretch foundation when src/fill rects are empty or zero, plus
+        // close-enough shrink/crop/inset so those variants still export.
+        let scaled = scale_blip_rgba(&crop, crop_w, crop_h, fw, fh)?;
+        for dy in 0..fh as i32 {
+            let y = y0 + fy0 as i32 + dy;
             if y < 0 || y >= self.h as i32 {
                 continue;
             }
-            for dx in 0..dest_w as i32 {
-                let x = x0 + dx;
+            for dx in 0..fw as i32 {
+                let x = x0 + fx0 as i32 + dx;
                 if x < 0 || x >= self.w as i32 {
                     continue;
                 }
-                let i = ((dy as u32 * dest_w + dx as u32) * 4) as usize;
+                let i = ((dy as u32 * fw + dx as u32) * 4) as usize;
                 let a = scaled[i + 3];
                 if a == 0 {
                     continue;
@@ -353,6 +374,75 @@ impl Canvas {
             }
         }
         Ok(())
+    }
+
+    fn paint_blip_tiled(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        dest_w: u32,
+        dest_h: u32,
+        fx0: u32,
+        fy0: u32,
+        fw: u32,
+        fh: u32,
+        crop: &[u8],
+        crop_w: u32,
+        crop_h: u32,
+        tile: &pattern::BlipTile,
+        dpi: u32,
+    ) {
+        let sx = if tile.sx == 0 { 100_000.0 } else { tile.sx as f64 / 100_000.0 };
+        let sy = if tile.sy == 0 { 100_000.0 } else { tile.sy as f64 / 100_000.0 };
+        let dpi_scale = if dpi == 0 {
+            1.0
+        } else {
+            f64::from(self.dpi.get()) / f64::from(dpi)
+        };
+        let tile_w = ((f64::from(crop_w) * sx * dpi_scale).round() as u32).clamp(1, MAX_PX);
+        let tile_h = ((f64::from(crop_h) * sy * dpi_scale).round() as u32).clamp(1, MAX_PX);
+        let Ok(cell) = scale_blip_rgba(crop, crop_w, crop_h, tile_w, tile_h) else {
+            return;
+        };
+        let emu = f64::from(self.dpi.get()) / 914_400.0;
+        let ox = tile.tx as f64 * emu;
+        let oy = tile.ty as f64 * emu;
+        let (ax, ay) = tile.algn.origin_frac();
+        let origin_x = ax * f64::from(fw) - ax * f64::from(tile_w) - ox;
+        let origin_y = ay * f64::from(fh) - ay * f64::from(tile_h) - oy;
+        let tw = f64::from(tile_w);
+        let th = f64::from(tile_h);
+        for dy in 0..fh as i32 {
+            let y = y0 + fy0 as i32 + dy;
+            if y < 0 || y >= self.h as i32 {
+                continue;
+            }
+            for dx in 0..fw as i32 {
+                let x = x0 + fx0 as i32 + dx;
+                if x < 0 || x >= self.w as i32 {
+                    continue;
+                }
+                let mut lx = (f64::from(dx) + 0.5 - origin_x).rem_euclid(tw);
+                let mut ly = (f64::from(dy) + 0.5 - origin_y).rem_euclid(th);
+                match tile.flip {
+                    pattern::BlipFlip::X | pattern::BlipFlip::Xy => lx = tw - 1.0 - lx,
+                    _ => {}
+                }
+                match tile.flip {
+                    pattern::BlipFlip::Y | pattern::BlipFlip::Xy => ly = th - 1.0 - ly,
+                    _ => {}
+                }
+                let tx = lx.floor().clamp(0.0, tw - 1.0) as u32;
+                let ty = ly.floor().clamp(0.0, th - 1.0) as u32;
+                let i = ((ty * tile_w + tx) * 4) as usize;
+                let a = cell[i + 3];
+                if a == 0 {
+                    continue;
+                }
+                self.blend(x, y, [cell[i], cell[i + 1], cell[i + 2]], a);
+            }
+        }
+        let _ = (dest_w, dest_h);
     }
 
     /// Existing axis-aligned pixel-center geometry. Cache at most one clipped
@@ -368,16 +458,41 @@ impl Canvas {
         if w <= 0.0 || h <= 0.0 || x1c <= x0c || y1c <= y0c {
             return;
         }
-        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
-        let colors: Vec<[u8; 3]> = if vertical {
-            (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
-        } else {
-            (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
-        };
+        if grad.is_axis_locked() && grad.stops.is_opaque() {
+            // Existing axis-aligned pixel-center geometry. Cache at most one clipped
+            // axis (<= canvas edge) so many-stop interval searches are not per pixel.
+            // Neither the two-stop interpolation nor border/plot geometry is changed.
+            let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+            let colors: Vec<[u8; 3]> = if vertical {
+                (y0c..y1c).map(|y| grad.sample((f64::from(y - y0) + 0.5) / h)).collect()
+            } else {
+                (x0c..x1c).map(|x| grad.sample((f64::from(x - x0) + 0.5) / w)).collect()
+            };
+            for y in y0c..y1c {
+                for x in x0c..x1c {
+                    let index = if vertical { y - y0c } else { x - x0c } as usize;
+                    self.blend(x, y, colors[index], 255);
+                }
+            }
+            return;
+        }
         for y in y0c..y1c {
             for x in x0c..x1c {
-                let index = if vertical { y - y0c } else { x - x0c } as usize;
-                self.blend(x, y, colors[index], 255);
+                let t = gradient_t(
+                    f64::from(x) + 0.5,
+                    f64::from(y) + 0.5,
+                    f64::from(x0),
+                    f64::from(y0),
+                    w,
+                    h,
+                    grad,
+                );
+                if grad.stops.is_opaque() {
+                    self.blend(x, y, grad.sample(t), 255);
+                } else {
+                    let (rgb, a) = grad.sample_rgba(t);
+                    self.blend(x, y, rgb, a);
+                }
             }
         }
     }
@@ -742,6 +857,69 @@ struct BlipRgba {
     w: u32,
     h: u32,
     px: Vec<u8>,
+}
+
+
+fn crop_blip(image: &BlipRgba, src_rect: Option<[i64; 4]>) -> (Vec<u8>, u32, u32) {
+    let Some(rect) = src_rect else {
+        return (image.px.clone(), image.w, image.h);
+    };
+    if rect == [0, 0, 0, 0] {
+        return (image.px.clone(), image.w, image.h);
+    }
+    let w = f64::from(image.w);
+    let h = f64::from(image.h);
+    let x0 = ((rect[0] as f64 / 100_000.0) * w).round().clamp(0.0, w - 1.0) as u32;
+    let y0 = ((rect[1] as f64 / 100_000.0) * h).round().clamp(0.0, h - 1.0) as u32;
+    let x1 = (((100_000 - rect[2]) as f64 / 100_000.0) * w)
+        .round()
+        .clamp(f64::from(x0) + 1.0, w) as u32;
+    let y1 = (((100_000 - rect[3]) as f64 / 100_000.0) * h)
+        .round()
+        .clamp(f64::from(y0) + 1.0, h) as u32;
+    let cw = (x1 - x0).max(1);
+    let ch = (y1 - y0).max(1);
+    let mut out = vec![0u8; cw as usize * ch as usize * 4];
+    for y in 0..ch {
+        let si = (((y0 + y) * image.w + x0) * 4) as usize;
+        let di = (y * cw * 4) as usize;
+        out[di..di + cw as usize * 4].copy_from_slice(&image.px[si..si + cw as usize * 4]);
+    }
+    (out, cw, ch)
+}
+
+fn fill_rect_window(dest_w: u32, dest_h: u32, fill_rect: Option<[i64; 4]>) -> (u32, u32, u32, u32) {
+    let Some(rect) = fill_rect else {
+        return (0, 0, dest_w, dest_h);
+    };
+    if rect == [0, 0, 0, 0] {
+        return (0, 0, dest_w, dest_h);
+    }
+    let w = f64::from(dest_w);
+    let h = f64::from(dest_h);
+    let x0 = ((rect[0] as f64 / 100_000.0) * w).round().clamp(0.0, w) as u32;
+    let y0 = ((rect[1] as f64 / 100_000.0) * h).round().clamp(0.0, h) as u32;
+    let x1 = (((100_000 - rect[2]) as f64 / 100_000.0) * w)
+        .round()
+        .clamp(f64::from(x0), w) as u32;
+    let y1 = (((100_000 - rect[3]) as f64 / 100_000.0) * h)
+        .round()
+        .clamp(f64::from(y0), h) as u32;
+    (x0, y0, (x1 - x0).max(0), (y1 - y0).max(0))
+}
+
+fn scale_blip_rgba(src: &[u8], src_w: u32, src_h: u32, dest_w: u32, dest_h: u32) -> Result<Vec<u8>, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if dest_w == 0 || dest_h == 0 || dest_w > MAX_PX || dest_h > MAX_PX {
+        return Err(unsupported());
+    }
+    if dest_w == src_w && dest_h == src_h {
+        return Ok(src.to_vec());
+    }
+    if let Some(px) = super::super::chart_gdi::scale_device_rgba(src, src_w, src_h, dest_w, dest_h) {
+        return Ok(px);
+    }
+    Ok(nearest_upscale(src, src_w, src_h, dest_w, dest_h))
 }
 
 fn decode_blip_png(bytes: &[u8]) -> Result<BlipRgba, Error> {
