@@ -6839,12 +6839,6 @@
                 r#"grouping val="percentStacked""#,
                 1,
             ),
-            bar_xml(
-                &ser,
-                r#"<c:dispBlanksAs val="span"/>"#,
-                "maxMin",
-                Some("bar"),
-            ),
             bar_xml(&two, "", "maxMin", Some("bar")).replacen(
                 r#"varyColors val="0""#,
                 r#"varyColors val="1""#,
@@ -6888,6 +6882,16 @@
             Some("bar"),
         ))
         .expect("bar dispBlanksAs=zero with a complete numeric cache should export");
+        // F14: unlabeled clustered bar dispBlanksAs=span uses the same
+        // general rule as official column Chart.Export (do not synthesize
+        // a mid value). A complete numeric cache is inert and must export.
+        render_bar(&bar_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="span"/>"#,
+            "maxMin",
+            Some("bar"),
+        ))
+        .expect("bar dispBlanksAs=span with a complete numeric cache should export");
         // 隐藏数据标签与空值缺口仍可画；gap 是缺省。
         render_bar(&bar_xml(
             &ser,
@@ -6975,6 +6979,52 @@
             render_bar(&bar_xml(&div, zero_extra, "maxMin", Some("bar"))).is_err(),
             "bar #DIV/0! + dispBlanksAs=zero stays NotImplemented"
         );
+    }
+
+    #[test]
+    fn column_and_bar_disp_blanks_as_span_skips_blanks_and_does_not_fill_zero() {
+        // Official F14 Chart.Export of clustered-column dispBlanksAs=span
+        // exists and has no mid column. Span does not synthesize a mid
+        // value: omitted blanks stay None (not filled as 0, unlike zero
+        // mode) and are skipped. Unlabeled official gold cannot uniquely
+        // distinguish that from gap. Documented general rule, not a unique
+        // official-matrix lock. Labeled blanks stay rejected.
+        let omitted = line_ser(0, "S1", &[Some(4.0), None, Some(9.0)], "");
+        let span_extra = r#"<c:dispBlanksAs val="span"/>"#;
+        let gap_extra = r#"<c:dispBlanksAs val="gap"/>"#;
+        for dir in ["col", "bar"] {
+            let span_xml = bar_xml(&omitted, span_extra, "maxMin", Some(dir));
+            let gap_xml = bar_xml(&omitted, gap_extra, "maxMin", Some(dir));
+            let doc = crate::xml::parse(span_xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap();
+            assert_eq!(
+                chart.series[0].values,
+                vec![Some(4.0), None, Some(9.0)],
+                "dispBlanksAs=span must not fill a true blank as 0 on {dir}"
+            );
+            let span_png = render_bar(&span_xml).unwrap();
+            let gap_png = render_bar(&gap_xml).unwrap();
+            assert_eq!(
+                span_png, gap_png,
+                "unlabeled {dir} span must skip the blank like gap"
+            );
+        }
+
+        let na = line_ser(0, "S1", &[Some(4.0), Some(0.0), Some(9.0)], "").replace(
+            r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let na_xml = bar_xml(&na, span_extra, "maxMin", Some("col"));
+        let na_doc = crate::xml::parse(na_xml.as_bytes()).unwrap();
+        let na_chart =
+            read_chart(&na_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(
+            na_chart.series[0].values,
+            vec![Some(4.0), None, Some(9.0)],
+            "column #N/A must not be filled as 0 under dispBlanksAs=span"
+        );
+        render_bar(&na_xml).expect("unlabeled column #N/A + span must export");
     }
 
     fn area_space(plot_body: &str, chart_extra: &str) -> String {

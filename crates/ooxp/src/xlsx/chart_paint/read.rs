@@ -548,10 +548,12 @@ pub(super) fn read_chart(
                     .and_then(|el| el.attr_local("val"))
                     .unwrap_or("gap");
                 // gap is the bar/column default. Official F13 Chart.Export of
-                // clustered-column dispBlanksAs=zero exists; the same general
-                // rule applies to clustered bar (true blanks become 0, #N/A
-                // is skipped and not painted as 0). span stays NI this pass.
-                if !matches!(blanks, "gap" | "zero") {
+                // clustered-column dispBlanksAs=zero and official F14
+                // Chart.Export of clustered-column span both exist. The same
+                // general rules apply to clustered bar: true blanks become 0
+                // under zero; #N/A is skipped; span does not synthesize a
+                // mid value (the official column has no mid column).
+                if !matches!(blanks, "gap" | "zero" | "span") {
                     return Err(unsupported());
                 }
                 if flag(wrapper, "varyColors").unwrap_or(false)
@@ -1113,8 +1115,11 @@ pub(super) fn read_chart(
         // general rule as StandardLine). A 0-height mark is not painted, so
         // an unlabeled negative-only official fixture can look like the gap
         // control except for the title. #N/A is not a blank: skip it and do
-        // not fill it as 0. Other errors (#DIV/0!) stay NI. span is unchanged
-        // this pass. Documented general rule, not a unique official-matrix lock.
+        // not fill it as 0. Other errors (#DIV/0!) stay NI under zero.
+        // Official F14 Chart.Export of clustered-column span exists and has
+        // no mid column; span does not synthesize a value, so blanks stay
+        // None (not filled as 0) and are skipped like gap. That is a
+        // documented general rule, not a unique “span equals gap” lock.
         if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar) {
             ser.error_points.resize(n, false);
             ser.unavailable_points.resize(n, false);

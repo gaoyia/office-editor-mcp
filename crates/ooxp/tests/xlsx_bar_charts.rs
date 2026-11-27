@@ -388,7 +388,7 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
 
     // F13: clustered bar dispBlanksAs=zero uses the same general rule as
     // official F13 column Chart.Export. A complete numeric cache is inert
-    // and must export without mutating the source. span stays NI below.
+    // and must export without mutating the source.
     let zero_xml = if xml.contains("dispBlanksAs") {
         xml.replace(r#"dispBlanksAs val="gap""#, r#"dispBlanksAs val="zero""#)
     } else {
@@ -403,7 +403,25 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
     let (zw, zh, _) = decode_rgb(&std::fs::read(zero_png).unwrap());
     assert_eq!((zw, zh), (w, h));
 
-    let cases: [(&str, String); 4] = [
+    // F14: clustered bar dispBlanksAs=span uses the same general rule as
+    // official F14 column Chart.Export (do not synthesize a mid value).
+    // A complete numeric cache is inert and must export without mutating
+    // the source.
+    let span_xml = if xml.contains("dispBlanksAs") {
+        xml.replace(r#"dispBlanksAs val="gap""#, r#"dispBlanksAs val="span""#)
+    } else {
+        xml.replacen("<c:chart>", r#"<c:chart><c:dispBlanksAs val="span"/>"#, 1)
+    };
+    let span_path = tmp("read-blanks-span");
+    rewrite_part(&book, &span_path, &part, &span_xml);
+    let span_source = std::fs::read(&span_path).unwrap();
+    let span_png =
+        export_chart_png(&span_path, "sheet:Sheet1/chart:1", "read-blanks-span-png").unwrap();
+    assert_eq!(std::fs::read(&span_path).unwrap(), span_source);
+    let (sw, sh, _) = decode_rgb(&std::fs::read(span_png).unwrap());
+    assert_eq!((sw, sh), (w, h));
+
+    let cases: [(&str, String); 3] = [
         (
             "stacked",
             xml.replace(r#"grouping val="clustered""#, r#"grouping val="stacked""#),
@@ -414,14 +432,6 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
                 r#"grouping val="clustered""#,
                 r#"grouping val="percentStacked""#,
             ),
-        ),
-        (
-            "blanks-span",
-            if xml.contains("dispBlanksAs") {
-                xml.replace(r#"dispBlanksAs val="gap""#, r#"dispBlanksAs val="span""#)
-            } else {
-                xml.replacen("<c:chart>", r#"<c:chart><c:dispBlanksAs val="span"/>"#, 1)
-            },
         ),
         (
             "column-axes",
