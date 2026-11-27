@@ -237,8 +237,13 @@ fn read_existing_scatter_part_exports_and_unsupported_details_stay_ni() {
     );
     let smooth_path = tmp("read-smooth");
     rewrite_part(&book, &smooth_path, &part, &smooth);
-    let err = export_chart_png(&smooth_path, "sheet:Sheet1/chart:1", "smooth-png").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    // Official-like smoothMarker must produce an image (close-enough
+    // curve, not a unique interpolation lock). scatterStyle=line above
+    // stays NI because Office does not save that COM name.
+    let smooth_png =
+        export_chart_png(&smooth_path, "sheet:Sheet1/chart:1", "smooth-png").unwrap();
+    let (_, _, smooth_rgb) = decode_rgb(&std::fs::read(&smooth_png).unwrap());
+    assert!(count_color(&smooth_rgb, ACCENT1, 18) >= 20);
 }
 
 #[test]

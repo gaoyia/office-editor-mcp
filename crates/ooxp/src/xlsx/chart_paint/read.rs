@@ -550,6 +550,7 @@ pub(super) fn read_chart(
     let mut stacking = Stacking::Clustered;
     let mut other: Option<OtherSpec> = None;
     let mut hole_size: Option<f64> = None;
+    let mut scatter_wrapper_smooth = false;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -657,10 +658,18 @@ pub(super) fn read_chart(
             // Official Excel 16.0 maps scatterStyle=marker (no series line hide,
             // smooth=0) to xlXYScatterLines (74) and draws connecting strokes.
             // Markers-only remains available via an explicit series a:ln/a:noFill.
+            // Official Excel does not write COM ChartType names as
+            // scatterStyle. xlXYScatterLinesNoMarkers is lineMarker +
+            // symbol=none; xlXYScatterSmooth / SmoothNoMarkers are saved
+            // as scatterStyle=smoothMarker plus series c:smooth=1.
+            // Accept official-like smooth/smoothMarker as a close-enough
+            // image (not a unique interpolation lock; F28 stays that).
+            // scatterStyle=none and the unsaved COM name "line" stay NI.
             let connect = match style {
-                "marker" | "lineMarker" => true,
+                "marker" | "lineMarker" | "smooth" | "smoothMarker" => true,
                 _ => return Err(unsupported()),
             };
+            scatter_wrapper_smooth = matches!(style, "smooth" | "smoothMarker");
             PlotKind::Scatter { connect }
         }
         "areaChart" => {
@@ -1284,6 +1293,7 @@ pub(super) fn read_chart(
                 width: 0.0,
                 marker: MarkerKind::None,
                 marker_color: None,
+                smooth: false,
             },
             PlotKind::StandardLine => read_line_series(ser, accents, dpi, order, true)?,
             PlotKind::StandardArea => {
@@ -1298,6 +1308,7 @@ pub(super) fn read_chart(
                     width: area.line_width,
                     marker: MarkerKind::None,
                     marker_color: None,
+                    smooth: false,
                 }
             }
             PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
@@ -1307,6 +1318,9 @@ pub(super) fn read_chart(
                 if !connect {
                     style.visible = false;
                 }
+                // Explicit series c:smooth wins. When the flag is omitted,
+                // official-like scatterStyle=smooth/smoothMarker still curves.
+                style.smooth = flag(ser, "smooth").unwrap_or(scatter_wrapper_smooth);
                 style
             }
         };
@@ -1388,6 +1402,7 @@ pub(super) fn read_chart(
             } else {
                 Vec::new()
             },
+            smooth: style.smooth,
         };
     }
     }
@@ -2182,7 +2197,9 @@ pub(super) fn read_line_series(
     explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    if flag(ser, "smooth").unwrap_or(false) {
+    // Line charts keep series smooth=1 as NI (F28). Scatter may set a
+    // close-enough curve after this function returns.
+    if explicit_pens && flag(ser, "smooth").unwrap_or(false) {
         return Err(unsupported());
     }
     for name in ["dPt", "trendline", "errBars"] {
@@ -2218,6 +2235,7 @@ pub(super) fn read_line_series(
         width,
         marker,
         marker_color,
+        smooth: false,
     })
 }
 
@@ -2270,6 +2288,7 @@ pub(super) fn read_line_sp_pr(
         width,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 
@@ -2434,6 +2453,7 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
         width,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 
@@ -2543,6 +2563,7 @@ pub(super) fn read_pie_series_style(
         width: 0.0,
         marker: MarkerKind::None,
         marker_color: None,
+        smooth: false,
     })
 }
 

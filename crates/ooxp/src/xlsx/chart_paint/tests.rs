@@ -6032,8 +6032,6 @@
         let cases = [
             scatter_xml("line", &ser, ""),
             scatter_xml("none", &ser, ""),
-            scatter_xml("smoothMarker", &ser, ""),
-            scatter_xml("smooth", &ser, ""),
             scatter_xml(
                 "lineMarker",
                 &scatter_ser(
@@ -6141,10 +6139,125 @@
             "</c:valAx>",
             r#"<c:crossBetween val="midCat"/></c:valAx>"#,
         );
-        assert!(
-            render_scatter(&smooth_midcat).is_err(),
-            "smoothMarker stays NI even with official midCat"
+        // Official-like smoothMarker + midCat must produce an image
+        // (close-enough curve, not a unique interpolation lock).
+        render_scatter(&smooth_midcat).unwrap();
+        render_scatter(&scatter_xml("smooth", &ser, "")).unwrap();
+        render_scatter(&scatter_xml("smoothMarker", &ser, "")).unwrap();
+    }
+
+    fn official_like_f27_axes(xml: &str) -> String {
+        xml.replace(
+            r#"<c:orientation val="minMax"/>"#,
+            r#"<c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/>"#,
+        )
+        .replace(
+            "</c:valAx>",
+            r#"<c:majorUnit val="10"/><c:crossBetween val="midCat"/></c:valAx>"#,
+        )
+    }
+
+    fn official_like_f27_scatter_xml(style: &str, extra: &str) -> String {
+        let xs = [Some(10.0), Some(20.0), Some(30.0), Some(40.0)];
+        let y1 = [Some(20.0), Some(40.0), Some(10.0), Some(30.0)];
+        let y2 = [Some(15.0), Some(25.0), Some(35.0), Some(20.0)];
+        official_like_f27_axes(&scatter_xml(
+            style,
+            &format!(
+                "{}{}",
+                scatter_ser(0, "F27S1", &xs, &y1, extra),
+                scatter_ser(1, "F27S2", &xs, &y2, extra),
+            ),
+            "",
+        ))
+    }
+
+    #[test]
+    fn official_like_f27_scatter_styles_export_and_paint_ink() {
+        let line = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
         );
+        let smooth = official_like_f27_scatter_xml(
+            "smoothMarker",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#,
+        );
+        let smooth_marker = official_like_f27_scatter_xml(
+            "smoothMarker",
+            r#"<c:smooth val="1"/>"#,
+        );
+        let marker = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln w="38100"><a:noFill/></a:ln></c:spPr><c:smooth val="0"/>"#,
+        );
+        let line_marker = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:smooth val="0"/>"#,
+        );
+        let style_smooth = official_like_f27_scatter_xml(
+            "smooth",
+            r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#,
+        );
+        let cases = [
+            ("line", &line),
+            ("smooth", &smooth),
+            ("smoothMarker", &smooth_marker),
+            ("marker", &marker),
+            ("lineMarker", &line_marker),
+            ("style-smooth", &style_smooth),
+        ];
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        for (name, xml) in cases {
+            let png = render_scatter(xml)
+                .unwrap_or_else(|err| panic!("official-like F27 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F27 {name} should paint the first series"
+            );
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                "official-like F27 {name} should paint the second series"
+            );
+        }
+        let straight = render_scatter(&line).unwrap();
+        let curved = render_scatter(&smooth).unwrap();
+        assert_ne!(
+            straight, curved,
+            "close-enough scatter smooth must curve, not copy the polyline"
+        );
+        let marked = render_scatter(&smooth_marker).unwrap();
+        assert_ne!(
+            curved, marked,
+            "smoothMarker should keep markers on the close-enough curve"
+        );
+    }
+
+    #[test]
+    fn leftover_f27_styles_without_official_saved_form_stay_not_implemented() {
+        let ser = scatter_ser(
+            0,
+            "S1",
+            &[Some(1.0), Some(2.0), Some(3.0)],
+            &[Some(4.0), Some(5.0), Some(6.0)],
+            "",
+        );
+        for (i, xml) in [
+            official_like_f27_axes(&scatter_xml("none", &ser, "")),
+            official_like_f27_axes(&scatter_xml("line", &ser, "")),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let err = render_scatter(xml)
+                .expect_err(&format!("leftover F27 style case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F27 style case {i} should stay NotImplemented"
+            );
+        }
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {

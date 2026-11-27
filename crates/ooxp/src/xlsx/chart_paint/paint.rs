@@ -402,6 +402,58 @@ pub(super) fn x_of_dir(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, re
     plot.x + t * plot.w
 }
 
+
+fn stroke_points_for_scatter_run(run: &[(f64, f64)], smooth: bool) -> Vec<(f64, f64)> {
+    if smooth {
+        close_enough_smooth_scatter_run(run)
+    } else {
+        run.to_vec()
+    }
+}
+
+/// Close-enough interpolating cubic for official-like scatter `c:smooth=1`.
+/// Catmull-Rom converted to cubic Bezier (tension 0.5) with duplicated
+/// endpoints, sampled into a polyline. This is not a unique official
+/// interpolation lock; F28 remains the reusable curve / endpoint / blank
+/// contract.
+fn close_enough_smooth_scatter_run(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    const STEPS: usize = 24;
+    if points.len() < 3 {
+        return points.to_vec();
+    }
+    let n = points.len();
+    let mut out = Vec::with_capacity((n - 1) * STEPS + 1);
+    out.push(points[0]);
+    for i in 0..n - 1 {
+        let p0 = if i == 0 { points[0] } else { points[i - 1] };
+        let p1 = points[i];
+        let p2 = points[i + 1];
+        let p3 = if i + 2 < n { points[i + 2] } else { points[n - 1] };
+        let c1 = (
+            p1.0 + (p2.0 - p0.0) / 6.0,
+            p1.1 + (p2.1 - p0.1) / 6.0,
+        );
+        let c2 = (
+            p2.0 - (p3.0 - p1.0) / 6.0,
+            p2.1 - (p3.1 - p1.1) / 6.0,
+        );
+        for step in 1..=STEPS {
+            let t = step as f64 / STEPS as f64;
+            let u = 1.0 - t;
+            let x = u * u * u * p1.0
+                + 3.0 * u * u * t * c1.0
+                + 3.0 * u * t * t * c2.0
+                + t * t * t * p2.0;
+            let y = u * u * u * p1.1
+                + 3.0 * u * u * t * c1.1
+                + 3.0 * u * t * t * c2.1
+                + t * t * t * p2.1;
+            out.push((x, y));
+        }
+    }
+    out
+}
+
 pub(super) fn draw_scatter(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -436,14 +488,16 @@ pub(super) fn draw_scatter(
                 }
                 _ => {
                     if ser.line_visible && ser.line_width > 0.0 {
-                        stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+                        let pts = stroke_points_for_scatter_run(&run, ser.smooth);
+                        stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     }
                     run.clear();
                 }
             }
         }
         if ser.line_visible && ser.line_width > 0.0 {
-            stroke_run_style(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
+            let pts = stroke_points_for_scatter_run(&run, ser.smooth);
+            stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);

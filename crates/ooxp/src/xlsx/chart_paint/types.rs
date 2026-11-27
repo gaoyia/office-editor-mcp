@@ -165,6 +165,10 @@ pub(super) struct LineSeriesStyle {
     pub(super) width: f64,
     pub(super) marker: MarkerKind,
     pub(super) marker_color: Option<[u8; 3]>,
+    /// Official-like scatter series `c:smooth=1` (or `scatterStyle` smooth /
+    /// smoothMarker when the series flag is omitted). Close-enough
+    /// interpolating cubic; not a unique F28 curve lock.
+    pub(super) smooth: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,6 +212,9 @@ pub(super) struct Series {
     pub(super) plot_kind: PlotKind,
     /// Bubble sizes (c:bubbleSize). Empty for other kinds.
     pub(super) bubble_sizes: Vec<Option<f64>>,
+    /// Official-like scatter smoothing. Close-enough interpolating cubic,
+    /// not a unique F28 curve lock.
+    pub(super) smooth: bool,
 }
 
 impl Default for Series {
@@ -237,6 +244,7 @@ impl Default for Series {
             on_secondary: false,
             plot_kind: PlotKind::ClusteredColumn,
             bubble_sizes: Vec::new(),
+            smooth: false,
         }
     }
 }
