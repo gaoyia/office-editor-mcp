@@ -403,20 +403,21 @@ pub(super) fn x_of_dir(value: f64, axis_min: f64, axis_max: f64, plot: &Rect, re
 }
 
 
-fn stroke_points_for_scatter_run(run: &[(f64, f64)], smooth: bool) -> Vec<(f64, f64)> {
+fn stroke_points_for_smooth_run(run: &[(f64, f64)], smooth: bool) -> Vec<(f64, f64)> {
     if smooth {
-        close_enough_smooth_scatter_run(run)
+        close_enough_smooth_run(run)
     } else {
         run.to_vec()
     }
 }
 
-/// Close-enough interpolating cubic for official-like scatter `c:smooth=1`.
-/// Catmull-Rom converted to cubic Bezier (tension 0.5) with duplicated
-/// endpoints, sampled into a polyline. This is not a unique official
-/// interpolation lock; F28 remains the reusable curve / endpoint / blank
-/// contract.
-fn close_enough_smooth_scatter_run(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
+/// Close-enough interpolating cubic for official-like series `c:smooth=1`
+/// (scatter or standard line). Catmull-Rom converted to cubic Bezier
+/// (tension 0.5) with duplicated endpoints, sampled into a polyline.
+/// Official F28 gold supports a per-series rule on a standard lineChart
+/// (wrapper smooth=0); this is not a unique official-matrix lock and not
+/// a unique endpoint / blank contract.
+fn close_enough_smooth_run(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
     const STEPS: usize = 24;
     if points.len() < 3 {
         return points.to_vec();
@@ -488,7 +489,7 @@ pub(super) fn draw_scatter(
                 }
                 _ => {
                     if ser.line_visible && ser.line_width > 0.0 {
-                        let pts = stroke_points_for_scatter_run(&run, ser.smooth);
+                        let pts = stroke_points_for_smooth_run(&run, ser.smooth);
                         stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
                     }
                     run.clear();
@@ -496,7 +497,7 @@ pub(super) fn draw_scatter(
             }
         }
         if ser.line_visible && ser.line_width > 0.0 {
-            let pts = stroke_points_for_scatter_run(&run, ser.smooth);
+            let pts = stroke_points_for_smooth_run(&run, ser.smooth);
             stroke_run_style(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, color);
         }
         if !matches!(ser.marker, MarkerKind::None) {
@@ -1947,7 +1948,8 @@ pub(super) fn draw_lines(
                 {
                     None
                 } else {
-                    stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
+                    let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+                    stroke_run_pattern_join(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
                     run.clear();
                     None
                 };
@@ -1955,7 +1957,8 @@ pub(super) fn draw_lines(
                     run.push(line_point(v, ci, slot, plot, axis_min, axis_max, log_base, reversed));
                 }
             }
-            stroke_run_pattern_join(canvas, &run, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
+            let pts = stroke_points_for_smooth_run(&run, ser.smooth);
+            stroke_run_pattern_join(canvas, &pts, stroke::Style { width: ser.line_width, cap: ser.line_cap }, ser.line_dash.as_deref(), ser.line_join, color)?;
         }
         if !matches!(ser.marker, MarkerKind::None) {
             let marker_color = ser.marker_color.unwrap_or(color);

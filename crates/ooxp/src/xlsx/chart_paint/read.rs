@@ -1295,7 +1295,25 @@ pub(super) fn read_chart(
                 marker_color: None,
                 smooth: false,
             },
-            PlotKind::StandardLine => read_line_series(ser, accents, dpi, order, true)?,
+            PlotKind::StandardLine => {
+                let style = read_line_series(ser, accents, dpi, order, true)?;
+                // Official F28 gold is a single standard lineChart
+                // (wrapper smooth=0) with per-series c:smooth. Combo,
+                // radar, stacked, 3D, and dashed pens stay NI.
+                if style.smooth
+                    && (stacking != Stacking::Clustered
+                        || wrappers.len() > 1
+                        || chart3d.is_some()
+                        || matches!(
+                            other.as_ref().map(|o| o.kind),
+                            Some(OtherKind::Radar)
+                        )
+                        || style.dash.is_some())
+                {
+                    return Err(unsupported());
+                }
+                style
+            }
             PlotKind::StandardArea => {
                 let area = read_area_series(ser, accents, dpi)?;
                 line_color = area.line_color;
@@ -2197,11 +2215,9 @@ pub(super) fn read_line_series(
     explicit_pens: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
-    // Line charts keep series smooth=1 as NI (F28). Scatter may set a
-    // close-enough curve after this function returns.
-    if explicit_pens && flag(ser, "smooth").unwrap_or(false) {
-        return Err(unsupported());
-    }
+    // Official-like standard line series may set c:smooth=1. The
+    // StandardLine arm still rejects combo / radar / stacked / 3D /
+    // dashed cases. Scatter may override the flag after this returns.
     for name in ["dPt", "trendline", "errBars"] {
         if ser.child_by_local(name).is_some() {
             return Err(unsupported());
@@ -2235,7 +2251,7 @@ pub(super) fn read_line_series(
         width,
         marker,
         marker_color,
-        smooth: false,
+        smooth: flag(ser, "smooth").unwrap_or(false),
     })
 }
 

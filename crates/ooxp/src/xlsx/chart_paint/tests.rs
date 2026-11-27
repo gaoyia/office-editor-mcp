@@ -5772,15 +5772,6 @@
                     0,
                     "S1",
                     &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:smooth val="1"/>"#,
-                ),
-                "",
-            ),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
                     r#"<c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr>"#,
                 ),
                 "",
@@ -6258,6 +6249,117 @@
                 "leftover F27 style case {i} should stay NotImplemented"
             );
         }
+    }
+
+    fn official_like_f28_axes(xml: &str) -> String {
+        xml.replace(
+            r#"<c:valAx><c:majorGridlines/><c:crossBetween val="between"/></c:valAx>"#,
+            r#"<c:valAx><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:axPos val="l"/><c:majorGridlines/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#,
+        )
+    }
+
+    fn official_like_f28_line_xml(extra1: &str, extra2: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "F28S1", &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)], extra1),
+                line_ser(1, "F28S2", &[Some(20.0), Some(10.0), Some(35.0), Some(15.0)], extra2),
+            ),
+            "",
+        ))
+    }
+
+    #[test]
+    fn official_like_f28_line_series_smooth_export_and_paint_ink() {
+        let none_on = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#;
+        let none_off = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#;
+        let both = official_like_f28_line_xml(none_on, none_on);
+        let marked = official_like_f28_line_xml(
+            r#"<c:smooth val="1"/>"#,
+            r#"<c:smooth val="1"/>"#,
+        );
+        let mixed = official_like_f28_line_xml(none_off, none_on);
+        let control = official_like_f28_line_xml(none_off, none_off);
+        let a1 = FALLBACK_ACCENTS[0];
+        let a2 = FALLBACK_ACCENTS[1];
+        for (name, xml) in [
+            ("both-smooth", &both),
+            ("markers-smooth", &marked),
+            ("one-smooth", &mixed),
+            ("control", &control),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F28 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a1, 18) >= 20,
+                "official-like F28 {name} should paint the first series"
+            );
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, a2, 18) >= 20,
+                "official-like F28 {name} should paint the second series"
+            );
+        }
+        let curved = render_line(&both).unwrap();
+        let straight = render_line(&control).unwrap();
+        assert_ne!(
+            curved, straight,
+            "close-enough line smooth must curve, not copy the polyline"
+        );
+        let mixed_png = render_line(&mixed).unwrap();
+        assert_ne!(
+            mixed_png, curved,
+            "F28 mixed series must keep the unsmoothed series as a polyline"
+        );
+        assert_ne!(
+            mixed_png, straight,
+            "F28 mixed series must still curve the smoothed series"
+        );
+        let marked_png = render_line(&marked).unwrap();
+        assert_ne!(
+            marked_png, curved,
+            "F28 markers-smooth should keep auto markers on the close-enough curve"
+        );
+    }
+
+    #[test]
+    fn leftover_f28_smooth_variants_without_official_gold_stay_not_implemented() {
+        let none_off = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#;
+        let none_on = r#"<c:marker><c:symbol val="none"/></c:marker><c:smooth val="1"/>"#;
+        let control = official_like_f28_line_xml(none_off, none_off);
+        let wrapper = official_like_f28_axes(&standard_line_xml(
+            &format!(
+                "{}{}",
+                line_ser(0, "F28S1", &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)], none_off),
+                line_ser(1, "F28S2", &[Some(20.0), Some(10.0), Some(35.0), Some(15.0)], none_off),
+            ),
+            "",
+        ))
+        .replace("</c:lineChart>", r#"<c:smooth val="1"/></c:lineChart>"#);
+        let stacked = official_like_f28_line_xml(none_on, none_on).replace(
+            r#"grouping val="standard""#,
+            r#"grouping val="stacked""#,
+        );
+        let dashed = official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(10.0), Some(40.0), Some(10.0), Some(40.0)],
+                r#"<c:marker><c:symbol val="none"/></c:marker><c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr><c:smooth val="1"/>"#,
+            ),
+            "",
+        ));
+        for (i, xml) in [wrapper, stacked, dashed].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F28 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F28 case {i} should stay NotImplemented"
+            );
+        }
+        // The unsmoothed official-like control must still export.
+        render_line(&control).unwrap();
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {

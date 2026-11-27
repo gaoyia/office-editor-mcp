@@ -165,9 +165,9 @@ pub(super) struct LineSeriesStyle {
     pub(super) width: f64,
     pub(super) marker: MarkerKind,
     pub(super) marker_color: Option<[u8; 3]>,
-    /// Official-like scatter series `c:smooth=1` (or `scatterStyle` smooth /
-    /// smoothMarker when the series flag is omitted). Close-enough
-    /// interpolating cubic; not a unique F28 curve lock.
+    /// Official-like series `c:smooth=1` (scatter, or a standard lineChart
+    /// series; scatterStyle smooth / smoothMarker when the flag is omitted).
+    /// Close-enough interpolating cubic; not a unique official-matrix lock.
     pub(super) smooth: bool,
 }
 
@@ -212,8 +212,8 @@ pub(super) struct Series {
     pub(super) plot_kind: PlotKind,
     /// Bubble sizes (c:bubbleSize). Empty for other kinds.
     pub(super) bubble_sizes: Vec<Option<f64>>,
-    /// Official-like scatter smoothing. Close-enough interpolating cubic,
-    /// not a unique F28 curve lock.
+    /// Official-like series smoothing. Close-enough interpolating cubic,
+    /// not a unique official-matrix or blank/endpoint lock.
     pub(super) smooth: bool,
 }
 
