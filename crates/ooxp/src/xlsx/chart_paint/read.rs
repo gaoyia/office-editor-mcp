@@ -2396,18 +2396,32 @@ pub(super) fn read_ln_with_caps(ln: &Element, accents: [[u8;3];6], default_width
                 dash_declared = true;
                 let value = child.attr_local("val").unwrap_or("solid");
                 if value != "solid" {
-                    // Presets reuse the same run/cap/join sampler as custom
-                    // dashes. Explicit flat pens are native-verified for all
-                    // ten tokens; round dash/dot are separately discriminated.
-                    // No inferred default cap/width, square terminal-gap rule,
-                    // other host expansion, or legend/plot compensation.
-                    if !explicit_caps || ln.attr_local("cap").is_none()
-                        || !(cap == stroke::Cap::Flat || (cap == stroke::Cap::Round && matches!(value,"dash"|"dot")))
-                        || ln.attr_local("w").and_then(|v|v.parse::<f64>().ok()).is_none_or(|w|!w.is_finite() || w<=0.0)
+                    // Official-like standard line charts may omit cap and w.
+                    // Presets reuse the same run/cap/join sampler and the
+                    // DrawingML ST_PresetLineDashVal width-percent contract.
+                    // Omitted cap keeps the accepted Round baseline; omitted w
+                    // keeps the accepted default width (2.25pt / 4px at 106dpi).
+                    // Explicit caps already accepted for this pen (flat/sq/rnd)
+                    // reuse the same sampler. Close-enough export, not a unique
+                    // official-matrix lock of period or phase. Invalid explicit
+                    // widths, other hosts, and inferred COM weights stay out.
+                    let explicit_w = ln.attr_local("w");
+                    let parsed_w = explicit_w.and_then(|v| v.parse::<f64>().ok());
+                    if !explicit_caps
+                        || (explicit_w.is_some()
+                            && parsed_w.is_none_or(|w| !w.is_finite() || w <= 0.0))
                         || child.element_children().next().is_some()
-                        || child.attrs.iter().any(|(k,_)| k!="val" && !k.starts_with("xmlns"))
-                    { return Err(unsupported()); }
-                    dash=Some(std::sync::Arc::new(stroke::DashPattern::from_preset_width(value,width).ok_or_else(unsupported)?));
+                        || child
+                            .attrs
+                            .iter()
+                            .any(|(k, _)| k != "val" && !k.starts_with("xmlns"))
+                    {
+                        return Err(unsupported());
+                    }
+                    dash = Some(std::sync::Arc::new(
+                        stroke::DashPattern::from_preset_width(value, width)
+                            .ok_or_else(unsupported)?,
+                    ));
                 }
             }
             "round" => {},

@@ -1021,19 +1021,25 @@
     }
 
     #[test]
-    fn preset_dash_parser_requires_explicit_native_validated_cap_and_pen() {
+    fn preset_dash_parser_reuses_resolved_pen_for_official_like_omitted_cap_and_width() {
         for name in ["dash","dashDot","dot","lgDash","lgDashDot","lgDashDotDot","sysDash","sysDot","sysDashDot","sysDashDotDot"] {
-            for cap in ["flat","rnd"] {
+            for cap in ["flat","rnd","sq"] {
                 let doc=crate::xml::parse(format!("<ln w='50800' cap='{cap}'><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
                 let a=read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true);
-                if cap=="flat" || matches!(name,"dash"|"dot") {assert!(a.unwrap().dash.is_some());}else{assert!(a.is_err());}
+                assert!(a.unwrap().dash.is_some(), "{name} cap={cap}");
                 assert!(read_solid_ln(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default()).is_err());
             }
+            let omitted=crate::xml::parse(format!("<ln><prstDash val='{name}'/></ln>").as_bytes()).unwrap();
+            let style=read_ln_with_caps(&omitted.root,FALLBACK_ACCENTS,4.,RenderDpi::default(),true).unwrap();
+            assert!(style.dash.is_some(), "{name} omitted cap/w");
+            assert_eq!(style.cap, stroke::Cap::Round);
+            assert_eq!(style.width, 4.0);
+            assert!(read_solid_ln(&omitted.root,FALLBACK_ACCENTS,4.,RenderDpi::default()).is_err());
         }
     }
     #[test]
     fn preset_dash_rejects_unverified_bounds_ambiguity_and_complex_pens() {
-        for attrs in ["", "w='50800'", "cap='flat'", "w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'", "w='50800' cap='sq'"] {
+        for attrs in ["w='0' cap='flat'", "w='NaN' cap='flat'", "w='bad' cap='flat'"] {
             let doc=crate::xml::parse(format!("<ln {attrs}><prstDash val='dash'/></ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.,RenderDpi::default(),true).is_err());
         }
         for body in ["<prstDash val='unknown'/>","<prstDash val='dash' phase='1'/>","<prstDash val='dash'><x/></prstDash>","<prstDash val='dash'/><prstDash val='solid'/>","<prstDash val='dash'/><custDash><ds d='100000' sp='100000'/></custDash>","<custDash><ds d='100000' sp='100000'/></custDash><prstDash val='dash'/>","<prstDash val='dash'/><noFill/>","<prstDash val='dash'/><solidFill><srgbClr val='175DB5'><alpha val='50000'/></srgbClr></solidFill>","<prstDash val='dash'/><headEnd type='triangle'/>"] {
@@ -1406,7 +1412,9 @@
             if cap!="rnd" {assert!(read_solid_ln(&node.root,FALLBACK_ACCENTS,2.0,RenderDpi::default()).is_err());}
         }
         assert_ne!(images[0],images[1]);assert_ne!(images[0],images[2]);assert_ne!(images[1],images[2]);
-        for body in ["<a:prstDash val='dash'/>","<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
+        let dash=crate::xml::parse(b"<a:ln xmlns:a='a' cap='flat'><a:prstDash val='dash'/></a:ln>").unwrap();
+        assert!(read_ln_with_caps(&dash.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).unwrap().dash.is_some());
+        for body in ["<a:custDash><a:ds d='200000' sp='100000'/></a:custDash>","<a:headEnd type='triangle'/>","<a:miter/>","<a:solidFill><a:srgbClr val='175DB5'><a:alpha val='50000'/></a:srgbClr></a:solidFill>"] {
             let doc=crate::xml::parse(format!("<a:ln xmlns:a='a' cap='flat'>{body}</a:ln>").as_bytes()).unwrap();assert!(read_ln_with_caps(&doc.root,FALLBACK_ACCENTS,2.0,RenderDpi::default(),true).is_err());
         }
         let mut thin=Canvas::new(90,40);let mut thick=Canvas::new(90,40);
@@ -5767,15 +5775,6 @@
                 r#"grouping val="standard""#,
                 r#"grouping val="percentStacked""#,
             ),
-            standard_line_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0), Some(3.0)],
-                    r#"<c:spPr><a:ln w="28575"><a:prstDash val="dash"/><a:solidFill><a:srgbClr val="156082"/></a:solidFill></a:ln></c:spPr>"#,
-                ),
-                "",
-            ),
             standard_line_xml(&base, "").replace(r#"varyColors val="0""#, r#"varyColors val="1""#),
             line_space(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:ser>
@@ -6360,6 +6359,100 @@
         }
         // The unsmoothed official-like control must still export.
         render_line(&control).unwrap();
+    }
+
+    fn official_like_f29_line_xml(extra: &str) -> String {
+        official_like_f28_axes(&standard_line_xml(
+            &line_ser(
+                0,
+                "F29S1",
+                &[Some(40.0); 8],
+                extra,
+            ),
+            "",
+        ))
+    }
+
+    fn official_like_f29_ln(prst: &str, cap: &str) -> String {
+        let cap_attr = if cap.is_empty() {
+            String::new()
+        } else {
+            format!(r#" cap="{cap}""#)
+        };
+        format!(
+            r#"<c:spPr><a:ln{cap_attr}><a:prstDash val="{prst}"/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#
+        )
+    }
+
+    #[test]
+    fn official_like_f29_prst_dash_export_and_paint_ink() {
+        let solid = official_like_f29_line_xml(&official_like_f29_ln("solid", ""));
+        let dash = official_like_f29_line_xml(&official_like_f29_ln("dash", ""));
+        let square_dot = official_like_f29_line_xml(&official_like_f29_ln("dot", "sq"));
+        let round_dot = official_like_f29_line_xml(&official_like_f29_ln("dot", "rnd"));
+        let dash_dot = official_like_f29_line_xml(&official_like_f29_ln("dashDot", ""));
+        let long_dash = official_like_f29_line_xml(&official_like_f29_ln("lgDash", ""));
+        let accent = FALLBACK_ACCENTS[0];
+        let mut pngs = Vec::new();
+        for (name, xml) in [
+            ("solid", &solid),
+            ("dash", &dash),
+            ("squareDot", &square_dot),
+            ("roundDot", &round_dot),
+            ("dashDot", &dash_dot),
+            ("longDash", &long_dash),
+        ] {
+            let png = render_line(xml)
+                .unwrap_or_else(|err| panic!("official-like F29 {name} must export, got {err}"));
+            let (w, h, rgb) = png_rgb(&png);
+            assert!(
+                count_in(&rgb, w, 0, w, 0, h, accent, 18) >= 20,
+                "official-like F29 {name} should paint the series"
+            );
+            pngs.push((name, png));
+        }
+        let solid_png = &pngs[0].1;
+        for (name, png) in &pngs[1..] {
+            assert_ne!(
+                png, solid_png,
+                "close-enough F29 {name} must dash, not copy the solid stroke"
+            );
+        }
+        assert_ne!(
+            pngs[1].1, pngs[4].1,
+            "F29 dash and dashDot must keep distinct preset periods"
+        );
+        assert_ne!(
+            pngs[1].1, pngs[5].1,
+            "F29 dash and lgDash must keep distinct preset periods"
+        );
+        assert_ne!(
+            pngs[2].1, pngs[3].1,
+            "F29 square and round dots must reuse the same cap sampler"
+        );
+    }
+
+    #[test]
+    fn leftover_f29_dash_variants_without_official_gold_stay_not_implemented() {
+        let dash = official_like_f29_line_xml(&official_like_f29_ln("dash", ""));
+        let unknown = official_like_f29_line_xml(&official_like_f29_ln("unknown", ""));
+        let custom_omitted = official_like_f29_line_xml(
+            r#"<c:spPr><a:ln><a:custDash><a:ds d="200000" sp="100000"/></a:custDash></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker><c:smooth val="0"/>"#,
+        );
+        let scatter = official_like_f27_scatter_xml(
+            "lineMarker",
+            r#"<c:spPr><a:ln><a:prstDash val="dash"/></a:ln></c:spPr><c:marker><c:symbol val="none"/></c:marker>"#,
+        );
+        for (i, xml) in [unknown, custom_omitted, scatter].iter().enumerate() {
+            let err = render_line(xml)
+                .expect_err(&format!("leftover F29 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F29 case {i} should stay NotImplemented"
+            );
+        }
+        render_line(&dash).unwrap();
     }
 
     fn bar_space(plot_body: &str, chart_extra: &str, cat_orient: &str) -> String {
