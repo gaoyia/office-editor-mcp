@@ -10201,6 +10201,11 @@
                 r#"<c:scaling><c:orientation val="minMax"/><c:min val="{vmin}"/><c:max val="{vmax}"/></c:scaling>"#
             )
         };
+        let major_el = if auto {
+            String::new()
+        } else {
+            format!(r#"<c:majorUnit val="{major}"/>"#)
+        };
         let (cat_pos, val_pos) = if dir == "bar" { ("l", "b") } else { ("b", "l") };
         format!(
             r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -10213,7 +10218,7 @@
         <c:gapWidth val="150"/><c:overlap val="100"/><c:axId val="1"/><c:axId val="2"/>
       </c:barChart>
       <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="{cat_pos}"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
-      <c:valAx><c:axId val="2"/>{scaling}<c:majorUnit val="{major}"/><c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
+      <c:valAx><c:axId val="2"/>{scaling}{major_el}<c:delete val="0"/><c:axPos val="{val_pos}"/><c:majorGridlines/>{numfmt}<c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>
     </c:plotArea>
     <c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>
   </c:chart>
@@ -10401,11 +10406,54 @@
         let br1 = accent_x_runs(&brgb, bw, bh, a1);
         assert_eq!(br1.len(), 3, "missing S2 in B is not drawn, got {br1:?}");
 
-        let auto = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
+        // Official F22-6 Chart.Export gold exists, so omitted min/max/major
+        // on stacked columns must produce an image. Auto bounds reuse
+        // scale_values on stacked extents (official 0-80 / 10), not raw
+        // point values, and are close-enough rather than a unique lock.
+        let auto_doc = crate::xml::parse(stacked_xml("col", "stacked", &series, true, false, false).as_bytes())
             .unwrap();
+        let auto_chart = read_chart(&auto_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+            .expect("omitted min/max on stacked must export");
+        assert!(auto_chart.axis.min.is_none() && auto_chart.axis.max.is_none());
+        let auto_png = render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("omitted min/max stacked must produce an image");
+        let (aw, ah, argb) = png_rgb(&auto_png);
+        let auto_r0 = accent_x_runs(&argb, aw, ah, a0);
+        let auto_r1 = accent_x_runs(&argb, aw, ah, a1);
+        let auto_r2 = accent_x_runs(&argb, aw, ah, a2);
+        assert_eq!(auto_r0.len(), 4, "auto stacked S1 four slots, got {auto_r0:?}");
+        assert_eq!(auto_r1.len(), 4, "auto stacked S2 four slots, got {auto_r1:?}");
+        assert_eq!(auto_r2.len(), 4, "auto stacked S3 four slots, got {auto_r2:?}");
+        let h_grids = {
+            let mut n = 0u32;
+            for y in 0..ah {
+                let mut ink = 0u32;
+                for x in aw / 8..(aw * 3) / 4 {
+                    let i = (y as usize * aw as usize + x as usize) * 3;
+                    if argb[i] < 40 && argb[i + 1] < 40 && argb[i + 2] < 40 {
+                        ink += 1;
+                    }
+                }
+                if ink >= aw / 5 {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // Official auto is 0-80 major 10 (8 intervals). Explicit 0-80 / 20
+        // has fewer grids. Raw point max 40 would not use an 80 range.
         assert!(
-            read_chart(&auto.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).is_err(),
-            "omitted min/max on stacked stays NI"
+            h_grids >= 8,
+            "stacked auto should use stacked extents (0-80 / 10), grids={h_grids}"
         );
         let inv = crate::xml::parse(stacked_xml("col", "stacked", &series, false, true, false).as_bytes())
             .unwrap();

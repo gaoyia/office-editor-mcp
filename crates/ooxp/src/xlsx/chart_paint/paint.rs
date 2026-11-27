@@ -576,6 +576,12 @@ pub(super) fn paint_bar(
             chart.axis,
             budget,
         )?
+    } else if chart.stacking == Stacking::Stacked {
+        axis::scale_values(
+            stacked_extent_values(&chart.series).into_iter(),
+            chart.axis,
+            budget,
+        )?
     } else {
         axis::scale(&chart.series, chart.axis, budget)?
     };
@@ -1150,6 +1156,12 @@ pub(super) fn paint(
                 .iter()
                 .filter(|ser| !ser.on_secondary)
                 .flat_map(|ser| ser.values.iter().copied()),
+            chart.axis,
+            budget,
+        )?
+    } else if chart.stacking == Stacking::Stacked {
+        axis::scale_values(
+            stacked_extent_values(&chart.series).into_iter(),
             chart.axis,
             budget,
         )?
@@ -2265,6 +2277,42 @@ pub(super) fn draw_bar_value(
 /// from zero, independently. Omitted or non-finite points are skipped and
 /// later series pack onto the running total. percentStacked uses value/sum
 /// of all (required positive finite) points in the category.
+/// Per-category positive and negative stack totals for auto scale. Official
+/// F22-6 omits min/max/major; feeding raw point values would clip the stack
+/// (max 40 vs stacked 70). Reuses scale_values, not a unique official lock.
+pub(super) fn stacked_extent_values(series: &[Series]) -> Vec<Option<f64>> {
+    let n = series.iter().map(|ser| ser.values.len()).max().unwrap_or(0);
+    let mut out = Vec::new();
+    for ci in 0..n {
+        let mut pos = 0.0;
+        let mut neg = 0.0;
+        let mut any = false;
+        for ser in series {
+            let Some(v) = ser.values.get(ci).copied().flatten() else {
+                continue;
+            };
+            if !v.is_finite() {
+                continue;
+            }
+            any = true;
+            if v >= 0.0 {
+                pos += v;
+            } else {
+                neg += v;
+            }
+        }
+        if any {
+            if pos > 0.0 {
+                out.push(Some(pos));
+            }
+            if neg < 0.0 {
+                out.push(Some(neg));
+            }
+        }
+    }
+    out
+}
+
 pub(super) fn stack_segment(group: &[&Series], ci: usize, si: usize, percent: bool) -> Option<(f64, f64)> {
     if si >= group.len() {
         return None;
