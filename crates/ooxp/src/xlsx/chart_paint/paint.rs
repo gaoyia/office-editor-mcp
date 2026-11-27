@@ -987,7 +987,13 @@ pub(super) fn paint_pie(
     if chart.series.len() != 1 {
         return Err(unsupported());
     }
-    if chart.legend.is_some() && !chart.legend_spec.default_right_ink() {
+    let standard_pie = chart.hole_size.is_none()
+        && chart.other.is_none()
+        && chart.chart3d.is_none();
+    if chart.legend.is_some()
+        && !(chart.legend_spec.default_right_ink()
+            || (standard_pie && chart.legend_spec.official_like_pie_auto_legend()))
+    {
         return Err(unsupported());
     }
     let label_px = canvas.dpi.pt_to_px_font(LABEL_PT) as f32;
@@ -1021,7 +1027,11 @@ pub(super) fn paint_pie(
         label_px,
         title_lines.len(),
     );
-    let legend_band = if chart.legend == Some(LegendPos::Right) {
+    let side_legend = matches!(
+        chart.legend,
+        Some(LegendPos::Right | LegendPos::Left | LegendPos::TopRight)
+    );
+    let legend_band = if side_legend {
         let line = gdi
             .as_ref()
             .map_or_else(|| text_height(font, label_px), |face| face.em_box());
@@ -1041,15 +1051,49 @@ pub(super) fn paint_pie(
     } else {
         0.0
     };
-    let plot = pie_plot_bounds(
+    // Horizontal-band height uses existing pie key/gap/pad tokens, not a
+    // Cartesian reserve and not a new official constant.
+    let horiz_band = if matches!(chart.legend, Some(LegendPos::Top | LegendPos::Bottom)) {
+        f64::from(
+            canvas.dpi.scale_px(LEGEND_SWATCH)
+                + canvas.dpi.scale_px(LEGEND_PLOT_GAP)
+                + canvas.dpi.scale_px(LEGEND_PAD),
+        )
+    } else {
+        0.0
+    };
+    let left_band = if chart.legend == Some(LegendPos::Left) {
+        legend_band
+    } else {
+        0.0
+    };
+    let right_band = if matches!(chart.legend, Some(LegendPos::Right | LegendPos::TopRight)) {
+        legend_band
+    } else {
+        0.0
+    };
+    let top_legend_band = if chart.legend == Some(LegendPos::Top) {
+        horiz_band
+    } else {
+        0.0
+    };
+    let bottom_band = if chart.legend == Some(LegendPos::Bottom) {
+        horiz_band
+    } else {
+        0.0
+    };
+    let plot = pie_plot_bounds_reserved(
         f64::from(canvas.w),
         f64::from(canvas.h),
         title_band,
-        legend_band,
+        left_band,
+        right_band,
+        top_legend_band,
+        bottom_band,
         canvas.dpi,
     )
     .ok_or_else(unsupported)?;
-    let inset_right = if chart.legend == Some(LegendPos::Right) {
+    let inset_right = if matches!(chart.legend, Some(LegendPos::Right | LegendPos::TopRight)) {
         pie_legend_right_inset(chart, font, gdi.as_ref(), label_px, canvas.dpi)
     } else {
         canvas.dpi.scale_px(INSET_TOP)
@@ -1065,6 +1109,17 @@ pub(super) fn paint_pie(
     if chart.legend == Some(LegendPos::Right) {
         let legend_plot_r = canvas.w as i32 - inset_right;
         draw_pie_legend(canvas, chart, font, gdi.as_ref(), label_px, legend_plot_r);
+    } else if let Some(pos) = chart.legend {
+        draw_pie_legend_pos(
+            canvas,
+            chart,
+            font,
+            gdi.as_ref(),
+            label_px,
+            pos,
+            &plot,
+            canvas.w as i32 - inset_right,
+        );
     }
     if matches!(host, ChartHost::Excel) {
         canvas.finish_excel_frame(Some(&plot));
@@ -1082,12 +1137,33 @@ pub(super) fn pie_plot_bounds(
     legend_band: f64,
     dpi: RenderDpi,
 ) -> Option<Rect> {
-    let available_width = width - legend_band;
-    let available_height = height - title_band;
+    // Existing right-band (or no-legend) contract: the band is taken from
+    // the right. Kept as a thin wrapper so locked PlotArea tests stay
+    // bit-identical.
+    pie_plot_bounds_reserved(width, height, title_band, 0.0, legend_band, 0.0, 0.0, dpi)
+}
+
+/// Pie square in a reserved rectangle. `pie_plot_bounds(w,h,title,right,dpi)`
+/// is exactly this with only `right_band` set. Left/top/bottom bands are the
+/// F39 close-enough reserves; they do not change the locked diameter
+/// formula, and they are not a unique five-position official lock or a
+/// new 0.875 guess.
+pub(super) fn pie_plot_bounds_reserved(
+    width: f64,
+    height: f64,
+    title_band: f64,
+    left_band: f64,
+    right_band: f64,
+    top_legend_band: f64,
+    bottom_band: f64,
+    dpi: RenderDpi,
+) -> Option<Rect> {
+    let available_width = width - left_band - right_band;
+    let available_height = height - title_band - top_legend_band - bottom_band;
     let diameter = available_width.min(available_height) * 0.875 - dpi.pt_to_px_font(22.0);
     (diameter > 1.0).then_some(Rect {
-        x: (available_width - diameter) / 2.0,
-        y: title_band + (available_height - diameter) / 2.0,
+        x: left_band + (available_width - diameter) / 2.0,
+        y: title_band + top_legend_band + (available_height - diameter) / 2.0,
         w: diameter,
         h: diameter,
     })
@@ -1246,6 +1322,106 @@ pub(super) fn draw_pie_legend(
             INK,
         );
         y += pitch;
+    }
+}
+
+fn paint_pie_legend_entry(
+    canvas: &mut Canvas,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    x: i32,
+    y: i32,
+    name: &str,
+    fill: &SliceFill,
+) {
+    let swatch = canvas.dpi.scale_px(LEGEND_SWATCH);
+    if let Some(grad) = fill.linear.as_ref() {
+        canvas.fill_linear_rect(x, y, x + swatch, y + swatch, grad);
+    } else if fill.alpha > 0 {
+        canvas.fill_rect_cov(x, y, x + swatch, y + swatch, fill.color, fill.alpha);
+    }
+    draw_text(
+        canvas,
+        font,
+        gdi,
+        name,
+        f64::from(x + swatch + legend_filled_key_gap(canvas.dpi)),
+        legend_filled_label_top(y, swatch, gdi, font, px),
+        px,
+        INK,
+    );
+}
+
+/// Close-enough l/t/b/tr pie legend. Right keeps `draw_pie_legend`.
+/// Keys stay LTR (label to the right of the swatch); left is a side
+/// reserve, not a mirrored key/text cluster. Top/bottom use the existing
+/// `LEGEND_PLOT_GAP` as the shared boundary with the pie square. TopRight
+/// reuses the right-band x and top-aligns with the pie square. Not a
+/// unique official-matrix lock and not a Cartesian reserve copy.
+pub(super) fn draw_pie_legend_pos(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    font: Option<&Font>,
+    gdi: Option<&super::super::chart_gdi::Face>,
+    px: f32,
+    pos: LegendPos,
+    plot: &Rect,
+    plot_r: i32,
+) {
+    if pos == LegendPos::Right {
+        draw_pie_legend(canvas, chart, font, gdi, px, plot_r);
+        return;
+    }
+    let items = pie_legend_items(chart);
+    let n = items.len() as i32;
+    if n == 0 {
+        return;
+    }
+    let pitch = canvas.dpi.scale_px(24);
+    let swatch = canvas.dpi.scale_px(LEGEND_SWATCH);
+    let gap = canvas.dpi.scale_px(LEGEND_PLOT_GAP);
+    let pad = canvas.dpi.scale_px(LEGEND_PAD);
+    let block = pitch * (n - 1) + swatch;
+    let title_band = if chart.title.is_some() {
+        canvas.dpi.scale_px(LEGEND_TITLE_BAND)
+    } else {
+        0
+    };
+    match pos {
+        LegendPos::Left => {
+            let mut y = (title_band + canvas.h as i32 - block) / 2;
+            let x = pad;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                y += pitch;
+            }
+        }
+        LegendPos::TopRight => {
+            let x = plot_r + gap;
+            let mut y = plot.y.round() as i32;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                y += pitch;
+            }
+        }
+        LegendPos::Top => {
+            let mut x = (canvas.w as i32 - block) / 2;
+            let y = plot.y.round() as i32 - gap - swatch;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                x += pitch;
+            }
+        }
+        LegendPos::Bottom => {
+            let mut x = (canvas.w as i32 - block) / 2;
+            let y = (plot.y + plot.h).round() as i32 + gap;
+            for (name, fill) in items {
+                paint_pie_legend_entry(canvas, font, gdi, px, x, y, &name, &fill);
+                x += pitch;
+            }
+        }
+        LegendPos::Right => {}
     }
 }
 

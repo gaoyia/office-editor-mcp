@@ -1789,8 +1789,14 @@ pub(super) fn read_chart(
         // even when every value is negative. All-zero and all-empty pies keep
         // the frame and legend but take no slice. The previous "at least one
         // finite positive" gate is therefore not required.
-        if legend_pos(chart).is_some() && !legend::Spec::read(root, accents)?.default_right_ink() {
-            return Err(unsupported());
+        if legend_pos(chart).is_some() {
+            let spec = legend::Spec::read(root, accents)?;
+            let standard_pie = wrapper.local_name() == "pieChart" && chart3d.is_none();
+            if !(spec.default_right_ink()
+                || (standard_pie && spec.official_like_pie_auto_legend()))
+            {
+                return Err(unsupported());
+            }
         }
     }
     let (axis, axis_x, grid_x, cats_from_bottom) = if matches!(kind, PlotKind::Pie) {

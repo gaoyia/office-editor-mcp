@@ -84,6 +84,30 @@ impl Spec {
             && self.background == FrameFill::NoFill
             && self.border.is_none()
     }
+
+    /// Official-like automatic pie legend: overlay 0, no manual layout, and
+    /// the same default typography/frame subset as `default_right_ink`.
+    /// Right stays on the existing path; l/t/b/tr are the F39 close-enough
+    /// positions. Not a unique official-matrix lock of every layout.
+    pub(super) fn official_like_pie_auto_legend(&self) -> bool {
+        !self.overlay
+            && self.style == TextStyle::default()
+            && self.manual.is_none()
+            && self.deleted.is_empty()
+            && self.entries.is_empty()
+            && self.background == FrameFill::NoFill
+            && self.border.is_none()
+            && matches!(
+                self.pos,
+                Some(
+                    LegendPos::Right
+                        | LegendPos::Left
+                        | LegendPos::Top
+                        | LegendPos::Bottom
+                        | LegendPos::TopRight
+                )
+            )
+    }
     // Entry-only paint changes do not change the inherited font metrics.
     // Controlled Excel exports confirm that the existing default-right geometry
     // stays fixed. Keep default_right_ink strict for the separate pie boundary.

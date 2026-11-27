@@ -9418,6 +9418,166 @@
         render_pie(&official_like_f38_pie_xml(&official_like_f38_lin("0"))).unwrap();
     }
 
+    fn official_like_f39_pie_xml(pos: &str) -> String {
+        official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            &format!(r#"<c:legend><c:legendPos val="{pos}"/><c:overlay val="0"/></c:legend>"#),
+        )
+    }
+
+    fn f39_is_colorful(px: [u8; 3]) -> bool {
+        let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+        let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+            && (px[1] as i16 - 247).unsigned_abs() <= 16
+            && (px[2] as i16 - 247).unsigned_abs() <= 16;
+        let blackish = px[0] < 50 && px[1] < 50 && px[2] < 50;
+        !fillish && !blackish && chroma >= 20
+    }
+
+    fn f39_colorful_bbox(rgb: &[u8], w: u32, h: u32) -> (i32, i32, i32, i32, f64, f64, usize) {
+        let n_pix = (w * h) as usize;
+        let mut seen = vec![false; n_pix];
+        let idx = |x: i32, y: i32| y as usize * w as usize + x as usize;
+        let mut best = (0i32, 0i32, -1i32, -1i32, 0.0, 0.0, 0usize);
+        for y0 in 0..h as i32 {
+            for x0 in 0..w as i32 {
+                let start = idx(x0, y0);
+                if seen[start] {
+                    continue;
+                }
+                let i0 = start * 3;
+                if !f39_is_colorful([rgb[i0], rgb[i0 + 1], rgb[i0 + 2]]) {
+                    seen[start] = true;
+                    continue;
+                }
+                let mut stack = vec![(x0, y0)];
+                seen[start] = true;
+                let mut min_x = x0;
+                let mut min_y = y0;
+                let mut max_x = x0;
+                let mut max_y = y0;
+                let mut sx = 0f64;
+                let mut sy = 0f64;
+                let mut n = 0usize;
+                while let Some((x, y)) = stack.pop() {
+                    let i = idx(x, y) * 3;
+                    if !f39_is_colorful([rgb[i], rgb[i + 1], rgb[i + 2]]) {
+                        continue;
+                    }
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                    sx += f64::from(x);
+                    sy += f64::from(y);
+                    n += 1;
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = x + dx;
+                        let ny = y + dy;
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let ni = idx(nx, ny);
+                        if seen[ni] {
+                            continue;
+                        }
+                        seen[ni] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+                if n > best.6 {
+                    let cx = sx / n as f64;
+                    let cy = sy / n as f64;
+                    best = (min_x, min_y, max_x, max_y, cx, cy, n);
+                }
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn official_like_f39_automatic_legend_positions_export_and_place() {
+        let right = official_like_f39_pie_xml("r");
+        let left = official_like_f39_pie_xml("l");
+        let top = official_like_f39_pie_xml("t");
+        let bottom = official_like_f39_pie_xml("b");
+        let tr = official_like_f39_pie_xml("tr");
+        let right_png = render_pie(&right).expect("official-like F39 pieLegR must export");
+        let left_png = render_pie(&left).expect("official-like F39 pieLegL must export");
+        let top_png = render_pie(&top).expect("official-like F39 pieLegT must export");
+        let bottom_png = render_pie(&bottom).expect("official-like F39 pieLegB must export");
+        let tr_png = render_pie(&tr).expect("official-like F39 pieLegTR must export");
+        assert_ne!(left_png, right_png, "left legend must move the pie");
+        assert_ne!(top_png, right_png, "top legend must change the layout");
+        assert_ne!(bottom_png, right_png, "bottom legend must change the layout");
+        assert_ne!(tr_png, right_png, "topRight legend must change the key placement");
+        let (w, h, rgb_r) = png_rgb(&right_png);
+        let (_, _, rgb_l) = png_rgb(&left_png);
+        let (_, _, rgb_t) = png_rgb(&top_png);
+        let (_, _, rgb_b) = png_rgb(&bottom_png);
+        let (_, _, rgb_tr) = png_rgb(&tr_png);
+        let r = f39_colorful_bbox(&rgb_r, w, h);
+        let l = f39_colorful_bbox(&rgb_l, w, h);
+        let tbox = f39_colorful_bbox(&rgb_t, w, h);
+        let bbox_b = f39_colorful_bbox(&rgb_b, w, h);
+        assert!(
+            l.4 > r.4 + 8.0,
+            "left legend must shift the pie toward the right, got left cx={} right cx={}",
+            l.4,
+            r.4
+        );
+        let r_d = (r.2 - r.0).max(r.3 - r.1);
+        let l_d = (l.2 - l.0).max(l.3 - l.1);
+        assert!(
+            (l_d - r_d).abs() <= 8,
+            "left and right pies must keep the same reserved-square diameter, got L={l_d} R={r_d}"
+        );
+        let t_d = (tbox.2 - tbox.0).max(tbox.3 - tbox.1);
+        let b_d = (bbox_b.2 - bbox_b.0).max(bbox_b.3 - bbox_b.1);
+        assert!(
+            t_d + 8 < r_d && b_d + 8 < r_d,
+            "top/bottom legends must leave a smaller pie square, got T={t_d} B={b_d} R={r_d}"
+        );
+        // TopRight keeps the right-band square (same diameter/x as right in
+        // this close-enough path) and top-aligns keys with the pie square.
+        let trb = f39_colorful_bbox(&rgb_tr, w, h);
+        assert!(
+            (trb.4 - r.4).abs() < 8.0,
+            "topRight pie must keep the right-band horizontal centre, got tr cx={} r cx={}",
+            trb.4,
+            r.4
+        );
+        let _ = (h, tr_png, bottom_png);
+    }
+
+    #[test]
+    fn leftover_f39_variants_without_official_gold_stay_not_implemented() {
+        let left = official_like_f39_pie_xml("l");
+        let overlay_l = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="l"/><c:overlay val="1"/></c:legend>"#,
+        );
+        let manual = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="l"/><c:overlay val="0"/><c:layout><c:manualLayout><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.1"/><c:w val="0.2"/><c:h val="0.2"/></c:manualLayout></c:layout></c:legend>"#,
+        );
+        let doughnut = official_like_doughnut_xml().replace(
+            r#"<c:legendPos val="r"/>"#,
+            r#"<c:legendPos val="l"/>"#,
+        );
+        let cases = [overlay_l, manual, doughnut];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_pie(xml)
+                .expect_err(&format!("F39 leftover case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "F39 leftover case {i} should stay NotImplemented"
+            );
+        }
+        render_pie(&left).unwrap();
+    }
+
     #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
@@ -9469,8 +9629,6 @@
                 ),
                 "",
             ),
-            standard_pie_xml(&ser, "", "")
-                .replace(r#"<c:legendPos val="r"/>"#, r#"<c:legendPos val="l"/>"#),
         ];
         for (i, xml) in cases.iter().enumerate() {
             let err =
