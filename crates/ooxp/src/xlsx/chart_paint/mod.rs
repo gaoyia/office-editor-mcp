@@ -30,6 +30,7 @@ mod render;
 mod stroke;
 mod typography;
 mod types;
+mod other;
 mod view3d;
 
 #[cfg(test)]
@@ -52,6 +53,7 @@ use render::*;
 use typography::*;
 #[allow(unused_imports)]
 use types::*;
+use other::*;
 use view3d::*;
 
 pub(crate) use color::{theme_accents, SystemColorPalette};

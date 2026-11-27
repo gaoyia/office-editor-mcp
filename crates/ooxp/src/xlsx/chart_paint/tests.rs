@@ -8109,14 +8109,6 @@
                 &format!(r#"<c:pieChart><c:varyColors val="1"/>{two}</c:pieChart>"#),
                 "",
             ),
-            base.replace("<c:pieChart>", "<c:doughnutChart>")
-                .replace("</c:pieChart>", "</c:doughnutChart>"),
-            pie_space(
-                r#"<c:ofPieChart><c:ofPieType val="pie"/><c:varyColors val="1"/><c:ser>
-          <c:order val="0"/><c:val><c:numLit><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val>
-        </c:ser></c:ofPieChart>"#,
-                "",
-            ),
             standard_pie_xml(&ser, "", r#"<c:firstSliceAng val="361"/>"#),
             // Leftover: series explosion plus a dPt explosion is not uniquely locked.
             standard_pie_xml(
@@ -11735,6 +11727,279 @@
                 err.code(),
                 crate::error::ErrorCode::NotImplemented,
                 "leftover 3D case {i} should stay NotImplemented"
+            );
+        }
+    }
+
+    fn hidden_dlbls() -> &'static str {
+        r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls>"#
+    }
+
+    fn cats_ab() -> &'static str {
+        r#"<c:cat><c:strLit><c:ptCount val="4"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt></c:strLit></c:cat>"#
+    }
+
+    fn val_pts(vals: &str) -> String {
+        let parts: Vec<&str> = vals.split(',').collect();
+        let mut pts = String::new();
+        for (i, v) in parts.iter().enumerate() {
+            pts.push_str(&format!(r#"<c:pt idx="{i}"><c:v>{v}</c:v></c:pt>"#));
+        }
+        format!(
+            r#"<c:val><c:numLit><c:ptCount val="{}"/>{pts}</c:numLit></c:val>"#,
+            parts.len()
+        )
+    }
+
+    fn f25_ser(order: usize, name: &str, vals: &str, extra: &str) -> String {
+        format!(
+            r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cats}
+          {val}
+          {extra}
+        </c:ser>"#,
+            cats = cats_ab(),
+            val = val_pts(vals),
+        )
+    }
+
+    fn official_like_doughnut_xml() -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:doughnutChart>
+        <c:varyColors val="1"/>
+        {ser}
+        {dlbls}
+        <c:firstSliceAng val="0"/>
+        <c:holeSize val="50"/>
+      </c:doughnutChart>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            ser = f25_ser(0, "F25S1", "10,20,30,40", ""),
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_ofpie_xml() -> String {
+        let cats = r#"<c:cat><c:strLit><c:ptCount val="7"/><c:pt idx="0"><c:v>A</c:v></c:pt><c:pt idx="1"><c:v>B</c:v></c:pt><c:pt idx="2"><c:v>C</c:v></c:pt><c:pt idx="3"><c:v>D</c:v></c:pt><c:pt idx="4"><c:v>E</c:v></c:pt><c:pt idx="5"><c:v>F</c:v></c:pt><c:pt idx="6"><c:v>G</c:v></c:pt></c:strLit></c:cat>"#;
+        let val = val_pts("40,25,15,10,8,6,5");
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:ofPieChart>
+        <c:ofPieType val="pie"/>
+        <c:varyColors val="1"/>
+        <c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx>
+          {cats}
+          {val}
+        </c:ser>
+        {dlbls}
+        <c:gapWidth val="150"/>
+        <c:secondPieSize val="75"/>
+        <c:serLines/>
+      </c:ofPieChart>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_radar_xml() -> String {
+        let marker = r#"<c:marker></c:marker>"#;
+        let series = format!(
+            "{}{}{}",
+            f25_ser(0, "F25S1", "10,20,30,40", marker),
+            f25_ser(1, "F25S2", "20,10,20,10", marker),
+            f25_ser(2, "F25S3", "20,30,10,20", marker),
+        );
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:radarChart>
+        <c:radarStyle val="marker"/>
+        <c:varyColors val="0"/>
+        {series}
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:radarChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_bubble_xml() -> String {
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:bubbleChart>
+        <c:varyColors val="0"/>
+        <c:ser>
+          <c:idx val="0"/><c:order val="0"/><c:tx><c:v>S1</c:v></c:tx>
+          <c:xVal><c:strLit><c:ptCount val="5"/><c:pt idx="0"><c:v>X</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt><c:pt idx="4"><c:v>40</c:v></c:pt></c:strLit></c:xVal>
+          <c:yVal><c:numLit><c:ptCount val="5"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>30</c:v></c:pt><c:pt idx="4"><c:v>40</c:v></c:pt></c:numLit></c:yVal>
+          <c:bubbleSize><c:numLit><c:ptCount val="5"/><c:pt idx="0"><c:v>0</c:v></c:pt><c:pt idx="1"><c:v>10</c:v></c:pt><c:pt idx="2"><c:v>20</c:v></c:pt><c:pt idx="3"><c:v>15</c:v></c:pt><c:pt idx="4"><c:v>25</c:v></c:pt></c:numLit></c:bubbleSize>
+          <c:bubble3D val="0"/>
+        </c:ser>
+        <c:bubbleScale val="100"/>
+        <c:showNegBubbles val="0"/>
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:bubbleChart>
+      <c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="10"/></c:valAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="10"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+            .to_string()
+    }
+
+    fn official_like_stock_xml() -> String {
+        let cat = r#"<c:cat><c:numLit><c:ptCount val="4"/><c:pt idx="0"><c:v>46023</c:v></c:pt><c:pt idx="1"><c:v>46024</c:v></c:pt><c:pt idx="2"><c:v>46025</c:v></c:pt><c:pt idx="3"><c:v>46026</c:v></c:pt></c:numLit></c:cat>"#;
+        let ser = |order: usize, name: &str, vals: &str, extra: &str| {
+            format!(
+                r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cat}
+          {val}
+          {extra}
+        </c:ser>"#,
+                val = val_pts(vals),
+            )
+        };
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:plotArea>
+      <c:stockChart>
+        {high}{low}{close}
+        <c:hiLowLines/>
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:stockChart>
+      <c:dateAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:numFmt formatCode="yyyy\-mm\-dd" sourceLinked="1"/><c:crossAx val="2"/><c:crosses val="autoZero"/><c:baseTimeUnit val="days"/></c:dateAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#,
+            high = ser(0, "High", "40,45,50,48", r#"<c:marker><c:symbol val="none"/></c:marker>"#),
+            low = ser(1, "Low", "20,25,30,28", r#"<c:marker><c:symbol val="none"/></c:marker>"#),
+            close = ser(2, "Close", "30,35,40,36", r#"<c:spPr><a:ln><a:solidFill><a:srgbClr val="196B24"/></a:solidFill></a:ln></c:spPr><c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="196B24"/></a:solidFill></c:spPr></c:marker>"#),
+            dlbls = hidden_dlbls(),
+        )
+    }
+
+    fn official_like_surface_top_xml() -> String {
+        let series = format!(
+            "{}{}{}",
+            f25_ser(0, "F25S1", "10,20,30,40", ""),
+            f25_ser(1, "F25S2", "20,10,20,10", ""),
+            f25_ser(2, "F25S3", "20,30,10,20", ""),
+        );
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:view3D><c:rotX val="90"/><c:rotY val="0"/><c:rAngAx val="0"/><c:perspective val="0"/></c:view3D>
+    <c:plotArea>
+      <c:surfaceChart>
+        {series}
+        <c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>
+      </c:surfaceChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="none"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="midCat"/><c:majorUnit val="20"/></c:valAx>
+      <c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/></c:serAx>
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    #[test]
+    fn excel_serial_formats_official_stock_dates() {
+        assert_eq!(format_excel_date(46023.0), "2026-01-01");
+        assert_eq!(format_excel_date(46024.0), "2026-01-02");
+        assert_eq!(format_excel_date(46025.0), "2026-01-03");
+        assert_eq!(format_excel_date(46026.0), "2026-01-04");
+    }
+
+    #[test]
+    fn official_like_f25_other_types_export_and_paint_ink() {
+        // Official F25 Chart.Export gold exists for these six wrappers.
+        // Close-enough painters must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock and does not claim 0-diff.
+        let cases = [
+            ("doughnutChart", official_like_doughnut_xml()),
+            ("ofPieChart", official_like_ofpie_xml()),
+            ("radarChart", official_like_radar_xml()),
+            ("bubbleChart", official_like_bubble_xml()),
+            ("stockChart", official_like_stock_xml()),
+            ("surfaceChart", official_like_surface_top_xml()),
+        ];
+        for (kind, xml) in cases {
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_f25_variants_without_official_gold_stay_not_implemented() {
+        let cases = [
+            official_like_doughnut_xml().replace(r#"holeSize val="50""#, r#"holeSize val="5""#),
+            official_like_ofpie_xml().replace(r#"ofPieType val="pie""#, r#"ofPieType val="bar""#),
+            official_like_ofpie_xml().replace(
+                r#"<c:gapWidth val="150"/>"#,
+                r#"<c:splitType val="cust"/><c:gapWidth val="150"/>"#,
+            ),
+            official_like_radar_xml()
+                .replace(r#"radarStyle val="marker""#, r#"radarStyle val="filled""#),
+            official_like_radar_xml()
+                .replace(r#"radarStyle val="marker""#, r#"radarStyle val="standard""#),
+            official_like_bubble_xml().replace(r#"bubble3D val="0""#, r#"bubble3D val="1""#),
+            official_like_bubble_xml()
+                .replace(r#"showNegBubbles val="0""#, r#"showNegBubbles val="1""#),
+            official_like_stock_xml().replace(
+                r#"<c:hiLowLines/>"#,
+                r#"<c:hiLowLines/><c:upDownBars><c:gapWidth val="150"/></c:upDownBars>"#,
+            ),
+            official_like_surface_top_xml().replace(
+                r#"<c:surfaceChart>"#,
+                r#"<c:surfaceChart><c:wireframe val="1"/>"#,
+            ),
+            official_like_surface_top_xml().replace(r#"rotX val="90""#, r#"rotX val="15""#),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover F25 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F25 case {i} should stay NotImplemented"
             );
         }
     }

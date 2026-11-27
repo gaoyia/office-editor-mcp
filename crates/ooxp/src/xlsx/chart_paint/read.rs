@@ -526,6 +526,8 @@ pub(super) fn read_chart(
     };
     let mut area_missing_as_zero = false;
     let mut stacking = Stacking::Clustered;
+    let mut other: Option<OtherSpec> = None;
+    let mut hole_size: Option<f64> = None;
     let kind = match wrapper.local_name() {
         "barChart" => {
             let dir = wrapper
@@ -703,6 +705,166 @@ pub(super) fn read_chart(
             }
             PlotKind::Pie
         }
+        "doughnutChart" => {
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if !matches!(blanks, "gap" | "zero" | "span") {
+                return Err(unsupported());
+            }
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            // Close-enough: holeSize is percent of the outer diameter.
+            // ECMA default is 50; official F25 gold writes 50. Out of 10..=90 stays NI.
+            let hole = number_val(wrapper, "holeSize").unwrap_or(50.0);
+            if !hole.is_finite() || !(10.0..=90.0).contains(&hole) {
+                return Err(unsupported());
+            }
+            hole_size = Some(hole);
+            PlotKind::Pie
+        }
+        "ofPieChart" => {
+            let typ = wrapper
+                .child_by_local("ofPieType")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("pie");
+            if typ != "pie" {
+                return Err(unsupported());
+            }
+            if wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count()
+                != 1
+            {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            let blanks = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            if !matches!(blanks, "gap" | "zero" | "span") {
+                return Err(unsupported());
+            }
+            if plot
+                .element_children()
+                .any(|el| matches!(el.local_name(), "valAx" | "catAx" | "dateAx" | "serAx"))
+            {
+                return Err(unsupported());
+            }
+            // Official F25 gold omits splitType/splitPos/custSplit (Excel auto =
+            // last three points, keeping at least one on the main pie).
+            // barOfPie and explicit splits stay NI; this is close-enough, not a
+            // unique official-matrix lock.
+            if wrapper.child_by_local("splitType").is_some()
+                || wrapper.child_by_local("splitPos").is_some()
+                || wrapper.child_by_local("custSplit").is_some()
+            {
+                return Err(unsupported());
+            }
+            let gap = number_val(wrapper, "gapWidth").unwrap_or(150.0);
+            let second = number_val(wrapper, "secondPieSize").unwrap_or(75.0);
+            if !gap.is_finite() || gap < 0.0 || !second.is_finite() || second <= 0.0 {
+                return Err(unsupported());
+            }
+            other = Some(OtherSpec {
+                kind: OtherKind::OfPie,
+                of_pie_gap: gap,
+                second_pie_size: second,
+                ser_lines: wrapper.child_by_local("serLines").is_some(),
+                split_last: 3,
+                bubble_scale: 100.0,
+            });
+            PlotKind::Pie
+        }
+        "radarChart" => {
+            let style = wrapper
+                .child_by_local("radarStyle")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("standard");
+            // Official F25 gold is radarStyle=marker (lines + markers).
+            // filled / standard stay NI without gold.
+            if style != "marker" {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::Radar,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardLine
+        }
+        "bubbleChart" => {
+            if flag(wrapper, "varyColors").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            if flag(wrapper, "showNegBubbles").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            if flag(wrapper, "bubble3D").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            let scale = number_val(wrapper, "bubbleScale").unwrap_or(100.0);
+            if !scale.is_finite() || scale <= 0.0 {
+                return Err(unsupported());
+            }
+            other = Some(OtherSpec {
+                kind: OtherKind::Bubble,
+                bubble_scale: scale,
+                ..OtherSpec::default()
+            });
+            PlotKind::Scatter { connect: false }
+        }
+        "stockChart" => {
+            let nser = wrapper
+                .element_children()
+                .filter(|el| el.local_name() == "ser")
+                .count();
+            // Official F25 gold is HLC (exactly 3 series) with hiLowLines and
+            // no upDownBars. OHLC / volume / upDownBars stay NI.
+            if nser != 3 || wrapper.child_by_local("hiLowLines").is_none() {
+                return Err(unsupported());
+            }
+            if wrapper.child_by_local("upDownBars").is_some() {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::Stock,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardLine
+        }
+        "surfaceChart" => {
+            if flag(wrapper, "wireframe").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            data_labels_hidden(wrapper.child_by_local("dLbls"))?;
+            other = Some(OtherSpec {
+                kind: OtherKind::SurfaceTop,
+                ..OtherSpec::default()
+            });
+            PlotKind::StandardArea
+        }
         "bar3DChart" => {
             let dir = wrapper
                 .child_by_local("barDir")
@@ -792,11 +954,28 @@ pub(super) fn read_chart(
         "surface3DChart" => Some(Chart3DKind::Surface),
         _ => None,
     };
-    let view3d = if chart3d.is_some() {
+    let view3d = if chart3d.is_some()
+        || matches!(
+            other.as_ref().map(|o| o.kind),
+            Some(OtherKind::SurfaceTop)
+        )
+    {
         Some(read_view3d(chart))
     } else {
         None
     };
+    if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::SurfaceTop)) {
+        // Official F25 surfaceChart gold is a top-down contour: rotX=90,
+        // rotY=0, rAngAx=0, perspective=0, wireframe=0. Other views stay NI.
+        let v = view3d.as_ref().ok_or_else(unsupported)?;
+        if (v.rot_x - 90.0).abs() > 1e-6
+            || v.rot_y.abs() > 1e-6
+            || v.right_angle_axes
+            || v.perspective.abs() > 1e-6
+        {
+            return Err(unsupported());
+        }
+    }
     if chart3d.is_some() && locked_secondary.is_some() {
         return Err(unsupported());
     }
@@ -962,7 +1141,13 @@ pub(super) fn read_chart(
         let order = number_val(ser, "order").unwrap_or(series.len() as f64) as usize;
         let (values, x_values) = if matches!(kind, PlotKind::Scatter { .. }) {
             let ys = series_numbers(ser.child_by_local("yVal"), sheet, cells);
-            let xs = series_numbers(ser.child_by_local("xVal"), sheet, cells);
+            let mut xs = series_numbers(ser.child_by_local("xVal"), sheet, cells);
+            // Official F25 bubble xVal is a strRef of numeric strings (plus a
+            // non-numeric header). Parse those as numbers; skip non-numeric
+            // cells. Close-enough, not a unique official-matrix lock.
+            if !xs.iter().any(|v| v.is_some_and(|n| n.is_finite())) {
+                xs = cache_numeric_strings(ser.child_by_local("xVal"));
+            }
             if xs.is_empty() && ys.is_empty() {
                 continue;
             }
@@ -1050,6 +1235,16 @@ pub(super) fn read_chart(
                 .any(|(error, na)| *error && !na)
         {
             return Err(unsupported());
+        }
+        if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+            if flag(ser, "bubble3D").unwrap_or(false) {
+                return Err(unsupported());
+            }
+            for point in ser.element_children().filter(|el| el.local_name() == "dPt") {
+                if flag(point, "bubble3D").unwrap_or(false) {
+                    return Err(unsupported());
+                }
+            }
         }
         let name = series_name(ser, sheet, cells).unwrap_or_else(|| format!("系列{}", order + 1));
         let mut line_color = None;
@@ -1162,6 +1357,11 @@ pub(super) fn read_chart(
                     == Some("span"),
             on_secondary,
             plot_kind: kind,
+            bubble_sizes: if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+                series_numbers(ser.child_by_local("bubbleSize"), sheet, cells)
+            } else {
+                Vec::new()
+            },
         };
     }
     }
@@ -1175,7 +1375,12 @@ pub(super) fn read_chart(
     }
     let mut n = series
         .iter()
-        .map(|ser| ser.values.len().max(ser.x_values.len()))
+        .map(|ser| {
+            ser.values
+                .len()
+                .max(ser.x_values.len())
+                .max(ser.bubble_sizes.len())
+        })
         .max()
         .unwrap_or(0);
     if n == 0 && kind != PlotKind::Pie {
@@ -1205,6 +1410,44 @@ pub(super) fn read_chart(
             categories.extend((start..n).map(|i| (i + 1).to_string()));
         }
         categories.truncate(n);
+    }
+    // Close-enough stock dateAx labels: format numeric Excel serials
+    // (1900 system) as yyyy-mm-dd. Not a unique official date-axis lock.
+    if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Stock)) {
+        categories = categories
+            .into_iter()
+            .map(|s| {
+                s.parse::<f64>()
+                    .ok()
+                    .filter(|n| n.is_finite() && *n >= 1.0)
+                    .map(format_excel_date)
+                    .unwrap_or(s)
+            })
+            .collect();
+    }
+    if let Some(spec) = other.as_mut() {
+        if spec.kind == OtherKind::OfPie {
+            let n_pts = series
+                .first()
+                .map(|ser| {
+                    ser.values
+                        .iter()
+                        .filter(|v| v.is_some_and(|n| n.is_finite() && n.abs() > 0.0))
+                        .count()
+                })
+                .unwrap_or(0);
+            spec.split_last = 3.min(n_pts.saturating_sub(1));
+        }
+        if spec.kind == OtherKind::Bubble {
+            let any_size = series.iter().any(|ser| {
+                ser.bubble_sizes
+                    .iter()
+                    .any(|v| v.is_some_and(|n| n.is_finite() && n > 0.0))
+            });
+            if !any_size {
+                return Err(unsupported());
+            }
+        }
     }
     if kind == PlotKind::StandardLine || series.iter().any(|s| s.value_label.is_some()) {
         // Do not silently shrink the category domain when both caches omit
@@ -1305,6 +1548,9 @@ pub(super) fn read_chart(
         }
         if matches!(kind, PlotKind::Scatter { .. }) {
             ser.x_values.resize(n, None);
+            if matches!(other.as_ref().map(|o| o.kind), Some(OtherKind::Bubble)) {
+                ser.bubble_sizes.resize(n, None);
+            }
         }
         if kind == PlotKind::Pie {
             let mode = chart
@@ -1571,6 +1817,8 @@ pub(super) fn read_chart(
         area_midcat,
         view3d,
         chart3d,
+        hole_size,
+        other,
     })
 }
 
@@ -2405,6 +2653,24 @@ pub(super) fn cache_numbers(parent: Option<&Element>) -> Vec<Option<f64>> {
     points_to_values(&read_pts(cache), parse_chart_number)
 }
 
+/// Parse numeric text from a strCache/strLit (or numCache) as numbers.
+/// Non-numeric cells (headers like "X") stay None.
+pub(super) fn cache_numeric_strings(parent: Option<&Element>) -> Vec<Option<f64>> {
+    let Some(parent) = parent else {
+        return Vec::new();
+    };
+    let Some(cache) = find_cache(parent) else {
+        return Vec::new();
+    };
+    points_to_values(&read_pts(cache), |text| {
+        let text = text.trim();
+        if text.is_empty() {
+            return None;
+        }
+        parse_chart_number(text).or_else(|| text.parse::<f64>().ok().filter(|n| n.is_finite()))
+    })
+}
+
 pub(super) fn cache_labels(parent: Option<&Element>) -> Vec<String> {
     let Some(parent) = parent else {
         return Vec::new();
@@ -2660,12 +2926,14 @@ pub(super) fn read_value_label(
             "showCatName",
             "showSerName",
             "showPercent",
-            "showLeaderLines",
         ] {
             if flag(labels, name).unwrap_or(false) {
                 return Err(unsupported());
             }
         }
+        // showLeaderLines is not a content flag: official F24 pie3D and F25
+        // radar/stock write it on hidden dLbls. Reject only when labels are
+        // visible (leader geometry is not locked).
         if let Some(v) = flag(labels, "showVal") {
             visible = v;
         }
@@ -2678,6 +2946,12 @@ pub(super) fn read_value_label(
     }
     if !visible {
         return Ok(None);
+    }
+    if configs
+        .iter()
+        .any(|(_, labels)| flag(labels, "showLeaderLines").unwrap_or(false))
+    {
+        return Err(unsupported());
     }
     for (_, labels) in configs {
         // Hidden label styling cannot affect output. Visible custom styling is

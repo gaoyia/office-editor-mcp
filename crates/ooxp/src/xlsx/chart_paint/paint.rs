@@ -1106,7 +1106,14 @@ pub(super) fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &R
         let oy = cy - mid_rad.cos() * offset;
         let fill = pie_slice_fill(chart, index);
         if fill.alpha > 0 {
-            canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+            if let Some(hole) = chart.hole_size {
+                let inner = r_draw * (hole / 100.0).clamp(0.05, 0.95);
+                canvas.fill_ring_wedge(
+                    ox, oy, inner, r_draw, start, end, fill.color, fill.alpha,
+                );
+            } else {
+                canvas.fill_wedge(ox, oy, r_draw, start, end, fill.color, fill.alpha);
+            }
         }
         start = end;
     }
@@ -1120,6 +1127,15 @@ pub(super) fn paint(
 ) -> Result<(), Error> {
     if chart.chart3d.is_some() {
         return paint_3d(canvas, chart, font, host);
+    }
+    if let Some(spec) = chart.other.as_ref() {
+        return match spec.kind {
+            OtherKind::OfPie => paint_of_pie(canvas, chart, font, host),
+            OtherKind::Radar => paint_radar(canvas, chart, font, host),
+            OtherKind::Bubble => paint_bubble(canvas, chart, font, host),
+            OtherKind::Stock => paint_stock(canvas, chart, font, host),
+            OtherKind::SurfaceTop => paint_surface_top(canvas, chart, font, host),
+        };
     }
     if matches!(chart.kind, PlotKind::Scatter { .. }) {
         return paint_scatter(canvas, chart, font, host);

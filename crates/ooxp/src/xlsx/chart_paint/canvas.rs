@@ -589,6 +589,60 @@ impl Canvas {
         }
     }
 
+    /// Clockwise ring wedge: same angle rule as fill_wedge, with an inner
+    /// hole. holeSize is a percent of the outer radius (inner = outer * hole/100).
+    pub(super) fn fill_ring_wedge(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        inner: f64,
+        outer: f64,
+        start_deg: f64,
+        end_deg: f64,
+        color: [u8; 3],
+        alpha: u8,
+    ) {
+        if outer <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !inner.is_finite()
+            || !outer.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+        {
+            return;
+        }
+        let inner = inner.clamp(0.0, outer);
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = outer + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let outer_cov = coverage(dist, outer);
+                let inner_cov = if inner > 0.0 { coverage(dist, inner) } else { 0 };
+                let ring = outer_cov.saturating_sub(inner_cov);
+                let cov = ((u16::from(ring) * u16::from(alpha) + 127) / 255) as u8;
+                if cov == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    self.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
     pub(super) fn hline_i(&mut self, x0: i32, x1: i32, y: i32, color: [u8; 3]) {
         for x in x0..=x1 {
             self.blend(x, y, color, 255);

@@ -206,6 +206,8 @@ pub(super) struct Series {
     /// F21-8 column+line secondary combo, which paints each wrapper with its
     /// own existing path. Not a general F26 combo lock.
     pub(super) plot_kind: PlotKind,
+    /// Bubble sizes (c:bubbleSize). Empty for other kinds.
+    pub(super) bubble_sizes: Vec<Option<f64>>,
 }
 
 impl Default for Series {
@@ -234,6 +236,7 @@ impl Default for Series {
             span_blanks: false,
             on_secondary: false,
             plot_kind: PlotKind::ClusteredColumn,
+            bubble_sizes: Vec::new(),
         }
     }
 }
@@ -289,6 +292,44 @@ pub(super) struct ColumnChart {
     pub(super) view3d: Option<View3D>,
     /// Which official 3D wrapper is being drawn. None for 2D charts.
     pub(super) chart3d: Option<Chart3DKind>,
+    /// Doughnut hole as a percent of the outer diameter (ECMA default 50).
+    /// None for a solid pie.
+    pub(super) hole_size: Option<f64>,
+    /// Close-enough F25 other-type paint path. None for ordinary 2D/3D kinds.
+    pub(super) other: Option<OtherSpec>,
+}
+
+/// Close-enough official-like F25 encodings. Not unique official-matrix locks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct OtherSpec {
+    pub(super) kind: OtherKind,
+    pub(super) of_pie_gap: f64,
+    pub(super) second_pie_size: f64,
+    pub(super) ser_lines: bool,
+    pub(super) split_last: usize,
+    pub(super) bubble_scale: f64,
+}
+
+impl Default for OtherSpec {
+    fn default() -> Self {
+        Self {
+            kind: OtherKind::Radar,
+            of_pie_gap: 150.0,
+            second_pie_size: 75.0,
+            ser_lines: false,
+            split_last: 3,
+            bubble_scale: 100.0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum OtherKind {
+    OfPie,
+    Radar,
+    Bubble,
+    Stock,
+    SurfaceTop,
 }
 
 /// Close-enough 3D view parameters. Explicit XML values win; omitted
