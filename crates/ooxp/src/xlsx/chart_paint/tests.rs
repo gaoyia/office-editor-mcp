@@ -7289,10 +7289,6 @@
             ),
             base.replace("<c:areaChart>", "<c:area3DChart>")
                 .replace("</c:areaChart>", "</c:area3DChart>"),
-            base.replace(
-                r#"crossBetween val="between""#,
-                r#"crossBetween val="midCat""#,
-            ),
             base.replacen(r#"varyColors val="0""#, r#"varyColors val="1""#, 1),
             base.replacen(
                 r#"</c:areaChart>"#,
@@ -7336,6 +7332,15 @@
                 "area case {i} should stay NotImplemented"
             );
         }
+        // Official Excel 16 standard area writes midCat (first/last categories
+        // on the plot edges). That encoding must export, not stay NI.
+        render_area(
+            &base.replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat must export");
         // Omitted grouping, gap blanks, hidden labels, and marker none stay supported.
         render_area(
             &area_space(
@@ -8540,6 +8545,21 @@
             "2",
         ))
         .unwrap();
+        // Official F16-8 writes the Excel default midCat, not the between fixture.
+        render_area(
+            &with_cat_crosses_at(
+                &standard_area_xml(
+                    &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                    "",
+                ),
+                "2",
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat plus catAx crossesAt must export");
         let bar = with_cat_crosses_at(
             &bar_xml(
                 &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),

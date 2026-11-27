@@ -275,6 +275,10 @@ pub(super) struct ColumnChart {
     /// missing cells / omitted cache points as 0 (a V to the baseline).
     /// Explicit dispBlanksAs=gap still leaves a hole. Unused for other kinds.
     pub(super) area_missing_as_zero: bool,
+    /// Official Excel 16 standard (and stacked) area valAx writes
+    /// crossBetween=midCat: first and last categories sit on the plot edges.
+    /// Unused for other kinds. The between path is unchanged.
+    pub(super) area_midcat: bool,
 }
 
 /// Two integer-thousandth opacity operands retain their exact product until

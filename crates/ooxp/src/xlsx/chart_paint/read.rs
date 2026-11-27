@@ -1177,11 +1177,11 @@ pub(super) fn read_chart(
                 .unwrap_or("between")
                 == "between"
         });
-    // Official Excel 16 areaChart stacked / percentStacked writes valAx
-    // crossBetween=midCat (first/last categories on the plot edges). Standard
-    // area and all line charts stay on the existing between path.
+    // Official Excel 16 areaChart writes valAx crossBetween=midCat
+    // (first/last categories on the plot edges), including the default
+    // standard-area encoding. Line charts stay on the existing between path.
+    // Stacked / percentStacked area still require midCat (between stays NI).
     let area_midcat = matches!(kind, PlotKind::StandardArea)
-        && stacking != Stacking::Clustered
         && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
             el.child_by_local("crossBetween")
                 .and_then(|c| c.attr_local("val"))
@@ -1386,6 +1386,7 @@ pub(super) fn read_chart(
         pie_explosion,
         point_explosions,
         area_missing_as_zero,
+        area_midcat,
     })
 }
 

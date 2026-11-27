@@ -1588,6 +1588,37 @@ pub(super) fn line_point(
     (x, y)
 }
 
+/// Standard area vertices: midCat puts first/last categories on the plot
+/// edges (same formula as stacked area). The between path keeps the
+/// half-slot line/column formula. Close-enough reuse of the existing
+/// midCat rule, not a new unique lock.
+fn area_vertex(
+    value: f64,
+    ci: usize,
+    slot: f64,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    reversed: bool,
+    midcat: bool,
+    cats: f64,
+) -> (f64, f64) {
+    if midcat {
+        let x = category_x_midcat(plot, ci, cats);
+        let y = y_map(
+            value.clamp(axis_min, axis_max),
+            axis_min,
+            axis_max,
+            plot,
+            None,
+            reversed,
+        );
+        (x, y)
+    } else {
+        line_point(value, ci, slot, plot, axis_min, axis_max, None, reversed)
+    }
+}
+
 pub(super) fn stroke_run(canvas: &mut Canvas, run: &[(f64, f64)], width: f64, color: [u8; 3]) {
     if let Some(style) = stroke::Style::new(width, stroke::Cap::Round) {
         stroke_run_style(canvas, run, style, color);
@@ -1692,10 +1723,14 @@ pub(super) fn draw_areas(
         for (ci, value) in ser.values.iter().enumerate() {
             match value {
                 Some(v) if v.is_finite() => {
-                    run.push(line_point(*v, ci, slot, plot, axis_min, axis_max, None, reversed));
+                    run.push(area_vertex(
+                        *v, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+                    ));
                 }
                 None if chart.area_missing_as_zero => {
-                    run.push(line_point(0.0, ci, slot, plot, axis_min, axis_max, None, reversed));
+                    run.push(area_vertex(
+                        0.0, ci, slot, plot, axis_min, axis_max, reversed, chart.area_midcat, cats,
+                    ));
                 }
                 _ => {
                     fill_area_run(canvas, &run, zero_y, fill);
