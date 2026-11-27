@@ -23,6 +23,7 @@ mod gradient;
 mod layout;
 mod legend;
 mod paint;
+mod pattern;
 mod read;
 mod render;
 mod stroke;
@@ -54,5 +55,6 @@ pub(crate) use color::{theme_accents, SystemColorPalette};
 pub(crate) use layout::bitmap_px;
 #[allow(unused_imports)]
 pub(crate) use render::{
-    render_chart, render_chart_at, render_chart_with_sys_palette, render_chart_with_theme, ChartHost,
+    render_chart, render_chart_at, render_chart_with_media, render_chart_with_sys_palette,
+    render_chart_with_theme, ChartHost,
 };

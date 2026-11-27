@@ -235,7 +235,7 @@ pub(super) fn paint_scatter(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     let y_regular = (((y_scale.max - y_scale.min) / y_scale.major).round() * y_scale.major
         - (y_scale.max - y_scale.min))
@@ -550,7 +550,7 @@ pub(super) fn paint_bar(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     // 数值轴在水平方向，间隔预算按绘图区宽度。占用系数用 1，与竖向数值轴同一套
     // 行盒口径，上限仍是 10。occupancy=3 是散点 X 轴为较长标签留的余量，在典型
@@ -756,8 +756,8 @@ pub(super) fn paint_pie(
     } else {
         canvas.dpi.scale_px(INSET_TOP)
     };
-    if let Some(PlotPaint::Solid(color, 255)) = canvas.plot_fill {
-        canvas.fill_fractional_rect(&plot, color);
+    if let Some(fill) = canvas.plot_fill.clone() {
+        canvas.paint_fractional_plot(&plot, fill)?;
     }
     draw_pie_slices(canvas, chart, &plot);
     if !title_lines.is_empty() {
@@ -1201,7 +1201,7 @@ pub(super) fn paint(
             (plot.x + plot.w) as i32,
             (plot.y + plot.h) as i32,
             fill,
-        );
+        )?;
     }
     let regular = log_base.is_some()
         || (((axis_max - axis_min) / step).round() * step - (axis_max - axis_min)).abs()

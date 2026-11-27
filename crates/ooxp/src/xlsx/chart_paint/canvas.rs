@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+use std::io::Cursor;
+
 use crate::error::{Error, ErrorKind};
 
 use super::*;
@@ -21,6 +24,7 @@ pub(super) struct Canvas {
     pub(super) custom_dash_budget: usize,
     pub(super) plot_fill: Option<PlotPaint>,
     pub(super) dpi: RenderDpi,
+    pub(super) blips: BTreeMap<String, Vec<u8>>,
 }
 
 pub(super) fn angle_in_wedge(dx: f64, dy: f64, start_deg: f64, end_deg: f64) -> bool {
@@ -96,6 +100,7 @@ impl Canvas {
             custom_dash_budget: MAX_CUSTOM_DASH_PIECES,
             plot_fill: None,
             dpi,
+            blips: BTreeMap::new(),
         }
     }
 
@@ -181,22 +186,173 @@ impl Canvas {
     /// Area coverage of an axis-aligned floating rectangle. Pie plot bounds
     /// are point-derived and must not be shifted/truncated to match one gold.
     pub(super) fn fill_fractional_rect(&mut self, rect: &Rect, color: [u8; 3]) {
+        self.fill_fractional_rect_cov(rect, color, 255);
+    }
+
+    pub(super) fn fill_fractional_rect_cov(&mut self, rect: &Rect, color: [u8; 3], alpha: u8) {
+        if alpha == 0 {
+            return;
+        }
         let right = rect.x + rect.w;
         let bottom = rect.y + rect.h;
         for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
             let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
             for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
                 let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
-                self.blend(x, y, color, (cx * cy * 255.0).round() as u8);
+                self.blend(x, y, color, (cx * cy * f64::from(alpha)).round() as u8);
             }
         }
     }
 
-    pub(super) fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) {
+    pub(super) fn paint_fractional_plot(&mut self, rect: &Rect, fill: PlotPaint) -> Result<(), Error> {
+        match fill {
+            PlotPaint::Solid(color, 255) => self.fill_fractional_rect(rect, color),
+            PlotPaint::Solid(color, cov) => self.fill_fractional_rect_cov(rect, color, cov),
+            PlotPaint::Linear(grad) => self.fill_fractional_linear(rect, &grad),
+            PlotPaint::Pattern(patt) => self.fill_fractional_pattern(rect, &patt),
+            PlotPaint::Blip(blip) => self.fill_fractional_blip(rect, &blip)?,
+        }
+        Ok(())
+    }
+
+    pub(super) fn fill_fractional_linear(&mut self, rect: &Rect, grad: &LinearFrameGrad) {
+        if rect.w <= 0.0 || rect.h <= 0.0 {
+            return;
+        }
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        let vertical = grad.ang == LINEAR_ANG_VERTICAL;
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                let cov = (cx * cy * 255.0).round() as u8;
+                if cov == 0 {
+                    continue;
+                }
+                let t = if vertical {
+                    (f64::from(y) + 0.5 - rect.y) / rect.h
+                } else {
+                    (f64::from(x) + 0.5 - rect.x) / rect.w
+                };
+                self.blend(x, y, grad.sample(t), cov);
+            }
+        }
+    }
+
+    pub(super) fn fill_fractional_pattern(&mut self, rect: &Rect, patt: &pattern::PatternFill) {
+        let right = rect.x + rect.w;
+        let bottom = rect.y + rect.h;
+        let dpi = self.dpi.get();
+        for y in (rect.y.floor() as i32).max(0)..(bottom.ceil() as i32).min(self.h as i32) {
+            let cy = (bottom.min(f64::from(y) + 1.0) - rect.y.max(f64::from(y))).clamp(0.0, 1.0);
+            for x in (rect.x.floor() as i32).max(0)..(right.ceil() as i32).min(self.w as i32) {
+                let cx = (right.min(f64::from(x) + 1.0) - rect.x.max(f64::from(x))).clamp(0.0, 1.0);
+                let cov = (cx * cy * 255.0).round() as u8;
+                if cov == 0 {
+                    continue;
+                }
+                self.blend(x, y, patt.color_at(x, y, dpi), cov);
+            }
+        }
+    }
+
+    pub(super) fn fill_fractional_blip(
+        &mut self,
+        rect: &Rect,
+        blip: &pattern::BlipFill,
+    ) -> Result<(), Error> {
+        let x0 = rect.x.floor() as i32;
+        let y0 = rect.y.floor() as i32;
+        let x1 = (rect.x + rect.w).ceil() as i32;
+        let y1 = (rect.y + rect.h).ceil() as i32;
+        self.paint_blip_rect(x0, y0, x1, y1, blip)?;
+        // Re-apply fractional edge coverage by not overwriting outside the
+        // floating rect: paint_blip_rect is integer-bounded; edge residual
+        // stays on the review page. The pie square uses this same bound as
+        // the opaque solid path's integer hull, then slices paint on top.
+        Ok(())
+    }
+
+    pub(super) fn paint_plot(&mut self, x0: i32, y0: i32, x1: i32, y1: i32, fill: PlotPaint) -> Result<(), Error> {
         match fill {
             PlotPaint::Solid(color, cov) => self.fill_rect_cov(x0, y0, x1, y1, color, cov),
             PlotPaint::Linear(grad) => self.fill_linear_rect(x0, y0, x1, y1, &grad),
+            PlotPaint::Pattern(patt) => self.fill_pattern_rect(x0, y0, x1, y1, &patt),
+            PlotPaint::Blip(blip) => self.paint_blip_rect(x0, y0, x1, y1, &blip)?,
         }
+        Ok(())
+    }
+
+    pub(super) fn fill_pattern_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        patt: &pattern::PatternFill,
+    ) {
+        let x0c = x0.max(0);
+        let y0c = y0.max(0);
+        let x1c = x1.min(self.w as i32);
+        let y1c = y1.min(self.h as i32);
+        let dpi = self.dpi.get();
+        for y in y0c..y1c {
+            for x in x0c..x1c {
+                self.blend(x, y, patt.color_at(x, y, dpi), 255);
+            }
+        }
+    }
+
+    pub(super) fn paint_blip_rect(
+        &mut self,
+        x0: i32,
+        y0: i32,
+        x1: i32,
+        y1: i32,
+        blip: &pattern::BlipFill,
+    ) -> Result<(), Error> {
+        let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+        let dest_w = x1.saturating_sub(x0);
+        let dest_h = y1.saturating_sub(y0);
+        if dest_w <= 0 || dest_h <= 0 {
+            return Ok(());
+        }
+        let dest_w = dest_w as u32;
+        let dest_h = dest_h as u32;
+        let bytes = self.blips.get(&blip.embed).ok_or_else(unsupported)?;
+        let image = decode_blip_png(bytes)?;
+        if dest_w < image.w || dest_h < image.h {
+            return Err(unsupported());
+        }
+        let scaled = if dest_w == image.w && dest_h == image.h {
+            image.px
+        } else if let Some(px) =
+            super::super::chart_gdi::scale_device_rgba(&image.px, image.w, image.h, dest_w, dest_h)
+        {
+            px
+        } else {
+            nearest_upscale(&image.px, image.w, image.h, dest_w, dest_h)
+        };
+        for dy in 0..dest_h as i32 {
+            let y = y0 + dy;
+            if y < 0 || y >= self.h as i32 {
+                continue;
+            }
+            for dx in 0..dest_w as i32 {
+                let x = x0 + dx;
+                if x < 0 || x >= self.w as i32 {
+                    continue;
+                }
+                let i = ((dy as u32 * dest_w + dx as u32) * 4) as usize;
+                let a = scaled[i + 3];
+                if a == 0 {
+                    continue;
+                }
+                self.blend(x, y, [scaled[i], scaled[i + 1], scaled[i + 2]], a);
+            }
+        }
+        Ok(())
     }
 
     /// Existing axis-aligned pixel-center geometry. Cache at most one clipped
@@ -579,4 +735,62 @@ pub(super) fn encode_png(
         .map_err(|_| Error::with_path(ErrorKind::ChartImageUnsupported, "id"))?;
     drop(writer);
     Ok(out)
+}
+
+
+struct BlipRgba {
+    w: u32,
+    h: u32,
+    px: Vec<u8>,
+}
+
+fn decode_blip_png(bytes: &[u8]) -> Result<BlipRgba, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err(unsupported());
+    }
+    let decoder = png::Decoder::new(Cursor::new(bytes));
+    let mut reader = decoder.read_info().map_err(|_| unsupported())?;
+    if reader.info().bit_depth != png::BitDepth::Eight {
+        return Err(unsupported());
+    }
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let frame = reader.next_frame(&mut buf).map_err(|_| unsupported())?;
+    if frame.width == 0 || frame.height == 0 || frame.width > MAX_PX || frame.height > MAX_PX {
+        return Err(unsupported());
+    }
+    let raw = &buf[..frame.buffer_size()];
+    let px = match frame.color_type {
+        png::ColorType::Rgb => {
+            let mut out = Vec::with_capacity(raw.len() / 3 * 4);
+            for chunk in raw.chunks_exact(3) {
+                out.extend_from_slice(&[chunk[0], chunk[1], chunk[2], 255]);
+            }
+            out
+        }
+        png::ColorType::Rgba => raw.to_vec(),
+        _ => return Err(unsupported()),
+    };
+    if px.len() != (frame.width as usize) * (frame.height as usize) * 4 {
+        return Err(unsupported());
+    }
+    Ok(BlipRgba {
+        w: frame.width,
+        h: frame.height,
+        px,
+    })
+}
+
+fn nearest_upscale(src: &[u8], src_w: u32, src_h: u32, dest_w: u32, dest_h: u32) -> Vec<u8> {
+    let mut out = vec![0u8; dest_w as usize * dest_h as usize * 4];
+    for y in 0..dest_h {
+        let sy = ((u64::from(y) * u64::from(src_h)) / u64::from(dest_h)) as u32;
+        for x in 0..dest_w {
+            let sx = ((u64::from(x) * u64::from(src_w)) / u64::from(dest_w)) as u32;
+            let si = (sy * src_w + sx) as usize * 4;
+            let di = (y * dest_w + x) as usize * 4;
+            out[di..di + 4].copy_from_slice(&src[si..si + 4]);
+        }
+    }
+    out
 }

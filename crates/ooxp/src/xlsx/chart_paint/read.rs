@@ -65,6 +65,20 @@ pub(super) fn read_frame_fill(node: &Element, scheme: &ThemeScheme) -> Result<Fr
                 saw_fill = true;
                 fill = read_linear_frame_grad(prop)?;
             }
+            "pattFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                fill = FrameFill::Pattern(read_pattern_fill(prop, scheme)?);
+            }
+            "blipFill" => {
+                if saw_fill {
+                    return Err(unsupported());
+                }
+                saw_fill = true;
+                fill = FrameFill::Blip(read_blip_fill(prop)?);
+            }
             "solidFill" => {
                 if saw_fill {
                     return Err(unsupported());
@@ -176,7 +190,126 @@ pub(super) fn ooxml_alpha_to_u8(alpha: u32) -> u8 {
 }
 
 /// Opaque sRGB stop-table linear gradFill at the existing 0/90 geometry. Path fills,
-/// other angles, pattern, blip, and color transforms stay NI.
+/// other angles, and color transforms stay NI.
+
+pub(super) fn read_pattern_fill(
+    patt: &Element,
+    scheme: &ThemeScheme,
+) -> Result<pattern::PatternFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    for (name, _) in &patt.attrs {
+        if name != "prst" {
+            return Err(unsupported());
+        }
+    }
+    let prst = pattern::PatternPreset::parse(patt.attr_local("prst").ok_or_else(unsupported)?)
+        .ok_or_else(unsupported)?;
+    let mut fg = None;
+    let mut bg = None;
+    for child in patt.element_children() {
+        match child.local_name() {
+            "fgClr" if fg.is_none() => fg = Some(read_pattern_color(child, scheme)?),
+            "bgClr" if bg.is_none() => bg = Some(read_pattern_color(child, scheme)?),
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(pattern::PatternFill {
+        prst,
+        fg: fg.ok_or_else(unsupported)?,
+        bg: bg.ok_or_else(unsupported)?,
+    })
+}
+
+fn read_pattern_color(slot: &Element, scheme: &ThemeScheme) -> Result<[u8; 3], Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let mut colors = slot.element_children();
+    let color = colors.next().ok_or_else(unsupported)?;
+    if colors.next().is_some() {
+        return Err(unsupported());
+    }
+    match resolve_frame_solid(color, scheme)? {
+        FrameFill::Solid(rgb) => Ok(rgb),
+        _ => Err(unsupported()),
+    }
+}
+
+/// Locked stretch-to-shape PNG: empty or zero `srcRect`, empty `fillRect`,
+/// `rotWithShape` omitted or 1, `dpi` omitted or 0, empty `a:alphaModFix`.
+/// Tile, crop, non-zero fillRect, and blip effects stay NI.
+pub(super) fn read_blip_fill(fill: &Element) -> Result<pattern::BlipFill, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    for (name, value) in &fill.attrs {
+        match name.as_str() {
+            "rotWithShape" if value == "1" => {}
+            "dpi" if value == "0" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    let mut blip = None;
+    let mut saw_src = false;
+    let mut saw_stretch = false;
+    for child in fill.element_children() {
+        match child.local_name() {
+            "blip" if blip.is_none() => {
+                if !blip_effects_are_noop(child) {
+                    return Err(unsupported());
+                }
+                let embed = child
+                    .attr_local("embed")
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(unsupported)?;
+                blip = Some(embed.to_string());
+            }
+            "srcRect" if !saw_src => {
+                if child.element_children().next().is_some()
+                    || ["l", "t", "r", "b"].iter().any(|name| {
+                        child
+                            .attr(name)
+                            .is_some_and(|raw| raw.parse::<i64>().ok() != Some(0))
+                    })
+                {
+                    return Err(unsupported());
+                }
+                saw_src = true;
+            }
+            "stretch" if !saw_stretch => {
+                let mut rects = child.element_children();
+                let rect = rects.next().ok_or_else(unsupported)?;
+                if rects.next().is_some()
+                    || rect.local_name() != "fillRect"
+                    || rect.element_children().next().is_some()
+                    || ["l", "t", "r", "b"].iter().any(|name| {
+                        rect.attr(name)
+                            .is_some_and(|raw| raw.parse::<i64>().ok() != Some(0))
+                    })
+                {
+                    return Err(unsupported());
+                }
+                saw_stretch = true;
+            }
+            _ => return Err(unsupported()),
+        }
+    }
+    if !saw_stretch {
+        return Err(unsupported());
+    }
+    Ok(pattern::BlipFill {
+        embed: blip.ok_or_else(unsupported)?,
+    })
+}
+
+fn blip_effects_are_noop(blip: &Element) -> bool {
+    for child in blip.element_children() {
+        match child.local_name() {
+            "extLst" => {}
+            "alphaModFix"
+                if child.attrs.is_empty() && child.element_children().next().is_none() => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
 pub(super) fn read_linear_frame_grad(grad: &Element) -> Result<FrameFill, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let flip = grad.attr_local("flip").unwrap_or("none");
@@ -432,7 +565,10 @@ pub(super) fn read_chart(
                 .child_by_local("dispBlanksAs")
                 .and_then(|el| el.attr_local("val"))
                 .unwrap_or("gap");
-            if blanks != "gap" {
+            // Official pies often write zero (F09 gold). Unknown values stay NI.
+            // zero/span with a blank point are rejected after the category
+            // domain is applied, because pie blank geometry is not locked.
+            if !matches!(blanks, "gap" | "zero" | "span") {
                 return Err(unsupported());
             }
             if plot
@@ -842,6 +978,23 @@ pub(super) fn read_chart(
         }
         if matches!(kind, PlotKind::Scatter { .. }) {
             ser.x_values.resize(n, None);
+        }
+        if kind == PlotKind::Pie {
+            let mode = chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                .unwrap_or("gap");
+            // A complete numeric cache makes zero/span inert. Leave residual
+            // NI when a blank or non-finite point exists, until official pie
+            // blank/zero/span geometry is uniquely locked.
+            if mode != "gap"
+                && ser
+                    .values
+                    .iter()
+                    .any(|v| v.is_none() || v.is_some_and(|n| !n.is_finite()))
+            {
+                return Err(unsupported());
+            }
         }
     }
     let grid = plot.element_children().any(|el| {

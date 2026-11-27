@@ -3333,8 +3333,8 @@
         for config in [
             "<c:spPr><a:gradFill/></c:spPr>",
             "<c:spPr><a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='EAF7F7'/></a:gs><a:gs pos='100000'><a:srgbClr val='0F6082'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill></c:spPr>",
-            "<c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
-            "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>",
+            "<c:spPr><a:pattFill prst='pct10'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>",
+            "<c:spPr><a:blipFill rotWithShape='1'><a:blip r:embed='rId1'/><a:tile/></a:blipFill></c:spPr>",
             "<c:spPr><a:solidFill><a:srgbClr val='EAF7F7'><a:alpha val='50000'/><a:alphaMod val='50000'/><a:hueMod val='50000'/></a:srgbClr></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='windowText' lastClr='FF0000'/></a:solidFill></c:spPr>",
             "<c:spPr><a:solidFill><a:sysClr val='window' lastClr='00FF00'/></a:solidFill></c:spPr>",
@@ -3349,6 +3349,119 @@
             let doc = crate::xml::parse(xml.as_bytes()).unwrap();
             assert!(read_frame(&doc.root).is_err(), "unsupported frame must not silently lose semantics: {config}");
         }
+    }
+
+    fn sample_rgb(rgb: &[u8], w: u32, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * w + x) * 3) as usize;
+        [rgb[i], rgb[i + 1], rgb[i + 2]]
+    }
+
+    fn tiny_png(w: u32, h: u32, px: &[[u8; 3]]) -> Vec<u8> {
+        assert_eq!(px.len(), (w * h) as usize);
+        let mut rgb = Vec::with_capacity(px.len() * 3);
+        for c in px {
+            rgb.extend_from_slice(c);
+        }
+        let mut out = Vec::new();
+        let mut enc = png::Encoder::new(&mut out, w, h);
+        enc.set_color(png::ColorType::Rgb);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut writer = enc.write_header().unwrap();
+        writer.write_image_data(&rgb).unwrap();
+        drop(writer);
+        out
+    }
+
+    #[test]
+    fn chart_area_lthorz_pattern_exports_horizontal_stripes() {
+        let fill = "<c:roundedCorners val='0'/><c:spPr><a:pattFill prst='ltHorz'><a:fgClr><a:srgbClr val='0F6082'/></a:fgClr><a:bgClr><a:srgbClr val='EAF7F7'/></a:bgClr></a:pattFill></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        match frame.fill {
+            FrameFill::Pattern(patt) => {
+                assert_eq!(patt.fg, [15, 96, 130]);
+                assert_eq!(patt.bg, [234, 247, 247]);
+            }
+            other => panic!("expected pattern, got {other:?}"),
+        }
+        let png = render_chart_at(
+            &doc.root,
+            80,
+            60,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .unwrap();
+        let (w, h, rgb) = decode_rgb(&png);
+        assert_eq!((w, h), (80, 60));
+        // At 96 dpi the 8x8 ltHorz cell has fg rows at y%8 == 0 or 4.
+        let y_fg = sample_rgb(&rgb, w, 4, 8);
+        let y_bg = sample_rgb(&rgb, w, 4, 10);
+        assert_eq!(y_fg, [15, 96, 130]);
+        assert_eq!(y_bg, [234, 247, 247]);
+        assert_eq!(sample_rgb(&rgb, w, 20, 8), [15, 96, 130]);
+    }
+
+    #[test]
+    fn chart_area_stretch_blip_exports_when_media_is_present() {
+        let fill = "<c:roundedCorners val='0'/><c:spPr><a:blipFill dpi='0' rotWithShape='1'><a:blip r:embed='rId1'><a:alphaModFix/></a:blip><a:srcRect/><a:stretch><a:fillRect/></a:stretch></a:blipFill></c:spPr>";
+        let xml = LONG_LEGEND.replace("<c:chart>", &format!("{fill}<c:chart>"));
+        let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+        let frame = read_frame(&doc.root).unwrap();
+        match frame.fill {
+            FrameFill::Blip(blip) => assert_eq!(blip.embed, "rId1"),
+            other => panic!("expected blip, got {other:?}"),
+        }
+        assert!(
+            render_chart_at(
+                &doc.root,
+                80,
+                40,
+                FALLBACK_ACCENTS,
+                None,
+                ChartHost::Excel,
+                None,
+                "",
+                RenderDpi::DEFAULT,
+            )
+            .is_err(),
+            "missing media must not fall back to white"
+        );
+        let mut tile = Vec::new();
+        for y in 0..16u32 {
+            for x in 0..16u32 {
+                tile.push(if x < 8 { [200, 0, 0] } else { [0, 0, 200] });
+            }
+            let _ = y;
+        }
+        let bytes = tiny_png(16, 16, &tile);
+        let mut blips = std::collections::BTreeMap::new();
+        blips.insert("rId1".to_string(), bytes);
+        let png = render_chart_with_media(
+            &doc.root,
+            80,
+            40,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+            None,
+            None,
+            Some(&blips),
+        )
+        .unwrap();
+        let (w, h, rgb) = decode_rgb(&png);
+        assert_eq!((w, h), (80, 40));
+        let left = sample_rgb(&rgb, w, 2, 2);
+        let right = sample_rgb(&rgb, w, 77, 2);
+        assert!(left[0] > right[0] && left[2] < right[2], "left={left:?} right={right:?}");
     }
 
     #[test]
@@ -6941,13 +7054,40 @@
                 );
             }
         }
-        for fill in [
-            "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>",
-            "<a:gradFill><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='0'/></a:gradFill>",
-        ] {
-            let xml=standard_pie_xml(&ser,"","").replace("<c:plotArea>",&format!("<c:plotArea><c:spPr>{fill}</c:spPr>"));
-            assert!(render_pie(&xml).is_err(),"unlocked pie plot fill must remain NI");
-        }
+        // Translucent and linear plot fills are painted on the same fractional
+        // square as the opaque solid case; diagonal/path fills stay NI.
+        let grad = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='5400000' scaled='1'/><a:tileRect/></a:gradFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            "",
+        ).replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{grad}</c:spPr>"));
+        let png = render_pie(&xml).expect("locked vertical pie plot gradient must export");
+        let (w, _h, rgb) = decode_rgb(&png);
+        let rect = pie_plot_bounds(576.0, 336.0, 0.0, 0.0, RenderDpi::DEFAULT).unwrap();
+        // Same inset as the opaque solid corner: mid-top sits inside a slice.
+        let x = rect.x.ceil() as u32 + 2;
+        let y_top = rect.y.ceil() as u32 + 2;
+        let y_bot = (rect.y + rect.h).floor() as u32 - 2;
+        let top = sample_rgb(&rgb, w, x, y_top);
+        let bot = sample_rgb(&rgb, w, x, y_bot);
+        assert!(top[0] > 200 && top[2] < 80, "top of plot square should be yellow, got {top:?}");
+        assert!(bot[2] > 200 && bot[0] < 80, "bottom of plot square should be blue, got {bot:?}");
+        let alpha = "<a:solidFill><a:srgbClr val='FFFF00'><a:alpha val='50000'/></a:srgbClr></a:solidFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            "",
+        ).replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{alpha}</c:spPr>"));
+        let png = render_pie(&xml).expect("locked translucent pie plot fill must export");
+        let (_, _, rgb) = decode_rgb(&png);
+        let corner = sample_rgb(&rgb, w, (rect.x + 2.0) as u32, (rect.y + 2.0) as u32);
+        // Straight 50% yellow over the default white chart area.
+        assert!(
+            corner[0] > 200 && corner[1] > 200 && corner[2] < 160,
+            "translucent yellow plot corner, got {corner:?}"
+        );
+        let bad = "<a:gradFill flip='none' rotWithShape='1'><a:gsLst><a:gs pos='0'><a:srgbClr val='FFFF00'/></a:gs><a:gs pos='100000'><a:srgbClr val='0000FF'/></a:gs></a:gsLst><a:lin ang='2700000' scaled='1'/><a:tileRect/></a:gradFill>";
+        let xml = standard_pie_xml(&ser, "", "").replace("<c:plotArea>", &format!("<c:plotArea><c:spPr>{bad}</c:spPr>"));
+        assert!(render_pie(&xml).is_err(), "diagonal pie plot fill must remain NI");
     }
 
     #[test]
@@ -7588,8 +7728,6 @@
                 "",
                 "",
             ),
-            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="zero"/>"#, ""),
-            standard_pie_xml(&ser, r#"<c:dispBlanksAs val="span"/>"#, ""),
             base.replacen(
                 r#"</c:pieChart>"#,
                 r#"<c:dLbls><c:showVal val="1"/></c:dLbls></c:pieChart>"#,
@@ -7623,6 +7761,44 @@
             ),
         )
         .unwrap();
+        // Official F09 gold writes dispBlanksAs=zero. With a complete cache
+        // zero and span are inert and must export the same image as gap.
+        let gap = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            "",
+        ))
+        .unwrap();
+        let zero = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="zero"/>"#,
+            "",
+        ))
+        .unwrap();
+        let span = render_pie(&standard_pie_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="span"/>"#,
+            "",
+        ))
+        .unwrap();
+        assert_eq!(zero, gap, "complete-cache pie zero must match gap");
+        assert_eq!(span, gap, "complete-cache pie span must match gap");
+        let blank_ser = line_ser(0, "S1", &[Some(1.0), None, Some(3.0)], "");
+        for mode in ["zero", "span"] {
+            let xml = standard_pie_xml(
+                &blank_ser,
+                &format!(r#"<c:dispBlanksAs val="{mode}"/>"#),
+                "",
+            );
+            let err = render_pie(&xml).expect_err(&format!(
+                "pie dispBlanksAs={mode} with a blank should stay NotImplemented"
+            ));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "pie dispBlanksAs={mode} with a blank should stay NotImplemented"
+            );
+        }
         render_line(&standard_line_xml(
             &line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], ""),
             "",

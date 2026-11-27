@@ -284,12 +284,13 @@ pub(super) const ALPHA_PRODUCT_DENOM: u64 = 100_000 * 100_000;
 
 
 /// Supported frame styles are semantic fills and a round/rectangle switch.
-/// Pattern, blip, path/non-axis-aligned/multi-stop gradients, theme/system
-/// colors, transforms and custom strokes remain NI.
+/// Path/non-axis-aligned gradients, unmeasured pattern presets, blip tile/crop,
+/// theme/system colors, transforms and custom strokes remain NI.
 /// Default (missing spPr) is white; explicit noFill is transparent; a solid
 /// srgbClr with alpha other than 100000 is straight translucency, not a
 /// flatten onto white.
 /// `Linear` uses an opaque sRGB stop table at the existing 0/90 degree geometry.
+/// `Pattern` is the locked `ltHorz` 8x8 hatch; `Blip` is stretch-to-shape PNG.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum FrameFill {
     Default,
@@ -301,6 +302,8 @@ pub(super) enum FrameFill {
     /// Only nonintegral-percent, nonopaque new alphaMod inputs use this path.
     AlphaProduct([u8; 3], u64),
     Linear(LinearFrameGrad),
+    Pattern(super::pattern::PatternFill),
+    Blip(super::pattern::BlipFill),
     NoFill,
 }
 
@@ -316,6 +319,8 @@ pub(super) struct LinearFrameGrad {
 pub(super) enum PlotPaint {
     Solid([u8; 3], u8),
     Linear(LinearFrameGrad),
+    Pattern(super::pattern::PatternFill),
+    Blip(super::pattern::BlipFill),
 }
 
 pub(super) const LINEAR_ANG_HORIZONTAL: i64 = 0;
