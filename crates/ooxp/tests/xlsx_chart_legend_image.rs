@@ -150,7 +150,8 @@ fn valid_unimplemented_complex_text_is_not_silently_ignored() {
         "<c:legend><c:txPr><a:p><a:pPr><a:defRPr u='sng'/></a:pPr></a:p></c:txPr></c:legend>"
     )
     .is_err());
-    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:wMode val='edge'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_err());
+    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:wMode val='edge'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_ok());
+    assert!(bytes("<c:legend><c:layout><c:manualLayout><c:layoutTarget val='other'/><c:w val='.4'/></c:manualLayout></c:layout></c:legend>").is_err());
 }
 
 #[test]

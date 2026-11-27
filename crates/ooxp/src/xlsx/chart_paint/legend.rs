@@ -31,6 +31,11 @@ struct Manual {
     y: Coordinate,
     w: Option<f64>,
     h: Option<f64>,
+    w_edge: bool,
+    h_edge: bool,
+    /// `layoutTarget=inner` keeps chart-space manual coordinates but does
+    /// not apply the automatic pos reservation to the plot. Not an outer no-op.
+    inner: bool,
 }
 pub(super) struct Spec {
     pub(super) legacy: bool,
@@ -169,28 +174,33 @@ impl Spec {
                 })
             })
         {
-            if layout
+            let target = layout
                 .child_by_local("layoutTarget")
-                .and_then(|n| n.attr_local("val"))
-                == Some("inner")
-            {
-                return Err(unsupported());
-            }
-            for mode in ["wMode", "hMode"] {
-                if layout
-                    .child_by_local(mode)
-                    .and_then(|n| n.attr_local("val"))
-                    == Some("edge")
-                {
+                .and_then(|n| n.attr_local("val"));
+            if let Some(val) = target {
+                if val != "inner" && val != "outer" {
                     return Err(unsupported());
                 }
             }
+            let mode_edge = |name: &str| -> Result<bool, Error> {
+                match layout
+                    .child_by_local(name)
+                    .and_then(|n| n.attr_local("val"))
+                {
+                    None | Some("factor") => Ok(false),
+                    Some("edge") => Ok(true),
+                    Some(_) => Err(unsupported()),
+                }
+            };
             let size = |key| number(layout, key).filter(|v| *v > 0.0);
             result.manual = Some(Manual {
                 x: coord(layout, "x", "xMode"),
                 y: coord(layout, "y", "yMode"),
                 w: size("w"),
                 h: size("h"),
+                w_edge: mode_edge("wMode")?,
+                h_edge: mode_edge("hMode")?,
+                inner: target == Some("inner"),
             });
         }
         for entry in legend.children_by_local("legendEntry") {
@@ -720,28 +730,48 @@ impl<'a> Layout<'a> {
             h: auto.h,
         };
         if let Some(m) = spec.manual {
-            frame.w = m.w.map(|v| v * w).unwrap_or(auto.w);
-            frame.h = m.h.map(|v| v * h).unwrap_or(auto.h);
-            if frame.w <= 0.0 || frame.h <= 0.0 || frame.w > w || frame.h > h {
-                return Err(unsupported());
-            }
+            // Chart-space coordinates for outer and inner. inner does not
+            // re-originate into the plot rectangle. wMode/hMode=edge are the
+            // right/bottom edge in that same space, applied after left/top.
+            // Degenerate edge sizes (right<=left or bottom<=top) stay
+            // exportable with no painted legend; they are not a factor fallback
+            // and not a guessed minimum box.
+            let factor_w = m.w.map(|v| v * w).unwrap_or(auto.w);
+            let factor_h = m.h.map(|v| v * h).unwrap_or(auto.h);
             frame.x = if m.x.edge {
                 m.x.value * w
             } else {
-                auto.x + auto.w / 2.0 - frame.w / 2.0 + m.x.value * w
+                auto.x + auto.w / 2.0 - factor_w / 2.0 + m.x.value * w
             };
             frame.y = if m.y.edge {
                 m.y.value * h
             } else {
-                auto.y + auto.h / 2.0 - frame.h / 2.0 + m.y.value * h
+                auto.y + auto.h / 2.0 - factor_h / 2.0 + m.y.value * h
             };
+            frame.w = if m.w_edge {
+                m.w.map(|v| v * w - frame.x).unwrap_or(auto.w)
+            } else {
+                factor_w
+            };
+            frame.h = if m.h_edge {
+                m.h.map(|v| v * h - frame.y).unwrap_or(auto.h)
+            } else {
+                factor_h
+            };
+            let degenerate = frame.w <= 0.0 || frame.h <= 0.0;
+            if degenerate {
+                frame.w = 0.0;
+                frame.h = 0.0;
+            } else if !m.w_edge && !m.h_edge && (frame.w > w || frame.h > h) {
+                return Err(unsupported());
+            }
             // Manual frame uses chart-space coordinates, not the COM
             // Legend.Left/Top rectangle (whose public bounds omit 4pt padding).
             // Edge can deliberately clip outside; factor is automatically bounded.
-            if !m.x.edge {
+            if !degenerate && !m.x.edge {
                 frame.x = frame.x.min(w - frame.w);
             }
-            if !m.y.edge {
+            if !degenerate && !m.y.edge {
                 frame.y = frame.y.min(h - frame.h);
             }
         }
@@ -774,14 +804,17 @@ impl<'a> Layout<'a> {
         Ok(result)
     }
     fn flow(&mut self) -> Result<(), Error> {
-        if self.spec.legacy || self.items.is_empty() {
+        if self.spec.legacy || self.items.is_empty() || self.frame.w <= 0.0 || self.frame.h <= 0.0
+        {
             return Ok(());
         }
         let mut row = Vec::new();
         let mut used = 0.0;
         for (idx, item) in self.items.iter().enumerate() {
             if item.width + self.space * 2.0 > self.frame.w {
-                return Err(unsupported());
+                if self.spec.manual.is_none() {
+                    return Err(unsupported());
+                }
             }
             if !row.is_empty()
                 && (!self.horizontal
@@ -800,10 +833,7 @@ impl<'a> Layout<'a> {
             self.rows.push(row);
         }
         let required = self.rows.len() as f64 * self.pitch;
-        if required > self.frame.h {
-            if self.spec.manual.is_some() {
-                return Err(unsupported());
-            }
+        if required > self.frame.h && self.spec.manual.is_none() {
             let delta = required + self.space * 2.0 - self.frame.h;
             self.frame.h += delta;
             self.auto.h = self.frame.h;
@@ -816,7 +846,10 @@ impl<'a> Layout<'a> {
     }
     pub(super) fn reserve(&self) -> [i32; 4] {
         let mut r = [0; 4];
-        if self.spec.overlay || self.items.is_empty() {
+        if self.spec.overlay
+            || self.items.is_empty()
+            || self.spec.manual.as_ref().is_some_and(|m| m.inner)
+        {
             return r;
         }
         match self.spec.pos {
@@ -1066,8 +1099,21 @@ mod tests {
             !m.x.edge && !m.y.edge,
             "missing or malformed coordinates retain automatic positioning"
         );
+        let edge = spec(
+            "<legend><layout><manualLayout><wMode val='edge'/><w val='.4'/></manualLayout></layout></legend>",
+        )
+        .unwrap();
+        let m = edge.manual.unwrap();
+        assert!(m.w_edge && !m.h_edge && !m.inner);
+        assert_eq!(m.w, Some(0.4));
+        let inner = spec(
+            "<legend><layout><manualLayout><layoutTarget val='inner'/><xMode val='edge'/><yMode val='edge'/><x val='.1'/><y val='.2'/><w val='.4'/><h val='.3'/></manualLayout></layout></legend>",
+        )
+        .unwrap();
+        let m = inner.manual.unwrap();
+        assert!(m.inner && m.x.edge && m.y.edge && !m.w_edge && !m.h_edge);
         assert!(spec(
-            "<legend><layout><manualLayout><wMode val='edge'/><w val='.4'/></manualLayout></layout></legend>"
+            "<legend><layout><manualLayout><layoutTarget val='other'/><w val='.4'/></manualLayout></layout></legend>"
         )
         .is_err());
     }

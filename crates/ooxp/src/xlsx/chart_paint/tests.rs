@@ -9578,6 +9578,200 @@
         render_pie(&left).unwrap();
     }
 
+    fn official_like_f40_legend(extra: &str) -> String {
+        format!(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout>{extra}<c:xMode val="edge"/><c:yMode val="edge"/><c:x val="9.7222222222222224E-2"/><c:y val="0.28888888888888886"/><c:w val="0.3125"/><c:h val="0.33333333333333331"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#
+        )
+    }
+
+    fn official_like_f40_col_xml(legend: &str, name: &str) -> String {
+        let ser = line_ser(0, name, &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)], "");
+        bar_xml(&ser, "", "minMax", Some("col")).replace(
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>"#,
+            legend,
+        )
+    }
+
+    fn f40_bar_max_x(rgb: &[u8], w: u32, h: u32) -> i32 {
+        let mut max_x = -1i32;
+        for y in 0..h as i32 {
+            for x in 0..w as i32 {
+                let i = (y as usize * w as usize + x as usize) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+                let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+                    && (px[1] as i16 - 247).unsigned_abs() <= 16
+                    && (px[2] as i16 - 247).unsigned_abs() <= 16;
+                if !fillish && ! (px[0] < 50 && px[1] < 50 && px[2] < 50) && chroma >= 20 {
+                    // skip tiny key-like pixels near edges later; take global
+                    max_x = max_x.max(x);
+                }
+            }
+        }
+        max_x
+    }
+
+    fn f40_key_xy(rgb: &[u8], w: u32, h: u32) -> Option<(i32, i32)> {
+        // Largest 4..=16 square-ish colorful component, like a legend key.
+        let n_pix = (w * h) as usize;
+        let mut seen = vec![false; n_pix];
+        let idx = |x: i32, y: i32| y as usize * w as usize + x as usize;
+        let colorful = |px: [u8; 3]| {
+            let chroma = px.iter().max().unwrap().saturating_sub(*px.iter().min().unwrap());
+            let fillish = (px[0] as i16 - 234).unsigned_abs() <= 16
+                && (px[1] as i16 - 247).unsigned_abs() <= 16
+                && (px[2] as i16 - 247).unsigned_abs() <= 16;
+            !fillish && !(px[0] < 50 && px[1] < 50 && px[2] < 50) && chroma >= 20
+        };
+        let mut best: Option<(i32, i32, i32, i32, usize)> = None;
+        for y0 in 0..h as i32 {
+            for x0 in 0..w as i32 {
+                let start = idx(x0, y0);
+                if seen[start] {
+                    continue;
+                }
+                let i0 = start * 3;
+                if !colorful([rgb[i0], rgb[i0 + 1], rgb[i0 + 2]]) {
+                    seen[start] = true;
+                    continue;
+                }
+                let mut stack = vec![(x0, y0)];
+                seen[start] = true;
+                let mut min_x = x0;
+                let mut min_y = y0;
+                let mut max_x = x0;
+                let mut max_y = y0;
+                let mut n = 0usize;
+                while let Some((x, y)) = stack.pop() {
+                    let i = idx(x, y) * 3;
+                    if !colorful([rgb[i], rgb[i + 1], rgb[i + 2]]) {
+                        continue;
+                    }
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                    n += 1;
+                    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                        let nx = x + dx;
+                        let ny = y + dy;
+                        if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                            continue;
+                        }
+                        let ni = idx(nx, ny);
+                        if seen[ni] {
+                            continue;
+                        }
+                        seen[ni] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+                let bw = max_x - min_x + 1;
+                let bh = max_y - min_y + 1;
+                if (4..=16).contains(&bw) && (4..=16).contains(&bh) && (best.is_none() || n > best.unwrap().4)
+                {
+                    best = Some((min_x, min_y, max_x, max_y, n));
+                }
+            }
+        }
+        best.map(|b| (b.0, b.1))
+    }
+
+    #[test]
+    fn official_like_f40_manual_inner_and_edge_export_and_place() {
+        let auto = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>"#,
+            "colAuto",
+        );
+        let official_a = official_like_f40_col_xml(&official_like_f40_legend(""), "colManualA");
+        let inner_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:layoutTarget val="inner"/>"#),
+            "colManualA",
+        );
+        let wmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:wMode val="edge"/>"#),
+            "colManualA",
+        );
+        let hmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:hMode val="edge"/>"#),
+            "colManualA",
+        );
+        let whmode_a = official_like_f40_col_xml(
+            &official_like_f40_legend(r#"<c:wMode val="edge"/><c:hMode val="edge"/>"#),
+            "colManualA",
+        );
+        let innerwh_a = official_like_f40_col_xml(
+            &official_like_f40_legend(
+                r#"<c:layoutTarget val="inner"/><c:wMode val="edge"/><c:hMode val="edge"/>"#,
+            ),
+            "colManualA",
+        );
+        let hmode_b = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout><c:hMode val="edge"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.15277777777777779"/><c:y val="0.46666666666666667"/><c:w val="0.55555555555555558"/><c:h val="0.22222222222222221"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#,
+            "colManualB",
+        );
+        let auto_png = render_bar(&auto).expect("F40 colAuto must export");
+        let official_png = render_bar(&official_a).expect("F40 official outer manual must export");
+        let inner_png = render_bar(&inner_a).expect("F40 layoutTarget=inner must export");
+        let wmode_png = render_bar(&wmode_a).expect("F40 wMode=edge must export");
+        let hmode_png = render_bar(&hmode_a).expect("F40 hMode=edge must export");
+        let whmode_png = render_bar(&whmode_a).expect("F40 wMode+hMode=edge must export");
+        let innerwh_png = render_bar(&innerwh_a).expect("F40 inner+edge must export");
+        render_bar(&hmode_b).expect("F40 degenerate hMode=edge must still export");
+        assert_ne!(official_png, auto_png);
+        assert_ne!(inner_png, official_png, "inner must change the plot reservation");
+        let (w, h, rgb_o) = png_rgb(&official_png);
+        let (_, _, rgb_i) = png_rgb(&inner_png);
+        let (_, _, rgb_w) = png_rgb(&wmode_png);
+        let (_, _, rgb_h) = png_rgb(&hmode_png);
+        let (_, _, rgb_wh) = png_rgb(&whmode_png);
+        let (_, _, rgb_iw) = png_rgb(&innerwh_png);
+        assert!(
+            f40_bar_max_x(&rgb_i, w, h) > f40_bar_max_x(&rgb_o, w, h) + 8,
+            "inner must not keep the automatic right-band plot reserve"
+        );
+        let ko = f40_key_xy(&rgb_o, w, h).expect("official manual key");
+        let ki = f40_key_xy(&rgb_i, w, h).expect("inner key");
+        assert!(
+            (ki.0 - ko.0).abs() <= 2 && (ki.1 - ko.1).abs() <= 2,
+            "inner keeps chart-space key placement, got inner={ki:?} official={ko:?}"
+        );
+        let kw = f40_key_xy(&rgb_w, w, h).expect("wMode key");
+        let kh = f40_key_xy(&rgb_h, w, h).expect("hMode key");
+        assert!(kw.0 + 4 < ko.0, "wMode=edge shortens from the right, got w={kw:?} official={ko:?}");
+        assert!(kh.1 + 4 < ko.1, "hMode=edge shortens from the bottom, got h={kh:?} official={ko:?}");
+        let kwh = f40_key_xy(&rgb_wh, w, h).expect("whMode key");
+        assert!(
+            (kwh.0 - kw.0).abs() <= 2 && (kwh.1 - kh.1).abs() <= 2,
+            "combined edge modes compose, got wh={kwh:?} w={kw:?} h={kh:?}"
+        );
+        let kiw = f40_key_xy(&rgb_iw, w, h).expect("innerwh key");
+        assert!(
+            (kiw.0 - kwh.0).abs() <= 2 && (kiw.1 - kwh.1).abs() <= 2,
+            "inner+edge keeps the edge-mode chart-space key, got innerwh={kiw:?} wh={kwh:?}"
+        );
+        assert!(
+            f40_bar_max_x(&rgb_iw, w, h) > f40_bar_max_x(&rgb_wh, w, h) + 8,
+            "inner+edge must still drop the automatic right-band reserve"
+        );
+    }
+
+    #[test]
+    fn leftover_f40_variants_without_official_gold_stay_not_implemented() {
+        let pie_manual = official_like_f38_pie_xml("").replace(
+            r#"<c:legend><c:legendPos val="r"/></c:legend>"#,
+            r#"<c:legend><c:legendPos val="r"/><c:overlay val="0"/><c:layout><c:manualLayout><c:layoutTarget val="inner"/><c:xMode val="edge"/><c:yMode val="edge"/><c:x val="0.1"/><c:y val="0.2"/><c:w val="0.3"/><c:h val="0.3"/></c:manualLayout></c:layout></c:legend>"#,
+        );
+        let err = render_pie(&pie_manual).expect_err("pie manual inner should stay NotImplemented");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+        let bad = official_like_f40_col_xml(
+            r#"<c:legend><c:legendPos val="r"/><c:layout><c:manualLayout><c:layoutTarget val="other"/><c:x val="0.1"/><c:w val="0.3"/></c:manualLayout></c:layout><c:overlay val="0"/></c:legend>"#,
+            "badTarget",
+        );
+        let err = render_bar(&bad).expect_err("unknown layoutTarget should stay NotImplemented");
+        assert_eq!(err.code(), crate::error::ErrorCode::NotImplemented);
+    }
+
     #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
