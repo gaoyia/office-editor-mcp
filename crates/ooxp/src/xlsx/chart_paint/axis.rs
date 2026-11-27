@@ -436,6 +436,10 @@ pub(super) struct SecondaryAxes {
     pub secondary_val_id: String,
     /// Official bar secondary keeps catAx minMax, so the first category is at the bottom.
     pub cats_from_bottom: bool,
+    /// Official F26-5 bar+line auto-secondary: valAx on the right, hidden
+    /// catAx at the bottom. The line uses column orientation. Not a general
+    /// F26 combo lock.
+    pub line_on_right: bool,
 }
 
 fn ax_id(axis: &Element) -> Option<&str> {
@@ -650,6 +654,93 @@ pub(super) fn read_locked_secondary_axes(plot: &Element) -> Result<SecondaryAxes
         primary_val_id,
         secondary_val_id,
         cats_from_bottom: true,
+        line_on_right: false,
+    })
+}
+
+/// Official F26-5: clustered bar primary (catAx l, valAx b) plus a standard
+/// line on a secondary valAx r / hidden catAx b. Close-enough composition of
+/// already-locked bar geometry and line-on-right pairing; not a general F26 lock.
+pub(super) fn read_locked_bar_line_mixed_secondary(plot: &Element) -> Result<SecondaryAxes, Error> {
+    if plot
+        .element_children()
+        .any(|e| matches!(e.local_name(), "dateAx" | "serAx"))
+    {
+        return Err(unsupported());
+    }
+    let vals: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .collect();
+    let cats: Vec<_> = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .collect();
+    if vals.len() != 2 || cats.len() != 2 {
+        return Err(unsupported());
+    }
+    if vals.iter().filter(|ax| ax_pos(ax) == "b").count() != 1
+        || vals.iter().filter(|ax| ax_pos(ax) == "r").count() != 1
+        || cats.iter().filter(|ax| ax_pos(ax) == "l").count() != 1
+        || cats
+            .iter()
+            .filter(|ax| ax_pos(ax) == "b" && axis_deleted(ax))
+            .count()
+            != 1
+    {
+        return Err(unsupported());
+    }
+    let primary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "b")
+        .ok_or_else(unsupported)?;
+    let secondary_val = vals
+        .iter()
+        .find(|ax| ax_pos(ax) == "r")
+        .ok_or_else(unsupported)?;
+    let primary_val_id = ax_id(primary_val).ok_or_else(unsupported)?.to_string();
+    let secondary_val_id = ax_id(secondary_val).ok_or_else(unsupported)?.to_string();
+    let primary_cat = cats
+        .iter()
+        .find(|cat| locked_primary_cat(cat, &primary_val_id, "l"))
+        .ok_or_else(unsupported)?;
+    let secondary_cat = cats
+        .iter()
+        .find(|cat| locked_hidden_secondary_cat(cat, &secondary_val_id, "b"))
+        .ok_or_else(unsupported)?;
+    if std::ptr::eq(*primary_cat, *secondary_cat) {
+        return Err(unsupported());
+    }
+    let primary_cat_id = ax_id(primary_cat).ok_or_else(unsupported)?;
+    let secondary_cat_id = ax_id(secondary_cat).ok_or_else(unsupported)?;
+    if primary_val
+        .child_by_local("crossAx")
+        .and_then(|e| e.attr_local("val"))
+        != Some(primary_cat_id)
+        || secondary_val
+            .child_by_local("crossAx")
+            .and_then(|e| e.attr_local("val"))
+            != Some(secondary_cat_id)
+    {
+        return Err(unsupported());
+    }
+    let primary = Spec::read_axis(primary_val)?;
+    if primary.deleted
+        || primary.reversed
+        || primary.log_base.is_some()
+        || primary.crosses_at.is_some()
+        || !matches!(primary.cat_crosses, CatCrosses::AutoZero)
+    {
+        return Err(unsupported());
+    }
+    let secondary = read_secondary_val_axis(secondary_val, "r")?;
+    Ok(SecondaryAxes {
+        primary,
+        secondary,
+        primary_val_id,
+        secondary_val_id,
+        cats_from_bottom: true,
+        line_on_right: true,
     })
 }
 

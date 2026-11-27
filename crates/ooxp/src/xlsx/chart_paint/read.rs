@@ -519,8 +519,30 @@ pub(super) fn read_chart(
         return Err(unsupported());
     }
     let wrapper = wrappers[0];
+    let n_val = plot
+        .element_children()
+        .filter(|e| e.local_name() == "valAx")
+        .count();
+    let n_cat = plot
+        .element_children()
+        .filter(|e| e.local_name() == "catAx")
+        .count();
     let locked_secondary = if wrappers.len() == 2 {
-        Some(axis::read_locked_secondary_axes(plot)?)
+        if n_val == 2 && n_cat == 2 {
+            // Official F26-5 bar+line auto-secondary uses a mixed layout
+            // (bar valAx at the bottom, line valAx on the right). Other
+            // two-wrapper secondary encodings keep the F21 pairing.
+            if official_like_bar_line_wrappers(&wrappers) {
+                Some(axis::read_locked_bar_line_mixed_secondary(plot)?)
+            } else {
+                Some(axis::read_locked_secondary_axes(plot)?)
+            }
+        } else if n_val == 1 && n_cat == 1 {
+            official_like_shared_primary_combo(&wrappers)?;
+            None
+        } else {
+            return Err(unsupported());
+        }
     } else {
         None
     };
@@ -988,6 +1010,10 @@ pub(super) fn read_chart(
         let same_wrapper = wrappers[1].local_name() == wrapper.local_name();
         let official_col_line_combo =
             kind == PlotKind::ClusteredColumn && wrappers[1].local_name() == "lineChart";
+        // Official F26-5: clustered bar + standard line on a right valAx.
+        // Close-enough composition, not a general F26 combo lock.
+        let official_bar_line_combo =
+            kind == PlotKind::ClusteredBar && wrappers[1].local_name() == "lineChart";
         if same_wrapper {
             if !matches!(
                 kind,
@@ -998,7 +1024,7 @@ pub(super) fn read_chart(
             ) {
                 return Err(unsupported());
             }
-        } else if !official_col_line_combo {
+        } else if !official_col_line_combo && !official_bar_line_combo {
             return Err(unsupported());
         }
         if stacking != Stacking::Clustered {
@@ -1017,7 +1043,7 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        if kind == PlotKind::ClusteredBar {
+        if kind == PlotKind::ClusteredBar && same_wrapper {
             let dir = wrappers[1]
                 .child_by_local("barDir")
                 .and_then(|el| el.attr_local("val"))
@@ -1030,7 +1056,7 @@ pub(super) fn read_chart(
                 return Err(unsupported());
             }
         }
-        if kind == PlotKind::StandardLine || official_col_line_combo {
+        if kind == PlotKind::StandardLine || official_col_line_combo || official_bar_line_combo {
             let grouping = wrappers[1]
                 .child_by_local("grouping")
                 .and_then(|el| el.attr_local("val"))
@@ -1105,7 +1131,7 @@ pub(super) fn read_chart(
         }
     }
     let mut series = Vec::new();
-    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() {
+    let ser_wrappers: Vec<&Element> = if locked_secondary.is_some() || wrappers.len() == 2 {
         wrappers.clone()
     } else {
         vec![wrapper]
@@ -1802,6 +1828,9 @@ pub(super) fn read_chart(
         axis,
         axis_x,
         axis_secondary,
+        secondary_line_on_right: locked_secondary
+            .as_ref()
+            .is_some_and(|sec| sec.line_on_right),
         cats_from_bottom,
         title: title_text(chart),
         title_typo: title_typography(chart)?,
@@ -1880,6 +1909,154 @@ pub(super) fn is_chart_wrapper(name: &str) -> bool {
             | "surfaceChart"
             | "surface3DChart"
     )
+}
+
+fn wrapper_ax_ids(wrap: &Element) -> Vec<&str> {
+    wrap.element_children()
+        .filter(|el| el.local_name() == "axId")
+        .filter_map(|el| el.attr_local("val"))
+        .collect()
+}
+
+fn wrapper_ser_count(wrap: &Element) -> usize {
+    wrap.element_children()
+        .filter(|el| el.local_name() == "ser")
+        .count()
+}
+
+fn clustered_col_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "barChart" {
+        return false;
+    }
+    let dir = wrap
+        .child_by_local("barDir")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("bar");
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("clustered");
+    dir == "col"
+        && grouping == "clustered"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && (number_val(wrap, "gapWidth").unwrap_or(150.0) - 150.0).abs() <= 1e-9
+        && number_val(wrap, "overlap").unwrap_or(0.0).abs() <= 1e-9
+}
+
+fn clustered_bar_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "barChart" {
+        return false;
+    }
+    let dir = wrap
+        .child_by_local("barDir")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("bar");
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("clustered");
+    dir == "bar"
+        && grouping == "clustered"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && (number_val(wrap, "gapWidth").unwrap_or(150.0) - 150.0).abs() <= 1e-9
+        && number_val(wrap, "overlap").unwrap_or(0.0).abs() <= 1e-9
+}
+
+fn standard_line_combo_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "lineChart" {
+        return false;
+    }
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("standard");
+    if grouping != "standard"
+        || flag(wrap, "varyColors").unwrap_or(false)
+        || flag(wrap, "smooth").unwrap_or(false)
+    {
+        return false;
+    }
+    if wrap.element_children().any(|child| {
+        matches!(
+            child.local_name(),
+            "dropLines" | "hiLowLines" | "upDownBars"
+        )
+    }) {
+        return false;
+    }
+    wrap.element_children()
+        .filter(|el| el.local_name() == "ser")
+        .all(|ser| {
+            ser.child_by_local("marker")
+                .and_then(|m| m.child_by_local("symbol"))
+                .and_then(|s| s.attr_local("val"))
+                == Some("none")
+        })
+}
+
+fn standard_area_combo_wrapper(wrap: &Element) -> bool {
+    if wrap.local_name() != "areaChart" {
+        return false;
+    }
+    let grouping = wrap
+        .child_by_local("grouping")
+        .and_then(|el| el.attr_local("val"))
+        .unwrap_or("standard");
+    grouping == "standard"
+        && !flag(wrap, "varyColors").unwrap_or(false)
+        && !wrap
+            .element_children()
+            .any(|child| child.local_name() == "dropLines")
+}
+
+fn official_like_bar_line_wrappers(wrappers: &[&Element]) -> bool {
+    wrappers.len() == 2
+        && clustered_bar_wrapper(wrappers[0])
+        && standard_line_combo_wrapper(wrappers[1])
+        && wrapper_ser_count(wrappers[0]) == 1
+        && wrapper_ser_count(wrappers[1]) == 1
+}
+
+/// Official F26 shared-primary combos: clustered col + standard line
+/// (1 or 2 column series), or standard area + clustered col (1+1), sharing
+/// one catAx/valAx pair with crossBetween=between. Close-enough composition
+/// of already-locked paint paths; not a general F26 combo lock.
+fn official_like_shared_primary_combo(wrappers: &[&Element]) -> Result<(), Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    if wrappers.len() != 2 {
+        return Err(unsupported());
+    }
+    let ids0 = wrapper_ax_ids(wrappers[0]);
+    let ids1 = wrapper_ax_ids(wrappers[1]);
+    if ids0.len() != 2 || ids1.len() != 2 {
+        return Err(unsupported());
+    }
+    let same_axes = ids0.iter().all(|id| ids1.contains(id)) && ids1.iter().all(|id| ids0.contains(id));
+    if !same_axes {
+        return Err(unsupported());
+    }
+    for wrap in wrappers {
+        data_labels_hidden(wrap.child_by_local("dLbls"))?;
+    }
+    let n0 = wrapper_ser_count(wrappers[0]);
+    let n1 = wrapper_ser_count(wrappers[1]);
+    let col_line = clustered_col_wrapper(wrappers[0])
+        && standard_line_combo_wrapper(wrappers[1])
+        && (n0 == 1 || n0 == 2)
+        && n1 == 1;
+    let area_col = standard_area_combo_wrapper(wrappers[0])
+        && clustered_col_wrapper(wrappers[1])
+        && n0 == 1
+        && n1 == 1;
+    let col_area = clustered_col_wrapper(wrappers[0])
+        && standard_area_combo_wrapper(wrappers[1])
+        && n0 == 1
+        && n1 == 1;
+    if col_line || area_col || col_area {
+        Ok(())
+    } else {
+        Err(unsupported())
+    }
 }
 
 

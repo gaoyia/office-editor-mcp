@@ -12003,3 +12003,288 @@
             );
         }
     }
+
+    fn f26_ser(order: usize, name: &str, vals: &str, extra: &str) -> String {
+        format!(
+            r#"<c:ser>
+          <c:idx val="{order}"/><c:order val="{order}"/><c:tx><c:v>{name}</c:v></c:tx>
+          {cats}
+          {val}
+          {extra}
+        </c:ser>"#,
+            cats = cats_ab(),
+            val = val_pts(vals),
+        )
+    }
+
+    fn f26_line_marker() -> &'static str {
+        r#"<c:marker><c:symbol val="none"/></c:marker>"#
+    }
+
+    fn f26_shared_axes() -> &'static str {
+        r#"<c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:majorTickMark val="out"/><c:tickLblPos val="nextTo"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#
+    }
+
+    fn official_like_f26_space(title: &str, plot: &str) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <c:chart>
+    <c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:t>{title}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>
+    <c:plotArea>
+      {plot}
+    </c:plotArea>
+    <c:legend><c:legendPos val="r"/></c:legend>
+  </c:chart>
+</c:chartSpace>"#
+        )
+    }
+
+    fn official_like_f26_col_line_primary_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-1", &plot)
+    }
+
+    fn official_like_f26_col_col_line_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}{s2}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s3}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/>
+      </c:lineChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+            s3 = f26_ser(2, "F26S3", "20,30,10,20", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-2", &plot)
+    }
+
+    fn official_like_f26_col_line_secondary_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="3"/><c:axId val="4"/>
+      </c:lineChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/><c:max val="50"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/><c:majorUnit val="10"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+        );
+        official_like_f26_space("F26-3", &plot)
+    }
+
+    fn official_like_f26_col_area_primary_xml() -> String {
+        let plot = format!(
+            r#"<c:areaChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:axId val="1"/><c:axId val="2"/>
+      </c:areaChart>
+      <c:barChart>
+        <c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      {axes}"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+            dlbls = hidden_dlbls(),
+            axes = f26_shared_axes(),
+        );
+        official_like_f26_space("F26-4", &plot)
+    }
+
+    fn official_like_f26_bar_line_mixed_xml() -> String {
+        let plot = format!(
+            r#"<c:barChart>
+        <c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>
+        {s1}
+        {dlbls}
+        <c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/>
+      </c:barChart>
+      <c:lineChart>
+        <c:grouping val="standard"/><c:varyColors val="0"/>
+        {s2}
+        {dlbls}
+        <c:smooth val="0"/><c:axId val="3"/><c:axId val="4"/>
+      </c:lineChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:majorGridlines/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>
+      <c:valAx><c:axId val="4"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="r"/><c:crossAx val="3"/><c:crosses val="max"/><c:crossBetween val="between"/></c:valAx>
+      <c:catAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="1"/><c:axPos val="b"/><c:crossAx val="4"/></c:catAx>"#,
+            s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+            s2 = f26_ser(1, "F26S2", "20,10,20,10", f26_line_marker()),
+            dlbls = hidden_dlbls(),
+        );
+        official_like_f26_space("F26-5", &plot)
+    }
+
+    #[test]
+    fn official_like_f26_combo_charts_export_and_paint_ink() {
+        // Official F26 Chart.Export gold exists for these combo encodings.
+        // Close-enough painters must produce an image with real ink.
+        // Residual pixels vs official gold stay on the review page; this
+        // is not a unique official-matrix lock, not a general F26 combo
+        // lock, and does not claim 0-diff. F26-3 reuses the already
+        // landed F21-8 column+line secondary path.
+        let cases = [
+            ("col-line-primary", official_like_f26_col_line_primary_xml()),
+            ("col-col-line", official_like_f26_col_col_line_xml()),
+            ("col-line-secondary", official_like_f26_col_line_secondary_xml()),
+            ("col-area-primary", official_like_f26_col_area_primary_xml()),
+            ("bar-line-primary", official_like_f26_bar_line_mixed_xml()),
+        ];
+        for (kind, xml) in cases {
+            let doc = crate::xml::parse(xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap_or_else(|err| panic!("{kind} must read; got {:?} {}", err.code(), err));
+            match kind {
+                "col-line-primary" => {
+                    assert_eq!(chart.series.len(), 2);
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && !chart.series[1].on_secondary);
+                    assert!(!chart.secondary_line_on_right);
+                }
+                "col-col-line" => {
+                    assert_eq!(chart.series.len(), 3);
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[2].plot_kind, PlotKind::StandardLine));
+                }
+                "col-line-secondary" => {
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && chart.series[1].on_secondary);
+                    assert!(!chart.secondary_line_on_right);
+                }
+                "col-area-primary" => {
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredColumn));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardArea));
+                    assert!(!chart.area_midcat);
+                }
+                "bar-line-primary" => {
+                    assert!(matches!(chart.kind, PlotKind::ClusteredBar));
+                    assert!(matches!(chart.series[0].plot_kind, PlotKind::ClusteredBar));
+                    assert!(matches!(chart.series[1].plot_kind, PlotKind::StandardLine));
+                    assert!(!chart.series[0].on_secondary && chart.series[1].on_secondary);
+                    assert!(chart.secondary_line_on_right);
+                }
+                _ => {}
+            }
+            let png = render_line(&xml).unwrap_or_else(|err| {
+                panic!("{kind} must export; got {:?} {}", err.code(), err)
+            });
+            let (_w, _h, rgb) = png_rgb(&png);
+            let ink = count_nonwhite_rgb(&rgb);
+            assert!(ink >= 80, "{kind} must paint ink, got {ink}");
+        }
+    }
+
+    #[test]
+    fn leftover_f26_variants_without_official_gold_stay_not_implemented() {
+        let three_col = official_like_f26_col_col_line_xml().replace(
+            &f26_ser(1, "F26S2", "20,10,20,10", ""),
+            &format!(
+                "{}{}",
+                f26_ser(1, "F26S2", "20,10,20,10", ""),
+                f26_ser(3, "F26S4", "15,15,15,15", ""),
+            ),
+        );
+        let line_area = official_like_f26_space(
+            "NI",
+            &format!(
+                r#"<c:lineChart><c:grouping val="standard"/><c:varyColors val="0"/>{s1}{dlbls}<c:smooth val="0"/><c:axId val="1"/><c:axId val="2"/></c:lineChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{s2}{dlbls}<c:axId val="1"/><c:axId val="2"/></c:areaChart>
+      {axes}"#,
+                s1 = f26_ser(0, "F26S1", "10,20,30,40", f26_line_marker()),
+                s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+                dlbls = hidden_dlbls(),
+                axes = f26_shared_axes(),
+            ),
+        );
+        let stacked = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:grouping val="clustered"/>"#,
+            r#"<c:grouping val="stacked"/>"#,
+        );
+        let smooth = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:smooth val="0"/>"#,
+            r#"<c:smooth val="1"/>"#,
+        );
+        let marked = official_like_f26_col_line_primary_xml().replace(
+            r#"<c:marker><c:symbol val="none"/></c:marker>"#,
+            r#"<c:marker><c:symbol val="circle"/></c:marker>"#,
+        );
+        let three_wrappers = official_like_f26_col_line_primary_xml().replace(
+            r#"</c:lineChart>"#,
+            &format!(
+                r#"</c:lineChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{}{}<c:axId val="1"/><c:axId val="2"/></c:areaChart>"#,
+                f26_ser(2, "F26S3", "20,30,10,20", ""),
+                hidden_dlbls(),
+            ),
+        );
+        let bar_area = official_like_f26_space(
+            "NI",
+            &format!(
+                r#"<c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>{s1}{dlbls}<c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart>
+      <c:areaChart><c:grouping val="standard"/><c:varyColors val="0"/>{s2}{dlbls}<c:axId val="1"/><c:axId val="2"/></c:areaChart>
+      <c:catAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="2"/><c:crosses val="autoZero"/></c:catAx>
+      <c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/><c:max val="80"/><c:min val="0"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/><c:majorUnit val="20"/></c:valAx>"#,
+                s1 = f26_ser(0, "F26S1", "10,20,30,40", ""),
+                s2 = f26_ser(1, "F26S2", "20,10,20,10", ""),
+                dlbls = hidden_dlbls(),
+            ),
+        );
+        let cases = [three_col, line_area, stacked, smooth, marked, three_wrappers, bar_area];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_line(xml).expect_err(&format!("leftover F26 case {i} should stay NI"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "leftover F26 case {i} should stay NotImplemented"
+            );
+        }
+    }

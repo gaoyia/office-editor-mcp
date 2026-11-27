@@ -501,7 +501,8 @@ pub(super) fn paint_bar(
     let sec_labels = chart
         .axis_secondary
         .as_ref()
-        .is_some_and(|spec| !spec.deleted && !spec.hide_tick_labels);
+        .is_some_and(|spec| !spec.deleted && !spec.hide_tick_labels)
+        && !chart.secondary_line_on_right;
     let need_top_val = (val_axis_at_top && val_labels) || sec_labels;
     let need_bottom_val = !val_axis_at_top && val_labels;
     let val_label_top = scale_plot_leading(canvas.dpi, INSET_BOTTOM);
@@ -546,6 +547,52 @@ pub(super) fn paint_bar(
             return Err(legend::unsupported());
         }
     }
+    // Official F26-5 line-on-right secondary uses a vertical budget, then
+    // reserves the mirrored label column between the plot and the legend.
+    // Close-enough composition of the F21 right-axis gutter, not a unique lock.
+    let mixed_secondary_scale = if chart.secondary_line_on_right {
+        if let Some(spec) = chart.axis_secondary {
+            Some(axis::scale_values(
+                chart
+                    .series
+                    .iter()
+                    .filter(|ser| ser.on_secondary)
+                    .flat_map(|ser| ser.values.iter().copied()),
+                spec,
+                axis::interval_budget_dpi(canvas.h, em, canvas.dpi),
+            )?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let mut right_axis_x = plot_r;
+    if let Some(sec) = mixed_secondary_scale.as_ref() {
+        let labels: Vec<String> = tick_values(sec.min, sec.max, sec.major)
+            .into_iter()
+            .map(|v| fmt_tick_with(v, sec.tick_format))
+            .collect();
+        let widest = labels
+            .iter()
+            .map(|label| {
+                let width = text_width(font, gdi.as_ref(), label, label_px);
+                let hanging = if label.starts_with('-') {
+                    text_width(font, gdi.as_ref(), "-", label_px) / 2.0
+                } else {
+                    0.0
+                };
+                (width - hanging).ceil() as i32
+            })
+            .max()
+            .unwrap_or(0);
+        let gutter = widest + canvas.dpi.scale_px(TICK_GAP);
+        plot_r -= gutter;
+        if plot_r <= plot_x {
+            return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+        }
+        right_axis_x = plot_r;
+    }
     let plot = Rect {
         x: f64::from(plot_x),
         y: f64::from(plot_y),
@@ -585,7 +632,9 @@ pub(super) fn paint_bar(
     } else {
         axis::scale(&chart.series, chart.axis, budget)?
     };
-    let secondary_scale = if let Some(spec) = chart.axis_secondary {
+    let secondary_scale = if mixed_secondary_scale.is_some() {
+        mixed_secondary_scale
+    } else if let Some(spec) = chart.axis_secondary {
         Some(axis::scale_values(
             chart
                 .series
@@ -639,26 +688,51 @@ pub(super) fn paint_bar(
         return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
     }
     if let Some(sec) = secondary_scale.as_ref() {
-        // Official same-type secondary bars overlap in the same category
-        // slots: each wrapper is a one-series cluster. Paint primary first.
-        draw_clustered_bars(
-            canvas,
-            chart,
-            &plot,
-            axis_min,
-            axis_max,
-            scale.reversed,
-            Some(false),
-        );
-        draw_clustered_bars(
-            canvas,
-            chart,
-            &plot,
-            sec.min,
-            sec.max,
-            sec.reversed,
-            Some(true),
-        );
+        if chart.secondary_line_on_right {
+            // Official F26-5: primary clustered bars, then a standard line in
+            // column orientation on the right valAx. Close-enough; not a
+            // general F26 combo lock.
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                axis_min,
+                axis_max,
+                scale.reversed,
+                Some(false),
+            );
+            draw_lines(
+                canvas,
+                chart,
+                &plot,
+                sec.min,
+                sec.max,
+                sec.log_base,
+                sec.reversed,
+                Some(true),
+            )?;
+        } else {
+            // Official same-type secondary bars overlap in the same category
+            // slots: each wrapper is a one-series cluster. Paint primary first.
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                axis_min,
+                axis_max,
+                scale.reversed,
+                Some(false),
+            );
+            draw_clustered_bars(
+                canvas,
+                chart,
+                &plot,
+                sec.min,
+                sec.max,
+                sec.reversed,
+                Some(true),
+            );
+        }
     } else {
         draw_clustered_bars(canvas, chart, &plot, axis_min, axis_max, scale.reversed, None);
     }
@@ -733,6 +807,25 @@ pub(super) fn paint_bar(
         }
     }
     if let Some(sec) = secondary_scale.as_ref() {
+        if chart.secondary_line_on_right {
+            canvas.vline_i(right_axis_x, plot_y, plot_b, INK);
+            if sec.value_labels_visible() {
+                draw_right_tick_labels(
+                    canvas,
+                    font,
+                    gdi.as_ref(),
+                    label_px,
+                    &plot,
+                    right_axis_x,
+                    &secondary_ticks,
+                    &secondary_tick_labels,
+                    sec.min,
+                    sec.max,
+                    sec.log_base,
+                    sec.reversed,
+                );
+            }
+        } else {
         let top_y = plot_y;
         canvas.hline_i(plot_x, plot_r, top_y, INK);
         for value in tick_values(sec.min + sec.minor, sec.max, sec.minor) {
@@ -765,6 +858,7 @@ pub(super) fn paint_bar(
                     INK,
                 );
             }
+        }
         }
     }
     if !title_lines.is_empty() {
@@ -1442,7 +1536,7 @@ pub(super) fn paint(
                     );
                 }
             } else {
-                draw_bars(
+                paint_combo_layers(
                     canvas,
                     chart,
                     &plot,
@@ -1453,7 +1547,7 @@ pub(super) fn paint(
                     scale.crossing(),
                     scale.reversed,
                     None,
-                );
+                )?;
             }
         }
         PlotKind::StandardLine => {
@@ -1505,16 +1599,18 @@ pub(super) fn paint(
                     Some(true),
                 );
             } else {
-                draw_areas(
+                paint_combo_layers(
                     canvas,
                     chart,
                     &plot,
                     axis_min,
                     axis_max,
+                    step,
+                    log_base,
                     scale.crossing(),
                     scale.reversed,
                     None,
-                );
+                )?;
             }
         }
         PlotKind::ClusteredBar | PlotKind::Pie | PlotKind::Scatter { .. } => {
@@ -1676,6 +1772,80 @@ pub(super) fn draw_value_minor_ticks(
     }
 }
 
+/// Official-like F26 shared-primary combos paint already-locked paths in
+/// official back-to-front order: area, then columns, then lines. Cluster
+/// width follows only the column series. Close-enough; not a general
+/// heterogeneous-combo lock. Plain single-kind charts take the same path.
+fn paint_combo_layers(
+    canvas: &mut Canvas,
+    chart: &ColumnChart,
+    plot: &Rect,
+    axis_min: f64,
+    axis_max: f64,
+    step: f64,
+    log_base: Option<f64>,
+    origin: f64,
+    reversed: bool,
+    group_secondary: Option<bool>,
+) -> Result<(), Error> {
+    let in_group = |ser: &Series| {
+        group_secondary
+            .map(|flag| ser.on_secondary == flag)
+            .unwrap_or(true)
+    };
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::StandardArea && in_group(ser))
+    {
+        draw_areas(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            origin,
+            reversed,
+            group_secondary,
+        );
+    }
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::ClusteredColumn && in_group(ser))
+    {
+        draw_bars(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            step,
+            log_base,
+            origin,
+            reversed,
+            group_secondary,
+        );
+    }
+    if chart
+        .series
+        .iter()
+        .any(|ser| ser.plot_kind == PlotKind::StandardLine && in_group(ser))
+    {
+        draw_lines(
+            canvas,
+            chart,
+            plot,
+            axis_min,
+            axis_max,
+            log_base,
+            reversed,
+            group_secondary,
+        )?;
+    }
+    Ok(())
+}
+
 pub(super) fn draw_lines(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -1696,7 +1866,7 @@ pub(super) fn draw_lines(
     let group: Vec<&Series> = chart
         .series
         .iter()
-        .filter(|ser| !ser.values.is_empty())
+        .filter(|ser| !ser.values.is_empty() && ser.plot_kind == PlotKind::StandardLine)
         .collect();
     for (si, ser) in group.iter().enumerate() {
         if !group_secondary
@@ -1904,6 +2074,9 @@ pub(super) fn draw_areas(
         return;
     }
     for ser in &chart.series {
+        if ser.plot_kind != PlotKind::StandardArea {
+            continue;
+        }
         if !group_secondary
             .map(|flag| ser.on_secondary == flag)
             .unwrap_or(true)
@@ -2489,7 +2662,10 @@ pub(super) fn draw_clustered_bars(
     let group: Vec<&Series> = chart
         .series
         .iter()
-        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .filter(|ser| {
+            ser.plot_kind == PlotKind::ClusteredBar
+                && group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true)
+        })
         .collect();
     if group.is_empty() {
         return;
@@ -2836,7 +3012,10 @@ pub(super) fn draw_bars(
     let group: Vec<&Series> = chart
         .series
         .iter()
-        .filter(|ser| group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true))
+        .filter(|ser| {
+            ser.plot_kind == PlotKind::ClusteredColumn
+                && group_secondary.map(|flag| ser.on_secondary == flag).unwrap_or(true)
+        })
         .collect();
     if group.is_empty() {
         return;
@@ -3153,8 +3332,12 @@ pub(super) fn draw_legend(
     // S2) but flips the default right legend when catAx is minMax, so the
     // keys follow the visual stack (S2 above S1). Package legend/series XML
     // is otherwise identical. Other chart kinds keep series-index order.
+    let mixed_combo = chart.series.iter().any(|ser| ser.plot_kind != chart.kind);
+    // Official F26-5 keeps series-index order (S1 above S2). The bar-only
+    // minMax flip is a same-type visual-stack rule and is not applied to a
+    // mixed combo. Close-enough; not a general combo-legend lock.
     let legend_series: Vec<(usize, &Series)> =
-        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom {
+        if chart.kind == PlotKind::ClusteredBar && chart.cats_from_bottom && !mixed_combo {
             chart.series.iter().enumerate().rev().collect()
         } else {
             chart.series.iter().enumerate().collect()
@@ -3163,7 +3346,7 @@ pub(super) fn draw_legend(
         let color = ser.color.unwrap_or(chart.accents[ser.slot % 6]);
         draw_plot_key_styled(
             canvas,
-            chart.kind,
+            if mixed_combo { ser.plot_kind } else { chart.kind },
             x,
             y,
             x + key_width,

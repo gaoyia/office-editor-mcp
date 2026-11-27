@@ -256,6 +256,10 @@ pub(super) struct ColumnChart {
     /// Official F21 secondary valAx (column/line/area axPos=r, bar axPos=t,
     /// crosses=max). None for one axis.
     pub(super) axis_secondary: Option<axis::Spec>,
+    /// Official F26-5: secondary valAx is on the right and the line is painted
+    /// in column orientation, while the primary remains a clustered bar.
+    /// Close-enough composition, not a general F26 combo lock.
+    pub(super) secondary_line_on_right: bool,
     pub(super) grid_x: bool,
     /// 条形图类目轴：minMax 时第一类在下，maxMin 时第一类在上。系列 0 落在该类目轴方向的槽起点。柱形/折线不用。
     pub(super) cats_from_bottom: bool,
