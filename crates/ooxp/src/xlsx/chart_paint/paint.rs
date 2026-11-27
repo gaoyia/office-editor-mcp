@@ -2260,8 +2260,11 @@ pub(super) fn draw_clustered_bars(
     }
 }
 
-/// OutsideEnd on horizontal bars follows the same category/cluster order as
-/// the marks. General integer formatting, plain font and complete values only.
+/// OutsideEnd and InsideEnd on horizontal bars follow the same category/cluster
+/// order as the marks. InsideEnd sits inward from the bar end with the same
+/// 6pt (3pt gap + 3pt inset) pad as the locked outEnd path. Short or zero
+/// bars that cannot hold the box stay unsupported, like column inEnd. Overflow
+/// off the canvas is still rejected rather than silently clipped.
 pub(super) fn draw_horizontal_value_labels(
     canvas: &mut Canvas,
     chart: &ColumnChart,
@@ -2280,7 +2283,10 @@ pub(super) fn draw_horizontal_value_labels(
     let side = (slot - bar_h * (n as f64 - (n - 1) as f64 * overlap)) / 2.0;
     let pad = canvas.dpi.pt_to_px_font(6.0);
     for (si, ser) in chart.series.iter().enumerate() {
-        if ser.value_label != Some(ValueLabel::OutsideEnd) {
+        let Some(position) = ser.value_label else {
+            continue;
+        };
+        if !matches!(position, ValueLabel::OutsideEnd | ValueLabel::InsideEnd) {
             continue;
         }
         let place = if chart.cats_from_bottom {
@@ -2301,10 +2307,24 @@ pub(super) fn draw_horizontal_value_labels(
             let end = x_of_dir(value.clamp(axis_min, axis_max), axis_min, axis_max, plot, reversed);
             let width = text_width(font, gdi, &text, px);
             let height = value_label_height(font, gdi, px);
-            let x = if *value < 0.0 {
-                end - pad - width
-            } else {
-                end + pad
+            if position == ValueLabel::InsideEnd {
+                let zero = x_of_dir(
+                    0.0_f64.clamp(axis_min, axis_max),
+                    axis_min,
+                    axis_max,
+                    plot,
+                    reversed,
+                );
+                if *value == 0.0 || (end - zero).abs() < width + 2.0 * pad || bar_h < height {
+                    return Err(Error::with_path(ErrorKind::ChartImageUnsupported, "id"));
+                }
+            }
+            let x = match (position, *value < 0.0) {
+                (ValueLabel::InsideEnd, false) | (ValueLabel::OutsideEnd, true) => {
+                    end - pad - width
+                }
+                (ValueLabel::InsideEnd, true) | (ValueLabel::OutsideEnd, false) => end + pad,
+                _ => end + pad,
             };
             let top =
                 category_slot_origin(plot, ci, chart.categories.len(), chart.cats_from_bottom)

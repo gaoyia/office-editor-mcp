@@ -5309,9 +5309,11 @@
             read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredColumn).unwrap(),
             Some(ValueLabel::InsideEnd)
         );
-        for kind in [PlotKind::ClusteredBar, PlotKind::StandardLine] {
-            assert!(read_value_label(&wrapper.root, &ser.root, kind).is_err());
-        }
+        assert_eq!(
+            read_value_label(&wrapper.root, &ser.root, PlotKind::ClusteredBar).unwrap(),
+            Some(ValueLabel::InsideEnd)
+        );
+        assert!(read_value_label(&wrapper.root, &ser.root, PlotKind::StandardLine).is_err());
         let ser = line_ser(
             0,
             "S1",
@@ -5536,19 +5538,24 @@
                 }
             }
         }
-        for xml in [
-            base.replace("val='outEnd'", "val='inEnd'"),
-            base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"),
-            base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"),
-        ] {
-            let xml = xml
-                .replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
-                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>");
-            assert!(
-                render_line(&xml).is_err(),
-                "unlocked bar labels must remain NI"
-            );
-        }
+        let axes = |xml: String| {
+            xml.replace("<c:valAx>", "<c:valAx><c:axPos val='b'/>")
+                .replace("<c:catAx/>", "<c:catAx><c:axPos val='l'/></c:catAx>")
+        };
+        // inEnd with a zero still stays NI (no silent outside fallback).
+        assert!(
+            render_line(&axes(base.replace("val='outEnd'", "val='inEnd'"))).is_err(),
+            "bar inEnd with a zero value must remain NI"
+        );
+        // General decimals on the locked outEnd path now export.
+        assert!(
+            render_line(&axes(base.replace("<c:v>9</c:v>", "<c:v>9.5</c:v>"))).is_ok(),
+            "bar General decimal outEnd should export"
+        );
+        assert!(
+            render_line(&axes(base.replace("<c:v>9</c:v>", "<c:v>#N/A</c:v>"))).is_err(),
+            "bar error-point labels must remain NI"
+        );
     }
 
     #[test]
@@ -5594,7 +5601,14 @@
         );
         assert_eq!(value_label_text(-0.0), Some("0".to_owned()));
         assert_eq!(value_label_text(-42.0), Some("-42".to_owned()));
-        for value in [1.25, f64::INFINITY, 100_000_000_000.0] {
+        assert_eq!(value_label_text(1.25), Some("1.25".to_owned()));
+        assert_eq!(value_label_text(4.5), Some("4.5".to_owned()));
+        assert_eq!(value_label_text(6.3), Some("6.3".to_owned()));
+        assert_eq!(
+            value_label_text(9.1999999999999993),
+            Some("9.2".to_owned())
+        );
+        for value in [f64::INFINITY, 100_000_000_000.0] {
             assert!(value_label_text(value).is_none());
         }
         let xml = standard_line_xml(
@@ -5607,8 +5621,8 @@
             "",
         );
         assert!(
-            render_line(&xml).is_err(),
-            "decimal General labels need an actual formatter, not an approximate integer"
+            render_line(&xml).is_ok(),
+            "General decimal labels should export with the close-enough formatter"
         );
     }
 
@@ -6717,6 +6731,35 @@
     }
 
     #[test]
+    fn clustered_bar_inend_and_general_decimals_export() {
+        let inend = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(4.0), Some(6.0), Some(9.0)],
+                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        render_bar(&inend).expect("bar inEnd General integers should export");
+
+        let decimal = bar_xml(
+            &line_ser(
+                0,
+                "S1",
+                &[Some(4.5), Some(6.3), Some(9.1999999999999993)],
+                r#"<c:dLbls><c:dLblPos val="outEnd"/><c:showVal val="1"/></c:dLbls>"#,
+            ),
+            "",
+            "maxMin",
+            Some("bar"),
+        );
+        render_bar(&decimal).expect("bar General decimals should export");
+    }
+
+    #[test]
     fn clustered_bar_unsupported_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0)], "");
         let two = format!(
@@ -6747,11 +6790,6 @@
                 r#"<c:dispBlanksAs val="span"/>"#,
                 "maxMin",
                 Some("bar"),
-            ),
-            bar_xml(&ser, "", "maxMin", Some("bar")).replacen(
-                r#"</c:barChart>"#,
-                r#"<c:dLbls><c:dLblPos val="inEnd"/><c:showVal val="1"/></c:dLbls></c:barChart>"#,
-                1,
             ),
             bar_xml(&two, "", "maxMin", Some("bar")).replacen(
                 r#"varyColors val="0""#,

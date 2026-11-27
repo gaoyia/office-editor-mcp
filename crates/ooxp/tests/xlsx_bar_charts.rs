@@ -353,8 +353,8 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
     assert_eq!((w, h), (576, 336));
     assert!(count_color(&rgb, ACCENT1, 18) >= 20);
 
-    // F10: plain General integer outside-end labels now export without
-    // mutating their source. Other label positions remain explicit NI below.
+    // F10: plain General integer outside-end and inEnd labels now export
+    // without mutating their source. Other unsupported details stay NI below.
     let labeled = tmp("read-labels");
     rewrite_part(
         &book,
@@ -369,7 +369,24 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
     assert_eq!((lw, lh), (w, h));
     assert_ne!(label_rgb, rgb, "success must paint real label pixels");
 
-    let cases: [(&str, String); 6] = [
+    let inend = tmp("read-labels-inend");
+    rewrite_part(
+        &book,
+        &inend,
+        &part,
+        &xml.replace(
+            r#"<c:showVal val="0"/>"#,
+            r#"<c:dLblPos val="inEnd"/><c:showVal val="1"/>"#,
+        ),
+    );
+    let inend_source = std::fs::read(&inend).unwrap();
+    let inend_png = export_chart_png(&inend, "sheet:Sheet1/chart:1", "read-labels-inend-png").unwrap();
+    assert_eq!(std::fs::read(&inend).unwrap(), inend_source);
+    let (iw, ih, inend_rgb) = decode_rgb(&std::fs::read(inend_png).unwrap());
+    assert_eq!((iw, ih), (w, h));
+    assert_ne!(inend_rgb, rgb, "inEnd success must paint real label pixels");
+
+    let cases: [(&str, String); 5] = [
         (
             "stacked",
             xml.replace(r#"grouping val="clustered""#, r#"grouping val="stacked""#),
@@ -379,13 +396,6 @@ fn read_existing_bar_part_exports_and_unsupported_details_stay_ni() {
             xml.replace(
                 r#"grouping val="clustered""#,
                 r#"grouping val="percentStacked""#,
-            ),
-        ),
-        (
-            "labels-inEnd",
-            xml.replace(
-                r#"<c:showVal val="0"/>"#,
-                r#"<c:dLblPos val="inEnd"/><c:showVal val="1"/>"#,
             ),
         ),
         (

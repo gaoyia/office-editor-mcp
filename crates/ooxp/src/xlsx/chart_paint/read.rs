@@ -2200,17 +2200,32 @@ pub(super) fn value_label_height(font: Option<&Font>, gdi: Option<&super::super:
     gdi.map_or_else(|| text_height(font, px), |face| face.em_box())
 }
 
-/// Minimum locked General subset: ordinary integers (no scientific notation,
-/// locale-dependent separators or decimal precision approximation).
+/// Locked General integers are unchanged (no scientific notation or locale
+/// separators). Finite non-integers use a close-enough General decimal: 10
+/// fraction digits with trailing zeros trimmed, so official 9.1999… becomes
+/// "9.2". This is not a unique official precision lock. Non-finite values
+/// and magnitudes >= 1e11 still stay unsupported.
 pub(super) fn value_label_text(value: f64) -> Option<String> {
-    if !value.is_finite() || value.fract() != 0.0 || value.abs() >= 100_000_000_000.0 {
+    if !value.is_finite() || value.abs() >= 100_000_000_000.0 {
         return None;
     }
-    Some(if value == 0.0 {
-        "0".to_owned()
-    } else {
-        format!("{value:.0}")
-    })
+    if value.fract() == 0.0 {
+        return Some(if value == 0.0 {
+            "0".to_owned()
+        } else {
+            format!("{value:.0}")
+        });
+    }
+    let mut text = format!("{value:.10}");
+    if let Some(dot) = text.find('.') {
+        while text.ends_with('0') && text.len() > dot + 1 {
+            text.pop();
+        }
+        if text.ends_with('.') {
+            text.pop();
+        }
+    }
+    Some(text)
 }
 
 /// Only deletion-only series point labels are locked. Known Excel editing
@@ -2409,7 +2424,9 @@ pub(super) fn read_value_label(
         (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "outEnd") => {
             Ok(Some(ValueLabel::OutsideEnd))
         }
-        (PlotKind::ClusteredColumn, "inEnd") => Ok(Some(ValueLabel::InsideEnd)),
+        (PlotKind::ClusteredColumn | PlotKind::ClusteredBar, "inEnd") => {
+            Ok(Some(ValueLabel::InsideEnd))
+        }
         (PlotKind::StandardLine, "r") => Ok(Some(ValueLabel::Right)),
         _ => Err(unsupported()),
     }
