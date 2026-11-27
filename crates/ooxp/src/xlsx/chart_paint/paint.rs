@@ -2599,12 +2599,18 @@ pub(super) fn draw_bars(
             }
             let x = origin + si as f64 * bar_w * (1.0 - overlap);
             let clipped = value.clamp(axis_min, axis_max);
-            let y_val = if value < axis_origin && log_base.is_none() {
+            // Official F15-6 Chart.Export paints a 1px-tall sliver for a
+            // positive value below the explicit log min (A=1 with min=10).
+            // Close-enough, not a unique clip-offset lock.
+            let below_log_min = log_base.is_some() && value > 0.0 && value < axis_min;
+            let y_val = if below_log_min {
+                y_zero.saturating_sub(1)
+            } else if value < axis_origin && log_base.is_none() {
                 crossing_axis_y_mode(plot, axis_min, axis_max, step, clipped, None, reversed)
             } else {
                 y_map(clipped, axis_min, axis_max, plot, log_base, reversed).round() as i32
             };
-            if y_val == y_zero || bar_w < 0.2 {
+            if bar_w < 0.2 || (!below_log_min && y_val == y_zero) {
                 continue;
             }
             let color = if chart.vary_points {

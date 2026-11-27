@@ -8347,23 +8347,45 @@
 
         let auto = col.replace(r#"<c:min val="1"/><c:max val="1000"/>"#, "");
         let auto_doc = crate::xml::parse(auto.as_bytes()).unwrap();
-        assert!(
-            read_chart(
-                &auto_doc.root,
-                FALLBACK_ACCENTS,
-                None,
-                "",
-                RenderDpi::DEFAULT
-            )
-            .is_err(),
-            "omitted log min/max must stay NI"
-        );
+        let auto_chart = read_chart(
+            &auto_doc.root,
+            FALLBACK_ACCENTS,
+            None,
+            "",
+            RenderDpi::DEFAULT,
+        )
+        .expect("omitted log min/max with values >= 1 must export");
+        assert_eq!(auto_chart.axis.min, None);
+        render_rgb_chart(
+            &auto_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("auto log10 1/10/100/1000 must render like explicit 1..1000");
 
         let below = inject_explicit_log10(&mixed_column_xml(&[0.5, 10.0, 100.0, 1000.0]));
         let below_doc = crate::xml::parse(below.as_bytes()).unwrap();
+        render_rgb_chart(
+            &below_doc.root,
+            424,
+            265,
+            FALLBACK_ACCENTS,
+            None,
+            ChartHost::Excel,
+            None,
+            "",
+        )
+        .expect("positive values below the explicit log min must render a close-enough sliver");
+        let zero = inject_explicit_log10(&mixed_column_xml(&[0.0, 10.0, 100.0, 1000.0]));
+        let zero_doc = crate::xml::parse(zero.as_bytes()).unwrap();
         assert!(
             render_rgb_chart(
-                &below_doc.root,
+                &zero_doc.root,
                 424,
                 265,
                 FALLBACK_ACCENTS,
@@ -8373,7 +8395,7 @@
                 "",
             )
             .is_err(),
-            "values below the explicit log min must stay NI"
+            "non-positive log values stay NI"
         );
 
         let area = inject_explicit_log10(&standard_area_xml(

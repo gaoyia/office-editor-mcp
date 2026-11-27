@@ -168,8 +168,42 @@ fn read_cat_crosses(plot: &Element) -> Result<(Option<f64>, CatCrosses), Error> 
     Ok((None, mode))
 }
 
-fn values_out_of_log_range(raw_min: f64, raw_max: f64, min: f64, max: f64) -> bool {
-    !raw_min.is_finite() || !raw_max.is_finite() || raw_min < min - 1e-12 || raw_max > max + 1e-12
+fn values_out_of_log_range(raw_min: f64, raw_max: f64, _min: f64, max: f64) -> bool {
+    // Non-positive values and overflow above the explicit max stay NI.
+    // A finite value above 0 but below the log min is a close-enough clip
+    // (official F15-6 paints a thin sliver), not a reject.
+    !raw_min.is_finite() || !raw_max.is_finite() || raw_min <= 0.0 || raw_max > max + 1e-12
+}
+
+/// Official F15 auto log axes (including log2 data 4/8/16/32) used min=1
+/// whenever every finite value was >= 1. max is the integer power of `base`
+/// at or above the data max. Degenerate or unsampled ranges (values < 1,
+/// non-positive points, max<=min) stay NI. Close-enough general rule, not
+/// a unique lock for unsampled high-only floors.
+fn auto_log_bounds(raw_min: f64, raw_max: f64, base: f64) -> Result<(f64, f64), Error> {
+    if raw_min < 1.0
+        || raw_max < 1.0
+        || !raw_min.is_finite()
+        || !raw_max.is_finite()
+        || base <= 1.0
+        || !base.is_finite()
+    {
+        return Err(unsupported());
+    }
+    let max_exp = raw_max.log(base);
+    if !max_exp.is_finite() {
+        return Err(unsupported());
+    }
+    let max_exp = if (max_exp - max_exp.round()).abs() <= 1e-9 {
+        max_exp.round()
+    } else {
+        max_exp.ceil()
+    };
+    let max = base.powf(max_exp);
+    if max <= 1.0 || !is_integer_power(max, base) {
+        return Err(unsupported());
+    }
+    Ok((1.0, max))
 }
 
 fn is_integer_power(value: f64, base: f64) -> bool {
@@ -295,20 +329,24 @@ impl Spec {
         }
         if let Some(base) = spec.log_base {
             // Official Excel 16 log axes write no majorUnit/minorUnit; custom
-            // steps are not uniquely locked. Auto min/max (omitted in XML) stay
-            // NI. Only explicit positive power-of-base ends are accepted here.
+            // steps are not uniquely locked. Both explicit ends omitted is auto
+            // (resolved from data in scale_values). A single explicit end stays
+            // NI. Explicit ends must still be >=1 integer powers of the base.
             if spec.major.is_some() || spec.minor.is_some() {
                 return Err(unsupported());
             }
-            let (Some(min), Some(max)) = (spec.min, spec.max) else {
-                return Err(unsupported());
-            };
-            if min < 1.0
-                || max <= min
-                || !is_integer_power(min, base)
-                || !is_integer_power(max, base)
-            {
-                return Err(unsupported());
+            match (spec.min, spec.max) {
+                (None, None) => {}
+                (Some(min), Some(max)) => {
+                    if min < 1.0
+                        || max <= min
+                        || !is_integer_power(min, base)
+                        || !is_integer_power(max, base)
+                    {
+                        return Err(unsupported());
+                    }
+                }
+                _ => return Err(unsupported()),
             }
             // Official F15 log evidence used formatCode General only.
             if spec.tick_format != TickFormat::General {
@@ -779,8 +817,11 @@ pub(super) fn scale_values(
         raw_max = 0.0;
     }
     if let Some(base) = spec.log_base {
-        let min = spec.min.ok_or_else(unsupported)?;
-        let max = spec.max.ok_or_else(unsupported)?;
+        let (min, max) = match (spec.min, spec.max) {
+            (Some(min), Some(max)) => (min, max),
+            (None, None) => auto_log_bounds(raw_min, raw_max, base)?,
+            _ => return Err(unsupported()),
+        };
         // Official F16/F17 log evidence had autoZero only; custom crosses stay NI.
         if spec.crosses_at.is_some()
             || !matches!(spec.cat_crosses, CatCrosses::AutoZero)
@@ -790,7 +831,8 @@ pub(super) fn scale_values(
         {
             return Err(unsupported());
         }
-        // Out-of-range values (official clip stubs) and non-positive points stay NI.
+        // Non-positive points and values above the max stay NI. A positive
+        // value below the log min is clipped at paint time (close-enough).
         if values_out_of_log_range(raw_min, raw_max, min, max) {
             return Err(unsupported());
         }
@@ -1054,11 +1096,18 @@ mod tests {
             (s.min, s.max, s.major, s.minor),
             (Some(-2.0), Some(8.0), Some(2.0), Some(0.5))
         );
-        for bad in ["<logBase val='10'/>", "<orientation val='xyz'/>"] {
-            let xml = format!("<plotArea><valAx><scaling>{bad}</scaling></valAx></plotArea>");
-            let d = crate::xml::parse(xml.as_bytes()).unwrap();
-            assert!(Spec::read(&d.root).is_err());
-        }
+        let auto_log = crate::xml::parse(
+            b"<plotArea><valAx><scaling><logBase val='10'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        let auto_spec = Spec::read(&auto_log.root).expect("omitted log min/max must parse as auto");
+        assert_eq!(auto_spec.log_base, Some(10.0));
+        assert_eq!((auto_spec.min, auto_spec.max), (None, None));
+        let bad_orient = crate::xml::parse(
+            b"<plotArea><valAx><scaling><orientation val='xyz'/></scaling></valAx></plotArea>",
+        )
+        .unwrap();
+        assert!(Spec::read(&bad_orient.root).is_err());
         let rev = crate::xml::parse(
             b"<plotArea><valAx><scaling><orientation val='maxMin'/><min val='-8'/><max val='8'/></scaling><majorUnit val='2'/></valAx></plotArea>",
         )
@@ -1146,9 +1195,50 @@ mod tests {
             (ok.min, ok.max, ok.major, ok.log_base),
             (1.0, 1000.0, 10.0, Some(10.0))
         );
+        let clipped = scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10)
+            .expect("positive values below the explicit log min must scale, not reject");
+        assert_eq!((clipped.min, clipped.max, clipped.major), (1.0, 1000.0, 10.0));
         assert!(
-            scale_values([Some(1.0), Some(10.0), Some(0.5)].into_iter(), spec, 10).is_err(),
-            "values below the explicit log min must stay NI"
+            scale_values([Some(0.0), Some(10.0), Some(100.0)].into_iter(), spec, 10).is_err(),
+            "non-positive log values stay NI"
+        );
+        let auto = Spec {
+            min: None,
+            max: None,
+            major: None,
+            minor: None,
+            log_base: Some(10.0),
+            crosses_at: None,
+            cat_crosses: CatCrosses::AutoZero,
+            tick_format: TickFormat::General,
+            reversed: false,
+            deleted: false,
+        };
+        let auto10 = scale_values(
+            [Some(1.0), Some(10.0), Some(100.0), Some(1000.0)].into_iter(),
+            auto,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (auto10.min, auto10.max, auto10.major, auto10.log_base),
+            (1.0, 1000.0, 10.0, Some(10.0))
+        );
+        let auto_off = scale_values([Some(3.0), Some(30.0), Some(300.0)].into_iter(), auto, 10)
+            .unwrap();
+        assert_eq!((auto_off.min, auto_off.max, auto_off.major), (1.0, 1000.0, 10.0));
+        let mut auto2 = auto;
+        auto2.log_base = Some(2.0);
+        let log2 = scale_values(
+            [Some(4.0), Some(8.0), Some(16.0), Some(32.0)].into_iter(),
+            auto2,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            (log2.min, log2.max, log2.major, log2.log_base),
+            (1.0, 32.0, 2.0, Some(2.0)),
+            "official log2 auto used min=1 even when data min is 4"
         );
     }
 
