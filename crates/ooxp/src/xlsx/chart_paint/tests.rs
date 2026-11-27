@@ -6841,12 +6841,6 @@
             ),
             bar_xml(
                 &ser,
-                r#"<c:dispBlanksAs val="zero"/>"#,
-                "maxMin",
-                Some("bar"),
-            ),
-            bar_xml(
-                &ser,
                 r#"<c:dispBlanksAs val="span"/>"#,
                 "maxMin",
                 Some("bar"),
@@ -6884,6 +6878,16 @@
                 "bar case {i} should stay NotImplemented"
             );
         }
+        // F13: unlabeled clustered bar dispBlanksAs=zero uses the same
+        // general rule as official column Chart.Export. A complete numeric
+        // cache is inert and must export.
+        render_bar(&bar_xml(
+            &ser,
+            r#"<c:dispBlanksAs val="zero"/>"#,
+            "maxMin",
+            Some("bar"),
+        ))
+        .expect("bar dispBlanksAs=zero with a complete numeric cache should export");
         // 隐藏数据标签与空值缺口仍可画；gap 是缺省。
         render_bar(&bar_xml(
             &ser,
@@ -6915,6 +6919,62 @@
   </c:chart>
 </c:chartSpace>"#;
         render_bar(&col_ok).unwrap();
+    }
+
+    #[test]
+    fn column_and_bar_disp_blanks_as_zero_fill_true_blanks_and_skip_na() {
+        // Official F13 Chart.Export of clustered-column dispBlanksAs=zero
+        // exists. True blanks become 0 (same general rule as lines). A
+        // 0-height mark is not painted. #N/A is not a blank and stays
+        // None / unpainted. Other errors stay NI. Labeled blanks stay
+        // rejected so a showVal cannot silently disappear. Documented
+        // general rule, not a unique official-matrix lock.
+        let omitted = line_ser(0, "S1", &[Some(-4.0), None, Some(-9.0)], "");
+        let explicit = line_ser(0, "S1", &[Some(-4.0), Some(0.0), Some(-9.0)], "");
+        let zero_extra = r#"<c:dispBlanksAs val="zero"/>"#;
+        for dir in ["col", "bar"] {
+            let omitted_xml = bar_xml(&omitted, zero_extra, "maxMin", Some(dir));
+            let explicit_xml = bar_xml(&explicit, zero_extra, "maxMin", Some(dir));
+            let doc = crate::xml::parse(omitted_xml.as_bytes()).unwrap();
+            let chart = read_chart(&doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT)
+                .unwrap();
+            assert_eq!(
+                chart.series[0].values,
+                vec![Some(-4.0), Some(0.0), Some(-9.0)],
+                "dispBlanksAs=zero must fill a true blank as 0 on {dir}"
+            );
+            let omitted_png = render_bar(&omitted_xml).unwrap();
+            let explicit_png = render_bar(&explicit_xml).unwrap();
+            assert_eq!(
+                omitted_png, explicit_png,
+                "unlabeled {dir} zero-filled blank must match an explicit 0"
+            );
+        }
+
+        let na = line_ser(0, "S1", &[Some(-4.0), Some(0.0), Some(-9.0)], "").replace(
+            r#"<c:pt idx="1"><c:v>0</c:v></c:pt>"#,
+            r#"<c:pt idx="1"><c:v>#N/A</c:v></c:pt>"#,
+        );
+        let na_xml = bar_xml(&na, zero_extra, "maxMin", Some("col"));
+        let na_doc = crate::xml::parse(na_xml.as_bytes()).unwrap();
+        let na_chart =
+            read_chart(&na_doc.root, FALLBACK_ACCENTS, None, "", RenderDpi::DEFAULT).unwrap();
+        assert_eq!(
+            na_chart.series[0].values,
+            vec![Some(-4.0), None, Some(-9.0)],
+            "column #N/A must not be filled as 0 under dispBlanksAs=zero"
+        );
+        render_bar(&na_xml).expect("unlabeled column #N/A + zero must export");
+
+        let div = na.replace("#N/A", "#DIV/0!");
+        assert!(
+            render_bar(&bar_xml(&div, zero_extra, "maxMin", Some("col"))).is_err(),
+            "column #DIV/0! + dispBlanksAs=zero stays NotImplemented"
+        );
+        assert!(
+            render_bar(&bar_xml(&div, zero_extra, "maxMin", Some("bar"))).is_err(),
+            "bar #DIV/0! + dispBlanksAs=zero stays NotImplemented"
+        );
     }
 
     fn area_space(plot_body: &str, chart_extra: &str) -> String {

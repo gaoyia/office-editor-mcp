@@ -547,7 +547,11 @@ pub(super) fn read_chart(
                     .child_by_local("dispBlanksAs")
                     .and_then(|el| el.attr_local("val"))
                     .unwrap_or("gap");
-                if blanks != "gap" {
+                // gap is the bar/column default. Official F13 Chart.Export of
+                // clustered-column dispBlanksAs=zero exists; the same general
+                // rule applies to clustered bar (true blanks become 0, #N/A
+                // is skipped and not painted as 0). span stays NI this pass.
+                if !matches!(blanks, "gap" | "zero") {
                     return Err(unsupported());
                 }
                 if flag(wrapper, "varyColors").unwrap_or(false)
@@ -838,7 +842,10 @@ pub(super) fn read_chart(
         {
             return Err(unsupported());
         }
-        let (error_points, unavailable_points) = if kind == PlotKind::StandardLine {
+        let (error_points, unavailable_points) = if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::ClusteredColumn | PlotKind::ClusteredBar
+        ) {
             series_error_points(ser.child_by_local("val"), sheet, cells, values.len())
         } else {
             (Vec::new(), Vec::new())
@@ -866,8 +873,10 @@ pub(super) fn read_chart(
         }
         // Like the bubble-only flag, NA-as-blank is inert without NA points.
         // Do not reject a fully numeric ordinary line for an inactive option.
-        if kind == PlotKind::StandardLine
-            && unavailable_points.iter().any(|na| *na)
+        if matches!(
+            kind,
+            PlotKind::StandardLine | PlotKind::ClusteredColumn | PlotKind::ClusteredBar
+        ) && unavailable_points.iter().any(|na| *na)
             && find_deep(root, "dispNaAsBlank")
                 .is_some_and(|e| !matches!(e.attr_local("val"), Some("0" | "false" | "off")))
         {
@@ -1062,8 +1071,9 @@ pub(super) fn read_chart(
     }
     for ser in &mut series {
         ser.values.resize(n, None);
-        // Column blank/error label text has not yet been locked by a public
-        // probe. Never report successful showVal while silently omitting it.
+        // Column/bar blank or error label text has not been locked by a
+        // public official probe. Reject before zero-fill so a labeled true
+        // blank with dispBlanksAs=zero cannot silently drop the label.
         if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar)
             && ser.value_label.is_some()
             && ser.values.iter().any(Option::is_none)
@@ -1091,6 +1101,36 @@ pub(super) fn read_chart(
                 .and_then(|el| el.attr_local("val"))
                 == Some("zero")
             {
+                for (value, error) in ser.values.iter_mut().zip(&ser.error_points) {
+                    if value.is_none() && !error {
+                        *value = Some(0.0);
+                    }
+                }
+            }
+        }
+        // Official F13 Chart.Export of clustered-column dispBlanksAs=zero
+        // exists. True blanks / omitted cache points become 0 (the same
+        // general rule as StandardLine). A 0-height mark is not painted, so
+        // an unlabeled negative-only official fixture can look like the gap
+        // control except for the title. #N/A is not a blank: skip it and do
+        // not fill it as 0. Other errors (#DIV/0!) stay NI. span is unchanged
+        // this pass. Documented general rule, not a unique official-matrix lock.
+        if matches!(kind, PlotKind::ClusteredColumn | PlotKind::ClusteredBar) {
+            ser.error_points.resize(n, false);
+            ser.unavailable_points.resize(n, false);
+            if chart
+                .child_by_local("dispBlanksAs")
+                .and_then(|el| el.attr_local("val"))
+                == Some("zero")
+            {
+                if ser
+                    .error_points
+                    .iter()
+                    .zip(&ser.unavailable_points)
+                    .any(|(error, na)| *error && !na)
+                {
+                    return Err(unsupported());
+                }
                 for (value, error) in ser.values.iter_mut().zip(&ser.error_points) {
                     if value.is_none() && !error {
                         *value = Some(0.0);
