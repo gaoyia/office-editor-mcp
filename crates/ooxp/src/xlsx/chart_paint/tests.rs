@@ -9162,6 +9162,262 @@
         .unwrap();
     }
 
+    fn official_like_f38_lin(ang: &str) -> String {
+        format!(
+            r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="{ang}" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#
+        )
+    }
+
+    fn official_like_f38_ser(extra: &str) -> String {
+        line_ser(
+            0,
+            "F38S1",
+            &[Some(10.0), Some(20.0), Some(30.0), Some(40.0)],
+            extra,
+        )
+    }
+
+    fn official_like_f38_pie_xml(extra: &str) -> String {
+        standard_pie_xml(
+            &official_like_f38_ser(extra),
+            r#"<c:dispBlanksAs val="gap"/>"#,
+            r#"<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="1"/></c:dLbls><c:firstSliceAng val="0"/>"#,
+        )
+    }
+
+    fn f38_is_grad_red(px: [u8; 3]) -> bool {
+        px[0] >= 160 && (px[0] as u16) > (px[1] as u16) + 80 && (px[0] as u16) > (px[2] as u16) + 80
+    }
+
+    fn f38_is_grad_blue(px: [u8; 3]) -> bool {
+        px[2] >= 160 && (px[2] as u16) > (px[1] as u16) + 80 && (px[2] as u16) > (px[0] as u16) + 80
+    }
+
+    fn f38_is_grad_field(px: [u8; 3]) -> bool {
+        f38_is_grad_red(px)
+            || f38_is_grad_blue(px)
+            || (px[1] <= 100 && px[0] >= 40 && px[2] >= 40)
+    }
+
+    fn f38_field_bbox(rgb: &[u8], w: u32, h: u32) -> (usize, usize, usize, usize) {
+        // Title/legend residuals stay on the review page; the bbox of the
+        // red/blue field is only a test probe of the pie square, not a
+        // production coordinate fudge.
+        let mut min_x = w as usize;
+        let mut min_y = h as usize;
+        let mut max_x = 0usize;
+        let mut max_y = 0usize;
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_field(px) {
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x + 1);
+                    max_y = max_y.max(y + 1);
+                }
+            }
+        }
+        (min_x, min_y, max_x, max_y)
+    }
+
+    fn f38_quad_counts(rgb: &[u8], w: u32, h: u32) -> ((usize, usize), (usize, usize), (usize, usize), (usize, usize)) {
+        let (x0, y0, x1, y1) = f38_field_bbox(rgb, w, h);
+        // Split through the field-pixel centroid so a small legend key on
+        // the right cannot pull a bbox midpoint into the pie's blue half.
+        let mut sx = 0u64;
+        let mut sy = 0u64;
+        let mut n = 0u64;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_field(px) {
+                    sx += x as u64;
+                    sy += y as u64;
+                    n += 1;
+                }
+            }
+        }
+        let mid_x = if n == 0 { (x0 + x1) / 2 } else { (sx / n) as usize };
+        let mid_y = if n == 0 { (y0 + y1) / 2 } else { (sy / n) as usize };
+        let mut red_top = 0usize;
+        let mut red_bot = 0usize;
+        let mut red_left = 0usize;
+        let mut red_right = 0usize;
+        let mut blue_top = 0usize;
+        let mut blue_bot = 0usize;
+        let mut blue_left = 0usize;
+        let mut blue_right = 0usize;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let i = (y * w as usize + x) * 3;
+                let px = [rgb[i], rgb[i + 1], rgb[i + 2]];
+                if f38_is_grad_red(px) {
+                    if y < mid_y {
+                        red_top += 1;
+                    } else {
+                        red_bot += 1;
+                    }
+                    if x < mid_x {
+                        red_left += 1;
+                    } else {
+                        red_right += 1;
+                    }
+                } else if f38_is_grad_blue(px) {
+                    if y < mid_y {
+                        blue_top += 1;
+                    } else {
+                        blue_bot += 1;
+                    }
+                    if x < mid_x {
+                        blue_left += 1;
+                    } else {
+                        blue_right += 1;
+                    }
+                }
+            }
+        }
+        (
+            (red_top, red_bot),
+            (blue_top, blue_bot),
+            (red_left, red_right),
+            (blue_left, blue_right),
+        )
+    }
+
+    #[test]
+    fn official_like_f38_series_and_dpt_linear_grads_export_and_paint() {
+        let control = official_like_f38_pie_xml("");
+        let ser_lin_h = official_like_f38_pie_xml(&official_like_f38_lin("5400000"));
+        let ser_lin_v = official_like_f38_pie_xml(&official_like_f38_lin("0"));
+        let pt_lin_h = official_like_f38_pie_xml(&format!(
+            r#"<c:dPt><c:idx val="0"/><c:bubble3D val="0"/>{}</c:dPt>"#,
+            official_like_f38_lin("5400000")
+        ));
+        let ser_solid = official_like_f38_pie_xml(
+            r#"<c:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></c:spPr>"#,
+        );
+        let control_png =
+            render_pie(&control).expect("official-like F38 pieControl must export");
+        let lin_h_png =
+            render_pie(&ser_lin_h).expect("official-like F38 series LinH must export");
+        let lin_v_png =
+            render_pie(&ser_lin_v).expect("official-like F38 series LinV must export");
+        let pt_png =
+            render_pie(&pt_lin_h).expect("official-like F38 dPt LinH must export");
+        let solid_png =
+            render_pie(&ser_solid).expect("official-like F38 series solid must still export");
+        assert_ne!(lin_h_png, control_png, "series LinH must change the pie");
+        assert_ne!(lin_v_png, control_png, "series LinV must change the pie");
+        assert_ne!(lin_h_png, lin_v_png, "LinH and LinV must not paint the same field");
+        assert_ne!(lin_h_png, solid_png, "LinH must not collapse to a solid first stop");
+        assert_ne!(pt_png, control_png, "dPt LinH must change the first slice");
+        assert_ne!(pt_png, lin_h_png, "dPt LinH must not paint every slice");
+
+        let (w_h, h_h, rgb_h) = png_rgb(&lin_h_png);
+        let ((red_top, red_bot), (blue_top, blue_bot), _, _) = f38_quad_counts(&rgb_h, w_h, h_h);
+        assert!(
+            red_top > red_bot * 2 && red_top >= 80,
+            "series LinH (ang=5400000) must keep red toward the top of the pie square, got red top={red_top} bot={red_bot}"
+        );
+        assert!(
+            blue_bot > blue_top * 2 && blue_bot >= 80,
+            "series LinH (ang=5400000) must keep blue toward the bottom of the pie square, got blue top={blue_top} bot={blue_bot}"
+        );
+
+        let (w_v, h_v, rgb_v) = png_rgb(&lin_v_png);
+        let (_, _, (red_left, red_right), (blue_left, blue_right)) = f38_quad_counts(&rgb_v, w_v, h_v);
+        assert!(
+            red_left > red_right * 2 && red_left >= 80,
+            "series LinV (ang=0) must keep red toward the left of the pie square, got red left={red_left} right={red_right}"
+        );
+        assert!(
+            blue_right > blue_left * 2 && blue_right >= 80,
+            "series LinV (ang=0) must keep blue toward the right of the pie square, got blue left={blue_left} right={blue_right}"
+        );
+
+        let (w_p, h_p, rgb_p) = png_rgb(&pt_png);
+        let (w_c, h_c, rgb_c) = png_rgb(&control_png);
+        assert_eq!((w_p, h_p), (w_c, h_c));
+        let exact = |rgb: &[u8], w: u32, h: u32, color: [u8; 3]| {
+            let mut n = 0usize;
+            for i in 0..(w * h) as usize {
+                if rgb[i * 3..i * 3 + 3] == color {
+                    n += 1;
+                }
+            }
+            n
+        };
+        // First slice (idx 0, accent 0) is overridden; later accent slices remain.
+        assert!(
+            exact(&rgb_p, w_p, h_p, FALLBACK_ACCENTS[0]) < 40,
+            "dPt LinH must replace the first accent slice"
+        );
+        for accent in &FALLBACK_ACCENTS[1..4] {
+            assert!(
+                exact(&rgb_p, w_p, h_p, *accent) >= 80,
+                "dPt LinH must leave later accent slices in place"
+            );
+        }
+        let mut red_n = 0usize;
+        let mut blue_n = 0usize;
+        for i in 0..(w_p * h_p) as usize {
+            let px = [rgb_p[i * 3], rgb_p[i * 3 + 1], rgb_p[i * 3 + 2]];
+            if f38_is_grad_red(px) {
+                red_n += 1;
+            } else if f38_is_grad_blue(px) {
+                blue_n += 1;
+            }
+        }
+        assert!(
+            red_n >= 20 && blue_n >= 10,
+            "dPt LinH first slice must show both gradient ends, got red={red_n} blue={blue_n}"
+        );
+        let _ = exact(&rgb_c, w_c, h_c, FALLBACK_ACCENTS[0]);
+    }
+
+    #[test]
+    fn leftover_f38_variants_without_official_gold_stay_not_implemented() {
+        let lin = official_like_f38_lin("5400000");
+        let cases = [
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:pattFill prst="pct50"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="0000FF"/></a:bgClr></a:pattFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:blipFill><a:blip r:embed="rId9"/><a:stretch/></a:blipFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:path path="circle"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="0"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="x" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="5400000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_f38_pie_xml(
+                r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="2700000" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
+            ),
+            official_like_doughnut_xml().replacen("</c:tx>", &format!("</c:tx>{lin}"), 1),
+        ];
+        for (i, xml) in cases.iter().enumerate() {
+            let err = render_pie(xml)
+                .expect_err(&format!("F38 leftover case {i} should stay NotImplemented"));
+            assert_eq!(
+                err.code(),
+                crate::error::ErrorCode::NotImplemented,
+                "F38 leftover case {i} should stay NotImplemented"
+            );
+        }
+        // Official mid-matrix linear grads must still export after the leftover list.
+        render_pie(&official_like_f38_pie_xml(&official_like_f38_lin("0"))).unwrap();
+    }
+
     #[test]
     fn unsupported_pie_inputs_stay_not_implemented() {
         let ser = line_ser(0, "S1", &[Some(1.0), Some(2.0), Some(3.0)], "");
@@ -9197,16 +9453,6 @@
                     "S1",
                     &[Some(1.0), Some(2.0)],
                     r#"<c:dPt><c:idx val="0"/><c:bubble3D val="1"/><c:explosion val="20"/></c:dPt>"#,
-                ),
-                "",
-                "",
-            ),
-            standard_pie_xml(
-                &line_ser(
-                    0,
-                    "S1",
-                    &[Some(1.0), Some(2.0)],
-                    r#"<c:spPr><a:gradFill flip="none" rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst><a:lin ang="0" scaled="1"/><a:tileRect/></a:gradFill></c:spPr>"#,
                 ),
                 "",
                 "",

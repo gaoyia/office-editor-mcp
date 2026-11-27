@@ -621,6 +621,69 @@ impl Canvas {
         }
     }
 
+    /// Linear fill sampled in a caller-supplied rectangle (the pie plot
+    /// square), not the host chart frame. Pixel centers use the existing
+    /// `gradient_t` / `sample_rgba` path. Close-enough, not a unique lock.
+    pub(super) fn fill_wedge_linear(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        radius: f64,
+        start_deg: f64,
+        end_deg: f64,
+        grad: &LinearFrameGrad,
+        origin_x: f64,
+        origin_y: f64,
+        w: f64,
+        h: f64,
+    ) {
+        if radius <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !radius.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+            || !origin_x.is_finite()
+            || !origin_y.is_finite()
+            || !w.is_finite()
+            || !h.is_finite()
+            || w <= 0.0
+            || h <= 0.0
+        {
+            return;
+        }
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = radius + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let cov = coverage(dist, radius);
+                if cov == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    let t = gradient_t(px, py, origin_x, origin_y, w, h, grad);
+                    let (color, alpha) = grad.sample_rgba(t);
+                    let cov = ((u16::from(cov) * u16::from(alpha) + 127) / 255) as u8;
+                    if cov != 0 {
+                        self.blend(x, y, color, cov);
+                    }
+                }
+            }
+        }
+    }
+
     /// Clockwise ring wedge: same angle rule as fill_wedge, with an inner
     /// hole. holeSize is a percent of the outer radius (inner = outer * hole/100).
     pub(super) fn fill_ring_wedge(
@@ -670,6 +733,71 @@ impl Canvas {
                 }
                 if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
                     self.blend(x, y, color, cov);
+                }
+            }
+        }
+    }
+
+    pub(super) fn fill_ring_wedge_linear(
+        &mut self,
+        cx: f64,
+        cy: f64,
+        inner: f64,
+        outer: f64,
+        start_deg: f64,
+        end_deg: f64,
+        grad: &LinearFrameGrad,
+        origin_x: f64,
+        origin_y: f64,
+        w: f64,
+        h: f64,
+    ) {
+        if outer <= 0.0
+            || !cx.is_finite()
+            || !cy.is_finite()
+            || !inner.is_finite()
+            || !outer.is_finite()
+            || !start_deg.is_finite()
+            || !end_deg.is_finite()
+            || !origin_x.is_finite()
+            || !origin_y.is_finite()
+            || !w.is_finite()
+            || !h.is_finite()
+            || w <= 0.0
+            || h <= 0.0
+        {
+            return;
+        }
+        let inner = inner.clamp(0.0, outer);
+        let span = end_deg - start_deg;
+        if span <= 1e-9 {
+            return;
+        }
+        let pad = outer + 1.0;
+        let min_x = (cx - pad).floor() as i32;
+        let min_y = (cy - pad).floor() as i32;
+        let max_x = (cx + pad).ceil() as i32;
+        let max_y = (cy + pad).ceil() as i32;
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let px = f64::from(x) + 0.5;
+                let py = f64::from(y) + 0.5;
+                let dx = px - cx;
+                let dy = py - cy;
+                let dist = dx.hypot(dy);
+                let outer_cov = coverage(dist, outer);
+                let inner_cov = if inner > 0.0 { coverage(dist, inner) } else { 0 };
+                let ring = outer_cov.saturating_sub(inner_cov);
+                if ring == 0 {
+                    continue;
+                }
+                if span >= 360.0 - 1e-9 || angle_in_wedge(dx, dy, start_deg, end_deg) {
+                    let t = gradient_t(px, py, origin_x, origin_y, w, h, grad);
+                    let (color, alpha) = grad.sample_rgba(t);
+                    let cov = ((u16::from(ring) * u16::from(alpha) + 127) / 255) as u8;
+                    if cov != 0 {
+                        self.blend(x, y, color, cov);
+                    }
                 }
             }
         }

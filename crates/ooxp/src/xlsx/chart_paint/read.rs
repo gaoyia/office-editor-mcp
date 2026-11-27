@@ -1377,7 +1377,12 @@ pub(super) fn read_chart(
                     smooth: false,
                 }
             }
-            PlotKind::Pie => read_pie_series_style(ser, accents, dpi)?,
+            PlotKind::Pie => read_pie_series_style(
+                ser,
+                accents,
+                dpi,
+                wrapper.local_name() == "pieChart" && chart3d.is_none(),
+            )?,
             PlotKind::Scatter { connect } => {
                 let mut style = read_line_series(ser, accents, dpi, order, false)?;
                 if style.cap != stroke::Cap::Round || style.dash.is_some() { return Err(unsupported()); }
@@ -1769,7 +1774,13 @@ pub(super) fn read_chart(
     let (point_colors, pie_explosion, point_explosions, series_fill, point_fills) =
         if kind == PlotKind::Pie {
             let (ser, _) = pie_painted_series(wrapper).ok_or_else(unsupported)?;
-            read_pie_point_colors(ser, accents, n, dpi)?
+            read_pie_point_colors(
+                ser,
+                accents,
+                n,
+                dpi,
+                wrapper.local_name() == "pieChart" && chart3d.is_none(),
+            )?
         } else {
             (Vec::new(), 0.0, Vec::new(), None, Vec::new())
         };
@@ -3108,10 +3119,119 @@ pub(super) fn pie_first_slice_ang(wrapper: &Element) -> Result<f64, Error> {
     }
 }
 
+
+/// Official-like pie series/dPt linear gradient. Coordinates are the pie
+/// plot square at paint time, not the F06 chart-frame rectangle. Only the
+/// official F38 0° / 90° `a:lin` encodings (flip none, rotWithShape 1,
+/// scaled 1, opaque or straight-alpha sRGB stops, empty tileRect, no path
+/// shade) are accepted. Close-enough, not a unique official-matrix lock.
+fn read_pie_sector_linear(grad: &Element) -> Result<LinearFrameGrad, Error> {
+    let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
+    let flip = grad.attr_local("flip").unwrap_or("none");
+    if flip != "none" {
+        return Err(unsupported());
+    }
+    let rot = grad.attr_local("rotWithShape").unwrap_or("1");
+    if rot != "1" {
+        return Err(unsupported());
+    }
+    let mut gs_lst = None;
+    let mut lin = None;
+    for child in grad.element_children() {
+        match child.local_name() {
+            "gsLst" if gs_lst.is_none() => gs_lst = Some(child),
+            "lin" if lin.is_none() => lin = Some(child),
+            "tileRect" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    let lin = lin.ok_or_else(unsupported)?;
+    let gs_lst = gs_lst.ok_or_else(unsupported)?;
+    let scaled = lin.attr_local("scaled").unwrap_or("1");
+    if scaled != "1" {
+        return Err(unsupported());
+    }
+    let ang: i64 = lin
+        .attr_local("ang")
+        .ok_or_else(unsupported)?
+        .parse()
+        .map_err(|_| unsupported())?;
+    if ang != LINEAR_ANG_HORIZONTAL && ang != LINEAR_ANG_VERTICAL {
+        return Err(unsupported());
+    }
+    let mut raw_stops = Vec::new();
+    let mut any_alpha = false;
+    for gs in gs_lst.element_children() {
+        if gs.local_name() != "gs" {
+            return Err(unsupported());
+        }
+        let pos: u32 = gs
+            .attr_local("pos")
+            .ok_or_else(unsupported)?
+            .parse()
+            .map_err(|_| unsupported())?;
+        let mut colors = gs.element_children();
+        let color = colors.next().ok_or_else(unsupported)?;
+        if colors.next().is_some() {
+            return Err(unsupported());
+        }
+        if color.local_name() != "srgbClr" {
+            return Err(unsupported());
+        }
+        let rgb = parse_hex(color.attr_local("val").ok_or_else(unsupported)?)
+            .ok_or_else(unsupported)?;
+        let mut alpha = 255u8;
+        let mut saw_alpha = false;
+        for child in color.element_children() {
+            match child.local_name() {
+                "alpha" => {
+                    if saw_alpha {
+                        return Err(unsupported());
+                    }
+                    saw_alpha = true;
+                    let raw = child.attr_local("val").ok_or_else(unsupported)?;
+                    let val = raw
+                        .parse::<f64>()
+                        .ok()
+                        .filter(|v| v.is_finite() && *v >= 0.0 && *v <= 100_000.0)
+                        .ok_or_else(unsupported)?;
+                    alpha = ooxml_alpha_to_u8(val.round() as u32);
+                }
+                _ => return Err(unsupported()),
+            }
+        }
+        if alpha != 255 {
+            any_alpha = true;
+        }
+        raw_stops.push((pos, rgb, alpha));
+    }
+    let use_close = any_alpha
+        || raw_stops.len() < 2
+        || raw_stops.first().is_some_and(|s| s.0 != 0)
+        || raw_stops.last().is_some_and(|s| s.0 != 100_000)
+        || {
+            let mut ordered = raw_stops.clone();
+            ordered.sort_by_key(|s| s.0);
+            ordered.windows(2).any(|pair| pair[0].0 == pair[1].0)
+        };
+    let stops = if use_close {
+        gradient::StopTable::close_enough(raw_stops).ok_or_else(unsupported)?
+    } else {
+        gradient::StopTable::new(raw_stops.into_iter().map(|(p, c, _)| (p, c)).collect())
+            .ok_or_else(unsupported)?
+    };
+    Ok(LinearFrameGrad {
+        stops,
+        ang,
+        path: None,
+    })
+}
+
 pub(super) fn read_pie_series_style(
     ser: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<LineSeriesStyle, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     data_labels_hidden(ser.child_by_local("dLbls"))?;
@@ -3129,7 +3249,7 @@ pub(super) fn read_pie_series_style(
         }
     }
     if let Some(sp) = ser.child_by_local("spPr") {
-        let _ = read_pie_sp_pr(sp, accents, dpi)?;
+        let _ = read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)?;
     }
     Ok(LineSeriesStyle {
         join: stroke::Join::Round,
@@ -3195,7 +3315,7 @@ pub(super) fn pie_solid_fill(slot: &Element, accents: &[[u8; 3]; 6]) -> Result<S
     if alpha < 255 && node.local_name() != "srgbClr" {
         return Err(unsupported());
     }
-    Ok(SliceFill { color, alpha })
+    Ok(SliceFill::solid(color, alpha))
 }
 
 pub(super) fn pie_hidden_fill_memory(ext_lst: &Element) -> bool {
@@ -3224,6 +3344,7 @@ pub(super) fn read_pie_sp_pr(
     sp: &Element,
     accents: [[u8; 3]; 6],
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<Option<SliceFill>, Error> {
     let unsupported = || Error::with_path(ErrorKind::ChartImageUnsupported, "id");
     let mut fill = None;
@@ -3241,12 +3362,15 @@ pub(super) fn read_pie_sp_pr(
                     return Err(unsupported());
                 }
                 no_fill = true;
-                fill = Some(SliceFill {
-                    color: [0, 0, 0],
-                    alpha: 0,
-                });
+                fill = Some(SliceFill::solid([0, 0, 0], 0));
             }
-            "gradFill" | "pattFill" | "blipFill" => return Err(unsupported()),
+            "gradFill" => {
+                if !allow_sector_grad || no_fill || fill.is_some() {
+                    return Err(unsupported());
+                }
+                fill = Some(SliceFill::from_linear(read_pie_sector_linear(child)?));
+            }
+            "pattFill" | "blipFill" => return Err(unsupported()),
             "ln" => {
                 let line = read_solid_ln(child, accents, 0.0, dpi)?;
                 if line.visible {
@@ -3274,6 +3398,7 @@ pub(super) fn read_pie_point_colors(
     accents: [[u8; 3]; 6],
     n: usize,
     dpi: RenderDpi,
+    allow_sector_grad: bool,
 ) -> Result<
     (
         Vec<Option<[u8; 3]>>,
@@ -3291,7 +3416,7 @@ pub(super) fn read_pie_point_colors(
         _ => return Err(unsupported()),
     };
     let series_fill = match ser.child_by_local("spPr") {
-        Some(sp) => read_pie_sp_pr(sp, accents, dpi)?,
+        Some(sp) => read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)?,
         None => None,
     };
     let mut colors = vec![None; n];
@@ -3341,11 +3466,11 @@ pub(super) fn read_pie_point_colors(
             }
         }
         if let Some(sp) = dpt.child_by_local("spPr") {
-            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi)? {
-                point_fills[idx] = Some(fill);
+            if let Some(fill) = read_pie_sp_pr(sp, accents, dpi, allow_sector_grad)? {
                 if fill.alpha > 0 {
                     colors[idx] = Some(fill.color);
                 }
+                point_fills[idx] = Some(fill);
             }
         }
     }

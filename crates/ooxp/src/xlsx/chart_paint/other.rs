@@ -169,10 +169,10 @@ fn draw_of_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, spec: &OtherSpec
         let fill = if *idx == usize::MAX {
             other_start = start;
             other_end = end;
-            SliceFill {
-                color: chart.accents[(chart.categories.len().saturating_sub(1) + 1) % 6],
-                alpha: 255,
-            }
+            SliceFill::solid(
+                chart.accents[(chart.categories.len().saturating_sub(1) + 1) % 6],
+                255,
+            )
         } else {
             pie_slice_fill(chart, *idx)
         };

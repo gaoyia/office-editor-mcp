@@ -1095,17 +1095,14 @@ pub(super) fn pie_plot_bounds(
 
 pub(super) fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
     if let Some(Some(fill)) = chart.point_fills.get(index) {
-        return *fill;
+        return fill.clone();
     }
     // RGB cache of a non-noFill dPt override; point_fills already won above
     // when both are populated together.
     if let Some(Some(color)) = chart.point_colors.get(index) {
-        return SliceFill {
-            color: *color,
-            alpha: 255,
-        };
+        return SliceFill::solid(*color, 255);
     }
-    if let Some(fill) = chart.series_fill {
+    if let Some(fill) = chart.series_fill.clone() {
         return fill;
     }
     let color = if chart.vary_points {
@@ -1115,7 +1112,7 @@ pub(super) fn pie_slice_fill(chart: &ColumnChart, index: usize) -> SliceFill {
             .color
             .unwrap_or(chart.accents[chart.series[0].slot % 6])
     };
-    SliceFill { color, alpha: 255 }
+    SliceFill::solid(color, 255)
 }
 
 pub(super) fn pie_legend_items(chart: &ColumnChart) -> Vec<(String, SliceFill)> {
@@ -1217,7 +1214,17 @@ pub(super) fn draw_pie_legend(
     let mut y = (title_band + canvas.h as i32 - block) / 2;
     let x = plot_r + canvas.dpi.scale_px(LEGEND_PLOT_GAP);
     for (name, fill) in items {
-        if fill.alpha > 0 {
+        if let Some(grad) = fill.linear.as_ref() {
+            // Close-enough key: the swatch's own rectangle, not the pie
+            // square and not a unique official legend-gradient lock.
+            canvas.fill_linear_rect(
+                x,
+                y,
+                x + canvas.dpi.scale_px(LEGEND_SWATCH),
+                y + canvas.dpi.scale_px(LEGEND_SWATCH),
+                grad,
+            );
+        } else if fill.alpha > 0 {
             canvas.fill_rect_cov(
                 x,
                 y,
@@ -1299,7 +1306,22 @@ pub(super) fn draw_pie_slices(canvas: &mut Canvas, chart: &ColumnChart, plot: &R
         let ox = cx + mid_rad.sin() * offset;
         let oy = cy - mid_rad.cos() * offset;
         let fill = pie_slice_fill(chart, index);
-        if fill.alpha > 0 {
+        if let Some(grad) = fill.linear.as_ref() {
+            // Sample in the existing pie plot square (the diameter box after
+            // title/legend reserve), not the F06 chart-frame rectangle and
+            // not a per-wedge rotated local box. Official F38 gold is one
+            // linear field over that pie square.
+            if let Some(hole) = chart.hole_size {
+                let inner = r_draw * (hole / 100.0).clamp(0.05, 0.95);
+                canvas.fill_ring_wedge_linear(
+                    ox, oy, inner, r_draw, start, end, grad, plot.x, plot.y, plot.w, plot.h,
+                );
+            } else {
+                canvas.fill_wedge_linear(
+                    ox, oy, r_draw, start, end, grad, plot.x, plot.y, plot.w, plot.h,
+                );
+            }
+        } else if fill.alpha > 0 {
             if let Some(hole) = chart.hole_size {
                 let inner = r_draw * (hole / 100.0).clamp(0.05, 0.95);
                 canvas.fill_ring_wedge(

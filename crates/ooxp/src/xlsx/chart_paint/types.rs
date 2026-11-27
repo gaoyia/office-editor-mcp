@@ -569,10 +569,33 @@ pub(super) struct TitleTypo {
 pub(super) const PIE_HIDDEN_FILL_URI: &str = "{909E8E84-426E-40DD-AFC4-6F175D3DCCD1}";
 
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct SliceFill {
     pub(super) color: [u8; 3],
     pub(super) alpha: u8,
+    /// Official-like two-stop linear `a:lin` sampled in the pie plot
+    /// square, not the F06 chart-frame rectangle. Close-enough; not a
+    /// unique official-matrix lock.
+    pub(super) linear: Option<LinearFrameGrad>,
+}
+
+impl SliceFill {
+    pub(super) fn solid(color: [u8; 3], alpha: u8) -> Self {
+        Self {
+            color,
+            alpha,
+            linear: None,
+        }
+    }
+
+    pub(super) fn from_linear(grad: LinearFrameGrad) -> Self {
+        let (color, alpha) = grad.sample_rgba(0.0);
+        Self {
+            color,
+            alpha,
+            linear: Some(grad),
+        }
+    }
 }
 
 pub(super) struct AreaSeriesStyle {
