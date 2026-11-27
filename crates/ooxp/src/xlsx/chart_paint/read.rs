@@ -1181,6 +1181,8 @@ pub(super) fn read_chart(
     // (first/last categories on the plot edges), including the default
     // standard-area encoding. Line charts stay on the existing between path.
     // Stacked / percentStacked area still require midCat (between stays NI).
+    // midCat composes with already-allowed catAx crosses=min/max and
+    // crossesAt (official F17-8 / F16-8); that is reuse, not a new lock.
     let area_midcat = matches!(kind, PlotKind::StandardArea)
         && plot.element_children().filter(|el| el.local_name() == "valAx").all(|el| {
             el.child_by_local("crossBetween")

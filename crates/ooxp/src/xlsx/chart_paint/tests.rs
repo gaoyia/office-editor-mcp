@@ -8790,6 +8790,34 @@
             "min",
         ))
         .unwrap();
+        // Official F17-8 writes the Excel default midCat, not the between fixture.
+        let area_mid_min = with_cat_crosses(
+            &standard_area_xml(
+                &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                "",
+            ),
+            "min",
+        )
+        .replace(
+            r#"crossBetween val="between""#,
+            r#"crossBetween val="midCat""#,
+        );
+        render_area(&area_mid_min)
+            .expect("standard area midCat plus catAx crosses=min must export");
+        render_area(
+            &with_cat_crosses(
+                &standard_area_xml(
+                    &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
+                    "",
+                ),
+                "max",
+            )
+            .replace(
+                r#"crossBetween val="between""#,
+                r#"crossBetween val="midCat""#,
+            ),
+        )
+        .expect("standard area midCat plus catAx crosses=max must export under the same general rule");
         let bar = with_cat_crosses(
             &bar_xml(
                 &line_ser(0, "S", &[Some(-4.0), Some(-1.0), Some(3.0), Some(6.0)], ""),
