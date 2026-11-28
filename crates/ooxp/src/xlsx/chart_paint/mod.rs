@@ -11,7 +11,7 @@
 #[allow(unused_imports)]
 use fontdue::{Font, FontSettings};
 #[allow(unused_imports)]
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 #[allow(unused_imports)]
 use crate::error::{Error, ErrorKind};
 #[allow(unused_imports)]

@@ -50,7 +50,8 @@ pub use charts::export_chart_data;
 pub use create::create;
 pub use export::export_media;
 pub use inspect::inspect;
-pub use page_paint::export_page_image;
+#[allow(unused_imports)]
+pub use page_paint::{export_page_image, export_page_image_at};
 pub use request::{parse_ops, parse_scope};
 
 pub const REL_CHART: &str =

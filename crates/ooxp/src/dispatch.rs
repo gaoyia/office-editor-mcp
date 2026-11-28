@@ -7,7 +7,7 @@ use crate::error::{Error, ErrorKind};
 use crate::json::{
     self, deny_unknown, infer_format, require_ops, str_field, Action, Format, Request,
 };
-use crate::xlsx::RenderDpi;
+use crate::render_dpi::RenderDpi;
 use crate::{docx, pptx, xlsx};
 
 /// 库门口的结果。字节由调用方自己落盘。
@@ -763,7 +763,8 @@ fn export_slide_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Err
             ))
         },
         || {
-            let exported = pptx::export_slide_image(bytes, id)?;
+            let dpi = RenderDpi::from_request(&req.obj)?;
+            let exported = pptx::export_slide_image_at(bytes, id, dpi)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,
@@ -787,7 +788,8 @@ fn export_page_image_bytes(req: &Request, bytes: &[u8]) -> Result<Exported, Erro
             ))
         },
         || {
-            let exported = docx::export_page_image(bytes, id)?;
+            let dpi = RenderDpi::from_request(&req.obj)?;
+            let exported = docx::export_page_image_at(bytes, id, dpi)?;
             Ok(Exported {
                 bytes: exported.bytes,
                 content_type: exported.content_type,

@@ -1,5 +1,7 @@
 //! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的不透明拉丁 Calibri 正文，画成 PNG。
-//! 宽高按节的 `w:pgSz`，96 dpi，twip×96/1440 四舍五入。
+//! 宽高按节的 `w:pgSz`，按请求 DPI 将 twip×dpi/1440 四舍五入。省略或 96 时与历史 `twip×96/1440` 像素一致。
+//! 磅与 EMU 也按请求 DPI 原生换算（磅×dpi/72；嵌入图 extent 为 EMU×dpi/914400 截断，与历史 96 dpi 截断一致）。
+//! 不要套用 Excel 先按 96 量化再放大的行高规则。只影响本次 PNG，不改源包，也不改系统 DPI。
 //! 单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
 //! 不透明 `wp:inline` PNG（extent 像素=源）与无文字表（填色 + single/nil 边、tblGrid/tblInd/trHeight）已画。
 //! default 页眉拉丁 Calibri（按 pgMar/@header 顶距，正文不位移）已画；奇偶/首页/页脚/页眉图表域仍 NI。
@@ -10,6 +12,7 @@ use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, Package};
+use crate::render_dpi::RenderDpi;
 use crate::xlsx::Face;
 use crate::xml::{self, Element, Node};
 
@@ -25,12 +28,21 @@ const LINE_DEN: u64 = 2048;
 const MAX_PX: u64 = 4096;
 const DEFAULT_SZ: u32 = 22;
 
+#[allow(dead_code)]
 pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    export_page_image_at(bytes, id, RenderDpi::DEFAULT)
+}
+
+pub fn export_page_image_at(
+    bytes: &[u8],
+    id: &str,
+    dpi: RenderDpi,
+) -> Result<ExportedMedia, Error> {
     let page = parse_page_id(id)?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let doc_part = opc::office_document_part(&pkg)?;
     let doc = xml::parse(pkg.get(&doc_part)?)?;
-    let layout = layout_of(&pkg, &doc_part, &doc.root)?;
+    let layout = layout_of(&pkg, &doc_part, &doc.root, dpi)?;
     if page == 0 || page as usize > layout.pages.len() {
         return Err(Error::with_path(ErrorKind::PageNotFound { n: page }, "id"));
     }
@@ -44,6 +56,7 @@ pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
 struct Layout {
     width: u32,
     height: u32,
+    dpi: RenderDpi,
     /// 下标 0 = page:1。
     pages: Vec<Page>,
     /// 每页重复绘制的 default 页眉文字（无则空）。
@@ -90,12 +103,12 @@ struct TextLine {
     body_w_twip: i64,
 }
 
-fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Error> {
+fn layout_of(pkg: &Package, doc_part: &str, root: &Element, dpi: RenderDpi) -> Result<Layout, Error> {
     if root.element_children().any(|el| el.local_name() != "body") {
         return Err(unsupported());
     }
     let body = root.child_by_local("body").ok_or_else(unsupported)?;
-    let (story, sect) = body_story(pkg, doc_part, body)?;
+    let (story, sect) = body_story(pkg, doc_part, body, dpi)?;
     let has_text = story.iter().any(|p| matches!(p, StoryPara::Text(_)));
     let has_image = story.iter().any(|p| matches!(p, StoryPara::Image(_)));
     let has_table = story.iter().any(|p| matches!(p, StoryPara::Table(_)));
@@ -122,17 +135,18 @@ fn layout_of(pkg: &Package, doc_part: &str, root: &Element) -> Result<Layout, Er
             }
         }
     }
-    let width = twip_px(page_w)?;
-    let height = twip_px(page_h)?;
-    let pages = layout_story(&story, left, top, body_w, body_h)?;
+    let width = twip_px(page_w, dpi)?;
+    let height = twip_px(page_h, dpi)?;
+    let pages = layout_story(&story, left, top, body_w, body_h, dpi)?;
     if pages.is_empty() {
         return Err(unsupported());
     }
     // 页眉在上边距区域内绘制，不把正文 y 下推（oracle：blank 页眉时正文 A 仍在 101）。
-    let header_texts = layout_default_header(pkg, doc_part, sect, left, body_w, page_h)?;
+    let header_texts = layout_default_header(pkg, doc_part, sect, left, body_w, page_h, dpi)?;
     Ok(Layout {
         width,
         height,
+        dpi,
         pages,
         header_texts,
     })
@@ -163,6 +177,7 @@ fn layout_default_header(
     margin_left: i64,
     body_w: i64,
     page_h: i64,
+    dpi: RenderDpi,
 ) -> Result<Vec<TextLine>, Error> {
     if super::hf::even_and_odd_headers(pkg, doc_part)? {
         return Err(unsupported());
@@ -196,13 +211,13 @@ fn layout_default_header(
     if doc.root.local_name() != "hdr" {
         return Err(unsupported());
     }
-    let story = header_body_story(pkg, &part, &doc.root)?;
+    let story = header_body_story(pkg, &part, &doc.root, dpi)?;
     if story.is_empty() {
         return Ok(Vec::new());
     }
     // 页眉不跨页；可用高度为页高减去页眉顶距。
     let avail = page_h.saturating_sub(header_top);
-    let pages = layout_story(&story, margin_left, header_top, body_w, avail)?;
+    let pages = layout_story(&story, margin_left, header_top, body_w, avail, dpi)?;
     if pages.len() != 1 {
         return Err(unsupported());
     }
@@ -217,12 +232,13 @@ fn header_body_story(
     pkg: &Package,
     header_part: &str,
     hdr: &Element,
+    dpi: RenderDpi,
 ) -> Result<Vec<StoryPara>, Error> {
     let mut story = Vec::new();
     for child in hdr.element_children() {
         match child.local_name() {
             "p" => {
-                let para = paragraph_kind(pkg, header_part, child)?;
+                let para = paragraph_kind(pkg, header_part, child, dpi)?;
                 match para {
                     StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
                     other => story.push(other),
@@ -273,6 +289,7 @@ fn layout_story(
     margin_top: i64,
     body_w: i64,
     body_h: i64,
+    dpi: RenderDpi,
 ) -> Result<Vec<Page>, Error> {
     // ??????????????floor(body_h * 2048 / 550000) ? ? ???
     let adv11 = line_advance_twip(DEFAULT_SZ)?;
@@ -389,7 +406,7 @@ fn layout_story(
                 if left_twip < 0 {
                     return Err(unsupported());
                 }
-                let rows = wrap_latin_lines(&line.text, line.sz, content_w)?;
+                let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
                 let adv = line_advance_twip(line.sz)?;
                 for (i, row) in rows.into_iter().enumerate() {
                     let lead = if i == 0 { line.before_twip.max(0) } else { 0 };
@@ -441,18 +458,18 @@ fn line_offset_twip(line_index: u64, sz: u32) -> Result<i64, Error> {
     i64::try_from(n).map_err(|_| unsupported())
 }
 
-fn wrap_latin_lines(text: &str, sz: u32, body_w_twip: i64) -> Result<Vec<String>, Error> {
+fn wrap_latin_lines(text: &str, sz: u32, body_w_twip: i64, dpi: RenderDpi) -> Result<Vec<String>, Error> {
     #[cfg(not(windows))]
     {
-        let _ = (text, sz, body_w_twip);
+        let _ = (text, sz, body_w_twip, dpi);
         return Err(unsupported());
     }
     #[cfg(windows)]
     {
         let pt = (sz as f32) / 2.0;
-        let px = pt * 96.0 / 72.0;
+        let px = dpi.pt_to_px_font(f64::from(pt)) as f32;
         let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
-        let max_w = f64::from(twip_px_unclamped(body_w_twip)?);
+        let max_w = f64::from(twip_px_unclamped(body_w_twip, dpi)?);
         if face.typo_width(text) <= max_w {
             return Ok(vec![text.to_string()]);
         }
@@ -556,6 +573,7 @@ fn body_story<'a>(
     pkg: &Package,
     doc_part: &str,
     body: &'a Element,
+    dpi: RenderDpi,
 ) -> Result<(Vec<StoryPara>, &'a Element), Error> {
     let mut story: Vec<StoryPara> = Vec::new();
     let mut sect: Option<&Element> = None;
@@ -566,7 +584,7 @@ fn body_story<'a>(
                 if sect.is_some() {
                     return Err(unsupported());
                 }
-                story.push(paragraph_kind(pkg, doc_part, child)?);
+                story.push(paragraph_kind(pkg, doc_part, child, dpi)?);
             }
             "tbl" => {
                 if sect.is_some() {
@@ -592,7 +610,7 @@ fn body_story<'a>(
     Ok((story, sect))
 }
 
-fn paragraph_kind(pkg: &Package, doc_part: &str, p: &Element) -> Result<StoryPara, Error> {
+fn paragraph_kind(pkg: &Package, doc_part: &str, p: &Element, dpi: RenderDpi) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
     let mut before = 0i64;
     let mut after = 0i64;
@@ -642,7 +660,7 @@ fn paragraph_kind(pkg: &Package, doc_part: &str, p: &Element) -> Result<StoryPar
         return Err(unsupported());
     }
     if let Some(drawing) = drawing {
-        let img = plain_inline_image(pkg, doc_part, drawing)?;
+        let img = plain_inline_image(pkg, doc_part, drawing, dpi)?;
         return Ok(StoryPara::Image(PendingImage {
             indent_twip: indent,
             before_twip: before,
@@ -923,9 +941,9 @@ fn margin(sect: &Element, local: &str) -> Result<i64, Error> {
     }
 }
 
-fn twip_px(twip: i64) -> Result<u32, Error> {
-    let n = u64::try_from(twip).map_err(|_| unsupported())?;
-    let px = (n + 7) / 15;
+fn twip_px(twip: i64, dpi: RenderDpi) -> Result<u32, Error> {
+    let px = dpi.twip_to_px_round(twip);
+    let px = u64::try_from(px).map_err(|_| unsupported())?;
     if !(1..=MAX_PX).contains(&px) {
         return Err(unsupported());
     }
@@ -937,24 +955,24 @@ fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     let idx = (page as usize).saturating_sub(1);
     if let Some(page_items) = layout.pages.get(idx) {
         for tbl in &page_items.tables {
-            paint_table(&mut rgb, layout.width, layout.height, tbl)?;
+            paint_table(&mut rgb, layout.width, layout.height, tbl, layout.dpi)?;
         }
         for img in &page_items.images {
-            paint_image(&mut rgb, layout.width, layout.height, img)?;
+            paint_image(&mut rgb, layout.width, layout.height, img, layout.dpi)?;
         }
         for line in &layout.header_texts {
-            paint_text(&mut rgb, layout.width, layout.height, line)?;
+            paint_text(&mut rgb, layout.width, layout.height, line, layout.dpi)?;
         }
         for line in &page_items.texts {
-            paint_text(&mut rgb, layout.width, layout.height, line)?;
+            paint_text(&mut rgb, layout.width, layout.height, line, layout.dpi)?;
         }
     }
-    encode_png(layout.width, layout.height, &rgb)
+    encode_png(layout.width, layout.height, &rgb, layout.dpi)
 }
 
-fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit) -> Result<(), Error> {
-    let x0 = twip_px_unclamped(img.left_twip)? as i32;
-    let y0 = twip_px_unclamped(img.top_twip)? as i32;
+fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit, dpi: RenderDpi) -> Result<(), Error> {
+    let x0 = twip_px_unclamped(img.left_twip, dpi)? as i32;
+    let y0 = twip_px_unclamped(img.top_twip, dpi)? as i32;
     if x0 < 0 || y0 < 0 {
         return Err(unsupported());
     }
@@ -974,23 +992,23 @@ fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit) -> Res
     Ok(())
 }
 
-fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine) -> Result<(), Error> {
+fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine, dpi: RenderDpi) -> Result<(), Error> {
     #[cfg(not(windows))]
     {
-        let _ = (rgb, width, height, line);
+        let _ = (rgb, width, height, line, dpi);
         return Err(unsupported());
     }
     #[cfg(windows)]
     {
         let pt = (line.sz as f32) / 2.0;
-        let px = pt * 96.0 / 72.0;
+        let px = dpi.pt_to_px_font(f64::from(pt)) as f32;
         let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
-        let body_w = f64::from(twip_px_unclamped(line.body_w_twip)?);
+        let body_w = f64::from(twip_px_unclamped(line.body_w_twip, dpi)?);
         if face.typo_width(&line.text) > body_w {
             return Err(unsupported());
         }
-        let x = f64::from(twip_px_unclamped(line.left_twip)?);
-        let y = f64::from(twip_px_unclamped(line.top_twip)?);
+        let x = f64::from(twip_px_unclamped(line.left_twip, dpi)?);
+        let y = f64::from(twip_px_unclamped(line.top_twip, dpi)?);
         face.draw(&line.text, x, y, [0, 0, 0], |px, py, color, cov| {
             blend(rgb, width, height, px, py, color, cov);
         });
@@ -998,9 +1016,9 @@ fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine) -> Resul
     }
 }
 
-fn twip_px_unclamped(twip: i64) -> Result<u32, Error> {
-    let n = u64::try_from(twip).map_err(|_| unsupported())?;
-    Ok(((n + 7) / 15) as u32)
+fn twip_px_unclamped(twip: i64, dpi: RenderDpi) -> Result<u32, Error> {
+    let px = dpi.twip_to_px_round(twip);
+    u32::try_from(px).map_err(|_| unsupported())
 }
 
 fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3], cov: u8) {
@@ -1020,11 +1038,20 @@ fn blend(rgb: &mut [u8], width: u32, height: u32, x: i32, y: i32, color: [u8; 3]
     }
 }
 
-fn encode_png(w: u32, h: u32, rgb: &[u8]) -> Result<Vec<u8>, Error> {
+fn encode_png(w: u32, h: u32, rgb: &[u8], dpi: RenderDpi) -> Result<Vec<u8>, Error> {
     let mut out = Vec::new();
     let mut encoder = png::Encoder::new(&mut out, w, h);
     encoder.set_color(png::ColorType::Rgb);
     encoder.set_depth(png::BitDepth::Eight);
+    // 仅非默认 DPI 写入 pHYs，使省略 dpi / dpi=96 的既有 PNG 字节保持不变。
+    if !dpi.is_default() {
+        let ppm = (dpi.get() / 0.0254).round() as u32;
+        encoder.set_pixel_dims(Some(png::PixelDimensions {
+            xppu: ppm,
+            yppu: ppm,
+            unit: png::Unit::Meter,
+        }));
+    }
     let mut writer = encoder.write_header().map_err(|_| unsupported())?;
     writer.write_image_data(rgb).map_err(|_| unsupported())?;
     drop(writer);
@@ -1075,12 +1102,13 @@ fn emu_twip(emu: i64) -> Result<i64, Error> {
     Ok(emu / 635)
 }
 
-fn emu_px(emu: i64) -> Result<u32, Error> {
+fn emu_px(emu: i64, dpi: RenderDpi) -> Result<u32, Error> {
     if emu <= 0 {
         return Err(unsupported());
     }
-    let px = emu.saturating_mul(96) / 914_400;
-    if !(1..=MAX_PX).contains(&(px as u64)) {
+    // Word 嵌入图 extent：按请求 DPI 整数截断，不是四舍五入。96 dpi 时与历史 `emu*96/914400` 一致。
+    let px = (emu as i128) * (dpi.get() as i128) / 914_400;
+    if px < 1 || px > MAX_PX as i128 {
         return Err(unsupported());
     }
     Ok(px as u32)
@@ -1091,6 +1119,7 @@ fn plain_inline_image(
     pkg: &Package,
     doc_part: &str,
     drawing: &Element,
+    dpi: RenderDpi,
 ) -> Result<(i64, i64, u32, u32, Vec<u8>), Error> {
     let children: Vec<&Element> = drawing.element_children().collect();
     if children.len() != 1 || children[0].local_name() != "inline" {
@@ -1108,8 +1137,8 @@ fn plain_inline_image(
         .ok_or_else(unsupported)?
         .parse()
         .map_err(|_| unsupported())?;
-    let width_px = emu_px(cx)?;
-    let height_px = emu_px(cy)?;
+    let width_px = emu_px(cx, dpi)?;
+    let height_px = emu_px(cy, dpi)?;
     // ??????inline ??? dist ????? 0?? 0 ? NI?
     for key in ["distT", "distB", "distL", "distR"] {
         if let Some(v) = inline.attr_local(key) {
@@ -1550,9 +1579,9 @@ fn border_is_single_black(el: &Element) -> Result<bool, Error> {
     }
 }
 
-fn paint_table(rgb: &mut [u8], page_w: u32, page_h: u32, tbl: &TableBlit) -> Result<(), Error> {
-    let x0 = twip_px_unclamped(tbl.left_twip)? as i32;
-    let y0 = twip_px_unclamped(tbl.top_twip)? as i32;
+fn paint_table(rgb: &mut [u8], page_w: u32, page_h: u32, tbl: &TableBlit, dpi: RenderDpi) -> Result<(), Error> {
+    let x0 = twip_px_unclamped(tbl.left_twip, dpi)? as i32;
+    let y0 = twip_px_unclamped(tbl.top_twip, dpi)? as i32;
     if x0 < 0 || y0 < 0 {
         return Err(unsupported());
     }
@@ -1561,13 +1590,13 @@ fn paint_table(rgb: &mut [u8], page_w: u32, page_h: u32, tbl: &TableBlit) -> Res
     let mut acc = tbl.left_twip;
     for w in &tbl.col_widths {
         acc = acc.saturating_add(*w);
-        xs.push(twip_px_unclamped(acc)? as i32);
+        xs.push(twip_px_unclamped(acc, dpi)? as i32);
     }
     let mut ys = vec![y0];
     acc = tbl.top_twip;
     for h in &tbl.row_heights {
         acc = acc.saturating_add(*h);
-        ys.push(twip_px_unclamped(acc)? as i32);
+        ys.push(twip_px_unclamped(acc, dpi)? as i32);
     }
     let right = *xs.last().unwrap();
     let bottom = *ys.last().unwrap();

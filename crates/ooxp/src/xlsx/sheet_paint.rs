@@ -24,7 +24,7 @@ use super::chart_gdi::Face;
 use super::eval::{self, Displayed, FormulaOutcome, FormulaSession};
 use super::inspect;
 use super::picture::{self, AnchorKind};
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 use super::ExportedMedia;
 use crate::xlsx::fill_device_rotated_rect;
 use crate::xlsx::fill_device_stroked_rect;

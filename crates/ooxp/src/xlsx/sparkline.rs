@@ -6,7 +6,7 @@ use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
 use super::layout;
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 use super::request::{
     ColorSpec, DeleteSparklineOp, InsertSparklineOp, Patch, SetSparklineOp, SparkAxisType,
     SparkColors, SparkEmpty, SparklineType,

@@ -2,7 +2,7 @@
 
 use serde_json::{json, Map, Value};
 
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 use crate::chart::{self, ChartRestrict, ChartType, CHARTEX_NS, CHART_NS};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{

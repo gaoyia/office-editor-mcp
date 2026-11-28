@@ -1,6 +1,11 @@
 //! 库导出可选栅格化 DPI。省略时为 96，与现有出图像素一致。
 //! 只影响本次 PNG，不改源包，也不改系统 DPI。
 //! 坐标、字体、描边和间距按该 DPI 原生计算，不是先画 96 再拉伸位图。
+//!
+//! 这是每次出图请求上的参数，不是包级、create/apply 或进程全局开关。
+//! Word 与 PowerPoint 按请求 DPI 一次换算：twip×dpi/1440、EMU×dpi/914400、磅×dpi/72。
+//! 四舍五入规则与现有 96 dpi 出图一致，使省略或 96 时像素不变。
+//! Excel 专用助手（如 `excel_row_px`）仍先按 96 量化再放大，不得套到 Word / PowerPoint。
 
 use serde_json::Value;
 
@@ -13,6 +18,7 @@ pub const MIN_DPI: i64 = 24;
 /// 允许的最大整数 DPI（含）。再高也仍受 1..=4096 像素边长与面积上限约束。
 pub const MAX_DPI: i64 = 600;
 const EMU_PER_INCH: f64 = 914_400.0;
+const TWIP_PER_INCH: f64 = 1440.0;
 
 /// 已校验的导出 DPI。
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -71,6 +77,13 @@ impl RenderDpi {
 
     pub fn pt_to_px_font(self, pt: f64) -> f64 {
         pt * self.value / 72.0
+    }
+
+    /// Word / 通用：twip 按请求 DPI 四舍五入成像素。
+    /// 96 dpi 时与历史 `(twip + 7) / 15` 一致（15 为奇数，不会落在半数）。
+    /// 不得改成 Excel 那种先按 96 量化再放大。
+    pub fn twip_to_px_round(self, twip: i64) -> i64 {
+        (twip as f64 * self.value / TWIP_PER_INCH).round() as i64
     }
 
     /// Excel 自定义行高：先按 96 dpi 截断 `floor(round(pt*12700)/9525)`，再按请求 dpi 四舍五入放大。
@@ -150,6 +163,17 @@ mod tests {
         assert_eq!(RenderDpi::DEFAULT.emu_to_px_round(5_486_400), 576);
         assert_eq!(RenderDpi::DEFAULT.excel_row_px(15.0), 20);
         assert_eq!(RenderDpi::DEFAULT.excel_row_px(14.25), 19);
+        // A4 宽 11906 twip、高 16838 twip：96 dpi 为 794×1123。
+        assert_eq!(RenderDpi::DEFAULT.twip_to_px_round(11906), 794);
+        assert_eq!(RenderDpi::DEFAULT.twip_to_px_round(16838), 1123);
+        for twip in 0..4000i64 {
+            let hist = ((twip as u64 + 7) / 15) as i64;
+            assert_eq!(
+                RenderDpi::DEFAULT.twip_to_px_round(twip),
+                hist,
+                "twip={twip}"
+            );
+        }
     }
 
     #[test]
@@ -164,6 +188,10 @@ mod tests {
         assert_eq!(dpi.excel_row_px(14.25), 21);
         assert_eq!(dpi.excel_row_px(20.0), 29);
         assert_eq!(dpi.excel_row_px(23.0), 33);
+        // Word 页宽按请求 DPI 原生换算，不是先得到 794 再放大。
+        assert_eq!(dpi.twip_to_px_round(11906), 876);
+        assert_eq!(dpi.twip_to_px_round(16838), 1239);
+        assert_ne!(dpi.twip_to_px_round(11906), i64::from(dpi.scale_px(794)));
         assert_eq!(from_json(json!(96.0)).unwrap(), RenderDpi::DEFAULT);
     }
 

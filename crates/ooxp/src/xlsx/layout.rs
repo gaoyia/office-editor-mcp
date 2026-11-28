@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
 use super::cell;
-use super::render_dpi::RenderDpi;
+use super::RenderDpi;
 use super::request::{MergeRangeOp, SetColWidthOp, SetRowHeightOp, UnmergeRangeOp};
 use crate::error::{Error, ErrorKind};
 use crate::xml::{Element, Node};
