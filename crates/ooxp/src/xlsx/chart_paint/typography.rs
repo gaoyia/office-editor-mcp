@@ -200,22 +200,15 @@ pub(super) fn open_title_face(
     }
     let face = super::super::chart_gdi::Face::open_dpi(px, typo.bold, dpi.get());
     if typo.italic {
-        #[cfg(windows)]
-        {
-            face.and_then(|f| {
-                super::super::chart_gdi::Face::open_cell_dpi(
-                    px,
-                    typo.bold,
-                    true,
-                    f.family_name(),
-                    dpi.get(),
-                )
-            })
-        }
-        #[cfg(not(windows))]
-        {
-            face
-        }
+        face.and_then(|f| {
+            super::super::chart_gdi::Face::open_cell_dpi(
+                px,
+                typo.bold,
+                true,
+                f.family_name(),
+                dpi.get(),
+            )
+        })
     } else {
         face
     }

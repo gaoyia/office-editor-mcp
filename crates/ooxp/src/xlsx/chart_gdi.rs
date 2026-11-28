@@ -2765,87 +2765,94 @@ impl Face {
 }
 
 #[cfg(not(windows))]
-pub fn fill_device_ellipse(_: i32, _: i32, _: i32, _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
-    false
+pub fn fill_device_ellipse(
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    blend: impl FnMut(i32, i32, u8),
+) -> bool {
+    super::soft_fill::fill_device_ellipse(x, y, w, h, blend)
 }
 
 #[cfg(not(windows))]
 pub fn fill_device_round_rect(
-    _: i32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: f64,
-    _: impl FnMut(i32, i32, u8),
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    radius: f64,
+    blend: impl FnMut(i32, i32, u8),
 ) -> bool {
-    false
+    super::soft_fill::fill_device_round_rect(x, y, w, h, radius, blend)
 }
 
 #[cfg(not(windows))]
 pub fn fill_device_opaque_round_rect(
-    _: &mut [u8],
-    _: u32,
-    _: u32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: f64,
-    _: [u8; 3],
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    radius: f64,
+    color: [u8; 3],
 ) -> bool {
-    false
+    super::soft_fill::fill_device_opaque_round_rect(rgb, page_w, page_h, x, y, w, h, radius, color)
 }
 
 #[cfg(not(windows))]
 pub fn fill_device_line(
-    _: i32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: impl FnMut(i32, i32, u8),
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+    width_px: i32,
+    blend: impl FnMut(i32, i32, u8),
 ) -> bool {
-    false
-}
-#[cfg(not(windows))]
-pub fn fill_device_polyline(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
-    false
+    super::soft_fill::fill_device_line(x0, y0, x1, y1, width_px, blend)
 }
 
 #[cfg(not(windows))]
-pub fn fill_device_beziers(_: &[(f32, f32)], _: i32, _: impl FnMut(i32, i32, u8)) -> bool {
-    false
+pub fn fill_device_polyline(points: &[(f32, f32)], width_px: i32, blend: impl FnMut(i32, i32, u8)) -> bool {
+    super::soft_fill::fill_device_polyline(points, width_px, blend)
+}
+
+#[cfg(not(windows))]
+pub fn fill_device_beziers(points: &[(f32, f32)], width_px: i32, blend: impl FnMut(i32, i32, u8)) -> bool {
+    super::soft_fill::fill_device_beziers(points, width_px, blend)
 }
 
 #[cfg(not(windows))]
 pub fn fill_device_stroked_rect(
-    _: i32,
-    _: i32,
-    _: i32,
-    _: i32,
-    _: Option<[u8; 3]>,
-    _: [u8; 3],
-    _: i32,
-    _: &mut [u8],
-    _: u32,
-    _: u32,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    fill: Option<[u8; 3]>,
+    stroke: [u8; 3],
+    width_px: i32,
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
 ) -> bool {
-    false
+    super::soft_fill::fill_device_stroked_rect(x, y, w, h, fill, stroke, width_px, rgb, page_w, page_h)
 }
 
 #[cfg(not(windows))]
 pub fn fill_device_rotated_rect(
-    _: &mut [u8],
-    _: u32,
-    _: u32,
-    _: f32,
-    _: f32,
-    _: f32,
-    _: f32,
-    _: f32,
-    _: [u8; 3],
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    deg: f32,
+    color: [u8; 3],
 ) -> bool {
-    false
+    super::soft_fill::fill_device_rotated_rect(rgb, page_w, page_h, x, y, w, h, deg, color)
 }
 
 #[cfg(not(windows))]

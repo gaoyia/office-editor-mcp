@@ -1627,7 +1627,7 @@ pub(crate) fn is_chart_frame(el: &Element) -> bool {
     el.local_name() == "graphicFrame" && graphic_uri(el).is_some()
 }
 
-fn direct_chart_frame(anchor: &Element) -> Option<&Element> {
+pub(crate) fn direct_chart_frame(anchor: &Element) -> Option<&Element> {
     if let Some(frame) = anchor.element_children().find(|c| is_chart_frame(c)) {
         return Some(frame);
     }
@@ -2126,6 +2126,41 @@ pub(crate) fn export_chart_image_at(
         bytes: png,
         content_type: Some("image/png".to_string()),
     })
+}
+
+/// 把 drawing 里的图表画成指定宽高的 PNG，供工作表出图叠在锚点矩形上。
+pub(crate) fn render_anchored_chart_png(
+    pkg: &Package,
+    drawing_part: &str,
+    frame: &Element,
+    width: u32,
+    height: u32,
+    dpi: RenderDpi,
+    sheet: &str,
+) -> Result<Vec<u8>, Error> {
+    let rid = chart_rid(frame).ok_or_else(|| {
+        Error::with_path(ErrorKind::ChartImageUnsupported, "id")
+    })?;
+    let chart_part = crate::opc::resolve_id(pkg, drawing_part, &rid)?;
+    let space = super::list_pin::parse_part(pkg, &chart_part)?;
+    let theme_xml = pkg.get("/xl/theme/theme1.xml").ok();
+    let accents = super::chart_paint::theme_accents(theme_xml);
+    let cells = chart_cell_cache(pkg)?;
+    let blips = load_chart_blips(pkg, &chart_part)?;
+    super::chart_paint::render_chart_with_media(
+        &space.root,
+        width,
+        height,
+        accents,
+        calibri_bytes().as_deref(),
+        super::chart_paint::ChartHost::Excel,
+        Some(&cells),
+        sheet,
+        dpi,
+        theme_xml,
+        None,
+        Some(&blips),
+    )
 }
 
 /// 图表工作表没有格子。按 export_chart_image 同一套规则导出该表上那一张已会画的图。

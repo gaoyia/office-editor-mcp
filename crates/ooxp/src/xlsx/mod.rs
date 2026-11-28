@@ -8,6 +8,7 @@ mod cf;
 mod chart;
 mod chart_drawing;
 mod chart_gdi;
+mod soft_fill;
 mod chart_paint;
 mod chartsheet;
 mod chartsheet_page;

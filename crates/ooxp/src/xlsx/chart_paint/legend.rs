@@ -556,14 +556,9 @@ fn style_face(
     px: f32,
     dpi: RenderDpi,
 ) -> Result<Option<super::super::chart_gdi::Face>, Error> {
-    #[cfg(not(windows))]
-    if style.bold || style.italic || !style.name.is_empty() {
-        return Err(unsupported());
-    }
     let face = if style.name.is_empty() {
         let face = super::super::chart_gdi::Face::open_dpi(px, style.bold, dpi.get());
-        #[cfg(windows)]
-        let face = if style.italic {
+        if style.italic {
             face.and_then(|f| {
                 super::super::chart_gdi::Face::open_cell_dpi(
                     px,
@@ -575,8 +570,7 @@ fn style_face(
             })
         } else {
             face
-        };
-        face
+        }
     } else {
         let face = super::super::chart_gdi::Face::open_cell_dpi(
             px,
