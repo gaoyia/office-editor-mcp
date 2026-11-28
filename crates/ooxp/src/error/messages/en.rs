@@ -1421,7 +1421,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::PageImageUnsupported => {
-            "This page cannot be drawn to PNG yet. Supported: one section; empty pages; Latin Calibri paragraphs (wrap/spacing/indent); opaque inline PNG whose extent pixels match the source (no scale); plain no-text tables (cell fill, single/nil borders, tblGrid/tblInd/trHeight); default header Latin Calibri (pgMar/@header; body origin unchanged). Floating wrap, crop, transparency, mixed text+picture, scaled pictures, merged/styled/text-in-table cells, even/first headers, footers, header images/tables/fields, and explicit line/pagination controls are not drawn"
+            "This page cannot be drawn to PNG yet. Supported: one section; empty pages; Latin or East Asian paragraphs (wrap/spacing/indent; system fonts, default Latin Calibri and East Asian Songti; explicit line spacing (line/lineRule auto/exact/atLeast) and pagination (pageBreakBefore/keepNext/keepLines/widowControl)); opaque inline PNG scaled to the extent (extent pixels still truncate EMU×dpi/914400); tables (cell fill, single/nil borders, tblGrid/tblInd/trHeight, default cell margins, Latin or East Asian cell text, explicit cell line spacing); default header/footer Latin or East Asian text (pgMar/@header top distance, @footer bottom-to-content-bottom; body origin unchanged). Floating wrap, crop, transparency, mixed text+picture, merged cells / table styles, even/first headers and footers, and header/footer images/tables/fields are not drawn"
                 .into()
         }
         ErrorKind::SparklineImageUnsupported => {
