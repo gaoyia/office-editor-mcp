@@ -35,6 +35,8 @@ mod view3d;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod soft_style_tests;
 
 // Private re-exports keep the pre-split flat namespace for child modules and unit tests.
 #[allow(unused_imports)]

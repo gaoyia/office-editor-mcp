@@ -650,6 +650,52 @@ mod tests {
                 ink > 20,
                 "{id} should show text, dark pixels={ink} size={w}x{h}"
             );
+            if id == "sheet:总览" {
+                let chart = crate::xlsx::export_chart_image(&bytes, "sheet:总览/chart:index:1")
+                    .unwrap_or_else(|err| panic!("总览 chart export failed: {err}"));
+                let (cw, ch, crgb) = decode_png(&chart.bytes);
+                assert!(cw > 0 && ch > 0);
+                let chart_colors = signature_colors(&crgb);
+                let sheet_colors = signature_colors(&rgb);
+                let overlap = chart_colors.iter().filter(|c| sheet_colors.contains(*c)).count();
+                assert!(
+                    overlap >= 3,
+                    "总览 sheet PNG should contain the embedded chart colors, overlap={overlap} chart={cw}x{ch} sheet={w}x{h}"
+                );
+                let colorful = colorful_pixels(&rgb);
+                assert!(
+                    colorful > 80,
+                    "总览 sheet should include chart fills, colorful={colorful}"
+                );
+            }
         }
     }
+
+    fn signature_colors(rgb: &[u8]) -> std::collections::HashSet<[u8; 3]> {
+        let mut out = std::collections::HashSet::new();
+        for p in rgb.chunks(3) {
+            let chroma = (p[0] as i16 - p[1] as i16)
+                .abs()
+                .max((p[1] as i16 - p[2] as i16).abs())
+                .max((p[0] as i16 - p[2] as i16).abs());
+            if chroma > 30 && p.iter().any(|c| *c < 200) {
+                // quantize a little so close antialiased shades still match
+                out.insert([p[0] & 0xF0, p[1] & 0xF0, p[2] & 0xF0]);
+            }
+        }
+        out
+    }
+
+    fn colorful_pixels(rgb: &[u8]) -> usize {
+        rgb.chunks(3)
+            .filter(|p| {
+                let chroma = (p[0] as i16 - p[1] as i16)
+                    .abs()
+                    .max((p[1] as i16 - p[2] as i16).abs())
+                    .max((p[0] as i16 - p[2] as i16).abs());
+                chroma > 30 && p.iter().any(|c| *c < 200)
+            })
+            .count()
+    }
+
 }

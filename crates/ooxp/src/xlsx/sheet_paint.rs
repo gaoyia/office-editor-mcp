@@ -87,6 +87,8 @@ pub(crate) fn export_sheet_image_at(
         &cols,
         &rows,
         theme.as_ref(),
+        dpi,
+        &name,
     )?;
     shapes.extend(embedded_sparks(
         &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
@@ -180,6 +182,8 @@ pub(crate) fn export_sheet_image_tiles_at(
         &cols,
         &rows,
         theme.as_ref(),
+        dpi,
+        &name,
     )?;
     shapes.extend(embedded_sparks(
         &pkg, &name, root, &cells, c0, r0, &cols, &rows, rtl, dpi,
@@ -666,6 +670,8 @@ fn plain_rects(
     cols: &[i32],
     rows: &[i32],
     theme: Option<&LoadedTheme>,
+    dpi: RenderDpi,
+    sheet_name: &str,
 ) -> Result<Vec<Overlay>, Error> {
     let mut out = Vec::new();
     for part in picture::drawing_parts(pkg, sheet_part)? {
@@ -701,6 +707,21 @@ fn plain_rects(
                 out.push(Overlay::Fill(plain_rect_at(
                     sp, theme, true, x0, y0, x1, y1,
                 )?));
+            } else if let Some(frame) = super::chart::direct_chart_frame(anchor) {
+                let Some(w) = (x1 - x0).try_into().ok().filter(|w: &u32| *w > 0) else {
+                    return Err(unsupported());
+                };
+                let Some(h) = (y1 - y0).try_into().ok().filter(|h: &u32| *h > 0) else {
+                    return Err(unsupported());
+                };
+                let png = super::chart::render_anchored_chart_png(
+                    pkg, &part, frame, w, h, dpi, sheet_name,
+                )?;
+                let (image_w, image_h, rgb) = decode_opaque_png(&png)?;
+                if image_w != w || image_h != h {
+                    return Err(unsupported());
+                }
+                out.push(Overlay::Png(SheetPng { x0, y0, w, h, rgb }));
             } else {
                 return Err(unsupported());
             }
