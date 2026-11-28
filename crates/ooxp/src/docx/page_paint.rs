@@ -3,9 +3,9 @@
 //! 磅与 EMU 也按请求 DPI 原生换算（磅×dpi/72；嵌入图 extent 为 EMU×dpi/914400 截断，与历史 96 dpi 截断一致）。
 //! 不要套用 Excel 先按 96 量化再放大的行高规则。只影响本次 PNG，不改源包，也不改系统 DPI。
 //! 单节拉丁或东亚文字多段（可空段、段前段后、左缩进；空格换行，东亚按字换行）已画；字形灰度仍暂缓。
-//! 不透明 `wp:inline` PNG（extent 像素=源）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字）已画。
+//! 不透明 `wp:inline` PNG（按 extent 缩放；extent 像素仍按 EMU×dpi/914400 截断）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字）已画。
 //! default 页眉/页脚拉丁或东亚文字（按 pgMar/@header 顶距、@footer 底距到内容底，正文不位移）已画；奇偶/首页/页眉页脚内图/表/域仍 NI。
-//! 显式行距（line/lineRule auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl）已画。合并/表样式、浮动绕排、缩放图与文图混排仍不画。
+//! 显式行距（line/lineRule auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl）已画。缩放图已按 extent 绘制。合并/表样式、浮动绕排与文图混排仍不画。
 //! 文字走已有 `Face`：Windows 上按系统字体名打开 GDI+ `AntiAliasGridFit`；非 Windows 先找系统字体，找不到再回退江城黑体子集。
 //! 字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 use std::io::Cursor;
@@ -1767,11 +1767,82 @@ fn plain_inline_image(
     let media = super::picture::resolve_embed(pkg, doc_part, &rid)?;
     let bytes = pkg.get(&media)?;
     let (sw, sh, rgb) = decode_opaque_png(bytes)?;
-    if sw != width_px || sh != height_px {
-        // ??????????? oracle 1:1??
+    let rgb = if sw == width_px && sh == height_px {
+        rgb
+    } else {
+        // extent 与源像素不一致时按目标尺寸缩放，不再整页 NI。
+        // 目标宽高仍来自 emu_px 的整数截断，不改成四舍五入。
+        scale_rgb(&rgb, sw, sh, width_px, height_px)?
+    };
+    Ok((cx, cy, width_px, height_px, rgb))
+}
+
+fn sample_rgb(src: &[u8], src_w: u32, src_h: u32, x: i64, y: i64) -> [f64; 3] {
+    let x = x.clamp(0, i64::from(src_w) - 1) as usize;
+    let y = y.clamp(0, i64::from(src_h) - 1) as usize;
+    let i = (y * src_w as usize + x) * 3;
+    [
+        f64::from(src[i]),
+        f64::from(src[i + 1]),
+        f64::from(src[i + 2]),
+    ]
+}
+
+/// 双线性把源 RGB 缩到 extent 像素。纯色图保持原色；尺寸以截断后的 extent 为准。
+fn scale_rgb(
+    src: &[u8],
+    src_w: u32,
+    src_h: u32,
+    dest_w: u32,
+    dest_h: u32,
+) -> Result<Vec<u8>, Error> {
+    if dest_w == 0
+        || dest_h == 0
+        || u64::from(dest_w) > MAX_PX
+        || u64::from(dest_h) > MAX_PX
+        || src_w == 0
+        || src_h == 0
+    {
         return Err(unsupported());
     }
-    Ok((cx, cy, width_px, height_px, rgb))
+    let expect = (src_w as usize)
+        .checked_mul(src_h as usize)
+        .and_then(|n| n.checked_mul(3))
+        .ok_or_else(unsupported)?;
+    if src.len() != expect {
+        return Err(unsupported());
+    }
+    if src_w == dest_w && src_h == dest_h {
+        return Ok(src.to_vec());
+    }
+    let mut dest = vec![0u8; (dest_w as usize) * (dest_h as usize) * 3];
+    let sw = f64::from(src_w);
+    let sh = f64::from(src_h);
+    let dw = f64::from(dest_w);
+    let dh = f64::from(dest_h);
+    for y in 0..dest_h {
+        let sy = (f64::from(y) + 0.5) * sh / dh - 0.5;
+        let y0 = sy.floor() as i64;
+        let fy = sy - y0 as f64;
+        let y1 = y0 + 1;
+        for x in 0..dest_w {
+            let sx = (f64::from(x) + 0.5) * sw / dw - 0.5;
+            let x0 = sx.floor() as i64;
+            let fx = sx - x0 as f64;
+            let x1 = x0 + 1;
+            let c00 = sample_rgb(src, src_w, src_h, x0, y0);
+            let c10 = sample_rgb(src, src_w, src_h, x1, y0);
+            let c01 = sample_rgb(src, src_w, src_h, x0, y1);
+            let c11 = sample_rgb(src, src_w, src_h, x1, y1);
+            let o = (y as usize * dest_w as usize + x as usize) * 3;
+            for c in 0..3 {
+                let v0 = c00[c] + (c10[c] - c00[c]) * fx;
+                let v1 = c01[c] + (c11[c] - c01[c]) * fx;
+                dest[o + c] = (v0 + (v1 - v0) * fy).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    Ok(dest)
 }
 
 fn find_local_desc<'a>(root: &'a Element, local: &str) -> Option<&'a Element> {

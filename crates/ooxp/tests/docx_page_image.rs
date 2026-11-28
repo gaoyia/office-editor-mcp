@@ -769,11 +769,62 @@ fn opaque_inline_png_respects_left_indent() {
 
 #[cfg(windows)]
 #[test]
-fn scaled_inline_png_extent_is_not_implemented() {
-    // 源 64x32，extent 报 96x48 → 缩放 NI（本切片只 1:1）。
-    let doc = create_inline_png("pic-scale", "opaque-64x32-red.png", 914_400, 457_200, None);
-    let err = export(&doc, "page:1").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+fn scaled_inline_png_upscale_matches_extent_ink_box() {
+    // 源 64×32，extent 1 英寸 × 0.5 英寸 → 96×48 @96dpi（914400/457200 EMU 整除，截断与四舍五入相同）。
+    let doc = create_inline_png(
+        "pic-scale-up",
+        "opaque-64x32-red.png",
+        914_400,
+        457_200,
+        None,
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 96, 96, 48));
+}
+
+#[cfg(windows)]
+#[test]
+fn scaled_inline_png_downscale_matches_extent_ink_box() {
+    // 源 64×32，extent 0.5 英寸 × 0.25 英寸 → 32×16 @96dpi。
+    let doc = create_inline_png(
+        "pic-scale-down",
+        "opaque-64x32-red.png",
+        304_800,
+        152_400,
+        None,
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 96, 32, 16));
+}
+
+#[cfg(windows)]
+#[test]
+fn scaled_inline_png_nonuniform_matches_extent_ink_box() {
+    // 源 64×32，横向 2 倍、纵向 0.5 倍 → 128×16 @96dpi。
+    let doc = create_inline_png(
+        "pic-scale-stretch",
+        "opaque-64x32-red.png",
+        1_219_200,
+        152_400,
+        None,
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 96, 128, 16));
+}
+
+#[cfg(windows)]
+#[test]
+fn scaled_inline_png_extent_still_truncates_not_rounds() {
+    // 96 dpi 下每像素 9525 EMU。923924 EMU / 9525 = 96.999…，截断为 96，四舍五入会变成 97。
+    let doc = create_inline_png(
+        "pic-scale-trunc",
+        "opaque-64x32-red.png",
+        923_924,
+        457_200,
+        None,
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 96, 96, 48));
 }
 
 #[cfg(windows)]

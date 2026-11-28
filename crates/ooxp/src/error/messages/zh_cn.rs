@@ -1269,7 +1269,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "这一页还有画不了的对象。目前能画白底或没有颜色变换的纯色页底，含本页、版式和母版上的主题色。不透明的两停点直角线性页底会画；半透明、路径、非直角或主题 bgRef 渐变仍铺白。还画没有旋转的 PNG、整像素且不缩放的裁剪、以及 Windows 上裁完或未裁后两边都不缩小的放大、直角矩形、圆角矩形、椭圆、形状里的文字（含 a:br 换行后的后续行）、簇状柱形图和纯色单元格的表。这些对象放在组合里、母版上和版式上也画。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 alpha。形状上的 blipFill 会按拉伸铺进这些形状；平铺、fillRect 偏移、对不齐的裁剪、缩小或一边放大一边缩小、非 PNG 或带颜色变换的 blip 会让整页失败。宽高要落在 1 到 4096 像素之间".into()
         }
         ErrorKind::PageImageUnsupported => {
-            "这一页还不能画出 PNG。已支持：单节；空页；拉丁或东亚文字多段（换行/段距/缩进，系统字体；缺省拉丁 Calibri、东亚宋体）；显式行距（line/lineRule auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl）；extent 像素与源一致的不透明 inline PNG（无缩放）；表（单元格填色、single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字、表内显式行距）；default 页眉/页脚拉丁或东亚文字（pgMar/@header 顶距、@footer 底距到内容底，正文原点不位移）。浮动绕排、裁剪、透明、文图混排、缩放图、合并/表样式、奇偶/首页页眉页脚、页眉页脚内图/表/域还不画".into()
+            "这一页还不能画出 PNG。已支持：单节；空页；拉丁或东亚文字多段（换行/段距/缩进，系统字体；缺省拉丁 Calibri、东亚宋体）；显式行距（line/lineRule auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl）；不透明 inline PNG（按 extent 缩放；extent 像素仍按 EMU×dpi/914400 截断）；表（单元格填色、single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字、表内显式行距）；default 页眉/页脚拉丁或东亚文字（pgMar/@header 顶距、@footer 底距到内容底，正文原点不位移）。浮动绕排、裁剪、透明、文图混排、合并/表样式、奇偶/首页页眉页脚、页眉页脚内图/表/域还不画".into()
         }
         ErrorKind::SparklineImageUnsupported => {
             "这条迷你图还不能画出 PNG。目前画一组里的一条折线；没有负数、没有空格子的柱形（高/低/首/末点可换纯色）；以及 type=stacked 盈亏（有限数字、可选负值着色，空与 0 不画柱）。dateAxis 打开且组上日期公式是与数值等长的单行或单列有限日期时，等距日期仍放到分类轴同一套槽公式上、与关闭日期轴一致；不等距日期按最小到最大的连续比例定位（96 dpi 左右各留 12 像素，右沿为 width-1-left），不映射到分类槽。不画日期缺失、非数值、长度不合、二维区域，或至少两点但日期全部相同的情况，也不画折线标记、坐标轴、从右到左、盈亏的 span 空格、自定义轴，且格子宽高要落在能画的范围里".into()
