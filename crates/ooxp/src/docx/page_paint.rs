@@ -3,9 +3,9 @@
 //! 磅与 EMU 也按请求 DPI 原生换算（磅×dpi/72；嵌入图 extent 为 EMU×dpi/914400 截断，与历史 96 dpi 截断一致）。
 //! 不要套用 Excel 先按 96 量化再放大的行高规则。只影响本次 PNG，不改源包，也不改系统 DPI。
 //! 单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
-//! 不透明 `wp:inline` PNG（extent 像素=源）与无文字表（填色 + single/nil 边、tblGrid/tblInd/trHeight）已画。
+//! 不透明 `wp:inline` PNG（extent 像素=源）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁 Calibri）已画。
 //! default 页眉拉丁 Calibri（按 pgMar/@header 顶距，正文不位移）已画；奇偶/首页/页脚/页眉图表域仍 NI。
-//! 合并/表样式/表内文字与图、浮动绕排、显式行距/分页控制仍不画。
+//! 合并/表样式、浮动绕排、显式行距/分页控制、缩放图与文图混排仍不画。
 //! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
 //! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 use std::io::Cursor;
@@ -103,7 +103,12 @@ struct TextLine {
     body_w_twip: i64,
 }
 
-fn layout_of(pkg: &Package, doc_part: &str, root: &Element, dpi: RenderDpi) -> Result<Layout, Error> {
+fn layout_of(
+    pkg: &Package,
+    doc_part: &str,
+    root: &Element,
+    dpi: RenderDpi,
+) -> Result<Layout, Error> {
     if root.element_children().any(|el| el.local_name() != "body") {
         return Err(unsupported());
     }
@@ -360,8 +365,9 @@ fn layout_story(
                 y = y.saturating_add(img.after_twip.max(0));
             }
             StoryPara::Table(table) => {
-                let table_h: i64 = table.row_heights.iter().copied().sum();
-                if table_h <= 0 || table.col_widths.is_empty() || table.row_heights.is_empty() {
+                let row_heights = table_row_heights(table, dpi)?;
+                let table_h: i64 = row_heights.iter().copied().sum();
+                if table_h <= 0 || table.col_widths.is_empty() || row_heights.is_empty() {
                     return Err(unsupported());
                 }
                 ensure_space(
@@ -377,23 +383,22 @@ fn layout_story(
                 if table_w > body_w.saturating_sub(table.indent_twip.max(0)) {
                     return Err(unsupported());
                 }
-                pages
-                    .last_mut()
-                    .ok_or_else(unsupported)?
-                    .tables
-                    .push(TableBlit {
-                        left_twip,
-                        top_twip: y,
-                        col_widths: table.col_widths.clone(),
-                        row_heights: table.row_heights.clone(),
-                        fills: table.fills.clone(),
-                        border_top: table.border_top,
-                        border_left: table.border_left,
-                        border_bottom: table.border_bottom,
-                        border_right: table.border_right,
-                        border_inside_h: table.border_inside_h,
-                        border_inside_v: table.border_inside_v,
-                    });
+                let texts = table_text_lines(table, left_twip, y, &row_heights, dpi)?;
+                let page = pages.last_mut().ok_or_else(unsupported)?;
+                page.texts.extend(texts);
+                page.tables.push(TableBlit {
+                    left_twip,
+                    top_twip: y,
+                    col_widths: table.col_widths.clone(),
+                    row_heights,
+                    fills: table.fills.clone(),
+                    border_top: table.border_top,
+                    border_left: table.border_left,
+                    border_bottom: table.border_bottom,
+                    border_right: table.border_right,
+                    border_inside_h: table.border_inside_h,
+                    border_inside_v: table.border_inside_v,
+                });
                 y = y.saturating_add(table_h);
                 at_page_top = false;
             }
@@ -458,7 +463,12 @@ fn line_offset_twip(line_index: u64, sz: u32) -> Result<i64, Error> {
     i64::try_from(n).map_err(|_| unsupported())
 }
 
-fn wrap_latin_lines(text: &str, sz: u32, body_w_twip: i64, dpi: RenderDpi) -> Result<Vec<String>, Error> {
+fn wrap_latin_lines(
+    text: &str,
+    sz: u32,
+    body_w_twip: i64,
+    dpi: RenderDpi,
+) -> Result<Vec<String>, Error> {
     #[cfg(not(windows))]
     {
         let _ = (text, sz, body_w_twip, dpi);
@@ -548,7 +558,11 @@ enum StoryPara {
 struct PendingTable {
     indent_twip: i64,
     col_widths: Vec<i64>,
-    row_heights: Vec<i64>,
+    margin_top: i64,
+    margin_left: i64,
+    margin_bottom: i64,
+    margin_right: i64,
+    rows: Vec<PendingRowBuild>,
     fills: Vec<(usize, usize, [u8; 3])>,
     border_top: bool,
     border_left: bool,
@@ -556,6 +570,17 @@ struct PendingTable {
     border_right: bool,
     border_inside_h: bool,
     border_inside_v: bool,
+}
+
+enum RowHeight {
+    Auto,
+    AtLeast(i64),
+    Exact(i64),
+}
+
+enum CellPara {
+    Empty { before: i64, after: i64 },
+    Text(PendingText),
 }
 
 struct PendingImage {
@@ -590,7 +615,9 @@ fn body_story<'a>(
                 if sect.is_some() {
                     return Err(unsupported());
                 }
-                story.push(StoryPara::Table(parse_plain_table(child)?));
+                story.push(StoryPara::Table(parse_plain_table(
+                    pkg, doc_part, child, dpi,
+                )?));
             }
             "sectPr" => {
                 if sect.is_some() || index + 1 != children.len() {
@@ -610,7 +637,12 @@ fn body_story<'a>(
     Ok((story, sect))
 }
 
-fn paragraph_kind(pkg: &Package, doc_part: &str, p: &Element, dpi: RenderDpi) -> Result<StoryPara, Error> {
+fn paragraph_kind(
+    pkg: &Package,
+    doc_part: &str,
+    p: &Element,
+    dpi: RenderDpi,
+) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
     let mut before = 0i64;
     let mut after = 0i64;
@@ -970,7 +1002,13 @@ fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
     encode_png(layout.width, layout.height, &rgb, layout.dpi)
 }
 
-fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit, dpi: RenderDpi) -> Result<(), Error> {
+fn paint_image(
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    img: &ImageBlit,
+    dpi: RenderDpi,
+) -> Result<(), Error> {
     let x0 = twip_px_unclamped(img.left_twip, dpi)? as i32;
     let y0 = twip_px_unclamped(img.top_twip, dpi)? as i32;
     if x0 < 0 || y0 < 0 {
@@ -992,7 +1030,13 @@ fn paint_image(rgb: &mut [u8], page_w: u32, page_h: u32, img: &ImageBlit, dpi: R
     Ok(())
 }
 
-fn paint_text(rgb: &mut [u8], width: u32, height: u32, line: &TextLine, dpi: RenderDpi) -> Result<(), Error> {
+fn paint_text(
+    rgb: &mut [u8],
+    width: u32,
+    height: u32,
+    line: &TextLine,
+    dpi: RenderDpi,
+) -> Result<(), Error> {
     #[cfg(not(windows))]
     {
         let _ = (rgb, width, height, line, dpi);
@@ -1260,8 +1304,184 @@ fn empty_auto_row_twip() -> Result<i64, Error> {
     Ok(line_advance_twip(DEFAULT_SZ)?.saturating_add(11))
 }
 
-fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
+/// 单元格行框：默认 11 磅走已对照过的空单元格自动行高（TTF 单倍 + 11 twip）；其它字号用 TTF 单倍。
+fn cell_line_box_twip(sz: u32) -> Result<i64, Error> {
+    if sz == DEFAULT_SZ {
+        empty_auto_row_twip()
+    } else {
+        line_advance_twip(sz)
+    }
+}
+
+fn parse_tbl_cell_mar(
+    el: &Element,
+    top: &mut i64,
+    left: &mut i64,
+    bottom: &mut i64,
+    right: &mut i64,
+) -> Result<(), Error> {
+    for side in el.element_children() {
+        let raw = side.attr_local("w").ok_or_else(unsupported)?;
+        let n = parse_twip(raw)?;
+        if n < 0 {
+            return Err(unsupported());
+        }
+        let ty = side.attr_local("type").unwrap_or("dxa");
+        if ty != "dxa" {
+            return Err(unsupported());
+        }
+        match side.local_name() {
+            "top" => *top = n,
+            "left" | "start" => *left = n,
+            "bottom" => *bottom = n,
+            "right" | "end" => *right = n,
+            _ => return Err(unsupported()),
+        }
+    }
+    Ok(())
+}
+
+fn inner_cell_width(col_w: i64, table: &PendingTable, indent: i64) -> Result<i64, Error> {
+    let inner = col_w
+        .saturating_sub(table.margin_left.max(0))
+        .saturating_sub(table.margin_right.max(0))
+        .saturating_sub(indent.max(0));
+    if inner <= 0 {
+        return Err(unsupported());
+    }
+    Ok(inner)
+}
+
+fn cell_paras_height(
+    paras: &[CellPara],
+    col_w: i64,
+    table: &PendingTable,
+    dpi: RenderDpi,
+) -> Result<i64, Error> {
+    let mut height = 0i64;
+    for para in paras {
+        match para {
+            CellPara::Empty { before, after } => {
+                height = height
+                    .saturating_add((*before).max(0))
+                    .saturating_add(cell_line_box_twip(DEFAULT_SZ)?)
+                    .saturating_add((*after).max(0));
+            }
+            CellPara::Text(line) => {
+                let content_w = inner_cell_width(col_w, table, line.indent_twip)?;
+                let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
+                let n = i64::try_from(rows.len()).map_err(|_| unsupported())?;
+                if n <= 0 {
+                    return Err(unsupported());
+                }
+                height = height
+                    .saturating_add(line.before_twip.max(0))
+                    .saturating_add(cell_line_box_twip(line.sz)?.saturating_mul(n))
+                    .saturating_add(line.after_twip.max(0));
+            }
+        }
+    }
+    Ok(height)
+}
+
+fn table_row_heights(table: &PendingTable, dpi: RenderDpi) -> Result<Vec<i64>, Error> {
+    if table.rows.is_empty() || table.col_widths.is_empty() {
+        return Err(unsupported());
+    }
+    let mut heights = Vec::with_capacity(table.rows.len());
+    for row in &table.rows {
+        if row.cells.len() != table.col_widths.len() {
+            return Err(unsupported());
+        }
+        let mut content = 0i64;
+        for (ci, cell) in row.cells.iter().enumerate() {
+            let h = cell_paras_height(&cell.paras, table.col_widths[ci], table, dpi)?;
+            content = content.max(h);
+        }
+        let with_mar = content
+            .saturating_add(table.margin_top.max(0))
+            .saturating_add(table.margin_bottom.max(0));
+        let height = match row.height {
+            RowHeight::Auto => with_mar,
+            RowHeight::AtLeast(n) => with_mar.max(n),
+            RowHeight::Exact(n) => n,
+        };
+        if height <= 0 {
+            return Err(unsupported());
+        }
+        heights.push(height);
+    }
+    Ok(heights)
+}
+
+fn table_text_lines(
+    table: &PendingTable,
+    table_left: i64,
+    table_top: i64,
+    row_heights: &[i64],
+    dpi: RenderDpi,
+) -> Result<Vec<TextLine>, Error> {
+    let mut texts = Vec::new();
+    let mut row_top = table_top;
+    for (ri, row) in table.rows.iter().enumerate() {
+        let row_h = *row_heights.get(ri).ok_or_else(unsupported)?;
+        let row_bottom = row_top.saturating_add(row_h);
+        let mut cell_left = table_left;
+        for (ci, cell) in row.cells.iter().enumerate() {
+            let col_w = *table.col_widths.get(ci).ok_or_else(unsupported)?;
+            let mut y = row_top.saturating_add(table.margin_top.max(0));
+            for para in &cell.paras {
+                match para {
+                    CellPara::Empty { before, after } => {
+                        y = y
+                            .saturating_add((*before).max(0))
+                            .saturating_add(cell_line_box_twip(DEFAULT_SZ)?)
+                            .saturating_add((*after).max(0));
+                    }
+                    CellPara::Text(line) => {
+                        let content_w = inner_cell_width(col_w, table, line.indent_twip)?;
+                        let left_twip = cell_left
+                            .saturating_add(table.margin_left.max(0))
+                            .saturating_add(line.indent_twip.max(0));
+                        let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
+                        let adv = cell_line_box_twip(line.sz)?;
+                        y = y.saturating_add(line.before_twip.max(0));
+                        for row_text in rows {
+                            // exact 行高时裁掉超出行底的行，避免盖住下一行。
+                            if y.saturating_add(adv) > row_bottom {
+                                break;
+                            }
+                            texts.push(TextLine {
+                                text: row_text,
+                                sz: line.sz,
+                                left_twip,
+                                top_twip: y,
+                                body_w_twip: content_w,
+                            });
+                            y = y.saturating_add(adv);
+                        }
+                        y = y.saturating_add(line.after_twip.max(0));
+                    }
+                }
+            }
+            cell_left = cell_left.saturating_add(col_w);
+        }
+        row_top = row_bottom;
+    }
+    Ok(texts)
+}
+
+fn parse_plain_table(
+    pkg: &Package,
+    doc_part: &str,
+    tbl: &Element,
+    dpi: RenderDpi,
+) -> Result<PendingTable, Error> {
     let mut indent = 0i64;
+    let mut margin_top = 0i64;
+    let mut margin_left = 108i64;
+    let mut margin_bottom = 0i64;
+    let mut margin_right = 108i64;
     let mut tbl_w_auto = true;
     let mut col_widths: Vec<i64> = Vec::new();
     let mut border_top = false;
@@ -1317,8 +1537,22 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
                                 }
                             }
                         }
-                        "tblCellMar" | "tblLayout" | "tblStyle" | "tblOverlap" | "shd"
-                        | "tblCaption" | "tblDescription" => return Err(unsupported()),
+                        "tblCellMar" => parse_tbl_cell_mar(
+                            p,
+                            &mut margin_top,
+                            &mut margin_left,
+                            &mut margin_bottom,
+                            &mut margin_right,
+                        )?,
+                        "tblLayout" => {
+                            let ty = p.attr_local("type").unwrap_or("autofit");
+                            if ty != "autofit" && ty != "fixed" {
+                                return Err(unsupported());
+                            }
+                        }
+                        "tblStyle" | "tblOverlap" | "shd" | "tblCaption" | "tblDescription" => {
+                            return Err(unsupported());
+                        }
                         _ => return Err(unsupported()),
                     }
                 }
@@ -1332,7 +1566,13 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
                     col_widths.push(parse_twip(w)?);
                 }
             }
-            "tr" => rows.push(parse_plain_row(child, col_widths.len())?),
+            "tr" => rows.push(parse_plain_row(
+                pkg,
+                doc_part,
+                child,
+                col_widths.len(),
+                dpi,
+            )?),
             "bookmarkStart" | "bookmarkEnd" => {}
             _ => return Err(unsupported()),
         }
@@ -1360,9 +1600,7 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
         border_inside_v = false;
     }
     let mut fills = Vec::new();
-    let mut row_heights = Vec::new();
     for (ri, row) in rows.iter().enumerate() {
-        row_heights.push(row.height_twip);
         for (ci, cell) in row.cells.iter().enumerate() {
             if let Some(rgb) = cell.fill {
                 fills.push((ri, ci, rgb));
@@ -1372,7 +1610,11 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
     Ok(PendingTable {
         indent_twip: indent,
         col_widths,
-        row_heights,
+        margin_top,
+        margin_left,
+        margin_bottom,
+        margin_right,
+        rows,
         fills,
         border_top,
         border_left,
@@ -1384,17 +1626,24 @@ fn parse_plain_table(tbl: &Element) -> Result<PendingTable, Error> {
 }
 
 struct PendingRowBuild {
-    height_twip: i64,
+    height: RowHeight,
     cells: Vec<PendingCellBuild>,
 }
 
 struct PendingCellBuild {
     fill: Option<[u8; 3]>,
     tc_w: Option<i64>,
+    paras: Vec<CellPara>,
 }
 
-fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, Error> {
-    let mut height: Option<i64> = None;
+fn parse_plain_row(
+    pkg: &Package,
+    doc_part: &str,
+    tr: &Element,
+    expect_cols: usize,
+    dpi: RenderDpi,
+) -> Result<PendingRowBuild, Error> {
+    let mut height = RowHeight::Auto;
     let mut cells: Vec<PendingCellBuild> = Vec::new();
     for child in tr.element_children() {
         match child.local_name() {
@@ -1409,11 +1658,13 @@ fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, 
                             let n = parse_twip(h)?;
                             let rule = p.attr_local("hRule").unwrap_or("atLeast");
                             match rule {
-                                "exact" | "atLeast" => height = Some(n),
+                                "exact" => height = RowHeight::Exact(n),
+                                "atLeast" => height = RowHeight::AtLeast(n),
                                 "auto" => {
                                     if n != 0 {
                                         return Err(unsupported());
                                     }
+                                    height = RowHeight::Auto;
                                 }
                                 _ => return Err(unsupported()),
                             }
@@ -1424,7 +1675,7 @@ fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, 
                     }
                 }
             }
-            "tc" => cells.push(parse_plain_cell(child)?),
+            "tc" => cells.push(parse_plain_cell(pkg, doc_part, child, dpi)?),
             "tblPrEx" => return Err(unsupported()),
             _ => return Err(unsupported()),
         }
@@ -1432,17 +1683,18 @@ fn parse_plain_row(tr: &Element, expect_cols: usize) -> Result<PendingRowBuild, 
     if expect_cols != 0 && cells.len() != expect_cols {
         return Err(unsupported());
     }
-    let height_twip = match height {
-        Some(h) if h > 0 => h,
-        _ => empty_auto_row_twip()?,
-    };
-    Ok(PendingRowBuild { height_twip, cells })
+    Ok(PendingRowBuild { height, cells })
 }
 
-fn parse_plain_cell(tc: &Element) -> Result<PendingCellBuild, Error> {
+fn parse_plain_cell(
+    pkg: &Package,
+    doc_part: &str,
+    tc: &Element,
+    dpi: RenderDpi,
+) -> Result<PendingCellBuild, Error> {
     let mut fill = None;
     let mut tc_w = None;
-    let mut paras = 0usize;
+    let mut paras: Vec<CellPara> = Vec::new();
     for child in tc.element_children() {
         match child.local_name() {
             "tcPr" => {
@@ -1474,21 +1726,19 @@ fn parse_plain_cell(tc: &Element) -> Result<PendingCellBuild, Error> {
                     }
                 }
             }
-            "p" => {
-                paras += 1;
-                // 只允许空段：无 run 或空 text。
-                if !cell_para_is_empty(child)? {
-                    return Err(unsupported());
-                }
-            }
+            "p" => match paragraph_kind(pkg, doc_part, child, dpi)? {
+                StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
+                StoryPara::Empty { before, after } => paras.push(CellPara::Empty { before, after }),
+                StoryPara::Text(text) => paras.push(CellPara::Text(text)),
+            },
             "tbl" => return Err(unsupported()),
             _ => return Err(unsupported()),
         }
     }
-    if paras != 1 {
+    if paras.is_empty() {
         return Err(unsupported());
     }
-    Ok(PendingCellBuild { fill, tc_w })
+    Ok(PendingCellBuild { fill, tc_w, paras })
 }
 
 /// 	blW=auto 且每一列的 dxa 	cW 在各行都一致时，用它作列宽。
@@ -1506,34 +1756,6 @@ fn preferred_auto_col_widths(rows: &[PendingRowBuild], n: usize) -> Option<Vec<i
         widths.push(w);
     }
     Some(widths)
-}
-
-fn cell_para_is_empty(p: &Element) -> Result<bool, Error> {
-    for child in p.element_children() {
-        match child.local_name() {
-            "pPr" => {
-                // 允许空 pPr；有复杂项则 NI。
-                if child.element_children().next().is_some() {
-                    return Err(unsupported());
-                }
-            }
-            "r" => {
-                for r in child.element_children() {
-                    match r.local_name() {
-                        "rPr" => {}
-                        "t" => {
-                            if !element_text(r).is_empty() {
-                                return Ok(false);
-                            }
-                        }
-                        _ => return Err(unsupported()),
-                    }
-                }
-            }
-            _ => return Err(unsupported()),
-        }
-    }
-    Ok(true)
 }
 
 fn parse_shd_fill(shd: &Element) -> Result<[u8; 3], Error> {
@@ -1579,7 +1801,13 @@ fn border_is_single_black(el: &Element) -> Result<bool, Error> {
     }
 }
 
-fn paint_table(rgb: &mut [u8], page_w: u32, page_h: u32, tbl: &TableBlit, dpi: RenderDpi) -> Result<(), Error> {
+fn paint_table(
+    rgb: &mut [u8],
+    page_w: u32,
+    page_h: u32,
+    tbl: &TableBlit,
+    dpi: RenderDpi,
+) -> Result<(), Error> {
     let x0 = twip_px_unclamped(tbl.left_twip, dpi)? as i32;
     let y0 = twip_px_unclamped(tbl.top_twip, dpi)? as i32;
     if x0 < 0 || y0 < 0 {

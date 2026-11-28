@@ -1,4 +1,4 @@
-//! exportPageImage：没有字的页画成白 PNG。单节多段（可空段、段前段后、左缩进、拉丁空格换行）不透明 Calibri 可画；显式 line/lineRule 仍 NI。无文字表（填色/single·nil 边）可画；合并/表内文字仍 NI。
+//! exportPageImage：没有字的页画成白 PNG。单节多段（可空段、段前段后、左缩进、拉丁空格换行）不透明 Calibri 可画；显式 line/lineRule 仍 NI。表（填色/single·nil 边、默认单元格边距、表内拉丁 Calibri）可画；合并/表样式仍 NI。
 
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -701,20 +701,84 @@ fn table_fill_without_borders_exact_rgb() {
 }
 
 #[cfg(windows)]
-#[test]
-fn table_cell_with_text_is_not_implemented() {
-    let src = tmp("tbl-text");
+fn create_table(tag: &str, cells: Vec<Vec<&'static str>>) -> PathBuf {
+    let src = tmp(tag);
     run_ok(json!({
         "schemaVersion": 1,
         "action": "create",
         "path": src.to_string_lossy(),
         "document": {
             "paragraphs": [{ "text": "" }],
-            "tables": [{ "cells": [["A", ""], ["", ""]] }]
+            "tables": [{ "cells": cells }]
         }
     }));
-    let err = export(&src, "page:1").unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    src
+}
+
+#[cfg(windows)]
+#[test]
+fn table_cell_latin_text_stays_inside_default_grid() {
+    // 空段后 2×2 默认表：边框墨迹仍是 (96,114) 193×38。
+    // 「A」画在首格默认左距 108 twip 内，不把盒子撑出网格。
+    let doc = create_table("tbl-text", vec![vec!["A", ""], vec!["", ""]]);
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 193, 38));
+    // 内容区应有字形墨迹（不只是边框）。
+    let mut marked = 0u32;
+    for y in 118..132 {
+        for x in 102..130 {
+            let i = ((y * 794 + x) * 3) as usize;
+            if rgb[i..i + 3] != [255, 255, 255] {
+                marked += 1;
+            }
+        }
+    }
+    assert!(
+        marked > 10,
+        "expected Calibri A ink inside first cell, marked={marked}"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn default_tbl_cell_mar_keeps_empty_table_ink_box() {
+    let src = create_empty_table("tbl-mar0", 2, 2);
+    let doc = rewrite_document_xml(&src, "cellmar", |xml| {
+        let needle = "</w:tblPr>";
+        assert!(xml.contains(needle), "tblPr");
+        let mar = concat!(
+            r#"<w:tblCellMar>"#,
+            r#"<w:top w:w="0" w:type="dxa"/>"#,
+            r#"<w:left w:w="108" w:type="dxa"/>"#,
+            r#"<w:bottom w:w="0" w:type="dxa"/>"#,
+            r#"<w:right w:w="108" w:type="dxa"/>"#,
+            r#"</w:tblCellMar>"#,
+            r#"<w:tblLayout w:type="autofit"/>"#,
+        );
+        xml.replacen(needle, &format!("{mar}{needle}"), 1)
+    });
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 114, 193, 38));
+}
+
+#[cfg(windows)]
+#[test]
+fn table_cell_latin_wrap_grows_the_row() {
+    let doc = create_table(
+        "tbl-wrap",
+        vec![vec![
+            "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen",
+            "",
+        ], vec!["", ""]],
+    );
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!((x, y), (96, 114));
+    assert_eq!(w, 193);
+    assert!(
+        h > 50,
+        "wrapped cell text should grow the auto row taller than two empty rows, got h={h}"
+    );
 }
 
 #[cfg(windows)]
