@@ -52,7 +52,7 @@ ooxp --input - < spark-106.json
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底（没有颜色变换的纯色、不透明拉伸铺满 PNG，以及两停点、直角、不透明线性渐变）、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
-docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁 Calibri 多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或无文字表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`），或 default 页眉拉丁 Calibri（`pgMar/@header` 顶距，正文原点不位移），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/样式/表内文字、奇偶/首页页眉、页脚、页眉内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁或东亚文字多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`、默认单元格边距、表内拉丁或东亚文字），或 default 页眉/页脚拉丁或东亚文字（`pgMar/@header` 顶距、`@footer` 底距到内容底，正文原点不位移），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/表样式、奇偶/首页页眉页脚、页眉页脚内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
@@ -2694,12 +2694,12 @@ irstRow 打开时，在 96dpi 幻灯片画布上沿首行底边画 4 像素实�
 - 空段行距按 Calibri 的 2500/2048 × 11 磅。一页放不下就换页。有字页只接受恰好一段；同一段拉丁按空格贪心换行（`Face::typo_width`，与绘制同套 StringFormat；不按逐字 GetGlyphOutline 前进宽之和）。可排宽度为页左右边距之间减去左/start 缩进。单词本身宽于可排区或换行后总高度超出本页剩余正文高时报 `NotImplemented`
 - 有字页可带左/start 缩进和段前间距；段后、首行/悬挂/右缩进必须为 0 或缺省；对齐只接受 left/start。run 可带 `sz` / 匹配的 `szCs`，`rFonts` 的 ascii/hAnsi 须为 Calibri 或沿用默认，颜色只接受 auto 或 000000
 - 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。非 Windows 对有字页报 `NotImplemented`。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可
-- 无文字表：按 `tblGrid` 累计列宽与行高（空自动行 = Calibri 11 行进 + 11 twip；显式 `trHeight` exact/atLeast）、`tblInd`、单元格 `shd` 纯色填色；`tblBorders` 的 `single`（sz 2/4/8、color auto/000000）画 1px 黑，`nil`/`none` 或去掉边框节点为无边。合并、`tblStyle`、表内文字/图、`tblLayout`、`tblCellMar`、非上述边色/粗细报 `NotImplemented`。不等宽且 `tblW=auto` 时 Word 可能 autofit，本实现跟 OOXML 网格，不建模 autofit
+- 表：按 `tblGrid` 累计列宽与行高（空自动行 = Calibri 11 行进 + 11 twip；显式 `trHeight` exact/atLeast）、`tblInd`、默认单元格边距、单元格 `shd` 纯色填色、表内拉丁或东亚文字；`tblBorders` 的 `single`（sz 2/4/8、color auto/000000）画 1px 黑，`nil`/`none` 或去掉边框节点为无边。合并、`tblStyle`、表内图、非默认 `tblCellMar`、非上述边色/粗细报 `NotImplemented`。不等宽且 `tblW=auto` 时 Word 可能 autofit，本实现跟 OOXML 网格，不建模 autofit
 - 单节 `wp:inline` 不透明 PNG 且 extent 像素与源一致时 1:1 拷贝；浮动/裁剪/透明/混排/缩放报 `NotImplemented`
 - 宽高按该节 `w:pgSz` 的 twip，按请求 DPI 将 `twip × dpi / 1440` 四舍五入成像素（96 dpi 时与现有 `twip × 96 / 1440` 一致）。磅按 `磅 × dpi / 72`。嵌入图 extent 按 `EMU × dpi / 914400` 截断，与历史 96 dpi 截断一致。不要套用 Excel 先按 96 量化再放大的行高规则
 - 宽或高小于 1 或大于 4096 报 `NotImplemented`
 - 页边距缺了按 1440 twip。正文区放不下一行报 `NotImplemented`
-- 合并/样式/表内文字的表、浮动图、分节符、或空段行距不是上面这一档，报 `NotImplemented`。无文字 plain 表与 1:1 不透明 inline PNG 已画
+- 合并/表样式/表内图、浮动图、分节符、或空段行距不是上面这一档，报 `NotImplemented`。plain 表（含表内拉丁或东亚文字）与 1:1 不透明 inline PNG 已画
 - xlsx 与 pptx 报 `InvalidField`
 - id 不是 `page:N` 报 `InvalidId`。页不存在报 `IdNotFound`
 - 成功时 `contentType` 为 `image/png`。源包不写回

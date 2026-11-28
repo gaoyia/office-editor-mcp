@@ -1,13 +1,13 @@
-//! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的不透明拉丁 Calibri 正文，画成 PNG。
+//! 把 docx 里没有可见内容的一页，或单节、单段（可换行）的正文（拉丁或东亚文字，系统字体），画成 PNG。
 //! 宽高按节的 `w:pgSz`，按请求 DPI 将 twip×dpi/1440 四舍五入。省略或 96 时与历史 `twip×96/1440` 像素一致。
 //! 磅与 EMU 也按请求 DPI 原生换算（磅×dpi/72；嵌入图 extent 为 EMU×dpi/914400 截断，与历史 96 dpi 截断一致）。
 //! 不要套用 Excel 先按 96 量化再放大的行高规则。只影响本次 PNG，不改源包，也不改系统 DPI。
-//! 单节拉丁 Calibri 多段（可空段、段前段后、左缩进）与空格换行已画；字形灰度仍暂缓。
-//! 不透明 `wp:inline` PNG（extent 像素=源）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁 Calibri）已画。
-//! default 页眉拉丁 Calibri（按 pgMar/@header 顶距，正文不位移）已画；奇偶/首页/页脚/页眉图表域仍 NI。
+//! 单节拉丁或东亚文字多段（可空段、段前段后、左缩进；空格换行，东亚按字换行）已画；字形灰度仍暂缓。
+//! 不透明 `wp:inline` PNG（extent 像素=源）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字）已画。
+//! default 页眉/页脚拉丁或东亚文字（按 pgMar/@header 顶距、@footer 底距到内容底，正文不位移）已画；奇偶/首页/页眉页脚内图/表/域仍 NI。
 //! 合并/表样式、浮动绕排、显式行距/分页控制、缩放图与文图混排仍不画。
-//! 有字页在 Windows 上走已有公开 GDI+ `AntiAliasGridFit` 路径。字形灰度按 C25 第 0 段暂缓，
-//! 不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
+//! 文字走已有 `Face`：Windows 上按系统字体名打开 GDI+ `AntiAliasGridFit`；非 Windows 先找系统字体，找不到再回退江城黑体子集。
+//! 字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 use std::io::Cursor;
 
 use crate::error::{Error, ErrorKind, IdReason};
@@ -27,6 +27,44 @@ const LINE_NUM: u64 = 550_000;
 const LINE_DEN: u64 = 2048;
 const MAX_PX: u64 = 4096;
 const DEFAULT_SZ: u32 = 22;
+
+#[derive(Clone, Debug)]
+struct RunFonts {
+    ascii: String,
+    east_asia: String,
+}
+
+impl Default for RunFonts {
+    fn default() -> Self {
+        Self {
+            ascii: "Calibri".into(),
+            east_asia: "宋体".into(),
+        }
+    }
+}
+
+fn is_east_asia_char(ch: char) -> bool {
+    let u = ch as u32;
+    matches!(
+        u,
+        0x1100..=0x11FF
+            | 0x2E80..=0x9FFF
+            | 0xA960..=0xA97F
+            | 0xAC00..=0xD7AF
+            | 0xF900..=0xFAFF
+            | 0xFE10..=0xFE1F
+            | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFFEF
+            | 0x20000..=0x2FA1F
+    )
+}
+
+fn reject_theme_font(name: &str) -> Result<(), Error> {
+    if name.is_empty() || name.starts_with('+') {
+        return Err(unsupported());
+    }
+    Ok(())
+}
 
 #[allow(dead_code)]
 pub fn export_page_image(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
@@ -61,6 +99,8 @@ struct Layout {
     pages: Vec<Page>,
     /// 每页重复绘制的 default 页眉文字（无则空）。
     header_texts: Vec<TextLine>,
+    /// 每页重复绘制的 default 页脚文字（无则空）。
+    footer_texts: Vec<TextLine>,
 }
 
 struct Page {
@@ -101,6 +141,7 @@ struct TextLine {
     left_twip: i64,
     top_twip: i64,
     body_w_twip: i64,
+    fonts: RunFonts,
 }
 
 fn layout_of(
@@ -113,13 +154,12 @@ fn layout_of(
         return Err(unsupported());
     }
     let body = root.child_by_local("body").ok_or_else(unsupported)?;
-    let (story, sect) = body_story(pkg, doc_part, body, dpi)?;
+    let defaults = parse_plain_defaults(pkg, doc_part)?;
+    let (story, sect) = body_story(pkg, doc_part, body, dpi, &defaults)?;
     let has_text = story.iter().any(|p| matches!(p, StoryPara::Text(_)));
     let has_image = story.iter().any(|p| matches!(p, StoryPara::Image(_)));
     let has_table = story.iter().any(|p| matches!(p, StoryPara::Table(_)));
-    if !sect_is_plain(sect, has_text || has_image || has_table)
-        || !uses_default_calibri(pkg, doc_part)?
-    {
+    if !sect_is_plain(sect, has_text || has_image || has_table) {
         return Err(unsupported());
     }
     let page_w = page_twip(sect, "w")?;
@@ -146,23 +186,36 @@ fn layout_of(
     if pages.is_empty() {
         return Err(unsupported());
     }
-    // 页眉在上边距区域内绘制，不把正文 y 下推（oracle：blank 页眉时正文 A 仍在 101）。
-    let header_texts = layout_default_header(pkg, doc_part, sect, left, body_w, page_h, dpi)?;
+    // 页眉/页脚在边距区域内绘制，不把正文 y 位移（oracle：blank 页眉时正文 A 仍在 101）。
+    let header_texts =
+        layout_default_header(pkg, doc_part, sect, left, body_w, page_h, dpi, &defaults)?;
+    let footer_texts =
+        layout_default_footer(pkg, doc_part, sect, left, body_w, page_h, dpi, &defaults)?;
     Ok(Layout {
         width,
         height,
         dpi,
         pages,
         header_texts,
+        footer_texts,
     })
 }
 
 /// `w:pgMar/@w:header`：页顶到页眉内容顶。缺省 708（Word 默认半英寸），不是正文 top 的 1440。
 fn header_distance_twip(sect: &Element) -> Result<i64, Error> {
+    hf_distance_twip(sect, "header")
+}
+
+/// `w:pgMar/@w:footer`：页底到页脚内容底（ECMA 17.6.11）。缺省 708，不是正文 bottom 的 1440。
+fn footer_distance_twip(sect: &Element) -> Result<i64, Error> {
+    hf_distance_twip(sect, "footer")
+}
+
+fn hf_distance_twip(sect: &Element, local: &str) -> Result<i64, Error> {
     let Some(mar) = sect.child_by_local("pgMar") else {
         return Ok(708);
     };
-    match mar.attr_local("header") {
+    match mar.attr_local(local) {
         None => Ok(708),
         Some(raw) => {
             let n = parse_twip(raw)?;
@@ -174,7 +227,7 @@ fn header_distance_twip(sect: &Element) -> Result<i64, Error> {
     }
 }
 
-/// 解析并排版唯一的 default 页眉。无引用 → 空；有图/表/域/页脚/奇偶首页 → NI。
+/// 解析并排版唯一的 default 页眉。无引用 → 空；有图/表/域/奇偶首页 → NI。
 fn layout_default_header(
     pkg: &Package,
     doc_part: &str,
@@ -183,14 +236,9 @@ fn layout_default_header(
     body_w: i64,
     page_h: i64,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<Vec<TextLine>, Error> {
     if super::hf::even_and_odd_headers(pkg, doc_part)? {
-        return Err(unsupported());
-    }
-    if sect
-        .element_children()
-        .any(|c| c.local_name() == "footerReference")
-    {
         return Err(unsupported());
     }
     let rels = crate::opc::Relationships::from_package(pkg, doc_part)?;
@@ -216,7 +264,7 @@ fn layout_default_header(
     if doc.root.local_name() != "hdr" {
         return Err(unsupported());
     }
-    let story = header_body_story(pkg, &part, &doc.root, dpi)?;
+    let story = hf_plain_story(pkg, &part, &doc.root, dpi, defaults)?;
     if story.is_empty() {
         return Ok(Vec::new());
     }
@@ -233,17 +281,90 @@ fn layout_default_header(
     Ok(page.texts.clone())
 }
 
-fn header_body_story(
+fn layout_default_footer(
     pkg: &Package,
-    header_part: &str,
-    hdr: &Element,
+    doc_part: &str,
+    sect: &Element,
+    margin_left: i64,
+    body_w: i64,
+    page_h: i64,
     dpi: RenderDpi,
+    defaults: &RunFonts,
+) -> Result<Vec<TextLine>, Error> {
+    if super::hf::even_and_odd_headers(pkg, doc_part)? {
+        return Err(unsupported());
+    }
+    let rels = crate::opc::Relationships::from_package(pkg, doc_part)?;
+    let map = super::hf::explicit_refs(
+        sect,
+        "footerReference",
+        super::hf::HfKind::Footer,
+        doc_part,
+        &rels,
+    )?;
+    if map.contains_key(&super::hf::HfType::Even) || map.contains_key(&super::hf::HfType::First) {
+        return Err(unsupported());
+    }
+    let Some(part) = map.get(&super::hf::HfType::Default).cloned() else {
+        return Ok(Vec::new());
+    };
+    let footer_dist = footer_distance_twip(sect)?;
+    if footer_dist <= 0 || footer_dist >= page_h {
+        return Err(unsupported());
+    }
+    let bytes = pkg.get(&part)?;
+    let doc = xml::parse(bytes)?;
+    if doc.root.local_name() != "ftr" {
+        return Err(unsupported());
+    }
+    let story = hf_plain_story(pkg, &part, &doc.root, dpi, defaults)?;
+    if story.is_empty() {
+        return Ok(Vec::new());
+    }
+    // 先在页顶排版量高度，再把内容底对齐到 page_h - @footer；向上长，不把正文原点上推。
+    let pages = layout_story(&story, margin_left, 0, body_w, page_h, dpi)?;
+    if pages.len() != 1 {
+        return Err(unsupported());
+    }
+    let page = &pages[0];
+    if !page.images.is_empty() || !page.tables.is_empty() {
+        return Err(unsupported());
+    }
+    if page.texts.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut content_bottom = 0i64;
+    for line in &page.texts {
+        let bottom = line.top_twip.saturating_add(line_advance_twip(line.sz)?);
+        if bottom > content_bottom {
+            content_bottom = bottom;
+        }
+    }
+    let target_bottom = page_h - footer_dist;
+    let shift = target_bottom - content_bottom;
+    let mut texts = page.texts.clone();
+    for line in &mut texts {
+        let top = line.top_twip.checked_add(shift).ok_or_else(unsupported)?;
+        if top < 0 {
+            return Err(unsupported());
+        }
+        line.top_twip = top;
+    }
+    Ok(texts)
+}
+
+fn hf_plain_story(
+    pkg: &Package,
+    part: &str,
+    root: &Element,
+    dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<Vec<StoryPara>, Error> {
     let mut story = Vec::new();
-    for child in hdr.element_children() {
+    for child in root.element_children() {
         match child.local_name() {
             "p" => {
-                let para = paragraph_kind(pkg, header_part, child, dpi)?;
+                let para = paragraph_kind(pkg, part, child, dpi, defaults)?;
                 match para {
                     StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
                     other => story.push(other),
@@ -411,7 +532,7 @@ fn layout_story(
                 if left_twip < 0 {
                     return Err(unsupported());
                 }
-                let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
+                let rows = wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
                 let adv = line_advance_twip(line.sz)?;
                 for (i, row) in rows.into_iter().enumerate() {
                     let lead = if i == 0 { line.before_twip.max(0) } else { 0 };
@@ -434,6 +555,7 @@ fn layout_story(
                             left_twip,
                             top_twip: y,
                             body_w_twip: content_w,
+                            fonts: line.fonts.clone(),
                         });
                     y = y.saturating_add(adv);
                     at_page_top = false;
@@ -463,47 +585,41 @@ fn line_offset_twip(line_index: u64, sz: u32) -> Result<i64, Error> {
     i64::try_from(n).map_err(|_| unsupported())
 }
 
-fn wrap_latin_lines(
+fn wrap_text_lines(
     text: &str,
     sz: u32,
     body_w_twip: i64,
     dpi: RenderDpi,
+    fonts: &RunFonts,
 ) -> Result<Vec<String>, Error> {
-    #[cfg(not(windows))]
-    {
-        let _ = (text, sz, body_w_twip, dpi);
-        return Err(unsupported());
+    let ascii = open_run_face(sz, dpi, &fonts.ascii)?;
+    let east = if fonts.east_asia == fonts.ascii {
+        None
+    } else {
+        Some(open_run_face(sz, dpi, &fonts.east_asia)?)
+    };
+    let max_w = f64::from(twip_px_unclamped(body_w_twip, dpi)?);
+    if typo_width_mixed(text, &ascii, east.as_ref()) <= max_w {
+        return Ok(vec![text.to_string()]);
     }
-    #[cfg(windows)]
-    {
-        let pt = (sz as f32) / 2.0;
-        let px = dpi.pt_to_px_font(f64::from(pt)) as f32;
-        let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
-        let max_w = f64::from(twip_px_unclamped(body_w_twip, dpi)?);
-        if face.typo_width(text) <= max_w {
-            return Ok(vec![text.to_string()]);
+    // ASCII 空格贪心：断在最后一个仍放得下的空格；断点空格留在上行（与 Word 16.0 一致）。
+    // 东亚文字在没有空格时按字断开。不 collapse 多空格。
+    let mut lines: Vec<String> = Vec::new();
+    let mut start = 0usize;
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0usize;
+    let mut last_space: Option<usize> = None;
+    while i < chars.len() {
+        if chars[i] == ' ' {
+            last_space = Some(i);
         }
-        // ASCII 空格贪心：断在最后一个仍放得下的空格；断点空格留在上行（与 Word 16.0 一致）。
-        // 不 collapse 多空格。
-        let mut lines: Vec<String> = Vec::new();
-        let mut start = 0usize;
-        let chars: Vec<char> = text.chars().collect();
-        let mut i = 0usize;
-        let mut last_space: Option<usize> = None;
-        while i < chars.len() {
-            if chars[i] == ' ' {
-                last_space = Some(i);
-            }
-            let end = i + 1;
-            let candidate: String = chars[start..end].iter().collect();
-            if face.typo_width(&candidate) <= max_w {
-                i += 1;
-                continue;
-            }
-            let Some(sp) = last_space.filter(|&sp| sp >= start) else {
-                return Err(unsupported());
-            };
-            // 上行含断点空格。
+        let end = i + 1;
+        let candidate: String = chars[start..end].iter().collect();
+        if typo_width_mixed(&candidate, &ascii, east.as_ref()) <= max_w {
+            i += 1;
+            continue;
+        }
+        if let Some(sp) = last_space.filter(|&sp| sp >= start) {
             let line: String = chars[start..=sp].iter().collect();
             if line.trim().is_empty() {
                 return Err(unsupported());
@@ -515,29 +631,58 @@ fn wrap_latin_lines(
             if start >= chars.len() {
                 break;
             }
-            // 单个词本身超宽
             if chars[start] != ' ' {
                 let mut j = start;
                 while j < chars.len() && chars[j] != ' ' {
                     j += 1;
                 }
                 let word: String = chars[start..j].iter().collect();
-                if face.typo_width(&word) > max_w {
-                    return Err(unsupported());
+                if typo_width_mixed(&word, &ascii, east.as_ref()) > max_w {
+                    // 整词超宽：若是东亚则按字切，拉丁词仍 NI（与历史一致）。
+                    if !word.chars().any(is_east_asia_char) {
+                        return Err(unsupported());
+                    }
                 }
             }
+            continue;
         }
-        if start < chars.len() {
-            let rest: String = chars[start..].iter().collect();
-            if !rest.is_empty() {
-                lines.push(rest);
-            }
+        if i > start && (is_east_asia_char(chars[i]) || is_east_asia_char(chars[i - 1])) {
+            let line: String = chars[start..i].iter().collect();
+            lines.push(line);
+            start = i;
+            last_space = None;
+            continue;
         }
-        if lines.is_empty() {
-            return Err(unsupported());
-        }
-        Ok(lines)
+        return Err(unsupported());
     }
+    if start < chars.len() {
+        lines.push(chars[start..].iter().collect());
+    }
+    if lines.is_empty() {
+        return Err(unsupported());
+    }
+    Ok(lines)
+}
+
+fn typo_width_mixed(text: &str, ascii: &Face, east: Option<&Face>) -> f64 {
+    text.chars()
+        .map(|ch| face_for_char(ch, ascii, east).typo_width(&ch.to_string()))
+        .sum()
+}
+
+fn face_for_char<'a>(ch: char, ascii: &'a Face, east: Option<&'a Face>) -> &'a Face {
+    if is_east_asia_char(ch) {
+        east.unwrap_or(ascii)
+    } else {
+        ascii
+    }
+}
+
+fn open_run_face(sz: u32, dpi: RenderDpi, name: &str) -> Result<Face, Error> {
+    reject_theme_font(name)?;
+    let pt = (sz as f32) / 2.0;
+    let px = dpi.pt_to_px_font(f64::from(pt)) as f32;
+    Face::open_named(px, false, name).ok_or_else(unsupported)
 }
 
 struct PendingText {
@@ -546,6 +691,7 @@ struct PendingText {
     indent_twip: i64,
     before_twip: i64,
     after_twip: i64,
+    fonts: RunFonts,
 }
 
 enum StoryPara {
@@ -599,6 +745,7 @@ fn body_story<'a>(
     doc_part: &str,
     body: &'a Element,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<(Vec<StoryPara>, &'a Element), Error> {
     let mut story: Vec<StoryPara> = Vec::new();
     let mut sect: Option<&Element> = None;
@@ -609,14 +756,14 @@ fn body_story<'a>(
                 if sect.is_some() {
                     return Err(unsupported());
                 }
-                story.push(paragraph_kind(pkg, doc_part, child, dpi)?);
+                story.push(paragraph_kind(pkg, doc_part, child, dpi, defaults)?);
             }
             "tbl" => {
                 if sect.is_some() {
                     return Err(unsupported());
                 }
                 story.push(StoryPara::Table(parse_plain_table(
-                    pkg, doc_part, child, dpi,
+                    pkg, doc_part, child, dpi, defaults,
                 )?));
             }
             "sectPr" => {
@@ -642,6 +789,7 @@ fn paragraph_kind(
     doc_part: &str,
     p: &Element,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
     let mut before = 0i64;
@@ -704,7 +852,7 @@ fn paragraph_kind(
             rgb: img.4,
         }));
     }
-    let (text, sz) = plain_run(run)?;
+    let (text, sz, fonts) = plain_run(run, defaults)?;
     if text.is_empty() {
         return Ok(StoryPara::Empty { before, after });
     }
@@ -714,6 +862,7 @@ fn paragraph_kind(
         indent_twip: indent,
         before_twip: before,
         after_twip: after,
+        fonts,
     }))
 }
 
@@ -779,13 +928,14 @@ fn parse_plain_ppr(
     }
     Ok(())
 }
-fn plain_run(run: &Element) -> Result<(String, u32), Error> {
+fn plain_run(run: &Element, defaults: &RunFonts) -> Result<(String, u32, RunFonts), Error> {
     let mut sz = DEFAULT_SZ;
+    let mut fonts = defaults.clone();
     let mut text = String::new();
     let mut saw_text = false;
     for child in run.element_children() {
         match child.local_name() {
-            "rPr" => parse_plain_rpr(child, &mut sz)?,
+            "rPr" => parse_plain_rpr(child, &mut sz, &mut fonts)?,
             "t" => {
                 if saw_text {
                     return Err(unsupported());
@@ -799,13 +949,10 @@ fn plain_run(run: &Element) -> Result<(String, u32), Error> {
     if !saw_text || text.chars().any(|ch| ch.is_control() || ch == '\t') {
         return Err(unsupported());
     }
-    if !text.is_ascii() {
-        return Err(unsupported());
-    }
-    Ok((text, sz))
+    Ok((text, sz, fonts))
 }
 
-fn parse_plain_rpr(rpr: &Element, sz: &mut u32) -> Result<(), Error> {
+fn parse_plain_rpr(rpr: &Element, sz: &mut u32, fonts: &mut RunFonts) -> Result<(), Error> {
     let mut sz_cs: Option<u32> = None;
     for child in rpr.element_children() {
         match child.local_name() {
@@ -815,18 +962,7 @@ fn parse_plain_rpr(rpr: &Element, sz: &mut u32) -> Result<(), Error> {
                 if child.element_children().next().is_some() {
                     return Err(unsupported());
                 }
-                for (name, value) in child.attrs.iter() {
-                    let local = local_of(name);
-                    match local {
-                        "ascii" | "hAnsi" => {
-                            if value != "Calibri" {
-                                return Err(unsupported());
-                            }
-                        }
-                        "eastAsia" | "cs" | "hint" => {}
-                        _ => return Err(unsupported()),
-                    }
-                }
+                apply_rfonts_attrs(child, fonts)?;
             }
             "color" => {
                 let val = child.attr_local("val").unwrap_or("auto");
@@ -883,8 +1019,10 @@ fn sect_is_plain(sect: &Element, has_text: bool) -> bool {
         .all(|child| match child.local_name() {
             "pgSz" | "pgMar" | "type" | "formProt" | "paperSrc" | "textDirection" | "bidi"
             | "rtlGutter" | "pgNumType" => true,
-            // 本切片只认 default 页眉；奇偶/首页/页脚仍 NI（计划不做，除非已差 0）。
-            "headerReference" => child.attr_local("type").unwrap_or("default") == "default",
+            // 本切片只认 default 页眉/页脚；奇偶/首页仍 NI。
+            "headerReference" | "footerReference" => {
+                child.attr_local("type").unwrap_or("default") == "default"
+            }
             "titlePg" => !has_text,
             "vAlign" => {
                 let val = child.attr_local("val").unwrap_or("top");
@@ -898,57 +1036,93 @@ fn sect_is_plain(sect: &Element, has_text: bool) -> bool {
         })
 }
 
-fn uses_default_calibri(pkg: &Package, doc_part: &str) -> Result<bool, Error> {
+fn parse_plain_defaults(pkg: &Package, doc_part: &str) -> Result<RunFonts, Error> {
     let Some(part) = styles::styles_part(pkg, doc_part)? else {
-        return Ok(false);
+        return Err(unsupported());
     };
     let styles = xml::parse(pkg.get(&part)?)?;
     let root = &styles.root;
     let Some(defaults) = root.child_by_local("docDefaults") else {
-        return Ok(false);
+        return Err(unsupported());
     };
     if let Some(ppr_default) = defaults.child_by_local("pPrDefault") {
         if let Some(ppr) = ppr_default.child_by_local("pPr") {
             if ppr.element_children().next().is_some() {
-                return Ok(false);
+                return Err(unsupported());
             }
         }
         if ppr_default
             .element_children()
             .any(|el| el.local_name() != "pPr")
         {
-            return Ok(false);
+            return Err(unsupported());
         }
     }
     let Some(rpr) = defaults
         .child_by_local("rPrDefault")
         .and_then(|el| el.child_by_local("rPr"))
     else {
-        return Ok(false);
+        return Err(unsupported());
     };
     if rpr.child_by_local("sz").and_then(|el| el.attr_local("val")) != Some("22") {
-        return Ok(false);
+        return Err(unsupported());
     }
-    if rpr
-        .child_by_local("rFonts")
-        .and_then(|el| el.attr_local("ascii"))
-        != Some("Calibri")
-    {
-        return Ok(false);
+    let mut fonts = RunFonts::default();
+    if let Some(rfonts) = rpr.child_by_local("rFonts") {
+        // 只读属性，复用 run 解析；缺省值已在 fonts 里。
+        parse_plain_rpr_fonts_only(rfonts, &mut fonts)?;
     }
     let Some(normal) = root.element_children().find(|el| {
         el.local_name() == "style"
             && el.attr_local("type") == Some("paragraph")
             && el.attr_local("default") == Some("1")
     }) else {
-        return Ok(false);
+        return Err(unsupported());
     };
     if let Some(ppr) = normal.child_by_local("pPr") {
         if ppr.element_children().next().is_some() {
-            return Ok(false);
+            return Err(unsupported());
         }
     }
-    Ok(true)
+    Ok(fonts)
+}
+
+fn parse_plain_rpr_fonts_only(rfonts: &Element, fonts: &mut RunFonts) -> Result<(), Error> {
+    if rfonts.element_children().next().is_some() {
+        return Err(unsupported());
+    }
+    apply_rfonts_attrs(rfonts, fonts)
+}
+
+fn apply_rfonts_attrs(rfonts: &Element, fonts: &mut RunFonts) -> Result<(), Error> {
+    let mut ascii: Option<String> = None;
+    let mut h_ansi: Option<String> = None;
+    for (name, value) in rfonts.attrs.iter() {
+        let local = local_of(name);
+        match local {
+            "ascii" => {
+                reject_theme_font(value)?;
+                ascii = Some(value.to_string());
+            }
+            "hAnsi" => {
+                reject_theme_font(value)?;
+                h_ansi = Some(value.to_string());
+            }
+            "eastAsia" => {
+                reject_theme_font(value)?;
+                fonts.east_asia = value.to_string();
+            }
+            "cs" | "hint" => {}
+            _ => return Err(unsupported()),
+        }
+    }
+    match (ascii, h_ansi) {
+        (Some(a), Some(h)) if a != h => return Err(unsupported()),
+        (Some(a), _) => fonts.ascii = a,
+        (None, Some(h)) => fonts.ascii = h,
+        (None, None) => {}
+    }
+    Ok(())
 }
 
 fn page_twip(sect: &Element, local: &str) -> Result<i64, Error> {
@@ -995,6 +1169,9 @@ fn paint_page(layout: &Layout, page: u32) -> Result<Vec<u8>, Error> {
         for line in &layout.header_texts {
             paint_text(&mut rgb, layout.width, layout.height, line, layout.dpi)?;
         }
+        for line in &layout.footer_texts {
+            paint_text(&mut rgb, layout.width, layout.height, line, layout.dpi)?;
+        }
         for line in &page_items.texts {
             paint_text(&mut rgb, layout.width, layout.height, line, layout.dpi)?;
         }
@@ -1037,27 +1214,49 @@ fn paint_text(
     line: &TextLine,
     dpi: RenderDpi,
 ) -> Result<(), Error> {
-    #[cfg(not(windows))]
-    {
-        let _ = (rgb, width, height, line, dpi);
+    let ascii = open_run_face(line.sz, dpi, &line.fonts.ascii)?;
+    let east = if line.fonts.east_asia == line.fonts.ascii {
+        None
+    } else {
+        Some(open_run_face(line.sz, dpi, &line.fonts.east_asia)?)
+    };
+    let body_w = f64::from(twip_px_unclamped(line.body_w_twip, dpi)?);
+    if typo_width_mixed(&line.text, &ascii, east.as_ref()) > body_w {
         return Err(unsupported());
     }
-    #[cfg(windows)]
-    {
-        let pt = (line.sz as f32) / 2.0;
-        let px = dpi.pt_to_px_font(f64::from(pt)) as f32;
-        let face = Face::open_named(px, false, "Calibri").ok_or_else(unsupported)?;
-        let body_w = f64::from(twip_px_unclamped(line.body_w_twip, dpi)?);
-        if face.typo_width(&line.text) > body_w {
-            return Err(unsupported());
+    let mut x = f64::from(twip_px_unclamped(line.left_twip, dpi)?);
+    let y = f64::from(twip_px_unclamped(line.top_twip, dpi)?);
+    let mut buf = String::new();
+    let mut current_is_ea: Option<bool> = None;
+    for ch in line.text.chars() {
+        let is_ea = is_east_asia_char(ch);
+        if current_is_ea != Some(is_ea) && !buf.is_empty() {
+            let face = if current_is_ea == Some(true) {
+                east.as_ref().unwrap_or(&ascii)
+            } else {
+                &ascii
+            };
+            let adv = face.typo_width(&buf);
+            face.draw(&buf, x, y, [0, 0, 0], |px, py, color, cov| {
+                blend(rgb, width, height, px, py, color, cov);
+            });
+            x += adv;
+            buf.clear();
         }
-        let x = f64::from(twip_px_unclamped(line.left_twip, dpi)?);
-        let y = f64::from(twip_px_unclamped(line.top_twip, dpi)?);
-        face.draw(&line.text, x, y, [0, 0, 0], |px, py, color, cov| {
+        current_is_ea = Some(is_ea);
+        buf.push(ch);
+    }
+    if !buf.is_empty() {
+        let face = if current_is_ea == Some(true) {
+            east.as_ref().unwrap_or(&ascii)
+        } else {
+            &ascii
+        };
+        face.draw(&buf, x, y, [0, 0, 0], |px, py, color, cov| {
             blend(rgb, width, height, px, py, color, cov);
         });
-        Ok(())
     }
+    Ok(())
 }
 
 fn twip_px_unclamped(twip: i64, dpi: RenderDpi) -> Result<u32, Error> {
@@ -1369,7 +1568,7 @@ fn cell_paras_height(
             }
             CellPara::Text(line) => {
                 let content_w = inner_cell_width(col_w, table, line.indent_twip)?;
-                let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
+                let rows = wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
                 let n = i64::try_from(rows.len()).map_err(|_| unsupported())?;
                 if n <= 0 {
                     return Err(unsupported());
@@ -1443,7 +1642,8 @@ fn table_text_lines(
                         let left_twip = cell_left
                             .saturating_add(table.margin_left.max(0))
                             .saturating_add(line.indent_twip.max(0));
-                        let rows = wrap_latin_lines(&line.text, line.sz, content_w, dpi)?;
+                        let rows =
+                            wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
                         let adv = cell_line_box_twip(line.sz)?;
                         y = y.saturating_add(line.before_twip.max(0));
                         for row_text in rows {
@@ -1457,6 +1657,7 @@ fn table_text_lines(
                                 left_twip,
                                 top_twip: y,
                                 body_w_twip: content_w,
+                                fonts: line.fonts.clone(),
                             });
                             y = y.saturating_add(adv);
                         }
@@ -1476,6 +1677,7 @@ fn parse_plain_table(
     doc_part: &str,
     tbl: &Element,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<PendingTable, Error> {
     let mut indent = 0i64;
     let mut margin_top = 0i64;
@@ -1572,6 +1774,7 @@ fn parse_plain_table(
                 child,
                 col_widths.len(),
                 dpi,
+                defaults,
             )?),
             "bookmarkStart" | "bookmarkEnd" => {}
             _ => return Err(unsupported()),
@@ -1642,6 +1845,7 @@ fn parse_plain_row(
     tr: &Element,
     expect_cols: usize,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<PendingRowBuild, Error> {
     let mut height = RowHeight::Auto;
     let mut cells: Vec<PendingCellBuild> = Vec::new();
@@ -1675,7 +1879,7 @@ fn parse_plain_row(
                     }
                 }
             }
-            "tc" => cells.push(parse_plain_cell(pkg, doc_part, child, dpi)?),
+            "tc" => cells.push(parse_plain_cell(pkg, doc_part, child, dpi, defaults)?),
             "tblPrEx" => return Err(unsupported()),
             _ => return Err(unsupported()),
         }
@@ -1691,6 +1895,7 @@ fn parse_plain_cell(
     doc_part: &str,
     tc: &Element,
     dpi: RenderDpi,
+    defaults: &RunFonts,
 ) -> Result<PendingCellBuild, Error> {
     let mut fill = None;
     let mut tc_w = None;
@@ -1726,7 +1931,7 @@ fn parse_plain_cell(
                     }
                 }
             }
-            "p" => match paragraph_kind(pkg, doc_part, child, dpi)? {
+            "p" => match paragraph_kind(pkg, doc_part, child, dpi, defaults)? {
                 StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
                 StoryPara::Empty { before, after } => paras.push(CellPara::Empty { before, after }),
                 StoryPara::Text(text) => paras.push(CellPara::Text(text)),

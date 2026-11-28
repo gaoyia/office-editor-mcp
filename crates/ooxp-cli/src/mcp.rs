@@ -315,7 +315,7 @@ fn tools(lang: Lang) -> Value {
             ),
             tool(
                 "exportPageImage",
-                say(lang, "按页 id 把 docx 的一页写成 PNG，写到 output。已画单节空页、拉丁 Calibri 多段、不缩放的不透明 inline PNG、表（含表内拉丁 Calibri）和 default 页眉。源文件保持不变，像素不进入 inspect 树。", "Draw one docx page to a PNG at output by page id. Drawn: a single-section empty page, Latin Calibri paragraphs, an unscaled opaque inline PNG, a table (including Latin Calibri cell text), and/or a default header. The source file stays unchanged, and the pixels do not enter the inspect tree."),
+                say(lang, "按页 id 把 docx 的一页写成 PNG，写到 output。已画单节空页、拉丁或东亚文字多段、不缩放的不透明 inline PNG、表（含表内拉丁或东亚文字）和 default 页眉/页脚。源文件保持不变，像素不进入 inspect 树。", "Draw one docx page to a PNG at output by page id. Drawn: a single-section empty page, Latin or East Asian paragraphs, an unscaled opaque inline PNG, a table (including Latin or East Asian cell text), and/or a default header or footer. The source file stays unchanged, and the pixels do not enter the inspect tree."),
                 domain_properties(Action::ExportPageImage, lang),
                 &["path", "id", "output"],
                 lang,

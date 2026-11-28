@@ -939,3 +939,181 @@ fn header_with_table_is_not_implemented() {
     let err = export(&src, "page:1").unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
+
+fn create_with_footer(tag: &str, body: &str, footer: &str) -> PathBuf {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": body }],
+            "footers": [{ "type": "default", "paragraphs": [{ "text": footer }] }]
+        }
+    }));
+    src
+}
+
+fn create_with_header_and_footer(tag: &str, body: &str, header: &str, footer: &str) -> PathBuf {
+    let src = tmp(tag);
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": body }],
+            "headers": [{ "type": "default", "paragraphs": [{ "text": header }] }],
+            "footers": [{ "type": "default", "paragraphs": [{ "text": footer }] }]
+        }
+    }));
+    src
+}
+
+#[cfg(windows)]
+#[test]
+fn default_footer_letter_matches_ink_bottom() {
+    // oracle：footer=708，A4 高 16838，Calibri 11 行进 268 → 内容顶 15862 twip ≈ 1057 px；
+    // 「F」墨迹顶约 1062（与页眉/正文同源 +5）。
+    let doc = create_with_footer("ftr-only", "", "F");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!(y, 1062, "x={x} y={y} w={w} h={h}");
+    assert!(x == 96 || x == 97, "x={x}");
+    assert!(h >= 8 && w >= 6, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn blank_footer_does_not_shift_body_ink() {
+    let doc = create_with_footer("ftr-blank", "A", "");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 101, 9, 9));
+}
+
+#[cfg(windows)]
+#[test]
+fn footer_and_body_stack_without_body_shift() {
+    let doc = create_with_footer("ftr-both", "A", "F");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!(x, 96);
+    assert_eq!(y, 101); // body top unchanged
+                        // 页脚「F」墨迹约在 1062..；合成盒底应覆盖到页脚。
+    assert!(y + h > 1068, "h={h} bottom={}", y + h - 1);
+    assert!(w >= 8);
+}
+
+#[cfg(windows)]
+#[test]
+fn header_footer_and_body_stack_without_body_shift() {
+    let doc = create_with_header_and_footer("hf-both", "A", "H", "F");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!(x, 96);
+    assert_eq!(y, 52); // header top
+    assert!(y + h > 1068, "h={h} bottom={}", y + h - 1);
+    assert!(w >= 8);
+}
+
+#[cfg(windows)]
+#[test]
+fn footer_with_table_is_not_implemented() {
+    let src = tmp("ftr-tbl");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "" }],
+            "footers": [{
+                "type": "default",
+                "paragraphs": [{ "text": "" }],
+                "tables": [{ "cells": [["", ""], ["", ""]] }]
+            }]
+        }
+    }));
+    let err = export(&src, "page:1").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn east_asia_ideograph_export_succeeds() {
+    // create 默认 eastAsia=宋体；非 Windows 走系统字体或江城黑体回退，不应再因非 ASCII 报 NI。
+    let src = create_text("cjk-export", "中");
+    export(&src, "page:1").unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn east_asia_ideograph_is_drawn() {
+    let src = create_text("cjk-yi", "中");
+    let (_, _, rgb) = decode_png(&export(&src, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    // 正文原点附近；宋体字形大小不必与 Calibri「A」的 9×9 一致。
+    assert!(x >= 90 && x <= 120, "x={x} y={y} w={w} h={h}");
+    assert!(y >= 90 && y <= 130, "x={x} y={y} w={w} h={h}");
+    assert!(w >= 8 && h >= 8, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn mixed_latin_and_cjk_is_drawn() {
+    let src = create_text("mix-cjk", "Hello 中文");
+    let (_, _, rgb) = decode_png(&export(&src, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert_eq!(ink_box(&rgb, 794, 1123).1, y);
+    assert!(x >= 90 && x <= 110, "x={x}");
+    assert!(y >= 90 && y <= 130, "y={y}");
+    assert!(w >= 24, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn named_latin_font_is_drawn() {
+    let src = tmp("arial-a");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "runs": [{ "text": "A", "font": "Arial" }] }] }
+    }));
+    let (_, _, rgb) = decode_png(&export(&src, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert!(x >= 90 && x <= 120, "x={x} y={y} w={w} h={h}");
+    assert!(y >= 90 && y <= 130, "x={x} y={y} w={w} h={h}");
+    assert!(w >= 6 && h >= 6, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn footer_cjk_is_drawn_near_bottom() {
+    let doc = create_with_footer("ftr-cjk", "", "页");
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    let (x, y, w, h) = ink_box(&rgb, 794, 1123);
+    assert!(x >= 90 && x <= 120, "x={x} y={y} w={w} h={h}");
+    // 默认页脚内容底在 16130 twip 一带，墨迹应靠近页底而非正文 101。
+    assert!(y >= 1000, "y={y}");
+    assert!(w >= 8 && h >= 8, "w={w} h={h}");
+}
+
+#[cfg(windows)]
+#[test]
+fn table_cell_cjk_wrap_grows_the_row() {
+    let src = tmp("cell-cjk-wrap");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": {
+            "paragraphs": [{ "text": "" }],
+            "tables": [{
+                "cells": [["一二三四五六七八九十十一十二十三十四十五十六", ""], ["", ""]]
+            }]
+        }
+    }));
+    let (_, _, rgb) = decode_png(&export(&src, "page:1").unwrap());
+    let (_x, y, w, h) = ink_box(&rgb, 794, 1123);
+    // 空 2×2 网格高 38；按字换行后行高应明显增加。
+    assert_eq!(y, 114, "y={y}");
+    assert!(h > 38, "w={w} h={h}");
+}
