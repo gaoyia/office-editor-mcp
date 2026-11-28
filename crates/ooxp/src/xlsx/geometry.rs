@@ -278,16 +278,30 @@ fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool, dpi: f64) -> Result
 
 #[cfg(not(windows))]
 fn normal_mdw(name: &str, pt: f64, bold: bool, italic: bool, dpi: f64) -> Result<f64, Error> {
+    if !dpi.is_finite() || dpi <= 0.0 {
+        return Err(unsupported());
+    }
+    // 与 Windows / 规范示例锁定的 Calibri 11 @96 MDW 保持一致。
     if name.eq_ignore_ascii_case("Calibri")
         && (pt - 11.0).abs() < 0.0001
         && !bold
         && !italic
         && (dpi - 96.0).abs() < 0.0001
     {
-        Ok(7.0)
-    } else {
-        Err(unsupported())
+        return Ok(7.0);
     }
+    let face =
+        super::chart_gdi::Face::open_cell_dpi((pt * dpi / 72.0) as f32, bold, italic, name, dpi)
+            .ok_or_else(unsupported)?;
+    let mut mdw = 0.0_f64;
+    for digit in '0'..='9' {
+        let w = face.width(&digit.to_string());
+        if !w.is_finite() || w <= 0.0 {
+            return Err(unsupported());
+        }
+        mdw = mdw.max(w);
+    }
+    Ok(mdw)
 }
 
 #[cfg(test)]

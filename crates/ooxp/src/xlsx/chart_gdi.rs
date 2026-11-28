@@ -2535,65 +2535,186 @@ mod win {
 pub use win::{
     fill_device_beziers, fill_device_ellipse, fill_device_line, fill_device_opaque_round_rect,
     fill_device_polyline, fill_device_rotated_rect, fill_device_round_rect,
-    fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window, Face,
+    fill_device_stroked_rect, scale_device_rgba, scale_device_rgba_window,
 };
 
-#[cfg(not(windows))]
-pub struct Face;
+#[cfg(all(windows, not(test)))]
+pub use win::Face;
+
+#[cfg(any(not(windows), test))]
+#[path = "face_soft.rs"]
+mod face_soft;
 
 #[cfg(not(windows))]
+pub use face_soft::Face;
+
+/// 单元测试里临时改走软件字体。正式 Windows 构建和集成测试仍走 GDI。
+#[cfg(test)]
+pub(crate) struct SoftFontGuard {
+    _private: (),
+}
+
+#[cfg(test)]
+impl Drop for SoftFontGuard {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        FORCE_SOFT_FONTS.with(|flag| flag.set(false));
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn force_soft_fonts() -> SoftFontGuard {
+    #[cfg(windows)]
+    FORCE_SOFT_FONTS.with(|flag| flag.set(true));
+    SoftFontGuard { _private: () }
+}
+
+#[cfg(all(windows, test))]
+thread_local! {
+    static FORCE_SOFT_FONTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(all(windows, test))]
+pub struct Face {
+    inner: FaceInner,
+}
+
+#[cfg(all(windows, test))]
+enum FaceInner {
+    Gdi(win::Face),
+    Soft(face_soft::Face),
+}
+
+#[cfg(all(windows, test))]
 impl Face {
-    pub fn open(_: f32, _: bool) -> Option<Self> {
-        None
+    fn from_gdi(face: win::Face) -> Self {
+        Self {
+            inner: FaceInner::Gdi(face),
+        }
     }
 
-    pub fn open_dpi(_: f32, _: bool, _: f64) -> Option<Self> {
-        None
+    fn from_soft(face: face_soft::Face) -> Self {
+        Self {
+            inner: FaceInner::Soft(face),
+        }
     }
 
-    pub fn open_named(_: f32, _: bool, _: &str) -> Option<Self> {
-        None
+    fn prefer_soft() -> bool {
+        FORCE_SOFT_FONTS.with(|flag| flag.get())
     }
 
-    pub fn open_cell(_: f32, _: bool, _: bool, _: &str) -> Option<Self> {
-        None
+    pub fn open(px: f32, bold: bool) -> Option<Self> {
+        if Self::prefer_soft() {
+            return face_soft::Face::open(px, bold).map(Self::from_soft);
+        }
+        win::Face::open(px, bold).map(Self::from_gdi)
     }
 
-    pub fn open_cell_dpi(_: f32, _: bool, _: bool, _: &str, _: f64) -> Option<Self> {
-        None
+    pub fn open_dpi(px: f32, bold: bool, dpi: f64) -> Option<Self> {
+        if Self::prefer_soft() {
+            return face_soft::Face::open_dpi(px, bold, dpi).map(Self::from_soft);
+        }
+        win::Face::open_dpi(px, bold, dpi).map(Self::from_gdi)
     }
 
-    pub fn line_height(&self) -> f64 {
-        0.0
-    }
-    pub fn descent(&self) -> f64 {
-        0.0
-    }
-    pub fn cell_height(&self) -> Option<f64> {
-        None
+    pub fn open_named(px: f32, bold: bool, name: &str) -> Option<Self> {
+        if Self::prefer_soft() {
+            return face_soft::Face::open_named(px, bold, name).map(Self::from_soft);
+        }
+        win::Face::open_named(px, bold, name).map(Self::from_gdi)
     }
 
-    pub fn em_box(&self) -> f64 {
-        0.0
+    pub fn open_cell(px: f32, bold: bool, italic: bool, name: &str) -> Option<Self> {
+        if Self::prefer_soft() {
+            return face_soft::Face::open_cell(px, bold, italic, name).map(Self::from_soft);
+        }
+        win::Face::open_cell(px, bold, italic, name).map(Self::from_gdi)
     }
 
-    pub fn width(&self, _: &str) -> f64 {
-        0.0
+    pub fn open_cell_dpi(px: f32, bold: bool, italic: bool, name: &str, dpi: f64) -> Option<Self> {
+        if Self::prefer_soft() {
+            return face_soft::Face::open_cell_dpi(px, bold, italic, name, dpi)
+                .map(Self::from_soft);
+        }
+        win::Face::open_cell_dpi(px, bold, italic, name, dpi).map(Self::from_gdi)
+    }
+
+    pub fn family_name(&self) -> &str {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.family_name(),
+            FaceInner::Soft(face) => face.family_name(),
+        }
+    }
+
+    pub fn width(&self, text: &str) -> f64 {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.width(text),
+            FaceInner::Soft(face) => face.width(text),
+        }
     }
 
     pub fn layout_width(&self, text: &str) -> f64 {
-        self.width(text)
+        match &self.inner {
+            FaceInner::Gdi(face) => face.layout_width(text),
+            FaceInner::Soft(face) => face.layout_width(text),
+        }
     }
 
     pub fn typo_width(&self, text: &str) -> f64 {
-        self.width(text)
+        match &self.inner {
+            FaceInner::Gdi(face) => face.typo_width(text),
+            FaceInner::Soft(face) => face.typo_width(text),
+        }
     }
 
     pub fn cell_pad(&self) -> f64 {
-        2.0
+        match &self.inner {
+            FaceInner::Gdi(face) => face.cell_pad(),
+            FaceInner::Soft(face) => face.cell_pad(),
+        }
     }
 
-    pub fn draw(&self, _: &str, _: f64, _: f64, _: [u8; 3], _: impl FnMut(i32, i32, [u8; 3], u8)) {}
+    pub fn line_height(&self) -> f64 {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.line_height(),
+            FaceInner::Soft(face) => face.line_height(),
+        }
+    }
+
+    pub fn descent(&self) -> f64 {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.descent(),
+            FaceInner::Soft(face) => face.descent(),
+        }
+    }
+
+    pub fn cell_height(&self) -> Option<f64> {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.cell_height(),
+            FaceInner::Soft(face) => face.cell_height(),
+        }
+    }
+
+    pub fn em_box(&self) -> f64 {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.em_box(),
+            FaceInner::Soft(face) => face.em_box(),
+        }
+    }
+
+    pub fn draw(
+        &self,
+        text: &str,
+        x: f64,
+        top: f64,
+        color: [u8; 3],
+        blend: impl FnMut(i32, i32, [u8; 3], u8),
+    ) {
+        match &self.inner {
+            FaceInner::Gdi(face) => face.draw(text, x, top, color, blend),
+            FaceInner::Soft(face) => face.draw(text, x, top, color, blend),
+        }
+    }
 
     pub fn draw_slide(
         &self,
@@ -2603,7 +2724,10 @@ impl Face {
         color: [u8; 3],
         blend: impl FnMut(i32, i32, [u8; 3], u8),
     ) {
-        self.draw(text, x, top, color, blend);
+        match &self.inner {
+            FaceInner::Gdi(face) => face.draw_slide(text, x, top, color, blend),
+            FaceInner::Soft(face) => face.draw_slide(text, x, top, color, blend),
+        }
     }
 
     pub fn draw_cells(
@@ -2614,7 +2738,10 @@ impl Face {
         color: [u8; 3],
         blend: impl FnMut(i32, i32, [u8; 3], u8),
     ) {
-        self.draw(text, x, top, color, blend);
+        match &self.inner {
+            FaceInner::Gdi(face) => face.draw_cells(text, x, top, color, blend),
+            FaceInner::Soft(face) => face.draw_cells(text, x, top, color, blend),
+        }
     }
 
     pub fn draw_cells_rotated(
@@ -2626,8 +2753,14 @@ impl Face {
         color: [u8; 3],
         blend: impl FnMut(i32, i32, [u8; 3], u8),
     ) {
-        let _ = (origin_x, origin_y, deg);
-        self.draw(text, origin_x, origin_y, color, blend);
+        match &self.inner {
+            FaceInner::Gdi(face) => {
+                face.draw_cells_rotated(text, origin_x, origin_y, deg, color, blend)
+            }
+            FaceInner::Soft(face) => {
+                face.draw_cells_rotated(text, origin_x, origin_y, deg, color, blend)
+            }
+        }
     }
 }
 
