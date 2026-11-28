@@ -52,7 +52,7 @@ ooxp --input - < spark-106.json
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底（没有颜色变换的纯色、不透明拉伸铺满 PNG，以及两停点、直角、不透明线性渐变）、PNG、矩形、带 `a:alpha` 的半透明纯色矩形、线宽恰好是 1 或 2 像素的直角矩形描边、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、直角折线连接符、弯曲连接符、形状文字、簇状柱形图和纯色单元格的表写成图。像素不进 inspect。画不了的对象让整页失败。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`，半透明会叠在已画像素上。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。
 create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。
-docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁或东亚文字多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`、默认单元格边距、表内拉丁或东亚文字），或 default 页眉/页脚拉丁或东亚文字（`pgMar/@header` 顶距、`@footer` 底距到内容底，正文原点不位移），写成 PNG。像素不进 inspect。显式 `w:spacing/@w:line|@w:lineRule`、keepNext/widow/pageBreakBefore、右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/表样式、奇偶/首页页眉页脚、页眉页脚内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
+docx 另有 `exportPageImage`：按页 id 把没有字的一页，或 Windows 上单节拉丁或东亚文字多段（可空段、段前段后、左缩进、按空格换行），或单节 `wp:inline` 且 extent 像素与源一致的不透明嵌入 PNG，或表（单元格填色、`single`/`nil` 边、`tblGrid`/`tblInd`/`trHeight`、默认单元格边距、表内拉丁或东亚文字），或 default 页眉/页脚拉丁或东亚文字（`pgMar/@header` 顶距、`@footer` 底距到内容底，正文原点不位移），或显式行距（`w:spacing/@w:line|@w:lineRule` auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl），写成 PNG。像素不进 inspect。右/首行缩进、浮动绕排、裁剪、透明、文图混排、缩放图、合并/表样式、奇偶/首页页眉页脚、页眉页脚内图/表/域还不画（NotImplemented，不静默丢段）。字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，

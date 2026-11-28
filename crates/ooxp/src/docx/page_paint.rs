@@ -5,7 +5,7 @@
 //! 单节拉丁或东亚文字多段（可空段、段前段后、左缩进；空格换行，东亚按字换行）已画；字形灰度仍暂缓。
 //! 不透明 `wp:inline` PNG（extent 像素=源）与表（填色 + single/nil 边、tblGrid/tblInd/trHeight、默认单元格边距、表内拉丁或东亚文字）已画。
 //! default 页眉/页脚拉丁或东亚文字（按 pgMar/@header 顶距、@footer 底距到内容底，正文不位移）已画；奇偶/首页/页眉页脚内图/表/域仍 NI。
-//! 合并/表样式、浮动绕排、显式行距/分页控制、缩放图与文图混排仍不画。
+//! 显式行距（line/lineRule auto/exact/atLeast）与分页控制（pageBreakBefore/keepNext/keepLines/widowControl）已画。合并/表样式、浮动绕排、缩放图与文图混排仍不画。
 //! 文字走已有 `Face`：Windows 上按系统字体名打开 GDI+ `AntiAliasGridFit`；非 Windows 先找系统字体，找不到再回退江城黑体子集。
 //! 字形灰度按 C25 第 0 段暂缓，不把灰阶差算成整页通过，也不借用幻灯片文字的布局近似许可。
 use std::io::Cursor;
@@ -407,8 +407,123 @@ fn ensure_space(
     Ok(())
 }
 
-/// 多段流式排版。行距见 `line_advance_twip`（Calibri TTF 2500/2048）。
-/// 段前在段起始计入一次；换到新页顶后不再补段前。空段占一行默认 11 磅行高。
+fn start_new_page(pages: &mut Vec<Page>, y: &mut i64, at_page_top: &mut bool, margin_top: i64) {
+    if *at_page_top {
+        return;
+    }
+    pages.push(Page {
+        texts: Vec::new(),
+        images: Vec::new(),
+        tables: Vec::new(),
+    });
+    *y = margin_top;
+    *at_page_top = true;
+}
+
+fn para_page_break_before(para: &StoryPara) -> bool {
+    match para {
+        StoryPara::Empty(flow) => flow.page_break_before,
+        StoryPara::Text(line) => line.page_break_before,
+        StoryPara::Image(img) => img.page_break_before,
+        StoryPara::Table(_) => false,
+    }
+}
+
+fn para_keep_next(para: &StoryPara) -> bool {
+    match para {
+        StoryPara::Empty(flow) => flow.keep_next,
+        StoryPara::Text(line) => line.keep_next,
+        StoryPara::Image(img) => img.keep_next,
+        StoryPara::Table(_) => false,
+    }
+}
+
+fn para_first_need(para: &StoryPara, body_w: i64, dpi: RenderDpi) -> Result<i64, Error> {
+    match para {
+        StoryPara::Empty(flow) => Ok(flow
+            .before
+            .max(0)
+            .saturating_add(line_advance_spaced(DEFAULT_SZ, flow.line)?)),
+        StoryPara::Text(line) => {
+            let content_w = body_w.saturating_sub(line.indent_twip.max(0));
+            if content_w <= 0 {
+                return Err(unsupported());
+            }
+            Ok(line
+                .before_twip
+                .max(0)
+                .saturating_add(line_advance_spaced(line.sz, line.line)?))
+        }
+        StoryPara::Image(img) => Ok(img.before_twip.max(0).saturating_add(emu_twip(img.cy_emu)?)),
+        StoryPara::Table(table) => {
+            let row_heights = table_row_heights(table, dpi)?;
+            let table_h: i64 = row_heights.iter().copied().sum();
+            if table_h <= 0 {
+                return Err(unsupported());
+            }
+            Ok(table_h)
+        }
+    }
+}
+
+fn para_block_height(para: &StoryPara, body_w: i64, dpi: RenderDpi) -> Result<i64, Error> {
+    match para {
+        StoryPara::Empty(flow) => Ok(flow
+            .before
+            .max(0)
+            .saturating_add(line_advance_spaced(DEFAULT_SZ, flow.line)?)
+            .saturating_add(flow.after.max(0))),
+        StoryPara::Text(line) => {
+            let content_w = body_w.saturating_sub(line.indent_twip.max(0));
+            if content_w <= 0 {
+                return Err(unsupported());
+            }
+            let rows = wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
+            let n = i64::try_from(rows.len()).map_err(|_| unsupported())?;
+            if n <= 0 {
+                return Err(unsupported());
+            }
+            Ok(line
+                .before_twip
+                .max(0)
+                .saturating_add(line_advance_spaced(line.sz, line.line)?.saturating_mul(n))
+                .saturating_add(line.after_twip.max(0)))
+        }
+        StoryPara::Image(img) => Ok(img
+            .before_twip
+            .max(0)
+            .saturating_add(emu_twip(img.cy_emu)?)
+            .saturating_add(img.after_twip.max(0))),
+        StoryPara::Table(table) => {
+            let row_heights = table_row_heights(table, dpi)?;
+            let table_h: i64 = row_heights.iter().copied().sum();
+            if table_h <= 0 {
+                return Err(unsupported());
+            }
+            Ok(table_h)
+        }
+    }
+}
+
+fn lines_fitting_now(y: i64, first_lead: i64, adv: i64, n: usize, page_bottom: i64) -> usize {
+    if n == 0 || adv <= 0 {
+        return 0;
+    }
+    if y.saturating_add(first_lead).saturating_add(adv) > page_bottom {
+        return 0;
+    }
+    let mut count = 1usize;
+    let mut yy = y.saturating_add(first_lead).saturating_add(adv);
+    while count < n && yy.saturating_add(adv) <= page_bottom {
+        yy = yy.saturating_add(adv);
+        count += 1;
+    }
+    count
+}
+
+/// 多段流式排版。缺省行距见 `line_advance_twip`（Calibri TTF 2500/2048）；
+/// 显式 `line`/`lineRule` 走 `line_advance_spaced`。段前在段起始计入一次。
+/// 空段占一行当前行距。分页：`pageBreakBefore` / `keepNext` / `keepLines` / 缺省开启的 `widowControl`。
 fn layout_story(
     story: &[StoryPara],
     margin_left: i64,
@@ -417,7 +532,7 @@ fn layout_story(
     body_h: i64,
     dpi: RenderDpi,
 ) -> Result<Vec<Page>, Error> {
-    // ??????????????floor(body_h * 2048 / 550000) ? ? ???
+    // 页底仍按 11 磅单倍行整数条数量化，避免 52 空段分页测试漂移。
     let adv11 = line_advance_twip(DEFAULT_SZ)?;
     let lines_fit = (body_h as u64).saturating_mul(LINE_DEN) / LINE_NUM;
     let usable = (lines_fit as i64).saturating_mul(adv11).min(body_h);
@@ -430,11 +545,37 @@ fn layout_story(
     let mut y = margin_top;
     let mut at_page_top = true;
 
-    for para in story {
+    for (idx, para) in story.iter().enumerate() {
+        if para_page_break_before(para) {
+            start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+        }
+        if para_keep_next(para) {
+            if let Some(next) = story.get(idx + 1) {
+                if !para_page_break_before(next) {
+                    let this_h = para_block_height(para, body_w, dpi)?;
+                    let next_first = para_first_need(next, body_w, dpi)?;
+                    let group = this_h.saturating_add(next_first);
+                    if y.saturating_add(group) > page_bottom && !at_page_top {
+                        if margin_top.saturating_add(group) <= page_bottom {
+                            start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+                        }
+                    }
+                }
+            }
+        }
         match para {
-            StoryPara::Empty { before, after } => {
-                let adv = adv11;
-                let before_use = (*before).max(0);
+            StoryPara::Empty(flow) => {
+                let adv = line_advance_spaced(DEFAULT_SZ, flow.line)?;
+                let before_use = flow.before.max(0);
+                if flow.keep_lines {
+                    let total = before_use.saturating_add(adv);
+                    if y.saturating_add(total) > page_bottom
+                        && !at_page_top
+                        && margin_top.saturating_add(total) <= page_bottom
+                    {
+                        start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+                    }
+                }
                 ensure_space(
                     &mut pages,
                     &mut y,
@@ -444,10 +585,9 @@ fn layout_story(
                     before_use.saturating_add(adv),
                 )?;
                 // 换页后段前仍计（文档首页/段起始与 Word COM 一致；见 first-before 探针）。
-                let before_use = (*before).max(0);
                 y = y.saturating_add(before_use).saturating_add(adv);
                 at_page_top = false;
-                y = y.saturating_add((*after).max(0));
+                y = y.saturating_add(flow.after.max(0));
             }
             StoryPara::Image(img) => {
                 let before_use = img.before_twip.max(0);
@@ -533,9 +673,62 @@ fn layout_story(
                     return Err(unsupported());
                 }
                 let rows = wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
-                let adv = line_advance_twip(line.sz)?;
+                let n = rows.len();
+                if n == 0 {
+                    return Err(unsupported());
+                }
+                let adv = line_advance_spaced(line.sz, line.line)?;
+                let first_lead = line.before_twip.max(0);
+                let total = first_lead.saturating_add(
+                    adv.saturating_mul(i64::try_from(n).map_err(|_| unsupported())?),
+                );
+                let fit = lines_fitting_now(y, first_lead, adv, n, page_bottom);
+                if line.keep_lines && fit < n && !at_page_top {
+                    if margin_top.saturating_add(total) <= page_bottom {
+                        start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+                    }
+                } else if line.widow_control && n >= 2 && fit < n {
+                    if fit == 1 && !at_page_top && margin_top.saturating_add(total) <= page_bottom {
+                        // 孤行：第一行不能单独留在页底。
+                        start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+                    } else if fit == n - 1 {
+                        // 寡行：最后一行不能单独落到下页；先放下 n-2 行再分页。
+                        let take_here = n - 2;
+                        for (i, row) in rows.into_iter().enumerate() {
+                            if i == take_here {
+                                start_new_page(&mut pages, &mut y, &mut at_page_top, margin_top);
+                            }
+                            let lead = if i == 0 { first_lead } else { 0 };
+                            ensure_space(
+                                &mut pages,
+                                &mut y,
+                                &mut at_page_top,
+                                margin_top,
+                                page_bottom,
+                                lead.saturating_add(adv),
+                            )?;
+                            y = y.saturating_add(lead);
+                            pages
+                                .last_mut()
+                                .ok_or_else(unsupported)?
+                                .texts
+                                .push(TextLine {
+                                    text: row,
+                                    sz: line.sz,
+                                    left_twip,
+                                    top_twip: y,
+                                    body_w_twip: content_w,
+                                    fonts: line.fonts.clone(),
+                                });
+                            y = y.saturating_add(adv);
+                            at_page_top = false;
+                        }
+                        y = y.saturating_add(line.after_twip.max(0));
+                        continue;
+                    }
+                }
                 for (i, row) in rows.into_iter().enumerate() {
-                    let lead = if i == 0 { line.before_twip.max(0) } else { 0 };
+                    let lead = if i == 0 { first_lead } else { 0 };
                     ensure_space(
                         &mut pages,
                         &mut y,
@@ -569,6 +762,54 @@ fn layout_story(
 
 fn line_advance_twip(sz: u32) -> Result<i64, Error> {
     line_offset_twip(1, sz)
+}
+
+fn line_advance_spaced(sz: u32, line: LineSpacing) -> Result<i64, Error> {
+    let single = line_advance_twip(sz)?;
+    match line {
+        LineSpacing::Auto {
+            two_hundred_fortieths,
+        } => {
+            if two_hundred_fortieths == 0 {
+                return Err(unsupported());
+            }
+            if two_hundred_fortieths == 240 {
+                return Ok(single);
+            }
+            Ok(single.saturating_mul(i64::from(two_hundred_fortieths)) / 240)
+        }
+        LineSpacing::Exact(twips) => {
+            if twips <= 0 {
+                return Err(unsupported());
+            }
+            Ok(twips)
+        }
+        LineSpacing::AtLeast(twips) => {
+            if twips <= 0 {
+                return Err(unsupported());
+            }
+            Ok(single.max(twips))
+        }
+    }
+}
+
+fn cell_line_box_spaced(sz: u32, line: LineSpacing) -> Result<i64, Error> {
+    let adv = line_advance_spaced(sz, line)?;
+    if sz == DEFAULT_SZ {
+        if matches!(
+            line,
+            LineSpacing::Auto {
+                two_hundred_fortieths: 240
+            }
+        ) {
+            empty_auto_row_twip()
+        } else {
+            let extra = empty_auto_row_twip()? - line_advance_twip(DEFAULT_SZ)?;
+            Ok(adv.saturating_add(extra.max(0)))
+        }
+    } else {
+        Ok(adv)
+    }
 }
 
 /// Calibri 单倍：`sz` 半磅 × 25000 / 2048 twip（见文件头 Calibri TTF 2500/2048）。
@@ -692,10 +933,56 @@ struct PendingText {
     before_twip: i64,
     after_twip: i64,
     fonts: RunFonts,
+    line: LineSpacing,
+    page_break_before: bool,
+    keep_next: bool,
+    keep_lines: bool,
+    widow_control: bool,
+}
+
+/// OOXML `w:spacing/@w:line` + `@w:lineRule`。缺省 `auto/240` 与历史单倍行距相同。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineSpacing {
+    Auto { two_hundred_fortieths: u32 },
+    Exact(i64),
+    AtLeast(i64),
+}
+
+impl Default for LineSpacing {
+    fn default() -> Self {
+        Self::Auto {
+            two_hundred_fortieths: 240,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ParaFlow {
+    before: i64,
+    after: i64,
+    line: LineSpacing,
+    page_break_before: bool,
+    keep_next: bool,
+    keep_lines: bool,
+    widow_control: bool,
+}
+
+impl Default for ParaFlow {
+    fn default() -> Self {
+        Self {
+            before: 0,
+            after: 0,
+            line: LineSpacing::default(),
+            page_break_before: false,
+            keep_next: false,
+            keep_lines: false,
+            widow_control: true,
+        }
+    }
 }
 
 enum StoryPara {
-    Empty { before: i64, after: i64 },
+    Empty(ParaFlow),
     Text(PendingText),
     Image(PendingImage),
     Table(PendingTable),
@@ -725,7 +1012,7 @@ enum RowHeight {
 }
 
 enum CellPara {
-    Empty { before: i64, after: i64 },
+    Empty(ParaFlow),
     Text(PendingText),
 }
 
@@ -733,6 +1020,8 @@ struct PendingImage {
     indent_twip: i64,
     before_twip: i64,
     after_twip: i64,
+    page_break_before: bool,
+    keep_next: bool,
     cx_emu: i64,
     cy_emu: i64,
     width_px: u32,
@@ -792,13 +1081,12 @@ fn paragraph_kind(
     defaults: &RunFonts,
 ) -> Result<StoryPara, Error> {
     let mut indent = 0i64;
-    let mut before = 0i64;
-    let mut after = 0i64;
+    let mut flow = ParaFlow::default();
     let mut run: Option<&Element> = None;
     for child in p.element_children() {
         match child.local_name() {
             "pPr" => {
-                parse_plain_ppr(child, &mut indent, &mut before, &mut after)?;
+                parse_plain_ppr(child, &mut indent, &mut flow)?;
             }
             "r" if run.is_none() => run = Some(child),
             _ => return Err(unsupported()),
@@ -812,7 +1100,7 @@ fn paragraph_kind(
         }) {
             return Err(unsupported());
         }
-        return Ok(StoryPara::Empty { before, after });
+        return Ok(StoryPara::Empty(flow));
     };
     // ? run?????? inline ???? NI?
     let mut drawing: Option<&Element> = None;
@@ -843,8 +1131,10 @@ fn paragraph_kind(
         let img = plain_inline_image(pkg, doc_part, drawing, dpi)?;
         return Ok(StoryPara::Image(PendingImage {
             indent_twip: indent,
-            before_twip: before,
-            after_twip: after,
+            before_twip: flow.before,
+            after_twip: flow.after,
+            page_break_before: flow.page_break_before,
+            keep_next: flow.keep_next,
             cx_emu: img.0,
             cy_emu: img.1,
             width_px: img.2,
@@ -854,24 +1144,47 @@ fn paragraph_kind(
     }
     let (text, sz, fonts) = plain_run(run, defaults)?;
     if text.is_empty() {
-        return Ok(StoryPara::Empty { before, after });
+        return Ok(StoryPara::Empty(flow));
     }
     Ok(StoryPara::Text(PendingText {
         text,
         sz,
         indent_twip: indent,
-        before_twip: before,
-        after_twip: after,
+        before_twip: flow.before,
+        after_twip: flow.after,
         fonts,
+        line: flow.line,
+        page_break_before: flow.page_break_before,
+        keep_next: flow.keep_next,
+        keep_lines: flow.keep_lines,
+        widow_control: flow.widow_control,
     }))
 }
 
-fn parse_plain_ppr(
-    ppr: &Element,
-    indent: &mut i64,
-    before: &mut i64,
-    after: &mut i64,
-) -> Result<(), Error> {
+fn parse_on_off(el: &Element, default_when_absent_val: bool) -> Result<bool, Error> {
+    if el.element_children().next().is_some() {
+        return Err(unsupported());
+    }
+    let mut seen_val = false;
+    let mut result = default_when_absent_val;
+    for (name, value) in el.attrs.iter() {
+        if local_of(name) != "val" {
+            return Err(unsupported());
+        }
+        if seen_val {
+            return Err(unsupported());
+        }
+        seen_val = true;
+        result = match value.as_str() {
+            "1" | "true" | "on" => true,
+            "0" | "false" | "off" => false,
+            _ => return Err(unsupported()),
+        };
+    }
+    Ok(result)
+}
+
+fn parse_plain_ppr(ppr: &Element, indent: &mut i64, flow: &mut ParaFlow) -> Result<(), Error> {
     for child in ppr.element_children() {
         match child.local_name() {
             "ind" => {
@@ -901,27 +1214,64 @@ fn parse_plain_ppr(
                 if child.element_children().next().is_some() {
                     return Err(unsupported());
                 }
+                let mut line_val: Option<i64> = None;
+                let mut line_rule: Option<String> = None;
                 for (name, value) in child.attrs.iter() {
                     let local = local_of(name);
                     match local {
-                        "before" => *before = parse_twip(value)?,
-                        "after" => *after = parse_twip(value)?,
+                        "before" => flow.before = parse_twip(value)?,
+                        "after" => flow.after = parse_twip(value)?,
                         "beforeAutospacing" | "afterAutospacing" => {
                             if value != "0" {
                                 return Err(unsupported());
                             }
                         }
-                        // 显式 line/lineRule：本切片只接受缺省单倍（Calibri 2500/2048）。
-                        "line" | "lineRule" => return Err(unsupported()),
+                        "line" => {
+                            let n = parse_twip(value)?;
+                            if n <= 0 {
+                                return Err(unsupported());
+                            }
+                            line_val = Some(n);
+                        }
+                        "lineRule" => line_rule = Some(value.to_string()),
                         _ => return Err(unsupported()),
                     }
                 }
+                let rule = line_rule.as_deref().unwrap_or("auto");
+                flow.line = match (line_val, rule) {
+                    (None, "auto") => LineSpacing::default(),
+                    (Some(v), "auto") => {
+                        let two_hundred_fortieths = u32::try_from(v).map_err(|_| unsupported())?;
+                        if two_hundred_fortieths == 0 {
+                            return Err(unsupported());
+                        }
+                        LineSpacing::Auto {
+                            two_hundred_fortieths,
+                        }
+                    }
+                    (Some(v), "exact") => LineSpacing::Exact(v),
+                    (Some(v), "atLeast") => LineSpacing::AtLeast(v),
+                    _ => return Err(unsupported()),
+                };
             }
             "jc" => {
                 let val = child.attr_local("val").unwrap_or("left");
                 if val != "left" && val != "start" {
                     return Err(unsupported());
                 }
+            }
+            "pageBreakBefore" => {
+                flow.page_break_before = parse_on_off(child, true)?;
+            }
+            "keepNext" => {
+                flow.keep_next = parse_on_off(child, true)?;
+            }
+            "keepLines" => {
+                flow.keep_lines = parse_on_off(child, true)?;
+            }
+            "widowControl" => {
+                // Word 缺省开启孤行/寡行控制；显式 val="0" 关闭后仍导出。
+                flow.widow_control = parse_on_off(child, true)?;
             }
             _ => return Err(unsupported()),
         }
@@ -1504,14 +1854,6 @@ fn empty_auto_row_twip() -> Result<i64, Error> {
 }
 
 /// 单元格行框：默认 11 磅走已对照过的空单元格自动行高（TTF 单倍 + 11 twip）；其它字号用 TTF 单倍。
-fn cell_line_box_twip(sz: u32) -> Result<i64, Error> {
-    if sz == DEFAULT_SZ {
-        empty_auto_row_twip()
-    } else {
-        line_advance_twip(sz)
-    }
-}
-
 fn parse_tbl_cell_mar(
     el: &Element,
     top: &mut i64,
@@ -1560,11 +1902,11 @@ fn cell_paras_height(
     let mut height = 0i64;
     for para in paras {
         match para {
-            CellPara::Empty { before, after } => {
+            CellPara::Empty(flow) => {
                 height = height
-                    .saturating_add((*before).max(0))
-                    .saturating_add(cell_line_box_twip(DEFAULT_SZ)?)
-                    .saturating_add((*after).max(0));
+                    .saturating_add(flow.before.max(0))
+                    .saturating_add(cell_line_box_spaced(DEFAULT_SZ, flow.line)?)
+                    .saturating_add(flow.after.max(0));
             }
             CellPara::Text(line) => {
                 let content_w = inner_cell_width(col_w, table, line.indent_twip)?;
@@ -1575,7 +1917,7 @@ fn cell_paras_height(
                 }
                 height = height
                     .saturating_add(line.before_twip.max(0))
-                    .saturating_add(cell_line_box_twip(line.sz)?.saturating_mul(n))
+                    .saturating_add(cell_line_box_spaced(line.sz, line.line)?.saturating_mul(n))
                     .saturating_add(line.after_twip.max(0));
             }
         }
@@ -1631,11 +1973,11 @@ fn table_text_lines(
             let mut y = row_top.saturating_add(table.margin_top.max(0));
             for para in &cell.paras {
                 match para {
-                    CellPara::Empty { before, after } => {
+                    CellPara::Empty(flow) => {
                         y = y
-                            .saturating_add((*before).max(0))
-                            .saturating_add(cell_line_box_twip(DEFAULT_SZ)?)
-                            .saturating_add((*after).max(0));
+                            .saturating_add(flow.before.max(0))
+                            .saturating_add(cell_line_box_spaced(DEFAULT_SZ, flow.line)?)
+                            .saturating_add(flow.after.max(0));
                     }
                     CellPara::Text(line) => {
                         let content_w = inner_cell_width(col_w, table, line.indent_twip)?;
@@ -1644,7 +1986,7 @@ fn table_text_lines(
                             .saturating_add(line.indent_twip.max(0));
                         let rows =
                             wrap_text_lines(&line.text, line.sz, content_w, dpi, &line.fonts)?;
-                        let adv = cell_line_box_twip(line.sz)?;
+                        let adv = cell_line_box_spaced(line.sz, line.line)?;
                         y = y.saturating_add(line.before_twip.max(0));
                         for row_text in rows {
                             // exact 行高时裁掉超出行底的行，避免盖住下一行。
@@ -1933,7 +2275,7 @@ fn parse_plain_cell(
             }
             "p" => match paragraph_kind(pkg, doc_part, child, dpi, defaults)? {
                 StoryPara::Image(_) | StoryPara::Table(_) => return Err(unsupported()),
-                StoryPara::Empty { before, after } => paras.push(CellPara::Empty { before, after }),
+                StoryPara::Empty(flow) => paras.push(CellPara::Empty(flow)),
                 StoryPara::Text(text) => paras.push(CellPara::Text(text)),
             },
             "tbl" => return Err(unsupported()),

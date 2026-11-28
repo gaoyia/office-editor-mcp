@@ -31,7 +31,7 @@ apply 在执行第一条 op 之前拒绝，报 `NotImplemented`，不写文件�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线、非负柱形和盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 可以按 `exportPageImage` 把单节空页、拉丁或东亚文字多段、不缩放的不透明 inline PNG、表（含表内拉丁或东亚文字）和 default 页眉/页脚写成 PNG，画不了的内容让整页失败。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
+本工具不支持预览。xlsx 的簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图和普通饼图可以按 `exportChartImage` 写成 PNG。xlsx 的折线、非负柱形和盈亏迷你图可以按 `exportSparklineImage` 写成 PNG，合法日期轴按日期比例定位。xlsx 的已用区域可以按 `exportSheetImage` 写成 PNG。pptx 可以按 `exportSlideImage` 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图和纯色单元格的表写成图。两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。create 把文本里的换行写成 `a:br` 时，预览器也会画出后续行。画不了的对象让整页失败。docx 可以按 `exportPageImage` 把单节空页、拉丁或东亚文字多段、显式行距与分页控制、不缩放的不透明 inline PNG、表（含表内拉丁或东亚文字）和 default 页眉/页脚写成 PNG，画不了的内容让整页失败。像素不进 inspect。库不调用 Office 或 WPS。机器上有其中之一时，调用方可以自己导出后再查看：
 
 - Word、Excel，以及 WPS 的 `kwps`、`ket`，用 `ExportAsFixedFormat` 写成 PDF
 - PowerPoint 和 WPS 的 `kwpp`，用幻灯片的 `Export` 写成 PNG
@@ -50,7 +50,7 @@ xlsx 另有 `exportSheetImage`：按工作表 id 把已用区域画成 PNG。不
 pptx 另有 `exportSlideImage`：按幻灯片 id 把页底、PNG、矩形、圆角矩形、椭圆、两色直线渐变、水平或垂直的直线、形状文字、簇状柱形图、簇状条形图、普通折线图、带标记的散点图、普通面积图、普通饼图和纯色单元格的表写成图。不改包，像素不进 inspect。xlsx 与 docx 报 `InvalidField`。
 两色直线渐变画在没有旋转的矩形、圆角矩形和椭圆上，两档可以带 `alpha`。形状上的 `blipFill` 会按拉伸铺进这些形状；画不了的变体让整页失败，不再静默跳过。写成 `a:br` 的换行也会预览出来。形状文字按布局近似排（Windows 单元格基线、默认 1.2 倍行距），不保证与 PowerPoint 16.0 的字形灰阶逐像素一致，细节见 [json-contract.md](json-contract.md)。
 
-docx 另有 `exportPageImage`：按页 id 把单节空页、拉丁或东亚文字多段、不缩放的不透明 inline PNG、表（含表内拉丁或东亚文字）和 default 页眉/页脚拉丁或东亚文字（`pgMar/@header` 顶距、`@footer` 底距到内容底，正文原点不位移）写成 PNG。不改包，像素不进 inspect。画不了的内容报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
+docx 另有 `exportPageImage`：按页 id 把单节空页、拉丁或东亚文字多段、显式行距与分页控制、不缩放的不透明 inline PNG、表（含表内拉丁或东亚文字）和 default 页眉/页脚拉丁或东亚文字（`pgMar/@header` 顶距、`@footer` 底距到内容底，正文原点不位移）写成 PNG。不改包，像素不进 inspect。画不了的内容报 `NotImplemented`。xlsx 与 pptx 报 `InvalidField`。
 
 ## 只读检查与试运行
 

@@ -422,19 +422,64 @@ fn second_paragraph_left_indent_shifts_x() {
 
 #[cfg(windows)]
 #[test]
-fn explicit_line_spacing_is_not_implemented() {
-    let src = create_text("line-ni-src", "A");
+fn auto_double_line_spacing_grows_second_paragraph() {
+    let src = tmp("line-auto-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "A" }, { "text": "B" }] }
+    }));
+    let (_, _, brgb) = decode_png(&export(&src, "page:1").unwrap());
+    let (bx, by, bw, bh0) = ink_box(&brgb, 794, 1123);
+    // 双倍行距时首行「A」墨迹仍靠近单倍位置，增高来自第二段下移。
+    assert_eq!((bx, by, bw), (96, 101, 9));
+
     let pid = first_para_id(&src);
     let spaced = apply_ops(
         &src,
         json!([{ "op": "setParaFormat", "id": pid, "line": 480, "lineRule": "auto" }]),
     );
-    let err = export(&spaced, "page:1").unwrap_err();
-    assert_eq!(err.code(), ooxp::ErrorCode::NotImplemented);
+    let (_, _, srgb) = decode_png(&export(&spaced, "page:1").unwrap());
+    let (sx, sy, sw, bh1) = ink_box(&srgb, 794, 1123);
+    assert_eq!((sx, sy, sw), (96, 101, 9));
+    // auto 480 = 双倍，单倍行盒 268 twip ≈ 18px @96dpi。
+    assert!(
+        bh1 >= bh0 + 16,
+        "auto 480 should enlarge stack by ~18px, base={bh0} spaced={bh1}"
+    );
+}
+
+#[cfg(windows)]
+fn find_nth_paragraph_open(xml: &str, index: usize) -> usize {
+    let mut search = 0;
+    let mut found = 0;
+    loop {
+        let rel = xml[search..].find("<w:p").expect("p");
+        let pos = search + rel;
+        let after = xml.as_bytes().get(pos + 4).copied();
+        if after == Some(b' ') || after == Some(b'>') {
+            if found == index {
+                return pos;
+            }
+            found += 1;
+        }
+        search = pos + 4;
+    }
 }
 
 #[cfg(windows)]
 fn inject_ppr_child(src: &std::path::Path, tag: &str, child_xml: &str) -> PathBuf {
+    inject_ppr_child_at(src, 0, tag, child_xml)
+}
+
+#[cfg(windows)]
+fn inject_ppr_child_at(
+    src: &std::path::Path,
+    para_index: usize,
+    tag: &str,
+    child_xml: &str,
+) -> PathBuf {
     use std::io::{Read, Write};
     let out = src.with_file_name(format!(
         "{}-{tag}.docx",
@@ -455,13 +500,32 @@ fn inject_ppr_child(src: &std::path::Path, tag: &str, child_xml: &str) -> PathBu
         file.read_to_end(&mut data).unwrap();
         if name == "word/document.xml" {
             let xml = String::from_utf8(data).unwrap();
-            let pos = xml.find("<w:p ").expect("p");
+            let pos = find_nth_paragraph_open(&xml, para_index);
             let gt = xml[pos..].find('>').expect(">") + pos;
-            let injected = format!(
-                "{}<w:pPr>{child_xml}</w:pPr>{}",
-                &xml[..=gt],
-                &xml[gt + 1..]
-            );
+            let after = &xml[gt + 1..];
+            let injected = if let Some(rest) = after.strip_prefix("<w:pPr>") {
+                format!("{}<w:pPr>{child_xml}{}", &xml[..=gt], rest)
+            } else if after.starts_with("<w:pPr ") {
+                let ppr_gt = after.find('>').expect("pPr>");
+                if after.as_bytes()[ppr_gt - 1] == b'/' {
+                    format!(
+                        "{}{}>{}{}",
+                        &xml[..=gt],
+                        &after[..ppr_gt - 1],
+                        child_xml,
+                        &after[ppr_gt + 1..]
+                    )
+                } else {
+                    format!(
+                        "{}{}>{child_xml}{}",
+                        &xml[..=gt],
+                        &after[..ppr_gt],
+                        &after[ppr_gt + 1..]
+                    )
+                }
+            } else {
+                format!("{}<w:pPr>{child_xml}</w:pPr>{}", &xml[..=gt], after)
+            };
             zout.start_file(name, opts).unwrap();
             zout.write_all(injected.as_bytes()).unwrap();
         } else {
@@ -475,22 +539,130 @@ fn inject_ppr_child(src: &std::path::Path, tag: &str, child_xml: &str) -> PathBu
 
 #[cfg(windows)]
 #[test]
-fn pagination_ppr_controls_are_not_implemented() {
-    let src = create_text("ppr-ni-src", "A");
-    for (tag, xml) in [
-        ("keepNext", "<w:keepNext/>"),
-        ("keepLines", "<w:keepLines/>"),
-        ("pageBreakBefore", "<w:pageBreakBefore/>"),
-        ("widowControl", r#"<w:widowControl w:val="0"/>"#),
-    ] {
-        let doc = inject_ppr_child(&src, tag, xml);
-        let err = export(&doc, "page:1").unwrap_err();
-        assert_eq!(
-            err.code(),
-            ErrorCode::NotImplemented,
-            "{tag} should stay NI, not silent skip"
-        );
-    }
+fn widow_control_off_still_exports_single_line() {
+    let src = create_text("widow-off-src", "A");
+    let doc = inject_ppr_child(&src, "widow-off", r#"<w:widowControl w:val="0"/>"#);
+    let (_, _, rgb) = decode_png(&export(&doc, "page:1").unwrap());
+    assert_eq!(ink_box(&rgb, 794, 1123), (96, 101, 9, 9));
+}
+
+#[cfg(windows)]
+#[test]
+fn page_break_before_sends_second_paragraph_to_page_two() {
+    let src = tmp("pbb-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": [{ "text": "A" }, { "text": "B" }] }
+    }));
+    let doc = inject_ppr_child_at(&src, 1, "pbb", "<w:pageBreakBefore/>");
+    let (_, _, p1) = decode_png(&export(&doc, "page:1").unwrap());
+    let (_, _, p2) = decode_png(&export(&doc, "page:2").unwrap());
+    assert_eq!(ink_box(&p1, 794, 1123), (96, 101, 9, 9));
+    let (bx, by, bw, bh) = ink_box(&p2, 794, 1123);
+    assert_eq!((by, bh), (101, 9));
+    assert!(
+        bx <= 97 && bw <= 9,
+        "B ink should stay near the left margin, got ({bx},{by},{bw},{bh})"
+    );
+    let missing = export(&doc, "page:3").unwrap_err();
+    assert_eq!(missing.code(), ErrorCode::IdNotFound);
+}
+
+#[cfg(windows)]
+#[test]
+fn keep_next_moves_pair_to_page_two_when_only_one_line_remains() {
+    // 52 个空段会溢出到第 2 页，故 51 行才排满第一页。
+    // 50 空 + A 占满第一页（A 在页底），B 落到第 2 页。
+    // A 带 keepNext 时，A+B 第一行应一起到第 2 页。
+    let src = tmp("keep-next-src");
+    let mut paras = paragraphs(50);
+    paras.push(json!({ "text": "A" }));
+    paras.push(json!({ "text": "B" }));
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": paras }
+    }));
+    let baseline = tmp("keep-next-base");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": baseline.to_string_lossy(),
+        "document": { "paragraphs": paras }
+    }));
+    let (_, _, b1) = decode_png(&export(&baseline, "page:1").unwrap());
+    let (_, _, b2) = decode_png(&export(&baseline, "page:2").unwrap());
+    let (ax, ay, aw, ah) = ink_box(&b1, 794, 1123);
+    assert_eq!((ax, aw, ah), (96, 9, 9));
+    assert!(ay >= 980, "A should sit at the bottom of page 1, ay={ay}");
+    let (bx, by, bw, bh) = ink_box(&b2, 794, 1123);
+    assert_eq!((by, bh), (101, 9));
+    assert!(bx <= 97 && bw <= 9, "B ink ({bx},{by},{bw},{bh})");
+
+    let doc = inject_ppr_child_at(&src, 50, "keep-next", "<w:keepNext/>");
+    let (_, _, p1) = decode_png(&export(&doc, "page:1").unwrap());
+    let (_, _, p2) = decode_png(&export(&doc, "page:2").unwrap());
+    assert!(
+        p1.iter().all(|b| *b == 255),
+        "page 1 should be empty when A is kept with B"
+    );
+    let (x, y, w, h) = ink_box(&p2, 794, 1123);
+    assert_eq!((x, y, w), (96, 101, 9));
+    assert!(h >= 20, "page 2 should contain both A and B, h={h}");
+    let missing = export(&doc, "page:3").unwrap_err();
+    assert_eq!(missing.code(), ErrorCode::IdNotFound);
+}
+
+#[cfg(windows)]
+#[test]
+fn keep_lines_keeps_wrapped_paragraph_together_when_widow_is_off() {
+    // wrap11 文本在 A4 上折成两行。50 个空段只剩一行空位。
+    // 关闭 widowControl 时第一行会留在页 1；keepLines 则两行一起到页 2。
+    let wrap = "This line is intentionally long enough that it should not fit on one A4 content width at Calibri eleven point without wrapping in Word.";
+    let mut paras = paragraphs(50);
+    paras.push(json!({ "text": wrap }));
+    let src = tmp("keep-lines-src");
+    run_ok(json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": src.to_string_lossy(),
+        "document": { "paragraphs": paras }
+    }));
+    let split = inject_ppr_child_at(&src, 50, "widow-off", r#"<w:widowControl w:val="0"/>"#);
+    let (_, _, s1) = decode_png(&export(&split, "page:1").unwrap());
+    let (_, _, s2) = decode_png(&export(&split, "page:2").unwrap());
+    let (_, _, _, h1) = ink_box(&s1, 794, 1123);
+    let (_, _, _, h2) = ink_box(&s2, 794, 1123);
+    assert!(
+        h1 <= 16,
+        "widow off should leave a short first-line band, h1={h1}"
+    );
+    assert!(
+        h2 <= 16,
+        "widow off should send the second line to page 2, h2={h2}"
+    );
+
+    let kept = inject_ppr_child_at(
+        &src,
+        50,
+        "keep-lines",
+        r#"<w:widowControl w:val="0"/><w:keepLines/>"#,
+    );
+    let (_, _, k1) = decode_png(&export(&kept, "page:1").unwrap());
+    let (_, _, k2) = decode_png(&export(&kept, "page:2").unwrap());
+    assert!(
+        k1.iter().all(|b| *b == 255),
+        "keepLines should move the whole wrapped paragraph to page 2"
+    );
+    let (_, ky, _, kh) = ink_box(&k2, 794, 1123);
+    assert!(
+        ky >= 96 && ky <= 105,
+        "kept wrapped para should start near the page-2 body top, ky={ky}"
+    );
+    assert!(kh >= 20, "page 2 should show both wrapped lines, kh={kh}");
 }
 
 #[cfg(windows)]
